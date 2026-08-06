@@ -80,8 +80,13 @@ nonce in the DB, operator-side, not #43) is unchanged.
   hash (unlike a password, which needs salt + a slow KDF), so the "no usable secret in a DB dump" property holds —
   the DB gains a fingerprint, never the key.
 - **Mismatch posture: degrade, don't brick.** The operator-blind rest of veyq needs no KEK, so only the
-  config-secret subsystem degrades — the send path falls back to copy-link and a loud startup log names the
-  recovery. The owner recovers by re-entering the SMTP password (reseal under the current key → the stored
+  config-secret subsystem degrades — the send path fell back to copy-link and a loud startup log names the
+  recovery. [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md) narrowed what that degradation means:
+  a tenant whose SMTP carries a `username` is simply **non-sendable** without an openable KEK, so member invites
+  and password recovery are **refused** with `503` (§2/§4) rather than degraded, and only the Server-Owner's
+  bootstrap invite still falls back to a copy-link (§3). The startup log and the recovery below are unchanged —
+  what changed is that an unopenable KEK now costs the tenant those two actions outright.
+  The owner recovers by re-entering the SMTP password (reseal under the current key → the stored
   fingerprint is updated → back to OK). The mismatch row is never auto-overwritten (that would defeat detection);
   it clears only on a deliberate reseal. With one config secret today this fully recovers; it scales with #43 (a
   key change then needs re-entering **all** stored secrets).
