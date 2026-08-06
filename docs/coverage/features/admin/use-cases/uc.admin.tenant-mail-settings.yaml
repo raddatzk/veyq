@@ -64,6 +64,12 @@ acceptanceCriteria:
       backend:
         unit: [ConfigSecretSealTest.generatesAKeyFileOnFirstConstructionWith0600Perms, ConfigSecretSealTest.readsAnExistingKeyFileRatherThanRegenerating, ConfigSecretSealTest.anUnavailableKekIsAnErrorNotAPlaintextLeak]
   - id: config-secret-key-loss-is-detected-and-degrades
+    # The cited tests prove the FIRST half at the port: a MISMATCH key makes the tenant non-sendable and no send
+    # is attempted with it (the port returns FALLBACK_COPYLINK as its "cannot send" sentinel — that value is not
+    # a channel here, ADR 0055 §2). The refusal that follows from it is handler-level and is proven under
+    # uc.spaces.add-member's `invite-travels-by-mail-only` + uc.account.recover-access's
+    # `no-mail-is-refused-not-swallowed`, listed there rather than duplicated (same convention as the shared
+    # rate-limiter core, listed under uc.spaces.add-member's `member-invite-rate-limited`).
     text: A lost or changed config-secret key is DETECTED via a non-invertible HKDF fingerprint stored in the DB (a hash of a full-entropy key, never the key — the "no usable secret in a DB dump" property holds), not a silent unseal failure. On a mismatch the send path never attempts a send with a bad key — the tenant simply counts as unable to send, so member invites and recovery are refused — and a reseal under the current key recovers to OK.
     coverage:
       backend:

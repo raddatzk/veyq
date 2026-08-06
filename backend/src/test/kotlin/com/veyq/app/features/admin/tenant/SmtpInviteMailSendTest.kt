@@ -154,7 +154,12 @@ class SmtpInviteMailSendTest {
     fun aConfiguredTenantWhoseConfigSecretKeyChangedFallsBackNotSends() {
         // Enabled + fully-configured SMTP, but the config-secret key no longer matches the one that sealed the
         // password (the key file changed/was lost ⇒ MISMATCH, ADR 0050 amendment). The stored password can't be
-        // unsealed, so the send path must DEGRADE to the copy-link fallback — never attempt a send with a bad key.
+        // unsealed, so the port must never attempt a send with a bad key.
+        //
+        // What FALLBACK_COPYLINK means here is the **port's** "cannot send" answer, not a channel: on a member
+        // invite the handler asks `canSend` first and refuses with 503 before any mint (ADR 0055 §2), so this
+        // value only ever becomes an actual copy-link on the ServerOwner bootstrap invite (§3). This test pins
+        // the port; MemberAddSliceTest pins the refusal that sits above it.
         val greenMail = GreenMail(ServerSetup(MISMATCH_SMTP_PORT, "127.0.0.1", "smtp"))
         greenMail.start()
         try {
