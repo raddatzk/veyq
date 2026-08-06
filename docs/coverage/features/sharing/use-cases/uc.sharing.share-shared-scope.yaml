@@ -1,0 +1,42 @@
+useCase: uc.sharing.share-shared-scope
+feature: sharing
+title: Public-share a Memory in a shared scope (group / tenant)
+# Built (web vertical, cr-0104 + ADR 0029 §6): lifts the v1 personal-scope-only restriction so ANY member of a
+# group or tenant scope may public-share a Memory there (all three built roles), gated on scope-membership AND the
+# role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal soft-revokes
+# (enabled=false) every share the removed member created in that scope; any remaining member may re-activate a
+# deactivated share, which transfers its owner_account. K_mem is stable across rotation (ADR 0024), so the share
+# follows new content and cannot be rotated away — the server-side deactivation IS the honest-server revocation
+# (the only forward layer for a tenant, which is ACL-revoke).
+acceptanceCriteria:
+  - id: member-authored-any-scope
+    text: A member of a group/tenant scope may createShare a MEMORY in that scope (personal still works); the create-gate is "MEMORY in a scope the caller is a member of" AND the role's sharing.* capability — not owner-only, not personal-only. A non-member cannot (no reveal).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSliceTest.nonMemberCreateIs404, ShareSliceTest.folderNodeIsRejected]
+      web:
+        unit: [src/features/memory/share.test.ts]
+  - id: removal-deactivates-shares
+    text: Removing a member from a scope soft-revokes (enabled=false) every share that member created in that scope; the anonymous resolve + gated blob endpoint then 404. Runs independently of the group scope-key rotation the removal also triggers.
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.removingGroupMemberDeactivatesOnlyTheirShares, ShareSharedScopeSliceTest.removingTenantMemberDeactivatesTheirTenantScopeShares]
+  - id: reactivation-transfers-ownership
+    text: Any remaining member may re-enable a deactivated share; doing so transfers owner_account to the re-activating member, so an active share is always owned by a current member (a later removal of the new owner deactivates it again).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.reactivateByAnotherMemberTransfersOwnershipAndResolves, ShareSharedScopeSliceTest.reactivateByNonMemberIs404]
+      web:
+        unit: [src/features/memory/share.test.ts]
+  - id: follows-new-content
+    text: Because K_mem is stable and never re-keyed (ADR 0024, no re-encryption), content added to the shared Memory after a rotation seals under the same K_mem and is visible via the existing share; the URL/fragment never changes and no re-wrap is performed.
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks]
+  - id: operator-blind-unchanged
+    text: A shared-scope share is the same opaque record shape (shareId, symWrap(K_share,K_mem), role, sealed name, nodeId, owner_account, enabled) and adds no new operator-visible signal; the server never sees K_share, K_mem, names, or the visitor. The manage list's `mine` flag is derived per request, never stored.
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSharedScopeSliceTest.listForNodeShowsEveryMembersSharesWithMineFlag]
+      web:
+        unit: [src/features/memory/share.test.ts]

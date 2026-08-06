@@ -1,0 +1,33 @@
+useCase: uc.account.unlock
+feature: account
+title: Account unlock (PASSWORD wrap)
+acceptanceCriteria:
+  - id: unlock-opens-master-key
+    text: The correct password + Secret Key derive the Unlock KEK, open the Master Key, and unwrap the identity private key into memory.
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.test.ts] }
+  - id: secret-key-import-from-kit
+    text: The Secret Key can be imported from the Emergency Kit (upload the kit file or scan its QR), decoded on-device via parseKit (cr-0007).
+    coverage:
+      web: { unit: [src/features/account/emergencyKit/emergencyKit.test.ts] }
+  - id: wrong-credentials-generic-failure
+    text: A wrong password or wrong Secret Key fails with a generic unlock failure (AEAD tag mismatch) and holds no key material; the server is uninvolved (E1).
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.test.ts] }
+  - id: no-password-wrap-generic-failure
+    text: An account with no PASSWORD wrap surfaces the same generic failure rather than a distinct error (E2).
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.test.ts] }
+  - id: key-material-authed-only
+    text: Key material is served only to an authenticated caller — a missing, malformed, expired, or revoked access token is a generic 401 (no anonymous read).
+    coverage:
+      backend: { integration: [AccountKeyMaterialSliceTest.missingTokenIsGeneric401, AccountKeyMaterialSliceTest.malformedTokenIsGeneric401, AccountKeyMaterialSliceTest.expiredTokenIs401, AccountKeyMaterialSliceTest.revokedFamilyTokenIs401] }
+  - id: no-cross-account-read
+    text: A valid token returns only the caller's own wraps + identity blob, never another account's material.
+    coverage:
+      backend: { integration: [AccountKeyMaterialSliceTest.validTokenReturnsCallersMaterial, AccountKeyMaterialSliceTest.tokenReturnsOnlyOwnMaterialNotAnothers] }
+  - id: operator-blind-ciphertext-only
+    text: The endpoint serves only ciphertext (wraps + wrapped identity private key) plus the public suite id; the server never derives a KEK or unwraps anything.
+    coverage:
+      backend: { integration: [AccountKeyMaterialSliceTest.validTokenReturnsCallersMaterial] }
+      web: { unit: [src/features/account/unlock/unlock.test.ts] }

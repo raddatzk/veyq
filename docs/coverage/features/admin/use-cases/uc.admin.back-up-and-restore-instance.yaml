@@ -1,0 +1,53 @@
+useCase: uc.admin.back-up-and-restore-instance
+feature: admin
+title: Back up an instance and restore it onto an empty one
+# Refined 2026-08-06 (ADR 0056), nothing built yet — hence `status: planned` and gaps on both surfaces.
+# This use-case exists to make architecture §10's durability bar executable: its sentence is criterion
+# `restore-onto-empty-opens-every-memory` below, almost word for word. Until a CI-run test carries that
+# criterion, §10 keeps saying "half held" — the bar follows the build, never the intention (ADR 0040).
+# The capture/restore machinery itself is a Python script and an orchestrator extension, neither of which is a
+# coverage surface; what is claimable here is what a test can observe about a restored instance.
+status: planned
+acceptanceCriteria:
+  - id: three-legs-or-it-is-not-a-backup
+    text: >-
+      A restore that carries the database and the object store but not the config-secret key file produces an
+      instance that starts cleanly, serves content, and is nonetheless broken: it reports a config-secret
+      mismatch and refuses member invites and password resets with 503 mail_unavailable. Content is unaffected —
+      the key seals operator config, never content — which is exactly why the failure is invisible until someone
+      tries to invite or reset. Restoring the key file, or re-entering each tenant's SMTP password, resolves it.
+  - id: a-stopped-app-makes-the-dangerous-skew-impossible
+    text: >-
+      With the application stopped, the database gains no rows even while a still-valid presigned URL lets a
+      client complete an upload against the store. An object written in that window therefore never acquires a
+      blob row, so a capture taken in that state cannot contain a row whose object is missing — the one skew the
+      media read path does not handle. This is the property that removes the capture ordering and the TTL wait
+      from the procedure, so it is asserted rather than assumed.
+  - id: restore-onto-empty-opens-every-memory
+    text: >-
+      After the documented procedure restores onto an empty instance, a person signs in with the password they
+      already had and opens a Memory containing media, decrypted with the key material they already hold. No
+      content was re-encrypted, no key was handed to the operator by the restore, and the Emergency Kit that
+      worked before still works. This is architecture §10's durability bar stated as a test.
+  - id: the-store-leg-is-verifiable-before-the-restore
+    text: >-
+      Because the store leg is the S3 object namespace rather than the store's on-disk form, the captured object
+      keys are comparable against the blob rows that reference them. A capture missing an object is detected
+      against the database it was taken with, before anyone restores it — the check a volume copy cannot offer,
+      and the reason this form was chosen.
+  - id: the-store-leg-restores-onto-a-different-store
+    text: >-
+      The captured objects restore into a bucket that is not the source's — different endpoint, credentials,
+      bucket name, and store implementation — with only configuration changing. The bucket, access key and
+      layout are recreated rather than restored, because they were never durable state.
+gaps:
+  backend: >-
+    Nothing built. The backend-observable half is the config-secret fingerprint verdict on a restored instance
+    (criterion `three-legs-or-it-is-not-a-backup`) — the MISMATCH state itself already has coverage under
+    uc.admin.tenant-mail-settings, but no test yet reaches it by way of a restore.
+  web: >-
+    Nothing built. This is where the bar lands: an e2e suite that seeds an instance with a Memory containing
+    media, drives the capture, wipes, restores, and reopens that Memory with the key material the seed already
+    persisted. The pieces exist — the orchestrator brings the stack up itself, and devSeed persists the Secret
+    Key and Master Key for a direct vault inject — so what is missing is the capture/restore choreography, not
+    the fixture.

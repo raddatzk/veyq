@@ -1,0 +1,1332 @@
+openapi: 3.1.0
+info:
+  title: veyq Media API
+  version: 0.1.0
+  description: >
+    Encrypted media **blobs** attached to a Memory tree (en.memory.media, cr-0028). A blob is a fixed-size
+    sequence of **chunked-AEAD** ciphertext objects, sealed client-side under a fresh random **`K_blob`**
+    (wrapped under the target Memory's `K_mem`, [ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)),
+    transferred **direct-to-store** via short-TTL presigned URLs
+    ([ADR 0013](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)) — bytes never flow through
+    the backend. The control plane is **batch-shaped** (lists + per-item results) from the start; the first
+    slice exercises **length-1 lists**.
+
+    **Operator-blind:** the server + object store hold only ciphertext chunks + opaque metadata
+    (`chunkCount`, `byteSize`, the per-chunk size `manifest`), the `K_blob` wrap, and the media→node link; never
+    a plaintext byte, a content key, or a filename in clear. Guards (enforced by code, ADR 0008): the caller
+    holds a grant for the scope; a media target must be a **MEMORY** or **CHAPTER** (a FOLDER owns no `K_mem`);
+    declare-then-verify on `complete` enforces the byte budget against the stored objects. **No content dedup**
+    ([ADR 0013 §5](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
+tags:
+  - name: media
+    description: >
+      Encrypted media blobs under a scope: start uploads (presign PUT) → complete + attach to a node → list a
+      node's media → presign GET for download. One tag = one resource interface owning the media subtree under
+      `/api/scopes/{scopeId}` (distinct from the `content` nodes resource).
+  - name: buckets
+    description: >
+      Per-uploader **buckets** within a Memory node — the attribution axis
+      ([en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034). A lazy virtual
+      **primary** bucket per uploader (keyed by an opaque `owner_key`) plus optional **one-level sub-buckets** with
+      `K_mem`-sealed names; media link via `bucketId` + a denormalized `createdBy`. Operator-blind — opaque
+      `owner_key` + structure, sealed names, **own-bucket authz** (`owner_key == caller`). A distinct resource
+      interface from `media`, sharing the node subtree.
+
+paths:
+  /api/scopes/{scopeId}/blob-uploads-batch:
+    post:
+      tags: [media]
+      operationId: startBlobUploads
+      summary: Start N blob uploads — reserve sessions + presign one PUT per chunk.
+      description: >
+        For each requested blob the client declares its `chunkCount`, total `byteSize`, and the `wrappedBlobKey`
+        (`K_blob` under `K_mem`). The server opens an upload session and returns, per item, an `uploadId` plus
+        one short-TTL presigned **PUT** URL per chunk — or a per-item error. The caller then PUTs each
+        ciphertext chunk **directly to the object store** and calls `media-batch` to complete + attach. The
+        in-memory store cannot presign and answers `store_unavailable`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BlobUploadsBatchRequest" }
+            example:
+              items:
+                - chunkCount: 2
+                  byteSize: 131072
+                  wrappedBlobKey: d3JhcHBlZC1rLWJsb2I=
+      responses:
+        "200":
+          description: Per-item upload results (success carries the presigned PUTs; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlobUploadsBatchResponse" }
+        "400":
+          description: Malformed request (missing/invalid fields).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "503":
+          description: The configured object store cannot presign (e.g. the in-memory dev store).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/scopes/{scopeId}/media-batch:
+    post:
+      tags: [media]
+      operationId: completeMedia
+      summary: Complete a media's uploads (original + derivatives) + attach to a node.
+      description: >
+        Each item is **one logical media**: an `originalUploadId` plus up to two role-tagged `derivatives`
+        (THUMBNAIL, PREVIEW — generated client-side, [en.memory.derivatives](../../docs/features/memory/enablers/en.memory.derivatives.md)).
+        The server verifies **every** upload session of the item, **stats the stored chunk objects** per blob
+        (declare-then-verify: count + total bytes must match what was declared, else the objects are purged and
+        the item fails `budget_exceeded`), records one `blob` per upload (each with its own per-chunk size
+        `manifest` and `K_blob` wrap), and one `media` row linking the original blob to `nodeId` with a
+        derivative row per derivative. Returns `{ blobId (the original), mediaId }` — or a per-item error. The
+        target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MediaBatchRequest" }
+            example:
+              items:
+                - nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+                  originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  derivatives:
+                    - kind: THUMBNAIL
+                      uploadId: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+                    - kind: PREVIEW
+                      uploadId: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
+      responses:
+        "200":
+          description: Per-item completion results (success carries blob+media ids; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaBatchResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/media:
+    get:
+      tags: [media]
+      operationId: listNodeMedia
+      summary: List a node's media — a conditional-GET keyset delta for the live gallery (cr-0107, ADR 0033).
+      description: >
+        Returns the node's media for the open gallery. **Live-updates (cr-0107, ADR 0033):** the response is a
+        conditional-GET **keyset delta**, not an unconditional full list. The client caches the node's
+        `mediaRevision` (an opaque per-node mutation counter) and echoes it as **`If-None-Match`**; when it still
+        equals the node's counter ⇒ **`304`** (no body, no media query — the idle fast path). On a change ⇒ `200`
+        with only the media whose `updatedAt` is **past the client's `since` cursor** (`updatedAt,mediaId`) — so an
+        active upload streams the few new items, never re-listing the whole gallery. Each row carries its
+        `mediaId`, the **original** blob ref (`blobId`, `chunkCount`, total `byteSize`, per-chunk `manifest`,
+        `wrappedBlobKey`), its role-tagged `derivatives` (THUMBNAIL, PREVIEW), the sealed `wrappedMeta`, and its
+        `updatedAt` (the cursor's sort key). The `200` also carries **both revisions** and — **only when a delete
+        advanced `deleteRevision`** past the client's echoed `sinceDelete` — the node's current **`mediaIds`** set,
+        so the client drops any id it no longer sees (catching a delete and a net-zero delete+add); pure adds/edits
+        stay delta-only. First load: omit `If-None-Match`/`since` for the full list. The client unwraps each
+        `K_blob` under `K_mem`, presigns the downloads (`blob-downloads-batch`), and opens the chunks with
+        `openFrame`. **Operator-blind** — opaque counters, opaque ids, coarse timestamps; never content, never a key.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - name: If-None-Match
+          in: header
+          required: false
+          description: >
+            The client's cached `mediaRevision` (opaque ETag). When it equals the node's current
+            `media_revision` the server answers `304`. Omitted on first load.
+          schema: { type: string, maxLength: 64, example: "7" }
+        - name: since
+          in: query
+          required: false
+          description: >
+            The client's keyset cursor `updatedAt,mediaId` (an RFC3339 timestamp, a `,`, then the media uuid). On a
+            `200` the server returns only media strictly past it (`updated_at > ts`, id as the tie-break). Omitted
+            on first load ⇒ the full list.
+          schema: { type: string, maxLength: 80, example: "2026-07-09T12:34:56.789Z,2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e" }
+        - name: sinceDelete
+          in: query
+          required: false
+          description: >
+            The client's last-seen `deleteRevision`. The server includes the current `mediaIds` set (for
+            delete-reconcile) **only when it lags** the node's `delete_revision` — i.e. a delete happened since.
+            Defaults to 0.
+          schema: { type: integer, format: int32, minimum: 0, default: 0, example: 0 }
+        - name: state
+          in: query
+          required: false
+          description: >
+            Which media to list: **`active`** (default) — the live gallery, the conditional-GET delta above; or
+            **`trashed`** — the node's soft-deleted media for the Trash tab (uc.memory.delete-media), a plain full
+            list (`If-None-Match`/`since`/`sinceDelete` do not apply, `mediaIds` is null), each row carrying
+            `deletedAt` + `deletedBy`. Trashed media never appear in the `active` listing.
+          schema: { type: string, default: active, maxLength: 8, example: active }
+      responses:
+        "200":
+          description: >
+            A keyset delta (the media past the `since` cursor) plus both revisions; `mediaIds` is present only when
+            `deleteRevision` advanced past the client's `sinceDelete`.
+          headers:
+            ETag:
+              description: The node's current `mediaRevision` — echo it as `If-None-Match` on the next poll.
+              schema: { type: string, example: "7" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaListPage" }
+        "304":
+          description: >
+            Not Modified — the client's `If-None-Match` equals the node's `media_revision`; nothing changed. No
+            body, and no media query ran server-side (the idle fast path).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/buckets:
+    get:
+      tags: [buckets]
+      operationId: listNodeBuckets
+      summary: List a node's uploader buckets — the "Beiträge" grouping (uc.memory.buckets).
+      description: >
+        Returns the node's materialized buckets for the Beiträge tab: one lazy **primary** per uploader (keyed by
+        `owner_key`) plus any **sub-buckets**, each with its opaque `ownerKey`, `parentBucketId` (null = primary),
+        `isPrimary`, the `K_mem`-sealed `sealedName` (null for a member's primary — the client shows the operator-
+        visible username; present for a contributor primary + every sub-bucket), and a per-bucket `mediaCount`. The
+        client groups by uploader, unseals names client-side, and filters the gallery grid. Operator-blind — opaque
+        `owner_key` + structure only, never a cleartext name, never content.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "200":
+          description: The node's buckets (primaries + sub-buckets) with per-bucket counts.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BucketListResponse" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+    post:
+      tags: [buckets]
+      operationId: createBucket
+      summary: Create a sub-bucket under a primary root (uc.memory.buckets).
+      description: >
+        Create a **sub-bucket** one level under a **primary** in this node. Without `parentBucketId` it nests under
+        the **caller's own primary** (lazily materialized); with `parentBucketId` (a primary's id) it nests under
+        **that** root — so a member can add sub-buckets under a **contributor's** root to organize contributions —
+        and the new bucket inherits **that root's** `ownerKey`. The parent must be a primary (`403` otherwise). The
+        client supplies the `sealedName` (sealed under `K_mem`); the server never sees it in clear. Sub-buckets do
+        not nest further. Operator-blind — the name is stored as ciphertext.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBucketRequest" }
+            example:
+              sealedName: YnVja2V0LW5hbWUtY2lwaGVy
+      responses:
+        "200":
+          description: The created sub-bucket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BucketSummary" }
+        "400":
+          description: Malformed request (missing/invalid sealed name).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The given parentBucketId is not a primary bucket (sub-buckets nest one level only).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/buckets/{bucketId}:
+    patch:
+      tags: [buckets]
+      operationId: renameBucket
+      summary: Rename a sub-bucket (uc.memory.buckets).
+      description: >
+        Re-store a **sub-bucket's** `K_mem`-sealed name. Any scope **member** may rename a sub-bucket (incl. a
+        contributor's, to organize contributions); a **primary** is not renameable (`illegal_target`). Operator-blind
+        — the new name is ciphertext.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/BucketId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameBucketRequest" }
+            example:
+              sealedName: cmVuYW1lZC1jaXBoZXI=
+      responses:
+        "200":
+          description: The renamed bucket.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BucketSummary" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The bucket is a primary (not renameable).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+        "404":
+          description: No such scope/node/bucket, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
+    delete:
+      tags: [buckets]
+      operationId: deleteBucket
+      summary: Delete a sub-bucket — its media fall back to its owner's primary (uc.memory.buckets).
+      description: >
+        Delete a **sub-bucket**; its media are **reparented to that root's owner primary** — media are **never**
+        deleted here (destructive delete is the media trash path, uc.memory.delete-media). Any scope **member** may
+        delete a sub-bucket (incl. a contributor's); a **primary** is not deletable (`illegal_target`). Idempotent —
+        an unknown bucket answers `204`. Operator-blind — a re-link, no content touched.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+        - $ref: "#/components/parameters/BucketId"
+      responses:
+        "204":
+          description: The sub-bucket was deleted and its media reparented to the primary (or it did not exist).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The bucket is a primary (not deletable).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/media-moves:
+    post:
+      tags: [buckets]
+      operationId: moveBucketMedia
+      summary: Move media between buckets of one owner-root (uc.memory.buckets).
+      description: >
+        Bulk-move media into `targetBucketId` (null ⇒ the shared owner's **primary**). Every listed medium **and**
+        the target bucket must share **one** `owner_key` (the same root), and the caller must be a scope member;
+        otherwise `403` (`illegal_target`). A member may curate a contributor's contributions this way, but **never
+        across owners** (a single distinct source `owner_key` is required) — attribution is preserved. A read-side
+        re-link — no blobs move, no content touched. Operator-blind.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MoveMediaRequest" }
+            example:
+              mediaIds: [2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e]
+              targetBucketId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+      responses:
+        "204":
+          description: The media were moved to the target bucket.
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: The source media span more than one owner, or the target bucket's owner differs (cross-owner move).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+        "404":
+          description: No such scope/node/media/bucket, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/cover-blob:
+    post:
+      tags: [media]
+      operationId: commitCoverBlob
+      summary: Commit an uploaded blob as the node's standalone cover — no media row.
+      description: >
+        Promote one `startBlobUploads` session into a **standalone cover blob** attached to the node. The server
+        verifies the upload session (declare-then-verify: stats the stored chunk objects against the declared
+        count + byte budget, purging + failing on mismatch), records one `veyq_blob`, and sets the node's
+        `cover_blob_id` to it — **atomically replacing + reclaiming** any prior cover blob (its store objects +
+        `veyq_blob` row are purged). Unlike `completeMedia` this creates **no `veyq_media` row** (no gallery
+        entry, no derivative tiers): the cover is a single blob the client downscaled on device. Serving reuses
+        `presignBlobDownloads`. Returns the committed `BlobRef`. Guards: the caller holds a grant for the scope;
+        the target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER). Operator-blind — the
+        server holds the ciphertext + the opaque `cover_blob_id` + size only, never the image, the crop, or the
+        fact that this blob is "the cover" (that stays in the sealed node meta).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CoverBlobCommitRequest" }
+            example:
+              uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+      responses:
+        "200":
+          description: The committed cover blob ref (opaque metadata; any prior cover blob was reclaimed).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlobRef" }
+        "400":
+          description: Malformed request, or the upload failed declare-then-verify (`budget_exceeded`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/node/upload, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "422":
+          description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
+    delete:
+      tags: [media]
+      operationId: deleteCoverBlob
+      summary: Detach + reclaim the node's standalone cover blob.
+      description: >
+        Clear the node's `cover_blob_id`, delete its `veyq_blob` row, and purge the blob's store objects. Used
+        when an uploaded cover is removed (the sealed node meta drops its `cover` separately, via `updateNode`).
+        Idempotent — a node with no cover blob answers `204`. Guards: the caller holds a grant for the scope.
+        `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the explicit
+        client-driven detach; the deferred unreferenced-blob sweep (ADR 0013 §3) is the crash-safety backstop.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "204":
+          description: The cover blob was detached + reclaimed (or the node had none).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+
+  /api/scopes/{scopeId}/media/{mediaId}/exif:
+    get:
+      tags: [media]
+      operationId: getMediaExif
+      summary: A media's sealed EXIF bundle (lazy, opaque) — for the lightbox detail.
+      description: >
+        Returns the media's `wrappedExif`: the heavy EXIF bundle (camera, lens, aperture, ISO, orientation,
+        dimensions, …) sealed client-side under the Memory's `K_mem` (opaque base64), or null when none was
+        sealed at upload. Deliberately **not** part of `listNodeMedia` (which stays constant-small): the lightbox
+        fetches + unseals this only when an item opens. The listed essentials — geometry, capture time, and GPS —
+        live in `wrappedMeta`, not here. Operator-blind — the server stores + returns the ciphertext verbatim,
+        never inspecting the fields inside.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/MediaId"
+      responses:
+        "200":
+          description: The media's sealed EXIF (opaque base64), or null when none was sealed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaExifResponse" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/media, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+
+  /api/scopes/{scopeId}/media/{mediaId}/meta:
+    put:
+      tags: [media]
+      operationId: updateMediaMeta
+      summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
+      description: >
+        Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob
+        `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,gpsLng}` under `K_mem` (a date correction
+        added/removed) and PUTs the new opaque base64 (or null to clear it). The only user-editable field is the
+        date correction; geometry and GPS are derived-only. Operator-blind — the server overwrites the ciphertext
+        it holds and never inspects the fields inside. Guards: the caller holds a grant for the scope; a media
+        target must exist.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/MediaId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MediaMetaUpdate" }
+            example:
+              wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
+      responses:
+        "200":
+          description: The stored listed-metadata blob (echoed opaque base64, or null when cleared).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MediaMetaResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/media, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+
+  /api/scopes/{scopeId}/media/{mediaId}:
+    delete:
+      tags: [media]
+      operationId: deleteMedia
+      summary: Trash a media — soft-delete into the Memory's recoverable trash (uc.memory.delete-media).
+      description: >
+        **Soft-delete** the media: set its `deleted_at`/`deleted_by` (the deletion audit) and bump the node's
+        `delete_revision` so every open gallery drops the tile on its next poll (cr-0107, ADR 0033). The row + its
+        blobs **survive** in the Memory's trash until the scheduled retention purge — `restoreMedia` brings it
+        back. **Any member** of the scope may trash (reversible, recovery-not-destruction — the irreversible purge
+        is the system job). Idempotent: an already-trashed media answers `204`. Operator-blind — a flag flip, no
+        content, no key.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/MediaId"
+      responses:
+        "204":
+          description: The media is trashed (or was already trashed).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/media, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+
+  /api/scopes/{scopeId}/media/{mediaId}/restore:
+    post:
+      tags: [media]
+      operationId: restoreMedia
+      summary: Restore a trashed media back into the gallery (uc.memory.delete-media).
+      description: >
+        Clear the media's `deleted_at`/`deleted_by` and bump the node's `media_revision` (advancing the media's
+        `updatedAt`) so the tile returns to every open gallery in its date position — a pure flag flip, its blobs
+        were never removed. **Any member** of the scope may restore. Idempotent on a live media (`204`). A media
+        already **purged** by the retention job is gone (`404`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/MediaId"
+      responses:
+        "204":
+          description: The media is restored (or was already live).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/media (e.g. already purged), or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+
+  /api/scopes/{scopeId}/media/{mediaId}/purge:
+    post:
+      tags: [media]
+      operationId: purgeMedia
+      summary: Permanently delete a trashed media now — expedite the retention purge (uc.memory.delete-media).
+      description: >
+        **Hard-delete** a media that is currently **in the trash**: remove its derivative + media + blob rows and
+        the store objects (the same reclaim the scheduled `MediaTrashPurge` runs, expedited by a member). This is
+        **irreversible**. **Any member** may purge an already-trashed item — the security model's reversible/
+        irreversible split lets a member expedite the purge of an item that was already reversibly removed. Only a
+        **trashed** media can be purged: a live (untrashed) or unknown media answers `404` (a live media is deleted
+        only via trash → purge). Operator-blind — opaque blob objects removed, never content.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/MediaId"
+      responses:
+        "204":
+          description: The trashed media was permanently deleted (rows + blob objects reclaimed).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such trashed media (unknown, already purged, or still live), or no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+
+  /api/scopes/{scopeId}/blob-downloads-batch:
+    post:
+      tags: [media]
+      operationId: presignBlobDownloads
+      summary: Presign GET for N blobs — one URL per chunk.
+      description: >
+        For each requested `blobId` the server returns one short-TTL presigned **GET** URL per chunk (in chunk
+        order) — or a per-item error. The caller GETs each ciphertext chunk **directly from the object store**
+        and opens it with `openFrame`. The in-memory store answers `store_unavailable`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BlobDownloadsBatchRequest" }
+            example:
+              items:
+                - blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+      responses:
+        "200":
+          description: Per-item download results (success carries the presigned GETs; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlobDownloadsBatchResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "503":
+          description: The configured object store cannot presign (e.g. the in-memory dev store).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. Any authenticated caller holding a grant for the scope (enforced by code).
+
+  parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the scope the media lives in.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the node (MEMORY/CHAPTER) the media is attached to.
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+    MediaId:
+      name: mediaId
+      in: path
+      required: true
+      description: Opaque id of the media whose sealed metadata is requested.
+      schema: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+    BucketId:
+      name: bucketId
+      in: path
+      required: true
+      description: Opaque id of a bucket (a primary or a sub-bucket) within the node.
+      schema: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a }
+
+  schemas:
+    # --- start uploads -------------------------------------------------------
+    BlobUploadsBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/BlobUploadRequestItem" }
+
+    BlobUploadRequestItem:
+      type: object
+      required: [chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: Number of ciphertext chunks the blob is sealed into (≥ 1).
+          minimum: 1
+          maximum: 100000
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Total ciphertext byte size declared up front (verified against the stored objects on complete).
+          minimum: 0
+          example: 131072
+        wrappedBlobKey:
+          type: string
+          description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    BlobUploadsBatchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/BlobUploadResultItem" }
+
+    BlobUploadResultItem:
+      type: object
+      description: One per request item, in order. Success carries `uploadId` + `presignedPuts`; failure carries `error`.
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The opaque upload session id, on success.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        presignedPuts:
+          type: [array, "null"]
+          description: One presigned PUT URL per chunk, in chunk order.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Per-item error code (`budget_exceeded` = declared bytes/chunks over the cap, `store_unavailable`); null on success.
+          maxLength: 64
+          example: null
+
+    # --- complete + attach ---------------------------------------------------
+    MediaBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/MediaRequestItem" }
+
+    MediaRequestItem:
+      type: object
+      description: >
+        One logical media: the original upload plus up to two role-tagged derivative uploads (THUMBNAIL,
+        PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads`.
+      required: [originalUploadId, nodeId]
+      properties:
+        originalUploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session for the **original** (pristine) blob, opened by `startBlobUploads`.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The MEMORY/CHAPTER node to attach the media to.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        bucketId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Optional target bucket to attach into — must be one of the **caller's own** buckets in this node.
+            Omitted/null ⇒ the caller's **primary** bucket (lazily created on first upload). ADR 0034 /
+            [en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md).
+          example: null
+        derivatives:
+          type: [array, "null"]
+          description: >
+            Role-tagged derivative uploads (THUMBNAIL, PREVIEW), each its own blob. Empty/absent for a media
+            type with no derivable frame (the gallery falls back to an icon). At most one of each kind.
+          maxItems: 2
+          items: { $ref: "#/components/schemas/MediaDerivativeUpload" }
+        wrappedMeta:
+          type: [string, "null"]
+          description: >
+            The original's **listed-metadata tier** `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,
+            gpsLat,gpsLng}` sealed under the Memory's `K_mem` (opaque base64) — geometry (for the justified
+            grid), capture time (for date sort/edit), and GPS (for the Memory's place medoid). Small and
+            **returned with every list** so the gallery can lay out + sort and the place medoid can read GPS
+            without the blind server ever seeing a coordinate or a timestamp, and without a per-item fetch.
+            Absent for a media type whose frame the client couldn't decode. Consolidates cr-0059's
+            `wrappedDimensions`/cr-0064's `wrappedLayout` + cr-0066's `wrappedCapturedAt` (versioned).
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        wrappedExif:
+          type: [string, "null"]
+          description: >
+            The original's **heavy EXIF bundle** (camera, lens, aperture, ISO, orientation, dimensions, …) sealed
+            under the Memory's `K_mem` (opaque base64). Stored verbatim, **not** returned by `listNodeMedia` (kept
+            constant-small) — the lightbox lazy-loads it via `getMediaExif`. Absent when the source carried no
+            readable EXIF. The listed essentials — capture time and GPS — live in `wrappedMeta`, not here. Larger,
+            so a wider cap.
+          contentEncoding: base64
+          maxLength: 16384
+          example: ZXhpZi1jaXBoZXJ0ZXh0
+
+    MediaDerivativeUpload:
+      type: object
+      required: [kind, uploadId]
+      properties:
+        kind: { $ref: "#/components/schemas/MediaDerivativeKind" }
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session for this derivative blob, opened by `startBlobUploads`.
+          example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+
+    MediaDerivativeKind:
+      type: string
+      description: The role of a derivative blob — THUMBNAIL (grid) or PREVIEW (lightbox).
+      enum: [THUMBNAIL, PREVIEW]
+      example: THUMBNAIL
+
+    MediaBatchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/MediaResultItem" }
+
+    MediaResultItem:
+      type: object
+      description: >
+        One per request item, in order. Success carries the **original** `blobId` + `mediaId`; failure carries
+        `error`. The whole item is atomic — if any of its uploads (original or a derivative) fails to verify,
+        none are attached.
+      properties:
+        blobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The **original** blob's id, on success (derivative blob ids surface via `listNodeMedia`).
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        mediaId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded`); null on success.
+          maxLength: 64
+          example: null
+
+    # --- read-back -----------------------------------------------------------
+    MediaSummary:
+      type: object
+      description: >
+        A media's read-back view: the **original** blob ref plus its role-tagged `derivatives`. A gallery
+        fetches `derivatives[THUMBNAIL]` for the grid, `derivatives[PREVIEW]` for the lightbox, and the
+        original blob only on download.
+      required: [mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, updatedAt]
+      properties:
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 131072
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at complete; ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The original blob's `K_blob` wrapped under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        derivatives:
+          type: [array, "null"]
+          description: Role-tagged derivative tiers (THUMBNAIL, PREVIEW), each its own blob ref with its own wrap.
+          items: { $ref: "#/components/schemas/MediaDerivativeSummary" }
+        wrappedMeta:
+          type: [string, "null"]
+          description: >
+            The original's listed-metadata tier `{v,w,h,capturedAt,capturedAtOverride,capturedAtSource,gpsLat,
+            gpsLng}` sealed under `K_mem` (opaque base64); the gallery unwraps it to lay out the justified grid
+            (geometry) and sort tiles by effective capture time (`override ?? capturedAt`), and the place medoid
+            reads its GPS. Null when none was sealed at upload (the grid uses a default aspect, the media sorts
+            last). The heavier EXIF tier is lazy via `getMediaExif`.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        updatedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: >
+            When this media last changed — set `= createdAt` at attach, bumped on a meta edit (cr-0068). The
+            `(updatedAt, mediaId)` pair is the gallery's keyset cursor for the live-updates delta (cr-0107,
+            ADR 0033); the client advances its `since` cursor to the newest row it has seen.
+          example: 2026-07-09T12:34:56.789Z
+        deletedAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: >
+            When this media was trashed (soft-deleted), or null for a live media. Non-null **only** in the
+            `state=trashed` listing (uc.memory.delete-media); the Trash tab shows it and offers Restore until the
+            retention purge.
+          example: null
+        deletedBy:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: >
+            Who trashed this media — the member's opaque user id (the deletion audit), or null for a live media.
+            The client compares it to the signed-in user to show "trashed by you" vs. another member.
+          maxLength: 64
+          example: null
+        ownerKey:
+          x-veyq-visibility: structure
+          type: [string, "null"]
+          description: >
+            The uploader's opaque **`owner_key`** — `user:{userId}` (a member) or `share:{shareIdentityId}` (a
+            public contributor) — the attribution the buckets grouping reads
+            ([en.memory.buckets](../../docs/features/memory/enablers/en.memory.buckets.md), ADR 0034).
+            Operator-visible coarse metadata; never a cleartext name. Null only for a pre-buckets row not yet
+            attributed.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
+        bucketId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The bucket this media lives in, or **null = the uploader's primary** (resolved lazily). Set when the
+            media was attached into an explicit sub-bucket or moved.
+          example: null
+
+    MediaListPage:
+      type: object
+      description: >
+        The conditional-GET response for the live gallery (cr-0107, ADR 0033). `media` carries only the rows past
+        the client's `since` cursor — a **keyset delta** (the full list on first load, when `since` is omitted).
+        `mediaRevision`/`deleteRevision` are the node's opaque per-node counters (`mediaRevision` doubles as the
+        ETag). `mediaIds` — the node's **current** id set for delete-reconcile — is present **only when a delete
+        advanced `deleteRevision`** past the client's `sinceDelete`, and is null on pure adds/edits.
+      required: [media, mediaRevision, deleteRevision]
+      properties:
+        media:
+          type: array
+          description: The delta rows — media whose `updatedAt` is past the `since` cursor, each a full read-back view.
+          items: { $ref: "#/components/schemas/MediaSummary" }
+        mediaRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: >
+            The node's current media-revision — a monotonic per-node counter bumped by every gallery-media
+            mutation (attach / meta-edit / delete; **not** a cover change). Doubles as the ETag; echo it as
+            `If-None-Match`.
+          example: 7
+        deleteRevision:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The node's current delete-revision — bumped **only** by a delete. Echo it as `sinceDelete` to gate the id-set.
+          example: 0
+        mediaIds:
+          x-veyq-visibility: id
+          type: [array, "null"]
+          description: >
+            The node's **current** `mediaId` set (ids only), present **only when `sinceDelete < deleteRevision`**
+            (a delete happened since the client last synced). The client drops any cached id absent from it,
+            catching a delete and a net-zero delete+add. Null on pure adds/edits.
+          items: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+
+    MediaDerivativeSummary:
+      type: object
+      description: A derivative tier's blob ref — same opaque metadata as the original, plus its role `kind`.
+      required: [kind, blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        kind: { $ref: "#/components/schemas/MediaDerivativeKind" }
+        blobId: { type: string, format: uuid, example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The derivative blob's own `K_blob` wrapped under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    MediaExifResponse:
+      type: object
+      description: >
+        A media's lazy metadata: the sealed heavy EXIF bundle, opaque to the server. Fetched per-item when the
+        lightbox opens (kept out of `listNodeMedia` so the list stays constant-small).
+      properties:
+        wrappedExif:
+          type: [string, "null"]
+          description: >
+            The original's heavy EXIF bundle sealed under `K_mem` (opaque base64); the lightbox unwraps it to
+            show camera/lens/exposure. Null when none was sealed at upload. Capture time + GPS live in
+            `wrappedMeta`, not here.
+          contentEncoding: base64
+          maxLength: 16384
+          example: ZXhpZi1jaXBoZXJ0ZXh0
+
+    MediaMetaUpdate:
+      type: object
+      description: >
+        Overwrite a media's sealed listed-metadata blob (re-sealed client-side under `K_mem`), e.g. to persist a
+        corrected date. Null clears it. Opaque to the server.
+      properties:
+        wrappedMeta:
+          type: [string, "null"]
+          description: The re-sealed listed-metadata blob (opaque base64), or null to clear the media's metadata.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+
+    MediaMetaResponse:
+      type: object
+      description: A media's stored listed-metadata blob (opaque), echoed after an update.
+      properties:
+        wrappedMeta:
+          type: [string, "null"]
+          description: The sealed listed-metadata blob (opaque base64), or null when cleared.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+
+    # --- buckets (uploader containers, ADR 0034 / en.memory.buckets) ---------
+    BucketListResponse:
+      type: object
+      required: [buckets]
+      properties:
+        buckets:
+          type: array
+          description: The node's materialized buckets — primaries (one per uploader) + any sub-buckets.
+          items: { $ref: "#/components/schemas/BucketSummary" }
+
+    BucketSummary:
+      type: object
+      description: >
+        One uploader bucket in a node. `ownerKey` is the opaque uploader key (`user:{id}` / `share:{id}`);
+        `parentBucketId` is null for a **primary**. `sealedName` is the `K_mem`-sealed name — null for a member's
+        primary (the client shows the operator-visible username), present for a contributor primary + every
+        sub-bucket. `mediaCount` is the live (non-trashed) media in this bucket.
+      required: [bucketId, ownerKey, isPrimary, mediaCount]
+      properties:
+        bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
+        ownerKey:
+          x-veyq-visibility: structure
+          type: string
+          description: The uploader's opaque owner_key — `user:{userId}` or `share:{shareIdentityId}`.
+          maxLength: 64
+          example: "user:2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e"
+        parentBucketId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The parent primary's id for a sub-bucket, or null when this is the primary.
+          example: null
+        isPrimary:
+          x-veyq-visibility: flag
+          type: boolean
+          description: True for the uploader's lazy primary bucket; false for a sub-bucket.
+          example: true
+        sealedName:
+          type: [string, "null"]
+          description: >
+            The bucket name sealed under `K_mem` (opaque base64) — null for a member's primary (the client shows
+            the operator-visible username), present for a contributor primary + every sub-bucket.
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+        mediaCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: Live (non-trashed) media currently in this bucket.
+          minimum: 0
+          example: 12
+
+    CreateBucketRequest:
+      type: object
+      description: >
+        Create a sub-bucket. Without `parentBucketId` it nests under the caller's own primary; with it, under that
+        primary root (e.g. a contributor's). The name is sealed client-side under `K_mem`.
+      required: [sealedName]
+      properties:
+        sealedName:
+          type: string
+          description: The sub-bucket's name sealed under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 512
+          example: YnVja2V0LW5hbWUtY2lwaGVy
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        parentBucketId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The primary bucket to nest under — null ⇒ the caller's own primary. Must be a primary.
+          example: null
+
+    RenameBucketRequest:
+      type: object
+      description: Re-store a sub-bucket's `K_mem`-sealed name.
+      required: [sealedName]
+      properties:
+        sealedName:
+          type: string
+          description: The new name sealed under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 512
+          example: cmVuYW1lZC1jaXBoZXI=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    MoveMediaRequest:
+      type: object
+      description: Bulk-move media into a target bucket within one owner-root (null = that owner's primary).
+      required: [mediaIds]
+      properties:
+        mediaIds:
+          x-veyq-visibility: id
+          type: array
+          description: The media to move — all must share one owner_key (the same root), in this node.
+          minItems: 1
+          maxItems: 256
+          items: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+        targetBucketId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The destination bucket (same owner as the source), or null ⇒ that owner's primary.
+          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+
+    # --- cover blob (standalone, no media row) -------------------------------
+    CoverBlobCommitRequest:
+      type: object
+      description: >
+        Promote one upload session into the node's standalone cover blob. The blob was sealed + PUT via the
+        existing `startBlobUploads` transport; here the client hands back only its `uploadId`.
+      required: [uploadId]
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session for the cover blob, opened by `startBlobUploads`.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+
+    BlobRef:
+      type: object
+      description: >
+        A committed blob's opaque read-back ref — the same shape the gallery consumes per media tier, reused for
+        the standalone cover. The client unwraps `wrappedBlobKey` under `K_mem`, presigns via
+        `presignBlobDownloads`, and opens the chunks with `openFrame`.
+      required: [blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (server-recorded at commit; ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The cover blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    # --- presign downloads ---------------------------------------------------
+    BlobDownloadsBatchRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/BlobDownloadRequestItem" }
+
+    BlobDownloadRequestItem:
+      type: object
+      required: [blobId]
+      properties:
+        blobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+
+    BlobDownloadsBatchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/BlobDownloadResultItem" }
+
+    BlobDownloadResultItem:
+      type: object
+      description: One per request item, in order. Success carries `presignedGets`; failure carries `error`.
+      properties:
+        presignedGets:
+          type: [array, "null"]
+          description: One presigned GET URL per chunk, in chunk order.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Per-item error code (`upload_not_found` = unknown blob, `store_unavailable`); null on success.
+          maxLength: 64
+          example: null
+
+    # --- shared --------------------------------------------------------------
+    PresignedUrl:
+      type: object
+      required: [index, url]
+      properties:
+        index:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: Chunk index (0-based, in chunk order).
+          example: 0
+        url:
+          x-veyq-visibility: token
+          type: string
+          description: A short-TTL, single-object, single-method presigned URL (PUT or GET) against the object store.
+          maxLength: 4096
+          example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

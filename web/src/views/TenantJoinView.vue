@@ -1,0 +1,347 @@
+<script setup lang="ts">
+// uc.admin.create-tenant Slice B (cr-0010) — the invited owner accepts and activates the tenant. The
+// bootstrap secret rides in the URL #fragment (never sent until accept). preview tells us whether the
+// invited email already has an account: a NEW owner registers cold (Emergency Kit) here, an EXISTING owner
+// signs in + unlocks. Either way the client cold-births the TENANT scope and seals the first grant to its
+// own identity — the scope key never leaves the device.
+import { computed, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
+import Button from 'primevue/button'
+import Card from 'primevue/card'
+import InputText from 'primevue/inputtext'
+import Message from 'primevue/message'
+import Password from 'primevue/password'
+import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/admin/createTenant/tenants'
+import { sealName } from '../features/account/profile/profile'
+import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
+import { InviteRole } from '../api/generated/tenants'
+import { buildAccount, type BuiltAccount } from '../features/account/register/accountBirth'
+import { login, withRefresh } from '../features/account/login/login'
+import { unlockMasterKey } from '../features/account/unlock/unlock'
+import { identityPrivate, vaultState } from '../app/vault'
+import { account } from '../app/account'
+import { setupApi } from '../api/client'
+import { fromB64std } from '../shared/base64'
+import { hybridPublic } from '../shared/crypto/v1'
+import { HttpStatus, isUnauthorized } from '../shared/httpError'
+
+const { t } = useI18n()
+const route = useRoute()
+const router = useRouter()
+
+type Phase = 'loading' | 'invalid' | 'expired' | 'register' | 'kit' | 'signin' | 'done'
+const phase = ref<Phase>('loading')
+const error = ref('')
+const busy = ref(false)
+
+const tenantName = ref('')
+const domain = ref('')
+const ownerEmail = ref('')
+// The invite's role (cr-0077): an OWNER cold-births the TENANT scope + seals the first grant; a MEMBER joins
+// grant-less (no scope birth, no grant) and a key-holder delivers the key later (cr-0076).
+const role = ref<InviteRole>(InviteRole.Owner)
+const isMember = computed(() => role.value === InviteRole.Member)
+
+// Role-aware copy: a MEMBER joins the shared space, an OWNER takes ownership. Falls back to the base (owner)
+// key when no `<base>Member` variant exists.
+function jcopy(base: string, params?: Record<string, unknown>): string {
+  return t(`tenant.join.${isMember.value ? `${base}Member` : base}`, params ?? {})
+}
+
+// register + signin form: the per-tenant handle chosen on join (ADR 0023), plus an OPTIONAL real name. For an
+// OWNER accept the client cold-births K_tenant here, so it can seal the name at join (cr-0106); a grant-less
+// MEMBER has no key yet, so its name field is hidden and the name is added later in profile settings.
+const username = ref('')
+const firstName = ref('')
+const lastName = ref('')
+const password = ref('')
+const secretKeyDisplay = ref('')
+const kitReady = ref(false)
+// sign-in form
+const secretKey = ref('')
+// Fast path: the session lapsed while the vault stayed unlocked → ask for the password only (re-login), never
+// the Secret Key (the identity key is already in memory).
+const needsReauth = ref(false)
+
+// This browser already holds the INVITED owner's unlocked vault (same-origin setup → create-tenant flow):
+// the identity key is in memory, so we can seal the grant and accept in one click — no password, no Secret
+// Key. Gated on the email so we never seal to a different signed-in identity (the server also enforces this).
+const alreadyUnlocked = computed(
+  () => vaultState.unlocked && account.email.trim().toLowerCase() === ownerEmail.value.trim().toLowerCase(),
+)
+
+const secret = String(route.hash || '').replace(/^#/, '')
+// Non-reactive: keep the freshly born identity's Uint8Arrays out of Vue's deep proxy.
+let built: BuiltAccount | null = null
+
+onMounted(async () => {
+  if (!secret) {
+    phase.value = 'invalid'
+    return
+  }
+  try {
+    const p = await previewInvite(secret)
+    tenantName.value = p.tenantName
+    domain.value = p.domain
+    ownerEmail.value = p.ownerEmail
+    role.value = p.role
+    phase.value = p.hasAccount ? 'signin' : 'register'
+  } catch (e) {
+    const { status } = await tenantError(e)
+    phase.value = status === HttpStatus.gone ? 'expired' : 'invalid'
+  }
+})
+
+/** Register step 1: build the account on-device and show its Emergency Kit before activating. */
+async function prepareRegistration() {
+  if (!username.value.trim() || password.value.length === 0) return
+  error.value = ''
+  busy.value = true
+  try {
+    const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
+    built = buildAccount(ownerEmail.value, password.value, instanceSalt)
+    secretKeyDisplay.value = built.emergencyKit.secretKey
+    phase.value = 'kit'
+  } catch {
+    error.value = t('tenant.join.failed')
+  } finally {
+    busy.value = false
+  }
+}
+
+/** Seal the OPTIONAL real name under the freshly-born K_tenant, or undefined when both fields are empty. Only
+ *  called on the OWNER path (which holds K_tenant at accept); a grant-less MEMBER never reaches it. */
+function sealedNameFor(scopeRootKey: Uint8Array): string | undefined {
+  if (!firstName.value.trim() && !lastName.value.trim()) return undefined
+  return sealName(scopeRootKey, { firstName: firstName.value, lastName: lastName.value })
+}
+
+/** Register step 2: cold-birth the scope grant to the new identity and register-and-accept. */
+async function finishRegistration() {
+  if (!built || !kitReady.value) return
+  error.value = ''
+  busy.value = true
+  try {
+    // A MEMBER joins grant-less (no scope birth, no name); only an OWNER cold-births the TENANT scope + seals a
+    // grant — and, holding K_tenant here, can seal the optional real name at join (cr-0106).
+    let grant: string | undefined
+    let sealedName: string | undefined
+    if (!isMember.value) {
+      const born = bornTenantScope({ x: built.identity.pub.kemX, m: built.identity.pub.kemM })
+      grant = born.grant
+      sealedName = sealedNameFor(born.scopeRootKey)
+    }
+    await registerAndAccept(secret, username.value.trim().toLowerCase(), built.material, grant, sealedName)
+    phase.value = 'done'
+  } catch (e) {
+    error.value = await mapError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** Existing owner: sign in, unlock (identity key), then seal the grant to it and accept. */
+async function signInAndAccept() {
+  if (password.value.length === 0 || secretKey.value.trim().length === 0) return
+  error.value = ''
+  busy.value = true
+  try {
+    await login(ownerEmail.value, password.value)
+    await unlockMasterKey(password.value, secretKey.value.trim())
+    const priv = identityPrivate()
+    if (!priv) throw new Error('locked')
+    let grant: string | undefined
+    let sealedName: string | undefined
+    if (!isMember.value) {
+      const born = bornTenantScope(hybridPublic(priv))
+      grant = born.grant
+      sealedName = sealedNameFor(born.scopeRootKey)
+    }
+    await acceptInvite(secret, username.value.trim().toLowerCase(), grant, sealedName)
+    phase.value = 'done'
+  } catch (e) {
+    error.value = await mapError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** With an already-unlocked identity in memory, cold-birth the scope grant and accept. acceptInvite isn't
+ *  withRefresh-wrapped itself, so wrap it here: an expired access token rotates silently from the cookie. */
+async function sealAndAccept() {
+  const priv = identityPrivate()
+  if (!priv) throw new Error('locked')
+  let grant: string | undefined
+  let sealedName: string | undefined
+  if (!isMember.value) {
+    const born = bornTenantScope(hybridPublic(priv))
+    grant = born.grant
+    sealedName = sealedNameFor(born.scopeRootKey)
+  }
+  await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), grant, sealedName))
+  password.value = ''
+  phase.value = 'done'
+}
+
+/** A "no live session" failure (access expired AND the silent refresh had nothing to rotate) — distinct from
+ *  a real invite error (400 malformed grant / 403 / 404 / 410), which must surface via mapError instead.
+ *  Only a 401 means the session lapsed: withRefresh already rotated once and still got 401, or the refresh
+ *  endpoint itself rejected. Delegates to the shared `isUnauthorized` (the same cross-package status duck-type
+ *  as login's withRefresh), just under a name that carries the invite-flow meaning. */
+function isAuthLapse(e: unknown): boolean {
+  return isUnauthorized(e)
+}
+
+/** One-click accept when this browser already holds the invited owner's unlocked vault. */
+async function acceptDirect() {
+  error.value = ''
+  busy.value = true
+  try {
+    await sealAndAccept()
+  } catch (e) {
+    // Vault unlocked but the session is gone and the cookie couldn't refresh it → fall to a password-only
+    // re-login (the Secret Key stays unnecessary). Anything else is a real invite error.
+    if (isAuthLapse(e)) needsReauth.value = true
+    else error.value = await mapError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+/** Session-lapsed branch: re-establish the session with the password only (the vault is still unlocked, so no
+ *  Secret Key), then seal + accept. */
+async function reauthAndAccept() {
+  if (password.value.length === 0) return
+  error.value = ''
+  busy.value = true
+  try {
+    await login(ownerEmail.value, password.value)
+    await sealAndAccept()
+    needsReauth.value = false
+  } catch (e) {
+    error.value = await mapError(e)
+  } finally {
+    busy.value = false
+  }
+}
+
+async function mapError(e: unknown): Promise<string> {
+  const { status, code } = await tenantError(e)
+  if (status === HttpStatus.gone) return t('tenant.join.expired')
+  if (status === HttpStatus.notFound) return t('tenant.join.invalid')
+  if (code === 'email_taken') return t('tenant.join.emailTaken')
+  if (code === 'username_taken') return t('tenant.join.usernameTaken')
+  if (code === 'not_invited_owner') return t('tenant.join.wrongOwner')
+  return t('tenant.join.failed')
+}
+</script>
+
+<template>
+  <Card class="join-card">
+    <template #title>{{ t('tenant.join.title') }}</template>
+    <template #content>
+      <p v-if="phase === 'loading'" class="muted">{{ t('tenant.join.loading') }}</p>
+
+      <Message v-else-if="phase === 'invalid'" severity="error" :closable="false">{{ t('tenant.join.invalid') }}</Message>
+      <Message v-else-if="phase === 'expired'" severity="warn" :closable="false">{{ t('tenant.join.expired') }}</Message>
+
+      <template v-else-if="phase === 'register'">
+        <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
+        <p class="veyq-form-copy">{{ jcopy('registerSub', { email: ownerEmail }) }}</p>
+        <form class="veyq-form" @submit.prevent="prepareRegistration">
+          <label>{{ t('tenant.join.username') }}
+            <InputText v-model="username" name="username" autocomplete="username" required />
+            <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
+          </label>
+          <template v-if="!isMember">
+            <div class="name-row">
+              <label>{{ t('profile.firstName') }}
+                <InputText v-model="firstName" name="given-name" autocomplete="given-name" />
+              </label>
+              <label>{{ t('profile.lastName') }}
+                <InputText v-model="lastName" name="family-name" autocomplete="family-name" />
+              </label>
+            </div>
+            <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
+          </template>
+          <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" /></label>
+          <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+          <Button type="submit" :label="t('tenant.join.continue')" icon="pi pi-arrow-right" :loading="busy"
+                  :disabled="!username.trim() || password.length === 0" />
+        </form>
+      </template>
+
+      <template v-else-if="phase === 'kit'">
+        <Message severity="info" :closable="false">{{ t('tenant.join.saveKitTitle') }}</Message>
+        <EmergencyKitSave :email="ownerEmail" :secret-key="secretKeyDisplay" v-model="kitReady">
+          <p class="veyq-form-copy">{{ t('tenant.join.saveKitSub') }}</p>
+        </EmergencyKitSave>
+        <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+        <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!kitReady" @click="finishRegistration" />
+      </template>
+
+      <template v-else-if="phase === 'signin'">
+        <p class="veyq-form-copy">{{ jcopy('invitedTo', { tenant: tenantName, domain }) }}</p>
+
+        <!-- The per-tenant handle (ADR 0023): an existing account still picks a username for THIS tenant. -->
+        <label class="veyq-form-field">{{ t('tenant.join.username') }}
+          <InputText v-model="username" name="username" autocomplete="username" required />
+          <small class="field-hint">{{ t('tenant.join.usernameHint') }}</small>
+        </label>
+        <template v-if="!isMember">
+          <div class="name-row">
+            <label class="veyq-form-field">{{ t('profile.firstName') }}
+              <InputText v-model="firstName" name="given-name" autocomplete="given-name" />
+            </label>
+            <label class="veyq-form-field">{{ t('profile.lastName') }}
+              <InputText v-model="lastName" name="family-name" autocomplete="family-name" />
+            </label>
+          </div>
+          <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
+        </template>
+
+        <!-- Fast path: this browser already holds the invited owner's unlocked vault → accept in one click,
+             or ask for the password only if the session lapsed. Never the Secret Key. -->
+        <template v-if="alreadyUnlocked">
+          <template v-if="needsReauth">
+            <p class="veyq-form-copy">{{ t('tenant.join.reauthSub') }}</p>
+            <form class="veyq-form" @submit.prevent="reauthAndAccept">
+              <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="reauth-password" /></label>
+              <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+              <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
+                      :disabled="!username.trim() || password.length === 0" />
+            </form>
+          </template>
+          <template v-else>
+            <p class="veyq-form-copy">{{ jcopy('signinReadySub', { email: ownerEmail }) }}</p>
+            <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+            <Button :label="jcopy('join')" icon="pi pi-check" :loading="busy" :disabled="!username.trim()" @click="acceptDirect" />
+          </template>
+        </template>
+
+        <!-- Cold path: locked vault or a different account signed in → full sign-in + unlock. -->
+        <template v-else>
+          <p class="veyq-form-copy">{{ jcopy('signinSub', { email: ownerEmail }) }}</p>
+          <form class="veyq-form" @submit.prevent="signInAndAccept">
+            <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="signin-password" /></label>
+            <label>{{ t('unlock.secretKey') }}<InputText v-model="secretKey" autocomplete="off" required /></label>
+            <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
+            <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
+                    :disabled="!username.trim() || password.length === 0 || secretKey.trim().length === 0" />
+          </form>
+        </template>
+      </template>
+
+      <template v-else-if="phase === 'done'">
+        <Message severity="success" :closable="false">{{ jcopy('done', { tenant: tenantName }) }}</Message>
+        <p class="veyq-form-copy">{{ jcopy('doneNote') }}</p>
+        <Button :label="t('login.title')" icon="pi pi-sign-in" @click="router.push({ name: 'login' })" />
+      </template>
+    </template>
+  </Card>
+</template>
+
+<style scoped>
+.muted { opacity: 0.7; }
+</style>

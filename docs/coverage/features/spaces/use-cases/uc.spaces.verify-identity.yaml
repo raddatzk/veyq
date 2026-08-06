@@ -1,0 +1,40 @@
+useCase: uc.spaces.verify-identity
+feature: spaces
+title: Verify a member's identity
+status: planned
+# Refined (ADR 0028 + en.account.identity-pinning define the model: TOFU-pin on first use, a change is a UI notice
+# / a worker block+decline, out-of-band safety-number verification elevates pinned->verified, opt-in strict mode).
+# PARTIALLY BUILT on web. cr-0098: the sealed pin-store sync, the grant-delivery decline seam, and
+# the TOFU wrap-gates at the three foreign-wrap sites -> tofu-pin-on-first-use, change-surfaced-not-trusted,
+# operator-blind-pinning FILLED. cr-0099: changed-key-review (side-by-side expected-vs-current -> accept/refuse) is
+# FILLED, and the pin-store verify PRIMITIVES ship (safetyNumber, markVerified, trustState/trustStates — unit-tested).
+# DESCOPED in cr-0099 (deliberately, after review): the proactive verify ceremony + the verified/recognized directory
+# badges were removed — a per-member "verified" state is advisory noise for the normal user, and it only pays off
+# under a scope-wide strict mode. So safety-number-verify stays a GAP (primitives only, no UI) and strict-mode stays
+# unbuilt -> the use-case remains planned. strict-mode also needs a redesign: a *per-account* toggle can't protect
+# shared-scope content (any co-member can key an unverified identity); see docs/inbox.md (K_SC-sealed attestation
+# registry) before cr-0100.
+acceptanceCriteria:
+  - id: tofu-pin-on-first-use
+    text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kemX+kemM+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
+  - id: change-surfaced-not-trusted
+    text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker) + a human-review flag. A change is attack-or-legitimate-rotation, resolved by a human.
+  - id: safety-number-verify
+    text: The caller compares a member's safety-number (fingerprint() digest, 6x5 digits) out-of-band — QR scan (compare scanned vs pinned key) or digits read aloud -> feedback matches (offer mark verified -> state verified) or differs (warn, do not trust). Verification elevates pinned -> verified and is the path to accept a legitimately rotated key.
+    # GAP (cr-0099 descope): the pin-store primitives exist + are unit-tested (safetyNumber is fingerprint-vector-
+    # pinned; markVerified elevates only if the pinned key still matches, else IdentityMovedError, verified-wins on a
+    # 409 — all in identityPins.test.ts), but the proactive verify CEREMONY UI (QR/read-aloud compare -> mark verified)
+    # was intentionally NOT shipped: it's advisory noise until scope-wide strict mode makes it pay off (cr-0100). So
+    # verified is reachable only via the data layer, no user-facing path -> this criterion stays a gap.
+  - id: changed-key-review
+    text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key, optionally verified) or refuses (leave blocked, the wrap/delivery stays gated).
+    # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
+    # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts] }
+  - id: strict-mode
+    text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
+  - id: operator-blind-pinning
+    text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
+gaps:
+  backend: "Built (cr-0098): the sealed pin-store sync (GET/PUT /api/account/identity-pins, optimistic-concurrency 409 stale_version) + the grant-delivery decline seam (POST /api/tasks/{jobId}/decline, per-worker exclusion). No verify/strict-mode server state (client-only ceremony; strict-mode is the follow-up)."

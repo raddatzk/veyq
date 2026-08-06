@@ -1,0 +1,315 @@
+openapi: 3.1.0
+info:
+  title: veyq Setup API
+  version: 0.1.0
+  description: >
+    First-run bootstrap of a veyq instance. A fresh instance has no owner; this API creates the first
+    account (Server Owner) as an end-to-end-encrypted account and then locks setup to a single owner.
+
+    The server is operator-blind: it receives only ciphertext (wrapped key material), public keys and
+    low-sensitivity operational metadata. It performs **no content crypto** and never sees the raw
+    password — authentication uses a password-derived Ed25519 keypair (the client registers only the
+    public key; login is challenge-response). See ADR 0003.
+
+    Field validation and sanitization are declared here and enforced by the generated code via the
+    `x-field-extra-annotation` vendor extension (bean-validation constraints + a trimming Jackson
+    deserializer), so malformed input is rejected at the boundary (400) before any handler runs.
+tags:
+  - name: setup
+    description: First-run instance setup and the single-owner lock.
+
+paths:
+  /api/setup:
+    get:
+      tags: [setup]
+      operationId: getSetupStatus
+      summary: Report whether first-run setup is still required.
+      description: >
+        Returns whether the instance still needs its first owner, plus the crypto suites the server
+        advertises. Reachable whether or not setup is complete.
+      responses:
+        "200":
+          description: Current setup status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupStatus" }
+              examples:
+                fresh:
+                  summary: A fresh instance
+                  value:
+                    setupRequired: true
+                    suites: ["v1"]
+                    instanceSalt: aW5zdGFuY2Utc2FsdC0xNmI=
+                    version: { major: 1, build: 1 }
+                    capabilities:
+                      - { id: sharing.public-links }
+                      - { id: sharing.uploader-links }
+                      - { id: spaces.groups }
+                      - { id: account.device-trust }
+                done:
+                  summary: An instance that is already set up
+                  value:
+                    setupRequired: false
+                    suites: ["v1"]
+                    instanceSalt: aW5zdGFuY2Utc2FsdC0xNmI=
+                    version: { major: 1, build: 1 }
+                    capabilities:
+                      - { id: sharing.public-links }
+                      - { id: sharing.uploader-links }
+                      - { id: spaces.groups }
+                      - { id: account.device-trust }
+
+  /api/setup/owner:
+    post:
+      tags: [setup]
+      operationId: createServerOwner
+      summary: Create the first Server Owner and complete setup.
+      description: >
+        Creates the first account as an E2EE registration and marks setup complete (single-owner lock).
+        The body carries only ciphertext, public keys and operational metadata; the server stores them
+        as-is. It does not verify the password (there is none) — `authPublicKey` is stored for later
+        challenge-response login.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateServerOwnerRequest" }
+            example:
+              email: kevin@example.com
+              suiteId: v1
+              identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+              wrappedIdentityPrivateKey: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+              authPublicKey: ZWQyNTUxOS1hdXRoLXB1Yg==
+              masterKeyWraps:
+                - method: PASSWORD
+                  wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
+              recoveryMasterKeyTag: cmVjb3ZlcnktdGFn
+      responses:
+        "201":
+          description: The Server Owner was created and setup is now locked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SetupResult" }
+              example: { userId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+        "400":
+          description: The request was malformed (missing/invalid fields).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "409":
+          description: Setup is already complete; a second owner cannot be bootstrapped.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: setup_already_complete }
+
+components:
+  schemas:
+    SetupStatus:
+      type: object
+      required: [setupRequired, suites, instanceSalt, version, capabilities]
+      properties:
+        setupRequired:
+          x-veyq-visibility: public
+          type: boolean
+          description: True while the instance has no owner yet.
+          example: true
+        version:
+          $ref: "#/components/schemas/Version"
+        capabilities:
+          type: array
+          description: >
+            The instance's ACTIVE capability manifest (ADR 0032): the abilities this build supports and the
+            operator has not disabled, sourced from the append-only catalog contracts/platform/capabilities.json
+            minus the veyq.capabilities.disabled config list. Pre-auth, identity-free and identical for every
+            caller (operator-blind-safe) — it advertises only instance-wide abilities, never per-user data. A
+            client soft-gates each optional feature on the presence of its id (absent => hidden). The wire shape
+            is intentionally [{ id }]; the catalog's serves[]/source metadata stays off the wire.
+          items: { $ref: "#/components/schemas/Capability" }
+          example:
+            - { id: sharing.public-links }
+            - { id: sharing.uploader-links }
+        suites:
+          x-veyq-visibility: public
+          type: array
+          description: Crypto suite ids the server advertises (e.g. "v1").
+          items: { type: string, maxLength: 16, example: v1 }
+          example: [v1]
+        instanceSalt:
+          type: string
+          description: >
+            Instance-wide salt for deriving each account's auth salt (authSalt = HKDF(instanceSalt,
+            normalizedEmail); ADR 0003). Generated once at first run, stable for the life of the instance
+            and identical for everyone — public, not a secret. The setup client needs it to derive the
+            owner's auth keypair; login receives the same value in the challenge response.
+          contentEncoding: base64
+          maxLength: 256
+          example: aW5zdGFuY2Utc2FsdC0xNmI=
+
+    Version:
+      type: object
+      description: >
+        The instance's advertised version (ADR 0032). Two parts with different roles: `major` is the hard
+        compatibility gate, `build` is informational only.
+      required: [major, build]
+      properties:
+        major:
+          x-veyq-visibility: public
+          type: integer
+          format: int32
+          description: >
+            The ONLY hard-compatibility gate. Incremented exclusively when a capability is REMOVED (a breaking
+            removal an older client might rely on). A client compares this to the `major` it was compiled
+            against: equal => proceed; server > client => a blocking "update your app" state; server < client =>
+            a blocking "update this server" state — any mismatch stops before login, never a silent partial
+            failure. Everything additive (a new capability, field or endpoint) bumps `build`, never `major`.
+          minimum: 0
+          example: 1
+        build:
+          x-veyq-visibility: public
+          type: integer
+          format: int32
+          description: >
+            Monotonic build counter, informational only (diagnostics, "what's new"). Bumped on every additive
+            change. Never gates.
+          minimum: 0
+          example: 1
+
+    Capability:
+      type: object
+      description: >
+        One entry in the active capability manifest. The wire shape is intentionally `{ id }` only; it is
+        extensible to `{ id, state, ... }` later without a `major` bump (additive => `build`).
+      required: [id]
+      properties:
+        id:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            Stable lowercase-dotted capability id (e.g. "sharing.public-links"), from the append-only catalog
+            contracts/platform/capabilities.json. A capability is instance-wide + pre-auth ("this server can do
+            X at all") — NOT a per-scope/role permission ("you may do X here"). A feature is offered only when
+            the capability is present AND local policy permits.
+          maxLength: 64
+          example: sharing.public-links
+
+    MasterKeyWrap:
+      type: object
+      description: One wrap of the Master Key, openable by a single unlock method.
+      required: [method, wrappedKey]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
+            it); ignored on input (setup assigns ids server-side).
+          maxLength: 64
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        method:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
+            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
+            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
+          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
+          example: PASSWORD
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tYXN0ZXIta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        kdfParams:
+          type: string
+          description: >
+            KDF parameters + salt needed to re-derive this method's unlock KEK (opaque base64; present for
+            password/recovery/device methods, absent for passkey which is PRF-derived). For DEVICE_KEY there
+            is no KDF — this field carries only the AEAD iv for the device-key wrap.
+          contentEncoding: base64
+          maxLength: 256
+          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    CreateServerOwnerRequest:
+      type: object
+      required:
+        - email
+        - suiteId
+        - identityPublicKey
+        - wrappedIdentityPrivateKey
+        - masterKeyWraps
+        - authPublicKey
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the source of its deterministic auth salt (ADR 0003) — authentication can
+            neither resolve the account nor derive its salt without this plaintext.
+          type: string
+          format: email
+          description: The owner's login email — identifier and source of the deterministic auth salt (ADR 0003). Server-visible.
+          maxLength: 254
+          example: kevin@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        suiteId:
+          x-veyq-visibility: enum
+          type: string
+          description: Crypto suite the client used to produce the wrapped material.
+          enum: [v1]
+          example: v1
+        identityPublicKey:
+          type: string
+          description: The owner's identity public key bundle (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedIdentityPrivateKey:
+          type: string
+          description: The identity private key wrapped under the Master Key (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        masterKeyWraps:
+          type: array
+          description: One wrap per chosen unlock method; PASSWORD is the mandatory floor.
+          minItems: 1
+          items: { $ref: "#/components/schemas/MasterKeyWrap" }
+          # @Valid cascades bean-validation into each MasterKeyWrap (wrappedKey/kdfParams/method), and
+          # @Size(min=1) enforces minItems (the PASSWORD floor) — both at the boundary, before the handler.
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1) @field:jakarta.validation.Valid'
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 auth public key derived from the password (ADR 0003). Server-visible and NOT a
+            credential — login proves possession of the matching private key via challenge-response.
+          contentEncoding: base64
+          maxLength: 8192
+          example: ZWQyNTUxOS1hdXRoLXB1Yg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        recoveryMasterKeyTag:
+          type: string
+          description: One-way tag proving recovery of the same Master Key during reset (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: cmVjb3ZlcnktdGFn
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    SetupResult:
+      type: object
+      required: [userId]
+      properties:
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the created Server Owner.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

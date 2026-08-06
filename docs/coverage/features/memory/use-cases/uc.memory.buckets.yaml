@@ -1,0 +1,48 @@
+useCase: uc.memory.buckets
+feature: memory
+title: Buckets — group a Memory's media by who contributed it
+# Built by cr-0113 (contracts → backend → web). A bucket = a per-uploader
+# container within one Memory, the attribution axis orthogonal to Chapters: a real veyq_bucket table keyed by an
+# opaque owner_key ("user:{id}" | "share:{shareIdentityId}"), a lazy virtual primary + one-level sub-buckets,
+# K_mem-sealed names, media linked via a nullable bucket_id + a denormalized created_by; reparent-on-delete. The
+# curation authz was relaxed in cr-0123 (a member curates any owner-root's sub-buckets + moves media within one
+# root — never a primary, never across owners). The web ships the "Beiträge" tab with per-tile selection + an
+# explicit action bar (cr-0122). A camera filter is a later slice. A full live
+# "Beiträge"-tab click-through is pending a session with the dev backend up.
+acceptanceCriteria:
+  - id: uploader-stamp-on-media
+    text: Every uploaded medium carries an operator-visible uploader stamp — a member's created_by = owner_key "user:{id}" XOR a contributor's "share:{shareIdentityId}" — set at attach and returned by the per-node media list (ownerKey/bucketId), so a client can group. A medium with no member stamp (a pre-cr0113 owner upload) is lazily backfilled to the owner's primary at list time.
+    coverage:
+      backend:
+        integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary]
+      web:
+        unit: [src/features/memory/media.buckets.test.ts]
+  - id: derived-primary-buckets
+    text: A Memory's buckets are materialized lazily via find-or-create on (node_id, owner_key) — one primary per uploader, virtual until that uploader has at least one medium. (Uniqueness holds for sequential resolves, which is what these tests pin; it is not enforced by a constraint — see ADR 0034 §4 + architecture §11.)
+    coverage:
+      backend:
+        integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents]
+  - id: sub-bucket-endpoints
+    text: Sub-buckets sit one level under a primary (parent must be primary), owner inherited, K_mem-sealed name; the backend exposes create/rename/delete/move endpoints; delete reparents the sub-bucket's media to the owner's primary and never deletes media, primaries are neither renameable nor deletable. Curation authz (cr-0123) — a scope member may create a sub under any primary root, rename/delete any sub (own or a contributor's), and move media WITHIN one owner-root, but never a primary and never across owners (a single distinct source owner_key is required, else 403).
+    coverage:
+      backend:
+        integration: [MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName, MediaBucketsSliceTest.memberMayManageAnotherRootsSubBucket, MediaBucketsSliceTest.memberCreatesSubUnderAnotherRootInheritingItsOwner, MediaBucketsSliceTest.createSubRejectsNonPrimaryParent, MediaBucketsSliceTest.crossOwnerMoveIsRejected, MediaBucketsSliceTest.primaryBucketNotRenameableNorDeletable]
+      web:
+        unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
+  - id: contributions-tab-primary-grouping
+    text: A "Beiträge" tab lists the Memory's uploaders by their primary bucket (with per-bucket counts); selecting one filters the existing MediaGrid + lightbox to that uploader. Bucket names are unsealed under K_mem client-side (a contributor's sealed name; a member's the per-tenant username), an unsealable name falling back to a neutral placeholder. An explicit action bar (cr-0122) adds per-tile selection (checkbox top-left, 3-dot top-right), a select-all/deselect toggle, and visible Move / Delete (delete = a straight soft-delete to trash with a local undo bar); the bucket actions (upload / new sub / rename / delete) are buttons beside the picker, enabled per the cr-0123 curation authz.
+    coverage:
+      web:
+        unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
+  - id: operator-blind-buckets
+    text: Grouping and ownership run over the opaque owner_key + the bucket structure (node, parentage, is_primary, counts) the operator already relays; names are unsealed client-side and a wrong AAD context can never open one. The operator never learns a cleartext bucket/uploader name nor any content, and a personal Memory with no share exposes only the account owner's owner_key.
+    coverage:
+      # Blindness = grouping over an opaque owner_key ("user:{id}") + sealed names the operator only relays,
+      # and a name openable ONLY under the right AAD. uploadStampsOwnerKey proves a personal Memory's lone
+      # primary carries just the owner's owner_key (no sealed name); rename proves the sealed name is opaque
+      # base64 echoed verbatim; the web test proves a wrong AAD context returns null (never a cleartext name).
+      # (listBucketsByNonMemberIs404 was an authz-404 test — tangential to blindness — so it is dropped here.)
+      backend:
+        integration: [MediaBucketsSliceTest.uploadStampsOwnerKeyAndMaterializesPrimary, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName]
+      web:
+        unit: [src/features/memory/media.buckets.test.ts]

@@ -1,0 +1,524 @@
+openapi: 3.1.0
+info:
+  title: veyq Auth API
+  version: 0.1.0
+  description: >
+    Operator-blind account login and session management.
+
+    Login is challenge-response over a password-derived Ed25519 keypair (ADR 0003): the client requests a
+    single-use nonce, signs it with the private key it derives from the password, and the server verifies
+    against the stored `authPublicKey`. The password never reaches the server and nothing replayable is
+    transmitted; the stored public key is not a credential.
+
+    A successful login issues an opaque, rotating **access + refresh** token pair grouped into a **session
+    family** (ADR 0004). Refresh rotates the pair; presenting a superseded refresh token revokes the whole
+    family (reuse detection). This API gates only a **session** — it performs no content crypto and never
+    unlocks content (auth ≠ unlock).
+
+    Challenge issuance and every failure are deliberately **non-enumerable**: the server behaves
+    identically for existing and non-existing accounts.
+
+    Field validation and sanitization are declared here and enforced by the generated code via the
+    `x-field-extra-annotation` vendor extension, so malformed input is rejected at the boundary (400).
+tags:
+  - name: login
+    description: Challenge-response login (issue a session).
+  - name: token
+    description: Session token rotation.
+  - name: session
+    description: Session lifecycle (logout).
+  - name: recovery
+    description: >
+      Password recovery (ADR 0054). Unauthenticated by necessity — the actor has no password — and gated on
+      two independent factors instead: a mailed one-time token proving address control, and reproduction of
+      the birth-time commitment proving possession of the Secret Key. Not escrow: the server hands out
+      ciphertext it cannot open, to a party that must already hold the key that opens it.
+
+paths:
+  /api/login/challenge:
+    post:
+      tags: [login]
+      operationId: requestLoginChallenge
+      summary: Issue a single-use login challenge (non-enumerable).
+      description: >
+        Returns a single-use, time-bounded nonce for the client to sign, plus the instance salt needed to
+        derive the auth keypair. The response is identical whether or not the account exists, so it never
+        reveals which emails have accounts.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginChallengeRequest" }
+            example: { email: kevin@example.com }
+      responses:
+        "200":
+          description: A challenge to sign (issued whether or not the account exists).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LoginChallenge" }
+              example: { nonce: bm9uY2UtZXhhbXBsZS0zMmJ5dGVz, instanceSalt: aW5zdGFuY2Utc2FsdC0xNmI= }
+        "400":
+          description: The request was malformed (missing/invalid email).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+
+  /api/login/verify:
+    post:
+      tags: [login]
+      operationId: verifyLogin
+      summary: Verify a signed challenge and issue a session.
+      description: >
+        Verifies the Ed25519 signature over the outstanding nonce against the stored `authPublicKey`. On
+        success it issues an opaque access + refresh token pair in a new session family. Any failure —
+        wrong signature, unknown account, or an expired/replayed nonce — returns a single generic 401,
+        identical in every case.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LoginVerifyRequest" }
+            example: { email: kevin@example.com, signature: c2lnbmF0dXJlLW92ZXItbm9uY2U= }
+      responses:
+        "200":
+          description: Authenticated; a new session family with its tokens.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400":
+          description: The request was malformed (missing/invalid fields).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (wrong signature, unknown account, or stale nonce).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/token/refresh:
+    post:
+      tags: [token]
+      operationId: refreshSession
+      summary: Rotate the session tokens.
+      description: >
+        Exchanges a valid refresh token for a fresh access + refresh pair and supersedes the old refresh
+        token. Presenting a superseded refresh token whose secret verifies is treated as a clone and
+        revokes the entire family (ADR 0004); an unverifiable, expired, or revoked token is a plain 401.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RefreshRequest" }
+            example: { refreshToken: cmVmcmVzaC10b2tlbi1vcGFxdWU }
+      responses:
+        "200":
+          description: A rotated access + refresh pair.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TokenPair" }
+        "400":
+          description: The request was malformed (missing token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: The refresh token is invalid, expired, or its family was revoked.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: refresh_rejected }
+
+  /api/logout:
+    post:
+      tags: [session]
+      operationId: logout
+      summary: Revoke the current session family.
+      description: >
+        Revokes the session family of the presented access token. Idempotent — a missing or
+        already-invalid session still returns 204.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The session family is revoked (or was already gone).
+
+  /api/recovery/request:
+    post:
+      tags: [recovery]
+      operationId: requestPasswordRecovery
+      summary: Request a password-recovery link (non-enumerable).
+      description: >
+        Mints a one-time recovery token and mails its link to the address, if an account exists under it.
+        The response is identical either way, so it never reveals which addresses have accounts — the same
+        posture as the login challenge (ADR 0004). A new request supersedes any outstanding token for that
+        address. Rate-limited per address and per source.
+
+        Non-enumerability covers the **address** and nothing more. Whether the tenant addressed by this
+        request's `Host` can send mail at all is a property of the deployment, not of any account, so it is
+        answered plainly with `503 mail_unavailable` instead of a silent `202` (ADR 0055 §4). That check runs
+        **before** the rate limiter, so a limited and an unlimited request cannot be paired into an
+        address-level oracle (ADR 0055 §5). There is no capability to ask in advance: a client may always
+        offer the reset link and let the request fail honestly.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryRequest" }
+      responses:
+        "202":
+          description: Accepted. Says nothing about whether the address is registered.
+        "429":
+          description: Too many recovery requests; retry after the indicated delay.
+          content:
+            application/json:
+              schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+        "503":
+          description: >
+            This tenant has no working mail transport, so a recovery link cannot be sent and none was minted
+            (`mail_unavailable`). There is deliberately no copy-link fallback — routing a recovery link through
+            the operator would make them a participant in a flow built to exclude them (ADR 0054 § Decision 4).
+          content:
+            application/json:
+              schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+
+  /api/recovery/release:
+    post:
+      tags: [recovery]
+      operationId: releaseRecoveryMaterial
+      summary: Exchange a recovery token for the withheld RECOVERY wrap.
+      description: >
+        Returns the account's `RECOVERY` master-key wrap — the one the ordinary key-material read filters
+        out. Gated **only** on a live, unspent recovery token, never on a session: releasing it to an
+        authenticated caller would let a live session plus the Secret Key open the vault without the
+        password, demoting the password from a content factor (ADR 0054 § Context 2).
+
+        The returned wrap is opened by the **Secret Key alone**, so this response is useless to anyone who
+        does not hold the Emergency Kit. The token is not spent here — it is spent by the completing reset,
+        so a wrong Secret Key costs the caller nothing.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryTokenRequest" }
+      responses:
+        "200":
+          description: The recovery material.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RecoveryMaterial" }
+        "404":
+          description: The token is unknown, expired or already spent. Deliberately indistinguishable.
+          content:
+            application/json:
+              schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+
+  /api/recovery/complete:
+    post:
+      tags: [recovery]
+      operationId: completePasswordRecovery
+      summary: Set a new password against a proven Secret Key.
+      description: >
+        Applies the reset in one transaction: replace the `PASSWORD` wrap, overwrite the auth public key,
+        delete every `DEVICE` and `DEVICE_KEY` wrap, revoke all sessions, and spend the token.
+
+        Accepted only if `recoveryAuthTag` matches the commitment stored at account birth — proof that the
+        caller actually opened the released wrap, i.e. holds the Secret Key. A caller with mailbox access
+        alone cannot produce it (ADR 0054 § Decision 1). The Master Key is unchanged, so **no content is
+        re-encrypted** and the Emergency Kit stays valid.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecoveryCompleteRequest" }
+      responses:
+        "204":
+          description: The password is reset; sign in with it. All device trust is gone.
+        "403":
+          description: The commitment did not match. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+        "404":
+          description: The token is unknown, expired or already spent.
+          content:
+            application/json:
+              schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh.
+
+  schemas:
+    LoginChallengeRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the source of its deterministic auth salt (ADR 0003) — authentication can
+            neither resolve the account nor derive its salt without this plaintext.
+          type: string
+          format: email
+          description: The account's login email — identifier and source of the deterministic auth salt (ADR 0003).
+          maxLength: 254
+          example: kevin@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    LoginChallenge:
+      type: object
+      required: [nonce, instanceSalt]
+      properties:
+        nonce:
+          type: string
+          description: Single-use, time-bounded challenge to sign with the auth private key (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: bm9uY2UtZXhhbXBsZS0zMmJ5dGVz
+        instanceSalt:
+          type: string
+          description: Instance-wide salt for deriving the auth salt (authSalt = HKDF(instanceSalt, normalizedEmail); ADR 0003).
+          contentEncoding: base64
+          maxLength: 256
+          example: aW5zdGFuY2Utc2FsdC0xNmI=
+
+    LoginVerifyRequest:
+      type: object
+      required: [email, signature]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the source of its deterministic auth salt (ADR 0003) — authentication can
+            neither resolve the account nor derive its salt without this plaintext.
+          type: string
+          format: email
+          description: The account's login email (same value used for the challenge).
+          maxLength: 254
+          example: kevin@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        signature:
+          type: string
+          description: Ed25519 signature over the issued nonce (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: c2lnbmF0dXJlLW92ZXItbm9uY2U=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        remember:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: >
+            The superseded "remember me" flag (ADR 0004 / ADR 0005 §15). Replaced by `sessionScope` (cr-0055)
+            and honoured (→ a persistent cookie) only when `sessionScope` is absent. When true the server
+            returns the refresh token as a persistent **httpOnly + Secure + SameSite cookie** instead of in the
+            body, and `refreshToken` is omitted. No current client sends this.
+        sessionScope:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Cookie lifetime (ADR 0004 / ADR 0005 §22, cr-0055). **PERSISTENT** → a persistent httpOnly refresh
+            cookie that survives a browser restart ("remember me"). **SESSION** → a session cookie (no
+            `Max-Age`) that survives page reloads but is dropped when the browser closes (the default). When
+            present it governs the transport — the refresh token rides the cookie and is omitted from the body
+            — and takes precedence over `remember`. The cookie carries only the opaque refresh token, so the
+            server stays operator-blind.
+          enum: [SESSION, PERSISTENT]
+          example: SESSION
+
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            The opaque refresh token to rotate. **Optional**: the client sends the token in the httpOnly
+            cookie instead (an empty body). The server uses the cookie when present, else this field; one of
+            the two must be supplied. No current client uses this field.
+          maxLength: 512
+          example: cmVmcmVzaC10b2tlbi1vcGFxdWU
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512)'
+
+    SessionFamily:
+      type: object
+      required: [id]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the session family (one login / device). The E2EE name is attached later by a planned use-case (uc.account.sessions — reserved in ADR 0004, not yet written or built).
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+
+    TokenPair:
+      type: object
+      required: [accessToken]
+      properties:
+        accessToken:
+          x-veyq-visibility: token
+          type: string
+          description: Opaque bearer access token (short-lived); sent as an Authorization bearer header.
+          maxLength: 512
+          example: YWNjZXNzLXRva2Vu
+        refreshToken:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            Opaque refresh token (long-lived); send only to /api/token/refresh. **Omitted** when the rotation
+            rode the httpOnly cookie (web "remember me") — the new refresh token is then set as a fresh cookie.
+          maxLength: 512
+          example: cmVmcmVzaC10b2tlbg
+
+    SessionResponse:
+      type: object
+      required: [accessToken, family]
+      properties:
+        accessToken:
+          x-veyq-visibility: token
+          type: string
+          description: Opaque bearer access token (short-lived); sent as an Authorization bearer header.
+          maxLength: 512
+          example: YWNjZXNzLXRva2Vu
+        refreshToken:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            Opaque refresh token (long-lived); send only to /api/token/refresh. **Omitted** when `remember` was
+            true — the token is then set as an httpOnly cookie instead (web "remember me").
+          maxLength: 512
+          example: cmVmcmVzaC10b2tlbg
+        family: { $ref: "#/components/schemas/SessionFamily" }
+
+    RecoveryRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the address the recovery link must be delivered to — the flow can
+            neither resolve the account nor address the mail without this plaintext.
+          type: string
+          format: email
+          description: The address to mail a recovery link to, if an account exists under it.
+          maxLength: 254
+          example: kevin@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    RecoveryTokenRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            The one-time token from the recovery link's URL fragment. Only its SHA-256 hash is stored, so the
+            server can recognise it but never reproduce it.
+          maxLength: 512
+          example: cmVjb3ZlcnktdG9rZW4
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+
+    RecoveryMaterial:
+      type: object
+      description: >
+        Enough to open the Master Key with the Secret Key alone: the RECOVERY wrap plus the identity private
+        key it protects. Every byte here is ciphertext or a KDF parameter — the server derives nothing from it.
+      required: [email, suiteId, wrappedKey, kdfParams, wrappedIdentityPrivateKey]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the source of its deterministic auth salt (ADR 0003) — the reset
+            cannot derive the new auth keypair without it. Returned rather than asked for again: the caller
+            reached this response by reading a mail sent to this very address, so it discloses nothing they do
+            not already hold, and re-typing it is a step that can only go wrong.
+          type: string
+          format: email
+          description: The account this token belongs to — the address the recovery mail was sent to.
+          maxLength: 254
+          example: kevin@example.com
+        suiteId:
+          x-veyq-visibility: enum
+          type: string
+          description: Crypto suite the wrapped material was produced under (selects the client crypto suite).
+          enum: [v1]
+          example: v1
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped under the recovery KEK — Argon2id over the Secret Key, no password.
+          contentEncoding: base64
+          maxLength: 8192
+          example: cmVjb3Zlcnktd3JhcHBlZC1tYXN0ZXIta2V5
+        kdfParams:
+          type: string
+          description: Argon2id parameters + salt for the recovery KEK, as carried at account birth.
+          contentEncoding: base64
+          maxLength: 1024
+          example: a2RmLXBhcmFtcy1yZWNvdmVyeQ==
+        wrappedIdentityPrivateKey:
+          type: string
+          description: The identity private key wrapped under the Master Key (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+
+    RecoveryCompleteRequest:
+      type: object
+      description: >
+        The new password's derived material, plus the proof that the caller opened the released wrap. Applied
+        atomically or not at all — a partial apply would leave an account that logs in but cannot unlock.
+      required: [token, recoveryAuthTag, wrappedKey, kdfParams, authPublicKey]
+      properties:
+        token:
+          x-veyq-visibility: token
+          type: string
+          description: The same one-time token the release was made against; spent by this call.
+          maxLength: 512
+          example: cmVjb3ZlcnktdG9rZW4
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        recoveryAuthTag:
+          type: string
+          description: >
+            sha256("veyq/v1/recovery-auth" ‖ masterKey) — reproducible only after opening the released wrap,
+            and compared against the commitment stored at account birth. Not a secret: a non-invertible hash
+            of 32 random bytes.
+          contentEncoding: base64
+          maxLength: 128
+          example: cmVjb3ZlcnktYXV0aC10YWc=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+        wrappedKey:
+          type: string
+          description: The **same** Master Key, re-wrapped under the new password's KEK (fresh salt and nonce).
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LXBhc3N3b3JkLXdyYXBwZWQtbWFzdGVyLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192)'
+        kdfParams:
+          type: string
+          description: Argon2id parameters + fresh salt for the new PASSWORD wrap.
+          contentEncoding: base64
+          maxLength: 1024
+          example: a2RmLXBhcmFtcy1uZXc=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024)'
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 public key derived from the new password (ADR 0003). Replaces the stored one in the
+            same transaction as the wrap, so login and unlock can never disagree.
+          contentEncoding: base64
+          maxLength: 256
+          example: bmV3LWF1dGgtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256)'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

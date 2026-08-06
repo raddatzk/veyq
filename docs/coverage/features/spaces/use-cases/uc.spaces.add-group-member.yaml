@@ -1,0 +1,36 @@
+useCase: uc.spaces.add-group-member
+feature: spaces
+title: Add a member to a group
+# cr-0086 delivers resolve/admit; grant-delivery of K_SC is the shared cr-0076/0079 primitive. cr-0093 makes that
+# delivery epoch-aware: recording grantedEpoch = currentEpoch on completion (so a member added to an already-rotated
+# group reads post-rotation content) and re-delivering members left stale by a rotation (§E2) — backend slice tests
+# + a live read-after-add-to-rotated-group e2e.
+acceptanceCriteria:
+  - id: resolve-username
+    text: A tenant-scoped username resolve returns an existing tenant member's identity public key (not a global user-search); an unknown/foreign handle is a generic not-found.
+    coverage:
+      backend: { integration: [ScopesSliceTest.addGroupMemberUnknownUsernameIs404] }
+      web: { unit: [src/features/spaces/members.test.ts] }
+  - id: admit-group-member
+    text: The GroupOwner adds a resolved member → the server records a grant-less GROUP membership (role=MEMBER); no key crosses the wire, and the group name stays sealed. A non-owner caller is rejected; adding an existing member is a no-op.
+    coverage:
+      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, ScopesSliceTest.addGroupMemberAlreadyMemberIs409] }
+      web: { unit: [src/features/spaces/members.test.ts] }
+  - id: auto-deliver-group-grant
+    text: The admitted member lands grant-less (hasGrant=false, "awaiting access") in the group directory — the input the grant-delivery reconciler (cr-0076) picks up to wrap K_SC, first-online-wins; the delivery wrap itself is the shared primitive's coverage (cr-0076/0079).
+    coverage:
+      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember] }
+  - id: epoch-aware-delivery
+    text: >
+      Delivery is epoch-aware (cr-0093): grant-delivery wraps the CURRENT epoch key E_current, so completing it
+      records grantedEpoch = the scope's currentEpoch — a member added to an already-rotated group reads
+      post-rotation content immediately (not stranded peeling E_current as E_0). A member left STALE by a rotation
+      (grantedEpoch < currentEpoch — e.g. a re-wrap that failed, en.spaces.scope-key-rotation §E2) is re-originated
+      by the reconciler and re-delivered at the current epoch. Idempotent + first-online-wins.
+    coverage:
+      backend: { integration: [TasksSliceTest.grantDeliveryIntoARotatedScopeRecordsTheDeliveredEpoch, TasksSliceTest.staleMemberIsReconciledAndReDeliveredAtTheCurrentEpoch] }
+      web: { e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+  - id: operator-blind-group-add
+    text: The server sees only the membership row, identity public keys, and opaque grant ciphertext — never K_SC, never the group's plaintext name; the add response never exposes email.
+    coverage:
+      backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember] }

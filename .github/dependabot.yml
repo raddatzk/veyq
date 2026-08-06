@@ -1,0 +1,34 @@
+version: 2
+
+multi-ecosystem-groups:
+  app-runtime:
+    schedule:
+      interval: "daily"
+
+updates:
+  - package-ecosystem: "npm"
+    directory: "/web"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "app-runtime"
+    open-pull-requests-limit: 1
+
+  - package-ecosystem: "gradle"
+    directory: "/backend"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "app-runtime"
+    open-pull-requests-limit: 1
+
+  # Docker ecosystems are intentionally absent: there is no root Dockerfile yet (the container-image
+  # build+publish pipeline is deferred, cr-0127). Add a docker entry per Dockerfile once one exists.
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    groups:
+      actions:
+        patterns:
+          - "*"
+    open-pull-requests-limit: 1

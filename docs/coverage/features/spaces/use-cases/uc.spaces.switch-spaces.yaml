@@ -1,0 +1,62 @@
+useCase: uc.spaces.switch-spaces
+feature: spaces
+title: List & switch spaces
+acceptanceCriteria:
+  - id: list-tenants
+    text: The member's tenants are listed (name + domain + role); someone who belongs to none gets an empty list.
+    coverage:
+      backend: { integration: [ScopesSliceTest.listMyTenantsReturnsTheCallersTenants] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: list-spaces
+    text: GET /api/scopes lists the member's scopes in the active tenant (the TENANT root + their PERSONAL scope), each with the caller's own role (cr-0087 — lets the settings hub list the groups they own).
+    coverage:
+      backend: { integration: [ScopesSliceTest.createPersonalScopeThenListReturnsBoth, ScopesSliceTest.listMyScopesCarriesTheCallersRole] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: switch-space-by-fragment
+    text: A space's position is encoded in + resolved from the URL #fragment client-side (the blind server resolves no path).
+    coverage:
+      web: { unit: [src/features/memory/location.test.ts] }
+  - id: create-group
+    # cr-0032 (G1): a member creates a named group — operator-blind (name sealed under a fresh K_SC + a self-grant).
+    text: A member creates a named GROUP scope — the name sealed under a fresh K_SC and the scope key sealed to their own identity (OWNER self-grant); the server stores only ciphertext and mints the self-membership. A caller who is not a member of the active tenant is rejected.
+    coverage:
+      backend: { integration: [ScopesSliceTest.createGroupThenListShowsItWithSealedNameAndSelfGrant, ScopesSliceTest.createGroupNonMemberIs404] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: list-groups-in-switcher
+    # cr-0032 (G1): groups appear in the sidebar switcher; each name is decrypted on-device from GET /api/scopes.
+    text: The member's groups are listed in the switcher with their names decrypted on-device; the server row carries only the ciphertext name (sealed under the group's own K_SC) — a group is entered via the `#@<id>` fragment.
+    coverage:
+      backend: { integration: [ScopesSliceTest.createGroupThenListShowsItWithSealedNameAndSelfGrant] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: tenant-switcher-overview
+    # cr-0108: the tenant switcher and the Tenant-space entry are merged into one active-tenant row — its body
+    # enters the shared Tenant home; a chevron (only with >1 tenant) opens an overview of all the member's tenants.
+    text: The active tenant is a single sidebar row whose body enters the shared Tenant home; a chevron on it — shown only when the member belongs to more than one tenant — opens an overview of all the member's tenants, and selecting another navigates to that tenant's domain.
+    coverage:
+      web: { unit: [src/components/app/AppSidebar.test.ts] }
+  - id: token-less-tenant-default
+    text: The token-less fragment (empty/#) resolves to the shared TENANT scope — the default home — and a granted member entering it opens the tenant key (ADR 0019).
+    coverage:
+      web: { unit: [src/features/memory/location.test.ts, src/app/activeSpace.test.ts, src/components/app/AppSidebar.test.ts] }
+  - id: personal-tenant-switch-resets
+    text: Flipping the leading fragment token (Personal ↔ Tenant) re-enters the scope — opening its key and resetting the tree + favorites so no stale per-scope state bleeds; the active space is highlighted in the sidebar.
+    coverage:
+      web: { unit: [src/app/activeSpace.test.ts, src/components/app/AppSidebar.test.ts] }
+  - id: no-tenant-grant-fallback
+    text: A member holding no TENANT grant falls back to Personal as the effective token-less home (the tenant scope is open-only, never minted client-side), and the tenant entry is flagged unavailable.
+    coverage:
+      web: { unit: [src/features/spaces/scopes.test.ts, src/app/activeSpace.test.ts] }
+  - id: operator-blind-listing
+    text: The tenant list exposes only membership metadata (name/domain/role); group names stay sealed and are decrypted on device.
+    coverage:
+      backend: { integration: [ScopesSliceTest.listMyTenantsReturnsTheCallersTenants] }
+  - id: boundary-unauthenticated
+    text: The scope endpoints reject an unauthenticated caller with a generic 401.
+    coverage:
+      backend: { integration: [ScopesSliceTest.unauthenticatedIs401] }
+  - id: mobile-nav-sheet
+    # cr-0084: below the compact threshold the inline nav is CSS-hidden, so a hamburger opens a bottom sheet with
+    # the full navigation (ported from the design source; CSS already vendored). Keeps Personal reachable on a phone.
+    text: On a narrow viewport a hamburger opens a bottom-sheet with the full navigation — the active-tenant row (which enters the shared Tenant home, cr-0108), other tenants to switch to, Personal, and favorites; each item navigates and closes the sheet.
+    coverage:
+      web: { unit: [src/components/app/AppSidebar.test.ts] }

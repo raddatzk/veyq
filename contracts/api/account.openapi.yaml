@@ -1,0 +1,541 @@
+openapi: 3.1.0
+info:
+  title: veyq Account API
+  version: 0.1.0
+  description: >
+    The authenticated account surface beyond login/session lifecycle. Operator-blind: every field served
+    here is ciphertext or a public, low-sensitivity descriptor — the server performs no content crypto.
+
+    `GET /api/account/key-material` returns the caller's own wrapped key material so the client can
+    **unlock** the Master Key entirely on-device (uc.account.unlock): the PASSWORD `MasterKeyWrap` plus its
+    KDF params, the Master-Key-wrapped identity private key, and the crypto suite id. The client derives the
+    unlock KEK from the password and Secret Key (2SKD, ADR 0003/0005), unwraps the Master Key, then unwraps
+    the identity private key — all in memory. The server never sees the password, the Secret Key, the KEK,
+    or any unwrapped key. Auth ≠ unlock: a valid session lets you fetch ciphertext, never open it.
+
+    The endpoint is keyed off the bearer access token and returns **only the caller's own** material — never
+    an email or id in the request — so it is no cross-account read and no enumeration vector. A stolen
+    access token yields only ciphertext, which is useless without the password and Secret Key.
+
+    `POST /api/account/wraps` adds a device-local convenience wrap — **DEVICE** (trust this device — unlock
+    with only the password next time) or **DEVICE_KEY** (password-less remember-me), ADR 0005;
+    `DELETE /api/account/wraps/{id}` removes a device-local wrap (untrust). Both act only on the caller's own
+    wraps and receive only ciphertext + KDF params — never a key, a password, or the Secret Key. The PASSWORD
+    floor (and RECOVERY/PASSKEY) cannot be removed this way.
+tags:
+  - name: account
+    description: Authenticated account key material (for client-side unlock).
+  - name: account-wraps
+    description: Add / remove Master Key wraps (device trust). Separate tag so it generates its own resource
+      interface (one path per tag avoids the greedy class-level @Path that would otherwise shadow siblings).
+  - name: account-profile
+    description: The caller's per-tenant identity profile (username + sealed real name) in the tenant resolved
+      from the Host (ADR 0023). Separate tag → its own resource interface.
+  - name: account-identity-pins
+    description: The caller's operator-blind identity-pin store — one Master-Key-sealed blob remembering each
+      contact's identity key for TOFU change-detection (ADR 0028, en.account.identity-pinning). Separate tag →
+      its own resource interface.
+
+paths:
+  /api/account/key-material:
+    get:
+      tags: [account]
+      operationId: getAccountKeyMaterial
+      summary: Fetch the caller's wrapped key material for client-side unlock.
+      description: >
+        Returns the authenticated caller's Master Key wraps (one per unlock method; PASSWORD is the floor),
+        the Master-Key-wrapped identity private key, and the crypto suite id. All opaque ciphertext — the
+        client derives the unlock KEK and unwraps locally. Resolved from the bearer access token; a missing,
+        malformed, expired, or revoked token is a single generic 401.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's wrapped key material (ciphertext only).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountKeyMaterial" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/wraps:
+    post:
+      tags: [account-wraps]
+      operationId: addAccountWrap
+      summary: Add a device-local convenience wrap (DEVICE or DEVICE_KEY) of the Master Key.
+      description: >
+        Stores a new device-local `MasterKeyWrap` for the authenticated caller — DEVICE (Master Key under a
+        password + device-bound KEK, "trust this device") or DEVICE_KEY (under a device key alone,
+        password-less remember-me), ADR 0005 — produced entirely on-device. The server receives only
+        ciphertext + the opaque KDF params (the AEAD iv for DEVICE_KEY) and returns the new wrap's id (for a
+        later untrust). Restricted to the device-local methods; the PASSWORD floor and other methods are
+        created elsewhere.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddWrapRequest" }
+      responses:
+        "201":
+          description: The wrap was stored; its opaque id is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AddWrapResult" }
+        "400":
+          description: The request was malformed (missing/invalid fields, or a method other than DEVICE / DEVICE_KEY).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "409":
+          description: The account already has the maximum number of device wraps (untrust a device first).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: too_many_devices }
+        "422":
+          description: >
+            The `account.device-trust` capability is disabled instance-wide (ADR 0032): the operator mandates a
+            full password every time, so device-local convenience wraps (trust-this-device / remember-me) are
+            turned off. Enforced server-side even if a stale client still offers the toggle.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: capability_disabled }
+
+  /api/account/profile:
+    get:
+      tags: [account-profile]
+      operationId: getMyProfile
+      summary: Fetch the caller's identity profile in the active tenant.
+      description: >
+        Returns the authenticated caller's per-tenant profile — their `username` (plaintext) + `sealedName`
+        (their real name sealed under `K_tenant`, or null if not yet sealed) — in the tenant resolved from the
+        Host (ADR 0023). Only the caller's own profile; no id/email in the request.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's profile in the active tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberProfile" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant resolves from the Host, or the caller has no profile there.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: profile_not_found }
+    put:
+      tags: [account-profile]
+      operationId: updateMyProfile
+      summary: Update the caller's username and/or sealed real name in the active tenant.
+      description: >
+        Updates the caller's per-tenant profile in the Host tenant: change the `username` (re-checked unique in
+        the tenant → `409 username_taken`) and/or store the `sealedName` blob (real name sealed under `K_tenant`,
+        opaque ciphertext). Either field may be omitted to leave it unchanged. Operator-blind: the server never
+        sees the plaintext name.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ProfileUpdateRequest" }
+            example:
+              username: kevin
+              sealedName: c2VhbGVkLW5hbWU=
+      responses:
+        "200":
+          description: The updated profile.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberProfile" }
+        "400":
+          description: The request was malformed (invalid username shape or name ciphertext).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant resolves from the Host, or the caller has no profile there.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: profile_not_found }
+        "409":
+          description: The chosen username is already taken in this tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: username_taken }
+
+  /api/account/identity-pins:
+    get:
+      tags: [account-identity-pins]
+      operationId: getIdentityPins
+      summary: Fetch the caller's sealed identity-pin store.
+      description: >
+        Returns the authenticated caller's identity-pin store — one opaque blob sealed under the Master Key
+        (`symWrap(masterKey, blob, "identity-pins")`, ADR 0028 / en.account.identity-pinning) plus its
+        monotonic `version` for optimistic concurrency. The server stores + relays the ciphertext verbatim and
+        never interprets it (no `userId`, no key, no count). Born empty: an account that has never written the
+        store gets `{ blob: null, version: 0 }`. Keyed off the bearer token — only the caller's own store.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's sealed pin store (ciphertext only) + its version. `blob` is null when never written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityPins" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+    put:
+      tags: [account-identity-pins]
+      operationId: putIdentityPins
+      summary: Store the caller's sealed identity-pin store (optimistic concurrency).
+      description: >
+        Replaces the caller's sealed pin-store blob. `version` is the version the client last read; the write
+        succeeds only if it still matches the server's stored version, which is then bumped and returned. If the
+        stored version moved since the client read (another device wrote), the server responds `409
+        stale_version` and the client re-reads, union-merges, and retries (en.account.identity-pinning §Sync).
+        The first write of a born-empty store sends `version: 0`. Operator-blind: the server never sees the
+        plaintext pins.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/IdentityPinsUpdate" }
+            example:
+              blob: c2VhbGVkLXBpbi1zdG9yZQ==
+              version: 3
+      responses:
+        "200":
+          description: The store was written; the new (bumped) version is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/IdentityPins" }
+        "400":
+          description: The request was malformed (missing/invalid blob or version).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "409":
+          description: The stored version moved since the client read it — re-read, union-merge, and retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_version }
+
+  /api/account/wraps/{id}:
+    delete:
+      tags: [account-wraps]
+      operationId: deleteAccountWrap
+      summary: Remove a wrap by id (untrust this device).
+      description: >
+        Removes the caller's wrap with this id. **Idempotent** (like logout): the wrap is deleted only if it
+        is the caller's own **DEVICE** wrap (the only kind this untrust endpoint creates); an unknown id,
+        another account's wrap, the PASSWORD floor, or any other method is a silent no-op. Always 204 — no
+        cross-account enumeration, the 2SKD floor can never be removed, and the RECOVERY/PASSKEY methods are
+        out of reach of this endpoint.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The opaque id of the wrap to remove (returned by the add-wrap call).
+          schema:
+            type: string
+            maxLength: 64
+            example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+            x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9-]+")'
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The wrap is gone (removed, or there was no removable wrap of yours with that id).
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh.
+
+  schemas:
+    # NOTE: MasterKeyWrap and ErrorResponse are intentionally identical to their definitions in
+    # setup.openapi.yaml / auth.openapi.yaml. Specs are self-contained (no cross-file $ref); the backend
+    # generator writes one model per name, so identical duplicates overwrite harmlessly (see V1 setup).
+    MasterKeyWrap:
+      type: object
+      description: One wrap of the Master Key, openable by a single unlock method.
+      required: [method, wrappedKey]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
+            it); ignored on input (setup assigns ids server-side).
+          maxLength: 64
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        method:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
+            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
+            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
+          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
+          example: PASSWORD
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tYXN0ZXIta2V5
+        kdfParams:
+          type: string
+          description: >
+            KDF parameters + salt needed to re-derive this method's unlock KEK (opaque base64; present for
+            password/recovery/device methods, absent for passkey which is PRF-derived). For DEVICE_KEY there
+            is no KDF — this field carries only the AEAD iv for the device-key wrap.
+          contentEncoding: base64
+          maxLength: 256
+          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+
+    AddWrapRequest:
+      type: object
+      description: >
+        A new device-local convenience wrap to store for the caller: DEVICE (trust this device — password +
+        device key) or DEVICE_KEY (remember me — password-less device key alone).
+      required: [method, wrappedKey, kdfParams]
+      properties:
+        method:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            The unlock method this wrap opens. Restricted to the device-local methods on this endpoint:
+            DEVICE (password + device factor) or DEVICE_KEY (password-less device key).
+          enum: [DEVICE, DEVICE_KEY]
+          example: DEVICE
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped to the device KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tYXN0ZXIta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        kdfParams:
+          type: string
+          description: >
+            KDF parameters + salt to re-derive the device KEK (opaque base64). For DEVICE_KEY there is no
+            KDF — this carries only the AEAD iv for the password-less device-key wrap.
+          contentEncoding: base64
+          maxLength: 256
+          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    AddWrapResult:
+      type: object
+      description: The id of the stored wrap, used later to remove it (untrust).
+      required: [id]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          description: Opaque id of the stored wrap.
+          maxLength: 64
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+
+    AccountKeyMaterial:
+      type: object
+      description: The caller's wrapped key material, enough to unlock the Master Key on-device.
+      required: [suiteId, wraps, wrappedIdentityPrivateKey]
+      properties:
+        suiteId:
+          x-veyq-visibility: enum
+          type: string
+          description: Crypto suite the wrapped material was produced under (selects the client crypto suite).
+          enum: [v1]
+          example: v1
+        wraps:
+          type: array
+          description: One wrap per unlock method the account has; PASSWORD is the floor used by this flow.
+          minItems: 1
+          items: { $ref: "#/components/schemas/MasterKeyWrap" }
+        wrappedIdentityPrivateKey:
+          type: string
+          description: The identity private key wrapped under the Master Key (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+
+    MemberProfile:
+      type: object
+      description: The caller's per-tenant identity — a plaintext handle + the sealed real name (ADR 0023).
+      required: [username, requireGroupAddConsent]
+      properties:
+        username:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The per-tenant handle members are known by (ADR 0023) — the directory's stable, human-readable label,
+            visible to every fellow tenant member.
+          type: string
+          description: The caller's per-tenant handle (plaintext, unique within the tenant).
+          maxLength: 32
+          example: kevin
+        sealedName:
+          type: [string, "null"]
+          description: >
+            The caller's real name (first + last) sealed under `K_tenant` (opaque base64), or null when not yet
+            sealed. Decrypted only on-device.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLW5hbWU=
+        requireGroupAddConsent:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            The caller's **account-global** "ask before adding me to groups" preference (uc.spaces.consent-group-add,
+            ADR 0014 §5) — default `false`. Account-scoped (applies in every tenant the caller belongs to), surfaced
+            here because this is the caller's own settings surface. Low-sensitivity server-visible operational
+            metadata (never a key or content): a GroupOwner attempting an add learns *that* the caller wants to be
+            asked, and their add becomes a consent proposal instead of a direct-add.
+          example: false
+
+    ProfileUpdateRequest:
+      type: object
+      description: >
+        A profile change — set the `username` (re-checked unique in the tenant), the `sealedName` blob, and/or
+        the account-global `requireGroupAddConsent` preference. Omit a field to leave it unchanged.
+      properties:
+        username:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
+            uniqueness within the tenant and to serve the directory.
+          type: string
+          description: >
+            The new per-tenant handle (plaintext; trimmed + lowercased server-side; unique in the tenant →
+            `409 username_taken`). Omit to keep the current one.
+          minLength: 2
+          maxLength: 32
+          example: kevin
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+        sealedName:
+          type: string
+          description: >
+            The real name (first + last) sealed under `K_tenant` (opaque base64 ciphertext the server stores
+            verbatim). Omit to leave the current name unchanged.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        requireGroupAddConsent:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            The account-global "ask before adding me to groups" preference (uc.spaces.consent-group-add). `true`
+            turns a GroupOwner's add into a consent proposal; `false` restores the default direct-add. Omit
+            (`null`) to leave it unchanged.
+          example: true
+
+    IdentityPins:
+      type: object
+      description: >
+        The caller's sealed identity-pin store + its version. `blob` is one opaque ciphertext
+        (`symWrap(masterKey, blob, "identity-pins")`) the server relays verbatim; `version` is the monotonic
+        optimistic-concurrency counter. A born-empty store is `{ blob: null, version: 0 }`.
+      required: [blob, version]
+      properties:
+        blob:
+          type: [string, "null"]
+          description: >
+            The pin-store plaintext sealed under the Master Key (opaque base64), or null when the store has
+            never been written. The server never interprets it (no `userId`, key, or count).
+          contentEncoding: base64
+          maxLength: 1048576
+          example: c2VhbGVkLXBpbi1zdG9yZQ==
+        version:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            Monotonic version for optimistic concurrency. `0` for a born-empty store; bumped by one on every
+            successful write. A `PUT` must send the version it last read.
+          minimum: 0
+          example: 3
+
+    IdentityPinsUpdate:
+      type: object
+      description: >
+        A new sealed pin-store blob to store, guarded by the `version` the client last read (optimistic
+        concurrency → `409 stale_version` on a mismatch).
+      required: [blob, version]
+      properties:
+        blob:
+          type: string
+          description: >
+            The pin-store plaintext sealed under the Master Key (opaque base64 ciphertext the server stores
+            verbatim).
+          contentEncoding: base64
+          maxLength: 1048576
+          example: c2VhbGVkLXBpbi1zdG9yZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1048576) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        version:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            The version the client last read (the write succeeds only if it still matches the stored version).
+            `0` for the first write of a born-empty store.
+          minimum: 0
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

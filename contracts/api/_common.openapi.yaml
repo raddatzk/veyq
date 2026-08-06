@@ -1,0 +1,55 @@
+# Shared OpenAPI components, referenced across contracts/api/*.openapi.yaml via external $ref (ADR 0038).
+#
+# This is NOT a generated spec — it has no paths and is never fed to a generator on its own: the backend
+# fileTree glob excludes it (backend/gradle/openapi.gradle.kts) and the web generate:api script does not list
+# it. It exists only as a single-source $ref target, so a shared component cannot drift across the per-domain
+# specs. openapi-generator (both surfaces) resolves the external $ref in place, emitting the same model per
+# module it emitted from the inline copies — a pure refactor, no wire change.
+openapi: 3.1.0
+info:
+  title: veyq shared contract components
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          description: Stable, client-localizable error code.
+          maxLength: 64
+          example: invalid_request
+        message:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Optional developer-facing detail; never contains secrets or content.
+          maxLength: 512
+          example: null
+
+    LocalizedMarkdown:
+      # Shared by the tenants spec (member terms, cr-0114) and the sharing spec (the accountless share terms
+      # gate, cr-anonymous-accept-gate). Single-sourced here (ADR 0038) so the operator-terms shape cannot drift
+      # between the two acceptance tiers.
+      type: object
+      description: >
+        Per-locale terms markdown (the operator's public policy). Each locale is optional; an absent/blank
+        locale falls back to the other at display time (no empty terms shown). Trimmed + newline-normalized
+        server-side before comparison.
+      properties:
+        de:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: German terms markdown (neutral-first inclusive language, cc.inclusive-language).
+          maxLength: 20000
+          example: "## Nutzungsbedingungen\n…"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 20000)'
+        en:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: English terms markdown.
+          maxLength: 20000
+          example: "## Terms of use\n…"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 20000)'

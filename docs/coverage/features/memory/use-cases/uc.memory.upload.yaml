@@ -1,0 +1,51 @@
+useCase: uc.memory.upload
+feature: memory
+title: Upload media into a Memory (web)
+# Web upload UI built by cr-0058 (ported from frontend-noe2ee): a gallery file-picker → a global upload queue →
+# the TopBar uploads tray, wired onto the ready addMedia data layer (cr-0028/0045). The data-path criteria carry
+# backend + web refs; the tray + queue are web unit-tested; the end-to-end browser flow is the cr-0058 smoke.
+acceptanceCriteria:
+  - id: seal-and-upload-operator-blind
+    text: Each picked file is sealed under a fresh K_blob (wrapped to K_mem), its chunks PUT direct-to-store, and one role-tagged media is attached to the node — the server sees only ciphertext + opaque sizes/counts. Metadata is sealed under K_mem in two tiers (cr-0064/0068) — the always-listed wrappedMeta tier (geometry + capture time + GPS, returned with every list) and the heavy wrappedExif bundle (camera/lens/exposure, kept out of the list, lazy via getMediaExif) — so the gallery lays out + sorts and the lightbox shows detail without the server ever seeing dimensions, capture time, GPS, or camera.
+    coverage:
+      backend:
+        integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaExifWithoutExifIsNull]
+      web:
+        unit: [src/features/memory/media.test.ts]
+  - id: global-uploads-tray
+    text: A TopBar uploads button (active-count badge) opens a popup listing each batch's files with status + progress and a cancel/retry control; the queue is a module singleton so uploads survive navigation.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/UploadStatusMenu.test.ts
+          - src/features/memory/uploadQueue.test.ts
+  - id: progress-and-cancel
+    text: Per-file progress advances as the ciphertext chunks land; cancelling an in-flight upload aborts its PUTs before completing, so no media is attached.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/uploadQueue.test.ts
+  - id: transient-retry
+    text: A transient upload failure is retried once automatically; a hard failure is marked failed and retried only on explicit request.
+    coverage:
+      web:
+        unit: [src/features/memory/uploadQueue.test.ts]
+  - id: safari-photos-import
+    text: Files imported from the Photos gallery (empty MIME, late/repeated input population) are accepted by extension, merged without dropping earlier picks (signature de-dupe), and sealed under a media type inferred from the extension.
+    coverage:
+      web:
+        unit: [src/features/memory/uploadQueue.test.ts]
+  - id: best-effort-derivation
+    text: Underivable media (a codec the browser can't decode, or an empty MIME type) uploads original-only instead of failing the whole upload.
+    coverage:
+      web:
+        unit: [src/features/memory/media.test.ts]
+  - id: optimistic-in-grid-tiles
+    text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, pinned ahead of the listed media — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/optimisticUpload.test.ts
+          - src/features/memory/uploadQueue.test.ts
+          - src/features/memory/components/MemoryDetail.optimistic.test.ts

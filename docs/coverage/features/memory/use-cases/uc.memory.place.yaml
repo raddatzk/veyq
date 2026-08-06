@@ -1,0 +1,61 @@
+useCase: uc.memory.place
+feature: memory
+title: Curate a Memory's place — one sealed, named location
+# Web-complete. Place reuses the node's `wrappedMeta` blob (shipped for the date, cr-0067) and adds a `location`
+# sub-object `{ name, nameSource, derived (medoid), derivedMode, nameAnchor{lat,lng,level} }` — sealed under K_mem,
+# set via the same partial updateNode, returned on listNodes. Deliberate set-up (never silent), a mandatory name,
+# position = the MEDOID of the media GPS, reverse-only opt-in geocoding (client-direct, Nominatim reference, ADR
+# 0016), and a per-folder-subtree "Karte" view plotting every located Memory/Chapter from listNodes without loading
+# media (cr-0071). The group consent
+# state-machine + a blind gazetteer remain prose gaps (own CRs), not unref'd criteria.
+acceptanceCriteria:
+  - id: sealed-location-on-node
+    text: A MEMORY/CHAPTER node's `wrappedMeta.location` carries ONE named place — name (mandatory, except a pending auto place) + nameSource (geocoded|manual) + derived {lat,lng} + derivedMode (fixed|auto) + nameAnchor {lat,lng,level} — sealed under K_mem in the same client-versioned blob as the date (no contract change), set via the partial updateNode and returned on listNodes. The operator-blind server never sees a coordinate or a place name.
+    coverage:
+      backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
+      web:
+        unit:
+          - src/features/memory/memoryLocation.test.ts
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: deliberate-set-location
+    text: A location is created only by a deliberate "set location" act (on Memory open, or pre-armed at Memory creation with a mandatory fallback name + derivedMode auto); there is no empty-name / unnamed-pin state (no name ⇒ no location). Setup never happens silently on upload.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MemoryLocationEditor.test.ts
+          - src/features/memory/components/NodeMutationDialog.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: medoid-position
+    text: The position `derived` is the MEDOID of the Memory's media GPS — the actual photo minimizing the summed Haversine distance to the others (robust to an outlier), never the arithmetic mean — so it never lands in the sea and barely moves as media are added. `derivedMode` defaults to auto on set-with-media (re-medoids as media are added) and flips to fixed when the user moves the MAP by hand (the centre crosshair becomes the position — "Karte verschieben"); fixed is a frozen snapshot. GPS is read from the always-listed capture tier (promoted alongside `capturedAt`, like cr-0066), so the medoid and every auto re-medoid are list-level — no per-item EXIF fetch; no backfill, so older media without the tier do not contribute.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryLocation.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: name-manual-or-reverse-geocoded
+    text: The name is independent of the position — either typed by hand (nameSource manual, frozen) or picked from the reverse-geocoded ADDRESS HIERARCHY (road…country; the user chooses the granularity `level`, e.g. Straße › Viertel › Stadt › Land; nameSource geocoded, may refresh at the stored level when the auto medoid moves). Position (move the map) and granularity (pick the level) are separate levers; a pending auto place gets both from the first geotagged media; if geocoding stays off the name is typed, blind.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/geocode.test.ts
+          - src/features/memory/memoryLocation.test.ts
+          - src/features/memory/components/MemoryLocationEditor.test.ts
+  - id: reverse-only-veyq-blind-geocoding
+    text: Geocoding is reverse-only and opt-in; the request goes client-direct to the provider (never through the veyq backend), carries no veyq identity (a bare coordinate), and sits behind a provider-neutral seam reverse(lat,lng,lang)->level[] (the address hierarchy; reference Nominatim, operator-configurable, off-until-configured — ADR 0016). Opt-in is standing consent (may auto-resolve on the first geotagged media at a default level); it never fires without opt-in, and a member who declined sees a name another member resolved without any request.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/geocode.test.ts
+          - src/shared/state/useMapConfig.test.ts
+          - src/features/memory/components/MemoryLocationEditor.test.ts
+  - id: tenant-map-via-listnodes
+    text: A "Karte" browse view mode shows every located Memory/Chapter in the current folder's subtree (the whole space at the scope root) as a clickable pin, read from each node's sealed `location` via listNodes (unsealed client-side under its own K_mem, no media load, no locations endpoint — a location endpoint would leak coordinates to the operator). On the map ⟺ a coordinate; a location ⟺ a name; a pending auto place (no `derived`) is not pinned; a pin click opens that Memory. Each pin shows the node's explicit `cover` (uc.memory.cover, cr-0072) cropped by the shared display formula — no cover ⇒ the placeholder (retiring the cr-0071 nearest-media stopgap). Map tiles are a separate opt-in/self-host seam (ADR 0018), reused from the editor. (cr-0071; per-folder-subtree, more contextual than always space-wide.)
+    coverage:
+      web:
+        unit:
+          - src/features/memory/spaceMap.test.ts
+          - src/features/memory/memoryCover.test.ts
+          - src/features/memory/components/SpaceMap.test.ts
+          - src/features/memory/components/MemoryBrowse.test.ts
+          - src/features/memory/components/ViewModeToggle.test.ts

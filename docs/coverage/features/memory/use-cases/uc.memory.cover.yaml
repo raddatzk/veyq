@@ -1,0 +1,53 @@
+useCase: uc.memory.cover
+feature: memory
+title: Memory cover — a chosen, cropped cover shown everywhere
+# Built web-first across two slices. The cover reuses the node's `wrappedMeta` blob (date cr-0067, location cr-0069)
+# and adds a `cover` sub-object `{ source (media mediaId | upload blob ref), crop{x,y,width,height} 0..1 }`, sealed
+# under K_mem, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
+# normalized crop shown identically on the browse card, the detail header, and the map pin. cr-0072 built the
+# existing-media source (web, no backend); cr-0073 added the new-upload source — a standalone cover blob
+# (contract + backend + web) committed with no `veyq_media` row.
+acceptanceCriteria:
+  - id: sealed-cover-on-node
+    text: A MEMORY/CHAPTER node's `wrappedMeta.cover` carries ONE cover — a source (an existing media `mediaId`, or a standalone uploaded blob ref) + a `crop {x,y,width,height}` normalized to 0..1 of the source image — sealed under K_mem in the same client-versioned blob as the date + location (no contract change for the media source), set via the partial updateNode and returned on listNodes. The operator-blind server never sees which image or the crop.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryCover.test.ts
+        e2e:
+          - src/features/memory/memoryCover.e2e.test.ts
+  - id: deliberate-no-auto-cover
+    text: A cover exists only by a deliberate pick (choose a media, or upload a cover image); there is no auto-cover. Unset ⇒ the placeholder (the soft-accent images tile) shows on every surface. A dangling source (the chosen media was deleted) falls back to the placeholder, never a broken card/pin.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryCover.test.ts
+          - src/features/memory/components/MemoryCoverImage.test.ts
+          - src/features/memory/components/MemoryCard.test.ts
+  - id: one-crop-everywhere
+    text: One stored normalized crop renders identically at any container size — the browse card, the detail header, and the map pin — via one shared display formula (expand the decrypted thumbnail inside an overflow-hidden box + offset by the crop). No per-surface crop, no cropped-image upload for the existing-media source.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryCover.test.ts
+          - src/features/memory/components/MemoryCoverImage.test.ts
+          - src/features/memory/components/MemoryCard.test.ts
+  - id: set-cover-and-crop-editor
+    text: Choosing "Set as cover" on a photo in the gallery lightbox opens the crop EDITOR seeded on that photo (its already-decrypted thumbnail is the crop source), the lightbox staying OPEN beneath the modal with its keyboard suspended so it neither navigates nor closes underneath; the user frames the 16:9 crop and saves (a photo already the cover pre-loads its stored crop). The same editor crops one source — a Memory photo picked in the lightbox, an uploaded image, OR the current cover re-framed — in a fixed 16:9 viewport with drag-to-pan + zoom (1–3×), hand-rolled (no crop library); Save normalizes the pan/zoom back to the 0..1 crop and seals it; Remove clears the cover; reopening an existing cover restores its pan/zoom. Browsing existing media stays in the gallery (scales to any count), never a modal grid. (cr-0109 replaced the earlier one-click full-frame set.)
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MemoryCoverDialog.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: cover-from-standalone-upload
+    text: The cover may be a brand-new uploaded image that is NOT registered as a Memory media — a standalone cover blob committed to the node (no `veyq_media` row), sealed under a K_blob wrapped by K_mem, served + garbage-collected via the blob transport; operator-blind (the server holds ciphertext + an opaque blob id for retention/authz only). (cr-0073.)
+    coverage:
+      backend:
+        integration: [NodeCoverSliceTest.commitAttachesCoverBlobWithNoMediaRow, NodeCoverSliceTest.replaceReclaimsPriorCoverBlob, NodeCoverSliceTest.deleteCoverBlobDetachesAndReclaims, NodeCoverSliceTest.deleteNodeReclaimsCoverBlob, NodeCoverSliceTest.coverOnFolderIsIllegalTarget, NodeCoverSliceTest.crossScopeUploadIs404, NodeCoverSliceTest.nonMemberIs404]
+      web:
+        unit: [src/features/memory/media.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/components/MemoryCoverDialog.test.ts]
+        # live smoke DONE (cr-0073, not scripted): re-seeded 127.0.0.1 instance + Garage --profile s3, browse origin
+        # 127.0.0.1:8089 = store public endpoint. Uploaded a new image into a media-less Memory → blob-uploads-batch
+        # → PUT /veyq → commitCoverBlob → downloaded back; cropped cover rendered on the detail header + browse card;
+        # DB: node cover_blob_id + cover_byte_size (downscaled), wrapped_meta ciphertext (no plaintext leak), 0
+        # veyq_media rows, 1 veyq_blob; remove reclaimed it (cover_blob_id NULL, veyq_blob 0).

@@ -1,0 +1,49 @@
+useCase: uc.memory.date
+feature: memory
+title: Curate a Memory's date — sealed on the node
+# Slice 1 (cr-0067) = the sealed date. The node gains one opaque, client-versioned `wrappedMeta` blob
+# (`{v, date{mode,from?,to?}, location?}`) sealed under K_mem (AAD context node-meta) — set at createNode + the
+# partial updateNode, returned on listNodes; the blind server only stores + echoes ciphertext. Web ships the
+# 4-mode date editor in the detail header, the materialized `auto` range (self-healing on open + after an upload
+# batch), and the browse card range + date-sort. Place (the node's `location`) is its own use-case
+# (uc.memory.place); the aggregated range is a later slice (see gaps).
+acceptanceCriteria:
+  - id: sealed-wrapped-meta-node
+    text: A MEMORY/CHAPTER node carries an optional opaque `wrappedMeta` blob (a client-versioned JSON `{v,date,location?}` sealed under the node's K_mem, AAD context node-meta). It is set at createNode, updated by the partial updateNode (a non-null value replaces it; a rename that omits it leaves it unchanged), and returned on listNodes so a browse card can read it without loading media. The operator-blind server stores + echoes the ciphertext and never inspects it.
+    coverage:
+      backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+  - id: four-mode-date-header-editor
+    text: A Memory's date is a mode switch — auto / single / range / ongoing — materialized into `wrappedMeta.date` (`single` ⇒ from==to; `range` ⇒ both; `ongoing` ⇒ from, no to). The detail header shows the effective date (locale-formatted, a neutral "no date yet"); an editor reveals the fitting IsoDateField inputs (none / one / two / one), rejects an invalid range (to < from, E4), and on save re-seals under K_mem + PATCHes updateNode + emits the updated node so the tree updates.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/components/MemoryDateEditor.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: auto-materialized-trustworthy
+    text: The `auto` range is materialized min→from / max→to (day-truncated to a local YYYY-MM-DD) over only TRUSTWORTHY capture times — a media whose capturedAt is EXIF-sourced (capturedAtSource === 'exif') or carries a user capturedAtOverride; file-modification-date fallbacks (and older source-less media) are excluded so an edited photo can't stretch the range. It is recomputed from the complete media list and re-sealed only when it changed, at settle points — on Memory open (the self-heal), after an upload batch — leaving an empty `auto` for a Memory with no trustworthy dated media.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: browse-card-range-and-sort
+    text: The browse card shows the sealed range under the cover + title, and the memory card grid (browse + chapters) is sorted by start date (newest first, undated last). Each card's date is read from the node's own `wrappedMeta` — opening its K_mem under the parent key (K_SC for a top-level Memory, the parent Memory's K_mem for a chapter), best-effort — WITHOUT loading the Memory's media.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MemoryCard.test.ts
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/components/MemoryBrowse.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: operator-blind-date
+    text: The server sees only the opaque `wrappedMeta` ciphertext + the unchanged node shape — never a day. A malformed or wrong-key blob is treated best-effort as no manual date (falls back to auto, E3), never a broken header/card.
+    coverage:
+      backend: { integration: [NodesSliceTest.wrappedMetaRoundTripsAndPartialUpdateLeavesItUnchanged] }
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts

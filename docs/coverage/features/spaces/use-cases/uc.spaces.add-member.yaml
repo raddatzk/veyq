@@ -1,0 +1,122 @@
+useCase: uc.spaces.add-member
+feature: spaces
+title: Add a member to the shared Tenant space
+# DELIVERY built cr-0076 (grant-delivery job), ONBOARDING built cr-0077 (MEMBER invite + cold-birth join + the
+# member directory + the web add-member UI). The reusable primitive: a key-holder wraps K_SC to another
+# member's identity pubkey (asymWrap to a FOREIGN identity; context `scope-grant`). ADMISSION (who may invite)
+# is owner-only; DELIVERY (the wrap) is any online key-holder's device, first-online-wins (no second human
+# action). Two-phase, "awaiting access" until any key-holder is next online. Authenticity is Plain in v1 (the
+# fingerprint/TOFU seam left open). The full grant-delivery happy-path needs the ML-KEM scope-grant flow not reproducible from a bare
+# .http, so it is proven at the integration layer (TasksSliceTest / MemberAddSliceTest), same as content.http.
+acceptanceCriteria:
+  - id: member-invite-and-onboard
+    text: The owner mints a single-use MEMBER invite (email, secret hashed) reusing the owner-invite machinery; the invitee cold-registers (identity born on-device, public bundle published) — or accepts on an existing account — becoming a tenant member with NO grant, so they land in the Personal fallback (cr-0075) marked "awaiting access".
+    coverage:
+      backend:
+        integration: [MemberAddSliceTest.ownerMintsMemberInviteOutsiderIs404, MemberAddSliceTest.memberRegisterJoinsGrantLessAndOwnerClaimOriginatesDelivery, MemberAddSliceTest.existingAccountAcceptsMemberInviteAndJoinsGrantLess, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses]
+      web:
+        unit: [src/features/spaces/InviteMemberDialog.test.ts, src/components/app/AppSidebar.test.ts]
+  - id: invite-travels-by-mail-only
+    # Was `invite-link-handoff`, and it asserted the opposite: the mint response used to hand the owner the raw
+    # secret so they could copy the link, justified as self-hostability. ADR 0055 reversed that — a token minted
+    # for a named other person must not be routed through whoever is looking at the owner's screen — and priced
+    # the self-hostability cost explicitly (a mailer becomes a precondition for admitting members; an auth-less
+    # relay suffices). The surviving copy-link is the Server-Owner's bootstrap invite, covered by
+    # uc.admin.create-tenant.
+    text: The invite is delivered to the invited address by email and by no other channel — the mint response carries no secret at all (ADR 0055 §2), and the secret that arrives in the mail is the real one (it accepts). A tenant with no sendable mail settings is refused with 503 `mail_unavailable` before anything is minted, so an undeliverable invitation never exists.
+    coverage:
+      backend:
+        integration: [MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
+      web:
+        unit: [src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/TenantMembersPanel.test.ts]
+        # The live half: the harness onboards its member actors the way a member is onboarded — inviting, then
+        # reading the token out of a real mailbox — against a real backend and a real SMTP server. If the mail
+        # ever stopped carrying the secret, no member would reach the tenant and this suite could not run at all.
+        e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
+  - id: member-invite-emailed-when-smtp-configured
+    # cr-email-smtp-transport (ADR 0048/0049): a second delivery channel alongside the copy-link. When the tenant
+    # has configured + enabled SMTP, the member invite is emailed from the tenant's own address; the body is
+    # rendered from the tenant's template (or veyq's EN+DE default) over the CLOSED set {{link}}/{{domain}}/
+    # {{expiry}} — veyq interpolates nothing sealed. `anUnconfiguredTenantSendsNoSmtpAndFallsBack` still pins the
+    # fallback because the bootstrap invite still uses it; what changed is that a *member* invite can no longer
+    # reach it — the gate refuses first (ADR 0055 §2), pinned by the criterion above.
+    text: When the tenant has configured + enabled per-tenant SMTP, a member invite is delivered by email from the tenant's own address (the accept link's secret in the URL fragment; body over the closed {{link}}/{{domain}}/{{expiry}} set, nothing sealed injected by veyq). With no config there is no member invite at all — the fallback that remains is the Server-Owner's bootstrap copy-link, not this path (ADR 0055 §3).
+    coverage:
+      backend:
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack]
+        unit: [InviteMailRendererTest.theRenderContextIsClosedToExactlyThreeNonSecretFields]
+  - id: member-invite-delivery-result
+    # cr-email-invite-send-hardening: the mint reports a first-class delivery result inline — SENT (SMTP accepted),
+    # FALLBACK_COPYLINK (no sendable SMTP → the copy-link is the channel), or FAILED (SMTP configured but the send
+    # errored, no longer silently swallowed). The send runs AFTER the mint transaction commits (a hung SMTP server
+    # no longer holds a DB connection); the FAILED path proves the send is best-effort and surfaced, not swallowed.
+    # Request-scoped only, never persisted → operator-blind untouched (ADR 0049). The web branches the three states:
+    # ADR 0055 narrowed this on the member path: FALLBACK_COPYLINK is refused before the mint and FAILED is no
+    # longer a success, so `delivery` can only read SENT here (it keeps its full range on the Server-Owner
+    # responses). A failed send *compensates* the mint — the invite is soft-revoked — because with no copy-link a
+    # surviving token would be a live secret nobody can reach.
+    text: >-
+      The invite mint reports a first-class delivery result inline, sent after the mint transaction commits and
+      never persisted (operator-blind untouched). On a member invite only SENT is reachable — no sendable mailer
+      is 503 `mail_unavailable` before the mint, and a send that errors is 503 `mail_send_failed` with the minted
+      invite revoked again, leaving no live token.
+    coverage:
+      backend:
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack, SmtpInviteMailSendTest.aConfiguredTenantWhoseSmtpIsUnreachableReportsFailed, MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberAddSliceTest.aSendThatFailsLeavesNoLiveInvite]
+      web:
+        unit: [src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/TenantMembersPanel.test.ts]
+  - id: member-invite-rate-limited
+    # cr-email-invite-send-hardening: the anti-bombing guard. A dedicated handler-level limiter keyed
+    # per-(tenant,recipient) [the primary guard] AND per-tenant [the volume cap], enforced after the authorization
+    # guards and before the mint, so a limited request creates no orphan invite. Over-limit → 429 + Retry-After.
+    # Built on the pure, mutation-verified TokenBucket core (not the per-IP IpRateLimitFilter, which cannot key on
+    # a recipient); its gradual refill turns 3/hour from a burst of 3 into one per 20 minutes (ADR 0052). Defaults (3/recipient, 20/tenant, per hour) are deliberately set, not calibrated — revidierbar.
+    text: Member-invite sends are rate-limited per-(tenant,recipient) and per-tenant to bound email-bombing of one address (the reissue-loop vector); over the limit the request is refused with 429 + Retry-After before any invite is minted, and the web surfaces a "try again later" message.
+    coverage:
+      backend:
+        integration: [MemberAddSliceTest.invitingOneRecipientPastTheLimitIs429WithRetryAfter]
+        unit: [InviteMailRateLimiterTest.theFourthInviteToOneRecipientIsRateLimited, InviteMailRateLimiterTest.aDifferentRecipientHasItsOwnBudget, InviteMailRateLimiterTest.theRecipientKeyIsCaseInsensitiveSoAliasCasingCannotEvadeIt, InviteMailRateLimiterTest.theTenantVolumeCapTripsAcrossDistinctRecipients, InviteMailRateLimiterTest.adifferentTenantIsIsolated]
+      web:
+        unit: [src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/TenantMembersPanel.test.ts]
+  - id: scope-member-directory
+    text: An authorized granter lists a scope's memberships with each member's identity public key + grant status (granted vs pending). The operator-blind server returns only already-stored operational metadata (pubkeys/roles/grant-present) — never a scope key — and the directory is scoped to that scope's members, not a global user search.
+    coverage:
+      backend:
+        integration: [MemberAddSliceTest.memberDirectoryListsMembersWithGrantStatus]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: member-identity
+    # Built by cr-0083 (en.spaces.member-identity, ADR 0023): the directory's identity layer. A member's
+    # per-tenant username is chosen at join (unique in the tenant); the real name is sealed under K_tenant.
+    text: Each member carries a per-tenant `username` (plaintext handle, unique within the tenant — a clash at join or rename is `409 username_taken`, and the same handle is free in another tenant) and a `firstName`/`lastName` **sealed under `K_tenant`** (decrypted on-device by any member; the server never sees the plaintext name). In the directory `email` is **owner-only** — nulled for a non-owner caller. The optional real name is sealed **at the join** when the invitee already holds `K_tenant` at accept (owner cold-birth, cr-0106), otherwise set/edited via the profile op after the member holds their grant.
+    coverage:
+      backend:
+        integration: [MemberIdentitySliceTest.twoMembersCannotShareAUsernameInOneTenant, MemberIdentitySliceTest.theSameUsernameIsFreeInAnotherTenant, MemberIdentitySliceTest.directoryShowsUsernameAndOwnerOnlyEmail, MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName, MemberIdentitySliceTest.changingToATakenUsernameIs409, MemberIdentitySliceTest.registerAndAcceptSealsTheOptionalNameAtJoin, TenantAcceptSliceTest.existingOwnerAcceptSealsTheOptionalNameAtJoin]
+      web:
+        unit: [src/features/account/profile/profile.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/admin/createTenant/tenants.test.ts]
+  - id: wrap-to-foreign-grant
+    text: Any online key-holder's device (not necessarily the inviter — every member holds K_SC) wraps the tenant scope key to a pending member's identity public key (asymWrap(hybridPublic(member), K_SC, "scope-grant") — the first wrap to a foreign identity), eagerly and automatically (no second human action), and posts it as that member's grant; first-online-wins, the rest no-op. The member opens it with their own identity private on next entry and reaches the shared space. The server stores opaque ciphertext, never the key.
+    # Delivery built as a grant-delivery job on the background-task mechanism (cr-0076). The onboarding that
+    # *produces* the pending member is cr-0077; here the pending (grant-less) membership is seeded.
+    coverage:
+      backend:
+        integration: [TasksSliceTest.grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently, TasksSliceTest.grantDeliveryCompletionWithoutAWrapIs400]
+      web:
+        unit: [src/features/tasks/grantDeliveryWorker.test.ts]
+  - id: admission-vs-delivery
+    text: Admission (minting an invite — who may join) is owner-only in v1; delivery (producing the wrap for an already-admitted, onboarded member) needs no special authority and is done by any key-holder. A non-inviting member cannot admit anyone, only help deliver the key.
+    # Both sides covered: DELIVERY (cr-0076) — eligibility is holding the scope key, so any granted member
+    # delivers and a grant-less member (a target, not a worker) cannot; ADMISSION (cr-0077) — only the tenant
+    # OWNER may mint a member invite, a non-owner is 403 not_tenant_owner.
+    coverage:
+      backend:
+        integration: [TasksSliceTest.grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently, TasksSliceTest.grantLessWorkerCannotClaim, MemberAddSliceTest.ownerMintsMemberInviteOutsiderIs404]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: additive-async-no-revocation
+    text: Granting is additive and asynchronous — it only adds a grant onto a hollow (role, no grant) membership; the member waits in the Personal fallback until ANY key-holder is next online to wrap (first-online-wins; no server-side wrap). Removal, key rotation, and re-invite are out of scope for this use-case.
+    coverage:
+      backend:
+        integration: [TasksSliceTest.grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently]
+      web:
+        unit: [src/features/tasks/grantDeliveryWorker.test.ts]

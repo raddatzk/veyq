@@ -1,0 +1,301 @@
+package com.veyq.app.features.sharing
+
+import com.veyq.app.features.media.DerivativeDeclare
+import com.veyq.app.features.media.UploadDeclare
+import com.veyq.app.generated.api.SharingApi
+import com.veyq.app.generated.model.CreateShareIdentityRequest
+import com.veyq.app.generated.model.CreateShareRequest
+import com.veyq.app.generated.model.LocalizedMarkdown
+import com.veyq.app.generated.model.PresignedUrl
+import com.veyq.app.generated.model.PublicShare
+import com.veyq.app.generated.model.ShareBlobDownload
+import com.veyq.app.generated.model.ShareBlobUploadResultItem
+import com.veyq.app.generated.model.ShareBlobUploadsRequest
+import com.veyq.app.generated.model.ShareBlobUploadsResponse
+import com.veyq.app.generated.model.ShareCreated
+import com.veyq.app.generated.model.ShareIdentity
+import com.veyq.app.generated.model.ShareIdentityCreated
+import com.veyq.app.generated.model.ShareMedia
+import com.veyq.app.generated.model.ShareMediaBatchRequest
+import com.veyq.app.generated.model.ShareMediaBatchResponse
+import com.veyq.app.generated.model.ShareMediaDerivative
+import com.veyq.app.generated.model.ShareMediaResultItem
+import com.veyq.app.generated.model.ShareNode
+import com.veyq.app.generated.model.ShareRole
+import com.veyq.app.generated.model.ShareSummary
+import com.veyq.app.generated.model.ShareTerms
+import com.veyq.app.generated.model.UpdateShareRequest
+import com.veyq.app.generated.model.NodeKind
+import com.veyq.app.shared.http.HttpFailure
+import com.veyq.app.shared.http.httpError
+import io.quarkus.security.Authenticated
+import io.quarkus.security.identity.SecurityIdentity
+import jakarta.annotation.security.PermitAll
+import jakarta.ws.rs.core.Response
+import java.time.ZoneOffset
+import java.util.UUID
+import com.veyq.app.shared.ratelimit.RateLimit
+import com.veyq.app.shared.ratelimit.RateLimitExempt
+import com.veyq.app.shared.ratelimit.RateLimitKey
+
+/**
+ * HTTP adapter for public viewer shares (uc.sharing.share-public-viewer, cr-0100). Implements the generated
+ * [SharingApi]; thin (ADR 0001) — delegates to [SharingHandler]. The class is `@Authenticated` (curator
+ * create/list/revoke); the two **guest** ops (`resolveShare`, `resolveShareBlob`) override with `@PermitAll`
+ * so an account-less viewer reaches them — gated only by share state (a non-enumerable 404), never by auth.
+ * Operator-blind: only ciphertext wraps + opaque metadata + presigned URLs cross.
+ */
+@Authenticated
+@RateLimitExempt(
+    reason = "Curator surface: authenticated + owner-gated on the caller's own shares. The guest (@PermitAll) " +
+        "operations each declare their own posture and override this — a class-level default must never be what " +
+        "silently covers the unauthenticated ones.",
+)
+class SharingResource(
+    private val handler: SharingHandler,
+    private val identity: SecurityIdentity,
+) : SharingApi {
+
+    override fun createShare(createShareRequest: CreateShareRequest): Response =
+        when (val o = handler.create(
+            userId = identity.principal.name,
+            nodeId = createShareRequest.nodeId.toString(),
+            role = createShareRequest.role.value, // VIEWER | CONTRIBUTOR (cr-0101)
+            wrap = createShareRequest.wrap,
+            sealedName = createShareRequest.sealedName,
+            expiresAt = createShareRequest.expiresAt?.toInstant(),
+            sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
+            sealedShareKey = createShareRequest.sealedShareKey, // cr-0115: recoverable K_share for a later edit
+            sealedShareName = createShareRequest.sealedShareName, // cr-0116: optional private label under K_share
+            passwordRequired = createShareRequest.passwordRequired ?: false, // cr-0118: optional access-control gate
+            pwSalt = createShareRequest.pwSalt,
+            pwVerifier = createShareRequest.pwVerifier,
+            sealedPassword = createShareRequest.sealedPassword, // cr-0118: management-only reveal copy
+        )) {
+            is CreateShareOutcome.Created -> Response.status(Response.Status.CREATED)
+                .entity(ShareCreated(shareId = o.shareId)).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun listShares(nodeId: UUID?): Response {
+        val me = identity.principal.name
+        // Without nodeId: the caller's own shares. With nodeId: every share on that Memory visible to a scope
+        // member (cr-0104) — `mine` tells the UI which the caller may revoke vs merely see / adopt.
+        val shares = if (nodeId != null) handler.listForNode(me, nodeId.toString()) else handler.list(me)
+        return Response.ok(shares.map { s ->
+            ShareSummary(
+                shareId = s.id,
+                nodeId = UUID.fromString(s.nodeId),
+                role = ShareRole.decode(s.role),
+                sealedName = s.sealedName,
+                enabled = s.enabled,
+                mine = s.ownerAccount == me,
+                createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
+                expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
+                sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
+                sealedShareName = s.sealedShareName, // cr-0116: the manage list's row title (falls back to the role)
+                sealedShareKey = s.sealedShareKey, // cr-0115: lets the manage UI recover K_share to edit note + name
+                passwordRequired = s.passwordRequired, // cr-0118: a lock badge in the manage list
+                sealedPassword = s.sealedPassword, // cr-0118: the reveal copy (management-only; never a viewer)
+            )
+        }).build()
+    }
+
+    override fun revokeShare(shareId: String): Response =
+        when (val o = handler.revoke(identity.principal.name, shareId)) {
+            RevokeShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun reactivateShare(shareId: String): Response =
+        when (val o = handler.reactivate(identity.principal.name, shareId)) {
+            ReactivateShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated in the handler (404 if not the
+    // caller's). The K_share-sealed ciphertexts (note + name) are re-sealed client-side; an optional `role` changes
+    // the grant in place (VIEWER ↔ CONTRIBUTOR — UPLOADER is 422). The link/K_share/wrap are untouched either way.
+    override fun updateShare(shareId: String, updateShareRequest: UpdateShareRequest): Response =
+        when (val o = handler.updateShare(
+            identity.principal.name, shareId,
+            updateShareRequest.sealedNote, updateShareRequest.sealedShareName, updateShareRequest.role?.value,
+            updateShareRequest.expiresAt?.toInstant(),
+            updateShareRequest.passwordRequired, updateShareRequest.pwSalt, updateShareRequest.pwVerifier, updateShareRequest.sealedPassword,
+        )) {
+            UpdateShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Guest read of the sealed subtree. Volume is unbounded BY DECISION, not by omission: neither " +
+            "available axis fits, and the residual gap is recorded in cc.security.rate-limit " +
+            "(§ Unbounded by decision) rather than left silent.",
+    )
+    override fun resolveShare(shareId: String, xSharePassword: String?): Response =
+        when (val o = handler.resolve(shareId, xSharePassword)) {
+            is ResolveShareOutcome.Found -> Response.ok(
+                PublicShare(
+                    role = ShareRole.decode(o.share.role),
+                    passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
+                    pwSalt = if (o.share.passwordRequired) o.share.pwSalt else null,
+                    wrap = o.share.wrap,
+                    sealedName = o.share.sealedName,
+                    sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
+                    nodes = o.subtree.nodes.map(::toShareNode),
+                    media = o.subtree.media.map(::toShareMedia),
+                    identities = o.identities.map { ShareIdentity(identityId = UUID.fromString(it.id), sealedDisplayName = it.sealedDisplayName) },
+                ),
+            ).build()
+            // cr-0118: password required + no token → a LOCKED shell (only the challenge; no wrap/name/note/subtree).
+            is ResolveShareOutcome.Locked -> Response.ok(
+                PublicShare(
+                    role = ShareRole.decode(o.share.role),
+                    passwordRequired = true,
+                    pwSalt = o.share.pwSalt,
+                    wrap = null, sealedName = null, sealedNote = null,
+                    nodes = emptyList(), media = emptyList(), identities = null,
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Guest presign of one share blob — the costliest of the three guest reads, since it mints a " +
+            "presigned URL. Unbounded by the same decision as resolveShare; cc.security.rate-limit " +
+            "(§ Unbounded by decision) names it as the open item rather than waving it away.",
+    )
+    override fun resolveShareBlob(shareId: String, blobId: UUID, xSharePassword: String?): Response =
+        when (val o = handler.resolveBlob(shareId, blobId.toString(), xSharePassword)) {
+            is ShareBlobOutcome.Found -> Response.ok(
+                ShareBlobDownload(presignedGets = o.gets.map { PresignedUrl(index = it.index, url = it.url) }),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // The accountless terms gate (uc.sharing.share-accept, ADR 0035 §3; @PermitAll — no auth, keyed on the
+    // non-enumerable shareId, no X-Share-Password: terms are public). Returns the owning tenant's public terms so
+    // the client can gate acceptance in localStorage. NOTE: this endpoint records NOTHING about the visitor — the
+    // accountless acceptance is an operational client-side gate, not enforcement (see SharingHandler.shareTerms).
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Account-less read of a share's terms — a constant document with no per-caller state. Same " +
+            "guest-read volume decision as resolveShare (cc.security.rate-limit § Unbounded by decision).",
+    )
+    override fun getShareTerms(shareId: String): Response =
+        when (val o = handler.shareTerms(shareId)) {
+            is ShareTermsOutcome.Found -> Response.ok(
+                ShareTerms(
+                    tenantId = UUID.fromString(o.tenantId),
+                    termsVersion = o.termsVersion,
+                    // null when the operator has published no terms (termsVersion 0) — the client never gates.
+                    terms = if (o.de == null && o.en == null) null else LocalizedMarkdown(de = o.de, en = o.en),
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    private fun toShareNode(n: ShareNodeRow) = ShareNode(
+        id = UUID.fromString(n.id),
+        kind = NodeKind.decode(n.kind),
+        parentId = n.parentId?.let(UUID::fromString),
+        orderIndex = n.orderIndex,
+        wrappedContentKey = n.wrappedContentKey,
+        wrappedMeta = n.wrappedMeta,
+    )
+
+    private fun toShareMedia(m: ShareMediaRow) = ShareMedia(
+        nodeId = UUID.fromString(m.nodeId),
+        mediaId = UUID.fromString(m.mediaId),
+        blobId = UUID.fromString(m.blobId),
+        chunkCount = m.chunkCount,
+        byteSize = m.byteSize,
+        wrappedBlobKey = m.wrappedBlobKey,
+        manifest = m.manifest,
+        derivatives = m.derivatives.map { d ->
+            ShareMediaDerivative(
+                kind = ShareMediaDerivative.Kind.valueOf(d.kind),
+                blobId = UUID.fromString(d.blobId),
+                chunkCount = d.chunkCount,
+                byteSize = d.byteSize,
+                wrappedBlobKey = d.wrappedBlobKey,
+                manifest = d.manifest,
+            )
+        },
+        wrappedMeta = m.wrappedMeta,
+        identityId = m.identityId?.let(UUID::fromString),
+    )
+
+    // --- contributor guest ops (cr-0101; @PermitAll — account-less, gated only by share state + token) ---
+
+    @PermitAll
+    // The one guest call that writes a row before any upload exists, so an unbounded link holder could grow the
+    // identity table on its own. Bounded per share in the handler (ShareRateLimiter.allowIdentity).
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun createShareIdentity(shareId: String, createShareIdentityRequest: CreateShareIdentityRequest, xSharePassword: String?): Response =
+        when (val o = handler.createIdentity(shareId, xSharePassword, createShareIdentityRequest.sealedDisplayName)) {
+            is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)
+                .entity(ShareIdentityCreated(identityId = UUID.fromString(o.identityId), contributorToken = o.contributorToken)).build()
+            is HttpFailure -> httpError(o)
+        }
+
+    @PermitAll
+    // The one guest write that already carries a real volume bound: ShareRateLimiter, per shareId, checked in the
+    // handler before any presign is minted. SHARE is a handler-enforced marker (ADR 0051) — a per-IP bound would
+    // be the wrong axis here, since a share's guests can all sit behind one proxy address.
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun startShareBlobUploads(shareId: String, shareBlobUploadsRequest: ShareBlobUploadsRequest, xSharePassword: String?): Response {
+        val declares = shareBlobUploadsRequest.items.map { UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey) }
+        return when (val o = handler.startUploads(shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares)) {
+            is ShareUploadOutcome.Results -> Response.ok(
+                ShareBlobUploadsResponse(
+                    results = o.items.map {
+                        ShareBlobUploadResultItem(
+                            uploadId = it.uploadId?.let(UUID::fromString),
+                            presignedPuts = it.presignedPuts?.map { p -> PresignedUrl(index = p.index, url = p.url) },
+                            error = it.error,
+                        )
+                    },
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
+    @PermitAll
+    // The attach half of the contributor upload flow — it creates the media rows, so it rides the same per-share
+    // upload budget as startShareBlobUploads (ShareRateLimiter.allowUpload).
+    @RateLimit(key = RateLimitKey.SHARE)
+    override fun completeShareMedia(shareId: String, shareMediaBatchRequest: ShareMediaBatchRequest, xSharePassword: String?): Response {
+        val items = shareMediaBatchRequest.items.map { item ->
+            ShareCompleteItem(
+                originalUploadId = item.originalUploadId.toString(),
+                derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },
+                wrappedMeta = item.wrappedMeta,
+                wrappedExif = item.wrappedExif,
+            )
+        }
+        return when (val o = handler.completeUploads(shareId, xSharePassword, shareMediaBatchRequest.contributorToken, items)) {
+            is ShareCompleteOutcome.Results -> Response.ok(
+                ShareMediaBatchResponse(
+                    results = o.items.map { ShareMediaResultItem(blobId = it.blobId?.let(UUID::fromString), mediaId = it.mediaId?.let(UUID::fromString), error = it.error) },
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "Delete-own is bounded by what the caller contributed: the store authorizes by single-row " +
+            "ownership (the media's share_identity_id must equal the token's identity), and those rows are " +
+            "already capped by the per-share upload budget. A separate delete bound would cap nothing new.",
+    )
+    override fun deleteShareMedia(shareId: String, mediaId: UUID, xContributorToken: String, xSharePassword: String?): Response =
+        when (val o = handler.deleteMedia(shareId, xSharePassword, xContributorToken, mediaId.toString())) {
+            ShareDeleteOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+}

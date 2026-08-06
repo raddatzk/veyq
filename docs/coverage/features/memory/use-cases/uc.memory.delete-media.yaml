@@ -1,0 +1,68 @@
+useCase: uc.memory.delete-media
+feature: memory
+title: Delete media — remove a photo into a recoverable per-Memory trash
+# Built by cr-0110 (contracts → backend → web). Soft-delete → per-Memory trash → 30-day retention (operator-
+# configurable) → scheduled hard-purge. Any scope member may TRASH and RESTORE (reversible, recovery-not-
+# destruction), audited by deleted_by/deleted_at; the irreversible purge is the scheduled system job, never a
+# member hand-action — per the security-model `Deletion & erasure` posture. Reuses the cr-0107 delete_revision
+# reconcile (no new propagation) and the cr-0102 blob-reclaim path (the purge).
+acceptanceCriteria:
+  - id: trash-soft-delete-any-member
+    text: Any member of the scope may trash a media item — the server marks it trashed (deleted_at + deleted_by), it leaves listNodeMedia and the delete-reconcile id-set, and bumps the node's delete_revision so every open gallery drops the tile on its next poll (uc.memory.live-updates). Operator-blind — a flag flip, no content, no key. A non-member gets a non-enumerable 404; unauthenticated is 401.
+    coverage:
+      # Server-side trash semantics (flag flip + drop from list/id-set + revision bump + non-member 404 +
+      # unauth 401) are proven by the backend slice. The lightbox UI affordance that emits the
+      # delete lives in MediaLightbox.test.ts but belongs to lightbox-delete-and-hotkey (which cites it); it
+      # proved no server behaviour here, so the tangential web ref is removed.
+      backend:
+        integration: [MediaTrashSliceTest.trashHidesFromListBumpsBothCountersAndDropsFromIdSet, MediaTrashSliceTest.deleteByNonMemberIs404, MediaTrashSliceTest.unauthenticatedDeleteIs401]
+  - id: restore-from-trash
+    text: Any member may restore a trashed media before it is purged — clearing deleted_at, bumping the revision — and the tile returns to the gallery in its date position (its blobs were never removed, only the flag flipped). Restoring an already-purged media is a 404.
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.restoreBringsItBackIntoTheGallery, MediaTrashSliceTest.restoreUnknownMediaIs404]
+  - id: per-memory-trash-tab
+    text: The Memory detail carries a "Trash" tab (beside Gallery/Chapters) that lazily lists the node's trashed media (state=trashed) in the SAME justified MediaGrid as the gallery (dimmed tiles), with a per-tile checkbox (batch-select) + a 3-dot menu (Restore / Delete forever) + a batch toolbar, plus an empty state; the trashed listing is excluded from the active gallery. (The deletion audit's actor id rides the data; surfacing the actor's display name is a later nicety, needing a username resolve.)
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.trashedListingCarriesTheAuditAndExcludesFromActive]
+  - id: member-expedited-purge
+    text: A member may permanently delete an ALREADY-TRASHED media now (the expedited purge, cr-0111) — hard-deleting its derivative + media + blob rows + store objects, bypassing the retention window; a live (untrashed) or unknown media is a 404 (destruction always goes trash → purge, never a one-step delete-forever of a live item). The Trash tab's 3-dot menu + batch toolbar drive it behind a confirm on the irreversible action. Matches the sharpened security-model `Deletion & erasure` (purge = the scheduled job OR a member expediting an already-trashed item).
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.purgeTrashedMediaHardDeletesNow, MediaTrashSliceTest.purgingALiveMediaIs404, MediaTrashSliceTest.purgeByNonMemberIs404]
+  - id: lightbox-delete-and-hotkey
+    text: Delete is a lightbox-only affordance — a trash button in the lightbox top bar and a Delete/Backspace hotkey — with no confirmation dialog (recoverable); it emits a delete for the current photo (the parent trashes it, advances, and shows an undo toast). The hotkey + button respect the lightbox's suspend-keys (no delete while the cover modal is open, cr-0109) and are hidden in the read-only public-share viewer.
+    coverage:
+      web:
+        unit: [src/features/memory/components/MediaLightbox.test.ts]
+  - id: trashed-media-leaves-the-share
+    text: A trashed media leaves a public share on BOTH guest paths at once (E6) — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign (a non-enumerable 404); a restore brings it back on both. Filtering only the listing would leave a medium invisible in the share yet fully downloadable by anyone holding its blobId, for the whole retention window. Two independent server-side predicates carry it (SharingStore.subtree and SharingStore.subtreeBlobIds), which is why each is proven separately rather than as one assertion.
+    coverage:
+      # A cross-feature obligation owned by neither side: the trash CR and the sharing CRs share only the
+      # `veyq_media` rows, so neither one's own tests would have caught the original defect (a public share served
+      # trashed media for the entire retention window). The backend slice pins the semantics; cr-sharing-contributor-e2e
+      # added the missing altitude — the same flow through the real web client against a live stack, which is where
+      # the two features actually meet. Both predicates were bite-tested independently: removing either one reddens
+      # exactly its own named assertion and leaves the other's live control green.
+      backend:
+        integration: [ShareTrashedMediaSliceTest.trashedMediaLeavesTheAnonymousResolve, ShareTrashedMediaSliceTest.trashedMediaBlobIsNoLongerAuthorizedThroughTheShare, ShareTrashedMediaSliceTest.restoredMediaComesBackIntoTheShare]
+      web:
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: scheduled-hard-purge
+    text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order and the store objects reclaimed, reusing the cr-0102 blob-reclaim path. The purge is irreversible and is not a member action.
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention]
+  - id: reversible-audit-vs-irreversible
+    text: The reversible trash step is any-member and audited (deleted_by/deleted_at, surfaced in the trashed listing); the irreversible purge is the scheduled system job — no member can delete-forever another member's content by hand. Trashing is idempotent. Matches the security-model `Deletion & erasure` reversible/irreversible split; the trash state (flag + actor + timestamp) is the disclosed server-visible operational metadata.
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.trashedListingCarriesTheAuditAndExcludesFromActive, MediaTrashSliceTest.deleteIsIdempotent]
+  - id: self-heal-cover-and-auto
+    text: A trashed media that was the cover falls back to the placeholder (the existing dangling-cover E2 path, no cover rewrite required); auto date + auto place re-materialize from the shrunken media list (the trashed media is excluded from listNodeMedia), never touching a manual/fixed value — no delete-specific reconcile code.
+    coverage:
+      backend:
+        integration: [MediaTrashSliceTest.trashHidesFromListBumpsBothCountersAndDropsFromIdSet]
+      web:
+        unit: [src/features/memory/memoryCover.test.ts]

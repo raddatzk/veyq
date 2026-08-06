@@ -1,0 +1,86 @@
+useCase: uc.sharing.share-contributor
+feature: sharing
+title: Share a Memory as a contributor link (anyone with the link can add photos)
+# Built (web vertical, cr-0101 + ADR 0030): a CONTRIBUTOR public share of one personal-scope Memory — the viewer
+# share (symWrap(K_share, K_mem), key in the URL fragment) plus a mandatory display name sealed under K_mem → an
+# anonymous share identity (the buckets forward-compat hook), share-scoped UNAUTHENTICATED upload endpoints
+# (presign mirror + complete, gated by role CONTRIBUTOR + enabled + a contributor token), and direct-append
+# attribution. Covered by the backend slice (create CONTRIBUTOR → identity-create → share-scoped upload attaches
+# + stamps the identity → surfaces in the resolve; VIEWER/bad-token/revoke rejected), the http guest-boundary
+# assertions, and the web unit round-trip of the operator-blind name seal. v1 is deliberately narrow: role CONTRIBUTOR only (view + append),
+# direct-append, personal scope; the buckets UI, the UPLOADER drop-box, MANAGER/edit/delete, password protection
+# and moderation are separate later slices.
+#
+# cr-sharing-contributor-e2e added the first LIVE coverage of this (or any) sharing flow:
+# src/features/memory/shareContributor.e2e.test.ts drives curator -> CONTRIBUTOR share -> anonymous resolve ->
+# named identity -> two real presigned uploads direct-to-store -> gated blob read-back -> the curator recovering
+# the contributor's name, against a real backend + MariaDB + the bundled store. It is the only layer that can
+# reach the second byte transport at all (startShareBlobUploads -> real PUTs -> completeShareMedia), which the
+# authenticated upload path never exercises.
+acceptanceCriteria:
+  - id: create-contributor-share
+    text: A curator turns one of their personal-scope Memories into a CONTRIBUTOR share — the curator picks the Contributor role in the Share dialog; the client mints K_share, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { nodeId, role CONTRIBUTOR, wrap, sealedName, expiresAt? }. The server mints a 256-bit shareId and stores the record opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    coverage:
+      backend:
+        integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
+      web:
+        unit: [src/features/memory/share.test.ts]
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: sealed-name-anonymous-identity
+    text: Before contributing, the visitor must enter a display name (mandatory). The client seals it under K_mem and creates an anonymous share identity via POST /api/shares/{shareId}/identities { sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
+    coverage:
+      # The e2e proves the CROSS-ACTOR half no other layer reaches: an anonymous stranger seals a display name
+      # under K_mem, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —
+      # who never met them — opens it with openBucketName(kMem, ..., 'contributor'). Note the route: the web
+      # client does NOT read the contract's PublicShare.identities (resolveShare drops it and nothing in web/src
+      # consumes it), so the live path goes through the bucket copy, which is a strictly stronger assertion.
+      backend:
+        integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
+      web:
+        unit: [src/features/memory/share.test.ts]
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: share-scoped-upload
+    text: Two share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role CONTRIBUTOR + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads presigns one PUT per chunk, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
+    coverage:
+      # The slice proves the endpoints' authz; only the e2e proves the TRANSPORT — real presigned PUTs of real
+      # sealed chunks into the bundled store, and the bytes coming back out through the gated presign byte-equal.
+      backend:
+        integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve, ShareContributorSliceTest.badTokenRejectedOnUpload]
+      web:
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: direct-append-attribution
+    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous resolve returns each media with its identityId and each identity's sealed name; v1 renders all contributed media inline (the buckets grouping UI is deferred, the identity link is the hook).
+    coverage:
+      # What the web e2e proves here, stated narrowly because the criterion text is wider than the client: the
+      # contribution attaches to the share's root node, surfaces immediately in BOTH the anonymous resolve and the
+      # curator's own listMedia, and its attribution is recoverable. It does NOT exercise "the resolve returns each
+      # media with its identityId and each identity's sealed name" through the client — that contract field has no
+      # web reader (see sealed-name-anonymous-identity); the backend slice is what covers it.
+      backend:
+        integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
+      web:
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: operator-blind
+    text: The server stores only the share record (shareId + wrap + plaintext role + sealed name + nodeId), an opaque share_identity (K_mem-sealed contributor name + token hash + shareId), a share_identity_id stamp on media, and ciphertext blobs. It never sees K_share, K_mem, the Memory name, the contributor's name, the photo bytes, or who the person is. The no-install contributor page carries the same trust-tier honesty (footer link, ADR 0026); a reported share is decryptable (T&S corollary), intended.
+    coverage:
+      # The e2e is the only ref here that reads the STORED BYTES rather than the client's intent: its
+      # wire-assertion sweep (ADR 0053) proves the five values this flow sealed — the Memory name, the note's two
+      # locales, the contributor's display name, the share's private name — appear in no row of the database the
+      # run wrote. A unit test sees what the client meant to seal; only this sees what the operator ends up with.
+      backend:
+        integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
+      web:
+        unit: [src/features/memory/share.test.ts]
+        e2e: [src/features/memory/shareContributor.e2e.test.ts]
+  - id: abuse-controls-and-revoke
+    text: The unauthenticated upload path is gated by curator opt-in (role CONTRIBUTOR) + the per-identity contributor token + the share enabled flag; revoke/expiry stops new uploads AND reads (403/404). The per-blob byte budget (ADR 0013) and a per-share rate limit are defense-in-depth. Soft (L1) revocation does not retract already-uploaded media (like already-read content); the curator deletes unwanted photos individually.
+    coverage:
+      backend:
+        integration: [ShareContributorSliceTest.viewerShareRejectsContribution, ShareContributorSliceTest.revokeStopsContribution]
+  - id: role-mutable-in-place
+    text: A curator changes an existing share's role in place (VIEWER <-> CONTRIBUTOR) via PATCH updateShare { role } (cr-0119, ADR 0036) — the same link / wrap / K_share are untouched (role is server-enforced plaintext authz, no re-crypto), so the new grant bites on the next guest request (a promote enables contribution at once; a demote 403s new uploads, already-contributed photos stay). Restricted to VIEWER <-> CONTRIBUTOR - setting role=UPLOADER, or changing an UPLOADER share's role, is 422 invalid_role_change (the write-only drop-box is its own separate action, its promise not flippable on distributed links). Owner-gated (a non-owner is 404, like the note edit); role is optional on the PATCH (omitted for a plain note/name edit). Web - the normal edit dialog shows the VIEWER/CONTRIBUTOR switcher (never the uploader variant).
+    coverage:
+      backend:
+        integration: [ShareNoteSliceTest.promoteViewerToContributorInPlaceKeepsTheLinkAndEnablesContribution, ShareNoteSliceTest.roleChangeToUploaderIs422, ShareNoteSliceTest.changingAnUploaderShareRoleIs422]
+      web:
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts]

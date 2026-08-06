@@ -1,0 +1,59 @@
+useCase: uc.platform.capability-discovery
+feature: platform
+title: A client discovers an instance's version + capabilities, and refuses to break silently
+# Built (web) via cr-0103 (ADR 0032, lean core): the pre-auth GET /api/setup advertises version { major, build }
+# (major = the only hard gate, bumped only on capability removal) and capabilities [{ id }] (the active set, from
+# the append-only catalog contracts/platform/capabilities.json, pinned into a backend registry + web constants
+# with conformance tests). The web client hard-gates on a major mismatch (a blocking, direction-specific screen
+# before login) and soft-gates each optional feature on hasCapability. An operator disables a capability
+# instance-wide (veyq.capabilities.disabled) — omitted from the manifest AND rejected at its create/enable gate
+# (422 capability_disabled). Sharing is the worked end-to-end proof; spaces.groups + account.device-trust ride
+# the same machinery. Lean-core scope: no deprecation lifecycle /
+# notices / audience filter yet.
+acceptanceCriteria:
+  - id: discover-manifest
+    text: GET /api/setup (pre-auth, no identity) returns version { major, build } and capabilities [{ id }] — the instance's ACTIVE capability set, sourced from the append-only catalog contracts/platform/capabilities.json. The response is identical for every caller (operator-blind-safe, no per-user data).
+    coverage:
+      backend:
+        integration: [CapabilityManifestSliceTest.advertisesVersionAndTheActiveCapabilitySet, CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller]
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts]
+  - id: major-hard-gate
+    text: A client whose compiled major differs from server.version.major shows a BLOCKING incompatibility state (direction-specific — update-app when server>client, update-server when server<client) BEFORE login; an equal major proceeds. build is informational and never gates.
+    coverage:
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts, src/components/app/IncompatibleScreen.test.ts]
+  - id: capability-soft-gate
+    text: A client hides/omits a feature whose capability id is ABSENT from the manifest, and renders normally when present. A missing capability degrades gracefully (feature hidden, never invoked), never throws.
+    coverage:
+      web:
+        unit: [src/shared/state/useCapabilities.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
+  - id: operator-disable-enforced
+    text: An operator disables a capability instance-wide (config); the server BOTH drops it from the manifest AND rejects the corresponding endpoint with 422 capability_disabled. The manifest is a UX hint; the server-side enforcement is the authority (a stale/ignoring client still cannot use it).
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.disabledIdsAreSubtractedFromActive]
+        integration: [CapabilityDisabledSliceTest.disabledCapabilityIsOmittedFromTheManifestButActiveOnesRemain, CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+  - id: capability-not-permission
+    text: A capability is instance-wide + pre-auth, NOT a per-scope/role permission. A feature is offered only when (capability present) AND (policy permits here) — e.g. sharing.public-links present AND the node is a personal-scope Memory the caller owns. The manifest carries no identity/permission data.
+    coverage:
+      backend:
+        integration: [CapabilityManifestSliceTest.manifestCarriesNoIdentityAndIsIdenticalForEveryCaller, CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+  - id: sharing-first-consumer
+    text: Sharing gates on sharing.public-links / sharing.uploader-links. The normal share create dialog offers only VIEWER/CONTRIBUTOR (ShareCreateDialog.test.ts); the uploader is a SEPARATE memory action + its own dialog variant, gated on sharing.uploader-links in MemoryDetail. Disabling sharing.uploader-links hides the uploader action AND makes createShare(role=UPLOADER) return 422 capability_disabled. Proves the full loop (manifest -> client gate -> server enforcement) on a real feature.
+    coverage:
+      backend:
+        integration: [CapabilityDisabledSliceTest.createUploaderShareIsRejectedWhileViewerPassesTheGate]
+      web:
+        unit: [src/features/memory/components/ShareCreateDialog.test.ts]
+  - id: catalog-serves-usecases
+    text: A capability is a coarser projection over use-cases, not a 1:1 rename (ADR 0032 §6). Each catalog entry in contracts/platform/capabilities.json declares a serves [uc.…] back-ref (catalog-only, NOT on the wire), and a validator enforces every serves resolves to a real use-case — so the catalog can't be a typo or drift from the graph. The catalog is append-only; an id may be reserved ahead of first advertisement and is advertised active only once its use-cases are built. Seed - 4 capabilities over 12 use-cases (sharing.public-links=viewer+contributor, sharing.uploader-links=uploader, spaces.groups=the 5 group use-cases, account.device-trust=the 4 device-unlock use-cases).
+    coverage:
+      backend:
+        unit: [CapabilityRegistryTest.everyAdvertisedIdIsARealCatalogEntry]
+      web:
+        unit: [src/features/platform/capabilities.test.ts]
+# scripts/validate_capabilities.py enforces catalog-serves-usecases at the doc-graph level (every serves -> a real,
+# built use-case), run in the CI trust-chain alongside validate_feature_wiring. The Phase-3 live smoke (uploader
+# disabled -> option gone + forced createShare UPLOADER rejected; a major bump -> the incompatibility screen) is a
+# manual browser check the ShareCreateDialog + IncompatibleScreen unit tests automate at component level.

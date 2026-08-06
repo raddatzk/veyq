@@ -1,0 +1,131 @@
+useCase: uc.memory.gallery
+feature: memory
+title: Open a Memory & browse its gallery
+# The web gallery UI is built (cr-0049): MemoryDetail (grid + header) + MediaLightbox (preview, prev/next,
+# download) over the ready three-tier data layer (en.memory.derivatives). The data-path criteria carry refs on
+# every surface (the cr-0045/0047/0048 data layer) plus the web render tests.
+acceptanceCriteria:
+  - id: thumbnail-grid
+    text: Opening a Memory lists its media and renders a thumbnail grid (each thumbnail fetched as ciphertext and decrypted on device under K_mem). The grid is the Gallery tab of a tabbed detail view (Gallery / Chapters, cr-0061).
+    coverage:
+      backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
+      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MemoryDetail.test.ts] }
+  - id: lightbox-preview
+    text: Opening an item shows its preview (not the multi-MB original) full-view, with prev/next paging the grid order.
+    coverage:
+      backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps] }
+      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
+  - id: download-original
+    text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
+    coverage:
+      backend: { integration: [MediaSliceTest.startCompleteListRoundTrip], e2e: [BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes] }
+      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts] }
+  - id: favorite-toggle
+    text: The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites).
+    coverage:
+      web: { unit: [src/app/favoritesStore.test.ts, src/features/memory/favorites.test.ts] }
+  - id: operator-blind-fetch
+    text: Every tier (thumbnail/preview/original) is fetched as ciphertext via presigned GET and decrypted on device; the server sees no pixel, filename, or content key.
+    coverage:
+      backend: { integration: [MediaSliceTest.derivativesRoundTripWithOwnWraps, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
+      web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MemoryDetail.test.ts, src/features/memory/components/MediaLightbox.test.ts] }
+  - id: justified-grid-sealed-dimensions
+    text: The web grid is laid out justified (aspect-preserving rows that fill the width); each media's geometry (w,h) rides the always-listed metadata tier (wrappedMeta, cr-0068 consolidating cr-0064's wrappedLayout + cr-0066's wrappedCapturedAt) sealed under K_mem at upload and unwrapped on device to drive the layout, so the blind server never sees pixel dimensions. Media without a sealed geometry fall back to a default aspect.
+    coverage:
+      backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaWithoutDerivativesListsEmptyTiers] }
+      web:
+        unit:
+          - src/features/memory/mediaGridLayout.test.ts
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: lightbox-exif-detail
+    text: Opening an item lazily fetches its sealed heavy EXIF tier (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device under K_mem to show the camera detail (camera, lens, focal length, aperture, exposure, ISO, dimensions). The capture date + coordinates come instantly from the always-listed metadata tier (wrappedMeta), not the lazy EXIF. The blind server never sees any field; an item without sealed EXIF shows a no-detail message (cr-0064/0068).
+    coverage:
+      backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaExifWithoutExifIsNull, MediaSliceTest.mediaExifForUnknownMediaIs404] }
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: date-sorted-grid
+    text: The gallery sorts tiles by effective capture time (newest first by default, a header toggle for oldest first; undated media last). Each media's capturedAt is sealed under K_mem in the always-listed metadata tier (wrappedMeta — geometry + capture time + GPS; cr-0066/0068) — the derived original is the EXIF DateTimeOriginal or the file's creation date, so the blind server never sees a timestamp yet the grid can order client-side. A lightbox correction re-sorts without a refetch.
+    coverage:
+      # Sorting is client-side; cite the tests that assert the ORDER. MemoryDetail.test.ts asserts newest-first
+      # default + the oldest-first toggle re-sorting already-listed tiles with no refetch (and a lightbox date
+      # correction persisting in place); media.test.ts asserts the effectiveCapturedAt sort key (undated → an
+      # undefined key that sorts last). The backend's role — relaying the sealed capturedAt tier the server can't
+      # read — is not sorting and is already proven under lightbox-exif-detail / lightbox-correct-capturedat, so
+      # the two MediaSliceTest refs (round-trip + meta-overwrite) are dropped here rather than mis-cited as sort proof.
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: lightbox-correct-capturedat
+    text: From the lightbox a user can correct (or set) a media's capture time; the correction is sealed under K_mem inside the listed metadata tier (wrappedMeta) as capturedAtOverride alongside the immutable extracted original (geometry + GPS ride along unchanged), re-sealed client-side and PUT verbatim (updateMediaMeta) — the blind server never sees the date. The panel shows the effective time (override ?? original) with a "corrected" indicator and can reset to the original; a media with no EXIF can have a date set (cr-0065/0068).
+    coverage:
+      backend: { integration: [MediaSliceTest.updateMetaOverwritesSealedTierAndLists, MediaSliceTest.updateMetaForUnknownMediaIs404] }
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: sealed-media-type
+    text: A media's full MIME type is sealed under K_mem inside the always-listed metadata tier (wrappedMeta) at upload — never a server-visible field (an application of ADR 0044 — a plaintext mediaType would leak photo-vs-video-vs-PDF per medium; ADR 0047). The blind server relays the same opaque blob it already does (its opaque relay is proven under justified-grid-sealed-dimensions); the client unseals it (isVideoMediaType) to drive the video signal. cr-inline-video-playback (#104/#105).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+  - id: lightbox-video-playback
+    text: Opening a video (sealed mediaType video/*) shows its poster (the PREVIEW tier) with a play affordance; clicking play fetches + decrypts the pristine original on device and plays it from a typed blob URL in a <video> element (Slice 1 interim, ADR 0047 — no service-worker range layer yet, no size cap). An image shows no play affordance. Operator-blind — the original is fetched as ciphertext via presigned GET and decrypted under K_mem. cr-inline-video-playback (#104).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: video-play-badge
+    text: A video tile draws a play badge over its poster in the gallery grid, the Beiträge (buckets) grid, and the Trash grid — driven by the sealed mediaType (isVideoMediaType), with no extra fetch. An uploading video shows a locally-derived first-frame poster + badge (not a bare icon) once settled, so the in-flight and persisted states agree. cr-inline-video-playback (#105).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: media-type-lazy-backfill
+    text: A pre-field media (uploaded before the sealed mediaType existed) carries no video signal; on the first download of its original the client sniffs the decrypted bytes (magic bytes, incl. WebM/MKV via the EBML DocType) and re-seals the type into the tier (updateMediaMeta), so the next listing shows the badge + the <video> branch. Never in the read-only public viewer (no authed write path); a never-fetched pre-field video stays without a signal — the accepted boundary (ADR 0047). cr-inline-video-playback (#104/#105).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/download.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: sw-range-streaming
+    text: A playing video is streamed, not fetched whole — a Service Worker intercepts a synthetic in-origin URL, parses the demuxer's HTTP Range (first probe, closed, open-ended, suffix; no-Range → 200 + Accept-Ranges), maps the plaintext byte-range to the covering ciphertext chunk indices (plaintextTotal = byteSize − 28·chunkCount), assembles the window and answers 206 Partial Content with Content-Range. The range↔chunk math is pure + unit-tested; the SW's fetch/206 assembly is tested against a mocked page port. cr-inline-video-playback Slice 2 (ADR 0047).
+    coverage:
+      web:
+        unit:
+          - src/sw/range.test.ts
+          - src/sw/mediaSw.test.ts
+  - id: sw-key-free-delegation
+    text: The Service Worker holds no key and no auth — it maps ranges to chunk indices and requests those chunks' decrypted plaintext from the owning page over a MessagePort; the page runs the existing presign→openFrame path in its own context (K_blob/K_mem never leave the page) and transfers plaintext back. The synthetic URL carries an opaque per-playback handle, never a blobId or credential. The SW's only cache is a bounded in-memory plaintext LRU — never Cache Storage / IndexedDB. The AAD `total` bound at openFrame is the whole blob's chunkCount, never the range subset (a subset total is proven to fail). cr-inline-video-playback Slice 2 (ADR 0047).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/sw/mediaSw.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: sw-presign-expiry
+    text: The page-side chunk provider presigns the whole blob once and caches the URLs by issue time; on a stale-URL 403 (the backend's 600 s presign TTL elapsed) it re-presigns the whole blob and retries the chunk once, so a long playback never breaks on expiry. cr-inline-video-playback Slice 2 (ADR 0047).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+  - id: sw-share-viewer
+    text: The anonymous public-share viewer streams video through the SAME SW path — the page passes a share-scoped chunk provider (per-item K_mem + guest pwToken over the gated share-scoped presign, resolveShareBlob) that shares the authed provider's openFrame core, so the SW never learns which route served the bytes. cr-inline-video-playback Slice 2 (ADR 0047).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/share.test.ts
+          - src/features/memory/media.test.ts
+  - id: sw-no-sw-fallback
+    text: When no Service Worker controls the page (unsupported browser, a first load before activation, or a protocol-version handshake mismatch with a stale SW), playback falls back to the Slice-1 path — fetch + decrypt the whole original and play it from a typed blob URL — so video always plays. The switchover is per-play and revokes the SW playback on item switch / close / unmount. cr-inline-video-playback Slice 2 (ADR 0047).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MediaLightbox.test.ts

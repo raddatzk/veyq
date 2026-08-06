@@ -1,0 +1,566 @@
+openapi: 3.1.0
+info:
+  title: veyq Background Tasks API
+  version: 0.1.0
+  description: >
+    The **operator-blind background-task mechanism** ([ADR 0021](../../docs/decisions/0021-operator-blind-background-tasks.md),
+    [docs/crosscutting/background-tasks.md](../../docs/crosscutting/background-tasks.md)): a **pull-based** job
+    mechanism inside the veyq backend (no broker). The server is a **blind coordinator** — it stores opaque,
+    scope-bound **job envelopes** and relays sealed results; it never holds a scope key, never unseals a body,
+    never picks a content-semantic type. An **equal, self-selecting pool of keyed workers** (any interactive
+    client *or* the later agent) pulls the jobs it is *eligible* for (`scope ∈ my memberships`) and *capable*
+    of (`tag ∈ my capability tags`), executes on-device, and completes idempotently under an at-least-once
+    lease (crash → lazy reclaim; poison → dead-letter).
+
+    **Envelope split.** Cleartext (server-visible — already-known routing + bookkeeping): `jobId`, `scopeId`,
+    `capabilityTag` (an **opaque** token from the public registry in `contracts/tasks/tags/`, not a plaintext
+    label), `resourceRef`, `status`, `leaseExpiresAt`, `attempts`. **Sealed body** (under a `K_SC`-derived key,
+    context `job`): the task type + parameters — only a scope-key-holding worker unseals it. The residual leak
+    is **correlation-bounded, not label-bounded** (ADR 0021; self-hosted moot) — documented, not hidden.
+
+    **First consumer — `grant-delivery` (ADR 0020).** A grant-less TENANT/GROUP membership is a *pending*
+    member; the backend originates a `grant-delivery` job for it (server-structural origination — a blind,
+    already-understood job, no sealed body). Any online key-holder claims it, wraps `K_SC` to the pending
+    member's identity public key (`asymWrap(hybridPublic(target), K_SC, "scope-grant")` — the first wrap to a
+    **foreign** identity), and completes by posting the ciphertext grant; the backend writes it onto the target
+    membership **idempotently** (no-op if a grant already exists — first-online-wins). The claim resolves the
+    delivery target (the member's userId + identity public key, operational metadata the server already holds)
+    so the worker need not look it up separately.
+
+    **Second consumer — `scope-rotation` (cr-0092, ADR 0025).** A tenant-member removal that cuts a co-shared
+    GROUP membership needs the group rotated forward for forward secrecy, but the removing owner is not
+    necessarily a key-holder there and so cannot mint the new epoch. The backend originates a `scope-rotation`
+    job (its `scopeId` **is** the group to rotate; no sealed body, no key) and the next online remaining
+    key-holder claims it, mints `E_{n+1}` + re-grants the surviving members on-device via the rotation-commit
+    (`POST /api/scopes/{scopeId}/epochs`, cr-0089), then completes — closing the job with no `sealedResult`
+    (the rotation is already committed). The claimed job carries only the cleartext envelope (no `grantDelivery`
+    target); the worker reads the member directory + epoch links it already has endpoints for. Idempotent +
+    first-online-wins; one live job per scope coalesces multiple removals.
+
+    Every operation requires an authenticated caller; authorization (scope membership) is enforced by code, not
+    this spec (ADR 0008). Field validation is declared here via `x-field-extra-annotation`, so malformed input
+    is rejected at the boundary (400) before any handler runs.
+tags:
+  - name: tasks
+    description: >
+      The background-task pull queue (claim / heartbeat / complete / fail / enqueue). One tag = one resource
+      interface owning the whole `/api/tasks` subtree.
+
+paths:
+  /api/tasks/claim:
+    post:
+      tags: [tasks]
+      operationId: claimTask
+      summary: Atomically lease one claimable job for this worker.
+      description: >
+        The worker sends its **capability tags**; the server atomically leases and returns **one** job where
+        `scope ∈ the caller's memberships ∧ tag ∈ the sent tags`, treating a `pending` job — or a `leased` job
+        whose lease has expired (lazy reclaim) — as claimable (MariaDB `SKIP LOCKED`). Returns `204` when
+        nothing is claimable. For a `grant-delivery` job the response also resolves the delivery target (the
+        pending member's userId + identity public key) so the worker can wrap `K_SC` to it directly.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClaimRequest" }
+            example:
+              capabilityTags: ["02f271ff"]
+      responses:
+        "200":
+          description: One job was leased to this worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ClaimedJob" }
+        "204":
+          description: No job is claimable for this worker's scopes + capability tags.
+        "400":
+          description: The request was malformed (missing/invalid capability tags).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/tasks/enqueue:
+    post:
+      tags: [tasks]
+      operationId: enqueueTask
+      summary: Enqueue a client-originated job onto a scope the caller belongs to.
+      description: >
+        Creates a `pending` job in `scopeId` (the caller must be a member). The body (`type` + params) is
+        **sealed client-side** under a `K_SC`-derived key (context `job`) and handed over as opaque
+        `sealedBody`; the server stores it verbatim and never unseals it. Server-structural jobs (like
+        `grant-delivery`) are **not** created here — the backend originates those itself; this is the front
+        door for content-processing jobs a client/agent prepares ready. Membership is the **first** gate (ADR
+        0042): a caller who is not a member of `scopeId` gets `404 scope_not_found` — the same answer as for a
+        scope id that does not exist, so scope existence is not enumerable. A member who holds no grant in the
+        scope (not a key-holder, so they could not have sealed the body) gets `403 not_key_holder`.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EnqueueRequest" }
+            example:
+              scopeId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+              capabilityTag: "9f3a1c04"
+              resourceRef: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+              sealedBody: AQ==
+      responses:
+        "201":
+          description: The job was enqueued.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobCreated" }
+              example:
+                jobId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        "400":
+          description: The request was malformed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of the target scope but holds no grant in it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_key_holder }
+        "404":
+          description: >
+            No such scope — or the caller is not a member of it (deliberately indistinguishable, ADR 0042).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: scope_not_found }
+
+  /api/tasks/{jobId}/heartbeat:
+    post:
+      tags: [tasks]
+      operationId: heartbeatTask
+      summary: Extend the lease on a job this worker holds.
+      description: >
+        A long-running worker calls this to push the job's `leaseExpiresAt` forward while it works, so the job
+        is not lazily reclaimed mid-flight. Only the current lease holder may extend; a job that is not leased
+        to the caller (or already terminal) is a `409`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: The lease was extended.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LeaseState" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No such job (or not in a scope the caller belongs to).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: job_not_found }
+        "409":
+          description: The job is not currently leased to this worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_lease_holder }
+
+  /api/tasks/{jobId}/complete:
+    post:
+      tags: [tasks]
+      operationId: completeTask
+      summary: Mark a job done, optionally posting a sealed result.
+      description: >
+        Marks the job `done`. Most results are a normal sealed veyq write via an existing path; a job-specific
+        output rides the optional opaque `sealedResult`. For a `grant-delivery` job the `sealedResult` **is**
+        the `wrappedGrant` — the scope key sealed to the pending member's identity public key — which the
+        backend writes onto the target membership. **Idempotent**: completing an already-`done` job, or a
+        `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). The
+        caller must be a member of the job's scope; a lease is not required (a cheap idempotent job needs none).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CompleteRequest" }
+            example:
+              sealedResult: AQ==
+      responses:
+        "204":
+          description: The job is done (or was already done — idempotent no-op).
+        "400":
+          description: The request was malformed (e.g. a grant-delivery completion with no wrap).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No such job (or not in a scope the caller belongs to).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: job_not_found }
+
+  /api/tasks/{jobId}/fail:
+    post:
+      tags: [tasks]
+      operationId: failTask
+      summary: Report a failed attempt; requeue or dead-letter.
+      description: >
+        Records a failed attempt: `attempts` is incremented and the lease released. If `attempts` is below the
+        job's max the job returns to `pending` (claimable again, at-least-once); once it reaches the max the
+        job is **dead-lettered** (`failed`, surfaced for inspection). The caller must be a member of the job's
+        scope.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FailRequest" }
+            example:
+              reason: unwrap_failed
+      responses:
+        "200":
+          description: The failed attempt was recorded.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+              example:
+                status: pending
+                attempts: 1
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No such job (or not in a scope the caller belongs to).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: job_not_found }
+
+  /api/tasks/{jobId}/decline:
+    post:
+      tags: [tasks]
+      operationId: declineTask
+      summary: Decline a claimed job back to the queue (do not re-offer it to this worker).
+      description: >
+        A worker **voluntarily refuses** a claimed job and releases it **without a failed attempt**: the lease
+        is dropped, the job returns to `pending` (claimable again by **other** workers), and a `(job, worker)`
+        decline is recorded so the reconciler **does not re-offer this job to this same worker**. This is the
+        grant-delivery TOFU seam (ADR 0028 / en.account.identity-pinning): a worker that holds a **different**
+        pin for the target's identity key blocks the wrap and declines the job + raises a human-review flag,
+        rather than sealing `K_SC` to a possibly-substituted key. **Per-device, not a global veto** — a
+        different key-holder without a conflicting pin can still TOFU-deliver (ADR 0028 §Consequences). Unlike
+        `fail`, `attempts` is **not** incremented (a legitimate decline must not dead-letter the job). The
+        caller must hold the job's lease.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeclineRequest" }
+            example:
+              reason: identity_changed
+      responses:
+        "200":
+          description: The job was released back to `pending` and will not be re-offered to this worker.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/JobStatus" }
+              example:
+                status: pending
+                attempts: 0
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No such job (or not in a scope the caller belongs to).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: job_not_found }
+        "409":
+          description: The caller does not hold the job's lease (only the lease-holder may decline).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_lease_holder }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. Any authenticated caller (enforced by code, not this spec).
+
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      description: Opaque id of the job.
+      schema:
+        type: string
+        format: uuid
+        example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+
+  schemas:
+    CapabilityTag:
+      type: string
+      description: >
+        An **opaque** capability token from the public registry (`contracts/tasks/tags/`). A bare DB dump sees
+        the token (e.g. `02f271ff`), not a plaintext semantic label. Lowercase hex.
+      maxLength: 64
+      pattern: "[0-9a-f]+"
+      example: "02f271ff"
+
+    ClaimRequest:
+      type: object
+      required: [capabilityTags]
+      properties:
+        capabilityTags:
+          type: array
+          description: The opaque capability tokens this worker can process. The server matches a job's tag against these.
+          minItems: 1
+          maxItems: 64
+          items: { $ref: "#/components/schemas/CapabilityTag" }
+          example: ["02f271ff"]
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotEmpty @field:jakarta.validation.constraints.Size(max = 64)'
+        scopeId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            Optionally narrow the claim to a single scope. A worker that has opened exactly one scope (so it
+            holds only that scope's `K_SC`) passes its id, so the server never hands back a job for a different
+            scope whose key the worker cannot unseal. Omitted → any of the caller's granted scopes.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+
+    ClaimedJob:
+      type: object
+      required: [jobId, scopeId, capabilityTag, attempts]
+      properties:
+        jobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the leased job — keys the idempotent completion.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The scope the job belongs to (the caller holds a grant for it, so it can unseal the body).
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        capabilityTag:
+          $ref: "#/components/schemas/CapabilityTag"
+        resourceRef:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: The opaque id of the resource the job acts on (for grant-delivery, the target membership id).
+          maxLength: 64
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        sealedBody:
+          type: [string, "null"]
+          description: >
+            The sealed task body (`type` + params) under a `K_SC`-derived key, context `job` — opaque base64.
+            Absent for server-structural jobs (like `grant-delivery`) whose task is fully described by the
+            cleartext envelope + the resolved target.
+          contentEncoding: base64
+          maxLength: 65536
+          example: null
+        leaseExpiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When this worker's lease expires (heartbeat to extend). Absent for lease-less claims.
+          example: 2026-07-04T12:34:56Z
+        attempts:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: How many times this job has been attempted (including the current lease).
+          example: 0
+        grantDelivery:
+          description: >
+            Present only for a `grant-delivery` job: the resolved delivery target — operational metadata the
+            server already holds (never a key). The worker wraps `K_SC` to `identityPublicKey` and completes.
+          oneOf:
+            - { $ref: "#/components/schemas/GrantDeliveryTarget" }
+            - type: "null"
+
+    GrantDeliveryTarget:
+      type: object
+      required: [targetUserId, targetMembershipId, identityPublicKey]
+      properties:
+        targetUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The pending member's user id.
+          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
+        targetMembershipId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The grant-less membership row the wrap will be posted onto.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        identityPublicKey:
+          type: string
+          description: >
+            The pending member's identity public key (opaque base64) — the worker's `asymWrap` target. The
+            server already stores this as operational metadata; exposing it to a granter does not widen the
+            operator's view (it never yields a key).
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+
+    EnqueueRequest:
+      type: object
+      required: [scopeId, capabilityTag]
+      properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The scope the job belongs to. The caller must be a member.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        capabilityTag:
+          $ref: "#/components/schemas/CapabilityTag"
+        resourceRef:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: Opaque id of the resource the job acts on (e.g. a mediaId).
+          maxLength: 64
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
+        sealedBody:
+          type: [string, "null"]
+          description: The sealed task body under a `K_SC`-derived key, context `job` — opaque base64, stored verbatim.
+          contentEncoding: base64
+          maxLength: 65536
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    CompleteRequest:
+      type: object
+      properties:
+        sealedResult:
+          type: [string, "null"]
+          description: >
+            An optional opaque job result (base64). For a `grant-delivery` job this **is** the `wrappedGrant`
+            (the scope key sealed to the target's identity public key) the backend writes onto the target
+            membership.
+          contentEncoding: base64
+          maxLength: 65536
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    FailRequest:
+      type: object
+      properties:
+        reason:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Optional developer-facing failure reason; never content or secrets.
+          maxLength: 256
+          example: unwrap_failed
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
+
+    DeclineRequest:
+      type: object
+      properties:
+        reason:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Optional developer-facing decline reason; never content or secrets. For the TOFU seam this is
+            typically `identity_changed`.
+          maxLength: 256
+          example: identity_changed
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
+
+    JobCreated:
+      type: object
+      required: [jobId]
+      properties:
+        jobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the enqueued job.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+
+    LeaseState:
+      type: object
+      required: [leaseExpiresAt]
+      properties:
+        leaseExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: The new lease expiry after the heartbeat.
+          example: 2026-07-04T12:39:56Z
+
+    JobStatus:
+      type: object
+      required: [status, attempts]
+      properties:
+        status:
+          x-veyq-visibility: public
+          type: string
+          description: The job's status after the report — `pending` (requeued) or `failed` (dead-lettered).
+          enum: [pending, failed]
+          example: pending
+        attempts:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: The attempt count after this failure.
+          example: 1
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

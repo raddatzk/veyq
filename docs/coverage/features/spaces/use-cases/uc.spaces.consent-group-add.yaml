@@ -1,0 +1,45 @@
+useCase: uc.spaces.consent-group-add
+feature: spaces
+title: Consent before being added to a group
+# cr-0094 delivered the optional consent opt-in (ADR 0014 §5): consent-first (K_SC gated BEFORE the wrap —
+# grant-delivery skips soft pendingConsent memberships), an account-global toggle, a silent-drop decline, and
+# owner-only pending visibility. cr-0096 (ADR 0027) replaces the informed-consent name mechanism: instead of a
+# one-off owner name-seal, the owner hands the invitee the group's DERIVED name-key K_name (from the name's epoch
+# key) so the invitee opens the SAME canonical encryptedName the members read — a modified owner cannot show a
+# divergent name. Backend slice tests + a web name-key unit test + the http unauth boundary; the crypto happy-path
+# (signed key-holder add/accept, live K_SC delivery) is slice + live-covered.
+acceptanceCriteria:
+  - id: consent-toggle
+    text: A person turns on an account-global "ask before adding me to groups" preference (default off); a server-visible boolean (operational metadata, no key/content). With it off, add is the direct-add of uc.spaces.add-group-member.
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.accountConsentToggleRoundTrips, ConsentGroupAddSliceTest.consentOffIsUnchangedDirectAdd] }
+  - id: soft-membership-gates-key
+    text: With consent on, a GroupOwner's add records a SOFT (pendingConsent) grant-less membership; grant-delivery SKIPS soft memberships, so K_SC is never wrapped to a pending invitee (consent-first, never wrap-then-soft). The gate holds on the ROTATION path too — a scope-key rotation never (re-)grants a pendingConsent row (cr-0095). A consent-on target added without a wrapped name-key is rejected (consent_required).
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsSoftRowAndGrantDeliverySkipsIt, ConsentGroupAddSliceTest.consentRequiredWithoutSealIs400, ConsentGroupAddSliceTest.rotationNeverGrantsAPendingProposal] }
+  - id: derived-name-key
+    text: The owner's device derives the group's name-key K_name = HKDF(E_e, "group-name-key") from the name's content-epoch key and wraps IT (not a name copy) to the invitee's identity (asymWrap under the distinct `group-name-key` AAD context). The invitee unwraps K_name and opens the scope's CANONICAL encryptedName — the SAME ciphertext the members read — so a modified owner cannot privately show a divergent name (ADR 0027). Domain-separated from `scope-grant` (a name-key wrap can never open as a key-grant); K_name leaks the name and nothing else (HKDF one-way — not E_e, not K_SC). The invitee never receives K_SC and no plaintext name reaches the server.
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.acceptFlipsToDeliverableAndClearsTheInvitation] }
+      web: { unit: [src/features/spaces/inviteName.test.ts] }
+  - id: accept-delivers
+    text: Accept clears pendingConsent → the proposal becomes a normal grant-less membership → ordinary grant-delivery wraps K_SC (awaiting access → Active), identical to direct-add from there. Re-accept is an idempotent no-op.
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.acceptFlipsToDeliverableAndClearsTheInvitation] }
+  - id: decline-silent-drop
+    text: Decline deletes the soft membership with no trace (no "declined" state) and no rotation; nothing was ever wrapped. A re-invite later is allowed (a fresh proposal). Decline with no open proposal is still a silent 204 (no enumeration); accept with none is 404.
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.declineDropsTheSoftRowWithNoTraceAndNoRotation, ConsentGroupAddSliceTest.acceptWithNoProposalIs404] }
+  - id: owner-only-pending
+    text: A pendingConsent invitee is visible in the group's member directory as "awaiting consent" to group OWNERS only; ordinary key-holders in the group do not see them until they accept.
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.pendingProposalIsOwnerVisibleOnly] }
+  - id: operator-blind-consent
+    text: The server stores only a membership row + one opaque wrapped name-key + relays pubkeys and the already-stored encryptedName ciphertext to the invitee — never K_SC, never a name-key it can use, never the plaintext name; authenticity stays Plain (the fingerprint/TOFU seam is unchanged).
+    coverage:
+      backend: { integration: [ConsentGroupAddSliceTest.consentOnAddRecordsSoftRowAndGrantDeliverySkipsIt] }
+      web: { unit: [src/features/spaces/inviteName.test.ts] }
+  - id: invitee-attention-badge
+    text: The invitee's open proposals surface as an appears-on-demand top-bar attention badge (cr-invitations-topbar-badge) — hidden at zero, showing the count and routing to the invitations view, self-clearing as accept/decline drops the row, fail-quiet on a fetch error. The count derives client-side from the existing listMyGroupInvitations (the blind server already holds the pendingConsent rows) — no new endpoint, no server-visible signal, and no read/unread state.
+    coverage:
+      web: { unit: [src/features/spaces/InvitationsBadge.test.ts] }

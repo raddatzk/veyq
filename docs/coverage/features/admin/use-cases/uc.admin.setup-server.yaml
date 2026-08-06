@@ -1,0 +1,30 @@
+useCase: uc.admin.setup-server
+feature: admin
+title: First-run server setup
+acceptanceCriteria:
+  - id: status-required-when-fresh
+    text: A fresh instance reports setupRequired=true and advertises the supported suites.
+    coverage:
+      backend: { integration: [SetupServerSliceTest.setupRequiredInitially] }
+  - id: create-owner-and-complete
+    text: A valid request creates the Server Owner (201) and marks setup complete.
+    coverage:
+      backend: { integration: [SetupServerSliceTest.createsOwner, SetupServerSliceTest.setupNoLongerRequired] }
+  - id: single-owner-lock
+    text: A second owner is rejected with 409 once setup is complete.
+    coverage:
+      backend: { integration: [SetupServerSliceTest.rejectsSecondOwner] }
+  - id: reject-non-base64-key
+    text: Non-base64 key material is rejected (400).
+    coverage:
+      backend: { integration: [SetupServerSliceTest.rejectsNonBase64Key] }
+  - id: reject-invalid-email
+    text: A malformed email is rejected at the boundary (400).
+    coverage:
+      backend: { integration: [SetupServerSliceTest.rejectsInvalidEmail] }
+  - id: trim-email-field
+    text: The email is trimmed before validation and storage (the account carries no display name — identity is a per-tenant username, ADR 0023).
+    coverage:
+      backend: { unit: [SetupRequestSanitizationTest.trimsNameFields] }
+gaps:
+  web: implemented (cr-0002); web-surface acceptance tests not yet linked

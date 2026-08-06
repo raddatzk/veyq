@@ -1,0 +1,76 @@
+useCase: uc.admin.tenant-mail-settings
+feature: admin
+title: Tenant mail settings — the owner configures per-tenant SMTP + the invite template
+# cr-email-smtp-transport (ADR 0048/0049/0050) delivered the owner-config half at the contract + backend + infra
+# layers: contracts (getTenantMailSettings/updateTenantMailSettings on the tenants spec) → backend
+# (veyq_tenant_mail_settings + an owner-gated CRUD that seals the SMTP password at rest, an InviteMailRenderer over
+# a closed variable set, and an SmtpTenantInviteMailer behind the existing TenantInviteMailer port) → infra (a
+# Mailpit dev container under the opt-in `mail` profile). Backend slice tests run over the full HTTP stack (H2); the
+# real SMTP send is proven hermetically against an in-JVM GreenMail server.
+# cr-email-tenant-mail-settings-web then added the missing web settings UI: an owner-gated TenantMailSettingsPanel
+# (in the settings hub, next to Terms) driving those endpoints — the SMTP form, the write-only password with the
+# "leave blank to keep" pattern, the invite-template editor over the closed set, the KEK-unavailable message, and an
+# honest send-readiness indicator. So `web` is no longer a gap.
+acceptanceCriteria:
+  - id: owner-configures-per-tenant-smtp
+    text: The tenant owner sets SMTP host/port/from/username/password/TLS + enabled as runtime settings, owner-gated (isOwner) — a non-owner member is refused (403 not_tenant_owner), a non-member is 404 (indistinguishable, ADR 0042). The password is write-only (a read exposes only passwordSet; it is never returned or logged). On the web the read is owner-gated too, so a 403 renders a read-only notice instead of the editor.
+    coverage:
+      backend:
+        integration: [TenantMailSettingsSliceTest.ownerConfiguresSmtpAndThePasswordIsWriteOnly, TenantMailSettingsSliceTest.nonOwnerMemberIsForbidden, TenantMailSettingsSliceTest.aNonMemberIs404]
+      web:
+        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+  - id: password-sealed-at-rest
+    text: The SMTP password is sealed at rest under the operator env KEK (AES-256-GCM, ADR 0050) — the stored columns hold only ciphertext + nonce, never the plaintext input; omitting the password on a later update keeps the stored one rather than clearing it. The web form drives that "omit to keep" contract (an empty field sends no password; a typed one is sent and then cleared from state).
+    coverage:
+      backend:
+        integration: [TenantMailSettingsSliceTest.theSmtpPasswordIsSealedAtRestNotPlaintext, TenantMailSettingsSliceTest.omittingThePasswordOnUpdateKeepsTheStoredOne]
+      web:
+        unit: [src/features/admin/createTenant/mailSettings.test.ts, src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+  - id: invite-template-closed-variable-set
+    text: The owner-authored subject/body template is rendered over a closed, non-secret variable set ({{link}}/{{domain}}/{{expiry}} only); veyq's machinery interpolates nothing sealed, and a template referencing any other {{tag}} is rejected at write time (400 invalid_mail_template) and never stored (ADR 0048 §6, ADR 0049). The web editor shows the allowed variables and surfaces that rejection as a specific, understandable message rather than a generic failure.
+    coverage:
+      backend:
+        unit: [InviteMailRendererTest.theRenderContextIsClosedToExactlyThreeNonSecretFields, InviteMailRendererTest.rejectsTagsOutsideTheClosedSet, InviteMailRendererTest.theShippedDefaultsAreContentFreeAndValid]
+        integration: [TenantMailSettingsSliceTest.aTemplateOutsideTheClosedVariableSetIsRejectedAndNotStored, SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet]
+      web:
+        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+  - id: unconfigured-blocks-member-invites
+    # Was `unconfigured-falls-back-to-copy-link`, justified as self-hostability. ADR 0055 reversed it and priced
+    # the cost: a mailer becomes a precondition for admitting members. The copy-link + dev-file path itself
+    # survives — it is what the Server-Owner's bootstrap invite still uses — so its tests stay; what no longer
+    # reaches it is a *member* invite.
+    text: >-
+      With no SMTP configured, sending disabled, or the KEK absent, this tenant cannot admit members at all —
+      inviting is refused with 503 `mail_unavailable` rather than degraded to a copy-link (ADR 0055 §2). The
+      copy-link + dev-file path still exists underneath, serving only the Server-Owner's bootstrap invite to a
+      PENDING tenant, which by construction can have no mail settings.
+    coverage:
+      backend:
+        integration: [SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
+        unit: [TenantInviteMailerDevFileTest.appendsOneJsonLinePerInviteWhenDevFileSet]
+  - id: kek-unavailable-surfaced-in-ui
+    text: When the server has no config-secret KEK, sealing a supplied password is refused (503 mail_secret_unavailable, ADR 0050). The web form surfaces that as an understandable "the server can't encrypt secrets — an admin must configure the KEK" message, so a self-hoster without a KEK learns why saving fails rather than hitting a generic error.
+    coverage:
+      web:
+        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+  - id: send-readiness-visible-in-ui
+    text: The send-gate is enabled ∧ host ∧ stored-password ∧ KEK, so ticking `enabled` alone still leaves the tenant unable to send (and therefore unable to invite members). The web form makes real send-readiness visible — a "ready to send" state when the config is complete, or an explicit list of what's still missing (sending off / no host / no password) — computed honestly from the read (a stored password already implies the KEK was present at seal time).
+    coverage:
+      web:
+        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+  - id: config-secret-kek-managed-as-a-file
+    text: The config-secret KEK (ADR 0050 amendment) is a server-managed key file — generated (32 random bytes, 0600) on first construction when absent, and read rather than regenerated when present. The env value channel is gone; an operator supplies their own key via a file path override.
+    coverage:
+      backend:
+        unit: [ConfigSecretSealTest.generatesAKeyFileOnFirstConstructionWith0600Perms, ConfigSecretSealTest.readsAnExistingKeyFileRatherThanRegenerating, ConfigSecretSealTest.anUnavailableKekIsAnErrorNotAPlaintextLeak]
+  - id: config-secret-key-loss-is-detected-and-degrades
+    text: A lost or changed config-secret key is DETECTED via a non-invertible HKDF fingerprint stored in the DB (a hash of a full-entropy key, never the key — the "no usable secret in a DB dump" property holds), not a silent unseal failure. On a mismatch the send path never attempts a send with a bad key — the tenant simply counts as unable to send, so member invites and recovery are refused — and a reseal under the current key recovers to OK.
+    coverage:
+      backend:
+        unit: [ConfigSecretSealTest.theFingerprintIsStableAndIsNotTheRawKey, ConfigSecretSealTest.aDifferentKeyHasADifferentFingerprint, ConfigSecretKeyGuardTest.detectsAChangedKeyThenRecoversOnReseal]
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantWhoseConfigSecretKeyChangedFallsBackNotSends]
+  - id: changed-key-surfaced-and-recoverable-in-ui
+    text: The owner sees the config-secret key state proactively on the mail-settings read — a MISMATCH (the stored password can't be decrypted; re-enter it) or an ABSENT server (can't seal at all) is shown as its own message and blocks the "send-ready" state, rather than the panel falsely reporting a usable config.
+    coverage:
+      web:
+        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]

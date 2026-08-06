@@ -1,0 +1,73 @@
+useCase: uc.account.recover-access
+feature: account
+title: Recover access after a forgotten password
+# Built by cr-account-recovery (ADR 0054). The RECOVERY wrap and recovery_master_key_tag had existed since V1
+# and were both unreachable — the wrap filtered out of the only endpoint that serves wraps, the tag read by
+# nothing. This use-case is the release path: a mailed one-time token authorizes handing over the wrap, and
+# reproducing the tag proves the Secret Key opened it.
+acceptanceCriteria:
+  - id: request-is-non-enumerable
+    # The test runs against a tenant that CAN send (a hermetic GreenMail server). That is load-bearing, not
+    # setup: on the mailer-less default both addresses now answer the same 503 for an instance-level reason, so
+    # the comparison would pass while proving nothing about enumerability. The mail itself is the difference.
+    text: A recovery request answers identically for a registered and an unregistered address, and mail is sent only in the former case. The response is never an oracle for whether an address has an account on this instance.
+    coverage:
+      backend: { integration: [RecoverySliceTest.requestIsIndistinguishableForKnownAndUnknownAddress] }
+      web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: token-stored-hashed-and-short-lived
+    text: Only the SHA-256 hash of the one-time token is stored, with an expiry far shorter than an invite's. The raw token exists only in the mail, carried in the link's URL fragment so it never reaches the server as part of a navigation. A new request supersedes any outstanding token for that address.
+    coverage:
+      backend: { integration: [RecoverySliceTest.freshRequestSupersedesTheOutstandingToken] }
+  - id: release-is-gated-on-the-token-never-a-session
+    text: The RECOVERY wrap is served only against a live, unspent token — never to an authenticated session. The ordinary key-material read continues to filter it out, so a live session plus the Secret Key can never open the vault without the password.
+    coverage:
+      backend: { integration: [RecoverySliceTest.liveTokenReleasesTheRecoveryWrap] }
+      web: { e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: secret-key-opens-the-wrap-client-side
+    text: The client derives the recovery KEK from the Secret Key alone (no password input) using the wrap's own carried KDF params, and unwraps the Master Key on the device. A wrong Secret Key fails locally as an AEAD error, with no server round trip and without spending the token.
+    coverage:
+      backend: { integration: [RecoverySliceTest.releaseDoesNotSpendTheToken] }
+      web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: commitment-proves-possession
+    text: The reset is accepted only if the client reproduces recoveryAuthTag(masterKey) matching the stored recovery_master_key_tag. An attacker holding only a valid mail token cannot produce it, so mailbox access alone never completes a reset.
+    coverage:
+      backend: { integration: [RecoverySliceTest.validTokenWithWrongSecretKeyDoesNotReset] }
+      web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: reset-is-atomic-and-drops-device-trust
+    text: In one transaction the reset replaces the PASSWORD wrap, overwrites auth_public_key, deletes every DEVICE and DEVICE_KEY wrap, revokes all sessions, and marks the token spent. A partial apply is impossible; DEVICE_KEY wraps in particular must not survive, since they carry no password input and would keep granting password-less entry.
+    coverage:
+      backend: { integration: [RecoverySliceTest.resetDropsDeviceKeyWrapsToo] }
+      web: { e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: nothing-is-re-encrypted
+    text: The Master Key, identity keypair, scope keys and all sealed content are unchanged by a reset, and the Emergency Kit stays valid because the Secret Key does not change.
+    coverage:
+      backend: { integration: [RecoverySliceTest.bothFactorsReplaceFloorAndAuthKeyWithoutReEncrypting] }
+      web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: no-mail-is-refused-not-swallowed
+    # Was `no-copy-link-fallback`, whose parenthetical said surfacing this needed a capability flag. ADR 0055
+    # rejected the flag — a capability is an off-switch for an *optional* feature, and adopting a mailer-less
+    # instance as supported is the opposite of the decision — and replaced it with a status code.
+    text: >-
+      A tenant with no working mail transport mints no token and produces no link, and says so with 503
+      `mail_unavailable` rather than the usual silent 202. There is deliberately no copy-link fallback, since
+      routing a recovery link through the operator would make them a participant in a flow built to exclude them.
+      No capability is advertised and the client asks nothing in advance — the sign-in screen may always offer the
+      reset link and let the request fail honestly.
+    coverage:
+      backend: { integration: [RecoverySliceTest.noMailTransportIsRefusedAndMintsNothing] }
+      web: { unit: [src/views/RecoverView.test.ts] }
+  - id: transport-answered-before-the-limiter
+    # The bite-test: with the checks in the other order a rate-limited address answers 202 and a fresh one 503 on
+    # the same tenant, which is an oracle for "was this address asked about recently" — the very class the 202
+    # posture exists to close. Verified failing against the un-hoisted order before this was trusted.
+    text: The mail-transport check runs before the per-address rate limiter, so the two answers can never be paired into an oracle for whether an address was recently asked about. A tenant that cannot send also burns no limiter budget.
+    coverage:
+      backend: { integration: [RecoverySliceTest.transportIsAnsweredBeforeTheRateLimiterSoTheTwoCannotBePaired] }
+# Backend built by cr-account-recovery: V44 token table, the request/release/complete triple, RecoveryMailer on
+# the extracted TenantMailSender seam, RecoveryRateLimiter (per-address + per-instance), RecoveryPurge.
+# Web built by the same CR: /recover route + view, recoveryKekAsync, and the data layer under recovery.test.ts.
+# The live suite is where the flow is proven whole — real backend, real SMTP (Mailpit), a token read out of an
+# actual mail — and it carries the wire assertion: a Memory created before the reset still opens after it, and
+# its name appears nowhere in that instance's database.
+# The one item #113 left open is closed by ADR 0055: it is a status code, not a capability flag; the client half
+# — /recover rendering that 503 instead of silently redrawing the form — landed with it.

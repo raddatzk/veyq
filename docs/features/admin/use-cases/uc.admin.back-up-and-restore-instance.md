@@ -1,0 +1,131 @@
+# UC: Back up an instance and restore it onto an empty one
+
+- **ID:** uc.admin.back-up-and-restore-instance
+- **Primary actor:** The **operator** of a self-hosted instance — in the common single-node deployment the same
+  person as the Server Owner ([ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md)), working at a
+  shell on the host, not in the app
+- **Goal:** Capture everything an instance durably holds, and bring it back on empty hardware such that every
+  Memory opens afterwards **with the keys their owners already hold** — no re-encryption, no key handed over,
+  nothing the operator could have read on the way ([ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md)).
+- **Preconditions:** The operator can stop and start the application, and can reach the database and the object
+  store from the host. The restore target serves the **same domain** as the source (ADR 0056 §4). The people
+  whose Memories these are still hold their passwords and Emergency Kits — the operator holds no key and cannot
+  supply that half ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md)).
+- **Postconditions (success):** A restored instance holds the same three legs as the source: the same database,
+  the same objects, and the same config-secret key. Its users sign in with the credentials they already had,
+  every Memory decrypts, and the instance can admit members and send recovery links again. Nothing about the
+  restore made the operator able to read anything.
+
+## Main flow
+
+**Capture — the app is stopped, the stores are not.**
+
+1. The operator **stops the application**. The database and the object store keep running: the capture reads
+   through their own interfaces, not through their files.
+2. The operator **dumps the database**. From this moment the dump cannot go stale in the direction that
+   matters — with the app down the database gains no rows, so no row can appear whose object the later store
+   capture missed (ADR 0056 §2).
+3. The operator **mirrors the bucket** — the object namespace as the store serves it over S3, not the store's
+   on-disk directories (ADR 0056 §3).
+4. The operator **copies the config-secret key file**. This is the leg that is forgotten, and the only one whose
+   absence lets a restore succeed and still be broken.
+5. The operator **starts the application**. The downtime was the capture, and nothing else.
+
+**Restore — onto an instance that holds nothing.**
+
+6. The operator brings up an **empty** instance on the target: a database with no schema, a store with no
+   objects, and no application running yet.
+7. The operator **loads the database dump**. The schema arrives with it; migrations are not re-run against an
+   empty database to produce it.
+8. The operator **recreates the store's configuration** — bucket, access key, layout. This is not restored
+   because it was never state (ADR 0056 §4 of Context); the bundled store's init script does it idempotently.
+9. The operator **pushes the mirrored objects back** into that bucket.
+10. The operator **puts the config-secret key file** where the application expects it, on storage that survives
+    a container being recreated.
+11. The operator **starts the application**.
+
+**Verify — the step that separates a restore from a hope.**
+
+12. The operator reads the instance's **config-secret state**. A match is what says leg three arrived; a
+    mismatch is the fingerprint doing its job (A2). Then a person signs in and **opens a Memory that contains
+    media** — the only assertion that exercises all three legs at once, because the row, the object and the key
+    that seals the SMTP settings are three different failures with the same symptom of "it looked fine".
+
+## Alternate / exception flows
+
+- **A1 — The application was still running during the capture.** The one precondition of the whole procedure is
+  gone: a client can complete an upload and the app can commit its row between the database dump and the store
+  mirror, producing a row whose object was never captured. That restores as a Memory with a picture that yields
+  a valid URL and a `404` — no server-side error, nothing in a log, a broken thumbnail as the only sign
+  (ADR 0056 § Context 2). Redo the capture; a partially captured backup cannot be repaired after the fact.
+- **A2 — The config-secret key was not captured.** The instance starts, serves content, and reports
+  `configSecretState: MISMATCH`. Member invites and password resets refuse with `503 mail_unavailable`
+  ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). Content is unaffected — the
+  key seals operator config, never content. Two ways out: restore the key file, or have each tenant owner
+  re-enter their SMTP password, which re-seals it under the new key.
+- **A3 — The target serves a different domain.** Not supported in V1 (ADR 0056 §4). The instance comes up
+  unreachable under the new name, and any outstanding invitation or recovery link still points at the old one.
+  Restore onto the same domain, or treat it as a new instance.
+- **A4 — Objects are missing relative to the rows that reference them.** Detectable before the restore, because
+  the capture is logical: the object keys can be compared against the blob rows that name them. This is the one
+  check a volume copy cannot offer, and it is the reason the store leg is captured this way.
+- **A5 — The target is not empty.** The restore is defined onto an empty instance and nothing reconciles two
+  populated ones. A database load onto an existing schema, or a mirror into a bucket that already holds objects,
+  produces a state no test covers and no decision describes. Empty it first.
+- **A6 — The target store is not the one the source used.** Supported by construction: the capture is the S3
+  namespace, so any S3-compatible store accepts it, and the backend signs vendor-neutrally. Only the endpoint,
+  credentials, bucket and region change, and all four are configuration.
+- **A7 — The restore is a rollback after a failed upgrade.** This is the *reason* the backup exists as a
+  precondition of upgrading (ADR 0056 §6): the schema migrates at boot with no gate and the migration set has no
+  downgrade path, so the previous image cannot simply be started again. Restore the backup taken before the
+  upgrade; there is no shorter way back.
+- **A8 — Only the users' half is lost.** Nothing here helps. A perfectly restored server whose people lost their
+  passwords and Emergency Kits is unreadable ciphertext, and that is the design, not a defect
+  ([uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) A7).
+
+## Quality notes
+
+- **The whole consistency argument is one act.** Stopping the app makes the dangerous skew impossible rather
+  than unlikely, which is why there is no ordering rule to remember and no window to wait out. A procedure whose
+  correctness depends on the operator recalling which artifact to capture first is a procedure that will
+  eventually be run in the wrong order.
+- **The backup is ciphertext, end to end.** Every leg of it — rows, objects, and the sealed operator config — is
+  material the operator already could not read on the running instance. Backing up therefore grants no new
+  reading power, and neither does restoring. This is the operator-blindness invariant surviving contact with
+  the most privileged routine an operator has.
+- **A restore is proven by opening something, not by starting cleanly.** Two of the three legs produce an
+  instance that boots, serves pages and answers requests while being incomplete. Only decrypting a Memory that
+  has media touches all three.
+- **The backup carries the instance's existing garbage.** Abandoned upload sessions and orphaned objects come
+  along. They are the running system's steady state, not an artifact of the capture, and the restore is not
+  where they get collected.
+
+## What this means for you / Was das für dich bedeutet
+
+**EN —** Whoever runs your instance can back up everything the server holds and bring it back after a disk
+dies — but everything they hold is locked, including to them. That is why a backup has a second half only you
+have: your password and your Emergency Kit. If the server is restored and you still have those, your memories
+open exactly as before, and nothing was re-encrypted or handed over on the way. If the server is restored and
+you lost both, your memories stay closed forever — there is no master key on the operator's side to open them
+with. It is the same promise that keeps your memories private, seen from its uncomfortable end: keep your
+Emergency Kit somewhere you will still find it in a year.
+
+**DE —** Wer deine Instanz betreibt, kann alles sichern, was der Server hält, und es nach einem Plattendefekt
+zurückholen — aber alles, was er hält, ist verschlossen, auch für ihn. Deshalb hat eine Sicherung eine zweite
+Hälfte, die nur du hast: dein Passwort und dein Notfall-Kit. Wird der Server wiederhergestellt und du hast
+beides noch, öffnen sich deine Erinnerungen genau wie vorher — unterwegs wurde nichts neu verschlüsselt und
+nichts herausgegeben. Wird der Server wiederhergestellt und du hast beides verloren, bleiben deine Erinnerungen
+für immer zu; auf der Betreiberseite liegt kein Hauptschlüssel, mit dem sich das öffnen ließe. Das ist dasselbe
+Versprechen, das deine Erinnerungen privat hält, nur von seiner unbequemen Seite: bewahre dein Notfall-Kit dort
+auf, wo du es in einem Jahr noch findest.
+
+## Related
+
+- [ADR 0056](../../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) — the three legs, the cold capture, and why the store leg is logical
+- [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) — presigned direct-to-store, which is why the client is a writer the capture must account for
+- [ADR 0050](../../../decisions/0050-operator-config-secret-encryption.md) — the config-secret key and the fingerprint that detects its loss
+- [ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) — what a missing key file actually costs an instance
+- [uc.account.recover-access](../../account/use-cases/uc.account.recover-access.md) — the half of durability the operator cannot hold
+- [uc.admin.setup-server](uc.admin.setup-server.md) — how the empty instance a restore targets comes into being
+- [architecture §10](../../../architecture/README.md) — the durability bar this exists to make executable
+- [infra/README](../../../../infra/README.md) — the stack the procedure operates on

@@ -1,0 +1,327 @@
+package com.veyq.app.features.account.recovery
+
+import com.veyq.app.features.account.login.SessionFamilyEntity
+import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.features.admin.tenant.TenantStore
+import com.veyq.app.features.admin.tenant.TestMailbox
+import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.identity.MasterKeyWrapEntity
+import com.veyq.app.shared.identity.VeyqUser
+import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusTest
+import io.restassured.RestAssured.given
+import io.restassured.http.ContentType
+import jakarta.inject.Inject
+import org.hamcrest.CoreMatchers.equalTo
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+
+/**
+ * Slice tests for password recovery (uc.account.recover-access, ADR 0054).
+ *
+ * The CR's acceptance is explicit that the happy path is the *least* interesting case here, so most of this file
+ * is the cases that must FAIL: a valid token with a wrong Secret Key, a correct proof with a dead token, and a
+ * release attempted with no token at all. A recovery flow that only proves its happy path is worse than none,
+ * because it looks finished.
+ *
+ * Tokens are minted through the store rather than the request endpoint, because the endpoint deliberately never
+ * returns one — it only mails it. That is the flow working as designed, not a testability gap.
+ */
+@QuarkusTest
+class RecoverySliceTest {
+
+    @Inject
+    lateinit var store: RecoveryStore
+
+    @Inject
+    lateinit var tenantStore: TenantStore
+
+    @Inject
+    lateinit var handler: RecoveryHandler
+
+    @Inject
+    lateinit var sessions: SessionService
+
+    @BeforeEach
+    fun seed() {
+        seedUser(USER, EMAIL)
+    }
+
+    // --- the request endpoint is never an oracle ---
+
+    @Test
+    fun requestIsIndistinguishableForKnownAndUnknownAddress(): Unit = TestMailbox(RECOVERY_SMTP_PORT).start().use { mail ->
+        // This test only means anything on a tenant that CAN send. Run it against the mailer-less default and both
+        // addresses answer 503 for the same instance-level reason: the assertions stay green while proving
+        // nothing about enumerability (ADR 0055 §4 narrowed the 202, and this is where that narrowing could have
+        // quietly eaten the guarantee). So: a real SMTP server, and a real mail as the difference.
+        seedTenant(SENDABLE_DOMAIN, mail)
+        val unknown = requestFor("nobody-at-all@example.com", SENDABLE_DOMAIN)
+        val known = requestFor(EMAIL, SENDABLE_DOMAIN)
+        assertEquals(known.statusCode, unknown.statusCode, "status must not depend on whether the account exists")
+        assertEquals(known.body.asString(), unknown.body.asString(), "body must not depend on it either")
+        assertEquals(202, known.statusCode)
+
+        // The wire is identical; what differs is invisible to the caller — only the registered address gets mail.
+        assertTrue(mail.deliveredTo(EMAIL), "a registered address is mailed")
+        assertFalse(mail.deliveredTo("nobody-at-all@example.com"), "an unknown address is not")
+    }
+
+    @Test
+    fun noMailTransportIsRefusedAndMintsNothing() {
+        // A tenant with no mail settings cannot deliver a recovery link, and says so instead of accepting a
+        // request it will silently drop (ADR 0055 §4). It must also leave no live token: there is no copy-link
+        // fallback to hand one to, so a minted-but-undeliverable token would be a live secret nobody can reach
+        // and an invitation to look for one (ADR 0054 § Decision 4).
+        seedTenant(SILENT_DOMAIN, mailbox = null)
+        requestFor(EMAIL, SILENT_DOMAIN).then().statusCode(503).body("code", equalTo("mail_unavailable"))
+        val minted = QuarkusTransaction.requiringNew().call<Long> {
+            AccountRecoveryEntity.count("userId = ?1 and status = ?2", USER, AccountRecoveryEntity.PENDING)
+        }
+        assertEquals(0L, minted, "no transport, no token")
+    }
+
+    @Test
+    fun transportIsAnsweredBeforeTheRateLimiterSoTheTwoCannotBePaired(): Unit = TestMailbox(ORDER_SMTP_PORT).start().use { mail ->
+        // The bite-test for ADR 0055 §5. If the per-address limiter ran first, a mailer-less tenant would answer
+        // 202 for an address whose bucket is spent and 503 for one that is fresh — an oracle for "was this
+        // address asked about recently", which is exactly the class ADR 0054 § Decision 6 exists to close.
+        // The limiter is per-address and instance-global, so it can be spent against a *sendable* tenant and the
+        // pairing then attempted against a silent one.
+        seedTenant(ORDER_SENDABLE_DOMAIN, mail)
+        seedTenant(ORDER_SILENT_DOMAIN, mailbox = null)
+        val victim = "bucket-victim@example.com"
+        repeat(PER_ADDRESS_MAX + 1) { requestFor(victim, ORDER_SENDABLE_DOMAIN) } // spend the bucket
+
+        requestFor(victim, ORDER_SILENT_DOMAIN).then().statusCode(503).body("code", equalTo("mail_unavailable"))
+    }
+
+    // --- release ---
+
+    @Test
+    fun liveTokenReleasesTheRecoveryWrap() {
+        val token = mintToken()
+        val material = handler.release(token)
+        assertNotNull(material)
+        assertEquals(REC_WRAP, material!!.wrappedKey, "the RECOVERY wrap, not the PASSWORD floor")
+        assertEquals(PRIV, material.wrappedIdentityPrivateKey)
+    }
+
+    @Test
+    fun releaseDoesNotSpendTheToken() {
+        val token = mintToken()
+        assertNotNull(handler.release(token))
+        assertNotNull(handler.release(token), "still live: the completing reset spends it, not the release")
+    }
+
+    @Test
+    fun expiredTokenReleasesNothing() {
+        val token = mintToken(expiresAt = Instant.now().minus(1, ChronoUnit.MINUTES))
+        assertNull(handler.release(token))
+    }
+
+    @Test
+    fun unknownTokenReleasesNothing() {
+        assertNull(handler.release(Tokens.random()))
+    }
+
+    @Test
+    fun freshRequestSupersedesTheOutstandingToken() {
+        val first = mintToken()
+        val second = mintToken()
+        assertNull(handler.release(first), "superseded")
+        assertNotNull(handler.release(second))
+    }
+
+    // --- the second factor: the commitment. These are the cases that must fail. ---
+
+    @Test
+    fun validTokenWithWrongSecretKeyDoesNotReset() {
+        val token = mintToken()
+        val outcome = handler.complete(token, "d3JvbmctdGFn", NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        assertEquals(ResetOutcome.NotProven, outcome)
+        assertEquals(PW_WRAP, wrapOf("PASSWORD"), "the floor must be untouched")
+        assertEquals(OLD_AUTH_KEY, authKeyOf(), "the auth key must be untouched")
+    }
+
+    @Test
+    fun correctSecretKeyWithDeadTokenDoesNotReset() {
+        val token = mintToken(expiresAt = Instant.now().minus(1, ChronoUnit.MINUTES))
+        val outcome = handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        assertEquals(ResetOutcome.TokenNotLive, outcome)
+        assertEquals(PW_WRAP, wrapOf("PASSWORD"))
+    }
+
+    @Test
+    fun spentTokenCannotBeReplayed() {
+        val token = mintToken()
+        assertEquals(ResetOutcome.Applied, handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+        assertEquals(
+            ResetOutcome.TokenNotLive,
+            handler.complete(token, REC_TAG, "b3RoZXI=", NEW_KDF, "b3RoZXI="),
+            "a replay must not re-run the reset",
+        )
+    }
+
+    // --- the reset itself ---
+
+    @Test
+    fun bothFactorsReplaceFloorAndAuthKeyWithoutReEncrypting() {
+        val token = mintToken()
+        val identityBefore = identityOf()
+
+        assertEquals(ResetOutcome.Applied, handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+
+        assertEquals(NEW_WRAP, wrapOf("PASSWORD"), "the floor now opens under the new password")
+        assertEquals(NEW_AUTH_KEY, authKeyOf(), "login follows the same password")
+        assertEquals(identityBefore, identityOf(), "the identity key is untouched — no content is re-encrypted")
+        assertEquals(REC_WRAP, wrapOf("RECOVERY"), "the recovery lock still opens with the same Emergency Kit")
+    }
+
+    @Test
+    fun resetDropsDeviceKeyWrapsToo() {
+        QuarkusTransaction.requiringNew().run {
+            persistWrap(USER, "DEVICE", "ZGV2aWNl")
+            persistWrap(USER, "DEVICE_KEY", "ZGV2aWNlLWtleQ==")
+        }
+        assertTrue(hasWrap("DEVICE_KEY"), "precondition")
+
+        handler.complete(mintToken(), REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+
+        assertFalse(hasWrap("DEVICE"), "a DEVICE wrap mixes the old password and would merely fail")
+        assertFalse(
+            hasWrap("DEVICE_KEY"),
+            "a DEVICE_KEY wrap takes NO password, so surviving the reset would keep granting password-less entry",
+        )
+    }
+
+    @Test
+    fun resetRevokesEveryLiveSession() {
+        val issued = sessions.issue(USER)
+        assertNotNull(issued)
+
+        handler.complete(mintToken(), REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+
+        val live = QuarkusTransaction.requiringNew().call<Long> {
+            SessionFamilyEntity.count("userId = ?1 and status = ?2", USER, SessionFamilyEntity.ACTIVE)
+        }
+        assertEquals(0L, live, "whoever prompted the reset may be holding a session")
+    }
+
+    // --- helpers ---
+
+    /** `X-Forwarded-Host` is what `RecoveryResource.activeHost()` reads first, and it selects whose mail settings
+     *  send the link — so it is how a test says "ask this tenant". */
+    private fun requestFor(email: String, host: String) = given()
+        .contentType(ContentType.JSON)
+        .header("X-Forwarded-Host", host)
+        .body("""{"email":"$email"}""")
+        .`when`().post("/api/recovery/request")
+        .then().extract().response()
+
+    /** An ACTIVE tenant on [domain]; with a [mailbox] it can send, without one it deliberately cannot. */
+    private fun seedTenant(domain: String, mailbox: TestMailbox?) {
+        val tenantId = QuarkusTransaction.requiringNew().call {
+            TenantEntity.find("domain", domain).firstResult()?.id ?: java.util.UUID.randomUUID().toString().also { id ->
+                TenantEntity().apply {
+                    this.id = id; name = "Fam"; this.domain = domain; ownerEmail = "owner@$domain"
+                    status = TenantEntity.ACTIVE; createdAt = Instant.now()
+                }.persist()
+            }
+        }
+        mailbox?.receiveFor(tenantStore, tenantId, domain)
+    }
+
+    private fun mintToken(expiresAt: Instant = Instant.now().plus(1, ChronoUnit.HOURS)): String {
+        val token = Tokens.random()
+        store.mint(USER, EMAIL, Tokens.hash(token), expiresAt)
+        return token
+    }
+
+    private fun wrapOf(method: String): String? = QuarkusTransaction.requiringNew().call<String?> {
+        MasterKeyWrapEntity.find("userId = ?1 and method = ?2", USER, method).firstResult()?.wrappedKey
+    }
+
+    private fun hasWrap(method: String): Boolean = wrapOf(method) != null
+
+    private fun authKeyOf(): String? =
+        QuarkusTransaction.requiringNew().call<String?> { VeyqUser.findById(USER)?.authPublicKey }
+
+    private fun identityOf(): String? =
+        QuarkusTransaction.requiringNew().call<String?> { VeyqUser.findById(USER)?.wrappedIdentityPrivateKey }
+
+    /** Reset the account to its pre-recovery state without deleting the row: other tables (session families
+     *  from a previous test in this class) hold FK references to it, so a delete-and-recreate would trip a
+     *  constraint rather than give a clean slate. */
+    private fun seedUser(userId: String, email: String) {
+        QuarkusTransaction.requiringNew().run {
+            AccountRecoveryEntity.delete("userId", userId)
+            MasterKeyWrapEntity.delete("userId", userId)
+            SessionFamilyEntity.update("status = ?1 where userId = ?2", SessionFamilyEntity.REVOKED, userId)
+            val user = VeyqUser.findById(userId) ?: VeyqUser().apply {
+                id = userId
+                this.email = email
+                serverRole = "SERVER_OWNER"
+                suiteId = "v1"
+                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
+                createdAt = Instant.now()
+                // Set before persist: these columns are NOT NULL, so the insert must already carry them.
+                wrappedIdentityPrivateKey = PRIV
+                authPublicKey = OLD_AUTH_KEY
+                recoveryMasterKeyTag = REC_TAG
+            }.also { it.persist() }
+            user.wrappedIdentityPrivateKey = PRIV
+            user.authPublicKey = OLD_AUTH_KEY
+            user.recoveryMasterKeyTag = REC_TAG
+            persistWrap(userId, "PASSWORD", PW_WRAP)
+            persistWrap(userId, "RECOVERY", REC_WRAP)
+        }
+    }
+
+    private fun persistWrap(userId: String, method: String, wrapped: String) {
+        MasterKeyWrapEntity().apply {
+            id = java.util.UUID.randomUUID().toString()
+            this.userId = userId
+            this.method = method
+            wrappedKey = wrapped
+            kdfParams = "a2RmLXBhcmFtcw=="
+        }.persist()
+    }
+
+    private companion object {
+        const val USER = "11111111-2222-3333-4444-555555555555"
+        const val EMAIL = "recover-me@example.com"
+        const val PRIV = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRl"
+        const val PW_WRAP = "cGFzc3dvcmQtd3JhcA=="
+        const val REC_WRAP = "cmVjb3Zlcnktd3JhcA=="
+        const val OLD_AUTH_KEY = "b2xkLWF1dGgta2V5"
+
+        /** The commitment stored at account birth; only a client that opened the RECOVERY wrap can reproduce it. */
+        const val REC_TAG = "cmVjb3ZlcnktYXV0aC10YWc="
+
+        const val NEW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
+        const val NEW_KDF = "bmV3LWtkZi1wYXJhbXM="
+        const val NEW_AUTH_KEY = "bmV3LWF1dGgta2V5"
+
+        /** `veyq.ratelimit.recovery.per-address-max-requests` — the bucket the ordering bite-test spends. */
+        const val PER_ADDRESS_MAX = 3
+
+        const val SENDABLE_DOMAIN = "recover-mail.example.com"
+        const val SILENT_DOMAIN = "recover-silent.example.com"
+        const val ORDER_SENDABLE_DOMAIN = "recover-order-mail.example.com"
+        const val ORDER_SILENT_DOMAIN = "recover-order-silent.example.com"
+
+        // One JVM for the whole suite ⇒ distinct ports (SmtpInviteMailSendTest 13925-13929,
+        // MemberAddSliceTest 13930-13933, MemberInviteManagementSliceTest 13934-13935).
+        const val RECOVERY_SMTP_PORT = 13936
+        const val ORDER_SMTP_PORT = 13937
+    }
+}

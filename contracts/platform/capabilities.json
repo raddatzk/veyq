@@ -1,0 +1,26 @@
+{
+  "registry": "platform-capabilities",
+  "note": "Append-only catalog of client-facing capability ids (ADR 0032). An id, once added, is never removed or repurposed. The backend advertises the ACTIVE subset on GET /api/setup — this catalog minus the operator's veyq.capabilities.disabled list. Each surface pins these ids as constants (backend CapabilityIds, web src/features/platform/capabilities.ts) with a conformance test guarding drift against this file. `serves` cross-references the use-case(s) each capability gates; it is a COARSER projection over use-cases (many-to-many, not 1:1) and is catalog-only metadata — NEVER put on the wire (the manifest is [{ id }] only). scripts/validate_capabilities.py enforces that every `serves` entry resolves to a real, built use-case. `source` records how the active bit is computed: operator-policy (a config toggle enforced by a 422 at the endpoint) vs infra-preflight (a runtime probe, no operator off-switch — e.g. directTransport, folding into this manifest is deferred). Reserving an id ahead of its use-cases being built (advertised active only once built, ADR 0032 §6) is a deferred lifecycle extension; every current entry's serves are already built.",
+  "capabilities": {
+    "sharing.public-links": {
+      "serves": ["uc.sharing.share-public-viewer", "uc.sharing.share-contributor"],
+      "source": "operator-policy",
+      "description": "Public read/contribute share links of a personal-scope Memory (viewer + contributor roles). Disabled => the Share affordance is hidden client-side and createShare(VIEWER|CONTRIBUTOR) is rejected server-side with 422 capability_disabled."
+    },
+    "sharing.uploader-links": {
+      "serves": ["uc.sharing.share-uploader"],
+      "source": "operator-policy",
+      "description": "Write-only uploader (drop-box) share links. Disabled => the Uploader role option is hidden client-side and createShare(UPLOADER) is rejected server-side with 422 capability_disabled."
+    },
+    "spaces.groups": {
+      "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],
+      "source": "operator-policy",
+      "description": "Shared group spaces — creating a group scope and managing its membership. Disabled => the group affordance is hidden client-side and the group-create endpoint is rejected server-side with 422 capability_disabled (a personal-only instance)."
+    },
+    "account.device-trust": {
+      "serves": ["uc.account.trust-device", "uc.account.remember-this-device"],
+      "source": "operator-policy",
+      "description": "Device trust and passwordless remember-me unlock levels. Disabled => the \"remember this device\" toggle is hidden client-side and enrolling a device wrap is rejected server-side with 422 capability_disabled (an instance mandating a full password every time)."
+    }
+  }
+}

@@ -1,0 +1,953 @@
+package com.veyq.app.features.spaces.scope
+
+import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.shared.identity.TenantProfileEntity
+import com.veyq.app.shared.identity.VeyqUser
+import io.quarkus.narayana.jta.QuarkusTransaction
+import io.quarkus.test.junit.QuarkusTest
+import io.restassured.RestAssured.given
+import io.restassured.http.ContentType
+import jakarta.inject.Inject
+import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItems
+import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Test
+import java.time.Duration
+import java.time.Instant
+import java.util.Base64
+import java.util.UUID
+
+/**
+ * Slice tests for a member's scopes (en.spaces.personal-scope, cr-0026): a member births their PERSONAL scope
+ * (client-supplied ciphertext grant) and lists their scopes; one personal scope per (member, tenant); the
+ * active tenant is resolved from the Host (X-Forwarded-Host); operator-blind (the stored grant is exactly the
+ * ciphertext the client sent). Seeds use UUID-unique domains/emails so the JVM-lived H2 mem DB (shared across
+ * test classes) can't bleed state.
+ */
+@QuarkusTest
+class ScopesSliceTest {
+
+    @Inject
+    lateinit var sessions: SessionService
+
+    @Inject
+    lateinit var purge: ScopePurge
+
+    private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ=" // "personal-scope-grant"
+    private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
+    private val groupName = "c2VhbGVkLWdyb3VwLW5hbWU=" // "sealed-group-name"
+    private val rotPrev = "cm90LXByZXY=" // "rot-prev" (symWrap(E1, E0))
+    private val newGrant = "bmV3LWVwb2NoLWdyYW50" // "new-epoch-grant"
+    private val renamedName = "cmVuYW1lZC1uYW1l" // "renamed-name" — re-sealed under K_name of the current epoch (cr-0097)
+    private val sealedIcon = "c2VhbGVkLWljb24=" // "sealed-icon" — opaque here; the constant-length invariant is a web unit test
+    private val replacedIcon = "cmVwbGFjZWQ=" // "replaced"
+
+    /** Add a seeded tenant member (by username) to a group via the API — returns nothing, the member is grant-less. */
+    private fun addToGroup(owner: String, domain: String, groupId: String, username: String) {
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"username":"$username"}""")
+            .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
+    }
+
+    @Test
+    fun promoteDemoteAndLastOwnerGuard() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+
+        // Promote partner → OWNER (co-owner).
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"role":"OWNER"}""")
+            .`when`().patch("/api/scopes/$groupId/members/$partner")
+            .then().statusCode(200).body("role", equalTo("OWNER"))
+
+        // Demote the original owner → MEMBER (allowed — partner is now an owner too).
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"role":"MEMBER"}""")
+            .`when`().patch("/api/scopes/$groupId/members/$owner")
+            .then().statusCode(200).body("role", equalTo("MEMBER"))
+
+        // partner is now the LAST owner → cannot be demoted (last-owner guard).
+        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+            .body("""{"role":"MEMBER"}""")
+            .`when`().patch("/api/scopes/$groupId/members/$partner")
+            .then().statusCode(409).body("code", equalTo("last_owner"))
+    }
+
+    @Test
+    fun removeMemberThenLastOwnerGuard() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+
+        // A non-owner (partner, a MEMBER) cannot remove anyone.
+        given().header("Authorization", "Bearer ${token(partner)}")
+            .`when`().delete("/api/scopes/$groupId/members/$owner")
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+
+        // The owner removes partner → 204; the directory no longer lists them.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId/members/$partner")
+            .then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/members")
+            .then().statusCode(200).body("find { it.username == 'partner' }", equalTo(null))
+
+        // The last owner cannot be removed (last-owner guard).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId/members/$owner")
+            .then().statusCode(409).body("code", equalTo("last_owner"))
+    }
+
+    @Test
+    fun rotateBumpsEpochAndReGrantsRemaining() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // Initial: epoch 0.
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.currentEpoch", equalTo(0))
+            .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(0))
+
+        // Rotate: owner mints E1 (chain-link) + re-grants self to the new epoch.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(201).body("epoch", equalTo(1))
+
+        // The scope now reports epoch 1, the owner re-granted (grantedEpoch 1 + the new grant).
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.currentEpoch", equalTo(1))
+            .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(1))
+            .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(newGrant))
+
+        // The epoch-chain link is readable (opaque ciphertext, verbatim).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/epochs")
+            .then().statusCode(200)
+            .body("[0].epoch", equalTo(1))
+            .body("[0].wrappedPrev", equalTo(rotPrev))
+    }
+
+    @Test
+    fun listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCapability() {
+        // The path cr-0162 fixed, and the reason the leak survived: it had no test at all. Three actors, three
+        // answers — a stranger must not be able to tell the real group from an invented id (ADR 0042).
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // A member who holds no grant yet (grant-less, pre-delivery) is inside the boundary → 403, not 404: they
+        // already know the group exists, so refusing them discloses nothing.
+        val grantless = seedTenantMember(tenantIdOf(domain), "grantless")
+        addToGroup(owner, domain, groupId, "grantless")
+        given().header("Authorization", "Bearer ${token(grantless)}")
+            .`when`().get("/api/scopes/$groupId/epochs")
+            .then().statusCode(403).body("code", equalTo("not_key_holder"))
+
+        // A stranger is outside it → 404, and byte-identical to the answer for a group id that does not exist.
+        val stranger = seedUser()
+        given().header("Authorization", "Bearer ${token(stranger)}")
+            .`when`().get("/api/scopes/$groupId/epochs")
+            .then().statusCode(404).body("code", equalTo("scope_not_found"))
+        given().header("Authorization", "Bearer ${token(stranger)}")
+            .`when`().get("/api/scopes/${UUID.randomUUID()}/epochs")
+            .then().statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    @Test
+    fun rotateNonOwnerIs403() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner") // partner is a MEMBER, not owner
+
+        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+            .body("""{"wrappedPrev":"$rotPrev","grants":[]}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+    }
+
+    // --- rename a group (uc.spaces.rename-group, cr-0097) ---
+
+    @Test
+    fun renameGroupUpdatesEncryptedNameAndNameEpoch() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // Born at name-epoch 0 with the creation name.
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.encryptedName", equalTo(groupName))
+            .body("find { it.id == '$groupId' }.nameEpoch", equalTo(0))
+
+        // Owner renames at the current epoch (0) → 204.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/name")
+            .then().statusCode(204)
+
+        // The row now carries the new sealed name, still at name-epoch 0.
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.encryptedName", equalTo(renamedName))
+            .body("find { it.id == '$groupId' }.nameEpoch", equalTo(0))
+    }
+
+    @Test
+    fun renameNonOwnerIs403() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner") // a MEMBER, not the name authority
+
+        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/name")
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+    }
+
+    @Test
+    fun renameStaleEpochIs409AndLeavesTheNameUnchanged() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // currentEpoch is 0; a rename claiming epoch 1 is stale → 409 stale_epoch.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":1}""")
+            .`when`().post("/api/scopes/$groupId/name")
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200).body("find { it.id == '$groupId' }.encryptedName", equalTo(groupName))
+    }
+
+    @Test
+    fun renameAfterRotationSealsUnderTheNewEpoch() {
+        // Forward-secrecy (metadata level): after a rotation to E1 the rename must carry nameEpoch=1 (the old
+        // epoch 0 is now stale) and the row's name_epoch tracks the current epoch — so a member removed at E0
+        // (holding only E0) cannot derive K_name of E1 for the new name (the crypto FS itself is asserted web-side).
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
+
+        // A rename at the OLD epoch 0 is now stale.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/name").then().statusCode(409).body("code", equalTo("stale_epoch"))
+
+        // A rename at the CURRENT epoch 1 succeeds and the row's name_epoch advances to 1.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":1}""")
+            .`when`().post("/api/scopes/$groupId/name").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.encryptedName", equalTo(renamedName))
+            .body("find { it.id == '$groupId' }.nameEpoch", equalTo(1))
+    }
+
+    @Test
+    fun renamePendingDeletionIs409() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // enters the grace period
+
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/name")
+            .then().statusCode(409).body("code", equalTo("scope_pending_deletion"))
+    }
+
+    // --- space icon (uc.spaces.set-space-icon) ---
+
+    @Test
+    fun setScopeIconUpdatesSealedIconAndIconEpochThenClearResets() {
+        val (owner, domain) = seedMember()
+        val tenantId = tenantIdOf(domain)
+
+        // Born with no icon.
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
+            .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
+
+        // The tenant owner sets the icon at the current epoch (0) → 204.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$tenantId/icon").then().statusCode(204)
+
+        // It shows on the tenant's own scope row.
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$tenantId' }.sealedIcon", equalTo(sealedIcon))
+            .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
+
+        // And on the widened my-tenants read (the switcher's cross-tenant path), with the caller's own grant.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/my-tenants").then().statusCode(200)
+            .body("[0].sealedIcon", equalTo(sealedIcon))
+            .body("[0].iconEpoch", equalTo(0))
+            .body("[0].wrappedGrant", notNullValue())
+
+        // Replace it (still epoch 0) → 204.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$replacedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$tenantId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$tenantId' }.sealedIcon", equalTo(replacedIcon))
+
+        // Remove it → 204; every member falls back to the initial (sealedIcon null again).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
+            .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
+    }
+
+    @Test
+    fun setScopeIconNonOwnerIs403EvenWithAPersonalScopeOwnerRow() {
+        // The owner gate keys on the tenant ROOT scope (isScopeOwner(caller, scopeId == tenantId), ADR 0007). A
+        // plain member also OWNS their personal scope, whose membership carries the SAME tenantId — a gate keyed on
+        // tenantId would read that OWNER row and wrongly admit them (cr-0163's escalation shape). Seed exactly that
+        // and assert 403: reverting the gate to a tenantId key reds this test. (The role bug itself is #93, already
+        // fixed + tested; this pins the *icon* gate against the same trap.)
+        val (_, domain) = seedMember()
+        val tenantId = tenantIdOf(domain)
+        val member = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            val personalId = UUID.randomUUID().toString()
+            ScopeEntity().apply {
+                id = personalId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
+            }.persist()
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = member; this.tenantId = tenantId
+                scopeId = personalId; role = MembershipEntity.OWNER
+                wrappedGrant = "cGVyc29uYWwtZ3JhbnQ=" // "personal-grant"
+                createdAt = Instant.now()
+            }.persist()
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = member; this.tenantId = tenantId
+                scopeId = tenantId; role = MembershipEntity.MEMBER
+                wrappedGrant = "bWVtYmVyLWdyYW50" // "member-grant"
+                createdAt = Instant.now()
+            }.persist()
+        }
+        given().header("Authorization", "Bearer ${token(member)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$tenantId/icon")
+            .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+    }
+
+    @Test
+    fun setScopeIconStaleEpochIs409AndLeavesTheIconUnset() {
+        val (owner, domain) = seedMember()
+        val tenantId = tenantIdOf(domain)
+        // currentEpoch is 0; a set claiming epoch 1 is stale → 409 stale_epoch.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":1}""")
+            .`when`().post("/api/scopes/$tenantId/icon")
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
+    }
+
+    @Test
+    fun clearScopeIconIsIdempotentAndOwnerGated() {
+        val (owner, domain) = seedMember()
+        val tenantId = tenantIdOf(domain)
+        // Idempotent: clearing an already-iconless scope → 204.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(204)
+        // A plain tenant member cannot clear → 403.
+        val member = seedTenantMember(tenantId, "member")
+        given().header("Authorization", "Bearer ${token(member)}")
+            .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        // A non-member gets the uniform 404 (membership first, ADR 0042).
+        val outsider = seedUser()
+        given().header("Authorization", "Bearer ${token(outsider)}")
+            .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(404)
+    }
+
+    @Test
+    fun setScopeIconOnAPersonalScopeIs404() {
+        // The residual of the old TENANT-only guard (the group slice lifted it for GROUP): a PERSONAL scope has
+        // no icon — nothing tells it apart from its owner — so the kind guard rejects it with the same uniform
+        // 404 a non-member gets, never leaking that the scope exists. Reverting the guard to `!= TENANT` reds the
+        // GROUP tests below; reverting it to `!= GROUP` reds this one.
+        val (userId, domain) = seedMember()
+        val personalId = given().header("Authorization", "Bearer ${token(userId)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes").then().statusCode(201).extract().path<String>("scopeId")
+        given().header("Authorization", "Bearer ${token(userId)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$personalId/icon").then().statusCode(404)
+    }
+
+    @Test
+    fun setScopeIconOnAGroupByOwnerThenCoOwnerUpdatesSealedIcon() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // The group owner sets the icon at the current epoch (0) → 204, and it shows on the group's scope row.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.sealedIcon", equalTo(sealedIcon))
+            .body("find { it.id == '$groupId' }.iconEpoch", equalTo(0))
+
+        // A promoted co-owner (G3/ADR 0014) is an OWNER too and may replace it → 204 — the owner gate needs no
+        // change (isScopeOwner is true for any OWNER-role membership on the scope, the same gate renameGroup uses).
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"role":"OWNER"}""").`when`().patch("/api/scopes/$groupId/members/$partner").then().statusCode(200)
+        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$replacedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.sealedIcon", equalTo(replacedIcon))
+    }
+
+    @Test
+    fun setScopeIconOnAGroupNonOwnerIs403AndNonMemberIs404() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val member = seedTenantMember(tenantIdOf(domain), "member")
+        addToGroup(owner, domain, groupId, "member")
+
+        // A plain group member (not an owner) → 403 not_scope_owner.
+        given().header("Authorization", "Bearer ${token(member)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(403).body("code", equalTo("not_scope_owner"))
+
+        // A non-member gets the uniform 404 (membership first, ADR 0042) — never leaks that the group exists.
+        val outsider = seedUser()
+        given().header("Authorization", "Bearer ${token(outsider)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(404)
+    }
+
+    @Test
+    fun setScopeIconOnAGroupAfterRotationIsStaleAtOldEpochThenSealsAtNew() {
+        // The group-only interaction a tenant can't exercise (a tenant never rotates, so its icon epoch is always
+        // 0). A member-removal rotation (ADR 0024) advances currentEpoch; a set claiming the OLD epoch is stale
+        // (409), a set at the NEW epoch seals and the row reports that iconEpoch (a later-epoch reader peels the
+        // chain down to it). Rotation itself never touches sealed_icon/icon_epoch.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+
+        // Rotate 0 → 1 (owner mints E1 + re-grants self).
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
+
+        // A set at the OLD epoch 0 is now stale → 409; the icon stays unset.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(409).body("code", equalTo("stale_epoch"))
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.sealedIcon", nullValue())
+
+        // A set at the CURRENT epoch 1 succeeds; the row reports iconEpoch 1.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":1}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.sealedIcon", equalTo(sealedIcon))
+            .body("find { it.id == '$groupId' }.iconEpoch", equalTo(1))
+    }
+
+    @Test
+    fun setScopeIconOnAGroupPendingDeletionIs409() {
+        // A group has a grace-delete a tenant lacks — a set during the grace period writes epoch-current
+        // ciphertext and is rejected (unlike a clear, which is allowed; see clearScopeIconOnAGroup...).
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // enters the grace period
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon")
+            .then().statusCode(409).body("code", equalTo("scope_pending_deletion"))
+    }
+
+    @Test
+    fun clearScopeIconOnAGroupIsIdempotentAndAllowedDuringGrace() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        // Set then clear → 204, back to null.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
+            .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.sealedIcon", nullValue())
+        // Idempotent: clearing an already-iconless group → 204.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
+        // A clear is allowed even after the group enters grace-deletion (planning decision: dropping an icon off a
+        // dying scope is inconsequential; unlike a set, it writes no epoch-current ciphertext).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // grace
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
+    }
+
+    @Test
+    fun createPersonalScopeThenListReturnsBoth() {
+        val (userId, domain) = seedMember()
+        val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes")
+            .then().statusCode(201)
+            .body("kind", equalTo("PERSONAL"))
+            .body("scopeId", notNullValue())
+            .extract().path<String>("scopeId")
+
+        // The list now shows the TENANT root + the new PERSONAL scope; the personal grant is the verbatim
+        // ciphertext the client sent (operator-blind — the server stored it without interpreting it).
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("kind", hasItems("TENANT", "PERSONAL"))
+            .body("find { it.id == '$scopeId' }.wrappedGrant", equalTo(personalGrant))
+    }
+
+    @Test
+    fun listMyScopesCarriesTheCallersRole() {
+        // The scope list surfaces the caller's OWN role per scope (cr-0087) — so the client can list groups it
+        // owns without a directory call. The tenant owner sees OWNER; a seeded plain member sees MEMBER.
+        val (owner, domain) = seedMember()
+        val memberId = seedTenantMember(tenantIdOf(domain), "partner")
+
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.kind == 'TENANT' }.role", equalTo("OWNER"))
+
+        given().header("Authorization", "Bearer ${token(memberId)}")
+            .header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.kind == 'TENANT' }.role", equalTo("MEMBER"))
+    }
+
+    @Test
+    fun secondPersonalScopeIs409() {
+        val (userId, domain) = seedMember()
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes").then().statusCode(201)
+
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes")
+            .then().statusCode(409).body("code", equalTo("personal_scope_exists"))
+    }
+
+    @Test
+    fun createGroupThenListShowsItWithSealedNameAndSelfGrant() {
+        val (userId, domain) = seedMember()
+        val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .`when`().post("/api/scopes/groups")
+            .then().statusCode(201)
+            .body("kind", equalTo("GROUP"))
+            .body("scopeId", notNullValue())
+            .extract().path<String>("scopeId")
+
+        // The list now carries the GROUP scope with the verbatim ciphertext name + the caller's self-grant —
+        // both are exactly what the client sent (operator-blind: the server stored, never interpreted, them).
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("kind", hasItems("TENANT", "GROUP"))
+            .body("find { it.id == '$scopeId' }.encryptedName", equalTo(groupName))
+            .body("find { it.id == '$scopeId' }.wrappedGrant", equalTo(groupGrant))
+            // TENANT/PERSONAL scopes carry no sealed name.
+            .body("find { it.kind == 'TENANT' }.encryptedName", equalTo(null))
+    }
+
+    @Test
+    fun createGroupNonMemberIs404() {
+        // A tenant exists, but this caller holds no membership in it → cannot create a group there.
+        val (_, domain) = seedMember()
+        val outsider = seedUser()
+        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .`when`().post("/api/scopes/groups")
+            .then().statusCode(404).body("code", equalTo("tenant_not_found"))
+    }
+
+    @Test
+    fun addGroupMemberByUsernameRecordsGrantlessMember() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        seedTenantMember(tenantIdOf(domain), "partner")
+
+        // The owner admits an existing tenant member by username → a grant-less MEMBER row (awaiting delivery);
+        // the response never exposes email, and no key/name was touched (operator-blind admission).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"username":"partner"}""")
+            .`when`().post("/api/scopes/$groupId/members")
+            .then().statusCode(201)
+            .body("username", equalTo("partner"))
+            .body("role", equalTo("MEMBER"))
+            .body("hasGrant", equalTo(false))
+            .body("email", nullValue())
+
+        // The group directory now lists the pending member — grant-less, ready for grant-delivery to wrap K_SC.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/members")
+            .then().statusCode(200)
+            .body("find { it.username == 'partner' }.hasGrant", equalTo(false))
+    }
+
+    @Test
+    fun addGroupMemberByANonMemberOfTheGroupIs404() {
+        // A fellow *tenant* member who does not belong to the group cannot admit anyone — and gets 404, the same
+        // answer as for a group that does not exist. Belonging to the tenant does not entitle you to learn which
+        // groups exist inside it (membership is the first guard, ADR 0042 / cr-0162).
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val nonMember = seedTenantMember(tenantIdOf(domain), "partner")
+        seedTenantMember(tenantIdOf(domain), "third")
+        given().header("Authorization", "Bearer ${token(nonMember)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"username":"third"}""")
+            .`when`().post("/api/scopes/$groupId/members")
+            .then().statusCode(404).body("code", equalTo("scope_not_found"))
+    }
+
+    @Test
+    fun addGroupMemberUnknownUsernameIs404() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"username":"nobody"}""")
+            .`when`().post("/api/scopes/$groupId/members")
+            .then().statusCode(404).body("code", equalTo("member_not_found"))
+    }
+
+    @Test
+    fun addGroupMemberAlreadyMemberIs409() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        seedTenantMember(tenantIdOf(domain), "partner")
+        val add = {
+            given().header("Authorization", "Bearer ${token(owner)}")
+                .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+                .body("""{"username":"partner"}""").`when`().post("/api/scopes/$groupId/members")
+        }
+        add().then().statusCode(201)
+        add().then().statusCode(409).body("code", equalTo("already_member"))
+    }
+
+    @Test
+    fun unknownHostIs404() {
+        val (userId, _) = seedMember()
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .header("X-Forwarded-Host", "nobody-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes")
+            .then().statusCode(404).body("code", equalTo("tenant_not_found"))
+    }
+
+    @Test
+    fun nonMemberIs404() {
+        // A tenant exists, but this caller holds no membership in it → cannot birth a personal scope there.
+        val (_, domain) = seedMember()
+        val outsider = seedUser()
+        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes")
+            .then().statusCode(404).body("code", equalTo("tenant_not_found"))
+    }
+
+    @Test
+    fun unauthenticatedIs401() {
+        given().header("X-Forwarded-Host", "x-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
+            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .`when`().post("/api/scopes")
+            .then().statusCode(401).body("code", equalTo("authentication_failed"))
+    }
+
+    @Test
+    fun listMyTenantsReturnsTheCallersTenants() {
+        // Host-independent: lists every tenant the caller belongs to (name + domain + role), for the switcher.
+        val (userId, domain) = seedMember()
+        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .`when`().get("/api/scopes/my-tenants")
+            .then().statusCode(200)
+            .body("size()", equalTo(1))
+            .body("[0].name", equalTo("Fam"))
+            .body("[0].domain", equalTo(domain))
+            .body("[0].role", equalTo("OWNER"))
+
+        // an outsider with no membership sees an empty list — only your own tenants (operator-blind).
+        val outsider = seedUser()
+        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+            .`when`().get("/api/scopes/my-tenants")
+            .then().statusCode(200).body("size()", equalTo(0))
+    }
+
+    @Test
+    fun myTenantsRoleKeysOnRootScopeNotAPersonalOwnerRow() {
+        // A plain member also OWNS their personal scope, whose membership carries the SAME tenantId. Grouping by
+        // tenantId then taking `.first().role` could surface that OWNER row → a MEMBER shown as OWNER (cr-0163's
+        // shape, in the switcher). The role must key on the tenant ROOT scope (scopeId == tenantId). #93.
+        val (_, domain) = seedMember()
+        val tenantId = domain.removePrefix("t-").removeSuffix(".example.com")
+        val member = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            // Personal-scope OWNER row FIRST — under H2's insertion scan order this is what a buggy `.first()`
+            // returns, so the assertion below bites the pre-fix code deterministically.
+            val personalId = UUID.randomUUID().toString()
+            ScopeEntity().apply {
+                id = personalId
+                this.tenantId = tenantId
+                kind = ScopeEntity.PERSONAL
+                createdAt = Instant.now()
+            }.persist()
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = member
+                this.tenantId = tenantId
+                scopeId = personalId
+                role = MembershipEntity.OWNER
+                wrappedGrant = "cGVyc29uYWwtZ3JhbnQ=" // "personal-grant"
+                createdAt = Instant.now()
+            }.persist()
+            // Then the tenant ROOT MEMBER row (scopeId == tenantId) — the one the role must come from.
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = member
+                this.tenantId = tenantId
+                scopeId = tenantId
+                role = MembershipEntity.MEMBER
+                wrappedGrant = "bWVtYmVyLWdyYW50" // "member-grant"
+                createdAt = Instant.now()
+            }.persist()
+        }
+        given().header("Authorization", "Bearer ${token(member)}")
+            .`when`().get("/api/scopes/my-tenants")
+            .then().statusCode(200)
+            .body("size()", equalTo(1))
+            .body("[0].role", equalTo("MEMBER"))
+    }
+
+    @Test
+    fun deleteGroupSoftThenRestoreWithReadOnlyGrace() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        createNodeIn(owner, groupId, "n1") // a write, allowed while active
+
+        // Owner soft-deletes → 204; the scope stays listed but now carries deletedAt + purgeAfter (pending-deletion).
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.deletedAt", notNullValue())
+            .body("find { it.id == '$groupId' }.purgeAfter", notNullValue())
+
+        // Read-only during grace: a content write is rejected 409 scope_deleting.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body(nodeBody("n2")).`when`().post("/api/scopes/$groupId/nodes")
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
+
+        // Restore → 204; the marker clears and writes work again.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().post("/api/scopes/$groupId/restore").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '$groupId' }.deletedAt", equalTo(null))
+        createNodeIn(owner, groupId, "n3") // write allowed again
+    }
+
+    @Test
+    fun deleteRestoreGuards() {
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner") // partner = MEMBER
+
+        // A non-owner cannot delete; restoring an active group is 409 not_deleted; deleting the TENANT scope is 409 not_group.
+        given().header("Authorization", "Bearer ${token(partner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().post("/api/scopes/$groupId/restore").then().statusCode(409).body("code", equalTo("not_deleted"))
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/${tenantIdOf(domain)}").then().statusCode(409).body("code", equalTo("not_group"))
+
+        // Soft-delete, then a second delete → 409 scope_already_deleted.
+        given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$groupId").then().statusCode(204)
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(409).body("code", equalTo("scope_already_deleted"))
+    }
+
+    @Test
+    fun purgeErasesExpiredScopeAndContentButKeepsFreshOnes() {
+        val (owner, domain) = seedMember()
+        val expired = createGroupAs(owner, domain)
+        createNodeIn(owner, expired, "doomed")
+        val fresh = createGroupAs(owner, domain)
+
+        // Soft-delete both; backdate the "expired" one past the 30-day retention window.
+        listOf(expired, fresh).forEach { given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204) }
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(expired)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+        }
+
+        // The scheduled sweep hard-erases the expired group + its content; the fresh (in-window) one survives.
+        purge.run()
+
+        QuarkusTransaction.requiringNew().run {
+            assertNull(ScopeEntity.findById(expired), "expired group hard-purged")
+            assertEquals(0, NodeEntity.count("scopeId", expired), "its nodes erased")
+            assertEquals(0, MembershipEntity.count("scopeId", expired), "its memberships erased")
+            assertNotNull(ScopeEntity.findById(fresh), "fresh group still in its grace window")
+        }
+    }
+
+    // --- helpers ---
+
+    private fun token(userId: String) = sessions.issue(userId).accessToken
+
+    /** A minimal FOLDER-node create body; `slug` becomes a base64 slug token (unique per parent). */
+    private fun nodeBody(slug: String) =
+        """{"kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0}"""
+
+    /** Create a FOLDER node in a scope (a write) → the new nodeId. */
+    private fun createNodeIn(owner: String, scopeId: String, slug: String): String =
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body(nodeBody(slug)).`when`().post("/api/scopes/$scopeId/nodes")
+            .then().statusCode(201).extract().path("nodeId")
+
+    /** The tenantId encoded in a domain seeded by [seedMember] (`t-<tenantId>.example.com`). */
+    private fun tenantIdOf(domain: String) = domain.removePrefix("t-").removeSuffix(".example.com")
+
+    /** Create a GROUP scope as the caller (the seeded name/grant are opaque here) → the new scopeId. */
+    private fun createGroupAs(userId: String, domain: String): String =
+        given().header("Authorization", "Bearer ${token(userId)}")
+            .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .`when`().post("/api/scopes/groups")
+            .then().statusCode(201).extract().path("scopeId")
+
+    /** Seed a second tenant member with a per-tenant username profile (the add-by-username target). */
+    private fun seedTenantMember(tenantId: String, username: String): String {
+        val userId = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = userId
+                this.tenantId = tenantId
+                scopeId = tenantId
+                role = MembershipEntity.MEMBER
+                wrappedGrant = "bWVtYmVyLWdyYW50" // "member-grant"
+                createdAt = Instant.now()
+            }.persist()
+            TenantProfileEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = userId
+                this.tenantId = tenantId
+                this.username = username
+                createdAt = Instant.now()
+            }.persist()
+        }
+        return userId
+    }
+
+    /** Seed a user + an ACTIVE tenant (unique domain) + the user's TENANT membership (post-activation state).
+     *  Returns the userId and the tenant's domain (use it as the X-Forwarded-Host). */
+    private fun seedMember(): Pair<String, String> {
+        val userId = seedUser()
+        val tenantId = UUID.randomUUID().toString()
+        val domain = "t-$tenantId.example.com"
+        QuarkusTransaction.requiringNew().run {
+            TenantEntity().apply {
+                id = tenantId
+                name = "Fam"
+                this.domain = domain
+                ownerEmail = "owner-$tenantId@example.com"
+                status = TenantEntity.ACTIVE
+                createdAt = Instant.now()
+            }.persist()
+            ScopeEntity().apply {
+                id = tenantId
+                this.tenantId = tenantId
+                kind = ScopeEntity.TENANT
+                createdAt = Instant.now()
+            }.persist()
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.userId = userId
+                this.tenantId = tenantId
+                scopeId = tenantId
+                role = MembershipEntity.OWNER
+                wrappedGrant = "dGVuYW50LWdyYW50" // "tenant-grant"
+                createdAt = Instant.now()
+            }.persist()
+        }
+        return userId to domain
+    }
+
+    private fun seedUser(): String {
+        val userId = UUID.randomUUID().toString()
+        QuarkusTransaction.requiringNew().run {
+            VeyqUser().apply {
+                id = userId
+                email = "u-$userId@example.com"
+                serverRole = "MEMBER"
+                suiteId = "v1"
+                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
+                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
+                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
+                createdAt = Instant.now()
+            }.persist()
+        }
+        return userId
+    }
+}

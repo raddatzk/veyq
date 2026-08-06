@@ -1,0 +1,21 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Bootstrap DB + Garage" type="ShConfigurationType">
+    <!-- Bring up the bundled dev infra (MariaDB + Garage S3 + garage-init sidecar). Two steps on purpose: the
+         first `up` starts everything and exits 0; the second waits only on the mariadb healthcheck so Flyway
+         never races a cold DB. Waiting on the WHOLE project would exit 1, because the garage-init sidecar exits
+         after seeding the bucket and the wait flag treats any container exit (even a clean 0) as a failure. -->
+    <option name="SCRIPT_TEXT" value="docker compose -f infra/docker-compose.yml --profile s3 up -d &amp;&amp; docker compose -f infra/docker-compose.yml --profile s3 up -d --wait mariadb" />
+    <option name="INDEPENDENT_SCRIPT_PATH" value="true" />
+    <option name="SCRIPT_PATH" value="" />
+    <option name="SCRIPT_OPTIONS" value="" />
+    <option name="INDEPENDENT_SCRIPT_WORKING_DIRECTORY" value="true" />
+    <option name="SCRIPT_WORKING_DIRECTORY" value="$PROJECT_DIR$" />
+    <option name="INDEPENDENT_INTERPRETER_PATH" value="true" />
+    <option name="INTERPRETER_PATH" value="/bin/zsh" />
+    <option name="INTERPRETER_OPTIONS" value="" />
+    <option name="EXECUTE_IN_TERMINAL" value="false" />
+    <option name="EXECUTE_SCRIPT_FILE" value="false" />
+    <envs />
+    <method v="2" />
+  </configuration>
+</component>

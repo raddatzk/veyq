@@ -1,0 +1,53 @@
+useCase: uc.spaces.manage-group-members
+feature: spaces
+title: Manage a group's members (promote / demote / remove)
+# cr-0088 delivers roles (promote/demote) end-to-end + the remove/rotation backend + slice tests. cr-0089 lands
+# the web remove UI + the client-side rotation crypto (epoch-aware scope open + tree seal, the epoch chain-peel):
+# `epochs.test.ts` (chain peel), `scopes.test.ts::rotateGroupForRemoval` (mint + chain-link + re-grant, all
+# operator-blind ciphertext), `members.test.ts::removeGroupMember` (membership delete). The two-account
+# forward-secrecy LIVE smoke is tracked in cr-0089's definition of done.
+acceptanceCriteria:
+  - id: promote-demote
+    text: A GroupOwner promotes a member to co-owner (OWNER) or demotes a co-owner to MEMBER — a pure role change, no key move.
+    coverage:
+      backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard] }
+      web: { unit: [src/features/spaces/members.test.ts] }
+  - id: last-owner-guard
+    text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner).
+    coverage:
+      backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.removeMemberThenLastOwnerGuard] }
+  - id: remove-member
+    text: A GroupOwner removes a member → the membership is deleted (the group instantly reads as 404 to them, ADR 0042). A non-owner caller is rejected.
+    coverage:
+      backend: { integration: [ScopesSliceTest.removeMemberThenLastOwnerGuard] }
+      web: { unit: [src/features/spaces/members.test.ts] }
+  - id: membership-boundary-first
+    text: >
+      Membership is the first guard on every scope-addressed operation (ADR 0042, cr-0162): a caller who is not a
+      member of the group gets 404 scope_not_found — byte-identical to the answer for a group id that does not
+      exist — so group ids are not enumerable across the membership boundary. Capability refusals inside the
+      boundary stay 403 (not_key_holder for a grant-less member, not_scope_owner for a non-owner member), which
+      discloses nothing because that caller already knows the group exists.
+    coverage:
+      backend:
+        integration: [ScopesSliceTest.listEpochsSeparatesTheMembershipBoundaryFromTheKeyHolderCapability, ScopesSliceTest.addGroupMemberByANonMemberOfTheGroupIs404, OperatorBlindProbeTest.noScopeAddressedEndpointDistinguishesANonMemberFromANonExistentScope]
+  - id: remove-rotates-forward
+    text: Removal rotates the scope content key forward into a new epoch, re-granted only to the remaining members; new content seals under it, so the removed member reads pre-removal content but never post-removal content (even against a malicious operator). The client mints the epoch, chain-links the old one, and re-grants the survivors (cr-0089).
+    coverage:
+      backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/epochs.test.ts] }
+  - id: queued-rotation-backstop
+    text: >
+      A2 (no key-holder online to rotate): when the remover isn't a key-holder able to rotate synchronously, the
+      rotation is queued as a SCOPE_ROTATION job on the operator-blind task queue and the next online remaining
+      key-holder completes it on-device (mint E_{n+1} + re-grant survivors), idempotent + coalescing + first-online-
+      wins. The identical async backstop serves uc.spaces.remove-tenant-member A4 (a tenant owner cutting a co-shared
+      group they don't hold) — one mechanism, cr-0092.
+    coverage:
+      backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
+      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+  - id: operator-blind-rotation
+    text: The server sees only role/membership metadata + opaque epoch-chain links, per-member grants, and per-node epoch indices — never a key or a name. The client posts only ciphertext (the chain-link + per-member grants).
+    coverage:
+      backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }

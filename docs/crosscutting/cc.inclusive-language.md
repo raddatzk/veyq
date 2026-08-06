@@ -1,0 +1,52 @@
+# Cross-cutting: German inclusive language (neutral-first)
+
+- **ID:** cc.inclusive-language
+- **Applies to:** every **German user-facing** string — the `de` catalog in `web/src/i18n/index.ts` and the
+  published DE wiki (`wiki/de/*.md`). **English strings and code/identifiers are unaffected** — this is a
+  language convention for the German product voice only.
+
+## The rule — neutral-first
+
+German user-facing text must **not** use the **generic masculine** (or generic feminine) for a person who could
+be any gender. Prefer, in order:
+
+1. **Geschlechtsneutrale Umformulierung** — rephrase so no gendered person-noun is needed. This is the default and
+   almost always possible:
+   - **„die Person" / „jemanden" / „das Mitglied"** — „…für die Person gespeichert, der die Erinnerung gehört".
+   - **„wer …" / „alle, die …" / „andere"** — „Nur **wer** den Bereich besitzt, kann …", „für **alle, die** unsere
+     Datenbank stehlen", „Was dürfen **andere**?".
+   - **Plural / Partizip** — „Geduldige **Angreifende**" statt „ein geduldiger Angreifer"; „**Eingeladene
+     Personen**".
+   - **Rephrase away from a pronoun** when a possessive reads gendered — „…dass der Schlüssel wirklich **zu dieser
+     Person gehört**" statt „…wirklich **ihrer** ist".
+2. **Gender-Doppelpunkt `:innen` / `:r` / `:n`** — the accepted fallback **only** where a neutral rewrite is
+   genuinely awkward. Already established in the product (`jede:r im Browser`), so stay consistent with it; do not
+   introduce Binnen-I, Gendersternchen, or Unterstrich.
+
+**Never:** „der Nutzer", „ein anderer Nutzer", „der Besitzer", „die Besitzerin", „jeder, der …", „der Betreiber"
+for a generic person.
+
+## Specific decisions (this project)
+
+- **„Owner" is avoided entirely** in German. The role is expressed neutrally: **„wer … besitzt"**, **„die besitzende
+  Person"**, **„Besitz-…"** (e.g. „Besitz-Einladung"), **„Mitbesitz"** (co-owner). (English keeps `owner` as the
+  wire/role term; only the German voice avoids it.)
+- **„Betreiber" (operator) → „die Person, die … betreibt" / „die betreibende Person" / „wer … betreibt".**
+- **„Benutzername" is kept** — it is a fixed **credential label** (mirrors EN „Username"), not a gendered
+  person-reference. Do not swap it for „Nutzername" (keeps the gendered root) either; leave it.
+- **Grammatical neuter agreement with „Mitglied"** („es", „das Mitglied") is fine; but a possessive that reads
+  masculine („seine", „ihm") is rephrased to **„dieser Person" / „der Person"**.
+
+## What this means for you / Was das für dich bedeutet
+
+**EN —** The German version of veyq speaks to and about everyone the same way — it avoids wording that assumes a
+gender, in the app and in this wiki.
+
+**DE —** Die deutsche Version von veyq spricht alle gleich an — in der App und in diesem Wiki wird Sprache
+vermieden, die ein Geschlecht unterstellt.
+
+## Related
+
+- Working rule: [docs/ai/README.md](../ai/README.md) § *Language* (converse in the user's language; document +
+  implement in English; the `wiki/` EN+DE exception).
+- Built: cr-0112 (the first neutral-first sweep of the DE i18n catalog + the DE wiki pages).

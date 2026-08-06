@@ -1,0 +1,142 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../../../api/client', () => ({
+  accountApi: vi.fn(),
+  loginApi: vi.fn(),
+  tokenApi: vi.fn(),
+  sessionApi: vi.fn(),
+}))
+
+import { unlockMasterKey } from './unlock'
+import { accountApi, tokenApi } from '../../../api/client'
+import { ResponseError } from '../../../api/generated/account'
+import { isUnlocked, masterKey, identityPrivate, clearVault } from '../../../app/vault'
+import { session } from '../../../app/session'
+import * as v1 from '../../../shared/crypto/v1'
+import { b64std } from '../../../shared/base64'
+import { TEST_ARGON } from '../../../test/argon'
+
+const PASSWORD = 'correct horse battery'
+
+/** Build the exact server-stored material setup writes: a PASSWORD wrap (KEK = Argon2id(secretKey+password))
+ *  over the Master Key, plus the identity private key wrapped under that Master Key. Mirrors setupServer.ts.
+ *
+ *  The wrap carries TEST_ARGON in its `kdfParams` and the KEK is built with the same (see src/test/argon.ts).
+ *  Unlock re-derives from the params it finds ON THE WRAP (AD-25 crypto agility), so this is the real wire path
+ *  at a cheap cost — and a sharper assertion than production params: an unlock that ignored `kdfParams` and
+ *  hardcoded `v1.ARGON` would pass the production-params fixture and fail this one. */
+function buildMaterial(password: string) {
+  const id = v1.generateIdentity()
+  const masterKey = v1.randomBytes(32)
+  const wrappedPriv = v1.symWrap(masterKey, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
+
+  const secretKey = v1.randomBytes(32)
+  const salt = v1.randomBytes(16)
+  const kek = v1.kekPasswordSecret(secretKey, password, salt, TEST_ARGON)
+  const masterWrap = v1.symWrap(kek, masterKey, 'master-key', v1.randomBytes(12))
+
+  const material = {
+    suiteId: 'v1',
+    wraps: [
+      { method: 'PASSWORD', wrappedKey: b64std(masterWrap), kdfParams: b64std(v1.encodeKdfParams(TEST_ARGON, salt)) },
+      { method: 'RECOVERY', wrappedKey: b64std(masterWrap), kdfParams: b64std(v1.encodeKdfParams(TEST_ARGON, salt)) },
+    ],
+    wrappedIdentityPrivateKey: b64std(wrappedPriv),
+  }
+  return { material, id, masterKey, secretKey }
+}
+
+function mockMaterial(material: unknown) {
+  vi.mocked(accountApi).mockReturnValue({
+    getAccountKeyMaterial: () => Promise.resolve(material),
+  } as unknown as ReturnType<typeof accountApi>)
+}
+
+beforeEach(() => {
+  clearVault()
+  vi.clearAllMocks()
+  session.accessToken = null
+  session.refreshToken = null
+  session.familyId = null
+})
+
+describe('unlockMasterKey (uc.account.unlock)', () => {
+  it('opens the Master Key + identity private key with the right password and Secret Key', async () => {
+    const { material, id, masterKey: expectedMaster, secretKey } = buildMaterial(PASSWORD)
+    mockMaterial(material)
+
+    await unlockMasterKey(PASSWORD, b64std(secretKey))
+
+    expect(isUnlocked()).toBe(true)
+    // the unwrapped Master Key matches the one the wrap was built from
+    expect(masterKey()).toEqual(expectedMaster)
+    // and the identity private key round-trips (proves the Master Key actually opened the identity bundle)
+    expect(identityPrivate()).toEqual(id.priv)
+  })
+
+  it('hands out key copies so clearVault cannot corrupt a held reference (use-after-clear safety)', async () => {
+    const { material, masterKey: expectedMaster, secretKey } = buildMaterial(PASSWORD)
+    mockMaterial(material)
+    await unlockMasterKey(PASSWORD, b64std(secretKey))
+
+    const held = masterKey()!
+    clearVault() // zero-fills the vault's OWN buffer in place
+
+    // the previously returned copy still holds the real bytes, not zeroes
+    expect(held).toEqual(expectedMaster)
+  })
+
+  it('fails generically on a wrong password — no key material is held', async () => {
+    const { material, secretKey } = buildMaterial(PASSWORD)
+    mockMaterial(material)
+
+    await expect(unlockMasterKey('wrong password', b64std(secretKey))).rejects.toThrow()
+    expect(isUnlocked()).toBe(false)
+    expect(masterKey()).toBeNull()
+  })
+
+  it('fails generically on a wrong Secret Key — no key material is held', async () => {
+    const { material } = buildMaterial(PASSWORD)
+    mockMaterial(material)
+
+    await expect(unlockMasterKey(PASSWORD, b64std(v1.randomBytes(32)))).rejects.toThrow()
+    expect(isUnlocked()).toBe(false)
+    expect(masterKey()).toBeNull()
+  })
+
+  it('refreshes the session and retries on a 401 from the account client (cross-package ResponseError)', async () => {
+    // Regression: withRefresh must recognise a 401 thrown by the *account* generated client, whose
+    // ResponseError is a DIFFERENT class than the auth client's — an `instanceof` check on one is false for
+    // the other, which silently disabled the refresh-retry for unlock.
+    const { material, masterKey: expectedMaster, secretKey } = buildMaterial(PASSWORD)
+    session.refreshToken = 'r1'
+    let calls = 0
+    vi.mocked(accountApi).mockReturnValue({
+      getAccountKeyMaterial: () => {
+        calls += 1
+        return calls === 1
+          ? Promise.reject(new ResponseError({ status: 401 } as unknown as Response, 'unauthorized'))
+          : Promise.resolve(material)
+      },
+    } as unknown as ReturnType<typeof accountApi>)
+    vi.mocked(tokenApi).mockReturnValue({
+      refreshSession: () => Promise.resolve({ accessToken: 'a2', refreshToken: 'r2' }),
+    } as unknown as ReturnType<typeof tokenApi>)
+
+    await unlockMasterKey(PASSWORD, b64std(secretKey))
+
+    expect(calls).toBe(2) // first 401 → refresh → retry succeeded
+    expect(session.accessToken).toBe('a2') // tokens rotated by the refresh
+    expect(isUnlocked()).toBe(true)
+    expect(masterKey()).toEqual(expectedMaster)
+  })
+
+  it('fails when the account has no PASSWORD wrap (E2)', async () => {
+    const { material, secretKey } = buildMaterial(PASSWORD)
+    const noPassword = { ...material, wraps: material.wraps.filter((w) => w.method !== 'PASSWORD') }
+    mockMaterial(noPassword)
+
+    await expect(unlockMasterKey(PASSWORD, b64std(secretKey))).rejects.toThrow()
+    expect(isUnlocked()).toBe(false)
+  })
+})

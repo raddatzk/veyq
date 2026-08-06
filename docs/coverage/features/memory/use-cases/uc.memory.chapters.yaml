@@ -1,0 +1,40 @@
+useCase: uc.memory.chapters
+feature: memory
+title: Chapters — nested Memories inside a Memory (web)
+# cr-0060: chapters surfaced in the web client over the ready CHAPTER node model. The crux is the recursive
+# K_mem key model (ADR 0012, amended): every content node (MEMORY = CHAPTER) carries its own random K_mem,
+# wrapped under its parent's content key — so a chapter is a sharing unit without a re-encryption migration.
+# Sharing itself is out (#19). Backend already enforces the nesting; the data-path criteria carry backend +
+# web refs, the UI is web unit-tested, end-to-end is the cr-0060 smoke.
+acceptanceCriteria:
+  - id: chapter-own-recursive-kmem
+    text: A chapter carries its OWN random K_mem, wrapped under its parent Memory's K_mem (recursive K_mem, not the parent's key, not a derived key) — the server stores only the opaque wrap + node shape and never inspects it.
+    coverage:
+      backend:
+        integration: [NodesSliceTest.createTreeThenList]
+      web:
+        unit: [src/features/memory/tree.test.ts]
+  - id: resolve-key-down-chain
+    text: The client resolves a chapter's K_mem by walking the content-key chain from K_SC (folders transparent, Memory under K_SC, each nested chapter under its parent's K_mem); a wrong parent key cannot open it.
+    coverage:
+      web:
+        unit: [src/features/memory/tree.test.ts]
+  - id: chapter-crud-ui
+    text: A Memory shows its chapters (in a tabbed detail view — Gallery / Chapters, cr-0061); the user can add a chapter, open it to its own gallery, and rename/delete it (chapters live only inside a Memory — folders/root browse, openable nodes render the detail gallery).
+    coverage:
+      web:
+        unit:
+          - src/features/memory/components/MemoryDetail.test.ts
+          - src/features/memory/browse.test.ts
+  - id: media-under-chapter-key
+    text: Media uploaded into a chapter is sealed under the chapter's OWN K_mem (K_blob wrapped under the direct parent node's key), so the chapter is independently openable/shareable — operator-blind.
+    coverage:
+      web:
+        unit: [src/features/memory/media.test.ts]
+  - id: sharing-prepared-not-built
+    text: Every content node is a sharing unit by construction (its K_mem is independently re-wrappable), but no sharing UI/flow is built here — only the key layout that makes per-chapter sharing possible later without re-encrypting media.
+    coverage:
+      backend:
+        integration: [NodesSliceTest.createTreeThenList]
+      web:
+        unit: [src/features/memory/tree.test.ts]

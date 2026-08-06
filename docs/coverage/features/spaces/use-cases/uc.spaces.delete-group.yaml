@@ -1,0 +1,29 @@
+useCase: uc.spaces.delete-group
+feature: spaces
+title: Delete a group (soft-delete, grace period, restore)
+# cr-0090 delivers the lifecycle end-to-end: backend (V26 deleted_at, delete/restore, the read-only guard, the
+# scheduled ScopePurge with blob-object erasure) + the web danger-zone/banner/restore + data layer. The
+# two-account LIVE smoke (owner deletes → members still view but marked → restore → purge) is tracked in the CR.
+acceptanceCriteria:
+  - id: soft-delete
+    text: A GroupOwner soft-deletes a GROUP → pending-deletion (deletedAt + a 30-day purgeAfter); grants/memberships untouched. Owner-gated (403), non-group rejected (409), idempotent (409).
+    coverage:
+      backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace, ScopesSliceTest.deleteRestoreGuards] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: grace-read-only-viewable
+    text: During the grace window the group stays listed + readable but read-only (create/update/delete node rejected 409 scope_deleting) and carries deletedAt/purgeAfter so the client marks it.
+    coverage:
+      backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace] }
+  - id: restore
+    text: Any owner restores while pending + in-window → fully active again (marker cleared). Restore of an active group is 409 not_deleted; a hard-purged scope is 404.
+    coverage:
+      backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace, ScopesSliceTest.deleteRestoreGuards] }
+      web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: hard-purge-erases
+    text: At purgeAfter the scheduled job hard-erases the scope — its nodes + blob objects + memberships + epoch links + the scope row; a not-yet-expired pending scope is left untouched.
+    coverage:
+      backend: { integration: [ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes] }
+  - id: operator-blind-purge
+    text: The server only flips a lifecycle timestamp and, at purge, deletes ciphertext rows + blob objects — never a key or a name (erasure the blind server may perform, unlike a removal's rotation).
+    coverage:
+      backend: { integration: [ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes] }

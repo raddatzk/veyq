@@ -1,0 +1,311 @@
+package com.veyq.app.shared.config
+
+import io.smallrye.config.ConfigMapping
+import io.smallrye.config.WithDefault
+import java.time.Duration
+import java.util.Optional
+
+/**
+ * The single typed model of the project-owned `veyq.*` configuration (styleguide §8, audit P3c / cr-0134).
+ * Replaces the ~28 scattered per-value `@ConfigProperty` injections with one `@ConfigMapping` so every knob is
+ * discoverable in one place, typed, and defaulted here rather than repeated at each injection site.
+ *
+ * Property names are derived from the method path in kebab-case, so `tasks().maxAttempts()` ⇒
+ * `veyq.tasks.max-attempts`. Values still come from `application.properties` (+ `%dev`/`%test` overrides); the
+ * `@WithDefault`s mirror those files and the previous annotation defaults — they are the fallback when a key is
+ * absent, not a second source of truth.
+ *
+ * Framework config (`quarkus.*`, `mp.jwt.*`, …) stays on direct injection (styleguide §8) and is not modeled here.
+ *
+ * The `*.purge.every` / `*.reconcile.every` intervals are consumed by the sibling `@Scheduled(every = "{…}")`
+ * beans as raw property expressions (a `@Scheduled` string cannot read a mapping), but they are declared here too
+ * so this interface stays the complete inventory of `veyq.*`.
+ */
+@ConfigMapping(prefix = "veyq")
+interface VeyqConfig {
+    fun version(): Version
+    fun capabilities(): Capabilities
+    fun tenant(): Tenant
+    fun session(): Session
+    fun recovery(): Recovery
+    fun scope(): Scope
+    fun media(): Media
+    fun blob(): Blob
+    fun blobStore(): BlobStore
+    fun tasks(): Tasks
+    fun ratelimit(): RateLimit
+    fun share(): Share
+    fun security(): Security
+
+    /** A scheduled cleanup interval (`*.purge.every` / `*.reconcile.every`); read by the `@Scheduled` sibling. */
+    interface Interval {
+        @WithDefault("1h")
+        fun every(): Duration
+    }
+
+    interface Version {
+        /** Hard compatibility-gate major version. */
+        @WithDefault("1")
+        fun major(): Int
+
+        /** Informational build version. */
+        @WithDefault("1")
+        fun build(): Int
+    }
+
+    interface Capabilities {
+        /** Operator off-switch: capability ids to disable (absent ⇒ all enabled). */
+        fun disabled(): Optional<List<String>>
+    }
+
+    interface Tenant {
+        fun invite(): Invite
+
+        interface Invite {
+            /** Owner-invite validity window. */
+            @WithDefault("P7D")
+            fun ttl(): Duration
+
+            /** How long terminal (accepted/expired) invites are kept before purge. */
+            @WithDefault("P30D")
+            fun retention(): Duration
+
+            /** Dev-only JSONL sink for invite links (absent in prod). */
+            fun devFile(): Optional<String>
+
+            fun purge(): Interval
+        }
+    }
+
+    interface Session {
+        fun cookie(): Cookie
+        fun purge(): Interval
+
+        interface Cookie {
+            /** `Secure` attribute on the refresh cookie (off in `%dev`/`%test`). */
+            @WithDefault("true")
+            fun secure(): Boolean
+        }
+    }
+
+    /** Password recovery (ADR 0054) — one-time token lifetimes. */
+    interface Recovery {
+        fun token(): Token
+        fun purge(): Interval
+
+        interface Token {
+            /** Recovery-link validity. Much shorter than an invite's: it is redeemed at the mailbox, not later. */
+            @WithDefault("PT1H")
+            fun ttl(): Duration
+
+            /** How long spent/expired rows are kept, so a replay reads as spent rather than unknown. */
+            @WithDefault("P7D")
+            fun retention(): Duration
+        }
+    }
+
+    interface Scope {
+        fun delete(): Delete
+
+        interface Delete {
+            /** Group soft-delete grace window before the hard purge. */
+            @WithDefault("P30D")
+            fun retention(): Duration
+
+            fun purge(): Interval
+        }
+    }
+
+    interface Media {
+        fun trash(): Trash
+
+        interface Trash {
+            /** Trashed-media restorable window before the hard purge. */
+            @WithDefault("P30D")
+            fun retention(): Duration
+
+            fun purge(): Interval
+        }
+    }
+
+    interface Blob {
+        /** Per-blob declared byte cap. */
+        @WithDefault("2147483648")
+        fun maxBytes(): Long
+
+        /** Per-blob declared chunk cap. */
+        @WithDefault("100000")
+        fun maxChunks(): Int
+    }
+
+    interface BlobStore {
+        /** Internal S3 endpoint (blank/absent fails startup — media is not gracefully degraded). */
+        fun endpoint(): Optional<String>
+
+        /** Client-reachable URL used purely to SIGN presigned URLs (blank ⇒ endpoint). */
+        fun publicEndpoint(): Optional<String>
+
+        fun accessKey(): Optional<String>
+
+        fun secretKey(): Optional<String>
+
+        @WithDefault("veyq")
+        fun bucket(): String
+
+        @WithDefault("us-east-1")
+        fun region(): String
+
+        @WithDefault("600")
+        fun presignTtlSeconds(): Int
+    }
+
+    interface Tasks {
+        fun lease(): Lease
+
+        /** Max attempts before a job is dead-lettered. */
+        @WithDefault("5")
+        fun maxAttempts(): Int
+
+        fun grantDelivery(): GrantDelivery
+
+        interface Lease {
+            /** Lease TTL granted on job claim. */
+            @WithDefault("PT5M")
+            fun ttl(): Duration
+        }
+
+        interface GrantDelivery {
+            fun reconcile(): Interval
+        }
+    }
+
+    /** `veyq.ratelimit.*` — the boundary rate limiters. Values live here, never in an annotation: the
+     *  `@RateLimit(key)` posture (ADR 0051) declares the *axis* so a self-hosted instance can still tune the
+     *  *numbers* ([invariant] self-hostable). */
+    interface RateLimit {
+        /** `veyq.ratelimit.auth.*` — the per-IP bound. The prefix is historical (it began as the auth-only
+         *  limiter); the bound is `@RateLimit(key = IP)` wherever it is declared. Renaming it would break every
+         *  self-hosted instance's config file for no behavioural gain, so it stays. */
+        fun auth(): Auth
+
+        /** `veyq.ratelimit.user.*` — the per-principal bound for `@RateLimit(key = USER)`. Deliberately generous:
+         *  an authenticated caller is attributable and revocable, so this bounds runaway automation, not abuse. */
+        fun user(): User
+
+        /** `veyq.ratelimit.invite.*` — the member-invite mail limiter (cr-email-invite-send-hardening): the real
+         *  anti-bombing guard, keyed per-(tenant,recipient) AND per-tenant, applied in the handler before the mint.
+         *  Defaults are **deliberately set, not empirically calibrated — revidierbar**: 3 per recipient / 20 per
+         *  tenant, per hour. */
+        fun invite(): Invite
+
+        /** `veyq.ratelimit.recovery.*` — the password-recovery limiter (cr-account-recovery, ADR 0054), keyed
+         *  per-ADDRESS and per-INSTANCE. Deliberately not per-tenant like [invite]: an account is tenant-global,
+         *  so a tenant key would bound neither one address nor the instance. Defaults deliberately set. */
+        fun recovery(): Recovery
+
+        interface Recovery {
+            /** The anti-bombing guard: recovery mails one **address** may trigger per window. */
+            @WithDefault("3")
+            fun perAddressMaxRequests(): Int
+
+            /** The volume cap against a scraper walking a list of addresses. */
+            @WithDefault("60")
+            fun perInstanceMaxRequests(): Int
+
+            @WithDefault("3600")
+            fun windowSeconds(): Long
+        }
+
+        interface Auth {
+            @WithDefault("60")
+            fun maxRequests(): Long
+
+            @WithDefault("60")
+            fun windowSeconds(): Long
+        }
+
+        interface User {
+            @WithDefault("600")
+            fun maxRequests(): Long
+
+            @WithDefault("60")
+            fun windowSeconds(): Long
+        }
+
+        interface Invite {
+            /** The tighter, primary guard: how many invites one tenant may send to the **same recipient** per window. */
+            @WithDefault("3")
+            fun perRecipientMaxRequests(): Int
+
+            /** The volume cap against an owner-as-sender: total invites a **tenant** may send per window. */
+            @WithDefault("20")
+            fun perTenantMaxRequests(): Int
+
+            @WithDefault("3600")
+            fun windowSeconds(): Long
+        }
+    }
+
+    /** `veyq.security.*` — operator-side security knobs. */
+    interface Security {
+        /** Path to the file holding the base64 32-byte KEK that seals server-held config secrets at rest
+         *  ([ADR 0050](../../../../../../../docs/decisions/0050-operator-config-secret-encryption.md) amendment).
+         *  The server **generates and manages** this file on first start (`0600`, base64 32-byte key) if it does
+         *  not exist; an operator supplying their own key mounts it and points this at it (the K8s/Docker-secret
+         *  shape). Default `config-secret.key` (relative to the process CWD) — put it on a **persisted volume** in
+         *  a container, else every recreate loses the key (the DB fingerprint tripwire then flags it loudly). The
+         *  old env **value** `veyq.security.config-secret-key` is gone. */
+        @WithDefault("config-secret.key")
+        fun configSecretFile(): String
+    }
+
+    /** `veyq.share.upload.rate.*` — the uploader-link rate limiter. */
+    interface Share {
+        fun upload(): Upload
+
+        /** cr-0165: the brute-force bound on wrong share-password attempts (per share, per window). Distinct budget
+         *  from [upload] — an order of magnitude tighter, since a password guess is an attack and an upload is not. */
+        fun password(): Password
+
+        /** `veyq.share.identity.rate.*` — the bound on anonymous contributor-identity creation, the one guest call
+         *  that writes a row before any upload exists. A real guest names itself **once** per share, so this is
+         *  deliberately much tighter than [upload] and still far above honest traffic. */
+        fun identity(): Identity
+
+        interface Upload {
+            fun rate(): Rate
+
+            interface Rate {
+                @WithDefault("300")
+                fun maxPerWindow(): Int
+
+                @WithDefault("60")
+                fun windowSeconds(): Long
+            }
+        }
+
+        interface Identity {
+            fun rate(): Rate
+
+            interface Rate {
+                @WithDefault("30")
+                fun maxPerWindow(): Int
+
+                @WithDefault("3600")
+                fun windowSeconds(): Long
+            }
+        }
+
+        interface Password {
+            fun rate(): Rate
+
+            interface Rate {
+                @WithDefault("10")
+                fun maxPerWindow(): Int
+
+                @WithDefault("60")
+                fun windowSeconds(): Long
+            }
+        }
+    }
+}

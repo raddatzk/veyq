@@ -1,0 +1,61 @@
+{
+  "name": "veyq-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "typecheck": "vue-tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "mutation": "stryker run stryker.config.mjs",
+    "prepare": "npm run generate:api",
+    "seed:dev": "npx tsx scripts/seed-dev.mts",
+    "bootstrap:user": "npx tsx scripts/bootstrap-user.mts",
+    "generate:api": "openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/setup.openapi.yaml -o src/api/generated --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/auth.openapi.yaml -o src/api/generated/auth --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/account.openapi.yaml -o src/api/generated/account --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/tenants.openapi.yaml -o src/api/generated/tenants --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/scopes.openapi.yaml -o src/api/generated/scopes --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/content.openapi.yaml -o src/api/generated/content --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/media.openapi.yaml -o src/api/generated/media --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/tasks.openapi.yaml -o src/api/generated/tasks --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/sharing.openapi.yaml -o src/api/generated/sharing --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false",
+    "verify:no-backdoor": "node scripts/assert-no-dev-backdoor-in-dist.mjs",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run verify:no-backdoor"
+  },
+  "//overrides": "qs: @stryker-mutator/core -> typed-rest-client@2.3.1 pins qs at EXACTLY 6.15.1, which carries GHSA-q8mj-m7cp-5q26 (qs.stringify DoS). That exact pin — not a range — is why `npm audit fix` cannot resolve it without --force. The vulnerable path is unreachable here (typed-rest-client only serves Stryker's dashboard reporter, which stryker.config.mjs does not enable), but a knowingly-vulnerable dependency is not something we keep. Drop this override once typed-rest-client ships qs >= 6.15.2.",
+  "overrides": {
+    "qs": "^6.15.2"
+  },
+  "dependencies": {
+    "@noble/ciphers": "^2.2.0",
+    "@noble/curves": "^2.2.0",
+    "@noble/hashes": "^2.2.0",
+    "@noble/post-quantum": "^0.6.1",
+    "@primeuix/themes": "^2.0.3",
+    "exifr": "^7.1.3",
+    "jspdf": "^4.2.1",
+    "jsqr": "^1.4.0",
+    "leaflet": "^1.9.4",
+    "primeicons": "^7.0.0",
+    "primevue": "^4.5.5",
+    "qrcode": "^1.5.4",
+    "vue": "^3.5.35",
+    "vue-i18n": "^10.0.8",
+    "vue-router": "^5.1.0"
+  },
+  "devDependencies": {
+    "@openapitools/openapi-generator-cli": "^2.34.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^22.0.0",
+    "@types/qrcode": "^1.5.6",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-typescript": "^14.9.0",
+    "@vue/test-utils": "^2.4.10",
+    "eslint": "^10.7.0",
+    "eslint-plugin-vue": "^10.9.2",
+    "fake-indexeddb": "^6.2.5",
+    "happy-dom": "^20.9.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.63.0",
+    "vite": "^8.0.14",
+    "vitest": "^4.1.7",
+    "vue-tsc": "^3.3.2"
+  }
+}

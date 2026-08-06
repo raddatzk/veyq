@@ -1,0 +1,154 @@
+:root {
+  --app-bg: #f7f8fb;
+  --app-surface: #ffffff;
+  --app-surface-muted: #f4f6fb;
+  --app-text: #111827;
+  --app-muted: #667085;
+  --app-line: #dce2ec;
+  --app-accent: #5b4df5;
+  --app-accent-soft: #f0eeff;
+  --app-favorite: color-mix(in srgb, var(--app-accent) 45%, #e11d48);
+  --app-success: #0f766e;
+  --app-success-strong: #115e59;
+  --app-success-soft: #ecfdf5;
+  --app-success-line: #bbf7d0;
+  --app-success-text: #166534;
+  --app-warning: #facc15;
+  --app-warning-soft: #fffbeb;
+  --app-warning-line: #fde68a;
+  --app-warning-text: #92400e;
+  --app-danger: #b42318;
+  --app-danger-strong: #b91c1c;
+  --app-danger-soft: #fef2f2;
+  --app-danger-line: #fecaca;
+  --app-info: #2563eb;
+  --app-info-soft: #eef4ff;
+  --app-info-line: #9db7f8;
+  --app-info-text: #1e3a8a;
+  --app-hover: #f3f5fa;
+  --app-overlay: rgba(255, 255, 255, 0.9);
+  --app-focus: #2563eb;
+  --app-focus-ring: color-mix(in srgb, var(--app-focus) 34%, transparent);
+  --app-on-strong: #fff;
+  --app-control-bg: #f8fafc;
+  --app-control-text: #334155;
+  --app-backdrop-strong: #0f172a;
+  --app-radius: 12px;
+  --app-radius-sm: 10px;
+  --app-shadow-sm: 0 1px 2px rgb(15 23 42 / 0.06);
+  --app-shadow-md: 0 14px 40px rgb(15 23 42 / 0.08);
+  --app-shadow-card: 0 1px 2px rgb(15 23 42 / 0.08), 0 6px 18px rgb(15 23 42 / 0.04);
+  --app-background-pattern:
+    radial-gradient(circle at 18% 12%, rgba(91, 77, 245, 0.13), transparent 28rem),
+    radial-gradient(circle at 82% 24%, rgba(14, 165, 233, 0.1), transparent 30rem),
+    var(--app-bg);
+  --app-background-pattern-subtle:
+    radial-gradient(circle at 20% 8%, rgba(91, 77, 245, 0.055), transparent 38rem),
+    radial-gradient(circle at 84% 22%, rgba(14, 165, 233, 0.052), transparent 42rem),
+    var(--app-bg);
+  --app-chrome-pattern:
+    linear-gradient(rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.84)),
+    radial-gradient(circle at 12% 8%, rgba(91, 77, 245, 0.16), transparent 18rem),
+    radial-gradient(circle at 88% 18%, rgba(14, 165, 233, 0.13), transparent 20rem),
+    var(--app-bg);
+  --app-sidebar-width: 304px;
+  --app-topbar-height: 72px;
+  color-scheme: light;
+}
+
+:root.veyq-dark {
+  --app-bg: #101418;
+  --app-surface: #171c22;
+  --app-surface-muted: #20262e;
+  --app-text: #eef3f8;
+  --app-muted: #9aa7b5;
+  --app-line: #333d49;
+  --app-accent: #9b8cff;
+  --app-accent-soft: #2a2541;
+  --app-favorite: color-mix(in srgb, var(--app-accent) 45%, #e11d48);
+  --app-success: #2dd4bf;
+  --app-success-strong: #5eead4;
+  --app-success-soft: #132b21;
+  --app-success-line: #14532d;
+  --app-success-text: #86efac;
+  --app-warning: #facc15;
+  --app-warning-soft: #2f2413;
+  --app-warning-line: #713f12;
+  --app-warning-text: #fde68a;
+  --app-danger: #f87171;
+  --app-danger-strong: #fca5a5;
+  --app-danger-soft: #3b1d24;
+  --app-danger-line: #7f1d1d;
+  --app-info: #67e8f9;
+  --app-info-soft: #1d3340;
+  --app-info-line: #155e75;
+  --app-info-text: #67e8f9;
+  --app-hover: #242b34;
+  --app-overlay: rgba(23, 28, 34, 0.92);
+  --app-focus: #93c5fd;
+  --app-focus-ring: color-mix(in srgb, var(--app-focus) 42%, transparent);
+  --app-on-strong: #fff;
+  --app-control-bg: #20262e;
+  --app-control-text: #eef3f8;
+  --app-backdrop-strong: #0b0f14;
+  --app-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.26);
+  --app-shadow-md: 0 18px 50px rgb(0 0 0 / 0.34);
+  --app-shadow-card: 0 1px 2px rgb(0 0 0 / 0.26), 0 6px 18px rgb(0 0 0 / 0.2);
+  --app-background-pattern:
+    radial-gradient(circle at 18% 12%, rgba(155, 140, 255, 0.16), transparent 28rem),
+    radial-gradient(circle at 82% 24%, rgba(45, 212, 191, 0.08), transparent 30rem),
+    var(--app-bg);
+  --app-background-pattern-subtle:
+    radial-gradient(circle at 20% 8%, rgba(155, 140, 255, 0.095), transparent 38rem),
+    radial-gradient(circle at 84% 22%, rgba(45, 212, 191, 0.055), transparent 42rem),
+    var(--app-bg);
+  --app-chrome-pattern:
+    linear-gradient(rgba(23, 28, 34, 0.86), rgba(23, 28, 34, 0.86)),
+    radial-gradient(circle at 12% 8%, rgba(155, 140, 255, 0.15), transparent 18rem),
+    radial-gradient(circle at 88% 18%, rgba(45, 212, 191, 0.08), transparent 20rem),
+    var(--app-bg);
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --p-focus-ring-color: var(--app-focus) !important;
+  --p-form-field-focus-border-color: var(--app-focus) !important;
+  --p-form-field-focus-ring-color: var(--app-focus) !important;
+  --p-button-primary-focus-ring-color: var(--app-focus) !important;
+  --p-button-secondary-focus-ring-color: var(--app-focus) !important;
+  --p-button-success-focus-ring-color: var(--app-focus) !important;
+  --p-button-info-focus-ring-color: var(--app-focus) !important;
+  --p-button-warn-focus-ring-color: var(--app-focus) !important;
+  --p-button-help-focus-ring-color: var(--app-focus) !important;
+  --p-button-danger-focus-ring-color: var(--app-focus) !important;
+  --p-button-contrast-focus-ring-color: var(--app-focus) !important;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  overflow-x: clip;
+  font-family: Inter, 'Avenir Next', 'Segoe UI', sans-serif;
+  background: var(--app-bg);
+  color: var(--app-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.small-spinner {
+  width: 28px;
+  height: 28px;
+}

@@ -1,0 +1,1241 @@
+openapi: 3.1.0
+info:
+  title: veyq Sharing API
+  version: 0.1.0
+  description: >
+    Public **viewer** shares of a single Memory (uc.sharing.share-public-viewer, cr-0100,
+    [ADR 0029](../../docs/decisions/0029-public-viewer-share.md)). A curator turns **one of their own
+    personal-scope Memories** into a **read-only, anonymous, revocable** link `/s/{shareId}#k=<K_share>`. The
+    share adds an **independent second wrap** of that Memory's content key — `symWrap(K_share, K_mem)`
+    ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)) — whose secret `K_share` rides the **URL
+    fragment** ([ADR 0015](../../docs/decisions/0015-operator-blind-readable-urls.md)) and **never reaches the
+    server**.
+
+    **Operator-blind.** The server stores only the opaque `shareId` (256-bit unguessable), the wrap, the
+    plaintext `role`, the Memory name **re-sealed under `K_share`**, and the shared `nodeId`. It never sees
+    `K_share`, `K_mem`, any name, the viewer, or — because blobs are fetched direct-from-store via presigned
+    GETs — which media a viewer opens.
+
+    **Two authorization surfaces.** Curator management (`create` / `list` / `revoke`) is **authenticated**
+    (`bearerAuth`) and gated to a **personal-scope** Memory the caller owns. The guest **resolve** + **gated
+    blob GET** are **unauthenticated** — a parallel authz path keyed on share state (`enabled` + `expiresAt`),
+    never a relaxed scope filter. Both `shareId` **and** the fragment key are required: the id alone is inert
+    (the wrap can't be opened without `K_share`), an unknown/disabled/expired id is a non-enumerable `404`.
+
+    Authorization is enforced by code (ADR 0008); field validation via `x-field-extra-annotation`. `K_share`
+    never appears in this spec — it lives only in the URL fragment (base64url, client-side).
+tags:
+  - name: sharing
+    description: >
+      Public viewer shares — the curator's create/list/revoke (authenticated) plus the anonymous guest
+      resolve + gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
+      `/api/shares` subtree.
+
+paths:
+  /api/shares:
+    post:
+      tags: [sharing]
+      operationId: createShare
+      summary: Create a public share of a Memory the caller is a member of (any scope).
+      description: >
+        The client generates a fresh 32-byte `K_share`, computes `wrap = symWrap(K_share, K_mem)`, re-seals the
+        Memory name under `K_share`, and POSTs `{ nodeId, role, wrap, sealedName, expiresAt? }` — `role` is
+        **VIEWER** (read-only) or **CONTRIBUTOR** (view + append photos, cr-0101). The server verifies the caller
+        is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a non-MEMORY node
+        is rejected `422`, a non-member is a non-enumerable `404`. It mints a **256-bit unguessable `shareId`** and
+        stores the record opaquely. The link is `/s/{shareId}#k=base64url(K_share)` —
+        the fragment (`K_share`) is built client-side and never sent.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShareRequest" }
+            example:
+              nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+              role: VIEWER
+              wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+              sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+              expiresAt: null
+      responses:
+        "201":
+          description: The share was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareCreated" }
+              example: { shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
+        "400":
+          description: Malformed request (missing/invalid fields).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such node, or the caller is not a member of its scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "422":
+          description: >
+            Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
+            (`sharing.public-links` for VIEWER/CONTRIBUTOR, `sharing.uploader-links` for UPLOADER) is disabled
+            instance-wide, so the operator has turned public sharing off (ADR 0032; checked first, before any
+            scope check, so it reads as instance policy not a scope error); `illegal_scope` — the node is not a
+            **MEMORY** (only a Memory can be shared; a non-member scope is a non-enumerable `404`, not `422`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
+    get:
+      tags: [sharing]
+      operationId: listShares
+      summary: List shares — the caller's own, or (with nodeId) every member's on one Memory.
+      description: >
+        Without `nodeId`: every share the authenticated caller created. With `nodeId`: **every** share on that
+        Memory node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can see
+        and adopt an orphaned (disabled) share on a shared Memory. Each row carries `mine` (owned by the caller).
+        Operator-blind: the row carries no plaintext name or content; a non-member / unknown node yields `[]`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: nodeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Scope the listing to one Memory node — returns all its shares visible to a scope member.
+      responses:
+        "200":
+          description: The caller's shares.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ShareSummary" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+
+  /api/shares/{shareId}/revoke:
+    post:
+      tags: [sharing]
+      operationId: revokeShare
+      summary: Revoke a share (soft — the next guest request 404s).
+      description: >
+        Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — a
+        missing/already-disabled share the caller owns still returns 204. Soft (L1) revocation: already-
+        downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "204":
+          description: The share is disabled (or was already gone).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such share owned by the caller.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
+  /api/shares/{shareId}/reactivate:
+    post:
+      tags: [sharing]
+      operationId: reactivateShare
+      summary: Re-activate a soft-revoked share and adopt its ownership.
+      description: >
+        Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller — for a share
+        auto-deactivated when its creator was removed from the scope (cr-0104, ADR 0029 §6). Any **current member**
+        of the share's scope may adopt it; the link resolves again (its `#k=K_share` fragment is unchanged), now
+        owned by the caller. Idempotent for a share the caller may already adopt.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "204":
+          description: The share is enabled and now owned by the caller.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such share, or the caller is not a member of its scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
+  /api/shares/{shareId}:
+    get:
+      tags: [sharing]
+      operationId: resolveShare
+      summary: Resolve a share (unauthenticated) → the sealed Memory subtree.
+      description: >
+        **No auth.** Returns the `role`, the `wrap` (`symWrap(K_share, K_mem)`), the `sealedName`, and the
+        **sealed subtree** rooted at the shared node — every node (for the `K_mem` chain) and every media
+        (metadata + blob refs), all still sealed under `K_mem`. The viewer unwraps `K_mem` with the fragment
+        key, derives each descendant's `K_mem` from `wrappedContentKey`, and decrypts names / metadata / blob
+        keys **locally**. A disabled, expired, or unknown share is a non-enumerable `404` (same shape in every
+        case). Without the fragment key the response is inert — the wrap cannot be opened.
+        **Password-protected shares (cr-0118, ADR 0037):** with **no** `X-Share-Password` the response is
+        **locked** — only `passwordRequired` + `pwSalt` (no `wrap`/`sealedName`/subtree); the client prompts,
+        derives the token, and re-resolves with the header. A **wrong** token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      responses:
+        "200":
+          description: The share record + its sealed Memory subtree (opaque; still under `K_mem`) — or a locked shell when a password is required and none/valid-token was given.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PublicShare" }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share, or it is disabled/expired (non-enumerable — identical in every case).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+    patch:
+      tags: [sharing]
+      operationId: updateShare
+      summary: Edit a share in place — note / name / role (owner-gated).
+      description: >
+        Edits an existing share **without minting a new link** (cr-0115/cr-0116/cr-0119, ADR 0036). Sets the
+        `K_share`-sealed **note** (`sealedNote`) + **private name** (`sealedShareName`) — the caller recovers
+        `K_share` from the share's `sealedShareKey` (`symWrap(K_mem, K_share)`, which they hold `K_mem` for),
+        re-seals them, and PATCHes them (null/blank clears a field). Optionally changes the **`role`** in place
+        (cr-0119) — a plaintext authorization change, no re-crypto, **VIEWER ↔ CONTRIBUTOR** only (UPLOADER →
+        `422`). Owner-gated: only the share's `owner_account` may edit — a share not owned by the caller is a
+        non-enumerable `404` (like revoke). Operator-blind: opaque ciphertext in, opaque ciphertext out; no key
+        crosses the boundary.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateShareRequest" }
+            example: { sealedNote: c2VhbGVkLW5vdGUtdjI= }
+      responses:
+        "204":
+          description: The share was updated (note / name / role).
+        "400":
+          description: Malformed request (invalid note encoding).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such share owned by the caller (non-enumerable).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "422":
+          description: >
+            An illegal role change (cr-0119) — `role = UPLOADER`, or a role change on a share whose current role is
+            UPLOADER. The write-only drop-box is a separate action and its role is not editable in place.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
+
+  /api/shares/{shareId}/terms:
+    get:
+      tags: [sharing]
+      operationId: getShareTerms
+      summary: The owning tenant's terms for an accountless visitor to accept (unauthenticated).
+      description: >
+        **No auth.** The accountless half of the two-tier terms gate (uc.sharing.share-accept,
+        [ADR 0035](../../docs/decisions/0035-server-terms-of-service.md) §3). Returns the **owning tenant's**
+        public terms so an accountless share visitor can accept them **client-side** before viewing/contributing —
+        `{ tenantId, termsVersion, terms }`. The terms are **public operational content, never E2EE**; `tenantId`
+        is opaque metadata (the caller's localStorage key), only **returned**, never passed in — so this adds **no
+        `tenantId` existence oracle**. Keyed on the already non-enumerable `shareId`: it reuses the share's
+        `activeShare()` gate, so an unknown / disabled / expired share is the **same non-enumerable 404** as
+        `resolveShare`. Independent of the share password (terms are public — **no** `X-Share-Password`). The server
+        records **nothing** about the accountless visitor: acceptance is client-only, no acceptance is written here.
+        A tenant with no published terms returns `termsVersion: 0` (`terms` null) — the client never gates.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "200":
+          description: The owning tenant's current public terms (or version 0 / null when the operator has published none).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareTerms" }
+              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsVersion: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
+        "404":
+          description: No such share, or it is disabled/expired (non-enumerable — identical in every case, like `resolveShare`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
+  /api/shares/{shareId}/blobs/{blobId}:
+    get:
+      tags: [sharing]
+      operationId: resolveShareBlob
+      summary: Gated presigned GET for a blob under the share (unauthenticated).
+      description: >
+        **No auth.** Authorizes the read **iff the blob is attached under the shared subtree** — a structural
+        check on opaque ids (the original/derivative blob of a media on the shared node or a descendant, or a
+        node's standalone cover blob). On success returns one short-TTL presigned **GET** URL per chunk; the
+        viewer fetches the ciphertext **directly from the object store** and opens it with `openFrame`, so the
+        operator never learns which media a viewer opens. A disabled/expired share, an unknown blob, or a blob
+        outside the shared subtree is a non-enumerable `404`. The in-memory dev store cannot presign (`503`).
+        For a **password-protected** share the valid `X-Share-Password` token is required too (cr-0118, ADR 0037) —
+        a missing token is `404` (non-enumerable, like an out-of-subtree blob), a wrong token is `403`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/BlobId"
+        - $ref: "#/components/parameters/SharePassword"
+      responses:
+        "200":
+          description: One presigned GET URL per chunk, in chunk order.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareBlobDownload" }
+        "403":
+          description: The share is password-protected and the presented `X-Share-Password` token is wrong (cr-0118).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
+        "404":
+          description: No such share (disabled/expired/unknown), the blob is not under the shared subtree, or a required password token is absent.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "503":
+          description: The configured object store cannot presign (e.g. the in-memory dev store).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/shares/{shareId}/identities:
+    post:
+      tags: [sharing]
+      operationId: createShareIdentity
+      summary: Name yourself as a contributor (unauthenticated) → an anonymous share identity.
+      description: >
+        **No auth.** For a **CONTRIBUTOR** share (cr-0101, ADR 0030), before uploading the visitor must name
+        themselves. The client **seals the display name under `K_mem`** (which it unwrapped from the fragment key)
+        and POSTs the ciphertext; the server mints an anonymous **share identity** — an opaque `identityId` + an
+        unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. The server stores
+        only the sealed name (opaque) + the token hash + the `shareId`; it never sees the name or the person. A
+        disabled/expired/unknown share, or a non-CONTRIBUTOR share, is a `404`/`403`.
+        **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
+        with **no** `X-Share-Password` the share is a non-enumerable `404`; a **wrong** token → `403
+        share_password_incorrect`. A guest names themselves only after presenting the password.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateShareIdentityRequest" }
+            example: { sealedDisplayName: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0= }
+      responses:
+        "201":
+          description: The anonymous share identity was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareIdentityCreated" }
+              example: { identityId: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl }
+        "400":
+          description: Malformed request (missing/invalid fields).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share does not allow contributions (not a CONTRIBUTOR share — `share_not_contributable`), or it is password-protected and the presented `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable, identical in every case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
+  /api/shares/{shareId}/blob-uploads:
+    post:
+      tags: [sharing]
+      operationId: startShareBlobUploads
+      summary: Start contributor blob uploads (unauthenticated) — reserve sessions + presign PUTs.
+      description: >
+        **No auth.** The share-scoped mirror of `startBlobUploads` (media API) for a **CONTRIBUTOR** share: gated on
+        the share (exists + `enabled` + role CONTRIBUTOR) + a valid `contributorToken`. For each declared blob
+        (`chunkCount`, `byteSize`, the `K_blob` wrap under `K_mem`) the server opens an upload session and returns
+        one short-TTL presigned **PUT** URL per chunk; the contributor PUTs ciphertext **direct-to-store** and then
+        calls `completeShareMedia`. The in-memory dev store cannot presign (`503`). Per-share rate-limited.
+        **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
+        `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareBlobUploadsRequest" }
+            example:
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              items:
+                - chunkCount: 2
+                  byteSize: 131072
+                  wrappedBlobKey: d3JhcHBlZC1rLWJsb2I=
+      responses:
+        "200":
+          description: Per-item upload results (success carries the presigned PUTs; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareBlobUploadsResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "429":
+          description: Too many uploads for this share in the current window (per-share rate limit).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
+        "503":
+          description: The configured object store cannot presign (e.g. the in-memory dev store).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/shares/{shareId}/media:
+    post:
+      tags: [sharing]
+      operationId: completeShareMedia
+      summary: Complete a contributor upload (unauthenticated) — attach to the shared Memory.
+      description: >
+        **No auth.** The share-scoped mirror of `completeMedia` for a **CONTRIBUTOR** share: gated on the share
+        (exists + `enabled` + role CONTRIBUTOR) + a valid `contributorToken`. Each item is one logical media (the
+        original upload + up to two role-tagged derivatives); the server verifies the stored objects
+        (declare-then-verify + byte budget), records the blob(s), and attaches **one media to the shared Memory
+        root node** (`nodeId` of the share) **stamped with the contributor's `identityId`** (direct-append). The
+        contributor is not told which node — the server uses the share's own node. Returns `{ blobId, mediaId }` or
+        a per-item error.
+        **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
+        `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareMediaBatchRequest" }
+            example:
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              items:
+                - originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  derivatives:
+                    - kind: THUMBNAIL
+                      uploadId: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+                    - kind: PREVIEW
+                      uploadId: 3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f
+      responses:
+        "200":
+          description: Per-item completion results (success carries blob+media ids; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareMediaBatchResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+
+  /api/shares/{shareId}/media/{mediaId}:
+    delete:
+      tags: [sharing]
+      operationId: deleteShareMedia
+      summary: Delete your own contributed media (unauthenticated) — the uploader/contributor removes one of their uploads.
+      description: >
+        **No auth.** Lets an anonymous contributor/uploader remove **one of their own** contributions this session
+        (the `UPLOADER` drop-box, cr-0102, [ADR 0031](../../docs/decisions/0031-uploader-public-share.md); also a
+        `CONTRIBUTOR`). The `contributorToken` rides the **`X-Contributor-Token`** header (no body on DELETE). Gated
+        on the share (exists + `enabled` + role ∈ {CONTRIBUTOR, UPLOADER}) + a valid token; the server deletes the
+        media (and its derivatives + reclaims all blobs from the store) **iff** the media's `share_identity_id`
+        equals the token's identity — a single-row **ownership** check, never gallery filtering. `404` for any other
+        media id (a foreign or unknown media is indistinguishable from a missing one). Idempotent-safe: a second
+        delete of the same id is `404`.
+        **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
+        `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/MediaId"
+        - $ref: "#/components/parameters/SharePassword"
+        - name: X-Contributor-Token
+          in: header
+          required: true
+          description: The opaque `contributorToken` from `createShareIdentity` — proves this caller owns the media being deleted.
+          schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl }
+      responses:
+        "204":
+          description: Deleted (the media, its derivatives, and its blobs are gone).
+        "403":
+          description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such media under this share owned by this identity, or a password-protected share with no `X-Share-Password` token given (cr-0164) — also covers a disabled/expired/unknown share, non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_media_not_found } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. The caller must own the shared node's personal scope (enforced by code).
+
+  parameters:
+    ShareId:
+      name: shareId
+      in: path
+      required: true
+      description: The opaque 256-bit share id (base64url, unguessable) — half the capability; the other half is the fragment key.
+      schema: { type: string, minLength: 43, maxLength: 43, pattern: "^[A-Za-z0-9_-]{43}$", example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
+    BlobId:
+      name: blobId
+      in: path
+      required: true
+      description: Opaque id of a blob the viewer wants to download (authorized only if it is attached under the shared subtree).
+      schema: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a }
+    MediaId:
+      name: mediaId
+      in: path
+      required: true
+      description: Opaque id of a media the caller contributed (deletable only if its `share_identity_id` matches the token's identity).
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    SharePassword:
+      name: X-Share-Password
+      in: header
+      required: false
+      description: >
+        The password token `base64(Argon2id(password, pwSalt))` for a password-protected share (cr-0118, ADR 0037).
+        Omit for a share with no password; a locked resolve then returns only `passwordRequired` + `pwSalt` so the
+        client can prompt and retry with this header.
+      schema: { type: string, maxLength: 64, pattern: "^[A-Za-z0-9+/]*={0,2}$" }
+
+  schemas:
+    ShareRole:
+      type: string
+      description: >
+        What a share grants — **VIEWER** (read-only, cr-0100), **CONTRIBUTOR** (view + append photos, cr-0101,
+        [ADR 0030](../../docs/decisions/0030-contributor-public-share.md)), or **UPLOADER** (write-only drop-box —
+        add photos but cannot see the Memory or others', cr-0102, [ADR 0031](../../docs/decisions/0031-uploader-public-share.md)).
+        MANAGER is a later slice.
+      enum: [VIEWER, CONTRIBUTOR, UPLOADER]
+      example: VIEWER
+
+    NodeKind:
+      type: string
+      description: FOLDER organizes only; MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory. A share's subtree holds MEMORY (root) + CHAPTER descendants.
+      enum: [FOLDER, MEMORY, CHAPTER]
+      example: MEMORY
+
+    CreateShareRequest:
+      type: object
+      required: [nodeId, role, wrap, sealedName]
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The Memory to share — must be a MEMORY in a scope the caller is a member of (personal, group, or tenant).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        role:
+          $ref: "#/components/schemas/ShareRole"
+        wrap:
+          type: string
+          description: The Memory's `K_mem` wrapped under the fresh per-share key — `symWrap(K_share, K_mem)` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: string
+          description: The Memory name re-sealed under `K_share` (opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        expiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: Optional expiry; a share past this instant resolves `404` (same shape as an unknown id). Null = no expiry.
+          example: null
+        sealedNote:
+          type: [string, "null"]
+          description: >
+            OPTIONAL curator note sealed under `K_share` (AAD `share-note`, opaque base64) — the plaintext is a
+            **per-locale JSON map** `{ "de": "…", "en": "…" }` (cr-0116); the share page renders the viewer's
+            locale (exact → base → en → first). Absent/blank = no note (cr-0115/cr-0116, ADR 0036).
+          contentEncoding: base64
+          maxLength: 16384
+          example: c2VhbGVkLW5vdGUtbG9jYWxlLW1hcA==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareName:
+          type: [string, "null"]
+          description: >
+            OPTIONAL private label for this share, sealed under `K_share` (AAD `share-name`, opaque base64) — a
+            **management-only** name (e.g. "For Grandma") shown in the curator's share list, distinct from the
+            Memory name; **never served to the viewer** (cr-0116).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXNoYXJlLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareKey:
+          type: [string, "null"]
+          description: >
+            OPTIONAL recoverable copy of the per-share key — `symWrap(K_mem, K_share)` (AAD `share-key-recovery`,
+            opaque base64). Lets the curator (who holds `K_mem`) recover `K_share` later to edit the note/name in
+            place. Openable only with `K_mem`; the operator never sees `K_share` (cr-0115, ADR 0036).
+          contentEncoding: base64
+          maxLength: 256
+          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWttZW0=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        passwordRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: OPTIONAL — protect the share with a password (cr-0118, ADR 0037). When true, `pwSalt` + `pwVerifier` (+ optionally `sealedPassword`) must accompany it.
+          example: false
+        pwSalt:
+          type: [string, "null"]
+          description: The random salt for `pwToken = Argon2id(password, pwSalt)` (opaque base64). Present iff `passwordRequired` (cr-0118).
+          contentEncoding: base64
+          maxLength: 64
+          example: cHctc2FsdC0xNmI=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        pwVerifier:
+          type: [string, "null"]
+          description: >
+            `SHA-256(pwToken)` where `pwToken = Argon2id(password, pwSalt)` (opaque base64) — the server checks a
+            presented token against this; it never sees the raw password (cr-0118, ADR 0037).
+          contentEncoding: base64
+          maxLength: 64
+          example: cHctdmVyaWZpZXItc2hhMjU2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedPassword:
+          type: [string, "null"]
+          description: >
+            OPTIONAL — the plaintext password sealed under `K_share` (AAD `share-password`, opaque base64) so the
+            curator can **reveal** it later; **management-only**, never served to a viewer (cr-0118, ADR 0037).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXBhc3N3b3Jk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    UpdateShareRequest:
+      type: object
+      description: >
+        Edit a share in place (cr-0115/cr-0116/cr-0119/cr-0118, ADR 0036/0037). `sealedNote` + `sealedShareName`
+        are a **full replace** of the two `K_share`-sealed fields (each is the new value, `null`/blank clears it) —
+        the curator holds both current values (decrypted in the manage list) and sends them together. `role` is an
+        **optional grant change** (cr-0119): when present it changes the share's role **in place** (a plaintext
+        authz change, no re-crypto — the link/wrap stay valid), restricted to **VIEWER ↔ CONTRIBUTOR** (setting
+        `UPLOADER`, or editing an UPLOADER share's role, is `422 invalid_role_change`); when omitted the grant is
+        unchanged. `passwordRequired` is an **optional tri-state** (cr-0118): `true` sets/changes the password (send
+        `pwSalt` + `pwVerifier` + `sealedPassword` with it), `false` removes it (the pw fields are cleared),
+        **omitted** leaves the password untouched — all in place, the link/`K_share` untouched.
+        `expiresAt` is a **full replace** like `sealedNote`/`sealedShareName` (cr-share-link-expiry-edit): the new
+        instant, or `null`/absent to clear the expiry — the manage UI holds the current value and re-sends it, so an
+        unrelated edit must include it to preserve it.
+      properties:
+        sealedNote:
+          type: [string, "null"]
+          description: The new curator note (per-locale JSON map) sealed under `K_share` (AAD `share-note`). Null/empty clears it.
+          contentEncoding: base64
+          maxLength: 16384
+          example: c2VhbGVkLW5vdGUtdjI=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareName:
+          type: [string, "null"]
+          description: The new private share name sealed under `K_share` (AAD `share-name`). Null/blank clears it (cr-0116).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXNoYXJlLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        role:
+          $ref: "#/components/schemas/ShareRole"
+        expiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: New expiry instant (full replace, cr-share-link-expiry-edit); `null`/absent clears it. Send the current value to preserve it.
+          example: null
+        passwordRequired:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: Tri-state (cr-0118, ADR 0037) — true sets/changes the password (with pwSalt/pwVerifier/sealedPassword), false removes it, null/omitted leaves it untouched.
+          example: null
+        pwSalt:
+          type: [string, "null"]
+          description: The new salt for `Argon2id(password, pwSalt)` (opaque base64) — sent with `passwordRequired` = true.
+          contentEncoding: base64
+          maxLength: 64
+          example: cHctc2FsdC0xNmI=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        pwVerifier:
+          type: [string, "null"]
+          description: The new `SHA-256(Argon2id(password, pwSalt))` (opaque base64) — sent with `passwordRequired` = true.
+          contentEncoding: base64
+          maxLength: 64
+          example: cHctdmVyaWZpZXItc2hhMjU2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedPassword:
+          type: [string, "null"]
+          description: The new plaintext password sealed under `K_share` (AAD `share-password`, opaque base64) — the reveal copy, management-only.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLXBhc3N3b3Jk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ShareCreated:
+      type: object
+      required: [shareId]
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: The opaque 256-bit share id (base64url). The full link `/s/{shareId}#k=<K_share>` is assembled client-side.
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+
+    ShareSummary:
+      type: object
+      required: [shareId, nodeId, role, sealedName, enabled, mine, createdAt]
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          minLength: 43
+          maxLength: 43
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The shared Memory node (lets the curator UI group shares by Memory).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        role:
+          $ref: "#/components/schemas/ShareRole"
+        sealedName:
+          type: string
+          description: The Memory name re-sealed under `K_share` (opaque base64) — the curator UI unwraps it to label the row.
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+        sealedNote:
+          type: [string, "null"]
+          description: The curator note (per-locale JSON map) under `K_share` (opaque base64), or null — the manage UI shows + edits it.
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+        sealedShareName:
+          type: [string, "null"]
+          description: The share's private label under `K_share` (opaque base64), or null — the manage UI shows it as the row title, falling back to the role (cr-0116).
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+        sealedShareKey:
+          type: [string, "null"]
+          description: >
+            The recoverable per-share key `symWrap(K_mem, K_share)` (opaque base64), or null — lets the manage UI
+            recover `K_share` to decrypt/edit the note + name (cr-0115/cr-0116, ADR 0036).
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+        passwordRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: True when the share is password-protected (cr-0118) — the manage UI shows a lock badge.
+          example: false
+        sealedPassword:
+          type: [string, "null"]
+          description: >
+            The plaintext password sealed under `K_share` (opaque base64), or null — management-only; the manage UI
+            recovers `K_share` (via `sealedShareKey`) to **reveal** it. Never served to a viewer (cr-0118, ADR 0037).
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+        enabled:
+          x-veyq-visibility: flag
+          type: boolean
+          description: False once revoked — the guest resolve + blob GET then `404`.
+          example: true
+        mine:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when the authenticated caller owns this share (so may revoke it). On a shared-scope Memory the
+            list also includes other members' shares (cr-0104); a disabled share by anyone can be re-activated by
+            a member, which transfers ownership.
+          example: true
+        expiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: The share's expiry instant, or null when it never expires.
+          example: null
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-07T12:00:00Z
+
+    PublicShare:
+      type: object
+      required: [role, passwordRequired, nodes, media]
+      description: >
+        A resolved share. When `passwordRequired` is true and the guest presented **no** (or a wrong) password
+        token, the response is **locked**: only `role` + `passwordRequired` + `pwSalt` are set and `wrap` /
+        `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are omitted/empty — the client prompts for
+        the password and re-resolves with the token (cr-0118, ADR 0037).
+      properties:
+        role:
+          $ref: "#/components/schemas/ShareRole"
+        passwordRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: True when this share needs a password token; a locked response carries only this + `pwSalt` (cr-0118).
+          example: false
+        pwSalt:
+          type: [string, "null"]
+          description: The salt for `Argon2id(password, pwSalt)` (opaque base64) — present when `passwordRequired`, so the client can derive the token (cr-0118).
+          contentEncoding: base64
+          maxLength: 64
+          example: null
+        wrap:
+          type: [string, "null"]
+          description: The wrap `symWrap(K_share, K_mem)` (opaque base64) — the viewer unwraps `K_mem` with the fragment key. Null in a locked (password-gated) response.
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+        sealedName:
+          type: [string, "null"]
+          description: The Memory name re-sealed under `K_share` (opaque base64). Null in a locked response.
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+        sealedNote:
+          type: [string, "null"]
+          description: The curator note (per-locale JSON map) sealed under `K_share` (opaque base64), or null when the share has none. The page renders the viewer's locale (cr-0115/cr-0116).
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+        nodes:
+          type: array
+          description: The subtree rooted at the shared Memory — the root plus its chapters, for the `K_mem` chain.
+          items: { $ref: "#/components/schemas/ShareNode" }
+        media:
+          type: array
+          description: Every media attached under the shared subtree (each tagged with its owning `nodeId`).
+          items: { $ref: "#/components/schemas/ShareMedia" }
+        identities:
+          type: [array, "null"]
+          description: >
+            The anonymous **contributor identities** of a CONTRIBUTOR share (cr-0101) — each an opaque `identityId`
+            + the `K_mem`-sealed display name. Lets a viewer attribute/group contributed media (the buckets hook);
+            null/empty for a VIEWER share or one with no contributions yet.
+          items: { $ref: "#/components/schemas/ShareIdentity" }
+
+    ShareNode:
+      type: object
+      description: >
+        One node of the shared subtree. The **root** carries `parentId: null` (the viewer keys its `K_mem` off
+        the share `wrap`); a descendant chapter carries its parent's id and its `K_mem` wrapped under the
+        parent's `K_mem` in `wrappedContentKey`. The name is **not** returned here (it is sealed under `K_SC`,
+        which a public viewer never holds — the root's name comes from `sealedName`).
+      required: [id, kind]
+      properties:
+        id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The parent node id within the subtree, or null at the shared root.
+          example: null
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+        orderIndex:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          example: 0
+        wrappedContentKey:
+          type: [string, "null"]
+          description: A descendant's `K_mem` wrapped under its parent's `K_mem` (opaque base64); null/ignored at the root (its `K_mem` comes from the share `wrap`).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+        wrappedMeta:
+          type: [string, "null"]
+          description: The node's curated metadata (date/place/cover) sealed under its `K_mem` (AAD `node-meta`; opaque base64); null when unset.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+
+    ShareMedia:
+      type: object
+      description: A media under the shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning `nodeId` so the viewer picks the right `K_mem`.
+      required: [nodeId, mediaId, blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The subtree node this media is attached to (selects its `K_mem`).
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
+        blobId: { type: string, format: uuid, example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 131072
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          description: Per-chunk ciphertext byte sizes in chunk order (ciphertext sizes only).
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          description: The original blob's `K_blob` wrapped under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+        derivatives:
+          type: [array, "null"]
+          description: Role-tagged derivative tiers (THUMBNAIL, PREVIEW), each its own blob ref with its own wrap.
+          items: { $ref: "#/components/schemas/ShareMediaDerivative" }
+        wrappedMeta:
+          type: [string, "null"]
+          description: The original's listed-metadata tier `{v,w,h,capturedAt,...}` sealed under `K_mem` (opaque base64); null when unset.
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        identityId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The **contributor identity** that added this media (cr-0101); null for media the curator uploaded. Maps into `identities[]` for attribution/grouping.
+          example: null
+
+    ShareMediaDerivative:
+      type: object
+      description: A derivative tier's blob ref — same opaque metadata as the original, plus its role `kind`.
+      required: [kind, blobId, chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [THUMBNAIL, PREVIEW]
+          example: THUMBNAIL
+        blobId: { type: string, format: uuid, example: 8b2c1f2d-3e4a-5b6c-7c3f-0e2a9b1d4a6e, x-veyq-visibility: id }
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          example: 1
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          example: 65536
+        manifest:
+          x-veyq-visibility: measure
+          type: [array, "null"]
+          items: { type: integer, format: int64, example: 65536 }
+        wrappedBlobKey:
+          type: string
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+
+    ShareBlobDownload:
+      type: object
+      required: [presignedGets]
+      properties:
+        presignedGets:
+          type: array
+          description: One presigned GET URL per chunk, in chunk order.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+
+    PresignedUrl:
+      type: object
+      required: [index, url]
+      properties:
+        index:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: Chunk index (0-based, in chunk order).
+          example: 0
+        url:
+          x-veyq-visibility: token
+          type: string
+          description: A short-TTL, single-object, single-method presigned URL (GET for viewer downloads, PUT for contributor uploads) against the object store.
+          maxLength: 4096
+          example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
+
+    # --- contributor (cr-0101) ---------------------------------------------------
+    ShareIdentity:
+      type: object
+      description: An anonymous contributor identity — an opaque id + the `K_mem`-sealed display name (attribution/grouping hook).
+      required: [identityId, sealedDisplayName]
+      properties:
+        identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
+        sealedDisplayName:
+          type: string
+          description: The contributor's display name AEAD-sealed under `K_mem` (AAD `share-identity-name`; opaque base64).
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=
+
+    CreateShareIdentityRequest:
+      type: object
+      required: [sealedDisplayName]
+      properties:
+        sealedDisplayName:
+          type: string
+          description: The contributor's display name sealed under `K_mem` (opaque base64) — mandatory, never in clear.
+          contentEncoding: base64
+          maxLength: 512
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ShareIdentityCreated:
+      type: object
+      required: [identityId, contributorToken]
+      properties:
+        identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: An unguessable capability token (held on device) that authorizes this identity's uploads on the share.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+
+    ShareBlobUploadsRequest:
+      type: object
+      required: [contributorToken, items]
+      properties:
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity` — authorizes the upload on the share.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ShareBlobUploadRequestItem" }
+
+    ShareBlobUploadRequestItem:
+      type: object
+      required: [chunkCount, byteSize, wrappedBlobKey]
+      properties:
+        chunkCount:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: Number of ciphertext chunks the blob is sealed into (≥ 1).
+          minimum: 1
+          maximum: 100000
+          example: 2
+        byteSize:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: Total ciphertext byte size declared up front (verified against the stored objects on complete).
+          minimum: 0
+          example: 131072
+        wrappedBlobKey:
+          type: string
+          description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLWJsb2I=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ShareBlobUploadsResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ShareBlobUploadResultItem" }
+
+    ShareBlobUploadResultItem:
+      type: object
+      description: One per request item, in order. Success carries `uploadId` + `presignedPuts`; failure carries `error`.
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        presignedPuts:
+          type: [array, "null"]
+          description: One presigned PUT URL per chunk, in chunk order.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Per-item error code (`budget_exceeded`, `store_unavailable`); null on success.
+          maxLength: 64
+          example: null
+
+    ShareMediaBatchRequest:
+      type: object
+      required: [contributorToken, items]
+      properties:
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity`.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ShareMediaRequestItem" }
+
+    ShareMediaRequestItem:
+      type: object
+      description: One logical media — the original upload + up to two role-tagged derivative uploads. Attaches to the share's own Memory node (no `nodeId` — the server uses the shared node).
+      required: [originalUploadId]
+      properties:
+        originalUploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The upload session for the original (pristine) blob, opened by `startShareBlobUploads`.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        derivatives:
+          type: [array, "null"]
+          description: Role-tagged derivative uploads (THUMBNAIL, PREVIEW), each its own blob. At most one of each kind.
+          maxItems: 2
+          items: { $ref: "#/components/schemas/ShareMediaDerivativeUpload" }
+        wrappedMeta:
+          type: [string, "null"]
+          description: The original's listed-metadata tier sealed under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 512
+          example: bWV0YS1jaXBoZXJ0ZXh0
+        wrappedExif:
+          type: [string, "null"]
+          description: The original's heavy EXIF bundle sealed under `K_mem` (opaque base64).
+          contentEncoding: base64
+          maxLength: 16384
+          example: ZXhpZi1jaXBoZXJ0ZXh0
+
+    ShareMediaDerivativeUpload:
+      type: object
+      required: [kind, uploadId]
+      properties:
+        kind:
+          x-veyq-visibility: enum
+          type: string
+          enum: [THUMBNAIL, PREVIEW]
+          example: THUMBNAIL
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
+
+    ShareMediaBatchResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ShareMediaResultItem" }
+
+    ShareMediaResultItem:
+      type: object
+      description: One per request item, in order. Success carries the original `blobId` + `mediaId`; failure carries `error`.
+      properties:
+        blobId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        mediaId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Per-item error code (`upload_not_found`, `budget_exceeded`); null on success.
+          maxLength: 64
+          example: null
+
+    # --- accountless terms gate (cr-anonymous-accept-gate, ADR 0035 §3) ---------
+    ShareTerms:
+      type: object
+      description: >
+        The owning tenant's public terms for a share, served to an accountless visitor to accept **client-side**
+        (uc.sharing.share-accept). No acceptance is recorded server-side. The `tenantId` is opaque metadata only
+        **returned** (never passed in — no existence oracle); it is the client's per-tenant localStorage key.
+      required: [tenantId, termsVersion]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The opaque id of the tenant that owns the share — the client's localStorage key for the accepted version. Only returned, never a request parameter.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        termsVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The tenant's current terms version. 0 = no terms published (the client never gates).
+          example: 3
+        terms:
+          description: The current per-locale terms (null/absent until the operator publishes any).
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedMarkdown"
+            - type: "null"
+
+    # A local named alias to the _common source (the ErrorResponse pattern) so the generator emits a
+    # `LocalizedMarkdown` model in this module while the shape is single-sourced with the tenants spec (ADR 0038).
+    LocalizedMarkdown:
+      $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

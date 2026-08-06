@@ -1,0 +1,67 @@
+# Acceptance coverage
+
+The machine-checked end of the trust chain: **feature → use-case → acceptance criteria → tests (or
+explicit gaps)**. One coverage file per use-case, mirroring the feature tree:
+
+```
+docs/coverage/features/<feature>/use-cases/uc.<feature>.<goal>.yaml
+```
+
+Each file lists acceptance criteria; every criterion's tests are keyed by **area** (which surface) then
+**level** (which kind of test). Surfaces with **no** coverage ref for the use-case are declared under
+`gaps` with a reason — never left silent.
+
+> **A surface that no CI job runs makes no coverage claim** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
+> The surfaces are **`backend` and `web`**. `http/` was hand-fired IDE tooling and has been deleted — real
+> requests that proved nothing, because nobody fired them. A surface enters this model when its CI job is
+> green, not when its code exists.
+
+`scripts/validate_coverage.py` enforces the chain (run it after changing a use-case, a coverage file,
+or the tests they point to).
+
+## Dimensions
+
+**Area** — *where* the test runs (the surface): `backend` · `web`.
+
+**Level** — *what kind* of test it is. Classify by the **scope of behaviour under test**, not by the
+test harness:
+
+| Level | Scope under test |
+| --- | --- |
+| `unit` | a single component in isolation (even if it uses the DI container to obtain it) |
+| `integration` | several components together across an internal boundary, in-process (e.g. HTTP resource → handler → DB) |
+| `e2e` | the system through its external interface against a running instance (e.g. a browser, or a web suite against a live backend) |
+
+> Examples: a Quarkus `…SliceTest` (RestAssured → resource → handler → H2) is **integration**; a focused
+> deserialization test is **unit**; a web suite run against a live backend (`run_web_e2e.py`) is **e2e**.
+
+## Shape
+
+```yaml
+useCase: uc.<feature>.<goal>
+feature: <feature>
+title: <title>
+acceptanceCriteria:
+  - id: <kebab-id>
+    text: <one sentence>
+    coverage:
+      <area>:
+        <level>: [<ref>, ...]   # backend ref: "ClassName.testMethod"; web ref: a path under web/
+gaps:
+  <area>: <reason>              # a surface with NO coverage ref for this use-case (never also covered)
+```
+
+## Rules
+
+- **Every acceptance criterion needs at least one test** (any area/level). This is enforced.
+- **Level is descriptive, not enforced.** It records *what kind* of test covers a criterion so gaps are
+  visible (e.g. "happy path has integration but no e2e yet") — the validator does **not** require any
+  particular level, because coverage is risk-based, not box-ticking.
+- **Areas and levels come from the fixed sets above**; unknown names fail validation (catches typos).
+- **References must resolve:** a `backend` `ClassName.method` ref resolves against *that* test class (a file
+  whose stem is `ClassName`, containing `method`); a `web` ref's file must exist.
+- **Gaps are explicit *and* mean uncovered:** a surface with no coverage ref is listed under `gaps` with a
+  reason (silent omission is not allowed); a surface that **is** covered may not also be a gap — that overlap
+  is a stale gap (a build-note or deferred-slice left behind) and fails validation ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
+- **Stop at area × level.** Do not add finer per-test metadata (individual assertions, requirement ids) —
+  classification noise without a decision payoff.

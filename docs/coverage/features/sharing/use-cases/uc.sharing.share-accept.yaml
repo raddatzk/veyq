@@ -1,0 +1,66 @@
+useCase: uc.sharing.share-accept
+feature: sharing
+title: Share accept — an accountless visitor accepts the tenant's terms before viewing
+# Built (contracts + backend + web, cr-anonymous-accept-gate, ADR 0035 §3): the accountless-visitor half of the
+# two-tier terms gate. The terms reach the accountless client from the SHARE (a public share is Host-independent —
+# shareId is a global key resolvable on any Host — so the tenant cannot come from the Host, and the member
+# getTenantTerms is bearerAuth + membership-gated), via a guest GET /api/shares/{shareId}/terms keyed on the already
+# non-enumerable shareId (reusing activeShare()) → the same non-enumerable 404 as resolveShare, so NO tenantId
+# existence oracle (the tenantId is only returned). Acceptance is client-only localStorage keyed per tenant+version
+# (accept once per tenant, not per share); the server records NOTHING about the accountless visitor. Ordering on the
+# share page: password (cr-0118) → terms → display-name (cr-0101/0102) → content. Fail-open on a transient
+# terms-fetch error. Honest limit: an OPERATIONAL gate, not enforcement — client-side localStorage is bypassable by
+# an accountless visitor (mirrors the member gate's framing in activeSpace.ts); the terms' content + the
+# decryptable-on-report path are the operator's real remedy, not this prompt.
+acceptanceCriteria:
+  - id: terms-shown-and-gated
+    text: >
+      An accountless visitor of a resolvable share whose tenant has published terms (termsVersion > 0) sees the
+      operator's terms (viewer's locale, safe markdown renderer) and cannot view or contribute until accepting. A
+      tenant with no terms (version 0) never gates. The terms come from GET /api/shares/{shareId}/terms.
+    coverage:
+      backend:
+        integration: [ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance, ShareSliceTest.shareTermsVersionZeroWhenTenantPublishedNoTerms]
+      web:
+        unit: [src/views/ShareView.test.ts]
+  - id: accept-persists-client-side
+    text: >
+      Accepting writes the accepted termsVersion to localStorage keyed by tenantId; the gate then clears and the
+      content (or, for CONTRIBUTOR/UPLOADER, the display-name pre-screen) shows. A reload does not re-prompt for the
+      same version. Accepting on one share of a tenant clears the gate on every share of that tenant.
+    # Client-only by design (acceptance is localStorage, keyed per tenant — the server keeps no record for the
+    # accountless visitor, so there is no backend behaviour to cover): ShareView.test.ts drives accept → clears +
+    # persists, and a reload (seeded localStorage) → no re-prompt.
+    coverage:
+      web:
+        unit: [src/views/ShareView.test.ts]
+  - id: re-accept-on-version-bump
+    text: >
+      When the operator bumps the tenant's termsVersion, the stored acceptance is now below current, so the gate
+      re-fires; the visitor re-reads and re-accepts the current version before proceeding.
+    coverage:
+      web:
+        unit: [src/views/ShareView.test.ts]
+  - id: ordering-password-terms-name
+    text: >
+      On the share page the terms gate sits after the password shell (cr-0118) and before the display-name
+      pre-screen (cr-0101/0102): password → terms → name → content. On a transient terms-fetch error the gate fails
+      open (treated as no gate) — a network blip never locks the visitor out.
+    # The fail-open runtime behaviour is directly tested (ShareView.test.ts: a rejected fetchShareTerms → content,
+    # no gate). The ordering itself is a static template guarantee — the v-else-if chain locked → needsTerms →
+    # needsName → content — decided before content paints (loadTerms is awaited ahead of status='ready').
+    coverage:
+      web:
+        unit: [src/views/ShareView.test.ts]
+  - id: operator-blind-and-honest-limit
+    text: >
+      The terms are public operational content served via a shareId-keyed guest endpoint whose unknown/disabled/
+      expired case is the same non-enumerable 404 as resolveShare (no tenantId existence oracle — the caller passes
+      only the shareId they hold; the opaque tenantId is only returned). Acceptance is client-only: the server keeps
+      NO record for the accountless visitor (anonymity preserved). It is an operational gate, not enforcement —
+      bypassable by an accountless visitor, and not a legal-non-repudiation record.
+    coverage:
+      backend:
+        integration: [ShareSliceTest.shareTermsIsTheSameNonEnumerable404AsResolve, ShareSliceTest.shareTermsServesOwningTenantTermsAndRecordsNoAcceptance]
+      web:
+        unit: [src/views/ShareView.test.ts]

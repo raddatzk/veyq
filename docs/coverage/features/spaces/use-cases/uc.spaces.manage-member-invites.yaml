@@ -1,0 +1,63 @@
+useCase: uc.spaces.manage-member-invites
+feature: spaces
+title: Manage pending member invites (list, re-issue link, revoke)
+# Built cr-0082 (backend → http → web) — the management companion to uc.spaces.add-member. add-member is
+# additive (ADR 0020), so tracking/re-issuing/revoking the member INVITES it mints lives here, mirroring the
+# owner-invite management the Server Owner already has (uc.admin.create-tenant: resend/reassign/revoke, cr-0009).
+# Owner-gated throughout; operator-blind (invite metadata only, the secret only re-returned on re-issue, cr-0080).
+# Removing a joined member + key rotation are explicitly NOT here (a later slice, ADR 0020/0014).
+# The owner-gated happy-path (list/reissue/revoke) needs a
+# signed member/owner session not reproducible from a bare .http, so it is proven at the integration layer
+# (MemberInviteManagementSliceTest); the .http covers the anonymous-401 boundary/authz.
+acceptanceCriteria:
+  - id: list-pending-member-invites
+    text: The tenant owner lists the tenant's pending (ACTIVE, unexpired) MEMBER invites — each an email + invite status + expiry — beside the joined-member directory. Owner-gated (a non-owner gets 403); operator-blind (only invite metadata the server already stores; never the secret). Consumed/expired invites are not listed.
+    coverage:
+      backend:
+        integration: [MemberInviteManagementSliceTest.ownerListsPendingMemberInvitesOutsiderIs404, MemberInviteManagementSliceTest.manageOnAnUnknownTenantIs404NotFound, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: reissue-mails-a-fresh-link
+    # Was `reissue-invite-link` ("returning the new copyable invite link … works without any mailer"). ADR 0055 §2
+    # retired that: the fresh secret goes to the invitee, not to the owner. The ordering matters and is pinned —
+    # `mintMemberInvite` supersedes as it mints, so a refusal has to come *first* or a tenant that never could
+    # have sent would be left with no live invite at all.
+    text: >-
+      The owner re-issues a pending member invite — the server supersedes the current one and mints a fresh
+      single-use secret (the old link dies), **emailed to the invited address**; the response carries no secret.
+      Same email, new secret + expiry. A tenant with no sendable mailer is refused with 503 `mail_unavailable`
+      before the supersede, so the outstanding invite survives untouched.
+    coverage:
+      backend:
+        integration: [MemberInviteManagementSliceTest.reissueSupersedesOldSecretAndMailsAUsableFreshLink, MemberInviteManagementSliceTest.reissueOnATenantThatCannotSendIsRefusedAndLeavesTheOutstandingInviteAlone, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: revoke-member-invite
+    text: The owner revokes a pending member invite — it is soft-transitioned to a terminal state so a later replay of its secret at accept is rejected (invite_no_longer_valid). Additive-safe — it touches no grant and no already-joined member; the reserved email is freed to re-invite. A non-owner is 403.
+    coverage:
+      backend:
+        integration: [MemberInviteManagementSliceTest.revokeMakesTheSecretNoLongerAcceptableAndDropsItFromTheList, MemberInviteManagementSliceTest.reissueAndRevokeOfAnUnknownInviteAre404]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: reissue-delivery-and-rate-limit
+    # cr-email-invite-send-hardening: the re-issue path gains the same two hardenings as the initial mint. It
+    # reports a first-class delivery result (SENT / FALLBACK_COPYLINK / FAILED, sent after the tx commits, never
+    # persisted → operator-blind untouched), and it is rate-limited per-(tenant,recipient) + per-tenant — re-issue
+    # is the SHARPEST bombing vector (repeated fresh links to one address), so over the limit is 429 + Retry-After
+    # before any fresh mint. The limiter core is the shared, mutation-verified TokenBucket (unit-tested in
+    # InviteMailRateLimiterTest, listed under uc.spaces.add-member's member-invite-rate-limited).
+    text: >-
+      A re-issue reports its delivery result inline — SENT is the only value reachable here since ADR 0055, the
+      other two having become 503s — and is rate-limited per-(tenant,recipient) + per-tenant; over the limit it is
+      refused with 429 + Retry-After before any fresh secret is minted. The rate-limit budget is deliberately not
+      refunded when a send then fails: what the limiter bounds is send attempts.
+    coverage:
+      backend:
+        integration: [MemberInviteManagementSliceTest.reissueSupersedesOldSecretAndMailsAUsableFreshLink, MemberInviteManagementSliceTest.reissuingOneRecipientPastTheLimitIs429WithRetryAfter]
+      web:
+        unit: [src/features/spaces/TenantMembersPanel.test.ts]
+  - id: invite-secret-never-logged
+    text: The raw invite bootstrap token — a redeemable secret — is never emitted to a log, in any launch mode. Every invite the shared delivery mailer sends (mint, resend, re-issue) logs only non-secret metadata (email + expiry); the secret reaches the invitee via the API response or the opt-in dev-file only. A production runtime logs a secret-free "not delivered" warning instead of the link.
+    coverage:
+      backend:
+        integration: [TenantInviteMailerDevFileTest.neverLogsTheRawBootstrapToken]

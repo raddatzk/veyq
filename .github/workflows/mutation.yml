@@ -1,0 +1,117 @@
+name: Mutation (crypto)
+
+# The crypto assertion-strength gate — the trust chain's last link (ADR 0045). validate_coverage.py proves a
+# test REF resolves; this proves the test's ASSERTIONS pin the output (a `seal(k,s)=s` that satisfies a weak
+# test dies here). PR-only + path-gated: it runs only when a PR touches the crypto suite, and mutates the
+# curated logic tier (web/stryker.mutate.json = v1.ts; the argon*.worker wiring layer is out, ADR 0045 §3).
+#
+# Cost control is Stryker's INCREMENTAL cache (ADR 0045 §4), NOT a git `--since` flag: StrykerJS OSS has no
+# native git-diff scoping (that is arcmutate, the commercial tool §1 excludes). Incremental is content-based
+# and re-tests a mutant when its code OR its covering tests changed — so a weakened *assertion* (a test edit,
+# no source change) is caught here, which a file-level git-diff scope would have missed.
+#
+# Not in ci.yml's `frontend` job: mutation is a heavier, path-gated job, kept off every push's critical path
+# (CLAUDE.md / ADR 0045 §4 — `npm run check` stays lint+typecheck+unit+build).
+
+on:
+  pull_request:
+    branches: [main]
+    # Source AND tests: a change to either can move the score (a weakened assertion lives in a *.test.ts), so
+    # either must re-run the gate.
+    paths:
+      - "web/src/shared/crypto/**"
+      - "web/stryker.config.mjs"
+      - "web/stryker.mutate.json"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "scripts/mutation_meta_check.py"
+      - "scripts/mutation_meta_check_selftest.py"
+      - ".github/workflows/mutation.yml"
+  # Also on main. A PR gates before the merge, so this is a backstop, not the primary gate: it catches what the
+  # PR job structurally cannot — a direct push, an admin/force merge, or a green PR that lands on a main which
+  # has meanwhile drifted. The same filter is repeated because Actions supports no YAML anchors; ci.yml
+  # duplicates its own filter the same way.
+  push:
+    branches: [main]
+    paths:
+      - "web/src/shared/crypto/**"
+      - "web/stryker.config.mjs"
+      - "web/stryker.mutate.json"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - "scripts/mutation_meta_check.py"
+      - "scripts/mutation_meta_check_selftest.py"
+      - ".github/workflows/mutation.yml"
+  workflow_dispatch:
+
+# One run per PR (or per main ref); a new push cancels the last (a mutation run is minutes, not seconds).
+concurrency:
+  group: veyq-mutation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    name: Crypto mutation gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # The meta-check diffs against the PR base to see whether a mutate-scope file changed.
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # The incremental report is the CI cache (ADR 0045 §4): Stryker re-tests only mutants whose code or
+      # covering tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved
+      # each run so the next PR starts warm.
+      - name: Restore Stryker incremental cache
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: web/reports/stryker-incremental.json
+          key: stryker-incremental-${{ github.sha }}
+          restore-keys: |
+            stryker-incremental-
+
+      - name: Install dependencies
+        working-directory: web
+        # `npm ci` runs `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports
+        # exists (mirrors ci.yml's frontend job). openapi-generator needs Java, pre-installed on ubuntu-latest.
+        run: npm ci
+
+      - name: Run crypto mutation gate
+        working-directory: web
+        # Full scope (one small file), incremental-accelerated. stryker.config.mjs breaks the build below the
+        # calibrated break threshold — that is the gate.
+        run: npm run mutation
+
+      - name: Meta-check selftest (the total-vs-per-glob asymmetry is as documented)
+        # Pins the two meta-checks' asymmetry (inbox #109) with fabricated fixtures — no real report needed, so
+        # it runs regardless of what this PR changed. If the check logic rots, this reds before the real check.
+        run: python3 scripts/mutation_meta_check_selftest.py
+
+      - name: Diff-aware meta-check (mutants > 0 when the mutate scope changed)
+        # ADR 0045 §4: a run that mutates nothing yet reports 100% is a claim nothing backs. When the diff
+        # intersects the mutate scope, the report must carry > 0 mutants — catches a mis-scoped glob (e.g. a
+        # renamed v1.ts the manifest missed) that would otherwise pass green with nothing measured.
+        #
+        # The base is per-event: a PR diffs against its target branch, a main push against the commit it advanced
+        # from. workflow_dispatch has no base at all, and a first/force push reports an all-zero `before` — in
+        # both cases there is no diff to scope against, so the check has nothing to assert and says so.
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE:-}" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+            echo "meta-check: no usable diff base for a ${{ github.event_name }} event — nothing to assert."
+            exit 0
+          fi
+          python3 scripts/mutation_meta_check.py --base "$BASE"

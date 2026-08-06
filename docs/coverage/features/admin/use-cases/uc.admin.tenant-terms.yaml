@@ -1,0 +1,24 @@
+useCase: uc.admin.tenant-terms
+feature: admin
+title: Tenant terms — the operator sets their server's legal terms (versioned)
+# cr-0114 (ADR 0035) delivers the operator half end-to-end: contracts (getTenantTerms/updateTenantTerms on the
+# tenants spec) → backend (terms_markdown_by_locale + terms_version on veyq_tenant, an owner-gated update that
+# normalizes + bumps-on-change, TenantTermsHandler/TenantsResource) → web (the owner terms editor in the settings
+# hub `tenant` category, TenantTermsPanel, the 11-clause DE+EN template + free per-locale markdown). Terms are the
+# operator's PUBLIC operational content (served) — no E2EE. Backend slice tests run over the full HTTP stack; a
+# signed ijhttp lifecycle proves it against a live instance. The
+# browser smoke passed too (owner sets terms → version 1 badge, live against the dev instance).
+acceptanceCriteria:
+  - id: operator-sets-per-locale-terms
+    text: The tenant owner sets terms_markdown_by_locale (DE+EN markdown) on veyq_tenant, from the clause template or edited freely; served as public operational content. Editing is owner-gated (isOwner); a non-owner is refused (403 not_tenant_owner), a member sees it read-only.
+    coverage:
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot, TenantTermsSliceTest.nonOwnerCannotUpdateTerms, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
+      web: { unit: [src/features/admin/createTenant/terms.test.ts] }
+  - id: version-bumped-on-change
+    text: Saving normalizes the markdown and bumps terms_version only when it actually changed (an idempotent re-save does not bump — the pre-E2EE logic). The higher version re-gates every member.
+    coverage:
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot] }
+  - id: operator-blind
+    text: The terms text is the operator's public policy (served, no content key); terms_version is a plain int. No user content, no E2EE key — the operator-blind boundary is unaffected (ADR 0035).
+    coverage:
+      backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot] }

@@ -1,0 +1,59 @@
+useCase: uc.sharing.share-uploader
+feature: sharing
+title: Share a Memory as an uploader link (a write-only drop-box)
+# Built (web vertical, cr-0102 + ADR 0031, building on ADR 0030): a write-only UPLOADER public share of one
+# personal-scope Memory — add photos but cannot see the Memory's existing content (nor others'). It reuses the
+# CONTRIBUTOR machinery (sealed identity + share-scoped upload) and adds: the UPLOADER role, the canView gate (the
+# resolve serves media=[] + the root node only for an uploader — "cannot see others" is structural, NO server-side
+# gallery filtering), the session-only client-local own-view (the optimistic tiles rendered from local previews,
+# never a download), the token-gated + ownership-checked delete-own (DELETE /media/{id}, X-Contributor-Token
+# header), and the four-place ephemerality warning. Covered by the backend slice (UPLOADER resolve serves media=[]
+# even with existing media; upload attaches + stamps; delete-own reclaims; foreign-identity 404 / bad-token 403 /
+# VIEWER 403), the http guest-boundary assertions, and the web unit tests (the delete wrapper + the queue
+# removeFile + the session-persistence of a done tile), plus a live browser smoke. v1 is deliberately narrow: role UPLOADER, direct-append,
+# personal scope; post-reload delete (persisting the id list), the buckets UI, MANAGER/view-all/delete, password
+# protection and moderation are separate later slices.
+acceptanceCriteria:
+  - id: create-uploader-share
+    text: A curator turns one of their personal-scope Memories into an UPLOADER share — picks the Uploader role in the Share dialog; the client mints K_share, wraps K_mem, re-seals the name, and POSTs { nodeId, role UPLOADER, wrap, sealedName }. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting]
+      web:
+        unit: [src/features/memory/share.test.ts]
+  - id: write-only-no-view-of-others
+    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns media=[], nodes=[], identities=[] for an UPLOADER share (only role + wrap + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks). The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete]
+      web:
+        unit: [src/features/memory/optimisticUpload.test.ts]
+  - id: session-own-gallery-no-download
+    text: The uploader names themselves (sealed under K_mem -> anonymous identity) and adds photos via the share-scoped upload path (as CONTRIBUTOR). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
+      web:
+        unit: [src/features/memory/optimisticUpload.test.ts, src/features/memory/uploadQueue.test.ts]
+  - id: delete-own-in-session
+    text: DELETE /api/shares/{shareId}/media/{mediaId} carries the contributor token; the server deletes the media + reclaims its blobs iff the media's share_identity_id equals the token's identity (a single-row ownership check, not gallery filtering). Reachable only in-session (after a reload the client no longer holds the id); the media otherwise remains (the curator can delete it from their own gallery).
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn, ShareUploaderSliceTest.foreignIdentityDeleteIs404, ShareUploaderSliceTest.badTokenDeleteIs403]
+      web:
+        unit: [src/features/memory/share.test.ts, src/features/memory/uploadQueue.test.ts]
+  - id: ephemerality-warned
+    text: The write-only, session-only nature is surfaced prominently in four places - (a) the mandatory name pre-screen before the first upload; (b) a persistent header badge ("visible only in this session") in place of the viewer's read-only badge; (c) a dedicated empty-state after a reload (not a blank gallery); (d) a note that delete works only in this session. The plain-language "what this means for you" states it too.
+    # The four warning surfaces (name-pre-screen warning, header badge, session note, reload empty-state) are
+    # guarded as present + translated (en+de) by the i18n test; the end-to-end render is proven by the live
+    # browser smoke (cr-0102): the UPLOADER /s/ shows all four in place, not the gallery.
+    coverage:
+      web:
+        unit: [src/i18n/setLocale.test.ts]
+  - id: operator-blind
+    text: The server serves the uploader NO gallery and NO bytes (resolve media=[]/nodes=[]; the blob endpoint is role-gated to 404 for an uploader). It holds only the opaque share record + the sealed anonymous identity + the share_identity_id stamp (for the curator's own view + the delete ownership check) + ciphertext blobs — never K_share/K_mem/any name/the photo bytes/a per-guest content listing. The no-install page carries the same trust-tier honesty (footer link, ADR 0026).
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
+      web:
+        unit: [src/features/memory/share.test.ts]

@@ -1,0 +1,52 @@
+useCase: uc.account.trust-device
+feature: account
+title: Trust this device (DEVICE wrap — unlock with only the password)
+acceptanceCriteria:
+  - id: trust-enrols-device-wrap
+    text: Trusting a device enrols a DEVICE wrap (it appears in the caller's key material) backed by a non-extractable device key.
+    coverage:
+      backend: { integration: [AccountWrapsSliceTest.addDeviceWrapAppearsInKeyMaterialAndReturnsId] }
+      web: { unit: [src/features/account/trustDevice/trustDevice.test.ts] }
+  - id: device-unlock-password-only
+    text: A trusted device opens the Master Key with only the password (its DEVICE wrap), no Secret Key.
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.device.test.ts] }
+  - id: device-kek-conformance
+    text: The DEVICE-wrap KEK derivation (Argon2id(deviceFactor + password)) matches the pinned crypto vector.
+    coverage:
+      web: { unit: [src/shared/crypto/v1.conformance.test.ts] }
+  - id: wrong-password-generic-failure
+    text: A wrong password on a trusted device fails generically (AEAD tag mismatch) and holds no key material.
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.device.test.ts] }
+  - id: device-key-absent-falls-back
+    text: With no local device key or an orphaned wrap, the DEVICE method is unavailable (the local key is NOT wiped on a single server response) and unlock falls back to the PASSWORD floor.
+    coverage:
+      web: { unit: [src/features/account/unlock/unlock.device.test.ts] }
+  - id: re-trust-replaces
+    text: Re-trusting an already-trusted device removes its old wrap before adding the new one (no duplicate).
+    coverage:
+      web: { unit: [src/features/account/trustDevice/trustDevice.test.ts] }
+  - id: untrust-removes-wrap
+    text: Untrusting removes that device's wrap by id (and the local key); other devices keep theirs.
+    coverage:
+      backend: { integration: [AccountWrapsSliceTest.deleteByIdRemovesTheWrap] }
+      web: { unit: [src/features/account/trustDevice/trustDevice.test.ts] }
+  - id: untrust-from-settings-ui
+    text: A user can forget the current device from the settings hub — the "This device" panel reflects the device's unlock tier (remembered / trusted / none) and its forget action (behind a confirm) drops whichever convenience tier this device holds, flipping it to none.
+    coverage:
+      web: { unit: [src/features/account/trustDevice/DeviceTrustPanel.test.ts] }
+  - id: multi-device
+    text: Multiple devices each enrol their own DEVICE wrap on the same Master Key (they coexist).
+    coverage:
+      backend: { integration: [AccountWrapsSliceTest.secondDeviceWrapCoexists] }
+  - id: no-cross-account-or-floor-removal
+    text: A caller cannot remove another account's wrap, and the PASSWORD floor can never be removed via this endpoint (both silent no-ops).
+    coverage:
+      backend: { integration: [AccountWrapsSliceTest.anotherUsersDeleteIsNoOp, AccountWrapsSliceTest.deletingPasswordWrapIsNoOp] }
+  - id: wrap-endpoints-authed-and-validated
+    text: Adding/removing wraps requires authentication; a malformed or non-DEVICE add is rejected at the boundary (400).
+    coverage:
+      backend: { integration: [AccountWrapsSliceTest.unauthenticatedAddAndDeleteAre401, AccountWrapsSliceTest.nonDeviceMethodIsRejected] }
+# Note: the authed add (201 + id) / untrust (204) round-trip is covered by the backend slice and the web
+# round-trip (and the live preview smoke).

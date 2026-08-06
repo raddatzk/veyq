@@ -1,0 +1,111 @@
+package com.veyq.app.features.account.login
+
+import com.veyq.app.shared.crypto.Ed25519Verifier
+import com.veyq.app.shared.instance.InstanceStore
+import com.veyq.app.shared.identity.VeyqUser
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
+import jakarta.transaction.Transactional
+import java.security.KeyPairGenerator
+import java.security.SecureRandom
+import java.time.Instant
+import java.time.temporal.ChronoUnit
+import java.util.Base64
+
+/** The challenge handed to the client: a nonce to sign plus the instance salt for key derivation. */
+data class ChallengeResult(val nonce: String, val instanceSalt: String)
+
+/**
+ * Operator-blind challenge-response login (ADR 0003). The password never reaches the server; the client
+ * proves possession of its password-derived auth private key by signing a server nonce, which the server
+ * verifies against the stored `authPublicKey`. Challenge issuance and every failure are **non-enumerable**
+ * — identical for existing and non-existing accounts.
+ */
+@ApplicationScoped
+class LoginHandler(
+    private val instanceStore: InstanceStore,
+    private val sessions: SessionService,
+    private val challengeStore: LoginChallengeStore,
+) {
+
+    /** Issue a single-use, time-bounded challenge. A nonce is always returned; it is only stored (and
+     *  thus verifiable) for an existing account, so the response never reveals whether the email exists. */
+    @Transactional
+    fun challenge(email: String): ChallengeResult {
+        val normalized = normalize(email)
+        val nonce = randomNonce()
+        if (VeyqUser.find("email", normalized).firstResult() != null) {
+            // Store in its own transaction and swallow a concurrent-insert race: the response must be
+            // identical (200 + nonce) whether or not the account exists — a PK conflict from a racing
+            // request for the same email must never surface as a different status (non-enumerability).
+            try {
+                challengeStore.replace(normalized, nonce, Instant.now().plus(CHALLENGE_TTL_MINUTES, ChronoUnit.MINUTES))
+            } catch (e: Exception) {
+                // a racing request already stored a challenge for this email — fine, ignore.
+            }
+        }
+        return ChallengeResult(nonce = nonce, instanceSalt = instanceStore.instanceSalt())
+    }
+
+    /** Verify a signed challenge and, on success, issue a session. The challenge is consumed (single-use)
+     *  whether or not verification succeeds. Returns null on any failure (→ generic 401). */
+    @Transactional
+    fun verify(email: String, signatureB64: String): IssuedSession? {
+        val normalized = normalize(email)
+        // Consume the single-use challenge atomically: a PESSIMISTIC_WRITE lock on the row (mirrors
+        // SessionService) serializes concurrent verifies of the SAME nonce — the first locks, deletes and
+        // commits; a racing request then blocks, re-reads nothing, and fails. Without the lock both requests
+        // read the row before either deletes it, so a captured signature could be replayed in parallel for two
+        // sessions off one challenge (audit P2f).
+        val challenge = LoginChallengeEntity.find("email", normalized)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
+        if (challenge != null) LoginChallengeEntity.deleteById(normalized) // single-use, consumed under the lock
+        val user = VeyqUser.find("email", normalized).firstResult()
+
+        val ok = verifySignature(challenge, user, signatureB64)
+        return if (ok && user != null) sessions.issue(user.id) else null
+    }
+
+    private fun verifySignature(challenge: LoginChallengeEntity?, user: VeyqUser?, signatureB64: String): Boolean {
+        // Timing equalization: run a verification in every branch so a missing account / nonce is not
+        // distinguishable by latency. A missing piece verifies against a static dummy key and fails.
+        val pubRaw: ByteArray
+        val message: ByteArray
+        if (challenge != null && user != null && challenge.expiresAt.isAfter(Instant.now())) {
+            pubRaw = decode(user.authPublicKey) ?: DUMMY_PUBLIC_KEY
+            message = decode(challenge.nonce) ?: ByteArray(0)
+        } else {
+            pubRaw = DUMMY_PUBLIC_KEY
+            message = DUMMY_MESSAGE
+        }
+        val signature = decode(signatureB64) ?: ByteArray(0)
+        val verified = Ed25519Verifier.verify(pubRaw, message, signature)
+        // Only a real challenge+account can succeed; the dummy branch can never verify true.
+        return verified && challenge != null && user != null && challenge.expiresAt.isAfter(Instant.now())
+    }
+
+    private fun normalize(email: String): String = email.trim().lowercase()
+
+    private fun randomNonce(): String {
+        val bytes = ByteArray(32)
+        SecureRandom().nextBytes(bytes)
+        return Base64.getEncoder().encodeToString(bytes)
+    }
+
+    private fun decode(b64: String): ByteArray? = try {
+        Base64.getDecoder().decode(b64)
+    } catch (e: IllegalArgumentException) {
+        null
+    }
+
+    companion object {
+        const val CHALLENGE_TTL_MINUTES = 5L
+
+        // A valid, throwaway Ed25519 public key used only to equalize the timing of failed verifications.
+        private val DUMMY_PUBLIC_KEY: ByteArray = run {
+            val pub = KeyPairGenerator.getInstance("Ed25519").generateKeyPair().public.encoded
+            pub.copyOfRange(pub.size - 32, pub.size) // strip the 12-byte X.509 SPKI prefix
+        }
+        private val DUMMY_MESSAGE = ByteArray(32)
+    }
+}

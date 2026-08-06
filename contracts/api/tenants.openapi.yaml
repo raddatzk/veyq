@@ -1,0 +1,1806 @@
+openapi: 3.1.0
+info:
+  title: veyq Tenants API
+  version: 0.1.0
+  description: >
+    Server-Owner administration of tenants — the structural (key-free) half of tenant creation
+    (uc.admin.create-tenant, Slice A / cr-0009). A Server Owner creates a tenant by entering a name, a
+    domain and the owner's email; the server validates the domain is free, creates the tenant in PENDING,
+    and mints a single-use, time-limited invite token bound to the owner email (delivered out-of-band by
+    email). The Server Owner can list all tenants and, for PENDING ones, resend the invite, reassign the
+    owner email, or revoke the tenant.
+
+    Operator-blind is not at stake here: name, domain and owner-email are low-sensitivity operational
+    metadata (host routing needs the domain anyway), and the invite is a **bootstrap secret, not a key**
+    (ADR 0006) — the server stores only its hash and holds no content key. **Activation** (Slice B, cr-0010)
+    is the `accept` family below: the invited owner cold-births the TENANT scope and seals the first grant
+    to their own identity; the server stores only the ciphertext grant + the OWNER membership and flips the
+    tenant ACTIVE — still operator-blind (it never sees the scope key).
+
+    The invite lifecycle mirrors the session refresh-token model (ADR 0004): each invite carries a status
+    (ACTIVE → SUPERSEDED on resend/reassign, → CONSUMED on acceptance, → EXPIRED past its TTL); transitions
+    are soft (never hard-deleted inline), so a replayed superseded/consumed token is recognised and
+    rejected. A scheduled purge removes terminal-state invites later.
+
+    The **admin** operations (create / list / resend / reassign / revoke) require the global **Server
+    Owner** role; the **accept** family does not — `accept/preview` and `accept/register` are public (gated
+    only by possession of the bootstrap secret), and `accept` needs any authenticated caller (being the
+    invited owner is a domain check → 403 `not_invited_owner`, not a role). Authorization is enforced by
+    code annotations, not this spec (ADR 0008). Field validation is declared here via
+    `x-field-extra-annotation` (bean-validation + trimming deserializer), so malformed input is rejected at
+    the boundary (400) before any handler runs.
+tags:
+  - name: tenants
+    description: >
+      Server-Owner tenant administration (create / list / invite resend·reassign / revoke). One tag = one
+      resource interface owning the whole `/api/tenants` subtree (avoids the greedy class-level @Path that
+      a second tag rooted at the same prefix would cause).
+
+paths:
+  /api/tenants:
+    post:
+      tags: [tenants]
+      operationId: createTenant
+      summary: Create a PENDING tenant and mint an owner invite.
+      description: >
+        Creates a tenant in PENDING with a domain↔tenant mapping and a single-use, time-limited invite
+        bound to the owner email. The tenant holds no content until its owner accepts and cold-births the
+        TENANT scope (Slice B). Server-Owner only.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTenantRequest" }
+            example:
+              tenantName: Familie Raddatz
+              domain: family.example.com
+              ownerEmail: kevin@example.com
+      responses:
+        "201":
+          description: The tenant was created in PENDING and an invite was minted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantCreated" }
+              example:
+                tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                status: PENDING
+                inviteExpiresAt: 2026-07-03T12:00:00Z
+        "400":
+          description: The request was malformed (missing/invalid name, domain or email).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "409":
+          description: The domain is already mapped to a tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: domain_taken }
+    get:
+      tags: [tenants]
+      operationId: listTenants
+      summary: List all tenants (active and pending).
+      description: >
+        Returns every tenant with its operational metadata and the state of its current invite. Server-Owner
+        only. No content keys or member identities are exposed — the operator stays blind to tenant content.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: All tenants on the instance.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TenantSummary" }
+              example:
+                - tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  name: Familie Raddatz
+                  domain: family.example.com
+                  ownerEmail: kevin@example.com
+                  status: PENDING
+                  inviteStatus: ACTIVE
+                  inviteExpiresAt: 2026-07-03T12:00:00Z
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+  /api/tenants/{tenantId}/invite/resend:
+    post:
+      tags: [tenants]
+      operationId: resendTenantInvite
+      summary: Re-mint and resend the invite for a pending tenant.
+      description: >
+        Soft-supersedes the current ACTIVE invite (→ SUPERSEDED) and mints a fresh ACTIVE one with a new
+        TTL, then re-sends the invite email to the same owner address. PENDING tenants only. Server-Owner
+        only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: A fresh invite was minted and re-sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantInviteState" }
+              example:
+                ownerEmail: kevin@example.com
+                inviteStatus: ACTIVE
+                inviteExpiresAt: 2026-07-03T12:00:00Z
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The tenant is not PENDING (already active) — invites apply only before activation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_pending }
+
+  /api/tenants/{tenantId}/invite/reassign:
+    post:
+      tags: [tenants]
+      operationId: reassignTenantInvite
+      summary: Re-bind a pending tenant's invite to a different owner email.
+      description: >
+        Changes the intended owner email, soft-supersedes the current ACTIVE invite, mints a fresh ACTIVE
+        one bound to the new email, and sends it there. This is what keeps the strict email-binding painless
+        (an existing user with a different primary email is invited at the right address). PENDING tenants
+        only. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReassignOwnerRequest" }
+            example: { ownerEmail: partner@example.com }
+      responses:
+        "200":
+          description: The invite was re-bound to the new email and re-sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantInviteState" }
+              example:
+                ownerEmail: partner@example.com
+                inviteStatus: ACTIVE
+                inviteExpiresAt: 2026-07-03T12:00:00Z
+        "400":
+          description: The request was malformed (missing/invalid email).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The tenant is not PENDING (already active).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_pending }
+
+  /api/tenants/{tenantId}/member-invites:
+    post:
+      tags: [tenants]
+      operationId: inviteTenantMember
+      summary: Invite a person (by email) into an active tenant as a MEMBER.
+      description: >
+        The tenant **owner** admits a new member (uc.spaces.add-member, ADR 0020): mints a single-use,
+        time-limited MEMBER-role invite bound to the email and **emailed to that address** — the *tenant* half of
+        member-add (a maybe-new person is onboarded by email + cold-birth; the *group* half, adding an
+        existing tenant member, is a separate scope-based operation later). Mail is the **only** channel: the
+        secret is never returned to the caller, because it is minted for the invited person and not for whoever
+        is looking at the owner's screen (ADR 0055). A tenant with no sendable mail settings is therefore
+        refused with `503 mail_unavailable` **before** anything is minted, and a send that errors leaves no
+        invite behind. Distinct from the Server-Owner
+        tenant admin above: this is gated on the caller holding the **OWNER membership** of `{tenantId}` (a
+        code check, not the Server-Owner role). The tenant must be ACTIVE. Delivery of the scope key is
+        automatic afterward (any online key-holder wraps `K_SC` to the new member — cr-0076); admission here
+        only creates the invite. Operator-blind: only the invite hash + the email (metadata) are stored.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MemberInviteRequest" }
+            example: { email: partner@example.com }
+      responses:
+        "201":
+          description: A MEMBER invite was minted and sent.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberInviteState" }
+              example:
+                email: partner@example.com
+                inviteStatus: ACTIVE
+                inviteExpiresAt: 2026-07-11T12:00:00Z
+                delivery: SENT
+        "400":
+          description: The request was malformed (missing/invalid email).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may invite members).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The email is already a member of this tenant, or the tenant is not ACTIVE.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: already_member }
+        "503":
+          description: >
+            This tenant cannot send mail, so the invite cannot reach anyone and none was minted
+            (`mail_unavailable` — the owner configures SMTP under mail settings); or the mail settings are
+            complete but the send errored, in which case the minted invite was revoked again
+            (`mail_send_failed`, safe to retry). There is no copy-link fallback on this path (ADR 0055).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+    get:
+      tags: [tenants]
+      operationId: listMemberInvites
+      summary: List the tenant's pending member invites (owner-gated).
+      description: >
+        Returns the tenant's currently **pending** MEMBER invites — each an opaque `inviteId`, the invited
+        `email`, its status, and expiry — so the owner can track who has been invited but has not joined yet
+        (uc.spaces.manage-member-invites). Consumed/expired/superseded invites are not listed. Gated on the
+        caller holding the tenant **OWNER** membership (a code check). Operator-blind: only invite metadata the
+        server already stores — never a plaintext secret.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant's pending member invites.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/PendingMemberInvite" }
+              example:
+                - inviteId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  email: partner@example.com
+                  inviteStatus: ACTIVE
+                  inviteExpiresAt: 2026-07-11T12:00:00Z
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller does not own this tenant.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/{tenantId}/member-invites/{inviteId}/reissue:
+    post:
+      tags: [tenants]
+      operationId: reissueMemberInvite
+      summary: Re-issue a pending member invite with a fresh secret + link (owner-gated).
+      description: >
+        Supersedes the given pending MEMBER invite and mints a **fresh single-use secret** for the same email,
+        emailed to that address (the old link dies) — for when the invitee lost or ignored the first one.
+        Owner-gated. Same email, new secret + expiry, never returned to the caller (ADR 0055). Like the first
+        mint, it needs a sendable mailer and is refused with `503` without one. Note the ordering cost: the
+        outstanding invite is superseded before the new one is minted, so a send that errors leaves the invitee
+        with **no** live invite — the owner retries.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/InviteId"
+      responses:
+        "200":
+          description: A fresh member invite was minted (the old one superseded).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberInviteState" }
+              example:
+                email: partner@example.com
+                inviteStatus: ACTIVE
+                inviteExpiresAt: 2026-07-11T12:00:00Z
+                delivery: SENT
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No such pending invite for this tenant — unknown, already consumed, or already terminal
+            (`invite_not_found`); or no such tenant, or the caller is not a member of it (`tenant_not_found`,
+            deliberately indistinguishable, ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "503":
+          description: >
+            This tenant cannot send mail, so nothing was minted and the previous invite still stands
+            (`mail_unavailable`); or the send errored, in which case the fresh invite was revoked and the
+            superseded one is **not** restored (`mail_send_failed`, safe to retry). ADR 0055.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+
+  /api/tenants/{tenantId}/member-invites/{inviteId}:
+    delete:
+      tags: [tenants]
+      operationId: revokeMemberInvite
+      summary: Revoke a pending member invite (owner-gated).
+      description: >
+        Soft-transitions the given pending MEMBER invite to a terminal state, so a later replay of its secret at
+        `accept` is rejected (`invite_no_longer_valid`) and the reserved email is freed to re-invite. Owner-gated.
+        **Additive-safe** — it touches no grant and no already-joined member (removing a *member* is a later
+        slice, ADR 0020).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - $ref: "#/components/parameters/InviteId"
+      responses:
+        "204":
+          description: The pending invite was revoked.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No such pending invite for this tenant (`invite_not_found`); or no such tenant, or the caller is
+            not a member of it (`tenant_not_found`, deliberately indistinguishable, ADR 0042: membership is
+            the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+
+  /api/tenants/{tenantId}/members/{userId}:
+    delete:
+      tags: [tenants]
+      operationId: removeTenantMember
+      summary: Remove a member from a tenant (ACL-revoke cascade + the group orphan rule).
+      description: >
+        The tenant **owner** removes a member (uc.spaces.remove-tenant-member, ADR 0014 §6): a tenant-level
+        **cascade**, distinct from the scope-level `removeMember` (a single group membership). Cuts the target's
+        **shared** access at once — deletes their TENANT-scope membership and every **co-shared** GROUP membership
+        (an instant 403 on shared content; the tenant content key is **not** rotated, ADR 0025 — ACL-revoke). Applies
+        the **orphan rule** to groups they solely owned: transfer OWNER to the **oldest** remaining member, else the
+        solo group is grace-tombstoned. The target's **own** scopes (personal + any solo group) are grace-tombstoned
+        with their **membership kept** (read-only grace, then `ScopePurge` — cr-0090), so they can read/export their
+        own memories before erasure. Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042),
+        then owner-gated (`403 not_tenant_owner`); the **last-owner guard** rejects removing
+        the last tenant OWNER (`409 last_owner`, ADR 0007). Operator-blind: only membership deletions + a lifecycle
+        timestamp — never a key. Enforced by code, not this spec (ADR 0008).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - { name: userId, in: path, required: true, description: Opaque id of the member to remove., schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: The member was removed (shared access cut; own scopes grace-tombstoned).
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may remove members).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No such member of this tenant (`member_not_found`); or no such tenant, or the caller is not a
+            member of it (`tenant_not_found`, deliberately indistinguishable, ADR 0042: membership is the
+            first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: member_not_found }
+        "409":
+          description: The last remaining tenant OWNER cannot be removed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: last_owner }
+
+  /api/tenants/{tenantId}:
+    delete:
+      tags: [tenants]
+      operationId: revokeTenant
+      summary: Revoke a pending tenant.
+      description: >
+        Deletes a PENDING tenant that was never accepted (reserved domain + outstanding invite). ACTIVE
+        tenants cannot be revoked this way — deactivating a live tenant is a separate future use-case.
+        Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "204":
+          description: The pending tenant was revoked.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The tenant is ACTIVE and cannot be revoked here.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_pending }
+
+  /api/tenants/{tenantId}/terms:
+    get:
+      tags: [tenants]
+      operationId: getTenantTerms
+      summary: Read a tenant's current terms + the caller's accepted version.
+      description: >
+        Returns the tenant's per-locale terms markdown, the current `termsVersion`, and the **caller's**
+        `acceptedVersion` (0 = not yet accepted). Serves the owner editor (loads the current text), the member
+        accept-gate (compare `acceptedVersion` to `termsVersion`), and the `/terms` accept view. The terms are
+        the operator's **public** policy (operational content, not E2EE); for now this is gated to **members**
+        of the tenant (a non-member is `404`, indistinguishable) — a pre-auth public-serving path is a later
+        slice. `@Authenticated`, enforced by code (ADR 0008, ADR 0035).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant's current terms + the caller's accepted version.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantTerms" }
+              example:
+                termsVersion: 3
+                acceptedVersion: 2
+                terms:
+                  de: "## Nutzungsbedingungen\n…"
+                  en: "## Terms of use\n…"
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant with that id, or the caller is not a member (indistinguishable).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+    put:
+      tags: [tenants]
+      operationId: updateTenantTerms
+      summary: Set/replace a tenant's terms (owner-gated; bumps the version on a real change).
+      description: >
+        The tenant **owner** replaces the per-locale terms markdown. The server **normalizes** the markdown
+        and, **only if it changed**, stores it and **bumps `terms_version`** (an idempotent re-save returns the
+        same version — the pre-E2EE logic). The higher version re-gates every member (uc.account.accept-terms).
+        Membership-gated first (a non-member gets `404 tenant_not_found`, ADR 0042), then gated on the caller
+        holding the tenant **OWNER** membership (a code check, `403 not_tenant_owner`).
+        Operator-blind: terms are public operational content, never a key.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantTermsUpdate" }
+            example:
+              terms:
+                de: "## Nutzungsbedingungen\n…"
+                en: "## Terms of use\n…"
+      responses:
+        "200":
+          description: The terms were stored; the (possibly bumped) current state is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantTerms" }
+              example:
+                termsVersion: 3
+                acceptedVersion: 3
+                terms:
+                  de: "## Nutzungsbedingungen\n…"
+                  en: "## Terms of use\n…"
+        "400":
+          description: The request was malformed (terms too long).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may edit terms).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/{tenantId}/terms/accept:
+    post:
+      tags: [tenants]
+      operationId: acceptTenantTerms
+      summary: Accept the tenant's current terms (member gate; re-accept on a bump).
+      description: >
+        The signed-in **member** accepts the tenant's terms at the version they were shown. The server records
+        `accepted_terms_version = version` for `(caller, tenant)` — **only if** `version` equals the current
+        `terms_version`, else `409 terms_version_changed` (the operator bumped them meanwhile → the client
+        re-reads and re-presents). Acceptance is **coarse operational metadata** (like membership), never
+        content. `@Authenticated`; a non-member is `404` (uc.account.accept-terms, ADR 0035).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptTermsRequest" }
+            example: { version: 3 }
+      responses:
+        "200":
+          description: Accepted; the current terms state (with the updated acceptedVersion) is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantTerms" }
+              example:
+                termsVersion: 3
+                acceptedVersion: 3
+                terms:
+                  de: "## Nutzungsbedingungen\n…"
+                  en: "## Terms of use\n…"
+        "400":
+          description: The request was malformed (missing/invalid version).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: No tenant with that id, or the caller is not a member (indistinguishable).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The terms version changed since it was shown — re-read and re-present before accepting.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: terms_version_changed }
+
+  /api/tenants/{tenantId}/mail-settings:
+    get:
+      tags: [tenants]
+      operationId: getTenantMailSettings
+      summary: Read a tenant's SMTP + invite-template settings (owner-gated; password never returned).
+      description: >
+        Returns the tenant's per-tenant mail configuration — SMTP host/port/from/username/TLS, whether sending is
+        `enabled`, whether a password is stored (`passwordSet`), and the owner-authored invite subject/body
+        templates (null ⇒ veyq's bilingual EN+DE default is used). The SMTP **password is never returned** — only
+        `passwordSet` ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)). Owner-gated: a
+        member who is not the owner gets `403 not_tenant_owner`, a non-member `404` (indistinguishable, ADR 0042).
+        Enforced by code (ADR 0008, [ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md)).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant's current mail settings (the password redacted to `passwordSet`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantMailSettings" }
+              example:
+                host: smtp.example.com
+                port: 587
+                from: noreply@family.example.com
+                username: family
+                tls: true
+                enabled: true
+                passwordSet: true
+                subjectTemplate: null
+                bodyTemplate: null
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may read mail settings).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+    put:
+      tags: [tenants]
+      operationId: updateTenantMailSettings
+      summary: Set/replace a tenant's SMTP + invite-template settings (owner-gated; password write-only).
+      description: >
+        The tenant **owner** configures per-tenant SMTP so member invites are emailed from the tenant's own
+        domain ([ADR 0048](../../docs/decisions/0048-provider-neutral-smtp-mail-transport.md)). The **password is
+        write-only** — supplied here, sealed at rest under the env KEK
+        ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)), never returned or logged;
+        **omit it to keep** the stored one. The optional `subjectTemplate` / `bodyTemplate` are owner-authored and
+        rendered over a **closed variable set** — `{{link}}`, `{{domain}}`, `{{expiry}}` only (ADR 0048 §6,
+        [ADR 0049](../../docs/decisions/0049-email-delivery-boundary.md)); a template that references any other
+        `{{tag}}` is rejected (`400 invalid_mail_template`). Omit them for veyq's bilingual EN+DE default. The PUT
+        **replaces** the settings (password excepted). Owner-gated (`403 not_tenant_owner`; a non-member `404`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantMailSettingsUpdate" }
+            example:
+              host: smtp.example.com
+              port: 587
+              from: noreply@family.example.com
+              username: family
+              password: hunter2
+              tls: true
+              enabled: true
+              subjectTemplate: "You're invited to {{domain}}"
+              bodyTemplate: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
+      responses:
+        "200":
+          description: The settings were stored; the current state (password redacted) is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantMailSettings" }
+              example:
+                host: smtp.example.com
+                port: 587
+                from: noreply@family.example.com
+                username: family
+                tls: true
+                enabled: true
+                passwordSet: true
+                subjectTemplate: "You're invited to {{domain}}"
+                bodyTemplate: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
+        "400":
+          description: >
+            The request was malformed (invalid host/port/from/username), or a template references a `{{tag}}`
+            outside the closed set (`invalid_mail_template`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_mail_template }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner may edit mail settings).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
+  /api/tenants/accept/preview:
+    post:
+      tags: [tenants]
+      operationId: previewTenantInvite
+      summary: Preview a tenant invite from its bootstrap secret.
+      description: >
+        Returns what the invitee is asked to accept (tenant name, domain, the invited owner email) and
+        whether that email already has an account — so the client picks the sign-in vs. register path.
+        Public: gated only by possession of the bootstrap secret (the URL-fragment token), which is matched
+        by hash and never echoed back. A replayed superseded/consumed/expired secret is 410.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptPreviewRequest" }
+            example: { bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc }
+      responses:
+        "200":
+          description: The invite is valid; here is what would be accepted.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InvitePreview" }
+              example:
+                tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                tenantName: Familie Raddatz
+                domain: family.example.com
+                ownerEmail: kevin@example.com
+                hasAccount: false
+        "400":
+          description: The request was malformed (missing/blank bootstrap secret).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "404":
+          description: No invite matches that secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "410":
+          description: The invite is no longer valid (superseded, consumed, or expired).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_no_longer_valid }
+
+  /api/tenants/accept:
+    post:
+      tags: [tenants]
+      operationId: acceptTenantInvite
+      summary: Accept a tenant invite as an existing user (activate the tenant).
+      description: >
+        The signed-in invitee accepts: the client has cold-born the TENANT scope and sealed the first grant
+        to its own identity (opaque ciphertext to the server). The server stores the OWNER membership +
+        grant, flips the tenant ACTIVE, and consumes the invite — atomically. Any authenticated caller may
+        call this; the caller's email must equal the invited owner email, else 403 `not_invited_owner`
+        (a domain check, not the Server-Owner role).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AcceptInviteRequest" }
+            example:
+              bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+              grant: AQ==
+      responses:
+        "200":
+          description: The tenant is now active and the caller is its owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantActivated" }
+              example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, status: ACTIVE }
+        "400":
+          description: The request was malformed (missing secret or grant).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the invited owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_invited_owner }
+        "404":
+          description: No invite matches that secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "409":
+          description: >
+            A conflict — the tenant is already active (`tenant_not_pending`), or the chosen `username` is already
+            taken in this tenant (`username_taken`). The specific case is in the response `code`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_pending }
+        "410":
+          description: The invite is no longer valid (superseded, consumed, or expired).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_no_longer_valid }
+
+  /api/tenants/accept/register:
+    post:
+      tags: [tenants]
+      operationId: registerAndAcceptTenantInvite
+      summary: Register a new account and accept the invite (activate the tenant).
+      description: >
+        The canonical email-invite path — the invitee has no account yet. A new MEMBER account is born on
+        the device (operator-blind: the server receives only ciphertext + public keys), its **email taken
+        from the invite** (not the body, which binds it). In one atomic step the server creates the account,
+        stores the OWNER membership + grant, flips the tenant ACTIVE, and consumes the invite. Public: gated
+        by the bootstrap secret. The new user logs in afterward (no session is issued here, mirroring setup).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterAndAcceptRequest" }
+            example:
+              bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+              username: kevin
+              account:
+                suiteId: v1
+                identityPublicKey: aWRlbnRpdHktcHVibGljLWtleQ==
+                wrappedIdentityPrivateKey: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+                authPublicKey: ZWQyNTUxOS1hdXRoLXB1Yg==
+                masterKeyWraps:
+                  - method: PASSWORD
+                    wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
+                    kdfParams: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+                recoveryMasterKeyTag: cmVjb3ZlcnktdGFn
+              grant: AQ==
+      responses:
+        "201":
+          description: The account was created, the tenant is active, and the caller owns it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantActivatedWithUser" }
+              example:
+                tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                status: ACTIVE
+                userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        "400":
+          description: The request was malformed (missing secret/grant or invalid account material).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "404":
+          description: No invite matches that secret.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_not_found }
+        "409":
+          description: >
+            A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), or the
+            chosen `username` is already taken in this tenant (`username_taken`). The specific case is in `code`.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: email_taken }
+        "410":
+          description: The invite is no longer valid (superseded, consumed, or expired).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invite_no_longer_valid }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        The opaque access token issued by login / refresh. Admin operations additionally require the
+        Server-Owner role; `accept` requires only an authenticated caller (enforced by code, not this spec).
+
+  parameters:
+    TenantId:
+      name: tenantId
+      in: path
+      required: true
+      description: Opaque id of the tenant.
+      schema:
+        type: string
+        format: uuid
+        example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+    InviteId:
+      name: inviteId
+      in: path
+      required: true
+      description: Opaque id of a member invite.
+      schema:
+        type: string
+        format: uuid
+        example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+
+  schemas:
+    CreateTenantRequest:
+      type: object
+      required: [tenantName, domain, ownerEmail]
+      properties:
+        tenantName:
+          x-veyq-visibility: public
+          type: string
+          description: Human display name of the tenant (operational cleartext; trimmed on input).
+          maxLength: 100
+          example: Familie Raddatz
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 100)'
+        domain:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            The tenant's domain (its Host) — the backend resolves the tenant from this. Operational
+            cleartext, unique across the instance. Lowercase hostname; trimmed on input.
+          maxLength: 253
+          example: family.example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+        ownerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            An invite is addressed and bound to this email — the server holds it in plaintext to deliver the invite and
+            to match the account that accepts it.
+          type: string
+          format: email
+          description: Email of the person who will own the tenant; the invite is bound to it. Server-visible.
+          maxLength: 254
+          example: kevin@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    ReassignOwnerRequest:
+      type: object
+      required: [ownerEmail]
+      properties:
+        ownerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            An invite is addressed and bound to this email — the server holds it in plaintext to deliver the invite and
+            to match the account that accepts it.
+          type: string
+          format: email
+          description: The new owner email to re-bind the invite to. Server-visible.
+          maxLength: 254
+          example: partner@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    TenantCreated:
+      type: object
+      required: [tenantId, status, inviteExpiresAt, bootstrapSecret, delivery]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the created tenant.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        status:
+          $ref: "#/components/schemas/TenantStatus"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the minted invite expires (UTC).
+          example: 2026-07-03T12:00:00Z
+        bootstrapSecret:
+          $ref: "#/components/schemas/InviteBootstrapSecret"
+        delivery:
+          $ref: "#/components/schemas/DeliveryResult"
+
+    TenantSummary:
+      type: object
+      required: [tenantId, name, domain, ownerEmail, status]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        name:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 100
+          example: Familie Raddatz
+        domain:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 253
+          example: family.example.com
+        ownerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Echoed to the owner so they can see which email an invite is bound to (ADR 0007) — the same plaintext the
+            invite was already bound to, not a new disclosure.
+          type: string
+          maxLength: 254
+          example: kevin@example.com
+        status:
+          $ref: "#/components/schemas/TenantStatus"
+        inviteStatus:
+          description: State of the tenant's current invite (absent once a tenant is ACTIVE).
+          oneOf:
+            - $ref: "#/components/schemas/InviteStatus"
+            - type: "null"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: When the current invite expires (null once ACTIVE).
+          example: 2026-07-03T12:00:00Z
+
+    TenantInviteState:
+      type: object
+      required: [ownerEmail, inviteStatus, inviteExpiresAt, bootstrapSecret, delivery]
+      properties:
+        ownerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Echoed to the owner so they can see which email an invite is bound to (ADR 0007) — the same plaintext the
+            invite was already bound to, not a new disclosure.
+          type: string
+          maxLength: 254
+          example: kevin@example.com
+        inviteStatus:
+          $ref: "#/components/schemas/InviteStatus"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-03T12:00:00Z
+        bootstrapSecret:
+          $ref: "#/components/schemas/InviteBootstrapSecret"
+        delivery:
+          $ref: "#/components/schemas/DeliveryResult"
+
+    TenantStatus:
+      type: string
+      description: Lifecycle state of a tenant.
+      enum: [PENDING, ACTIVE]
+      example: PENDING
+
+    InviteStatus:
+      type: string
+      description: >
+        Lifecycle state of an invite (mirrors the session refresh-token model): ACTIVE until superseded by
+        a resend/reassign, consumed on acceptance, or expired past its TTL.
+      enum: [ACTIVE, SUPERSEDED, CONSUMED, EXPIRED]
+      example: ACTIVE
+
+    InviteRole:
+      type: string
+      description: >
+        The role the invite grants on acceptance. OWNER cold-births the TENANT scope + seals the first grant
+        (tenant activation, cr-0010); MEMBER joins an already-active tenant grant-less, the key delivered
+        later by a key-holder (cr-0076/cr-0077).
+      enum: [OWNER, MEMBER]
+      example: MEMBER
+
+    DeliveryResult:
+      x-veyq-visibility: enum
+      type: string
+      description: >
+        How the invite reached (or did not reach) its recipient, returned inline to the minting owner
+        (cr-email-invite-send-hardening; ADR 0048/0049). Request-scoped only — never persisted, so it adds no
+        stored metadata (operator-blind untouched). SENT = the tenant's SMTP is configured and the mail was
+        accepted by the server. FALLBACK_COPYLINK = no sendable SMTP, so the copy-link is the channel — reachable
+        **only on the Server-Owner's bootstrap invite**, where a PENDING tenant has no mail settings by
+        construction (ADR 0055 §3). FAILED = SMTP is configured but the send errored; the returned
+        `bootstrapSecret` copy-link is the fallback, again on the bootstrap invite only. On a **member** invite
+        neither of the latter two occurs: both are refused as `503` (`mail_unavailable` / `mail_send_failed`).
+      enum: [SENT, FALLBACK_COPYLINK, FAILED]
+      example: SENT
+
+    MemberInviteRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            An invite is addressed and bound to this email — the server holds it in plaintext to deliver the invite and
+            to match the account that accepts it.
+          type: string
+          format: email
+          description: Email of the person to invite as a tenant member; the invite is bound to it. Server-visible.
+          maxLength: 254
+          example: partner@example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    PendingMemberInvite:
+      type: object
+      required: [inviteId, email, inviteStatus, inviteExpiresAt]
+      properties:
+        inviteId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the pending invite (used to re-issue or revoke it).
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Echoed to the owner so they can see which email an invite is bound to (ADR 0007) — the same plaintext the
+            invite was already bound to, not a new disclosure.
+          type: string
+          maxLength: 254
+          example: partner@example.com
+        inviteStatus:
+          $ref: "#/components/schemas/InviteStatus"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-11T12:00:00Z
+
+    MemberInviteState:
+      type: object
+      description: >
+        A minted member invite, as reported back to the owner who minted it. It deliberately carries **no
+        secret**: a member invite travels by mail only, because the token is minted for the invited person
+        (ADR 0055 §2). `delivery` is kept for shape-parity with the Server-Owner invite responses, but on this
+        resource only `SENT` is reachable — the other two outcomes are `503`s, not success bodies.
+      required: [email, inviteStatus, inviteExpiresAt, delivery]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Echoed to the owner so they can see which email an invite is bound to (ADR 0007) — the same plaintext the
+            invite was already bound to, not a new disclosure.
+          type: string
+          maxLength: 254
+          example: partner@example.com
+        inviteStatus:
+          $ref: "#/components/schemas/InviteStatus"
+        inviteExpiresAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          example: 2026-07-11T12:00:00Z
+        delivery:
+          $ref: "#/components/schemas/DeliveryResult"
+
+    InviteBootstrapSecret:
+      type: string
+      description: >
+        The raw single-use invite secret, returned to the **Server Owner** who mints a tenant's *bootstrap*
+        invite, so they can hand it off out-of-band by copying the invite link (`/tenant/accept#<bootstrapSecret>`).
+        This is the one place veyq still does that, and only because a `PENDING` tenant has no mail settings by
+        construction, so no other channel can exist yet ([ADR 0055](../../docs/decisions/0055-mail-is-a-precondition-not-a-capability.md) §3).
+        A **member** invite never carries it. It is the **admission token, not a key** ([ADR 0006](../../docs/decisions/0006-cold-tenant-scope-birth.md));
+        it rides the URL **fragment** on the invitee side and is matched server-side by hash only (never stored
+        plaintext, never echoed in the tenant list — only here at mint time, over TLS to the owner-gated caller).
+      maxLength: 128
+      example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+
+    # --- cr-0114 (ADR 0035): tenant terms of service ---
+    # LocalizedMarkdown moved to _common (ADR 0038, cr-anonymous-accept-gate) — shared with the sharing spec's
+    # accountless terms gate. A local named alias to the external source (the ErrorResponse pattern) so the
+    # generator still emits a `LocalizedMarkdown` model in this module while the shape is single-sourced.
+    LocalizedMarkdown:
+      $ref: '_common.openapi.yaml#/components/schemas/LocalizedMarkdown'
+
+    TenantTerms:
+      type: object
+      required: [termsVersion, acceptedVersion]
+      properties:
+        termsVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The tenant's current terms version. 0 = no terms set (nothing to accept, the gate never fires).
+          example: 3
+        acceptedVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: >
+            The **caller's** accepted version. 0 = not yet accepted; anything below `termsVersion` = the accept
+            gate fires (uc.account.accept-terms).
+          example: 2
+        terms:
+          description: The current per-locale terms (absent/empty until the owner publishes).
+          oneOf:
+            - $ref: "#/components/schemas/LocalizedMarkdown"
+            - type: "null"
+
+    TenantTermsUpdate:
+      type: object
+      required: [terms]
+      properties:
+        terms:
+          $ref: "#/components/schemas/LocalizedMarkdown"
+          # @Valid cascades the per-locale size validation into the map.
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+
+    AcceptTermsRequest:
+      type: object
+      required: [version]
+      properties:
+        version:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The terms version the member is accepting — must equal the current termsVersion, else 409.
+          minimum: 1
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
+
+    # --- cr-email-smtp-transport (ADR 0048/0049/0050): per-tenant SMTP + owner-authored invite templates ---
+    TenantMailSettings:
+      type: object
+      description: >
+        A tenant's mail configuration as **read back**: the SMTP transport fields, the send toggle, whether a
+        password is stored (never the password itself, ADR 0050), and the owner-authored invite templates. The
+        transport fields and templates are operator-authored config (`public`), not user data.
+      required: [tls, enabled, passwordSet, configSecretState]
+      properties:
+        host:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP server host (operator infra config). Null ⇒ not configured.
+          maxLength: 253
+          example: smtp.example.com
+        port:
+          x-veyq-visibility: public
+          type: [integer, "null"]
+          format: int32
+          description: SMTP server port (operator infra config).
+          example: 587
+        from:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The From address invites are sent from (null ⇒ noreply@<tenant.domain>).
+          maxLength: 254
+          example: noreply@family.example.com
+        username:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP auth username (operator infra config).
+          maxLength: 254
+          example: family
+        tls:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether to use STARTTLS on the SMTP connection.
+          example: true
+        enabled:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether email sending is enabled. Off (or incomplete) means this tenant cannot admit members at all
+            — inviting is refused rather than degraded to a copy-link (ADR 0048/0055).
+          example: true
+        passwordSet:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether an SMTP password is stored — the password itself is never returned (ADR 0050).
+          example: true
+        subjectTemplate:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Owner-authored invite subject, rendered over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`
+            (ADR 0048 §6). Null ⇒ veyq's bilingual EN+DE default.
+          maxLength: 200
+          example: null
+        bodyTemplate:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Owner-authored invite body, rendered over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`
+            (ADR 0048 §6, ADR 0049). Owner literal prose is a consented, operator/provider-visible disclosure.
+            Null ⇒ veyq's bilingual EN+DE default.
+          maxLength: 8000
+          example: null
+        configSecretState:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            The server's config-secret subsystem state ([ADR 0050](../../docs/decisions/0050-operator-config-secret-encryption.md)
+            amendment), so the owner sees honestly whether a stored SMTP password can actually be used. `OK` = a KEK
+            is present and matches the DB fingerprint that sealed the stored secrets. `ABSENT` = no KEK is available
+            (generation failed / read-only FS) — sealing and sending are unavailable, so member invites and
+            password recovery are refused until it is fixed (ADR 0055).
+            `MISMATCH` = a KEK is present but is **not** the one that sealed the stored password (the key file
+            changed or was lost/restored differently) — the stored password can't be decrypted; re-enter it to
+            reseal under the current key. Server self-description, not user data.
+          enum: [OK, ABSENT, MISMATCH]
+          example: OK
+
+    TenantMailSettingsUpdate:
+      type: object
+      description: >
+        Owner-supplied mail configuration. The password is **write-only** (sealed at rest, ADR 0050) — omit it to
+        keep the stored one; every other field is a full replace. The template fields are optional (null ⇒ veyq's
+        EN+DE default) and validated against the closed variable set at write time (an unknown `{{tag}}` ⇒
+        `400 invalid_mail_template`).
+      required: [tls, enabled]
+      properties:
+        host:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP server host (a bare hostname). Null ⇒ clear (unconfigured).
+          maxLength: 253
+          example: smtp.example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
+        port:
+          x-veyq-visibility: public
+          type: [integer, "null"]
+          format: int32
+          description: SMTP server port.
+          example: 587
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(65535)'
+        from:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: The From address (null ⇒ noreply@<tenant.domain>).
+          maxLength: 254
+          example: noreply@family.example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        username:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: SMTP auth username.
+          maxLength: 254
+          example: family
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 254)'
+        password:
+          x-veyq-visibility: token
+          type: [string, "null"]
+          description: >
+            WRITE-ONLY SMTP password; sealed at rest under the env KEK (ADR 0050), never returned or logged. Omit
+            (or null) to keep the stored one.
+          maxLength: 256
+          example: hunter2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
+        tls:
+          x-veyq-visibility: flag
+          type: boolean
+          description: Whether to use STARTTLS.
+          example: true
+        enabled:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether email sending is enabled. Off means member invites and password recovery are refused on this
+            tenant, not degraded to a copy-link (ADR 0055).
+          example: true
+        subjectTemplate:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Owner-authored invite subject over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`. Null ⇒ default.
+          maxLength: 200
+          example: "You're invited to {{domain}}"
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.Size(max = 200)'
+        bodyTemplate:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Owner-authored invite body over the closed set `{{link}}`/`{{domain}}`/`{{expiry}}`. Null ⇒ default.
+          maxLength: 8000
+          example: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8000)'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+
+    # --- Slice B (cr-0010): invite acceptance / activation ---
+
+    AcceptPreviewRequest:
+      type: object
+      required: [bootstrapSecret]
+      properties:
+        bootstrapSecret:
+          x-veyq-visibility: token
+          type: string
+          description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
+          maxLength: 128
+          example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+
+    InvitePreview:
+      type: object
+      required: [tenantId, tenantName, domain, ownerEmail, hasAccount, role]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        tenantName:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 100
+          example: Familie Raddatz
+        domain:
+          x-veyq-visibility: public
+          type: string
+          maxLength: 253
+          example: family.example.com
+        ownerEmail:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            Shown to whoever holds the invite's bootstrap secret so they can confirm which email the invite is bound to
+            before accepting — the email the invite was already sent to.
+          type: string
+          description: The invited email (the field name is historical — it is the invitee's email for any role).
+          maxLength: 254
+          example: kevin@example.com
+        hasAccount:
+          x-veyq-visibility: flag
+          type: boolean
+          description: True if the invited email already has an account (the client then uses the sign-in accept).
+          example: false
+        role:
+          $ref: "#/components/schemas/InviteRole"
+
+    AcceptInviteRequest:
+      type: object
+      required: [bootstrapSecret, username]
+      properties:
+        bootstrapSecret:
+          x-veyq-visibility: token
+          type: string
+          description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
+          maxLength: 128
+          example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+        username:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
+            uniqueness within the tenant and to serve the directory.
+          type: string
+          description: >
+            The caller's chosen handle **in the tenant they are joining** — per-tenant, unique within it,
+            plaintext (not a login credential; email is, ADR 0023). Trimmed + lowercased server-side; a clash in
+            the target tenant is `409 username_taken`. The optional real name may be sealed here (`sealedName`) at
+            join, or later via the profile op.
+          minLength: 2
+          maxLength: 32
+          example: kevin
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+        grant:
+          type: [string, "null"]
+          description: >
+            The scope root key sealed to the caller's own identity public key. **Required for an OWNER invite**
+            (the invitee cold-births the TENANT scope and seals the first grant) — opaque base64 the server
+            stores verbatim. **Omitted for a MEMBER invite**: a member joins grant-less and the key is
+            delivered later by a key-holder (cr-0076). The server enforces this per the invite's role.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: [string, "null"]
+          description: >
+            OPTIONAL real name (first + last) sealed under `K_tenant` (opaque base64) — the same blob the profile
+            op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
+            (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
+            profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    TenantActivated:
+      type: object
+      required: [tenantId, status]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        status:
+          $ref: "#/components/schemas/TenantStatus"
+
+    TenantActivatedWithUser:
+      type: object
+      required: [tenantId, status, userId]
+      properties:
+        tenantId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        status:
+          $ref: "#/components/schemas/TenantStatus"
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: Opaque id of the freshly created owner account.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+
+    RegisterAndAcceptRequest:
+      type: object
+      required: [bootstrapSecret, username, account]
+      properties:
+        bootstrapSecret:
+          x-veyq-visibility: token
+          type: string
+          description: The invite's bootstrap secret (the URL-fragment token). Matched by hash; not a key.
+          maxLength: 128
+          example: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+        username:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
+            uniqueness within the tenant and to serve the directory.
+          type: string
+          description: >
+            The new account's chosen handle **in the tenant it is joining** — per-tenant, unique within it,
+            plaintext (not a login credential; email is, ADR 0023). Trimmed + lowercased server-side; a clash in
+            the target tenant is `409 username_taken`. The optional real name may be sealed here (`sealedName`) at
+            join, or later via the profile op.
+          minLength: 2
+          maxLength: 32
+          example: kevin
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+        account:
+          $ref: "#/components/schemas/AccountRegistration"
+          # @Valid cascades bean-validation into the cold-birth account material.
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        grant:
+          type: [string, "null"]
+          description: >
+            The scope root key sealed to the new account's identity public key. **Required for an OWNER
+            invite** (cold-births the TENANT scope); **omitted for a MEMBER invite** (the member joins
+            grant-less; a key-holder delivers the key later, cr-0076). Opaque base64; enforced per the invite's
+            role.
+          contentEncoding: base64
+          maxLength: 8192
+          example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: [string, "null"]
+          description: >
+            OPTIONAL real name (first + last) sealed under `K_tenant` (opaque base64) — the same blob the profile
+            op stores (ADR 0023). Submitted **at the join** when the invitee already holds `K_tenant` at accept
+            (owner cold-birth / grant-sealed accept); omitted ⇒ username-only, the name added/edited later in the
+            profile (a grant-less accept always omits it). Stored verbatim; the server never decrypts it.
+          contentEncoding: base64
+          maxLength: 8192
+          example: c2VhbGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    AccountRegistration:
+      type: object
+      description: >
+        Cold-birth material for a new account (operator-blind, same shape as setup's owner registration minus
+        the email, which is taken from the invite). All key material is ciphertext or a public key. The account
+        carries **no** display name — identity is the per-tenant `username` (on the request) + the optional sealed
+        real name (`sealedName`, on the request at join, or later via the profile op — ADR 0023).
+      required: [suiteId, identityPublicKey, wrappedIdentityPrivateKey, masterKeyWraps, authPublicKey]
+      properties:
+        suiteId:
+          x-veyq-visibility: enum
+          type: string
+          description: Crypto suite the client used to produce the wrapped material.
+          enum: [v1]
+          example: v1
+        identityPublicKey:
+          type: string
+          description: The new account's identity public key bundle (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedIdentityPrivateKey:
+          type: string
+          description: The identity private key wrapped under the Master Key (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 auth public key derived from the password + the invited email's auth salt (ADR 0003).
+            Server-visible and NOT a credential — login proves possession of the matching private key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: ZWQyNTUxOS1hdXRoLXB1Yg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        masterKeyWraps:
+          type: array
+          description: One wrap per chosen unlock method; PASSWORD is the mandatory floor.
+          minItems: 1
+          items: { $ref: "#/components/schemas/MasterKeyWrap" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1) @field:jakarta.validation.Valid'
+        recoveryMasterKeyTag:
+          type: string
+          description: One-way tag proving recovery of the same Master Key during reset (opaque base64).
+          contentEncoding: base64
+          maxLength: 256
+          example: cmVjb3ZlcnktdGFn
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    MasterKeyWrap:
+      type: object
+      description: One wrap of the Master Key, openable by a single unlock method.
+      required: [method, wrappedKey]
+      properties:
+        id:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            Opaque id of this wrap. Present in responses (lets a client pin its own DEVICE wrap and untrust
+            it); ignored on input (setup assigns ids server-side).
+          maxLength: 64
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        method:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Which unlock method opens this wrap. DEVICE mixes the password into the KEK
+            (Argon2id(deviceFactor + password)); DEVICE_KEY is the password-less remember-me wrap — a
+            device-held key alone (no password, no KDF), so its kdfParams carries only the AEAD iv.
+          enum: [PASSWORD, PASSKEY, RECOVERY, DEVICE, DEVICE_KEY]
+          example: PASSWORD
+        wrappedKey:
+          type: string
+          description: The Master Key wrapped to this method's KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tYXN0ZXIta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        kdfParams:
+          type: string
+          description: >
+            KDF parameters + salt to re-derive this method's unlock KEK (opaque base64; present for
+            password/recovery/device, absent for passkey). For DEVICE_KEY there is no KDF — this carries
+            only the AEAD iv for the device-key wrap.
+          contentEncoding: base64
+          maxLength: 256
+          example: AAAAAwAAgAAAAAABAAAAIHNhbHQtZXhhbXBsZS0xNmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'

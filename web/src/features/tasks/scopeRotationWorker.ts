@@ -1,0 +1,66 @@
+// The web worker loop for the **second** consumer of the operator-blind task queue (ADR 0021) — scope-rotation
+// (cr-0092, ADR 0025). When a tenant owner removes a member co-sharing a GROUP the owner doesn't hold, the
+// backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there). The next remaining key-holder
+// online completes it on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing
+// `rotateGroupForRemoval`, cr-0089), then complete. Claimed **globally across every held scope** — a key-holder
+// sitting anywhere (even their own personal scope) drains queued rotations WITHOUT opening the group. Requires
+// an unlocked vault (the rotation opens the caller's own grant on-device). Idempotent + first-online-wins: the
+// backend leases each job to one worker and coalesces multiple removals into one rotation, so a second
+// key-holder simply finds nothing to claim.
+import { tasksApi } from '../../api/client'
+import { withRefresh } from '../account/login/login'
+import { rotateGroupForRemoval } from '../spaces/scopes'
+import { listScopeMembers } from '../spaces/members'
+import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
+import { SCOPE_ROTATION } from './capabilityTags'
+import type { ClaimedJob } from '../../api/generated/tasks'
+
+/**
+ * Drain the scope-rotation jobs claimable for this key-holder across all held scopes: claim → re-grant the
+ * surviving directory forward → complete, until nothing is left (a 204 → null claim). Returns how many groups
+ * this worker rotated. A claimed job whose scope this worker can't rotate (a race — e.g. the grant was cut) is
+ * failed back for the right worker rather than left leased.
+ */
+export async function runScopeRotationWorker(): Promise<number> {
+  let rotated = 0
+  for (;;) {
+    const job = await claimScopeRotation()
+    if (!job) break
+    if (job.capabilityTag !== SCOPE_ROTATION) {
+      // Not a rotation job we can fulfil — release it for the right worker (defensive; the claim tag-filters).
+      await failJob(job.jobId, 'not-scope-rotation')
+      continue
+    }
+    try {
+      // The directory AFTER the cut (the ex-member's membership is already deleted server-side), so the rotation
+      // re-grants exactly the surviving set — coalesced removals collapse into one forward-secure rotation.
+      const remaining = await listScopeMembers(job.scopeId)
+      await rotateGroupForRemoval(job.scopeId, remaining)
+      await completeJob(job.jobId)
+      // If the rotated group is the scope we're actively viewing, swap in the fresh epoch so our next write seals
+      // under E_{n+1}, not the stale E_n (mirrors the synchronous remove flow, cr-0089).
+      if (activeSpace.scopeId === job.scopeId) await refreshActiveScope()
+      rotated++
+    } catch {
+      await failJob(job.jobId, 'rotate-failed')
+    }
+  }
+  return rotated
+}
+
+async function claimScopeRotation(): Promise<ClaimedJob | null> {
+  // No `scopeId` narrowing — claim a rotation for ANY scope this worker holds a grant in, so it drains queued
+  // rotations for groups it isn't currently viewing (the whole point of the async backstop).
+  const job = await withRefresh(() => tasksApi().claimTask({ claimRequest: { capabilityTags: [SCOPE_ROTATION] } }))
+  return job ?? null
+}
+
+async function completeJob(jobId: string): Promise<void> {
+  // No sealedResult: the rotation-commit (`POST /api/scopes/{scopeId}/epochs`) already advanced the epoch; this
+  // just closes the job. The backend marks it DONE idempotently (a re-complete of a DONE job is a no-op).
+  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: {} }))
+}
+
+async function failJob(jobId: string, reason: string): Promise<void> {
+  await withRefresh(() => tasksApi().failTask({ jobId, failRequest: { reason } }))
+}

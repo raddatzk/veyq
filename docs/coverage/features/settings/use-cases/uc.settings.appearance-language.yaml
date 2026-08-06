@@ -1,0 +1,22 @@
+useCase: uc.settings.appearance-language
+feature: settings
+title: Set appearance & language
+acceptanceCriteria:
+  - id: theme-switch-persists
+    text: Choosing a theme (system/light/dark) flips the whole palette live and is persisted on the device.
+    coverage:
+      web: { unit: [src/shared/state/useThemeState.test.ts] }
+  - id: theme-quick-picker
+    # cr-0085: the top-bar theme control is a labelled dropdown (System/Light/Dark, active checked) instead of a
+    # mystery cycle-button — clearer what it does.
+    text: The web top-bar theme control is a labelled dropdown listing System / Light / Dark with the active one checked; picking one applies it (a quick-picker beside the settings-hub selector).
+    coverage:
+      web: { unit: [src/components/app/AppTopbar.test.ts] }
+  - id: language-switch-live
+    text: Choosing a language (en/de) re-renders every visible string live (no content reload) and is persisted.
+    coverage:
+      web: { unit: [src/i18n/setLocale.test.ts] }
+  - id: resolution-fallback
+    text: An unknown locale falls back to English; an unknown key resolves to itself; every key has both translations.
+    coverage:
+      web: { unit: [src/i18n/setLocale.test.ts] }

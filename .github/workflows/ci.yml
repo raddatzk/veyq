@@ -1,0 +1,118 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+    # Docs are ignored *here* on purpose: a doc change cannot break `./gradlew check` or `npm run check`.
+    # The guards that do validate docs live in trust-chain.yml, which is unfiltered.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "site/**"
+      - ".github"
+  pull_request:
+    branches:
+      - main
+    # Docs are ignored *here* on purpose: a doc change cannot break `./gradlew check` or `npm run check`.
+    # The guards that do validate docs live in trust-chain.yml, which is unfiltered.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "site/**"
+      - ".github"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Run backend checks
+        working-directory: backend
+        run: ./gradlew --no-daemon check
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run frontend checks
+        working-directory: web
+        run: npm run check
+
+  web-e2e:
+    name: Web E2E (live backend)
+    # The only end-to-end coverage any CI run executes: web's *.e2e.test.ts drive real crypto against a real
+    # backend and a real object store. They are gated on VEYQ_E2E, which nothing but this job sets — so a test
+    # that is skipped here makes no coverage claim at all (ADR 0040), and four coverage refs depend on this job
+    # staying green. scripts/run_web_e2e.py supplies the whole world itself: it brings up the bundled compose
+    # stack (MariaDB + Garage), then per e2e file gives it its own database and a fresh %e2e backend boot. That
+    # is why this job declares no `services:` and no `env:` — adding either would split the truth in two.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Java
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+
+      - name: Set up Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # Build the runnable fast-jar ONCE; the orchestrator boots it again per e2e file, because every suite
+      # cold-births its own Server Owner and asserts setupRequired===true, and an instance has one.
+      #
+      # Each boot gets its own MariaDB DATABASE, not a fresh in-memory DB — this comment used to claim the
+      # latter and it does not work: quarkus.datasource.db-kind is a build-time property baked at augmentation
+      # under %prod, so a runtime QUARKUS_DATASOURCE_DB_KIND=h2 is ignored and the MariaDB driver rejects the
+      # H2 URL. `CREATE DATABASE veyq_e2e_<n>` is a fresh instance in the only sense the suites care about, and
+      # it keeps this build-once step intact instead of needing a second, differently-configured jar.
+      - name: Build backend fast-jar
+        working-directory: backend
+        run: ./gradlew --no-daemon quarkusBuild
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Run web E2E suites against a live backend
+        run: python3 scripts/run_web_e2e.py

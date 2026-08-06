@@ -1,0 +1,98 @@
+useCase: uc.admin.create-tenant
+feature: admin
+title: Create a tenant & invite its owner
+# Slice A (cr-0009) — structural tenant creation + invite lifecycle + Server-Owner management.
+# Slice B (cr-0010) — invite acceptance: cold TENANT-scope birth + first OWNER membership/grant → ACTIVE,
+# via register-and-accept (new owner) or sign-in accept (existing owner).
+acceptanceCriteria:
+  - id: create-pending-tenant
+    # cr-email-invite-send-hardening: create/resend/reassign responses also carry the delivery result field. A
+    # PENDING tenant has no mail settings, so the bootstrap invite is always FALLBACK_COPYLINK (the copy-link is
+    # the channel) — the SENT/FAILED states and the rate-limiter apply only to the tenant-owner member paths
+    # (uc.spaces.add-member / uc.spaces.manage-member-invites). Never persisted → operator-blind untouched.
+    text: A Server Owner creates a PENDING tenant (201) with an owner invite; the response reports the delivery result, which for a bootstrap invite is always FALLBACK_COPYLINK (no SMTP for a PENDING tenant).
+    coverage:
+      backend: { integration: [TenantsSliceTest.createReturns201Pending] }
+      web: { unit: [src/features/admin/createTenant/CreateTenantDialog.test.ts] }
+  - id: reject-duplicate-domain
+    text: A domain already mapped to a tenant is rejected (409 domain_taken).
+    coverage:
+      backend: { integration: [TenantsSliceTest.duplicateDomainIs409] }
+  - id: invite-link-handoff
+    text: The owner invite is delivered out-of-band by the Server Owner copying the invite link (the bootstrap secret in the URL fragment) — create/resend/reassign responses return the raw secret to the Server-Owner-gated caller, so tenant onboarding works without any email/SMTP infrastructure (self-hostable by default). (cr-0080.)
+    coverage:
+      web:
+        unit: [src/features/admin/createTenant/CreateTenantDialog.test.ts, src/features/admin/createTenant/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts]
+  - id: list-tenants
+    text: A Server Owner lists all tenants with each one's current invite status.
+    coverage:
+      backend: { integration: [TenantsSliceTest.listIncludesCreatedTenantWithActiveInvite] }
+      # cr-0050/cr-0087: the Server → Tenants collection in the settings hub lists all tenants; Server-Owner-gated
+      # by the backend 403 + the client serverRole probe.
+      web: { unit: [src/views/SettingsHubView.test.ts] }
+  - id: resend-supersedes-invite
+    text: Resend soft-supersedes the current ACTIVE invite and mints a fresh ACTIVE one (one ACTIVE kept).
+    coverage:
+      backend: { integration: [TenantsSliceTest.resendSupersedesOldInviteAndKeepsOneActive] }
+  - id: reassign-rebinds-email
+    text: Reassign re-binds the owner email and supersedes the prior invite.
+    coverage:
+      backend: { integration: [TenantsSliceTest.reassignRebindsEmailAndSupersedes] }
+  - id: revoke-pending-tenant
+    text: A pending tenant is revoked (204) and disappears; a follow-up action returns 404.
+    coverage:
+      backend: { integration: [TenantsSliceTest.revokePendingTenantDeletesIt] }
+  - id: server-owner-only
+    text: A signed-in non-owner is refused (403 not_server_owner).
+    coverage:
+      backend: { integration: [TenantsSliceTest.nonOwnerIsForbidden] }
+  - id: authenticated-only
+    text: An unauthenticated caller is refused (401), and auth is checked before tenant lookup.
+    coverage:
+      backend: { integration: [TenantsSliceTest.unauthenticatedIs401] }
+  - id: reject-invalid-domain
+    text: A malformed domain is rejected at the boundary (400).
+    coverage:
+      backend: { integration: [TenantsSliceTest.invalidDomainIs400] }
+  - id: unknown-tenant-404
+    text: An action on an unknown tenant id returns 404 tenant_not_found.
+    coverage:
+      backend: { integration: [TenantsSliceTest.resendOnUnknownTenantIs404] }
+  - id: invite-purge
+    text: Overdue ACTIVE invites are expired and terminal-state invites are purged on a schedule.
+    coverage:
+      backend: { integration: [TenantsSliceTest.purgeExpiresActiveAndDeletesTerminalInvites] }
+  # --- Slice B (cr-0010): invite acceptance / activation ---
+  - id: activate-by-register
+    text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.registerAndAcceptActivatesTenant] }
+      # web: manual browser smoke only (cr-0010 phase 4, DB-verified); no automated harness yet → see gaps.web
+  - id: activate-by-signin
+    text: An existing owner signs in and accepts, activating the tenant with the cold-born grant.
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.existingUserAcceptActivatesTenant] }
+  - id: preview-invite
+    text: Previewing a valid bootstrap secret returns the tenant + whether the invited email has an account.
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.previewReturnsTenantAndAccountFlag] }
+  - id: accept-reuse-detection
+    text: Replaying a consumed/superseded/expired invite is rejected (410), mirroring session reuse-detection.
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.replayOfConsumedSecretIs410, TenantAcceptSliceTest.expiredInviteIs410] }
+  - id: accept-only-invited-owner
+    text: A signed-in caller whose email differs from the invite is refused (403 not_invited_owner).
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.emailMismatchIsForbidden] }
+  - id: register-email-taken
+    text: Register-and-accept when the invited email already has an account is rejected (409 email_taken).
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.registerWhenEmailTakenIs409] }
+  - id: accept-unknown-invite
+    text: An unknown bootstrap secret returns 404 invite_not_found (public preview/register reach the handler).
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.unknownSecretIs404] }
+  - id: accept-requires-auth
+    text: The existing-user accept endpoint requires a session (401 when anonymous).
+    coverage:
+      backend: { integration: [TenantAcceptSliceTest.unauthenticatedAcceptIs401] }

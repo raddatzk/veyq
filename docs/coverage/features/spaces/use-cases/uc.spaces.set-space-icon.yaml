@@ -1,0 +1,88 @@
+useCase: uc.spaces.set-space-icon
+feature: spaces
+title: Space icon
+# Built — TENANT (cr-space-icon) + GROUP (cr-group-space-icon). The icon is a chosen image, baked to a fixed square,
+# re-encoded to WebP, padded to a CONSTANT plaintext length, and sealed under K_icon = HKDF(E_e, "veyq/v1/space-icon-key").
+# Owner-gated on the root scope (isScopeOwner, ADR 0007; a GROUP co-owner is an OWNER too), the server rejects a stale
+# iconEpoch (409) and stores only sealed_icon (opaque, constant length) + icon_epoch. The GROUP slice lifted the kind
+# guard (only PERSONAL is now rejected — it never has an icon) and adds the group settings-panel icon header + the
+# sidebar group avatar. Its only real difference is behavioral: a GROUP rotates its content key on member-removal
+# (ADR 0024), so its iconEpoch may sit BELOW the current epoch and the read PEELS the epoch chain down to iconEpoch —
+# openMyTenantIcon shortcuts to epoch 0 (a tenant never rotates) and is deliberately not reused for groups.
+#
+# THREE claims are structurally invisible to the hermetic suites (ADR 0040 — a test no CI run executes makes no
+# coverage claim), so their refs below prove the CI-provable PART and the DoD live smoke on veyq.localhost:8081
+# proves the residual: (a) operator-blind-icon — the CI slice test proves the API stores+returns the opaque value
+# verbatim; the smoke proves the DB bytes are not a decodable image; (b) icon-size-cap-fits-mariadb — the CI unit
+# test pins the exact 21884-char length < 65535; the smoke proves a real MariaDB write at the cap (H2 is unbounded);
+# (c) cross-tenant-icon-read — the CI unit test proves openMyTenantIcon opens OUR grant + decrypts; the smoke proves
+# a SECOND tenant renders the first's icon end-to-end. The refs never claim the smoke as coverage.
+acceptanceCriteria:
+  - id: owner-gated-icon-write
+    text: Only the space's OWNER may set, replace or remove the icon; a plain member gets 403 not_scope_owner and a non-member gets the same 404 as a bogus scope id (membership guard first, ADR 0042). For a TENANT the gate is isScopeOwner against the root scope row (id == tenantId) — a member who owns only a personal or group scope carrying the same tenantId is refused, which is the cr-0163 escalation shape and must be pinned by a test that seeds exactly that actor. For a GROUP the same owner gate applies and a promoted co-owner (OWNER role) qualifies too; a set is rejected while the group is pending-deletion (409). A PERSONAL scope has no icon and returns 404. The web panel shows the icon controls only to an owner.
+    coverage:
+      backend:
+        integration:
+          - ScopesSliceTest.setScopeIconNonOwnerIs403EvenWithAPersonalScopeOwnerRow
+          - ScopesSliceTest.clearScopeIconIsIdempotentAndOwnerGated
+          - ScopesSliceTest.setScopeIconOnAPersonalScopeIs404
+          - ScopesSliceTest.setScopeIconOnAGroupByOwnerThenCoOwnerUpdatesSealedIcon
+          - ScopesSliceTest.setScopeIconOnAGroupNonOwnerIs403AndNonMemberIs404
+          - ScopesSliceTest.setScopeIconOnAGroupPendingDeletionIs409
+          - OperatorBlindProbeTest.noScopeAddressedEndpointDistinguishesANonMemberFromANonExistentScope
+      web:
+        unit:
+          - src/features/spaces/GroupMembersPanel.test.ts
+  - id: operator-blind-icon
+    text: The server stores only sealed_icon (opaque ciphertext) + icon_epoch (a small integer) and never the image, a key, or an image size. It performs no image decode and no key derivation. Proven at the DB against a live instance — the stored bytes are not a decodable image and match no plaintext of the uploaded file.
+    coverage:
+      backend:
+        integration:
+          - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
+          - OperatorBlindProbeTest.noScopeAddressedEndpointDistinguishesANonMemberFromANonExistentScope
+  - id: constant-ciphertext-length
+    text: Every sealed_icon has the identical byte length regardless of the source image, because the plaintext is padded to a constant before sealing. A flat two-colour logo and a dense photo produce ciphertexts of equal length, so the operator cannot fingerprint or correlate icons by size — including across the several tenants one my-tenants response returns.
+    coverage:
+      web:
+        unit:
+          - src/features/spaces/spaceIcon.test.ts
+  - id: icon-size-cap-fits-mariadb
+    text: The contract's @Size for sealedIcon is the exact computed base64 length of the sealed constant and is provably below MariaDB's 65535-byte TEXT limit — not inherited from identity_pins.sealed_blob (which declares 1048576 over a TEXT column) nor from veyq_scope_favorites.ciphertext (65536 against 65535). H2 is effectively unbounded, so this cannot be proven by the hermetic suite alone and needs a real-MariaDB write at the cap.
+    coverage:
+      web:
+        unit:
+          - src/features/spaces/spaceIcon.test.ts
+  - id: icon-sealed-under-current-epoch
+    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch; the client refetches, re-seals and retries once. A plain rotation leaves sealed_icon and icon_epoch untouched, and a member holding a later epoch still reads the icon by peeling the chain down to iconEpoch. A member removed before a replacement cannot derive the new K_icon_e.
+    coverage:
+      backend:
+        integration:
+          - ScopesSliceTest.setScopeIconStaleEpochIs409AndLeavesTheIconUnset
+          - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
+          - ScopesSliceTest.setScopeIconOnAGroupAfterRotationIsStaleAtOldEpochThenSealsAtNew
+      web:
+        unit:
+          - src/shared/crypto/v1.conformance.test.ts
+          - src/features/spaces/spaceIcon.test.ts
+          - src/features/spaces/scopes.test.ts
+  - id: initial-fallback-without-grant
+    text: A reader who holds no grant for the space — the awaiting-access window before grant-delivery wraps K_SC to a newly admitted member — sees the initial, not an error, a blank, or a broken image. The same holds for a malformed or wrong-key sealed_icon, and for a space with no icon set. The initial is never a failure state.
+    coverage:
+      web:
+        unit:
+          - src/features/spaces/spaceIcon.test.ts
+          - src/features/spaces/scopes.test.ts
+  - id: cross-tenant-icon-read
+    text: The tenant overview renders each tenant's icon by opening that tenant's own wrappedGrant from the account-scoped my-tenants response, which is Host-independent. Each foreign scope key is opened transiently and zeroed as soon as the icon is decrypted (the listMyGroups pattern), and the decrypted bytes' object URL is owned by useObjectUrls so it is revoked on unmount.
+    coverage:
+      web:
+        unit:
+          - src/features/spaces/scopes.test.ts
+  - id: remove-restores-initial
+    text: Removing the icon clears sealed_icon and icon_epoch on the row; every member falls back to the initial on their next list. Same owner gate as a set, but no epoch check (a removal carries no ciphertext to be stale) and idempotent.
+    coverage:
+      backend:
+        integration:
+          - ScopesSliceTest.clearScopeIconIsIdempotentAndOwnerGated
+          - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
+          - ScopesSliceTest.clearScopeIconOnAGroupIsIdempotentAndAllowedDuringGrace

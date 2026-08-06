@@ -1,0 +1,56 @@
+name: Wiki Sync
+
+# Publishes the end-user wiki (wiki/**, EN+DE) to the GitHub Wiki.
+# The repo is the single source of truth — edit wiki/, not the GitHub Wiki.
+# docs/ (engineering state) is repo-only and intentionally NOT published.
+#
+# Prerequisite: the GitHub Wiki must be enabled and initialized once (create any page in
+# the Wiki UI) so that <repo>.wiki.git exists and can be pushed to.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "wiki/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Sync wiki/ to the GitHub Wiki
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Clone the GitHub Wiki
+        # Into a distinct dir: the repo already has wiki/ (the source), so the clone target must not collide.
+        run: |
+          git clone \
+            "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" \
+            wiki-remote
+
+      - name: Mirror wiki/ into the GitHub Wiki (docs/ is repo-only and not published)
+        # Mermaid diagrams render natively on the GitHub Wiki, so there is no diagram-render step (the old
+        # PlantUML renderer, scripts/render-wiki-diagrams.mjs, is gone and not needed).
+        run: rsync -a --delete --exclude='.git' wiki/ wiki-remote/
+
+      - name: Commit and push
+        working-directory: wiki-remote
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No wiki changes."
+          else
+            git commit -m "docs: sync wiki from wiki/ @ ${{ github.sha }}"
+            git push
+          fi

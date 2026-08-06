@@ -1,0 +1,113 @@
+# Local dev database (uc.* slices). A persistent MariaDB so dev data survives a backend restart — closer to
+# prod than the in-memory H2, which the test suite keeps using. Start it before `./gradlew quarkusDev`:
+#   docker compose up -d        (from backend/)
+#   docker compose down         (stop; data is kept in the named volume)
+#   docker compose down -v      (stop AND wipe the data — fresh instance)
+services:
+  mariadb:
+    image: mariadb:11.4
+    container_name: veyq-mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: veyq
+      MARIADB_USER: veyq
+      # Local throwaway only — matches application-dev.properties. Change both together for a non-default.
+      MARIADB_PASSWORD: change-me
+      MARIADB_ROOT_PASSWORD: change-me-root
+    ports:
+      - "3306:3306"
+    volumes:
+      - veyq-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # --- Bundled object store for media blobs (cr-0028/cr-0029, ADR 0013) — opt-in: `docker compose --profile s3
+  # up -d` (the garage-init sidecar below assigns the layout + creates the bucket/key automatically). The
+  # backend never streams bytes; it presigns short-TTL URLs the
+  # client PUT/GETs directly. **Garage** (S3-compatible, AGPL, built for self-hosting — replaces the archived
+  # MinIO). Exposed on :19000 for the backend e2e (`VEYQ_S3_E2E=1`, BlobBatchE2ETest); Traefik path-routes the
+  # bucket so the web app reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4). Throwaway creds only.
+  garage:
+    image: dxflrs/garage:v2.0.0
+    container_name: veyq-garage
+    profiles: ["s3"]
+    restart: unless-stopped
+    volumes:
+      - "./garage.toml:/etc/garage.toml:ro"
+      - veyq-garage-meta:/var/lib/garage/meta
+      - veyq-garage-data:/var/lib/garage/data
+    ports:
+      - "19000:3900"   # S3 API — VEYQ_S3_ENDPOINT for the backend e2e; also the internal endpoint the backend stats against
+      - "19003:3903"   # admin API (local only)
+    labels:
+      # Traefik path-route for same-origin web access: route the bucket path WITHOUT stripping the prefix and
+      # with the Host header preserved — SigV4 signs host+path+query, so a stripPrefix/host rewrite breaks it.
+      - "traefik.enable=true"
+      - "traefik.http.routers.veyq-blobs.rule=PathPrefix(`/veyq`)"
+      - "traefik.http.routers.veyq-blobs.entrypoints=web"
+      - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
+      - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
+
+  # One-shot init: assigns the single-node layout and creates the `veyq` bucket + deterministic dev key, so a
+  # fresh `--profile s3 up` (or a `down -v` wipe) is usable without a manual step. Idempotent — a no-op once the
+  # bucket exists. Its own scratch-image parent has no shell, so this runs a tiny Alpine+garage-CLI image
+  # (garage-init.Dockerfile) that drives the node over RPC; exits 0 when done (restart: "no").
+  garage-init:
+    build:
+      context: .
+      dockerfile: garage-init.Dockerfile
+    image: veyq-garage-init:v2.0.0
+    container_name: veyq-garage-init
+    profiles: ["s3"]
+    restart: "no"
+    depends_on:
+      - garage
+    volumes:
+      - "./garage.toml:/etc/garage.toml:ro"
+      - "./garage-init.sh:/garage-init.sh:ro"
+      # Read-only: the CLI needs the node's `node_key` from the metadata dir to authenticate its RPC
+      # connection. All actual writes happen on the garage node over RPC, so ro here is enough.
+      - "veyq-garage-meta:/var/lib/garage/meta:ro"
+    entrypoint: ["/bin/sh", "/garage-init.sh"]
+
+  # Reverse proxy so the bundled store is reachable same-origin by the web app (ADR 0013 §4). Routes only the
+  # bucket path (see the garage labels); the backend + web are added behind it in a fuller deployment.
+  traefik:
+    image: traefik:v3.3
+    container_name: veyq-traefik
+    profiles: ["s3"]
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /veyq/<obj> → Garage
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+
+  # --- Test mailbox for per-tenant SMTP (cr-email-smtp-transport, ADR 0048) — opt-in: `docker compose --profile
+  # mail up -d`. A dev tenant points its mail settings at this (host `localhost`, port 11025, any username/
+  # password) to smoke the real send path; the web UI + HTTP API on :18025 let you read what arrived. **Mailpit**
+  # (MIT, actively maintained) — NOT the archived MailHog (root CLAUDE.md: no EOL deps). Nothing is stored across
+  # restarts (in-memory), which is exactly what a throwaway test mailbox wants.
+  mailpit:
+    image: axllent/mailpit:v1.20.0
+    container_name: veyq-mailpit
+    profiles: ["mail"]
+    restart: unless-stopped
+    environment:
+      # Accept any AUTH over plain SMTP so a dev tenant's configured username/password is not a setup hurdle.
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    ports:
+      - "11025:1025"   # SMTP — a tenant's mail settings point here (host localhost, port 11025)
+      - "18025:8025"   # web UI + HTTP API — read delivered invites (http://localhost:18025)
+
+volumes:
+  veyq-mariadb-data:
+  veyq-garage-meta:
+  veyq-garage-data:

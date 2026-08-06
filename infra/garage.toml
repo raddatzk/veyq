@@ -1,0 +1,21 @@
+# Garage single-node config for the bundled dev/self-host object store (cr-0029, ADR 0013). S3-compatible,
+# AGPL-3.0, run as a separate service — veyq signs presigned URLs against it via the vendor-neutral AWS S3 SDK.
+# Local dev throwaway: the rpc_secret + admin_token below are NOT secret; set real ones for any real deployment.
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+db_engine = "lmdb"
+
+replication_factor = 1
+
+rpc_bind_addr = "[::]:3901"
+rpc_public_addr = "garage:3901"
+rpc_secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+[s3_api]
+# Must match veyq.blob-store.region (default us-east-1) — SigV4 signs the region, so they have to agree.
+s3_region = "us-east-1"
+api_bind_addr = "[::]:3900"
+
+[admin]
+api_bind_addr = "[::]:3903"
+admin_token = "veyq-dev-admin-token"

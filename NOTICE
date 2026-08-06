@@ -1,0 +1,14 @@
+veyq
+Copyright (C) 2026 veyq contributors
+
+veyq is distributed under the GNU Affero General Public License version 3 only.
+See LICENSE for the full license text.
+
+The veyq name, logos, icons and brand assets are not licensed under the AGPL
+unless explicitly stated otherwise. The AGPL grants you rights to the source,
+not to the branding: you may run, modify and redistribute veyq, but a modified
+or redistributed build must not present itself as "veyq" or carry its marks
+without permission. Ask before using them for anything else.
+
+Third-party dependency licenses remain governed by their own license terms.
+Notable vendored source notices are kept next to the vendored files.

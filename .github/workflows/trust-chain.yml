@@ -1,0 +1,60 @@
+name: Trust chain
+
+# Deliberately unfiltered: this runs on every push and every PR, docs included.
+#
+# It used to be a job in ci.yml, which ignores `docs/**` and `**/*.md` so a doc change does not pay for
+# `./gradlew check` + `npm ci`. That filter is right for those jobs and was wrong for this one: the guards whose
+# whole purpose is validating `docs/` only fired when *code* changed. Two of the three commits that found this
+# were doc-only, and would have skipped their own validation.
+#
+# Nothing is filtered back in, because there is nothing to filter: a code change can dangle a coverage ref just
+# as a doc change can, and the whole run is seconds. A path filter here would be machinery guarding a job that is
+# cheaper than the machinery.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trust-chain:
+    name: Trust-chain validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      # The glob is the mechanism, not a convenience: a hand-written list is green on the day a tenth validator
+      # lands and silently never runs it. This is `changes/README.md` § *The trust-chain guards stay green* made
+      # executable — that file says every deterministic check in scripts/ gates a CR, all of them.
+      #
+      # What each guard asserts, and the defect that bought it, is that validator's own module docstring.
+      # `scripts/` is the registry; this file does not restate it, because a restated list drifts — the list
+      # that used to live here said "three" and "four" long after there were nine.
+      - name: Validate trust-chain guards
+        run: |
+          # nullglob is load-bearing, not tidiness: without it an unmatched glob hands the loop the literal
+          # string "scripts/validate_*.py", so the count below reads 1 and can never fire. With it, no match
+          # means no iterations — and the count is what turns "the trust chain validated nothing" from a
+          # confusing python error into a red build that says so.
+          shopt -s nullglob
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet pyyaml
+          count=0
+          for f in scripts/validate_*.py; do
+            echo "--- $f"
+            .venv/bin/python "$f"
+            count=$((count + 1))
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "::error::no scripts/validate_*.py found — the trust chain validated nothing"
+            exit 1
+          fi
+          echo "$count guards green"

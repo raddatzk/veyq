@@ -1,0 +1,447 @@
+openapi: 3.1.0
+info:
+  title: veyq Content API
+  version: 0.1.0
+  description: >
+    The encrypted Memory tree inside a scope (en.memory.tree, cr-0027). Nodes — FOLDER (organization only),
+    MEMORY (the content unit), CHAPTER (inside a Memory) — addressed by opaque ids, under the scope resolved
+    from the path `scopeId`. **Operator-blind:** the server stores only ciphertext (`encryptedName`,
+    `wrappedContentKey`) + opaque `parentId`/`kind`/`orderIndex` + the **blinded `slugToken`**; it never sees
+    a name or a content key, and learns only the *shape* of the tree.
+
+    The client encrypts the name under the scope content key `K_SC` and computes the blinded slug token (a
+    keyed MAC under `K_SC`); a MEMORY **or CHAPTER** additionally carries a fresh random per-node key `K_mem`
+    wrapped under its **parent's content key** — `K_SC` for a top-level Memory, the parent Memory's `K_mem` for
+    a chapter (recursive `K_mem`; `wrappedContentKey`) — the share grain ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)).
+    The server enforces structure only: a caller must hold a grant for the scope, slug uniqueness per parent
+    (`UNIQUE(parentId, slugToken)`), no folder inside a Memory, no cycle, no cross-scope move. Authorization is
+    enforced by code, not this spec (ADR 0008); field validation via `x-field-extra-annotation`.
+tags:
+  - name: content
+    description: >
+      The Memory tree under a scope (create / list / update / delete nodes). One tag = one resource interface
+      owning the `/api/scopes/{scopeId}/nodes` subtree (distinct from the `/api/scopes` scopes resource).
+  - name: favorites
+    description: >
+      The caller's **per-(user, scope) favorites** — the set of pinned Memory ids, sealed client-side under
+      `K_SC` and stored as a single opaque blob (en.memory.favorites, cr-0031). Operator-blind: a favorite is a
+      personal preference, NOT in the sanctioned metadata set, so the server never sees *which* nodes are
+      pinned — only an opaque ciphertext + its size. Own resource interface (one path).
+
+paths:
+  /api/scopes/{scopeId}/nodes:
+    post:
+      tags: [content]
+      operationId: createNode
+      summary: Create a node (folder / Memory / chapter) in the scope's tree.
+      description: >
+        Adds a node under `parentId` (or the scope root if omitted). The client supplies the ciphertext name,
+        the blinded slug token, and — for a MEMORY or CHAPTER — the `wrappedContentKey` (`K_mem` under the
+        parent's content key). The server
+        stores it opaquely and enforces slug uniqueness per parent + the structural rules.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateNodeRequest" }
+            example:
+              parentId: null
+              kind: MEMORY
+              encryptedName: ZW5jcnlwdGVkLW5hbWU=
+              slugToken: c2x1Zy10b2tlbi1iYXNlNjQ=
+              orderIndex: 0
+              wrappedContentKey: d3JhcHBlZC1rLW1lbQ==
+      responses:
+        "201":
+          description: The node was created.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/NodeCreated" }
+              example: { nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+        "400":
+          description: Malformed request (missing/invalid fields).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409":
+          description: A sibling already has that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "422":
+          description: Illegal structure (folder inside a Memory, unknown/foreign parent, or a cycle).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+    get:
+      tags: [content]
+      operationId: listNodes
+      summary: List the scope's tree (opaque rows).
+      description: >
+        Returns every node in the scope with its opaque id, parent, kind, ordering, ciphertext name, slug
+        token, and (for Memories and chapters) the `wrappedContentKey`. The client decrypts names with `K_SC` and assembles
+        the tree; the operator sees only the shape.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      responses:
+        "200":
+          description: The scope's nodes.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/NodeSummary" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}:
+    patch:
+      tags: [content]
+      operationId: updateNode
+      summary: Rename / move / reorder a node.
+      description: >
+        Partial update. **Rename** = new `encryptedName` + recomputed `slugToken`. **Move** = new `parentId`
+        (null = scope root) + recomputed `slugToken` (cycle/containment checked; same scope only). **Reorder**
+        = `orderIndex`. Fields not sent are unchanged.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateNodeRequest" }
+            example: { encryptedName: cmVuYW1lZA==, slugToken: bmV3LXNsdWc= }
+      responses:
+        "204":
+          description: The node was updated.
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope/node, or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: A sibling already has that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+        "422":
+          description: Illegal structure (folder into a Memory, or a move that would create a cycle).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_structure } }
+    delete:
+      tags: [content]
+      operationId: deleteNode
+      summary: Delete a node (and its subtree).
+      description: >
+        Removes the node and its descendants. Idempotent (a missing node is still 204). Media/journal cleanup
+        for a deleted subtree is handled by the content-purge job (later slices).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "204":
+          description: The node is gone.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409":
+          description: The scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
+
+  /api/scopes/{scopeId}/favorites:
+    get:
+      tags: [favorites]
+      operationId: getFavorites
+      summary: Get the caller's sealed favorites blob for the scope.
+      description: >
+        Returns the caller's own favorites ciphertext for the scope (the sealed set of pinned Memory ids), or a
+        null ciphertext if none was ever stored. The client decrypts it with `K_SC`; the operator sees only an
+        opaque blob.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      responses:
+        "200":
+          description: The caller's favorites blob (ciphertext null when unset).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Favorites" }
+              example: { ciphertext: ZmF2b3JpdGVzLWNpcGhlcnRleHQ= }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+    put:
+      tags: [favorites]
+      operationId: putFavorites
+      summary: Replace the caller's sealed favorites blob for the scope.
+      description: >
+        Upserts the caller's favorites ciphertext for the scope (last-write-wins). The client seals the whole
+        pinned set under `K_SC` and PUTs the opaque result; the server stores it verbatim.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutFavoritesRequest" }
+            example: { ciphertext: ZmF2b3JpdGVzLWNpcGhlcnRleHQ= }
+      responses:
+        "204":
+          description: The favorites blob was stored.
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: The opaque access token issued by login / refresh. Any authenticated caller holding a grant for the scope (enforced by code).
+
+  parameters:
+    ScopeId:
+      name: scopeId
+      in: path
+      required: true
+      description: Opaque id of the scope whose tree is addressed.
+      schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: Opaque id of the node.
+      schema: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d }
+
+  schemas:
+    NodeKind:
+      type: string
+      description: FOLDER organizes only (no content key); MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory inside a Memory (owns its own K_mem, wrapped under the parent Memory's K_mem).
+      enum: [FOLDER, MEMORY, CHAPTER]
+      example: MEMORY
+
+    CreateNodeRequest:
+      type: object
+      required: [kind, encryptedName, slugToken]
+      properties:
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: Parent node id, or null/absent for the scope root.
+          example: null
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+        encryptedName:
+          type: string
+          description: The node name, AEAD-sealed under the scope content key `K_SC` (opaque base64).
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          description: Blinded slug token — a keyed MAC under `K_SC` over (parent ‖ slug); the server enforces uniqueness per parent without seeing the name (opaque base64).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        orderIndex:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: Ordering among siblings (default 0 / append).
+          example: 0
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The scope **content-key epoch** this node's name / slug / `K_mem`-wrap are sealed under (ADR 0024).
+            The client sends the scope's current epoch; omitted/absent = 0 (the pre-rotation baseline). A member
+            reads a node of epoch `k` iff they hold an epoch ≥ `k`.
+          minimum: 0
+          default: 0
+          example: 0
+        wrappedContentKey:
+          type: [string, "null"]
+          description: For a MEMORY or CHAPTER — its random `K_mem` wrapped under the parent's content key (`K_SC` for a top-level Memory, the parent Memory's `K_mem` for a chapter; opaque base64). Absent for folders.
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedMeta:
+          type: [string, "null"]
+          description: A MEMORY's or CHAPTER's curated metadata (date now, place later) — a client-versioned JSON blob AEAD-sealed under this node's `K_mem` (AAD context `node-meta`; opaque base64). Absent = the implicit `auto`-with-no-dated-media state. The server never inspects it.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    UpdateNodeRequest:
+      type: object
+      description: Partial update — rename (encryptedName+slugToken), move (parentId+slugToken), reorder (orderIndex). Omitted fields are unchanged.
+      properties:
+        encryptedName:
+          type: string
+          contentEncoding: base64
+          maxLength: 4096
+          example: cmVuYW1lZA==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        slugToken:
+          type: string
+          contentEncoding: base64
+          maxLength: 128
+          example: bmV3LXNsdWc=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: New parent for a move (null = scope root).
+          example: null
+        orderIndex:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          example: 1
+        wrappedMeta:
+          type: [string, "null"]
+          description: Curated metadata sealed under the node's `K_mem` (see NodeSummary.wrappedMeta). Partial semantics — a non-null value replaces it; an omitted/null one leaves it unchanged. Opaque base64.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    NodeCreated:
+      type: object
+      required: [nodeId]
+      properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+
+    NodeSummary:
+      type: object
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch]
+      properties:
+        id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The scope content-key epoch this node is sealed under (ADR 0024); 0 for pre-rotation nodes.
+          minimum: 0
+          example: 0
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: Parent node id, or null at the scope root.
+          example: null
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+        encryptedName:
+          type: string
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+        slugToken:
+          type: string
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+        orderIndex:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          example: 0
+        wrappedContentKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 256
+          description: A MEMORY's or CHAPTER's `K_mem` wrapped under its parent's content key; null for folders.
+          example: d3JhcHBlZC1rLW1lbQ==
+        wrappedMeta:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 8192
+          description: A MEMORY's or CHAPTER's curated metadata (date/place) — a client-versioned JSON blob sealed under this node's `K_mem` (AAD context `node-meta`); null when unset. Lets a browse card show + sort by the date without loading the Memory's media. Opaque to the server.
+          example: d3JhcHBlZC1tZXRh
+
+    Favorites:
+      type: object
+      required: [ciphertext]
+      properties:
+        ciphertext:
+          type: [string, "null"]
+          description: The caller's pinned-Memory set, AEAD-sealed under `K_SC` (opaque base64); null when unset.
+          contentEncoding: base64
+          maxLength: 65536
+          example: ZmF2b3JpdGVzLWNpcGhlcnRleHQ=
+
+    PutFavoritesRequest:
+      type: object
+      required: [ciphertext]
+      properties:
+        ciphertext:
+          type: string
+          description: The pinned-Memory set, AEAD-sealed under `K_SC` (opaque base64).
+          contentEncoding: base64
+          maxLength: 65536
+          example: ZmF2b3JpdGVzLWNpcGhlcnRleHQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

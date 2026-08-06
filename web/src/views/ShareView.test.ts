@@ -1,0 +1,147 @@
+// @vitest-environment happy-dom
+// The accountless terms gate on the share page (uc.sharing.share-accept, ADR 0035 §3). Load-bearing behaviours:
+// a not-yet-accepted visitor sees the gate (not the content); accepting clears it and reveals the content and
+// persists per tenant (a reload does not re-prompt); an operator version bump re-gates; a transient terms-fetch
+// error FAILS OPEN (content, never a lock-out). We drive the REAL terms helpers (localStorage per tenant, the
+// locale pick) + the REAL ShareView wiring (needsTerms/loadTerms/acceptTerms) — only the network resolve/terms
+// reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+
+const SHARE_ID = 's1'
+const TENANT = 't-1'
+const ACCEPT_KEY = `veyq:terms-accepted:${TENANT}`
+
+// The two heavy media composables → inert stubs (no crypto, no object URLs, no timers).
+vi.mock('../features/memory/useOptimisticTiles', () => ({
+  useOptimisticTiles: () => ({ optimisticTiles: { value: [] }, donorPreviewFor: () => undefined }),
+}))
+vi.mock('../features/memory/useThumbnailPipeline', () => ({
+  useThumbnailPipeline: () => ({
+    thumbs: new Map(),
+    reconcile: vi.fn(),
+    decrypt: vi.fn().mockResolvedValue(undefined),
+    revokeAll: vi.fn(),
+  }),
+}))
+
+// The generated client is never hit (resolveShare/fetchShareTerms are overridden below), but share.ts imports it
+// at module load — mock it exactly as share.test.ts does so loading the real module is side-effect-free.
+vi.mock('../api/client', () => ({ sharesApi: vi.fn(), publicSharesApi: vi.fn(), tokenApi: vi.fn() }))
+
+// A resolvable, unlocked VIEWER share reached via a valid fragment link.
+vi.mock('vue-router', () => ({ useRoute: () => ({ params: { shareId: SHARE_ID }, hash: '#k=AAAA' }) }))
+
+// Keep the REAL terms helpers (acceptedTermsVersion/recordTermsAccepted/pickShareTerms) + error classes; override
+// only the two network reads so no resolve crypto runs.
+const resolveShareMock = vi.fn()
+const fetchShareTermsMock = vi.fn()
+vi.mock('../features/memory/share', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../features/memory/share')>()
+  return {
+    ...actual,
+    resolveShare: (...args: unknown[]) => resolveShareMock(...args),
+    fetchShareTerms: (...args: unknown[]) => fetchShareTermsMock(...args),
+  }
+})
+
+import ShareView from './ShareView.vue'
+import { ShareRole } from '../api/generated/sharing'
+
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: {
+    en: {
+      share: {
+        loading: 'Loading…',
+        termsTitle: 'Please accept the terms of use',
+        termsIntro: 'Accept before continuing.',
+        termsAccept: 'Accept and continue',
+        empty: 'No photos yet.',
+        readonly: 'Read-only',
+        securityFooter: 'Is my data safe?',
+        unavailable: 'Unavailable',
+      },
+      media: { itemCount: 'no items | {count} item | {count} items' },
+    },
+  },
+})
+
+function mountShareView() {
+  return mount(ShareView, {
+    global: {
+      plugins: [i18n],
+      stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true },
+    },
+  })
+}
+
+function viewerShare() {
+  return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, rootMemoryKey: new Uint8Array(), items: [] }
+}
+
+describe('ShareView — accountless terms gate', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    resolveShareMock.mockReset().mockResolvedValue(viewerShare())
+    fetchShareTermsMock.mockReset().mockResolvedValue({
+      tenantId: TENANT,
+      termsVersion: 1,
+      terms: { de: '## Regeln', en: '## Rules' },
+    })
+  })
+
+  it('shows the terms gate (not the content) for a not-yet-accepted visitor', async () => {
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(true) // the gate
+    expect(wrapper.find('.share-view-header').exists()).toBe(false) // content is withheld
+    // the terms markdown is rendered (safe markdown) inside the gate
+    expect(wrapper.find('.share-terms-body').html()).toContain('Rules')
+  })
+
+  it('accepting clears the gate, reveals the content, and persists per tenant', async () => {
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    await wrapper.find('.share-terms-card .share-name-submit').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(false) // gate cleared
+    expect(wrapper.find('.share-view-header').exists()).toBe(true) // content shown
+    expect(localStorage.getItem(ACCEPT_KEY)).toBe('1') // acceptance is client-only, keyed per tenant
+  })
+
+  it('does not re-prompt after a reload once accepted for the version', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1') // accepted on a previous visit
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(false)
+    expect(wrapper.find('.share-view-header').exists()).toBe(true)
+  })
+
+  it('re-gates when the operator bumps the terms version', async () => {
+    localStorage.setItem(ACCEPT_KEY, '1') // previously accepted v1
+    fetchShareTermsMock.mockResolvedValue({ tenantId: TENANT, termsVersion: 2, terms: { en: '## Rules v2' } })
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(true) // stored 1 < current 2 → gate re-fires
+    expect(wrapper.find('.share-view-header').exists()).toBe(false)
+  })
+
+  it('fails open (shows content, no gate) on a transient terms-fetch error', async () => {
+    fetchShareTermsMock.mockRejectedValue(new Error('network'))
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    expect(wrapper.find('.share-terms-card').exists()).toBe(false) // a network blip never locks the visitor out
+    expect(wrapper.find('.share-view-header').exists()).toBe(true)
+  })
+})

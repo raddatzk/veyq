@@ -1,0 +1,120 @@
+# UC: Recover access after a forgotten password
+
+- **ID:** uc.account.recover-access
+- **Primary actor:** Account holder who still has their **Emergency Kit** (the Secret Key) and can read the
+  mailbox their account is registered under, but no longer knows their password — unauthenticated, on any
+  device
+- **Goal:** Set a **new password** without losing any content, by opening the withheld **`RECOVERY`
+  `MasterKeyWrap`** with the Secret Key alone and re-wrapping the *same* Master Key under the new password. The
+  server hands out ciphertext it cannot open and never learns the new password, the Secret Key, or the Master
+  Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)).
+- **Preconditions:** The instance has a **working mail transport** — without it there is no recovery at all
+  ([ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md)). The account was born with a
+  `RECOVERY` wrap and a `recovery_master_key_tag` (both written at account birth since V1). The actor holds the
+  **Secret Key**. No session is required, and none helps.
+- **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
+  `DEVICE` and `DEVICE_KEY` wrap is gone and every session is revoked; the recovery token is spent. The **Master
+  Key, identity keypair, scope keys and all content are unchanged** — nothing was re-encrypted. The Emergency Kit
+  is **still valid**: the Secret Key did not change.
+
+## Main flow
+
+1. On the sign-in screen the actor chooses **"Forgot password"** and enters their email address.
+2. The server answers **identically whether or not the address is known** — no enumeration oracle
+   ([ADR 0004](../../../decisions/0004-session-tokens.md)). That promise covers the *address*; whether this
+   tenant can send mail at all is a property of the deployment and is answered plainly instead (A2). If it *is*
+   known, it mints a one-time token, stores
+   only its SHA-256 hash with a short expiry, commits, and *then* mails the raw token in the link's **URL
+   fragment**. The mail carries link, domain and expiry and nothing else
+   ([ADR 0049](../../../decisions/0049-email-delivery-boundary.md)).
+3. The actor opens the link. The token stays in the fragment, so it is never sent to the server as part of a
+   navigation and never lands in a server log.
+4. The client presents the token to **release** the `RECOVERY` wrap. The server looks the token up by hash,
+   checks it is live and unspent, and returns the wrap (plus the suite id and the wrapped identity private key).
+   This is the only path on which that wrap is ever served — the ordinary key-material read filters it out.
+5. The client asks for the **Secret Key**, typed or imported from the Emergency Kit (file or QR, both decoded
+   on-device).
+6. The client derives the recovery KEK `= Argon2id(Secret Key, wrap KDF params)` — **no password input** — and
+   unwraps the **Master Key**. A wrong Secret Key fails here, on the device, with no server round trip.
+7. The client computes the commitment `recoveryAuthTag(Master Key)`. Only someone who actually opened the wrap
+   can produce it.
+8. The actor chooses a **new password**. The client derives the new Ed25519 **auth keypair**
+   ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)) and builds a fresh **`PASSWORD` wrap**
+   over the *same* Master Key with a new salt and nonce.
+9. The client sends the token, the commitment, the new wrap and the new auth public key in **one request**.
+10. The server verifies the commitment against the stored `recovery_master_key_tag`. On a match it applies, **in
+    a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every `DEVICE` and
+    `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
+11. The actor signs in with the new password. Because all device trust was dropped, this device asks for the
+    Secret Key once more and then re-enrols ([uc.account.trust-device](uc.account.trust-device.md)).
+
+## Alternate / exception flows
+
+- **A1 — Address unknown.** Step 2 answers success anyway and no mail is sent. The actor learns nothing about
+  who is registered on the instance.
+- **A2 — No mail transport configured.** The request is refused with **`503 mail_unavailable`** and nothing is
+  minted — the instance says so plainly instead of offering a control that silently fails. There is deliberately
+  **no copy-link fallback**: passing a recovery link through the operator would make them a participant in a flow
+  built to exclude them ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) § Decision 4).
+  Saying it out loud is not an oracle — it is a fact about the deployment, not about any address — and the check
+  runs **before** the rate limiter precisely so the two answers cannot be paired into one
+  ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) §4/§5). No capability is
+  advertised: the client asks nothing in advance and may always offer the link.
+- **A3 — Token expired, already spent, or unknown.** The release in step 4 is refused generically. The actor
+  starts over; a new request supersedes any outstanding token for that address.
+- **A4 — Wrong Secret Key.** Step 6 fails as an AEAD error on the device. Nothing was sent, the token is still
+  live, and the actor may retry — the server cannot tell the difference between a typo and a walk-away.
+- **A5 — Correct token, no Secret Key.** The actor holds the wrap and cannot open it. Step 7 is unreachable, so
+  step 10 never runs. This is the attacker-with-mailbox-access case, and it ends here.
+- **A6 — Commitment mismatch at step 10.** The server refuses. Either the client opened a wrap belonging to a
+  different Master Key, or something forged a commitment without opening anything. Nothing is written.
+- **A7 — Password *and* Emergency Kit both lost.** Not recoverable, by design. There is no escrow and no
+  operator override; the content stays encrypted forever. Stated openly rather than softened.
+
+## Quality notes
+
+- **Two independent factors, and neither is sufficient.** Address control authorizes the *release*; the Secret
+  Key authenticates the *actor*. A mailbox takeover yields ciphertext; a stolen Emergency Kit yields no token.
+- **The server gains no power it did not have.** It already stores the `RECOVERY` wrap; recovery only lets it
+  hand that ciphertext to a party who must already hold the opening key. Recovery is **not** escrow.
+- **The password must not be silently demoted.** Releasing the wrap to any authenticated session would let a
+  live session plus the Secret Key open the vault without the password. That is why release is gated on a mailed
+  token and never on a session.
+- **All-or-nothing.** The three writes in step 10 are one transaction: a partial apply produces an account that
+  logs in but cannot unlock, or unlocks but cannot log in. Both are lockouts.
+- **`DEVICE_KEY` wraps must die with the rest.** They carry no password input, so they would survive a reset
+  and keep granting password-less entry to a device the actor may be resetting *because of*.
+
+## What this means for you / Was das für dich bedeutet
+
+**EN —** If you forget your password, you are not locked out — as long as you still have your Emergency Kit.
+Ask for a reset link, open the mail we send you, and enter the Secret Key from your kit. Asking is always
+offered — and if the server you are on cannot send email yet, it tells you so right there, instead of leaving you
+waiting for a link that was never going to arrive. You choose a new
+password, and everything you have saved is still there: your memories are never re-encrypted, and your kit keeps
+working afterwards. Two things have to come together, on purpose: reading your mail, and holding your kit.
+Someone who breaks into your mailbox gets nothing they can open. What we cannot do is help if both the password
+*and* the kit are gone — there is no master key on our side, and no back door. That is the same promise that
+keeps your memories private, seen from its uncomfortable end. After a reset every device signs in fresh, so you
+will enter your Secret Key once more on each of them.
+
+**DE —** Wenn du dein Passwort vergisst, bist du nicht ausgesperrt — solange du dein Notfall-Kit noch hast.
+Fordere einen Link an, öffne die Mail, die wir dir schicken, und gib den Secret Key aus deinem Kit ein. Anfordern
+kannst du immer — und kann der Server, auf dem du bist, noch keine E-Mails verschicken, sagt er dir das direkt,
+statt dich auf einen Link warten zu lassen, der nie gekommen wäre. Du
+wählst ein neues Passwort, und alles Gespeicherte ist weiterhin da: deine Erinnerungen werden nie neu
+verschlüsselt, und dein Kit funktioniert danach weiter. Zwei Dinge müssen zusammenkommen, und das ist Absicht:
+Zugriff auf dein Postfach und das Kit in der Hand. Wer in dein Postfach einbricht, bekommt nur etwas, das er
+nicht öffnen kann. Nicht helfen können wir, wenn Passwort **und** Kit weg sind — bei uns liegt kein
+Hauptschlüssel, und eine Hintertür gibt es nicht. Das ist dasselbe Versprechen, das deine Erinnerungen privat
+hält, nur von seiner unbequemen Seite. Nach einem Zurücksetzen meldet sich jedes Gerät neu an, du gibst deinen
+Secret Key dort also noch einmal ein.
+
+## Related
+
+- [en.account.key-model](../enablers/en.account.key-model.md) — the wrap inventory this flow reads and rewrites
+- [uc.account.unlock](uc.account.unlock.md) — the ordinary two-secret unlock this restores the actor to
+- [uc.account.trust-device](uc.account.trust-device.md) — the re-enrolment every device goes through afterwards
+- [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) — the two-factor release decision
+- [ADR 0049](../../../decisions/0049-email-delivery-boundary.md) — what a veyq mail may contain
+- [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) — why a new password means a new auth keypair
