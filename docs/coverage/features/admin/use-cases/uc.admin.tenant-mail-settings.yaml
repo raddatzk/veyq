@@ -46,7 +46,7 @@ acceptanceCriteria:
       PENDING tenant, which by construction can have no mail settings.
     coverage:
       backend:
-        integration: [SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
+        integration: [SmtpInviteMailSendTest.anUnconfiguredTenantCannotSendAndAttemptsNoSmtp, MemberAddSliceTest.aTenantThatCannotSendMailIsRefusedAndMintsNothing]
         unit: [TenantInviteMailerDevFileTest.appendsOneJsonLinePerInviteWhenDevFileSet]
   - id: kek-unavailable-surfaced-in-ui
     text: When the server has no config-secret KEK, sealing a supplied password is refused (503 mail_secret_unavailable, ADR 0050). The web form surfaces that as an understandable "the server can't encrypt secrets — an admin must configure the KEK" message, so a self-hoster without a KEK learns why saving fails rather than hitting a generic error.
@@ -74,7 +74,7 @@ acceptanceCriteria:
     coverage:
       backend:
         unit: [ConfigSecretSealTest.theFingerprintIsStableAndIsNotTheRawKey, ConfigSecretSealTest.aDifferentKeyHasADifferentFingerprint, ConfigSecretKeyGuardTest.detectsAChangedKeyThenRecoversOnReseal]
-        integration: [SmtpInviteMailSendTest.aConfiguredTenantWhoseConfigSecretKeyChangedFallsBackNotSends]
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantWhoseConfigSecretKeyChangedCannotSendAndAttemptsNoSmtp]
   - id: changed-key-surfaced-and-recoverable-in-ui
     text: The owner sees the config-secret key state proactively on the mail-settings read — a MISMATCH (the stored password can't be decrypted; re-enter it) or an ABSENT server (can't seal at all) is shown as its own message and blocks the "send-ready" state, rather than the panel falsely reporting a usable config.
     coverage:

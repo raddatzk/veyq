@@ -76,16 +76,19 @@ class SmtpInviteMailSendTest {
     }
 
     @Test
-    fun anUnconfiguredTenantSendsNoSmtpAndFallsBack() {
+    fun anUnconfiguredTenantCannotSendAndAttemptsNoSmtp() {
         val greenMail = GreenMail(ServerSetup(SMTP_PORT_2, "127.0.0.1", "smtp"))
         greenMail.start()
         try {
             val domain = "no-smtp.example.com"
-            seedTenant(domain) // deliberately no mail-settings row ⇒ the copy-link fallback
+            // Deliberately no mail-settings row ⇒ the port's "cannot send" answer. Whether that becomes an actual
+            // copy-link is the CALLER's business: only the ServerOwner bootstrap invite still has one (ADR 0055
+            // §3); a member invite is refused with 503 before it ever reaches this port (§2).
+            seedTenant(domain)
 
             val delivery = mailer.sendInvite(domain, "x@elsewhere.example", "TOKEN-xyz", Instant.parse("2026-07-31T12:00:00Z"))
 
-            assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "an unconfigured tenant falls back to the copy-link")
+            assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "an unconfigured tenant reports cannot-send")
             assertFalse(greenMail.waitForIncomingEmail(1_000, 1), "an unconfigured tenant must not send SMTP")
             assertEquals(0, greenMail.receivedMessages.size)
         } finally {
@@ -151,7 +154,7 @@ class SmtpInviteMailSendTest {
     }
 
     @Test
-    fun aConfiguredTenantWhoseConfigSecretKeyChangedFallsBackNotSends() {
+    fun aConfiguredTenantWhoseConfigSecretKeyChangedCannotSendAndAttemptsNoSmtp() {
         // Enabled + fully-configured SMTP, but the config-secret key no longer matches the one that sealed the
         // password (the key file changed/was lost ⇒ MISMATCH, ADR 0050 amendment). The stored password can't be
         // unsealed, so the port must never attempt a send with a bad key.
@@ -182,7 +185,7 @@ class SmtpInviteMailSendTest {
 
             val delivery = mailer.sendInvite(domain, "x@elsewhere.example", "TOKEN-k", Instant.parse("2026-07-31T12:00:00Z"))
 
-            assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "a MISMATCH key ⇒ copy-link fallback, not a send")
+            assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "a MISMATCH key ⇒ cannot-send, not a send")
             assertFalse(greenMail.waitForIncomingEmail(1_000, 1), "a MISMATCH key must not send SMTP")
             assertEquals(0, greenMail.receivedMessages.size)
         } finally {

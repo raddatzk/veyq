@@ -37,13 +37,13 @@ acceptanceCriteria:
     # cr-email-smtp-transport (ADR 0048/0049): a second delivery channel alongside the copy-link. When the tenant
     # has configured + enabled SMTP, the member invite is emailed from the tenant's own address; the body is
     # rendered from the tenant's template (or veyq's EN+DE default) over the CLOSED set {{link}}/{{domain}}/
-    # {{expiry}} — veyq interpolates nothing sealed. `anUnconfiguredTenantSendsNoSmtpAndFallsBack` still pins the
+    # {{expiry}} — veyq interpolates nothing sealed. `anUnconfiguredTenantCannotSendAndAttemptsNoSmtp` still pins the
     # fallback because the bootstrap invite still uses it; what changed is that a *member* invite can no longer
     # reach it — the gate refuses first (ADR 0055 §2), pinned by the criterion above.
     text: When the tenant has configured + enabled per-tenant SMTP, a member invite is delivered by email from the tenant's own address (the accept link's secret in the URL fragment; body over the closed {{link}}/{{domain}}/{{expiry}} set, nothing sealed injected by veyq). With no config there is no member invite at all — the fallback that remains is the Server-Owner's bootstrap copy-link, not this path (ADR 0055 §3).
     coverage:
       backend:
-        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack]
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantCannotSendAndAttemptsNoSmtp]
         unit: [InviteMailRendererTest.theRenderContextIsClosedToExactlyThreeNonSecretFields]
   - id: member-invite-delivery-result
     # cr-email-invite-send-hardening: the mint reports a first-class delivery result inline — SENT (SMTP accepted),
@@ -62,7 +62,7 @@ acceptanceCriteria:
       invite revoked again, leaving no live token.
     coverage:
       backend:
-        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantSendsNoSmtpAndFallsBack, SmtpInviteMailSendTest.aConfiguredTenantWhoseSmtpIsUnreachableReportsFailed, MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberAddSliceTest.aSendThatFailsLeavesNoLiveInvite]
+        integration: [SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet, SmtpInviteMailSendTest.anUnconfiguredTenantCannotSendAndAttemptsNoSmtp, SmtpInviteMailSendTest.aConfiguredTenantWhoseSmtpIsUnreachableReportsFailed, MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberAddSliceTest.aSendThatFailsLeavesNoLiveInvite]
       web:
         unit: [src/features/spaces/InviteMemberDialog.test.ts, src/features/spaces/TenantMembersPanel.test.ts]
   - id: member-invite-rate-limited
