@@ -20,8 +20,14 @@ Reference *substance*, not just resolution: a ref that resolves can still point 
 a web ref at a non-test file (a real `package.json` once passed), a backend ref at an empty `fun` body.
 Both degenerate cases are rejected here. This does NOT prove the test's assertion is *correct* — a body
 that runs but asserts nothing (oracle correctness) stays ADR 0045's job (mutation score), never this
-guard's. The line is deliberate: "is it a test file / does it have a body" is decidable and cheap;
-"does the body assert the right thing" is not, and pretending otherwise would oversell the green.
+guard's. It also does NOT prove the cited test proves *this* criterion: a ref is bound to an AC by being
+listed under it and by nothing else, so a sound, well-asserting test stays green beneath a sentence that
+reaches past what it exercises — and a mutation score stays green too, because the test itself is fine.
+The real case: a port-level test (a mailer returning its "cannot send" sentinel) cited under an AC that
+claimed the *handler's* 503 refusal. Only reading the sentence against the test catches that.
+The line is deliberate: "is it a test file / does it have a body" is decidable and cheap; "does the body
+assert the right thing, and the right thing for *this* sentence" is not, and pretending otherwise would
+oversell the green.
 
 Coverage shape (per acceptance criterion):
     coverage:
