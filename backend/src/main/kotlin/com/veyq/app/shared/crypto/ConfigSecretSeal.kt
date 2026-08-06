@@ -31,8 +31,10 @@ data class SealedSecret(val ciphertext: String, val nonce: String)
  * reads the base64 32-byte key from [VeyqConfig.Security.configSecretFile]; if that file does not exist it
  * **generates** one (32 random bytes), writes it `0600`, and logs loudly to back it up. An operator supplying
  * their own key mounts it and points the path at it. A read/generate **IO** failure (unwritable path) degrades to
- * [configured] = false (→ copy-link fallback) rather than crashing; a present-but-**malformed** key still fails
- * loudly at construction.
+ * [configured] = false rather than crashing; a present-but-**malformed** key still fails loudly at construction.
+ * Degraded, any tenant whose SMTP carries a `username` becomes non-sendable (`TenantMailSender.sendable`), so
+ * member invites and password recovery are **refused** with `503` (ADR 0055 §2/§4) — only the Server-Owner's
+ * tenant-bootstrap invite still degrades to a copy-link (§3).
  *
  * This is operator-side crypto for the server's OWN infrastructure secrets — distinct from, and no threat to, the
  * client-side content E2EE the server never touches (ADR 0012).
@@ -46,7 +48,8 @@ class ConfigSecretSeal(config: VeyqConfig) {
 
     private val key: SecretKey? = readOrGenerate(config.security().configSecretFile())
 
-    /** True when a KEK is available; lets a caller fall back (e.g. copy-link) rather than storing a secret. */
+    /** True when a KEK is available. False lets a caller degrade — refuse the send (ADR 0055 §2/§4), or fall back
+     *  to the Server-Owner bootstrap copy-link (§3) — rather than storing a secret it cannot seal. */
     val configured: Boolean get() = key != null
 
     /** Seal a plaintext secret. Throws if no KEK is available — never returns the plaintext unsealed. */
@@ -105,10 +108,12 @@ class ConfigSecretSeal(config: VeyqConfig) {
             throw e
         } catch (e: Exception) {
             // An IO failure (unwritable/unreadable path) must not crash the operator-blind rest of veyq, which needs
-            // no KEK. Degrade: configured=false → the send path uses the copy-link fallback (ADR 0050 amendment).
+            // no KEK. Degrade: configured=false → password-authenticated SMTP is unsendable, so the send paths
+            // refuse (ADR 0050 amendment; ADR 0055 §2/§4). Only the ServerOwner bootstrap still copy-links (§3).
             log.errorf(
                 "Could not read or generate the config-secret key at %s (%s) — config-secret sealing is UNAVAILABLE; " +
-                    "mail falls back to copy-link. Fix the path/permissions to enable it.",
+                    "any tenant whose SMTP needs a password cannot send, so member invites and password recovery " +
+                    "are refused with 503. Fix the path/permissions to enable it.",
                 pathStr, e.message,
             )
             null

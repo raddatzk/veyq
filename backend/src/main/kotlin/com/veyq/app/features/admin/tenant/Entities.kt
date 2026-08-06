@@ -81,7 +81,9 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
 
 /**
  * A tenant's own SMTP + invite-template configuration (cr-email-smtp-transport, ADR 0048/0049/0050). One row per
- * tenant (PK == tenant_id). Nullable transport fields = "not configured" ⇒ the copy-link fallback. The SMTP
+ * tenant (PK == tenant_id). Nullable transport fields = "not configured" ⇒ this tenant cannot send, so its member
+ * invites and password recovery are refused with `503` (ADR 0055 §2/§4); only the Server-Owner's tenant-bootstrap
+ * invite still falls back to a copy-link (§3), where a PENDING tenant has no settings by construction. The SMTP
  * **password is never stored in plaintext**: [passwordCiphertext] + [passwordNonce] hold the `ConfigSecretSeal`
  * output (AES-256-GCM under the env KEK, ADR 0050); null ciphertext = no password. [subjectTemplate] /
  * [bodyTemplate] are the owner-authored invite templates (null = veyq's bilingual EN+DE default), rendered over

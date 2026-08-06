@@ -13,8 +13,10 @@ import java.time.format.DateTimeFormatter
  * it resolves the tenant's own mail settings by the `domain` it is handed, and when that tenant has **enabled +
  * fully configured** SMTP (and the KEK is present so the password can be unsealed), it renders the invite over
  * the closed variable set ([InviteMailRenderer]) and sends it from the tenant's own address. Otherwise it
- * **delegates to [LoggingTenantInviteMailer]** (copy-link + the cr-0046 dev-file) — so SMTP-less tenants, the
- * owner-bootstrap invite (a PENDING tenant has no settings), and the whole dev/seed loop are unchanged.
+ * **delegates to [LoggingTenantInviteMailer]** (copy-link + the cr-0046 dev-file). Since ADR 0055 §2 that
+ * delegation is reachable **only for the Server-Owner's tenant-bootstrap invite** — a PENDING tenant has no mail
+ * settings by construction, which is exactly what bounds the surviving copy-link (§3) — and for the dev/seed loop
+ * that rides it. A **member** invite is refused at [canSend] before it is minted, so it never arrives here.
  *
  * Settings lookup, the sendability rule and the wire itself now live on the shared [TenantMailSender]
  * (cr-account-recovery), so a second mail kind reuses them rather than copying them. What stays here is what is
@@ -25,9 +27,12 @@ import java.time.format.DateTimeFormatter
  * bean type is never ambiguous, ADR 0048). No call site changes.
  *
  * **Best-effort, and first-class about it:** a send failure is surfaced as [DeliveryResult.FAILED], not swallowed.
- * The invite is already minted and its raw token is returned to the owner for the copy-link fallback, so a
- * transient SMTP error must not roll back the mint — the caller sends **after** the mint transaction commits
- * (cr-email-invite-send-hardening). The raw token / accept link is **never** logged, in any mode.
+ * The invite is already minted by then — the caller sends **after** the mint transaction commits, so a hung SMTP
+ * server never holds a pooled DB connection (cr-email-invite-send-hardening) — so the send cannot roll the mint
+ * back. What the caller then does with `FAILED` differs per invite (ADR 0055): on the Server-Owner bootstrap the
+ * raw token goes back to the owner as the copy-link (§3); a member invite has no such channel, so its handler
+ * compensates the mint by soft-revoking it and answers `503 mail_send_failed` (§6). The raw token / accept link
+ * is **never** logged, in any mode.
  */
 @Alternative
 @Priority(1)

@@ -14,11 +14,12 @@ import java.time.format.DateTimeFormatter
  * Reuses [TenantMailSender] for settings, sendability and the wire — and differs from the invite mailer in the
  * two ways that matter:
  *
- * **1. There is no fallback.** An invite that cannot be mailed degrades to a copy-link the owner hands over.
- * Recovery has nobody to hand it to: routing a recovery link through the operator would make them a participant
- * in a flow built to exclude them (ADR 0054 § Decision 4). A non-sendable instance reports
- * [DeliveryResult.FALLBACK_COPYLINK] to say "no mail left here" — and the handler treats that as *no recovery*,
- * never as a link to surface.
+ * **1. There is no fallback.** Recovery has nobody to hand a copy-link to: routing a recovery link through the
+ * operator would make them a participant in a flow built to exclude them (ADR 0054 § Decision 4). ADR 0055 §2
+ * then extended that rule to the member invite, leaving the Server-Owner's tenant-bootstrap invite as the one
+ * surviving copy-link (§3) — the case where there is no third party to route around. A non-sendable tenant
+ * reports [DeliveryResult.FALLBACK_COPYLINK] here purely as a "no mail left here" sentinel, never as a link to
+ * surface; in practice [canSend] refuses first and the request answers `503 mail_unavailable` (ADR 0055 §4).
  *
  * **2. The copy is veyq-fixed, not owner-authorable.** The per-tenant template exists so an owner can word an
  * invitation in their own voice; an owner-authored *recovery* mail is a phishing surface aimed at their own

@@ -19,11 +19,21 @@ import java.util.Optional
  */
 interface TenantInviteMailer {
     /**
-     * Delivers the invite (or falls back to copy-link) and reports **how it went** as a [DeliveryResult]:
-     * `SENT` (SMTP accepted it), `FALLBACK_COPYLINK` (no sendable SMTP — the copy-link is the channel), or
-     * `FAILED` (SMTP configured but the send errored). The result is **request-scoped only, never persisted**
-     * (operator-blind untouched — ADR 0049); the returned `bootstrapSecret` copy-link is the FAILED/FALLBACK
-     * fallback the caller hands back to the owner.
+     * Delivers the invite and reports **how it went** as a [DeliveryResult]: `SENT` (SMTP accepted it),
+     * `FALLBACK_COPYLINK` (no sendable SMTP — the copy-link is the channel), or `FAILED` (SMTP configured but the
+     * send errored). The result is **request-scoped only, never persisted** (operator-blind untouched — ADR 0049).
+     *
+     * **Which of the three a caller can actually observe depends on the invite (ADR 0055 §7).** The port keeps all
+     * three because one impl still needs them; the endpoints do not:
+     *  - **Member invite** (`POST /api/tenants/{tenantId}/member-invites` and `.../{inviteId}/reissue`): `SENT`
+     *    only. [canSend] refuses before any mint, so `FALLBACK_COPYLINK` never arises here (`503
+     *    mail_unavailable`, ADR 0055 §2), and a `FAILED` send compensates the mint and answers `503
+     *    mail_send_failed` rather than a success body (§6). The response carries no `bootstrapSecret` — there is
+     *    no copy-link to hand back.
+     *  - **Server-Owner tenant-bootstrap invite** (`POST /api/tenants` plus the resend/reassign of that same
+     *    invite): all three stay reachable. A `PENDING` tenant has no mail settings by construction, so this is
+     *    the one surviving copy-link (§3), and the returned `bootstrapSecret` is the channel on
+     *    `FALLBACK_COPYLINK` / `FAILED`.
      */
     fun sendInvite(domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult
 

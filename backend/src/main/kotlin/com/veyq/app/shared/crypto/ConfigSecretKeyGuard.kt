@@ -9,7 +9,8 @@ enum class ConfigSecretKeyState {
     /** A KEK is available and matches the fingerprint that sealed the stored secrets. */
     OK,
 
-    /** No KEK is available (generation failed / unwritable path) — sealing + sending unavailable, copy-link stands. */
+    /** No KEK is available (generation failed / unwritable path) — sealing is unavailable, and SMTP that needs a
+     *  password cannot send: member invites and password recovery refuse with `503` (ADR 0055 §2/§4). */
     ABSENT,
 
     /** A KEK is present but is NOT the one that sealed the stored secrets (the key file changed/was lost) — the
