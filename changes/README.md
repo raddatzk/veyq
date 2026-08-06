@@ -206,6 +206,16 @@ copies → forges → runs → discards, so even an abort leaves an orphaned tem
 (every guard's `__file__`-relative `ROOT` makes a copied `scripts/<guard>.py` resolve to the copy).
 Snapshot-restore is the interactive one-shot; a copy is its automated form.
 
+**First check the lever is wired to the mechanism at all.** Both traps below assume the lever *reaches* the code
+path; a CR that specifies a mechanism and, separately, the bite that must break it can name two things that never
+touch. cr-email-member-invite-mail-only chose `up -d --wait mailpit` for readiness and a bite that repointed the
+orchestrator's Mailpit **URL constant** at a dead port — but `--wait` probes the container's own healthcheck from
+inside the container and never reads that constant, so the injection would have produced a **green run**: the
+exact failure the bite exists to detect, one level up. Write the mechanism and its bite next to each other and
+ask *does turning this knob change that code path?* Where the answer is no, one of the two is wrong — there it
+was both, and keeping each for its own job (the healthcheck wait for readiness, a bounded poll for the address
+the tool actually exports) is what made the constant load-bearing.
+
 **And check the lever survives the tool.** An injection is only an injection if the thing under test cannot undo
 it. cr-e2e-orchestrator planned *"store absent — stop the garage container"*; the orchestrator's own
 `docker compose up -d` restarts a stopped container, so that injection silently becomes a green run — correct
