@@ -34,12 +34,16 @@ Five rules follow:
    break quietly.
 4. **A claim nothing backs is a lie with a reason attached.** Coverage no CI runs, a diagram no reader can
    render, a work-order nobody reads. Cut it, don't annotate it.
-5. **Don't offload meaning to git.** The rule was written against a planned v1 move to a fresh repo, which
-   would have dropped the history; that move's whole purpose was shedding the previous implementation, and
-   that is now simply done, in place. **Whether this repo is the final one is an open question** — until it
-   is answered, treat history as expendable: what must survive lives in the **working tree**, or is knowingly
-   let go. It stands on its own merit anyway — a reason that only a `git log` holds is a reason the next
-   reader will not find.
+5. **Don't offload meaning to git.** This rule was written against a planned move to a fresh repo, and that
+   move has happened — so it is no longer a precaution held open against a maybe. This repo's history begins
+   at its import; the implementation it replaced is archived and still readable at
+   [`raddatzk/veyq-no-e2ee`](https://github.com/raddatzk/veyq-no-e2ee). Nothing crossed but the working tree,
+   which is the rule stated as an event: **what must survive lives in the working tree, or is knowingly let
+   go.** The obligation that leaves is on the docs, not on the repo. Work-order ids (`cr-…`) are **provenance
+   labels, not resolvable pointers** — a CR is deleted when done, and no `git log --grep` recovers what it
+   said. So a doc that cites one carries the whole reason in its own sentence; the id records where a decision
+   came from, never where to go read it. A reason that only a `git log` holds is a reason the next reader will
+   not find.
 
 ## State vs. flow
 
