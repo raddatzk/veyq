@@ -123,9 +123,16 @@ decision rather than to the runbook's discretion.
 - **The operator page gains a leg.** Its two-halves framing — the server's ciphertext against the users' keys —
   stays exactly as it is; what changes is that the server's half is stated as three things, with the key file
   named as the one that fails quietly.
-- **The deployment artifacts must persist leg (c), and today none of them do.** No image declares a volume for
-  it and no compose file mounts it, so a container that is recreated regenerates the key and walks into the
-  `MISMATCH` state on its own. This decision surfaces that defect; it is fixed where deployment lives, not here.
+- **Every deployment artifact must persist leg (c), and the obligation outlives the one that first met it.**
+  A container that is recreated without a persisted key path regenerates the key and walks into the `MISMATCH`
+  state on its own — an instance that boots, serves every page, and can admit nobody. `infra/docker-compose.prod.yml`
+  mounts a named volume for it and `scripts/validate_config_secret_persistence.py` holds the three files that
+  have to agree about that path — the `Dockerfile`'s `WORKDIR`, `VeyqConfig`'s default, and the compose mount —
+  to each other. That guard sees compose files in this tree only: for Kubernetes, a bare `docker run` or a
+  systemd unit the obligation is the operator's, and the `veyq_instance` fingerprint tripwire is the only
+  detection. Note what the fix is NOT: a `VOLUME` in the image, which would create an *anonymous* volume when
+  nothing is mounted — persistence-shaped, discarded by `--rm` and `down -v`, under a name no `docker volume ls`
+  identifies. The defect must stay visible where nothing mounts the path.
 - **The durability bar becomes executable.** Its sentence turns into an acceptance criterion with an owner:
   [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md).
   Until a test carries it, §10 keeps saying *half held* — the bar follows the proof, never the intention.

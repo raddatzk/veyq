@@ -8,15 +8,18 @@ If you are here to find out whether your memories are safe, you want
 
 ## The honest state, first
 
-**There is no supported production deployment yet.** veyq is pre-V1. What exists today is a *development*
-stack — a Docker Compose file that brings up the database, an S3-compatible object store, and a throwaway
-mailbox. The latter two are opt-in *profiles* in that file, which is not the same as optional in a real
-instance: without a store there is no media, and without working email nobody can be invited and nobody can
-reset a password. It is not hardened, it has no upgrade path, and there is no backup procedure written down.
+**There is no supported production deployment yet.** veyq is pre-V1. There are now two Compose files — a
+*development* stack (database, an S3-compatible object store, a throwaway mailbox, the latter two opt-in
+*profiles*) and a *production* one that adds the application itself and terminates TLS in front of it. Do not
+read "optional profile" as "optional in a real instance": without a store there is no media, and without
+working email nobody can be invited and nobody can reset a password.
 
-That is not an oversight; it is the current V1 work. Until it lands, running veyq means reading the repository
-and making your own operational decisions. Please do not put memories you cannot afford to lose on an instance
-you set up from the dev stack.
+A **backup-and-restore procedure is now written down and tested**, and that is the part of this page that
+changed. What is still missing is an **upgrade path**: veyq migrates its database on start with no way back, so
+moving to a newer version means taking a backup first and restoring it if the new version does not work out.
+
+Until that lands, running veyq means reading the repository and making your own operational decisions. Please
+do not put memories you cannot afford to lose on an instance you set up from the dev stack.
 
 ## What you are responsible for
 
@@ -40,20 +43,29 @@ So the things you own are:
 
 A veyq backup has **two halves**, and the server only holds one of them.
 
-1. **The server's half** — the database and the object store. This is what your backup tooling captures, and
-   it is entirely ciphertext.
+1. **The server's half** — and it is *three* things, not two. The database, the object store's contents, and a
+   small **key file** the server manages for itself. The third is the one that gets forgotten, and its absence
+   is the one that hides: an instance restored without it starts up, serves every page, and then refuses to
+   invite anybody or send a password-reset link. All three are ciphertext or keys to ciphertext; none of it
+   lets you read anything.
 2. **The users' half** — their passwords and Emergency Kits. You do not have these and cannot back them up.
 
 A perfectly restored server whose users lost their keys is not a recovered instance. It is unreadable data.
 Tell your users to keep their Emergency Kit somewhere safe, and mean it. This is why key recovery is treated
 as a durability requirement in veyq, not a convenience feature.
 
+The commands, and the one precondition that makes them correct — **stop the application first, and leave the
+database and the store running** — are in
+[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md) § Backup & restore. Take one
+before every upgrade.
+
 ## Where the material is
 
-Until the runbook exists, these are the real sources:
+These are the real sources:
 
-- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — the dev stack: profiles,
-  the object store, and the mail setup (including the throwaway mailbox to test it against).
+- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — both stacks: the dev
+  profiles, the object store, the mail setup (including the throwaway mailbox to test it against), running in
+  production, and the backup-and-restore runbook.
 - **[`README.md`](https://github.com/raddatzk/veyq/blob/main/README.md)** — repository shape and what is built.
 - **[`docs/architecture/README.md`](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md)** —
   deployment topology and the runtime view.

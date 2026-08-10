@@ -1,12 +1,18 @@
 useCase: uc.admin.back-up-and-restore-instance
 feature: admin
 title: Back up an instance and restore it onto an empty one
-# Refined 2026-08-06 (ADR 0056), nothing built yet — hence `status: planned` and gaps on both surfaces.
 # This use-case exists to make architecture §10's durability bar executable: its sentence is criterion
 # `restore-onto-empty-opens-every-memory` below, almost word for word. Until a CI-run test carries that
 # criterion, §10 keeps saying "half held" — the bar follows the build, never the intention (ADR 0040).
 # The capture/restore machinery itself is a Python script and an orchestrator extension, neither of which is a
 # coverage surface; what is claimable here is what a test can observe about a restored instance.
+#
+# The suites now EXIST and pass locally. `status: planned` is nonetheless correct and not a formality: this
+# repository has no remote and no CI run has ever executed, so ADR 0040's rule — a test no CI run executes makes
+# no coverage claim — leaves every criterion uncovered. The gaps below therefore state the ONE remaining
+# condition, which is a CI run and not a missing test. `docs/coverage/README.md` § Rules forbids the
+# compromise ("a surface that is covered may not also be a gap"), so "refs plus a caveat" is not an expressible
+# state; the flip is a mechanical edit gated on that event, spelled out in docs/inbox.md #26.
 status: planned
 acceptanceCriteria:
   - id: three-legs-or-it-is-not-a-backup
@@ -42,12 +48,23 @@ acceptanceCriteria:
       layout are recreated rather than restored, because they were never durable state.
 gaps:
   backend: >-
-    Nothing built. The backend-observable half is the config-secret fingerprint verdict on a restored instance
-    (criterion `three-legs-or-it-is-not-a-backup`) — the MISMATCH state itself already has coverage under
-    uc.admin.tenant-mail-settings, but no test yet reaches it by way of a restore.
+    No backend test, and none is planned. The two criteria that stay uncovered on every surface are
+    `a-stopped-app-makes-the-dangerous-skew-impossible` — whose property is "the app is stopped", which a
+    backend test cannot observe because a backend test IS the app — and
+    `the-store-leg-is-verifiable-before-the-restore`, whose observable is the exit code of
+    `scripts/instance_backup.py verify`, and a Python tool is not a coverage surface (ADR 0040). Both are
+    proven instead by that tool's own asymmetry (an object with no row is tolerated, a row with no object is
+    fatal, naming the object) and by the CR's bite-proofing. The config-secret MISMATCH verdict itself is
+    already covered under uc.admin.tenant-mail-settings; what this use-case adds is reaching it BY WAY OF a
+    restore, which is a live-instance property and therefore web's.
   web: >-
-    Nothing built. This is where the bar lands: an e2e suite that seeds an instance with a Memory containing
-    media, drives the capture, wipes, restores, and reopens that Memory with the key material the seed already
-    persisted. The pieces exist — the orchestrator brings the stack up itself, and devSeed persists the Secret
-    Key and Master Key for a direct vault inject — so what is missing is the capture/restore choreography, not
-    the fixture.
+    The suites exist and pass locally; the only thing missing is a CI run to execute them (ADR 0040). Two
+    grouped e2e suites under `web/src/features/admin/` run through `scripts/run_web_e2e.py`: `restore.*`
+    births an instance with media, has the orchestrator capture it, DESTROY the source, and restore onto a
+    fresh database, bucket and key path, then signs in for real (`login` + `unlockMasterKey` — Argon2 over the
+    password and the Emergency Kit's Secret Key, no injected vault) and compares the fetched plaintext byte for
+    byte; `legthree.*` does the same restore minus the key file and asserts MISMATCH plus a 503
+    mail_unavailable invite, with a pre-capture `OK` as its positive control. Note what this corrects: the
+    fixture is NOT `web/scripts/devSeed.mts` — no e2e suite reads it, every suite bootstraps through
+    `birthInstance()`, and a `vaultFromSeed()` inject would have bypassed the password-derived unlock that
+    "with the keys their owners already hold" is actually about.
