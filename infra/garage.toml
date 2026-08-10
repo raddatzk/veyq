@@ -1,15 +1,25 @@
 # Garage single-node config for the bundled dev/self-host object store (cr-0029, ADR 0013). S3-compatible,
 # AGPL-3.0, run as a separate service — veyq signs presigned URLs against it via the vendor-neutral AWS S3 SDK.
-# Local dev throwaway: the rpc_secret + admin_token below are NOT secret; set real ones for any real deployment.
+#
+# ONE config file serves both stacks, and it holds NO secrets: `rpc_secret` and `admin_token` come from the
+# environment (`GARAGE_RPC_SECRET` / `GARAGE_ADMIN_TOKEN`, both supported by the pinned binary — measured).
+# docker-compose.yml supplies the documented dev throwaways; docker-compose.prod.yml requires real ones from
+# infra/.env. A secret written into a tracked file is one an operator inherits by accident.
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
+# `garage meta snapshot` defaults to writing INSIDE metadata_dir — i.e. into the very volume a same-host
+# volume-copy rollback is meant to copy, so each snapshot grows the thing being snapshotted (ADR 0056 §3). Its
+# own named volume keeps the two apart. Note what this does NOT buy: a running node can snapshot its metadata
+# database consistently and there is no equivalent for its data blocks (`garage block --help` offers
+# info | list-errors | purge | retry-now, and no snapshot) — which is why the volume copy is documented as a
+# same-host fast path and never as the procedure the durability bar is measured against.
+metadata_snapshots_dir = "/var/lib/garage/snapshots"
 db_engine = "lmdb"
 
 replication_factor = 1
 
 rpc_bind_addr = "[::]:3901"
 rpc_public_addr = "garage:3901"
-rpc_secret = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 [s3_api]
 # Must match veyq.blob-store.region (default us-east-1) — SigV4 signs the region, so they have to agree.
@@ -18,4 +28,3 @@ api_bind_addr = "[::]:3900"
 
 [admin]
 api_bind_addr = "[::]:3903"
-admin_token = "veyq-dev-admin-token"

@@ -35,16 +35,24 @@ services:
     container_name: veyq-garage
     profiles: ["s3"]
     restart: unless-stopped
+    environment:
+      # garage.toml holds no secrets, so both stacks can share it — these are the DOCUMENTED dev throwaways.
+      GARAGE_RPC_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      GARAGE_ADMIN_TOKEN: "veyq-dev-admin-token"
     volumes:
       - "./garage.toml:/etc/garage.toml:ro"
       - veyq-garage-meta:/var/lib/garage/meta
       - veyq-garage-data:/var/lib/garage/data
+      # metadata_snapshots_dir (garage.toml) — deliberately its OWN volume, not a path under meta/: a snapshot
+      # written inside the metadata volume grows the very thing a volume-copy rollback copies.
+      - veyq-garage-snapshots:/var/lib/garage/snapshots
     ports:
       - "19000:3900"   # S3 API — VEYQ_S3_ENDPOINT for the backend e2e; also the internal endpoint the backend stats against
       - "19003:3903"   # admin API (local only)
     labels:
       # Traefik path-route for same-origin web access: route the bucket path WITHOUT stripping the prefix and
       # with the Host header preserved — SigV4 signs host+path+query, so a stripPrefix/host rewrite breaks it.
+      - "veyq.stack=dev"           # so the DEV proxy claims only dev containers, and vice versa
       - "traefik.enable=true"
       - "traefik.http.routers.veyq-blobs.rule=PathPrefix(`/veyq`)"
       - "traefik.http.routers.veyq-blobs.entrypoints=web"
@@ -65,6 +73,10 @@ services:
     restart: "no"
     depends_on:
       - garage
+    environment:
+      # The CLI authenticates its RPC connection with the same secret the node uses — it is no longer in the
+      # config file, so the sidecar needs it here too.
+      GARAGE_RPC_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     volumes:
       - "./garage.toml:/etc/garage.toml:ro"
       - "./garage-init.sh:/garage-init.sh:ro"
@@ -76,13 +88,20 @@ services:
   # Reverse proxy so the bundled store is reachable same-origin by the web app (ADR 0013 §4). Routes only the
   # bucket path (see the garage labels); the backend + web are added behind it in a fuller deployment.
   traefik:
-    image: traefik:v3.3
+    # v3.6, not v3.3: v3.3's docker client cannot negotiate with Docker Engine 29 (API 1.55) and fails with an
+    # empty error, so it loads NO routers at all — the proxy answers 404 for everything while looking healthy.
+    # That is how this route stayed broken here unnoticed: the Vite dev server proxies `/veyq` itself
+    # (application-dev.properties signs for http://127.0.0.1:5173), so nothing in the dev loop reads this path.
+    image: traefik:v3.6
     container_name: veyq-traefik
     profiles: ["s3"]
     restart: unless-stopped
     command:
       - "--providers.docker=true"
       - "--providers.docker.exposedbydefault=false"
+      # Scoped: the docker provider sees every container on the host, so a prod stack on the same
+      # machine would collide with this one on the router name and Traefik would drop BOTH.
+      - "--providers.docker.constraints=Label(`veyq.stack`,`dev`)"
       - "--entrypoints.web.address=:80"
     ports:
       - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /veyq/<obj> → Garage
@@ -111,3 +130,4 @@ volumes:
   veyq-mariadb-data:
   veyq-garage-meta:
   veyq-garage-data:
+  veyq-garage-snapshots:
