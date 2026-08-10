@@ -90,6 +90,166 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
   opposite — `scripts/run_web_e2e.py` starts this profile itself and waits on it, because every suite it runs
   onboards a member out of this mailbox.
 
+## Running in production
+
+`infra/docker-compose.prod.yml` is the deployment artifact: the app, MariaDB, Garage, and a Traefik that
+terminates TLS in front of both. It is **standalone**, not an override of the dev file — that file has no app
+service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
+
+```sh
+cp infra/.env.example infra/.env          # then fill in every value (it is gitignored)
+docker compose -p veyq -f infra/docker-compose.prod.yml up -d
+```
+
+**Always name the project (`-p veyq`).** Compose otherwise derives it from the compose file's *directory*, which
+both files share — so an unqualified `down -v` meant for the dev stack would destroy the production volumes. With
+the project named, `docker volume ls` shows `infra_*` and `veyq_*` side by side and the two never touch.
+
+**Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
+rather than starting an instance on a password that is printed in this repository.
+
+**TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
+plain HTTP the refresh cookie is set and never sent back and "remember me" breaks silently; and every invitation
+link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
+scheme it does not answer. Traefik obtains a Let's Encrypt certificate over the HTTP-01 challenge, which needs
+port 80 reachable from the internet and `VEYQ_DOMAIN` resolving to this host. While you are still testing a
+deployment, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory — a handful of failed production
+orders per hostname per hour is all it takes to be locked out for a week.
+
+**The config-secret volume is the point of this file.** `veyq-config-secret` is mounted at `/var/lib/veyq` and
+`VEYQ_SECURITY_CONFIG_SECRET_FILE` points into it. Without it, every `up -d --force-recreate app` regenerates the
+KEK, the instance reports `configSecretState: MISMATCH`, and member invites and password resets refuse with
+`503 mail_unavailable` — an instance that boots, serves every page, and cannot admit anybody.
+`scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
+(`Dockerfile`, `VeyqConfig.kt`, this compose file) to each other on every push.
+
+Two things worth knowing rather than discovering:
+
+- **The proxy is scoped to this stack** (`--providers.docker.constraints=Label(veyq.stack,prod)`). Traefik's
+  docker provider is not project-aware: unconstrained, it discovers *every* container on the host — which both
+  exposes whatever else the machine runs and, with two veyq stacks side by side, collides on the router name and
+  makes Traefik drop the router for both.
+- **Upgrading** means changing `VEYQ_IMAGE` and running `up -d`. The schema migrates at boot with no gate and
+  there is no downgrade path, so **take a backup first** (§ Backup & restore) — restoring it is the only way back.
+
+## Backup & restore
+
+The use-case owns the goal and the failure modes
+([uc.admin.back-up-and-restore-instance](../docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md));
+[ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) owns the decisions. This
+section owns the **commands**, and `scripts/instance_backup.py` is what they call — its module docstring carries
+the tool's own reference.
+
+**An instance's durable state is exactly three legs:** (a) the database, (b) the object store's *contents*,
+(c) the **config-secret key file**. Two legs produce an instance that boots, serves content, and refuses member
+invites and password resets with `503 mail_unavailable` — the leg that gets forgotten is the one whose absence
+looks like health.
+
+**The capture is cold, and *cold* means the writer is stopped — not the stores.** Stop the application; leave
+MariaDB and Garage running, because the capture reads through their own interfaces. That single act is the whole
+consistency argument: with the app down the database gains no rows, so a row whose object was never captured is
+structurally impossible and there is no ordering to remember. The tool cannot check this for you and does not
+pretend to.
+
+### Capture
+
+```sh
+# 1. STOP the application (quarkusDev / the app container). Nothing else stops.
+
+# 2. Credentials — the SAME variables the backend already reads, so there is nothing new to configure.
+#    The endpoint must be the one the rclone CONTAINER sees (an internal name), not a published host port.
+export VEYQ_BACKUP_DB_PASSWORD=change-me-root
+export VEYQ_BLOB_STORE_ENDPOINT=http://garage:3900
+export VEYQ_BLOB_STORE_ACCESS_KEY=GK0123456789abcdef01234567
+export VEYQ_BLOB_STORE_SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# 3. Capture all three legs into infra/backups/<UTC-ISO8601>/ (gitignored).
+python3 scripts/instance_backup.py capture \
+    --docker-network infra_default \
+    --config-secret-file backend/config-secret.key
+
+# 4. CHECK it — the store leg is captured logically precisely so this is possible at all.
+python3 scripts/instance_backup.py verify infra/backups/<stamp>
+
+# 5. Start the application again. The downtime was the capture, and nothing else.
+```
+
+`--docker-network` is the network the pinned `rclone` container joins; for the bundled stack it is
+`infra_default` (the project name comes from the compose file's **directory**). List them with
+`docker network ls`. An operator with their own `rclone` install can pass `--rclone-binary rclone` instead, and
+one whose database is not this compose service passes `--db-host`/`--db-port` (the client then runs from `PATH`
+if installed, else in the pinned `mariadb:11.4` image on `--docker-network`).
+
+No credential ever reaches `argv`: the store remote is defined entirely through `RCLONE_CONFIG_*` and the
+database password through `MYSQL_PWD`, both handed to the child as bare `-e NAME`. `rclone` logs
+`NOTICE: Config file … not found - using defaults` on every call — that is normal, not an error, and no config
+file is written.
+
+**What `verify` tells you, and its one deliberate asymmetry.** An **object with no row** is an ordinary steady
+state: every store deletion is best-effort *after* the commit and the upload-session GC `V11__media.sql:9`
+promised was never built, so orphans are counted and tolerated. A **row with no object** is fatal (A4): it
+restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
+— so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
+backup is structurally intact but carries no leg (c).
+
+### Restore — onto an instance that holds nothing
+
+A restore targets the **same domain** (ADR 0056 §4); `--domain` is required and the tool refuses anything the
+backup did not hold. It also refuses a target database that already has tables, or a bucket that already has
+objects — the restore is defined onto an empty instance and nothing reconciles two populated ones (A5).
+
+```sh
+# 1. An EMPTY instance: an empty database, an initialised-but-empty bucket, no application running.
+docker compose -f infra/docker-compose.yml --profile s3 up -d      # garage-init recreates layout+bucket+key
+docker compose -f infra/docker-compose.yml exec -T mariadb \
+    mariadb -uroot -pchange-me-root -e "CREATE DATABASE veyq;"
+
+# 2. Load all three legs.
+python3 scripts/instance_backup.py restore infra/backups/<stamp> \
+    --domain veyq.localhost \
+    --docker-network infra_default \
+    --config-secret-file backend/config-secret.key
+
+# 3. Start the application, then VERIFY — this is the step that separates a restore from a hope.
+```
+
+The store's **configuration** is not restored because it was never state: bucket, access key and single-node
+layout are recreated idempotently by `garage-init.sh`. One limit worth knowing rather than discovering: that
+script hardcodes `layout apply --version 1`, so it initialises a **fresh** node — which is exactly a restore
+target's shape, and not a partly-configured one.
+
+The final step is not "it started". Read the instance's **config-secret state** (`GET
+/api/tenants/{id}/mail-settings` → `configSecretState: OK`), then have a person sign in and **open a Memory that
+contains media**. That is the only assertion that touches all three legs at once: the row, the object and the key
+are three different failures with the same symptom of *"it looked fine"*.
+
+### The volume-copy fast path — and what it is not
+
+For a **same-host, same-version** rollback you can stop everything and copy the named volumes
+(`infra_veyq-mariadb-data`, `infra_veyq-garage-meta`, `infra_veyq-garage-data`) plus the config-secret key file.
+It is faster and needs no credentials. It is **not** the procedure the durability bar is measured against: a
+volume copy is opaque, so a complete one and a truncated one look identical until you restore them, and it binds
+the backup to one store's on-disk format and version.
+
+Garage can snapshot its metadata database consistently while running:
+
+```sh
+docker exec veyq-garage /garage meta snapshot
+```
+
+There is **no** equivalent for its data blocks (`garage block --help` offers `info | list-errors | purge |
+retry-now` and no snapshot), which is the second reason this path is a rollback aid and not the procedure.
+`garage.toml` sets `metadata_snapshots_dir` to its own named volume (`infra_veyq-garage-snapshots`) because the
+default writes snapshots **inside** `metadata_dir` — i.e. into the very volume the fast path copies, so each
+snapshot grows the thing being snapshotted. An instance created before that setting still carries the old
+snapshots under `meta/snapshots/`; they are safe to delete once.
+
+### An upgrade begins with a backup
+
+The schema migrates at boot with no operator gate and the migration set carries no downgrade path, so returning
+to the previous image means restoring a backup (ADR 0056 §6). Take one **before** you pull a new tag. There is no
+upgrade runbook yet; this section is its precondition, not its substitute.
+
 ## Seeding a reproducible dev instance (cr-0046)
 
 Bring up a known `{Server Owner + 127.0.0.1 tenant owner + personal scope}` in one command and persist it
