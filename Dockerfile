@@ -73,14 +73,32 @@ WORKDIR /work/
 # `grep -rn veyq-media backend/src/main infra/ .github/` finds nothing that would mount it.
 # /work MUST stay writable by the runtime user: veyq.security.config-secret-file defaults to
 # `config-secret.key` relative to the process CWD and the server GENERATES it 0600 on first start
-# (ADR 0050, VeyqConfig.kt:224). A container without a persistent /work regenerates the KEK on every
-# recreate, which the veyq_instance fingerprint then reports as MISMATCH — mount it, or set the path.
+# (ADR 0050, the @WithDefault in VeyqConfig.kt's `Security` interface). A container without a persisted key
+# path regenerates the KEK on every recreate, which the veyq_instance fingerprint then reports as MISMATCH.
+#
+# /var/lib/veyq is that path, and it exists here ONLY so a named volume mounted on it inherits uid 10001 —
+# Docker seeds a fresh volume from the image directory it covers, ownership included, and a root-owned mount
+# would leave the server unable to write its own key. Deployments set
+# VEYQ_SECURITY_CONFIG_SECRET_FILE=/var/lib/veyq/config-secret.key and mount a volume here;
+# infra/docker-compose.prod.yml does exactly that, and scripts/validate_config_secret_persistence.py holds
+# the three files to it.
+#
+# NOT /work, and not a `VOLUME` declaration — two deliberate omissions:
+#   - /work already holds quarkus-app/. A named volume mounted there is seeded from the image ONCE and then
+#     never refreshed, so `up -d` with a newer tag would keep running the FIRST image's jar. An upgrade that
+#     silently does nothing is worse than one that fails.
+#   - `VOLUME /var/lib/veyq` would create an ANONYMOUS volume when nothing is mounted, which looks like
+#     persistence (the key survives a restart) while `--rm` and `compose down -v` still discard it under a
+#     name no `docker volume ls` identifies. The defect must stay visible where nothing mounts the path;
+#     detection is the remedy ADR 0050's amendment chose.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r -g 10001 veyq \
     && useradd -r -u 10001 -g veyq -s /usr/sbin/nologin veyq \
-    && chown -R 10001:10001 /work
+    && mkdir -p /var/lib/veyq \
+    && chmod 0700 /var/lib/veyq \
+    && chown -R 10001:10001 /work /var/lib/veyq
 COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-app /work/quarkus-app
 USER 10001
 EXPOSE 8080
@@ -97,9 +115,14 @@ ENV VEYQ_VERSION="${VEYQ_VERSION}"
 ENV VEYQ_REVISION="${VEYQ_REVISION}"
 WORKDIR /work/
 # curl: healthcheck only; no ffmpeg (see runtime-jvm — no server-side transcode in an operator-blind core).
+# /var/lib/veyq: the config-secret mount point, for the same reasons spelled out on runtime-jvm above. Both
+# targets carry it because a guard anchored on one of them passes a Dockerfile whose other target drifted.
 RUN microdnf install -y curl && microdnf clean all
 COPY --from=backend-build-native --chown=10001:10001 /code/backend/build/*-runner /work/application
-RUN chmod 0755 /work/application && chown -R 10001:10001 /work
+RUN chmod 0755 /work/application \
+    && mkdir -p /var/lib/veyq \
+    && chmod 0700 /var/lib/veyq \
+    && chown -R 10001:10001 /work /var/lib/veyq
 USER 10001
 EXPOSE 8080
 ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]

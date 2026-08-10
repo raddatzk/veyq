@@ -1,0 +1,182 @@
+# Production stack for a self-hosted veyq instance: the app, its database, the bundled object store, and a
+# Traefik that terminates TLS in front of both. See infra/README.md § Running in production.
+#
+# ALWAYS run it with an explicit project name:
+#
+#     docker compose -p veyq -f infra/docker-compose.prod.yml up -d
+#
+# The project name otherwise comes from this file's DIRECTORY, which both compose files share — so an
+# unqualified `down -v` on the dev stack would destroy the production volumes. Naming the project is what keeps
+# `infra_*` (dev) and `veyq_*` (prod) apart on one host.
+#
+# It is a STANDALONE file, deliberately not an override of docker-compose.yml. That file has no app service at
+# all (the backend is run from the IDE), publishes 3306/19000/18080, and ships `change-me` passwords — an
+# override would inherit a file whose entire premise is that the app is elsewhere, and inherit a known password
+# by accident.
+#
+# Every secret is REQUIRED and has no default: `${VAR:?…}` fails the `up` when it is unset. A prod stack that
+# boots with `change-me` is worse than one that refuses to boot. Copy infra/.env.example to infra/.env
+# (gitignored) and fill it in.
+
+services:
+  mariadb:
+    image: mariadb:11.4
+    restart: unless-stopped
+    environment:
+      MARIADB_DATABASE: veyq
+      MARIADB_USER: veyq
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?set MARIADB_ROOT_PASSWORD in infra/.env}
+    # No published port. The app reaches it on the compose network; a backup capture reaches it through
+    # `docker compose exec`, which needs no port either.
+    volumes:
+      - veyq-mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  garage:
+    image: dxflrs/garage:v2.0.0
+    restart: unless-stopped
+    environment:
+      # garage.toml carries no secrets so one config serves both stacks; these are the real ones.
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/.env (64 hex chars)}
+      GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
+    volumes:
+      - "./garage.toml:/etc/garage.toml:ro"
+      - veyq-garage-meta:/var/lib/garage/meta
+      - veyq-garage-data:/var/lib/garage/data
+      - veyq-garage-snapshots:/var/lib/garage/snapshots
+    labels:
+      # Same-origin bucket routing, over TLS. The prefix is NOT stripped and the Host header is preserved:
+      # SigV4 signs host+path+query, so either rewrite breaks every presigned URL. The rule is longer than the
+      # app's, and the explicit priority says so rather than relying on Traefik's length heuristic.
+      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
+      - "traefik.enable=true"
+      - "traefik.http.routers.veyq-blobs.rule=Host(`${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}`) && PathPrefix(`/veyq`)"
+      - "traefik.http.routers.veyq-blobs.priority=100"
+      - "traefik.http.routers.veyq-blobs.entrypoints=websecure"
+      - "traefik.http.routers.veyq-blobs.tls.certresolver=letsencrypt"
+      - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
+      - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
+
+  # One-shot, idempotent: layout + bucket + key. The store's CONFIGURATION is not durable state (ADR 0056 §4 of
+  # Context), which is exactly why a restore target needs no surviving store identity — this recreates it.
+  # NOTE its one limit: garage-init.sh hardcodes `layout apply --version 1`, so it initialises a FRESH node.
+  garage-init:
+    build:
+      context: .
+      dockerfile: garage-init.Dockerfile
+    image: veyq-garage-init:v2.0.0
+    restart: "no"
+    depends_on:
+      - garage
+    environment:
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/.env (64 hex chars)}
+      VEYQ_S3_ACCESS_KEY: ${VEYQ_S3_ACCESS_KEY:?set VEYQ_S3_ACCESS_KEY in infra/.env}
+      VEYQ_S3_SECRET_KEY: ${VEYQ_S3_SECRET_KEY:?set VEYQ_S3_SECRET_KEY in infra/.env}
+    volumes:
+      - "./garage.toml:/etc/garage.toml:ro"
+      - "./garage-init.sh:/garage-init.sh:ro"
+      - "veyq-garage-meta:/var/lib/garage/meta:ro"
+    entrypoint: ["/bin/sh", "/garage-init.sh"]
+
+  app:
+    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq:1.2.3}
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+      garage:
+        condition: service_started
+    environment:
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:mariadb://mariadb:3306/veyq
+      QUARKUS_DATASOURCE_USERNAME: veyq
+      QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
+      # Behind a reverse proxy the per-IP rate limiter must key on the real client, not on Traefik.
+      QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+      # The store is reached INTERNALLY; presigned URLs are SIGNED for the public origin so a browser fetches
+      # them same-origin, with no CORS (ADR 0013 §4). Both must be set — signing for the internal name would
+      # produce URLs no client can reach.
+      VEYQ_BLOB_STORE_ENDPOINT: http://garage:3900
+      VEYQ_BLOB_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
+      VEYQ_BLOB_STORE_ACCESS_KEY: ${VEYQ_S3_ACCESS_KEY:?set VEYQ_S3_ACCESS_KEY in infra/.env}
+      VEYQ_BLOB_STORE_SECRET_KEY: ${VEYQ_S3_SECRET_KEY:?set VEYQ_S3_SECRET_KEY in infra/.env}
+      # Leg (c) of the backup, on the volume below. An ABSOLUTE path outside /work on purpose: /work holds
+      # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
+      # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.
+      VEYQ_SECURITY_CONFIG_SECRET_FILE: /var/lib/veyq/config-secret.key
+    volumes:
+      # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
+      # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
+      # and password resets with 503 mail_unavailable (ADR 0050 amendment, ADR 0055, ADR 0056 § Consequences).
+      - veyq-config-secret:/var/lib/veyq
+    # MaxRAMPercentage in the image's ENTRYPOINT is a percentage of the CONTAINER limit; without one the JVM
+    # sizes its heap off host RAM.
+    mem_limit: ${VEYQ_MEM_LIMIT:-1g}
+    healthcheck:
+      # /api/setup: unauthenticated, served only once Flyway has migrated, and the first call every client
+      # makes — the same probe scripts/run_web_e2e.py uses. This backend has no smallrye-health extension, so
+      # there is no /q/health/ready to poll.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8080/api/setup"]
+      interval: 15s
+      timeout: 5s
+      retries: 20
+      start_period: 60s
+    labels:
+      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
+      - "traefik.enable=true"
+      - "traefik.http.routers.veyq-app.rule=Host(`${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}`)"
+      - "traefik.http.routers.veyq-app.priority=1"
+      - "traefik.http.routers.veyq-app.entrypoints=websecure"
+      - "traefik.http.routers.veyq-app.tls.certresolver=letsencrypt"
+      - "traefik.http.services.veyq-app.loadbalancer.server.port=8080"
+
+  # TLS is a PRECONDITION here, not a deployment preference. `veyq.session.cookie.secure=true` is the shipped
+  # default, so over plain HTTP the refresh cookie is set and never sent back — "remember me" breaks silently.
+  # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails
+  # links pointing at a scheme it does not answer.
+  traefik:
+    # v3.6, not v3.3: v3.3's docker client cannot negotiate with Docker Engine 29 (API 1.55). It fails with an
+    # EMPTY message — `Failed to retrieve information of the docker client and server host: Error response from
+    # daemon: ` — so the provider never loads a single router and every request 404s while the proxy itself
+    # looks healthy. Measured on this host, where it had also silently broken the dev stack's bucket route.
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      # SCOPED to this stack. The docker provider is not project-aware: it discovers EVERY container on the
+      # host, so an internet-facing proxy would otherwise pick up whatever else the machine happens to run —
+      # and two veyq stacks on one host collide outright ("Router defined multiple times with different
+      # configurations", after which Traefik drops the router and serves 404 for both). Measured here.
+      - "--providers.docker.constraints=Label(`veyq.stack`,`prod`)"
+      - "--entrypoints.web.address=:80"
+      # :80 exists only for the ACME HTTP-01 challenge and to redirect everything else to :443.
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.email=${VEYQ_ACME_EMAIL:?set VEYQ_ACME_EMAIL in infra/.env}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      # Point this at Let's Encrypt's staging directory while you are still testing a deployment — a handful of
+      # failed production orders per hostname per hour is all it takes to be rate-limited out for a week.
+      - "--certificatesresolvers.letsencrypt.acme.caserver=${VEYQ_ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - veyq-acme:/acme
+
+volumes:
+  veyq-mariadb-data:
+  veyq-garage-meta:
+  veyq-garage-data:
+  veyq-garage-snapshots:
+  veyq-acme:
+  # Leg (c). Small, and the difference between a restorable instance and one that boots into MISMATCH.
+  veyq-config-secret:
