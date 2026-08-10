@@ -204,6 +204,10 @@ test-results/
 
 # Local deployment secrets
 infra/.env
+# Instance backups (scripts/instance_backup.py). Leg (c) of every capture is a `0600` config-secret KEK, and the
+# dump is the whole instance — this directory must never become a commit. `.dockerignore` keeps it out of the
+# build context for the same reason.
+infra/backups/
 # Local dev secrets — Quarkus dev-mode auto-loads backend/.env (SMTP creds, real cloud keys); keep it untracked.
 backend/.env
 load/k6/users.local.json
