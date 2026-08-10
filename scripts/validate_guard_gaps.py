@@ -103,6 +103,10 @@ BACKEND_TEST_REF = f"{BACKEND_TEST_CLASS}.createWithNoteThenAnonymousResolveRetu
 # free-text cap (the operator terms, 20 000) — forging it huge is the free-text open-gap probe.
 B64_CAP_ANCHOR = ("contracts/api/scopes.openapi.yaml", "maxLength: 21884", "maxLength: 65536")
 FREETEXT_CAP_ANCHOR = ("contracts/api/_common.openapi.yaml", "maxLength: 20000", "maxLength: 999996")
+# The volume that carries the config-secret KEK across a container recreate — the hole ADR 0056 § Consequences
+# surfaced and cr-instance-backup-and-restore closed. Removing it is the whole forgery.
+PROD_COMPOSE = "infra/docker-compose.prod.yml"
+CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 
 
 def _sub(text: str, old: str, new: str) -> str:
@@ -235,6 +239,14 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
     return "a mutated policy depending on a file in no `paths:` filter (the transitive-dependency open gap)"
 
 
+def forge_unmounted_config_secret(root: pathlib.Path) -> str:
+    f = root / PROD_COMPOSE
+    if not f.is_file():
+        raise ForgeError(f"{PROD_COMPOSE} is missing — the production deployment artifact moved or was deleted")
+    f.write_text(_sub(f.read_text(), CONFIG_SECRET_MOUNT, ""))
+    return "the app's config-secret volume removed (the KEK would not survive a container recreate)"
+
+
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
@@ -247,6 +259,7 @@ CASES = [
     ("8",  "validate_maxlength_storage.py", forge_freetext_cap_over_column,   True),
     ("9",  "validate_ratelimit_core.py",    forge_ratelimit_state_under_another_name, True),
     ("10", "validate_mutation_trigger_paths.py", forge_scoped_policy_gains_unlisted_dependency, True),
+    ("11", "validate_config_secret_persistence.py", forge_unmounted_config_secret, False),
 ]
 
 
