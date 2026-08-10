@@ -108,6 +108,16 @@ subtly wrong — it is no locator at all, because the claim did not feel like a 
 one-line `grep` goes **before** the sentence, not after the correction. The tell is the feeling of already
 knowing — that is exactly where the imported prior is, and exactly where this repo most often inverts it.
 
+**A third tell, and the cheapest to act on: the claim is about a PATH.** A mount point, a `WORKDIR`, a restore
+target, a file a plan writes into — a location reads as a coordinate rather than as a claim, so nobody asks what
+already lives there. cr-instance-backup-and-restore made that mistake three times in one document: it put the
+config-secret volume on `/work` (which holds `quarkus-app/`, so the mount would have frozen the app at its first
+image and made every later upgrade silently do nothing), it specified `mariadb-dump --databases` two screens from
+a decision that restores into a differently-named database, and it described a bootstrap helper as sealing an SMTP
+password when the line it cited passes `username: null` *with the reason attached*. Each was one `ls`, one `grep`
+or one paragraph away. **Before a CR fixes a path, list what is there and paste the output in** — and read the
+neighbouring decision while you are at it, because nothing checks a document against itself.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an
@@ -193,7 +203,9 @@ genuinely suffices, the CR says why.
 To prove a new test bites, revert the
 fix and watch it red — the revert must be exact and reversible. Protocol: `cp <file> /tmp/snap` **before** the
 injection, break the code, run the one test, then `command cp -f /tmp/snap <file>` (the `command` prefix skips
-any interactive `cp -i` alias). **Never `git checkout -- <file>` to restore** — it resets to HEAD and silently
+any interactive `cp -i` alias — and it is needed for **every** destructive builtin an injection uses, not just
+this restore step: an aliased `rm` turns a deletion into a prompt, which is a no-op with a green run behind it,
+or a command that hangs until its timeout). **Never `git checkout -- <file>` to restore** — it resets to HEAD and silently
 discards *uncommitted* work in that file; `git checkout` is safe only when the baseline is committed. Confirm
 the restore before moving on — with **`git diff --quiet -- <path>`**, which is read-only and therefore available
 even when `git checkout` is not. **Do not confirm it by counting the fix marker.** cr-sharing-contributor-e2e's
@@ -262,6 +274,14 @@ neighbouring methods, nothing compiled, and the run was scored as "the guard doe
 read the full build output, not a filtered line; and for a **surgical** injection anchor on the target and cut
 **backwards** from it — a forward non-greedy multi-line regex latches onto the first sibling member and eats
 everything up to the anchor.
+
+**And prove the injection LANDED before believing the run.** The failure above is a red misread as green; this is
+its twin, a green that was never earned — the patch did not apply at all. cr-instance-backup-and-restore's first
+bite anchored on a string that had drifted by two words, the edit silently no-opped, and the suite passed exactly
+as it should have. A second one used `rm` against an interactive `rm -i` alias, so the file was never deleted and
+the run came back green again. Both were caught only by reading the full output. So an injection asserts its own
+arrival — `grep` the marker out of the file, or `test ! -e` the thing you deleted — **before** the run starts, and
+scores an unconfirmed injection as a failed bite, never as a passing one.
 
 ### A new universal check meets every existing local one
 
