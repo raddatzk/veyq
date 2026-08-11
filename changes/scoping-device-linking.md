@@ -133,7 +133,9 @@ The device **with a camera scans**; the device **without a camera displays**.
    new device polls for it. Non-enumerable, short-lived, single-use.
 3. **No new ADR for the anchor** — reuse ADR 0028 (safety-number/QR) and ADR 0021 (pull channel); cite, don't
    restate.
-4. **Device naming** (`uc.account.sessions`) is adjacent — **[DECISION C]** whether linking depends on it.
+4. **Device naming** (`uc.account.sessions`) is **upstream, not adjacent** — **[DECISION C]** settled it: inbox
+   #111 runs first, so its ADR-free sessions slice and its Master-Key-sealed device register already exist when
+   this ADR is written, and the ceremony can name the device it is granting.
 
 ## 6. Rough scope (slices; order contracts → backend → web)
 
@@ -142,7 +144,7 @@ The device **with a camera scans**; the device **without a camera displays**.
 | **1 — Ephemeral device-key + QR (enabler)** | New device mints an ephemeral transport keypair; render/scan its pubkey reusing `fingerprint()` + `KitScanner.vue` | ADR 1 |
 | **2 — Direction 1, push-free** | Relay endpoint (pending pairing + sealed-blob pickup); trusted device scans → approves (ceremony) → `asymWrap`s Master Key → new device unwraps → enrols its own `DEVICE_KEY` wrap | Slice 1, ADR 1/2 |
 | **3 — Direction 2, poll-woken** | Poll-for-pending-pairing on trusted online devices (ADR 0021 pattern) + the two-way QR bootstrap | Slice 2 |
-| **(adjacent) — Device naming** | `uc.account.sessions` E2EE named-sessions so linking shows/lists named devices | — |
+| **(precedes) — Device naming + revoke** | `uc.account.sessions` E2EE named-sessions + the sealed device register, so linking shows/lists named devices **and a mistaken grant can be taken back** | inbox #111 — decided to run first, **[DECISION C]** |
 
 **Deliberately deferred:**
 
@@ -163,9 +165,13 @@ separate topics (owner's call), but the Recovery scoping should consume this rat
   approval hands over everything).
 - **[DECISION B] Which direction first** — recommend **Direction 1 (push-free)**; Direction 2 as a later slice
   on poll-for-pending-pairing.
-- **[DECISION C] Couple device-naming or not** — ship link-without-names first (functional, uglier UX), or build
-  `uc.account.sessions` naming alongside so the ceremony can say "*Kevin's iPhone*". Recommend: link first,
-  naming adjacent/after.
+- **[DECISION C] Couple device-naming or not — DECIDED 2026-08-11: the device & session manager (inbox #111)
+  runs *before* this feature**, which inverts this doc's earlier "link first, naming after" recommendation. The
+  reason is not UX polish, it is remediation: **[DECISION A]**'s risk is a *phished approval* handing a stranger
+  the Master Key, and there is no remote revoke today to undo it — so linking-first would ship the attack
+  without its cure. A reversible grant also lets the ceremony be lighter than it would otherwise have to be.
+  Consequence for this doc: #111 delivers §6's "(adjacent) — Device naming" row, plus the stable client-side
+  `deviceId` the ceremony needs to name the new device at all.
 - **[DECISION D] Waking mechanism for Direction 2** — poll-for-pending-pairing (reuse ADR 0021, recommended) vs.
   wait for true push infra (bigger, deferred).
 
