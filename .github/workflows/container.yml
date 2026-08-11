@@ -1,12 +1,13 @@
 name: Container
 
+# A tag is deliberately NOT a trigger. The publish CREATES `v<major>.<minor>` (ADR 0057 §2), so a tag push
+# could only ever ask for a version that is already published — which the `assert-release-unpublished` step
+# below refuses by design. Triggering on both would mean every release is followed by a red run.
 on:
   push:
     branches:
       - main
       - "release/**"
-    tags:
-      - "v*"
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -35,11 +36,10 @@ permissions:
 
 jobs:
   version:
-    name: Compute veyq version
+    name: Read the veyq version from the tree
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-      packages: read # gh api lists existing container tags to compute the next minor
+      contents: read # the version is a function of the checkout; this job reaches no network at all
     outputs:
       major: ${{ steps.veyq-version.outputs.major }}
       version: ${{ steps.veyq-version.outputs.version }}
@@ -49,75 +49,40 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
-      - name: Compute veyq version
+      # This script is EXECUTED, offline, by scripts/validate_release_identity.py — which is the whole reason
+      # the version comes from the tree. Keep every input in `env:` and use no `${{ }}` expression here, or the
+      # guard can no longer assert what a publish would stamp. It must also reach no network: a version the
+      # registry decides makes the released artifact the authority on its own name (ADR 0057 § Rejected).
+      - name: Read the veyq version from the tree
         id: veyq-version
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OWNER: ${{ github.repository_owner }}
           REF_NAME: ${{ github.ref_name }}
-          REF_TYPE: ${{ github.ref_type }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
-          major="$(tr -d '[:space:]' < VERSION)"
-          if [[ ! "$major" =~ ^[0-9]+$ ]]; then
-            echo "VERSION must contain a numeric major version, got: $major" >&2
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^([0-9]+)\.([0-9]+)$ ]]; then
+            echo "VERSION must contain <major>.<minor>, got: $version" >&2
             exit 1
           fi
+          major="${BASH_REMATCH[1]}"
 
           publish_branch_tags=false
           publish_latest=false
 
           if [[ "$EVENT_NAME" == "pull_request" ]]; then
-            version="${major}.0"
-          elif [[ "$REF_TYPE" == "tag" ]]; then
-            if [[ "$REF_NAME" =~ ^v([0-9]+)\.([0-9]+)$ ]]; then
-              version="${REF_NAME#v}"
-            else
-              version="${major}.0"
-            fi
-          else
-            if [[ "$REF_NAME" != "main" && "$REF_NAME" != "master" ]]; then
-              if [[ "$REF_NAME" =~ ^release/([0-9]+)\.x$ ]]; then
-                if [[ "${BASH_REMATCH[1]}" != "$major" ]]; then
-                  echo "Release branch $REF_NAME does not match VERSION major $major" >&2
-                  exit 1
-                fi
-              else
-                echo "Unsupported release branch: $REF_NAME" >&2
-                exit 1
-              fi
-            fi
-
-            versions_json="$(
-              gh api --paginate "/orgs/${OWNER}/packages/container/veyq/versions" 2>/dev/null ||
-                gh api --paginate "/users/${OWNER}/packages/container/veyq/versions" 2>/dev/null ||
-                printf '[]'
-            )"
-
-            highest="$(
-              jq -r --arg major "$major" '
-                if type == "array" then .[] else empty end |
-                .metadata?.container?.tags[]? |
-                select(test("^" + $major + "\\.[0-9]+$")) |
-                split(".")[1] |
-                tonumber
-              ' <<< "$versions_json" |
-                sort -n |
-                tail -1
-            )"
-
-            if [[ -z "$highest" ]]; then
-              version="${major}.1"
-            else
-              version="${major}.$((highest + 1))"
-            fi
-
+            # A PR builds the image and publishes nothing. The version is still the tree's: the artifact a PR
+            # builds is the one that would ship, which a synthesised `${major}.0` was not.
+            :
+          elif [[ "$REF_NAME" == "main" || "$REF_NAME" == "master" ]]; then
             publish_branch_tags=true
-            if [[ "$REF_NAME" == "main" || "$REF_NAME" == "master" ]]; then
-              publish_latest=true
-            fi
+            publish_latest=true
+          elif [[ "$REF_NAME" == "release/${major}.x" ]]; then
+            publish_branch_tags=true
+          else
+            echo "Unsupported release branch: $REF_NAME (VERSION ${version} publishes from main or release/${major}.x)" >&2
+            exit 1
           fi
 
           echo "major=${major}" >> "$GITHUB_OUTPUT"
@@ -221,10 +186,13 @@ jobs:
       - build
     if: github.event_name != 'pull_request'
     permissions:
-      contents: read
+      contents: write # create the one `v<major>.<minor>` ref this release is named by (ADR 0057 §2)
       packages: write
       id-token: write # keyless cosign signing via GitHub OIDC
     steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
@@ -235,13 +203,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A publish onto an existing release FAILS rather than replacing it (ADR 0057 §1). What this replaces: the
+      # old pipeline asked the registry for the highest published minor and incremented it, with `|| printf '[]'`
+      # as its error path — so a transient API error and "nothing published yet" were indistinguishable and both
+      # ended at `${major}.1`, republishing an already-delivered release under its own name. An operator who
+      # pinned that tag then receives different bits with no signal, which is precisely the assumption
+      # uc.admin.identify-instance-release rests on. The remedy is a bump commit, not a retry.
+      - name: Refuse to republish an existing release
+        id: assert-release-unpublished
+        if: needs.version.outputs.publish_branch_tags == 'true'
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          if docker buildx imagetools inspect "${IMAGE}:${VERSION}" > /dev/null 2>&1; then
+            echo "${IMAGE}:${VERSION} is already published. A release names itself from the tree — bump VERSION." >&2
+            exit 1
+          fi
+
+          if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
+            echo "refs/tags/v${VERSION} already exists. One release, one name, one tree — bump VERSION." >&2
+            exit 1
+          fi
+
       - name: Extract image metadata
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/veyq
           tags: |
-            type=ref,event=tag
             type=raw,value=${{ needs.version.outputs.version }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
             type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
             type=sha,prefix=sha-,format=long
@@ -278,3 +270,18 @@ jobs:
           digest="sha256:$(docker buildx imagetools inspect --raw "$IMAGE:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
           echo "Signing $IMAGE@${digest}"
           cosign sign --yes "$IMAGE@${digest}"
+
+      # One release, one name, one tree (ADR 0057 §2). The ref is created LAST, by the publish itself, so it
+      # exists only for a release that actually shipped — and it is the ref at which the deployment files
+      # belonging to this image can be found. The push is deliberately not forced: a tag that already exists is
+      # a second publish of one release, and it must fail here too and not only in the check above.
+      - name: Tag the released commit
+        id: release-tag
+        if: needs.version.outputs.publish_branch_tags == 'true'
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+
+          git tag "v${VERSION}" "${GITHUB_SHA}"
+          git push origin "refs/tags/v${VERSION}"

@@ -1,0 +1,404 @@
+#!/usr/bin/env python3
+"""Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
+naming a release names a shape the pipeline actually emits (ADR 0057).
+
+**What it asserts.** Four things, in the order a release happens:
+
+  1. **`VERSION` exists at the repository root and holds `<major>.<minor>`.** That file *is* the release
+     identity (ADR 0057 §1) — a checkout answers what it is, with no network call and no registry.
+  2. **The publish workflow derives the version from that file, offline.** The `version` job's compute step is
+     *executed* here, in a throwaway directory holding a copy of `VERSION`, under four scenarios — a `main`
+     push, a pull request, a matching `v<major>.<minor>` tag, and a tag that disagrees with the tree (which
+     must FAIL). Executing it is the only honest way to assert what a publish *would* stamp; reading it would
+     only assert what it looks like. The step is also held to declaring no network tool at all, because a
+     version a registry decides is not an identity (ADR 0057 § Rejected).
+  3. **A publish refuses to replace a release, and leaves exactly one git ref.** The `publish` job carries a
+     step that fails when the image tag or `v<major>.<minor>` already exists, and a step that creates that ref
+     — neither with `--force`, and both keyed on the *tree-derived* version rather than on anything else. The
+     `build` job stamps the same value into the image as `VEYQ_VERSION`, which is what the running instance
+     later reports.
+  4. **The deployment recipe travels in the image, in every runtime target.** Both `runtime-*` stages of the
+     `Dockerfile` copy `infra/docker-compose.prod.yml` and `infra/.env.example` from their real in-tree paths,
+     to the same destination, and that destination is neither `/work` (it holds `quarkus-app/`; a mount there
+     freezes an upgrade — see the Dockerfile's own comment) nor under `/var/lib/veyq` (the config-secret
+     volume). Plus: every veyq image tag written down under `infra/` matches a tag the pipeline emits.
+
+**The defect that bought it.** All of it was live when this guard was written (2026-08-11), and the first run
+was the discovery: there was no `VERSION` file at all, so `container.yml`'s first command
+(`tr -d '[:space:]' < VERSION`) died and **no image had ever been published** — while `infra/.env.example` told
+the operator to pin `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0`, a three-part shape this pipeline never emits, and
+`infra/docker-compose.prod.yml`'s `${VEYQ_IMAGE:?…}` message repeated the invented shape as `…/veyq:1.2.3`. The
+file had been deleted by a "cleanup" commit that also took `Dockerfile` and `scripts/run_web_e2e.py`; those two
+were recovered and this one was not, and nothing noticed for the two months in which no container run happened.
+
+**Its limit — what a green run does NOT prove.** It reads **files**, and executes exactly one of them (the
+version step's shell). It cannot prove a publish ever ran, that a tag was created, that a republish was
+refused, or that the registry holds what the workflow says it would push — this repository has **no remote**
+and no workflow has ever executed, so the publish path stays an explicitly stated ADR 0040 gap. The trust chain
+is also **buildless**: nothing here can inspect a *built* image, so assertion 4 proves the `Dockerfile`
+**declares** the copy, never that the file is in the image — that is proven by building it and reading the file
+back out, which is cr-release-identity's phase-2 done-when and not a guard. It says nothing about the backup
+manifest's `app.version` (its observable is a capture run against a live instance, not a file), and its scan
+for written-down image tags covers `infra/` only: `docs/` quotes the *old, wrong* shapes on purpose, as the
+defect being described.
+"""
+from __future__ import annotations
+
+import pathlib
+import re
+import subprocess
+import sys
+import tempfile
+
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
+    print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+VERSION_FILE = ROOT / "VERSION"
+WORKFLOW = ROOT / ".github/workflows/container.yml"
+DOCKERFILE = ROOT / "Dockerfile"
+INFRA = ROOT / "infra"
+
+# `<major>.<minor>` — the whole release identity. Not three parts: the pipeline emits `<major>`,
+# `<major>.<minor>`, `sha-<sha>` and `latest`, and a patch component would name an artifact with no producer.
+RELEASE_VERSION = re.compile(r"^([0-9]+)\.([0-9]+)$")
+
+# Step ids this guard anchors on. A rename makes it say "step not found" rather than pass vacuously.
+VERSION_JOB, VERSION_STEP = "version", "veyq-version"
+PUBLISH_JOB = "publish"
+REFUSE_STEP, TAG_STEP = "assert-release-unpublished", "release-tag"
+BUILD_JOB = "build"
+
+# The tree-derived version, as the workflow refers to it. Every release-naming step must key on THIS and not on
+# a registry query, a `git describe`, or a hand-typed literal.
+VERSION_EXPR = "${{ needs.version.outputs.version }}"
+
+# `FROM <image> AS <stage>` — the same anchor validate_config_secret_persistence.py uses, for the same reason:
+# there is more than one runtime target and a guard anchored on one is no guard.
+STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
+COPY = re.compile(r"^\s*COPY\s+(?!--from)(?:--\S+\s+)*(\S+)\s+(\S+)\s*$", re.IGNORECASE)
+
+# The deployment recipe, by its in-tree path. Both files, both runtime targets (ADR 0057 §3).
+RECIPE = ("infra/docker-compose.prod.yml", "infra/.env.example")
+# Forbidden destinations, with the reason each is forbidden. /work holds quarkus-app/, so a volume mounted
+# there is seeded once and never refreshed — an upgrade that silently keeps running the first image's jar.
+# /var/lib/veyq is the config-secret volume, which a mount likewise covers.
+FORBIDDEN_DESTS = {
+    "/work": "it holds quarkus-app/, and a volume mounted there freezes the app at its first image",
+    "/var/lib/veyq": "it is the config-secret volume's mount point",
+}
+
+# A veyq image reference with a literal tag: `…/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq`
+# must be `:` so `veyq-garage-init:v2.0.0` is not claimed as the app image (the same discrimination
+# validate_config_secret_persistence.py's APP_IMAGE makes, and for the same reason).
+IMAGE_TAG = re.compile(r"(?:^|[\s/=\"'`])veyq:([^\s\"'`,;)}\]]+)")
+
+# Anything that would make the version a function of the network rather than of the tree.
+NETWORK_TOOLS = re.compile(r"(?:^|[\s|(&;])(gh|curl|wget|nc)\s", re.MULTILINE)
+
+errors: list[str] = []
+
+
+def fail(message: str) -> None:
+    errors.append(message)
+
+
+# ---- 1. the release identity itself ------------------------------------------------------------------------
+
+version_text = VERSION_FILE.read_text() if VERSION_FILE.is_file() else None
+version_value = version_text.strip() if version_text is not None else None
+version_match = RELEASE_VERSION.match(version_value) if version_value else None
+
+if version_text is None:
+    fail(
+        "there is no VERSION file at the repository root. It IS the release identity (ADR 0057 §1): without it "
+        "the container workflow dies on its first command and nothing can ever be published, while "
+        "infra/.env.example tells the operator to pin an image tag that has no producer."
+    )
+elif not version_match:
+    fail(
+        f"VERSION holds {version_value!r}, which is not `<major>.<minor>`. The pipeline emits `<major>`, "
+        f"`<major>.<minor>`, `sha-<sha>` and `latest` — any other shape names an artifact with no producer."
+    )
+elif version_text != f"{version_value}\n":
+    fail(
+        f"VERSION must be exactly `{version_value}` and one trailing newline — it is read by shell, by this "
+        f"guard and by a human, and whitespace that only one of them tolerates is a difference of opinion."
+    )
+
+
+# ---- 2. the workflow derives that value, offline -------------------------------------------------------------
+
+def job_steps(doc: dict, job: str) -> list[dict]:
+    steps = ((doc.get("jobs") or {}).get(job) or {}).get("steps") or []
+    return [s for s in steps if isinstance(s, dict)]
+
+
+def step_by_id(doc: dict, job: str, step_id: str) -> dict | None:
+    return next((s for s in job_steps(doc, job) if s.get("id") == step_id), None)
+
+
+def run_scenario(script: str, env: dict[str, str]) -> tuple[int, dict[str, str], str]:
+    """Execute the workflow's own version script offline and read back what it wrote to $GITHUB_OUTPUT."""
+    with tempfile.TemporaryDirectory(prefix="release_identity_") as tmp:
+        work = pathlib.Path(tmp)
+        (work / "VERSION").write_text(version_text or "")
+        out = work / "github_output"
+        out.touch()
+        proc = subprocess.run(
+            ["bash", "-c", script],
+            cwd=work,
+            env={"PATH": "/usr/bin:/bin", "GITHUB_OUTPUT": str(out), **env},
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        written = {}
+        for line in out.read_text().splitlines():
+            key, _, value = line.partition("=")
+            written[key] = value
+        return proc.returncode, written, (proc.stderr or proc.stdout).strip()
+
+
+workflow_doc: dict = {}
+if not WORKFLOW.is_file():
+    fail(f"{WORKFLOW.relative_to(ROOT)} is missing — there is no publish pipeline to hold to the tree")
+else:
+    try:
+        workflow_doc = yaml.safe_load(WORKFLOW.read_text()) or {}
+    except yaml.YAMLError as e:
+        fail(f"{WORKFLOW.relative_to(ROOT)} is not readable YAML: {e}")
+
+compute = step_by_id(workflow_doc, VERSION_JOB, VERSION_STEP) if workflow_doc else None
+if workflow_doc and compute is None:
+    fail(
+        f"{WORKFLOW.relative_to(ROOT)}: no step `id: {VERSION_STEP}` in job `{VERSION_JOB}` — this guard "
+        f"executes that step to assert what a publish would stamp, and cannot find it"
+    )
+elif compute is not None and version_match:
+    script = str(compute.get("run") or "")
+    if "${{" in script:
+        fail(
+            f"the `{VERSION_STEP}` step's script interpolates a `${{{{ }}}}` expression, so it cannot be run "
+            f"outside GitHub Actions and this guard cannot assert what it would stamp. Pass values through "
+            f"the step's `env:` instead, which is what makes the derivation locally checkable."
+        )
+    elif (tool := NETWORK_TOOLS.search(script)) is not None:
+        fail(
+            f"the `{VERSION_STEP}` step calls `{tool.group(1)}` — the version must be a function of the tree, "
+            f"not of the network. A registry query makes the released artifact the authority on its own name, "
+            f"cannot be checked without a network, and its error path republishes silently (ADR 0057 §1)."
+        )
+    else:
+        major = version_match.group(1)
+        scenarios = [
+            (
+                "a push to main",
+                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": "main"},
+                0,
+                {"version": version_value, "major": major, "publish_branch_tags": "true", "publish_latest": "true"},
+            ),
+            (
+                "a pull request",
+                {"EVENT_NAME": "pull_request", "REF_TYPE": "branch", "REF_NAME": "main"},
+                0,
+                {"version": version_value, "publish_branch_tags": "false", "publish_latest": "false"},
+            ),
+            (
+                f"a push to release/{major}.x",
+                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": f"release/{major}.x"},
+                0,
+                {"version": version_value, "publish_branch_tags": "true", "publish_latest": "false"},
+            ),
+            (
+                # The built-in bite: a ref that disagrees with the tree must not produce a version at all.
+                f"a push to release/{int(major) + 7}.x, which disagrees with the tree",
+                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": f"release/{int(major) + 7}.x"},
+                1,
+                {},
+            ),
+        ]
+        for label, env, expect_rc, expect in scenarios:
+            try:
+                rc, written, message = run_scenario(script, env)
+            except subprocess.TimeoutExpired:
+                fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
+                continue
+            if expect_rc == 0 and rc != 0:
+                fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
+                continue
+            if expect_rc != 0:
+                if rc == 0:
+                    fail(
+                        f"the `{VERSION_STEP}` step accepts {label} and would stamp "
+                        f"`{written.get('version')}` — a release names itself from the tree, so a ref that "
+                        f"disagrees with VERSION must fail rather than pick a side"
+                    )
+                continue
+            for key, want in expect.items():
+                if written.get(key) != want:
+                    fail(
+                        f"for {label} the `{VERSION_STEP}` step wrote `{key}={written.get(key)}`, expected "
+                        f"`{key}={want}` (VERSION says {version_value})"
+                    )
+
+# The value the workflow derives must be the value stamped into the image, or the instance reports a version
+# that is not the one it was published under.
+build_args = "\n".join(
+    str((s.get("with") or {}).get("build-args") or "") for s in job_steps(workflow_doc, BUILD_JOB)
+)
+if workflow_doc and f"VEYQ_VERSION={VERSION_EXPR}" not in build_args:
+    fail(
+        f"the `{BUILD_JOB}` job does not pass `VEYQ_VERSION={VERSION_EXPR}` as a build-arg — the running "
+        f"instance would then report a release version that is not the one it was published under"
+    )
+
+
+# ---- 3. a publish refuses to replace a release, and leaves one ref -------------------------------------------
+
+if workflow_doc:
+    # `on:` is a YAML 1.1 boolean, so PyYAML keys it as True. Enumerate the spelling rather than guess it.
+    triggers = workflow_doc.get("on", workflow_doc.get(True)) or {}
+    if (triggers.get("push") or {}).get("tags"):
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)} triggers on a pushed tag. The publish CREATES `v<major>.<minor>` "
+            f"(ADR 0057 §2), so a tag push can only ask for a version that is already published — which the "
+            f"`{REFUSE_STEP}` step refuses by design. Keeping both means every release is followed by a red run."
+        )
+
+    publish_perms = ((workflow_doc.get("jobs") or {}).get(PUBLISH_JOB) or {}).get("permissions") or {}
+    if publish_perms.get("contents") != "write":
+        fail(
+            f"the `{PUBLISH_JOB}` job cannot create the `v<major>.<minor>` ref: it needs "
+            f"`permissions: contents: write` (ADR 0057 §2 — one release, one name, one tree)"
+        )
+
+    for step_id, must_contain, why in (
+        (
+            REFUSE_STEP,
+            ("exit 1",),
+            "a publish whose tag already exists must FAIL rather than replace it: a transient registry error "
+            "would otherwise be indistinguishable from `nothing published yet`, and an operator who pinned "
+            "that tag receives different bits with no signal (ADR 0057 §1)",
+        ),
+        (
+            TAG_STEP,
+            ("refs/tags/v${VERSION}", "git push"),
+            "a published image has exactly one git ref, `v<major>.<minor>`, created by the publish — without "
+            "it the deployment files belonging to a version cannot be found (ADR 0057 §2)",
+        ),
+    ):
+        step = step_by_id(workflow_doc, PUBLISH_JOB, step_id)
+        if step is None:
+            fail(f"{WORKFLOW.relative_to(ROOT)}: no step `id: {step_id}` in job `{PUBLISH_JOB}` — {why}")
+            continue
+        body = str(step.get("run") or "")
+        if VERSION_EXPR not in str(step.get("env") or {}):
+            fail(
+                f"the `{step_id}` step does not read `{VERSION_EXPR}` — it must key on the version the tree "
+                f"derived, never on a registry query or a hand-typed literal"
+            )
+        for needle in must_contain:
+            if needle not in body:
+                fail(f"the `{step_id}` step does not contain `{needle}` — {why}")
+        if "--force" in body or " -f " in body:
+            fail(
+                f"the `{step_id}` step forces: a release that can be overwritten names a moving artifact, and "
+                f"reporting it accurately would still mislead (uc.admin.identify-instance-release § Quality)"
+            )
+
+
+# ---- 4. the recipe travels in the image, and written-down tags name a shape the pipeline emits ---------------
+
+def runtime_stages(body: str) -> dict[str, str]:
+    """Every `runtime-*` stage's body, keyed by stage name."""
+    stages = [(m.start(), m.group(1)) for m in STAGE.finditer(body)]
+    out: dict[str, str] = {}
+    for index, (offset, name) in enumerate(stages):
+        end = stages[index + 1][0] if index + 1 < len(stages) else len(body)
+        if name.startswith("runtime-"):
+            out[name] = body[offset:end]
+    return out
+
+
+if not DOCKERFILE.is_file():
+    fail("there is no Dockerfile — the image the recipe travels in does not exist")
+else:
+    stages = runtime_stages(DOCKERFILE.read_text())
+    if not stages:
+        fail("the Dockerfile declares no `runtime-*` stage — nothing to carry the deployment recipe")
+    destinations: dict[str, set[str]] = {}
+    for stage_name, stage_body in sorted(stages.items()):
+        copied = {}
+        for line in stage_body.splitlines():
+            match = COPY.match(line)
+            if match and match.group(1) in RECIPE:
+                copied[match.group(1)] = match.group(2)
+        for source in RECIPE:
+            if not (ROOT / source).is_file():
+                fail(f"`{source}` does not exist in the tree, so no runtime target can copy it into the image")
+            elif source not in copied:
+                fail(
+                    f"the Dockerfile's `{stage_name}` target does not COPY `{source}` into the image. The "
+                    f"recipe travels inside the image so it cannot drift from the bits it describes and "
+                    f"inherits their cosign signature (ADR 0057 §3) — and it must be in EVERY runtime target, "
+                    f"because a guard anchored on one passes a Dockerfile whose other one drifted."
+                )
+            else:
+                dest = copied[source]
+                destinations.setdefault(source, set()).add(dest)
+                dest_dir = dest if dest.endswith("/") else dest.rsplit("/", 1)[0] + "/"
+                for forbidden, reason in FORBIDDEN_DESTS.items():
+                    if dest_dir == forbidden + "/" or dest_dir.startswith(forbidden + "/"):
+                        fail(
+                            f"the Dockerfile's `{stage_name}` target copies `{source}` to `{dest}`, under "
+                            f"`{forbidden}` — {reason}. Put the recipe where nothing mounts and nothing writes."
+                        )
+    for source, dests in sorted(destinations.items()):
+        if len(dests) > 1:
+            fail(
+                f"the runtime targets disagree about where `{source}` lands (" + ", ".join(sorted(dests)) +
+                ") — a tool reading the recipe out of a published image cannot say which target it got"
+            )
+
+written_tags = 0
+for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
+    try:
+        text = path.read_text()
+    except (UnicodeDecodeError, OSError):
+        continue
+    for match in IMAGE_TAG.finditer(text):
+        tag = match.group(1)
+        if tag.startswith("${") or "<" in tag:
+            continue  # a variable or a placeholder, not a claim about a tag that exists
+        written_tags += 1
+        if not RELEASE_VERSION.match(tag):
+            fail(
+                f"{path.relative_to(ROOT)}: `veyq:{tag}` is not a tag this pipeline emits. A publish produces "
+                f"`<major>`, `<major>.<minor>`, `sha-<sha>` and `latest`; of those only `<major>.<minor>` "
+                f"names a fixed set of bits, which is the only kind of tag worth writing down as the one an "
+                f"operator pins and rolls back to (ADR 0056 §6)."
+            )
+
+if not written_tags and not errors:
+    # A guard that checked nothing and a guard whose subject is sound report the same green.
+    fail(
+        f"no literal veyq image tag found anywhere under {INFRA.relative_to(ROOT)}/ — this half of the guard "
+        f"checked NOTHING and would report green either way"
+    )
+
+if errors:
+    print("RELEASE IDENTITY VALIDATION FAILED:")
+    for e in errors:
+        print("  -", e)
+    sys.exit(1)
+
+print(
+    f"release identity OK: VERSION {version_value} is derived offline by the publish workflow, a republish is "
+    f"refused, ref v{version_value} is created, the recipe is declared in "
+    f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), and {written_tags} written-down image "
+    f"tag(s) name a shape the pipeline emits"
+)

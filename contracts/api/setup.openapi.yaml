@@ -171,8 +171,10 @@ components:
           type: integer
           format: int32
           description: >
-            Monotonic build counter, informational only (diagnostics, "what's new"). Bumped on every additive
-            change. Never gates.
+            Hand-maintained build counter, informational only (diagnostics, "what's new") — nothing bumps it
+            automatically and it gates nothing, so a stale value costs nothing observable. It is NOT the
+            release version: which bits are running is a different question, answered by the Server-Owner-only
+            `GET /api/instance/release` and deliberately never merged with this one (ADR 0057 §4).
           minimum: 0
           example: 1
 

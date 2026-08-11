@@ -207,8 +207,14 @@ any interactive `cp -i` alias — and it is needed for **every** destructive bui
 this restore step: an aliased `rm` turns a deletion into a prompt, which is a no-op with a green run behind it,
 or a command that hangs until its timeout). **Never `git checkout -- <file>` to restore** — it resets to HEAD and silently
 discards *uncommitted* work in that file; `git checkout` is safe only when the baseline is committed. Confirm
-the restore before moving on — with **`git diff --quiet -- <path>`**, which is read-only and therefore available
-even when `git checkout` is not. **Do not confirm it by counting the fix marker.** cr-sharing-contributor-e2e's
+the restore before moving on — **against the same baseline the snapshot was taken from, which is almost never
+HEAD.** A bite runs *before* the CR is committed, so the files it injects into already carry the CR's own
+edits, and `git diff --quiet -- <path>` then reports "still dirty" for every case whether the restore worked or
+not — a false failure that invites re-breaking the file to chase it (it fired on all ten of
+cr-release-identity's injections). Two forms that do work with an uncommitted baseline: compare the file's
+**bytes to the snapshot**, and compare **`git status --porcelain` before and after** the whole run.
+`git diff --quiet -- <path>` is correct only once the baseline is committed.
+**And do not confirm it by counting the fix marker.** cr-sharing-contributor-e2e's
 protocol said `grep -c "deletedAt is null" … # expect 2`; the honest answer is **3**, because the comment above
 the predicate quotes it in order to explain it. A tally over source text counts prose as code, so it reports a
 successful restore as a failed one — and the repair it invites is deleting the comment that documents the rule.

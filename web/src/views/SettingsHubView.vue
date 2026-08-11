@@ -16,6 +16,7 @@ import TenantTermsPanel from '../features/admin/createTenant/TenantTermsPanel.vu
 import TenantMailSettingsPanel from '../features/admin/createTenant/TenantMailSettingsPanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
 import TenantDetailPanel from '../features/admin/createTenant/TenantDetailPanel.vue'
+import ReleaseVersionPanel from '../features/admin/instance/ReleaseVersionPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import CreateTenantDialog from '../features/admin/createTenant/CreateTenantDialog.vue'
 import { activeSpace } from '../app/activeSpace'
@@ -104,6 +105,13 @@ const categories = computed<NavCategory[]>(() => {
       items: ownedGroups.value.map((g) => ({ id: `group-${g.scopeId}`, label: g.name, icon: g.deletedAt ? 'pi pi-trash' : 'pi pi-users' })),
     })
   }
+  // Server → the instance itself. Its own non-collapsible category rather than an entry in the Tenants
+  // collection below: that one is a fan-out over entities, this is a fixed page about the server (ADR 0022 §3).
+  if (serverRole.canManage) {
+    cats.push({ key: 'instance', label: t('settings.server'), collapsible: false, items: [
+      { id: 'server-release', label: t('release.navTitle'), icon: 'pi pi-tag' },
+    ] })
+  }
   // Server → Tenants collection — every tenant a Server Owner administers + a create affordance.
   if (serverRole.canManage) {
     cats.push({
@@ -147,6 +155,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'tenant-members') return { component: TenantMembersPanel, props: {} }
   if (id === 'terms') return { component: TenantTermsPanel, props: {} }
   if (id === 'mail') return { component: TenantMailSettingsPanel, props: {} }
+  if (id === 'server-release') return { component: ReleaseVersionPanel, props: {} }
   if (id.startsWith('group-')) {
     const scopeId = id.slice('group-'.length)
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }

@@ -81,7 +81,18 @@ the moment a validator is tightened — the very failure this section is about, 
 deliberate — closing a gap flips a documented pass/fail and turns that guard red, forcing the closure to be
 recorded here, not landed silently.
 
-Three documented gaps sit **outside** that guard, on purpose:
+Four documented gaps sit **outside** that guard, on purpose:
+
+- **the release-identity guard's two ends**
+  ([ADR 0057](../../../docs/decisions/0057-release-identity-and-deployment-recipe.md)).
+  `validate_release_identity.py` goes further than the rest of the glob — it *executes* `container.yml`'s
+  version step offline and asserts what a publish would stamp — and still stops at two places no file-forging
+  meta-guard can reach. It cannot inspect a **built image**, because the chain is buildless, so it proves the
+  `Dockerfile` *declares* the deployment-recipe copy and never that the file is in the image (that is proven
+  by building it and reading the file back out). And it cannot prove a **publish ran**: this repository has no
+  remote and no workflow has ever executed, so the refusal-to-republish and the `v<major>.<minor>` ref stay
+  statements about a file — an explicitly stated ADR 0040 gap, in the same shape as the coverage flip that ADR
+  still leaves owed.
 
 - the mutation **total-vs-per-glob** asymmetry: `mutation_meta_check.py` (crypto) asserts a **total** mutant
   count > 0 (`:53-55`); the **backend** one is **per-glob** (`mutation_meta_check_backend.py:54-63`). (The

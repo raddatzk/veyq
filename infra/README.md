@@ -131,6 +131,25 @@ Two things worth knowing rather than discovering:
   makes Traefik drop the router for both.
 - **Upgrading** means changing `VEYQ_IMAGE` and running `up -d`. The schema migrates at boot with no gate and
   there is no downgrade path, so **take a backup first** (§ Backup & restore) — restoring it is the only way back.
+  **Name the version you are coming from before you leave it.** A release is `<major>.<minor>`, and a publish
+  onto an existing tag fails rather than replacing it ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)),
+  so that tag names one fixed set of bits for good — which is what makes it a rollback target rather than a
+  label. Read the running one as the Server Owner under **Settings → Server → Release**; the capture writes it
+  into `manifest.json` as `app.version` beside the schema version, so the way back is *restore that backup and
+  pin `VEYQ_IMAGE` to the release the manifest names*. A manifest that records no release is still a valid
+  backup — it just cannot tell you which image to start it under, and it says so rather than implying one.
+- **The compose file and the env template ride inside the image.** Every published image carries the recipe it
+  was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
+  describes, and it inherits the image's cosign signature instead of needing a second trust decision:
+
+  ```sh
+  docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/docker-compose.prod.yml
+  docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/.env.example
+  ```
+
+  Diff those against your copies before an upgrade — a version that adds a service or a required variable has
+  no other delivery path to you. (Note the current limit: the recipe is the two files, so the store's
+  `garage.toml` / `garage-init.sh` still come from this repository.)
 
 ## Backup & restore
 

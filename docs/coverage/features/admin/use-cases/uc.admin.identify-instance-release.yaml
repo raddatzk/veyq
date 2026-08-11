@@ -1,14 +1,28 @@
 useCase: uc.admin.identify-instance-release
 feature: admin
 title: Know which release an instance runs, and which release a backup came from
-# Refined ahead of implementation (ADR 0057), so this ships `status: planned` with every target surface gapped —
-# the rule for a use-case whose CR has not run yet (changes/README.md § Coverage is part of the work).
+# cr-release-identity delivers it: a `VERSION` file the publish stamps into the image, a workflow that derives
+# the version from the tree offline and refuses to republish a tag, the production recipe copied into both
+# runtime targets, an owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a
+# backup manifest that reads the release off the app CONTAINER instead of off the capture process's environment.
 #
-# Note what is NOT claimable here even after the CR lands. The publish half of ADR 0057 — a tree-derived version,
-# a `v<major>.<minor>` tag, a refusal to republish an existing tag — is a GitHub Actions workflow, and a workflow
-# is not a coverage surface (ADR 0040); this repository additionally has no remote, so no run has ever executed.
-# What a test can observe is the instance side: who may read the release version, what an unstamped build says,
-# and that the pre-auth response did not grow it.
+# `status: planned` is nonetheless correct, and it is not a formality — it is the same call the sibling
+# uc.admin.back-up-and-restore-instance makes, for the same reason. Two independent conditions each keep this
+# file from carrying refs, and the second one does not go away:
+#
+#  1. **No CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
+#     executes makes no coverage claim — leaves every criterion uncovered no matter how green the suites are
+#     locally. The suites DO exist and pass; naming them below keeps the later flip mechanical (docs/inbox.md
+#     #26). The one remaining condition is an event, not a missing test.
+#  2. **`a-backup-names-the-release-it-came-from` has no coverage surface at all**, and never will: its
+#     observable is a manifest written by `scripts/instance_backup.py`, and a Python operator tool is not a
+#     coverage surface (ADR 0040) — the same shape as that sibling's store-leg criterion. It is proven instead
+#     by the tool's own bite-proofing, recorded in the gap below.
+#
+# And what is NOT claimable here even after a CI run: the publish half of ADR 0057 — a tree-derived version, a
+# `v<major>.<minor>` ref, a refusal to republish — is a GitHub Actions workflow, and a workflow is not a
+# coverage surface either. What holds it is `scripts/validate_release_identity.py`, which *executes* the version
+# step offline and asserts what a publish would stamp; that guard is in the trust chain, not in this model.
 status: planned
 acceptanceCriteria:
   - id: server-owner-reads-the-running-release
@@ -36,14 +50,25 @@ acceptanceCriteria:
       never structurally null while looking like data, which is the defect this replaces.
 gaps:
   backend: >-
-    No test yet — the CR that implements ADR 0057 has not run. Three of the four criteria are backend-observable
-    (an owner-gated read, the unstamped-build answer, and the pre-auth response's shape) and are expected to land
-    as slice tests over the full HTTP stack, in the shape TenantOwnerGateTest already uses for owner gating.
-    `a-backup-names-the-release-it-came-from` will not: its observable is a manifest written by
-    scripts/instance_backup.py, and a Python operator tool is not a coverage surface (ADR 0040) — it is proven
-    instead by that tool's own bite-proofing, as the backup use-case's store-leg criterion already is.
+    The suites exist and pass locally; the only missing thing for the first three criteria is a CI run to
+    execute them (ADR 0040). `InstanceReleaseSliceTest` runs on a profile that sets a distinctive release
+    version, so its pre-auth negative asserts that exact string is absent from the whole `GET /api/setup` body
+    while the owner read returns it — a positive control on the same predicate, without which the negative is
+    satisfied by there being no value to leak. Its siblings anchor the refusals on their specific observables
+    (403 `not_server_owner`, 401 `authentication_failed`), never on "it threw".
+    `InstanceReleaseUnstampedSliceTest` is the A1 half on the opposite profile: the field is PRESENT and null.
+    `a-backup-names-the-release-it-came-from` is not on this list and will not be: its observable is
+    `scripts/instance_backup.py`'s manifest, and a Python operator tool is not a coverage surface. It is proven
+    by that tool's own bite-proofing — `app_release()` was run against a real, STOPPED container built from
+    this Dockerfile (the cold-capture state) and returned the stamped `1.0`; against the dev compose, which
+    declares no app service, it returned an explicit `no-app-service`; and a real capture against the dev stack
+    wrote `{"version": null, "versionSource": "no-app-service"}`, a measured absence rather than the structural
+    null it replaces. That probe also earned its keep: the first version of the function reported "no app
+    service" as "docker unavailable", which the run caught.
   web: >-
-    No test yet, and the surface is thin: the release version is a read the Server Owner performs. Whether it
-    earns a web affordance at all is the CR's call — the mechanism the upgrade procedure needs reads the running
-    container from the host, not from the browser, so this surface is the one part of ADR 0057 that is a
-    convenience rather than a precondition.
+    Same condition, same one event. `web/src/features/admin/instance/ReleaseVersionPanel.test.ts` covers the
+    first three criteria on this surface: the stamped render (the version verbatim), the unstamped render (the
+    absence stated, and the value element absent entirely so there is no empty box that reads as a failed
+    load), and the 403 render (the owner-only notice, no version). It also pins the trap those two share — a
+    load ERROR and an unstamped build must not render the same, because one means "there is no version" and the
+    other means "we do not know", and an operator choosing an image needs them apart.

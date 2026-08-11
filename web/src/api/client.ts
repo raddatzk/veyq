@@ -23,6 +23,7 @@ import { ContentApi, FavoritesApi, Configuration as ContentConfiguration } from 
 import { MediaApi, BucketsApi, Configuration as MediaConfiguration } from './generated/media'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
+import { InstanceApi, Configuration as InstanceConfiguration } from './generated/instance'
 import { session } from '../app/session'
 
 export function setupApi(): SetupApi {
@@ -106,4 +107,11 @@ export function sharesApi(): SharingApi {
 
 export function publicSharesApi(): SharingApi {
   return new SharingApi(new SharingConfiguration({ basePath: session.apiBase }))
+}
+
+// Server-Owner operational reads about the running instance (ADR 0057). Bearer-authed by necessity, not by
+// convention: the release version is deliberately absent from the pre-auth surface, so there is no anonymous
+// counterpart to this factory and there must not be one.
+export function instanceApi(): InstanceApi {
+  return new InstanceApi(new InstanceConfiguration(bearerParams()))
 }

@@ -24,6 +24,7 @@ import java.util.Optional
 @ConfigMapping(prefix = "veyq")
 interface VeyqConfig {
     fun version(): Version
+    fun release(): Release
     fun capabilities(): Capabilities
     fun tenant(): Tenant
     fun session(): Session
@@ -51,6 +52,23 @@ interface VeyqConfig {
         /** Informational build version. */
         @WithDefault("1")
         fun build(): Int
+    }
+
+    /**
+     * The release the running image was published under — a **different** number from [Version], never merged
+     * with it (ADR 0057 §4). [Version] answers *"can these two sides talk to each other?"* and is pre-auth;
+     * this answers *"which bits are running, and what do I roll back to?"* and is Server-Owner-only, because a
+     * precise release number is what maps an instance to a list of known vulnerabilities.
+     */
+    interface Release {
+        /**
+         * `<major>.<minor>` — the tree's `VERSION` at the commit that published this image, bound from the
+         * image's `VEYQ_VERSION` in `application.properties`. **Absent** for any build the release pipeline
+         * never stamped (a local `docker build`, a `quarkusDev` run), and that absence is reported as itself:
+         * a synthesised number is the one an operator would later try to roll back *to*
+         * (uc.admin.identify-instance-release A1).
+         */
+        fun version(): Optional<String>
     }
 
     interface Capabilities {

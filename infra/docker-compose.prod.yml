@@ -84,7 +84,7 @@ services:
     entrypoint: ["/bin/sh", "/garage-init.sh"]
 
   app:
-    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq:1.2.3}
+    image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq:1.0}
     restart: unless-stopped
     depends_on:
       mariadb:

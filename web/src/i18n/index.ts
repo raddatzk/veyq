@@ -300,6 +300,18 @@ const en = {
     versionChanged: 'The terms just changed — please review the updated version and agree again.',
     signOut: 'Sign out',
   },
+  release: {
+    navTitle: 'Release',
+    sub: 'Which build of veyq this server is running — the version to name if an update ever has to be undone.',
+    loading: 'Reading the release version…',
+    loadFailed: 'Couldn’t read the release version.',
+    notOwner: 'Only the server owner can see which release this instance runs.',
+    running: 'Running release',
+    unstamped:
+      'This build carries no release stamp. It was never published — a local build, or a development run — so there is no version to name, and none is invented here.',
+    rollbackHint:
+      'Pin this version in your deployment rather than a tag that moves: it is the one you can go back to, and going back means restoring the backup you took before the update.',
+  },
   mail: {
     navTitle: 'Email',
     editorSub: 'Connect this space to your own email server so member invitations arrive as real emails from your own domain. Leave it off and invites are shared as a copy link, which always works.',
@@ -1014,6 +1026,18 @@ const de: typeof en = {
     acceptFailed: 'Deine Zustimmung konnte nicht gespeichert werden. Bitte versuch es erneut.',
     versionChanged: 'Die Bedingungen haben sich gerade geändert — bitte sieh dir die aktualisierte Fassung an und stimme erneut zu.',
     signOut: 'Abmelden',
+  },
+  release: {
+    navTitle: 'Release',
+    sub: 'Welchen Stand von veyq dieser Server ausführt — die Version, die du benennen kannst, wenn ein Update rückgängig gemacht werden muss.',
+    loading: 'Release-Version wird gelesen…',
+    loadFailed: 'Die Release-Version konnte nicht gelesen werden.',
+    notOwner: 'Nur die Besitzperson des Servers kann sehen, welches Release diese Instanz ausführt.',
+    running: 'Laufendes Release',
+    unstamped:
+      'Dieser Stand trägt keine Release-Kennung. Er wurde nie veröffentlicht — ein lokaler Build oder ein Entwicklungslauf —, es gibt also keine Version zu benennen, und hier wird keine erfunden.',
+    rollbackHint:
+      'Trage diese Version fest in dein Deployment ein statt eines Tags, der sich bewegt: Sie ist die, zu der du zurückkehren kannst — und Zurückkehren heißt, das Backup einzuspielen, das du vor dem Update gemacht hast.',
   },
   mail: {
     navTitle: 'E-Mail',

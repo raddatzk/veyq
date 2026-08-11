@@ -1,0 +1,104 @@
+openapi: 3.1.0
+info:
+  title: veyq Instance API
+  version: 0.1.0
+  description: >
+    Operational reads about the running instance itself, for the **Server Owner**. This is the operator's
+    view of the software — which bits are running — and not the client's view of the protocol.
+
+    The two are deliberately never merged (ADR 0057 §4). The pre-auth `GET /api/setup` advertises
+    `version: { major, build }`, which answers *can this client and this server talk to each other?* and must
+    be readable before login because that is where its gate fires. The **release version** here answers
+    *which bits are running, and what do I roll back to?* — and it stays authenticated and Server-Owner-only,
+    because a precise release number is what maps an instance to a list of known vulnerabilities, and a
+    self-hosted instance is the kind that upgrades late. The capability manifest already discloses this
+    instance's feature set to any visitor; the release number does not become public with it.
+
+    Nothing here is user content: a release version is a property of the software. Operator-blindness is
+    untouched — this value ends up disclosed to *fewer* parties than the capability manifest already is.
+    Authorization is enforced by code annotations, not this spec (ADR 0008).
+tags:
+  - name: instance
+    description: >
+      Server-Owner reads about the running instance (release identity). One tag = one resource interface
+      owning the whole `/api/instance` subtree.
+
+paths:
+  /api/instance/release:
+    get:
+      tags: [instance]
+      operationId: getInstanceRelease
+      summary: Report the release version the running image was stamped with.
+      description: >
+        Returns the release the running image was published under — the rollback target an upgrade needs to be
+        able to name (uc.admin.identify-instance-release, ADR 0056 §6). Server-Owner only.
+
+        This answers what is **running**, which is not the same question as what a compose file **pins**: the
+        two diverge after a pull that was never restarted, or a restart that silently reused a cached image —
+        the case where an upgrade appears to have happened and did not.
+
+        A build that was never published carries no stamp, and the answer says so (`release: null`) rather
+        than synthesising a number. Absence is a first-class answer here: every consumer of this value uses it
+        to choose an image to start, so a fabricated version is the one an operator would try to roll back to.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The release version of the running instance, or its explicit absence.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceRelease" }
+              examples:
+                published:
+                  summary: An image produced by the release pipeline
+                  value: { release: "1.0" }
+                unstamped:
+                  summary: A locally built image or a quarkusDev run — never published, so never stamped
+                  value: { release: null }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
+components:
+  schemas:
+    InstanceRelease:
+      type: object
+      description: >
+        The running instance's release identity. One field, because a second one would only restate it:
+        `release: null` already says "this build carries no release stamp", and a separate boolean would be a
+        second way to say the same thing — which is a way to say the opposite when the two disagree.
+      required: [release]
+      properties:
+        release:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            The release version the running image was stamped with at publish: `<major>.<minor>`, the value
+            this repository's VERSION file held at the commit that published it, and the tag the image carries
+            in the registry (ADR 0057 §1). A publish onto an existing tag fails rather than replacing it, which
+            is what makes this value a rollback target rather than a label on a moving artifact.
+
+            `null` when the running build was never published — a locally built image or a `quarkusDev` run.
+            That is reported as the absence it is, never as a placeholder.
+          maxLength: 32
+          example: "1.0"
+
+    ErrorResponse:
+      $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: >
+        The opaque access token issued by login / refresh. Every operation here additionally requires the
+        global Server-Owner role (enforced by code, not this spec).

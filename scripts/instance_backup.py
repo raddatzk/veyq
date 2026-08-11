@@ -358,6 +358,75 @@ class Store:
 # --------------------------------------------------------------------------------------------------------
 
 
+def app_release(compose_file: Path, service: str) -> tuple[str | None, str]:
+    """The release version of **the instance being captured**, with how it was determined (ADR 0057 §5).
+
+    This used to read `os.environ["VEYQ_VERSION"]` — the *capture process's* environment, on the **host**,
+    outside the container, where that variable is never set. So the one field that would name a rollback target
+    was structurally `null` in every manifest ever written, sitting beside a `database.schemaVersion` genuinely
+    read from the instance. A field that cannot be true is not data; it is a claim with nothing behind it, in
+    the one artifact whose entire job is to still be trustworthy a year later.
+
+    It is read from the app **container**, because that is the instance: `docker inspect` reports the effective
+    environment of a container whether it is running or not, which matters here — a capture is *cold*, so the
+    app is stopped by the time this runs, and `ps` without `-a` would find nothing and report every capture as
+    unstamped.
+
+    Returns `(version, source)`. `version` is `None` for a genuine absence, and `source` says **which** absence
+    it is — they are different facts and an operator choosing an image to restore under needs them apart:
+    `unstamped-build` (the instance runs an image the release pipeline never stamped — A3, the same shape as
+    A1), `no-app-service` (this compose file declares none, as the dev stack does not — the backend runs
+    outside it), `no-app-container` (declared, never created), and the three that are about this host rather
+    than about the instance: `no-compose-file`, `compose-unresolvable` (an `infra/.env` that is not in reach)
+    and `docker-unavailable`.
+
+    The service is looked up in **two** steps on purpose. `docker compose ps <service>` exits non-zero both
+    when docker is unreachable and when the file simply has no such service, so a single call reports the dev
+    stack — whose compose file deliberately has no `app` — as a broken host. Measured, not assumed: that is
+    exactly what the first version of this function did. `--no-interpolate` for the same reason one step later:
+    without it, `config` on the production compose file fails whenever `infra/.env` is not in reach, and a
+    missing variable would again be reported as a missing docker.
+    """
+    if not compose_file.is_file():
+        return None, "no-compose-file"
+    try:
+        declared = subprocess.run(
+            ["docker", "compose", "-f", str(compose_file), "config", "--no-interpolate", "--services"],
+            capture_output=True, text=True,
+        )
+    except FileNotFoundError:
+        return None, "docker-unavailable"
+    if declared.returncode != 0:
+        return None, "docker-unavailable"
+    if service not in declared.stdout.split():
+        return None, "no-app-service"
+
+    found = subprocess.run(
+        ["docker", "compose", "-f", str(compose_file), "ps", "-aq", service],
+        capture_output=True, text=True,
+    )
+    if found.returncode != 0:
+        # `ps` DOES interpolate, so an unresolved `${VAR:?…}` — an `infra/.env` that is not in reach — fails
+        # here in exactly the same way an unreachable daemon does. Ask docker itself which it was.
+        alive = subprocess.run(["docker", "version", "--format", "{{.Server.Version}}"], capture_output=True, text=True)
+        return None, ("compose-unresolvable" if alive.returncode == 0 else "docker-unavailable")
+    containers = [line for line in found.stdout.split() if line]
+    if not containers:
+        return None, "no-app-container"
+
+    inspected = subprocess.run(
+        ["docker", "inspect", "--format", "{{range .Config.Env}}{{println .}}{{end}}", containers[0]],
+        capture_output=True, text=True,
+    )
+    if inspected.returncode != 0:
+        return None, "docker-unavailable"
+    for line in inspected.stdout.splitlines():
+        name, _, value = line.partition("=")
+        if name == "VEYQ_VERSION":
+            return (value.strip() or None), ("container-env" if value.strip() else "unstamped-build")
+    return None, "unstamped-build"
+
+
 def expected_keys(blobs: list[list]) -> list[str]:
     """Every object key the rows require, expanded from the compact blob index."""
     return [f"{key}/{i}" for key, chunks in blobs for i in range(chunks)]
@@ -422,6 +491,15 @@ def cmd_capture(args: argparse.Namespace) -> int:
     store.mirror_out(objects)
     count, byte_total = store.size()
 
+    release, release_source = app_release(Path(args.compose_file), args.app_service)
+    if release:
+        log(f"the instance being captured runs release {release} — the image a restore should be started under")
+    else:
+        # Named, never silent: a backup that cannot name its source release is still a valid backup; what it
+        # cannot do is tell you which image to start it under, and it says so instead of implying one (A3).
+        log(f"WARNING: this capture cannot name the release it came from ({release_source}). The backup is "
+            f"still valid; what it cannot tell you is which image to restore it under.")
+
     key_source = Path(args.config_secret_file)
     key_present = key_source.is_file()
     if key_present:
@@ -439,7 +517,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
     manifest = {
         "backupFormat": BACKUP_FORMAT,
         "domains": domains,
-        "app": {"version": os.environ.get("VEYQ_VERSION") or None},
+        "app": {"version": release, "versionSource": release_source},
         "database": {"name": db.name, "schemaVersion": schema, "bytes": (backup / DUMP_NAME).stat().st_size},
         "store": {
             "bucket": store.bucket,
@@ -534,6 +612,13 @@ def cmd_verify(args: argparse.Namespace) -> int:
     log(f"backup OK: {backup}" if claims_key else f"backup INCOMPLETE (leg (c) missing): {backup}")
     log(f"  domains            {manifest['domains']}")
     log(f"  schema             V{manifest['database']['schemaVersion']}")
+    # The rollback target, stated or explicitly absent — never a bare `null` that reads as data (ADR 0057 §5).
+    app = manifest.get("app") or {}
+    if app.get("version"):
+        log(f"  release            {app['version']} — restore this backup under that image")
+    else:
+        log(f"  release            unknown ({app.get('versionSource') or 'not recorded'}) — still a valid "
+            f"backup, but it cannot tell you which image to start it under (A3)")
     log(f"  objects            {len(present)} present, {len(required)} required by {len(blobs)} blob row(s)")
     # Tolerated and named, never silent: an object with no row is the running system's steady state (every
     # store deletion is best-effort AFTER the commit, and the upload-session GC was never built). Reporting it
@@ -639,6 +724,9 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--compose-file", default=str(DEFAULT_COMPOSE),
                         help=f"compose file for the bundled stack (default: {DEFAULT_COMPOSE.relative_to(REPO)})")
     parser.add_argument("--db-service", default="mariadb", help="compose service holding the database")
+    parser.add_argument("--app-service", default="app",
+                        help="compose service running the application — inspected (stopped or not) for the "
+                             "release version the manifest records as the rollback target")
     parser.add_argument("--db-host", default=None,
                         help="switch to direct mode: connect to this database host instead of the compose service")
     parser.add_argument("--db-port", type=int, default=3306)

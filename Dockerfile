@@ -100,6 +100,16 @@ RUN apt-get update \
     && chmod 0700 /var/lib/veyq \
     && chown -R 10001:10001 /work /var/lib/veyq
 COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-app /work/quarkus-app
+# The deployment recipe travels INSIDE the image (ADR 0057 §3): a tool about to run a given image reads the
+# compose file and the env template out of that image instead of fetching them from a URL, so the recipe cannot
+# drift from the bits it describes and inherits the image's cosign signature rather than needing a second trust
+# path. /opt/veyq/deploy is chosen because nothing mounts it and nothing writes it — NOT /work (it holds
+# quarkus-app/, see above) and NOT /var/lib/veyq (the config-secret volume); a mount over either would hide the
+# recipe of the image actually running behind the recipe of the first one ever started. Left root-owned and
+# read-only to uid 10001: this is reference material, and the runtime never writes it.
+# Extract with: docker run --rm --entrypoint cat <image> /opt/veyq/deploy/docker-compose.prod.yml
+COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
+COPY infra/.env.example /opt/veyq/deploy/.env.example
 USER 10001
 EXPOSE 8080
 # MaxRAMPercentage is a percentage of the CONTAINER memory limit (set via compose mem_limit) — without that
@@ -123,6 +133,10 @@ RUN chmod 0755 /work/application \
     && mkdir -p /var/lib/veyq \
     && chmod 0700 /var/lib/veyq \
     && chown -R 10001:10001 /work /var/lib/veyq
+# The deployment recipe, at the same path as runtime-jvm and for the same reasons (ADR 0057 §3). Both targets
+# carry it — a tool extracting it from a published image cannot say which target that image was built from.
+COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
+COPY infra/.env.example /opt/veyq/deploy/.env.example
 USER 10001
 EXPOSE 8080
 ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]

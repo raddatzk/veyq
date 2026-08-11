@@ -65,3 +65,14 @@ gaps:
   is a stale gap (a build-note or deferred-slice left behind) and fails validation ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
 - **Stop at area × level.** Do not add finer per-test metadata (individual assertions, requirement ids) —
   classification noise without a decision payoff.
+- **One shape is deliberately not expressible: "built on every surface, but one criterion no surface can
+  reach."** The two rules above interlock — every criterion needs a ref *unless* the file is `status:
+  planned`, `planned` needs at least one gap, and a gap may only name an **uncovered** surface. So a use-case
+  whose other criteria are covered on both `backend` and `web` has no legal home for a criterion whose
+  observable is a Python operator tool, a workflow, or anything else that is not a coverage surface
+  ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)). The resolution is `status:
+  planned` with the gaps carrying the reason *and naming the suites*, so the later flip is a mechanical edit
+  — which is what `uc.admin.back-up-and-restore-instance` and `uc.admin.identify-instance-release` both do.
+  **Plan for it at refine time:** a CR phase that says "replace the gaps with refs" is unbuildable the moment
+  one of that use-case's criteria is out of every surface's reach, and the CR that says it will discover this
+  at its last phase.
