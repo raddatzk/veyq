@@ -97,6 +97,36 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     expect(b64std(opened)).toBe(b64std(v1.serializeIdentityPrivate(FIXED_IDENTITY)))
   })
 
+  // `opts.secretKey` — the dev-bootstrap re-seed path (an existing Emergency Kit stays valid across a `down -v`).
+  // The bite: a buildAccount that took the option but kept minting its own key would still return SOME 32 bytes,
+  // so asserting "it is 32 bytes" proves nothing. We assert the GIVEN bytes come back AND reach both KEK
+  // derivations — the two places a stale key would silently produce an unopenable wrap.
+  describe('opts.secretKey — re-use an existing Emergency Kit (dev re-seed only)', () => {
+    const MINE = new Uint8Array(32).fill(0x5e)
+
+    it('uses the supplied Secret Key for the kit and for BOTH KEK derivations', () => {
+      const built = buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
+
+      expect(built.emergencyKit).toEqual({ secretKey: b64std(MINE) })
+      // One fewer randomBytes call than the default path, so the salts shift down by one: #2 pw salt, #4 rec salt.
+      expect(v1.kekPasswordSecret).toHaveBeenCalledWith(MINE, 'pw', seededBytes(2, 16), v1.ARGON)
+      expect(v1.kekRecovery).toHaveBeenCalledWith(MINE, seededBytes(4, 16), v1.ARGON)
+    })
+
+    it('still births everything else fresh — the Master Key is random, not derived from the kit', () => {
+      const built = buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
+      // The Master Key is randomBytes #0, untouched by the option (a wrap that opened to MINE would mean the
+      // re-seed had collapsed the two into one secret).
+      expect(b64std(v1.symUnwrap(KEK_PW, fromB64std(built.material.masterKeyWraps[0].wrappedKey), 'master-key')))
+        .toBe(b64std(seededBytes(0, 32)))
+    })
+
+    it('rejects a Secret Key that is not 32 bytes, and mints a fresh one when the option is absent', () => {
+      expect(() => buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).toThrow()
+      expect(buildAccount('a@b.test', 'pw', new Uint8Array(16)).emergencyKit.secretKey).toBe(b64std(seededBytes(2, 32)))
+    })
+  })
+
   it('feeds the two KEKs to the matching wrap — PASSWORD←kekPasswordSecret, RECOVERY←kekRecovery', () => {
     const built = buildAccount('a@b.test', 'pw', new Uint8Array(16))
     const masterKey = seededBytes(0, 32)

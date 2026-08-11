@@ -23,10 +23,17 @@ here; the server is blind.
     (holds the **TENANT grant** + a personal scope). This is the current dev instance (IntelliJ "Bootstrap User"
     run config) — the tenant is **`veyq.localhost`** (e.g. "Familie Raddatz"), so **live-verify browses
     `veyq.localhost:<viteport>`** and logs in with the `.run/.env` creds/secret key. **Cold start (fresh/empty
-    DB):** the `.run/.env` `SECRET_KEY`/`WRAPPED_MASTERKEY` are stale after a `docker compose … down -v` (they
-    were written against the old DB), so **re-run `npm run bootstrap:user`** against the fresh backend first — it
-    reseeds `veyq.localhost` and rewrites those two keys — then browse `veyq.localhost:<viteport>`. Prefer this
+    DB):** the `.run/.env` key material is stale after a `docker compose … down -v` (it was written against the
+    old DB), so **re-run `npm run bootstrap:user`** against the fresh backend first — it reseeds
+    `veyq.localhost`, points the tenant at Mailpit so member invites can actually be sent, and rewrites
+    `WRAPPED_MASTERKEY` — then browse `veyq.localhost:<viteport>`. **`SECRET_KEY` is re-used, not re-minted**,
+    when `.run/.env` already holds a usable one, so the kit you copied into a browser survives a re-seed
+    (`buildAccount(..., { secretKey })` — dev bootstrap only; every real birth mints fresh entropy). Prefer this
     over `seed:dev` for a manual smoke: it is one command and needs no dev-invite file.
+    - **It writes the owner's material as soon as the owner is complete**, before the optional second user — a
+      failure in an optional step warns and leaves a usable owner behind. It used to write last, so a failing
+      user2 threw away the Secret Key of an owner that already existed in the DB (irrecoverable: a wipe + re-seed
+      was the only way out).
     - **DEV auto-unlock (cr-dev-auto-unlock) — reach the unlocked dev app without typing the password.** Browse
       `veyq.localhost:<viteport>/?devlogin` and `boot()` logs in + unlocks from `.run/.env` via the app's real
       `login`+`unlockMasterKey` (then enrols the device key, so later loads restore without the param). For a phone,

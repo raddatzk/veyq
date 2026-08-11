@@ -31,13 +31,27 @@ export type BuiltAccount = {
  * the returned material (the caller supplies it to the server — at setup the owner types it, at invite
  * acceptance it comes from the invite). The Secret Key in the Emergency Kit + the password (never stored)
  * are both needed to open the PASSWORD wrap (2SKD).
+ *
+ * `opts.secretKey` **re-uses an existing Emergency Kit** instead of minting a fresh Secret Key. Everything
+ * else is still born fresh (identity, Master Key, every salt and nonce), so the account is new — only the
+ * kit the human already wrote down stays valid. Its **one** supported caller is the local dev bootstrap
+ * (`web/scripts/bootstrap-user.mts`), which re-seeds the same throwaway principal after a `down -v` and would
+ * otherwise invalidate the Secret Key in `.run/.env` on every run. Never pass it on a real registration path:
+ * a Secret Key must be 32 bytes of fresh entropy per account, and reusing one links the accounts' PASSWORD
+ * KEKs to a single kit — if it leaks, it opens all of them. Rejected unless it is exactly 32 bytes.
  */
-export function buildAccount(email: string, password: string, instanceSalt: Uint8Array): BuiltAccount {
+export function buildAccount(
+  email: string,
+  password: string,
+  instanceSalt: Uint8Array,
+  opts?: { secretKey?: Uint8Array },
+): BuiltAccount {
+  if (opts?.secretKey && opts.secretKey.length !== 32) throw new Error('buildAccount: secretKey must be 32 bytes')
   const id = v1.generateIdentity()
   const masterKey = v1.randomBytes(32)
   const wrappedPriv = v1.symWrap(masterKey, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
 
-  const secretKey = v1.randomBytes(32)
+  const secretKey = opts?.secretKey ?? v1.randomBytes(32)
   const salt = v1.randomBytes(16)
   const masterWrap = v1.symWrap(v1.kekPasswordSecret(secretKey, password, salt, ARGON), masterKey, 'master-key', v1.randomBytes(12))
 

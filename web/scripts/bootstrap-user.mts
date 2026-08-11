@@ -9,8 +9,16 @@
 // VEYQ_USER2_* inputs are set — a SECOND user onboarded as a tenant MEMBER with its tenant grant delivered (a
 // ready 2-member tenant for multi-member dev). It writes the derived key material back:
 //   VEYQ_SECRET_KEY, VEYQ_WRAPPED_MASTERKEY (+ VEYQ_USER2_SECRET_KEY / VEYQ_USER2_WRAPPED_MASTERKEY)
-// Run it against a FRESH backend (Bootstrap DB + Garage → Run Backend first). Re-run needs a `down -v` wipe:
-// the Secret Key is random per birth, so a second run can't reproduce an existing account.
+// Run it against a FRESH backend (Bootstrap DB + Garage → Run Backend first); a re-run needs a `down -v` wipe.
+//
+// Two properties this file exists to keep, both learned the hard way:
+//  - **The Secret Key in .run/.env survives a re-seed.** A cold birth mints one at random, so re-seeding used to
+//    invalidate the kit the human had already copied into a browser/password manager. When .run/.env already
+//    carries one, we hand it to `buildAccount` and only the rest of the account is born fresh.
+//  - **The owner's material is written the moment it is complete** (step 4a) — before any optional step can
+//    fail. It used to be written last, so a failure in the OPTIONAL user2 block destroyed the keys of a
+//    successfully-born owner: the account existed in the DB, its Secret Key existed only in this process, and
+//    .run/.env still held the previous run's. Anything after 4a therefore warns instead of exiting.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { fileURLToPath } from 'node:url'
@@ -21,11 +29,15 @@ import { buildAccount } from '../src/features/account/register/accountBirth'
 import { sealName } from '../src/features/account/profile/memberName'
 import { wrapScopeKeyToMember } from '../src/features/spaces/grant'
 import { awaitInvite } from './devSeed.mts'
+import { MAILPIT, MAILPIT_SMTP_PORT, clearMailbox, waitForMail } from '../src/test/mailpit'
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
 const DB_CONTAINER = process.env.VEYQ_DB_CONTAINER ?? 'veyq-mariadb'
 const INVITE_FILE = process.env.VEYQ_INVITE_FILE ?? fileURLToPath(new URL('../../backend/build/dev-invites.jsonl', import.meta.url))
+/** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
+ *  `^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$`, so a bare `localhost` is a 400. `*.localhost` resolves to loopback. */
+const SMTP_HOST = process.env.VEYQ_SMTP_HOST ?? 'mailpit.localhost'
 
 function fail(msg: string): never { console.error(`bootstrap-user: ${msg}`); process.exit(1) }
 
@@ -99,11 +111,30 @@ const u2Password = env.VEYQ_USER2_PASSWORD ?? ''
 const numeric = /^[0-9.]+$/.test(domain)
 const createDomain = numeric ? (process.env.VEYQ_CREATE_DOMAIN ?? 'local.veyq.test') : domain
 
+/**
+ * The Emergency Kit already in .run/.env, when there is a usable one — so a re-seed after `down -v` keeps the
+ * Secret Key the human has already copied somewhere. Anything unusable (blank, not base64, wrong length) falls
+ * back to a fresh mint rather than failing the run; a dev kit is not worth a blocked bootstrap.
+ */
+function reusableSecretKey(raw: string | undefined, who: string): Uint8Array | undefined {
+  const s = (raw ?? '').trim()
+  if (!s) return undefined
+  const bytes = (() => { try { return fromB64std(s) } catch { return undefined } })()
+  if (!bytes || bytes.length !== 32) {
+    console.warn(`bootstrap-user: ${who} secret key in .run/.env is unusable — minting a fresh one`)
+    return undefined
+  }
+  console.log(`${who}: re-using the Secret Key already in .run/.env`)
+  return bytes
+}
+
 const setup = await awaitBackend()
 if (!setup.setupRequired) fail('instance already set up — wipe it first (Bootstrap DB + Garage: `docker compose … down -v`), the Secret Key is random per birth')
 
 // 1 — cold-birth the Server Owner
-const built = buildAccount(email, password, fromB64std(setup.instanceSalt))
+const built = buildAccount(email, password, fromB64std(setup.instanceSalt), {
+  secretKey: reusableSecretKey(env.VEYQ_SECRET_KEY, 'owner'),
+})
 const m = built.material
 const ownerRes = await post('/api/setup/owner', {
   email,
@@ -144,19 +175,63 @@ const scopeRes = await tenant('POST', '/api/scopes', token, domain, { wrappedGra
 if (scopeRes.status >= 300) fail(`createPersonalScope failed: ${scopeRes.status} ${JSON.stringify(scopeRes.body)}`)
 console.log(`scope: personal scope ${scopeRes.body?.scopeId ?? ''} created`)
 
-// 4b — optional SECOND user: a tenant MEMBER, fully granted so it is usable immediately (no "log the owner in
+// 4a — the owner is complete: record its material NOW. Everything below is optional, and an optional step must
+// never be able to take the owner's Secret Key down with it (it exists nowhere but this process until here).
+let u2SecretKey = ''
+let u2WrappedKey = ''
+const passwordWrap = m.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
+const persist = (): void => writeEnv({
+  VEYQ_USERNAME: username, VEYQ_EMAIL: email, VEYQ_PASSWORD: password,
+  VEYQ_FIRST_NAME: firstName, VEYQ_LAST_NAME: lastName,
+  VEYQ_SECRET_KEY: built.emergencyKit.secretKey, VEYQ_WRAPPED_MASTERKEY: passwordWrap.wrappedKey,
+  VEYQ_TENANT: tenantName, VEYQ_TENANT_DOMAIN: domain,
+  VEYQ_USER2_USERNAME: u2Username, VEYQ_USER2_EMAIL: u2Email, VEYQ_USER2_PASSWORD: u2Password,
+  VEYQ_USER2_SECRET_KEY: u2SecretKey, VEYQ_USER2_WRAPPED_MASTERKEY: u2WrappedKey,
+})
+persist()
+console.log(`env: owner key material written to ${ENV_FILE}`)
+
+// 4b — point the tenant at Mailpit, so it can actually send. Not a nicety: since ADR 0055 a member invite
+// travels by mail or not at all, so a tenant with no sendable settings refuses `POST /member-invites` with
+// `503 mail_unavailable` BEFORE minting anything — which is what a hand-run instance always looked like. The
+// `username: null` shape keeps it off the sealed-password path (no config-secret KEK needed), and the host is a
+// dotted name that resolves to loopback because the contract's host pattern rejects a bare `localhost`.
+async function configureMail(): Promise<boolean> {
+  if (!(await fetch(`${MAILPIT}/api/v1/info`).then((r) => r.ok).catch(() => false))) {
+    console.warn(`mail: no Mailpit at ${MAILPIT} — skipping mail settings (start it: docker compose -f infra/docker-compose.yml --profile mail up -d)`)
+    return false
+  }
+  const res = await tenant('PUT', `/api/tenants/${tenantId}/mail-settings`, token, domain, {
+    host: SMTP_HOST, port: MAILPIT_SMTP_PORT, from: `noreply@${createDomain}`, username: null, tls: false, enabled: true,
+  })
+  if (res.status >= 300) { console.warn(`mail: updateTenantMailSettings failed: ${res.status} ${JSON.stringify(res.body)}`); return false }
+  console.log(`mail: ${domain} sends via Mailpit (${SMTP_HOST}:${MAILPIT_SMTP_PORT}) — read it at ${MAILPIT}`)
+  return true
+}
+const mailReady = await configureMail()
+
+// 4c — optional SECOND user: a tenant MEMBER, fully granted so it is usable immediately (no "log the owner in
 // first" step). The owner mints a MEMBER invite; user2 cold-births + register-and-accepts grant-less; then — as
 // the online key-holder — we drain the grant-delivery job the backend originated (claim → wrap K_tenant to
 // user2's identity → complete), exactly what a key-holder's device does in the web client (cr-0076).
-let u2SecretKey = ''
-let u2WrappedKey = ''
-if (u2Username && u2Email && u2Password) {
+//
+// The invite token is read out of the MAILBOX, not the dev-invite file: a member invite is minted for the
+// invited person and never returned to the caller (ADR 0055 §2), and the mailer's dev-file append only ever
+// carried the owner-bootstrap invite it falls back on. Throws rather than `fail()`s — the caller downgrades any
+// failure here to a warning, because the owner above is already usable and already persisted.
+async function onboardUser2(): Promise<void> {
+  if (!mailReady) throw new Error('no sendable mail settings — a MEMBER invite has no other channel (ADR 0055)')
+  await clearMailbox(u2Email)
   const inv = await tenant('POST', `/api/tenants/${tenantId}/member-invites`, token, domain, { email: u2Email })
-  if (inv.status >= 300) fail(`inviteTenantMember failed: ${inv.status} ${JSON.stringify(inv.body)}`)
-  const u2Secret = await awaitInvite(INVITE_FILE, u2Email)
-  const u2 = buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt))
+  if (inv.status >= 300) throw new Error(`inviteTenantMember failed: ${inv.status} ${JSON.stringify(inv.body)}`)
+  const body = await waitForMail(u2Email)
+  const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
+  if (!link) throw new Error(`no invite link in the mail to ${u2Email}`)
+  const u2 = buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
+    secretKey: reusableSecretKey(env.VEYQ_USER2_SECRET_KEY, 'user2'),
+  })
   const u2Accept = await post('/api/tenants/accept/register', {
-    bootstrapSecret: u2Secret,
+    bootstrapSecret: link[1],
     username: u2Username,
     account: {
       suiteId: u2.material.suiteId,
@@ -167,7 +242,7 @@ if (u2Username && u2Email && u2Password) {
       recoveryMasterKeyTag: u2.material.recoveryMasterKeyTag,
     },
   })
-  if (!u2Accept.ok) fail(`user2 accept/register failed: ${u2Accept.status} ${await u2Accept.text()}`)
+  if (!u2Accept.ok) throw new Error(`user2 accept/register failed: ${u2Accept.status} ${await u2Accept.text()}`)
   // Deliver the tenant grant: claim the grant-delivery job the backend originated for the new grant-less
   // membership (retry briefly in case origination lags), wrap K_tenant to user2's identity, complete.
   let job: any = null
@@ -176,25 +251,21 @@ if (u2Username && u2Email && u2Password) {
     if (claim.status === 200 && claim.body?.grantDelivery) job = claim.body
     else await sleep(400)
   }
-  if (!job) fail('grant-delivery job for user2 was not claimable')
+  if (!job) throw new Error('grant-delivery job for user2 was not claimable')
   const wrap = wrapScopeKeyToMember(tenantScopeKey, job.grantDelivery.identityPublicKey)
   const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: wrap })
-  if (done.status >= 300) fail(`grant-delivery complete failed: ${done.status} ${JSON.stringify(done.body)}`)
+  if (done.status >= 300) throw new Error(`grant-delivery complete failed: ${done.status} ${JSON.stringify(done.body)}`)
   u2SecretKey = u2.emergencyKit.secretKey
   u2WrappedKey = u2.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!.wrappedKey
   console.log(`user2: ${u2Email} joined ${domain} as MEMBER (@${u2Username}) + tenant grant delivered`)
 }
+if (u2Username && u2Email && u2Password) {
+  try { await onboardUser2(); persist() } catch (e) {
+    console.warn(`\nbootstrap-user: user2 was NOT onboarded — ${(e as Error).message}`)
+    console.warn(`  the owner below is complete and already written to ${ENV_FILE}; re-run after fixing it (needs a fresh instance).`)
+  }
+}
 
-// 5 — record the derived material back into .run/.env
-const passwordWrap = m.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
-writeEnv({
-  VEYQ_USERNAME: username, VEYQ_EMAIL: email, VEYQ_PASSWORD: password,
-  VEYQ_FIRST_NAME: firstName, VEYQ_LAST_NAME: lastName,
-  VEYQ_SECRET_KEY: built.emergencyKit.secretKey, VEYQ_WRAPPED_MASTERKEY: passwordWrap.wrappedKey,
-  VEYQ_TENANT: tenantName, VEYQ_TENANT_DOMAIN: domain,
-  VEYQ_USER2_USERNAME: u2Username, VEYQ_USER2_EMAIL: u2Email, VEYQ_USER2_PASSWORD: u2Password,
-  VEYQ_USER2_SECRET_KEY: u2SecretKey, VEYQ_USER2_WRAPPED_MASTERKEY: u2WrappedKey,
-})
 console.log(`\nbootstrap-user complete → ${ENV_FILE}`)
 console.log(`  ${email} @ ${domain} (owner) — log in with VEYQ_EMAIL / VEYQ_PASSWORD / VEYQ_SECRET_KEY`)
 if (u2SecretKey) console.log(`  ${u2Email} @ ${domain} (member) — log in with VEYQ_USER2_EMAIL / VEYQ_USER2_PASSWORD / VEYQ_USER2_SECRET_KEY`)

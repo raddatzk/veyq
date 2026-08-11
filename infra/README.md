@@ -73,9 +73,14 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 - **SMTP** → `localhost:11025`; **web UI + HTTP API** → `http://localhost:18025` (nothing persists across
   restarts — a test mailbox, by design).
 - **Smoke the send path**: bring the profile up, then (as a tenant owner) `PUT /api/tenants/{id}/mail-settings`
-  with `host=localhost`, `port=11025`, any `username`/`password`, `enabled=true`, `tls=false`. The next
+  with `host=mailpit.localhost`, `port=11025`, `enabled=true`, `tls=false`. The next
   **member** invite is emailed; read it at `http://localhost:18025` or fetch it from the API
-  (`GET http://localhost:18025/api/v1/messages`). Sealing the SMTP password needs the **config-secret KEK**
+  (`GET http://localhost:18025/api/v1/messages`). **The host must be a dotted name** — `TenantMailSettingsUpdate.host`
+  is pinned to `^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$`, so a bare `localhost` is a `400`, while any `*.localhost`
+  resolves to loopback and passes. Leave `username` unset unless you want to exercise SMTP AUTH: it is what keys
+  the sealed-password path, so an auth-less send needs neither a stored password nor an openable KEK. `npm run
+  bootstrap:user` writes exactly these settings for the dev tenant, so a hand-seeded instance can invite members
+  out of the box. Sealing the SMTP password needs the **config-secret KEK**
   ([ADR 0050](../docs/decisions/0050-operator-config-secret-encryption.md) + amendment): the server **generates
   and manages** this key as a `0600` file on first start (default `config-secret.key` in the process CWD — a local
   `quarkusDev` drops one there, gitignored), so a fresh instance can seal secrets with **no** operator setup. To
