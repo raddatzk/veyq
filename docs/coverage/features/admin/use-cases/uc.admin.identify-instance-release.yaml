@@ -1,0 +1,49 @@
+useCase: uc.admin.identify-instance-release
+feature: admin
+title: Know which release an instance runs, and which release a backup came from
+# Refined ahead of implementation (ADR 0057), so this ships `status: planned` with every target surface gapped —
+# the rule for a use-case whose CR has not run yet (changes/README.md § Coverage is part of the work).
+#
+# Note what is NOT claimable here even after the CR lands. The publish half of ADR 0057 — a tree-derived version,
+# a `v<major>.<minor>` tag, a refusal to republish an existing tag — is a GitHub Actions workflow, and a workflow
+# is not a coverage surface (ADR 0040); this repository additionally has no remote, so no run has ever executed.
+# What a test can observe is the instance side: who may read the release version, what an unstamped build says,
+# and that the pre-auth response did not grow it.
+status: planned
+acceptanceCriteria:
+  - id: server-owner-reads-the-running-release
+    text: >-
+      A signed-in Server Owner reads the release version the running image was stamped with at publish — the
+      value that names a rollback target, not the pre-auth protocol version. This is also the positive control
+      for `the-release-version-never-appears-pre-auth`: without it, a response that carries the field for nobody
+      satisfies that negative perfectly.
+  - id: an-unstamped-build-reports-absence-not-a-number
+    text: >-
+      An image built locally, or a quarkusDev run, was never published and therefore has no release version. The
+      read reports that absence explicitly rather than synthesising a placeholder, because every consumer of the
+      value uses it to choose an image to start — a fabricated version is the one an operator would try to roll
+      back to.
+  - id: the-release-version-never-appears-pre-auth
+    text: >-
+      GET /api/setup's response is unchanged: it still advertises version.major and version.build and carries no
+      release version, and no unauthenticated or non-owner caller obtains one from any surface. This is the
+      assertion that keeps ADR 0057 §4's separation true rather than merely intended, and it anchors on the
+      specific observable (the absent field plus the refused call), never on "it failed".
+  - id: a-backup-names-the-release-it-came-from
+    text: >-
+      A capture records the release of the instance it was taken from in the backup manifest, beside the schema
+      version it already records — or records its absence, when the source was an unstamped build. The field is
+      never structurally null while looking like data, which is the defect this replaces.
+gaps:
+  backend: >-
+    No test yet — the CR that implements ADR 0057 has not run. Three of the four criteria are backend-observable
+    (an owner-gated read, the unstamped-build answer, and the pre-auth response's shape) and are expected to land
+    as slice tests over the full HTTP stack, in the shape TenantOwnerGateTest already uses for owner gating.
+    `a-backup-names-the-release-it-came-from` will not: its observable is a manifest written by
+    scripts/instance_backup.py, and a Python operator tool is not a coverage surface (ADR 0040) — it is proven
+    instead by that tool's own bite-proofing, as the backup use-case's store-leg criterion already is.
+  web: >-
+    No test yet, and the surface is thin: the release version is a read the Server Owner performs. Whether it
+    earns a web affordance at all is the CR's call — the mechanism the upgrade procedure needs reads the running
+    container from the host, not from the browser, so this surface is the one part of ADR 0057 that is a
+    convenience rather than a precondition.

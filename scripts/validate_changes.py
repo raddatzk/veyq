@@ -18,9 +18,10 @@ Checks per `changes/cr-<slug>.md`:
   - the filename is `cr-<slug>.md` (lowercase, hyphen-separated, no CR number)
   - frontmatter `id` equals the filename stem (`cr-<slug>`)
   - `status` is one of planned | in-progress | done | superseded
-  - every `satisfies:` id resolves to a use-case (docs/features/*/use-cases/uc.<id>.md), an
-    enabler (docs/features/*/enablers/en.<id>.md), or a cross-cutting concern
-    (docs/crosscutting/cc.<id>.md)
+  - every `satisfies:` id resolves to a use-case, enabler or cross-cutting concern — matched against the
+    file's FULL stem, prefix included: `uc.admin.setup-server`, `en.…`, `cc.…`, never the bare goal. (Written
+    as `<id>` here once and read as "the part after the prefix"; the miss costs a red run, so it is spelled
+    out.) Searched in docs/features/*/use-cases/, docs/features/*/enablers/, docs/crosscutting/
   - every `adrs:` id is a quoted 4-digit string AND resolves to docs/decisions/NNNN-*.md
 """
 import pathlib

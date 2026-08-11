@@ -23,7 +23,11 @@ handling of reported shares.
 - ★ [Back up & restore the instance](use-cases/uc.admin.back-up-and-restore-instance.md) — **refined**
   ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md); three legs not two, a cold
   capture that stops only the writer, and a store leg captured as objects rather than volumes)
+- ★ [Know which release runs, and which a backup came from](use-cases/uc.admin.identify-instance-release.md) —
+  **refined** ([ADR 0057](../../decisions/0057-release-identity-and-deployment-recipe.md); the release version is
+  the operator's, the pre-auth `major`/`build` is the client's, and they are never merged)
 - Upgrade the instance — planned (runbook). Begins with the backup above, by decision rather than by advice:
   the schema migrates at boot with no gate and the migration set has no downgrade path
-  ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6)
+  ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6). Blocked on the
+  release identity above: an upgrade whose rollback target cannot be named is advice, not a procedure
 - Act on a reported public share — planned
