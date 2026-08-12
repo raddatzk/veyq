@@ -146,8 +146,16 @@ Key again.
   for there was no way in at all. The entry point therefore sits **on the sign-in form, not behind it**: a
   secondary action offered exactly where that field is, which logs in and attempts **no** unlock — not
   unlocking is the intent here, so a failed unlock would be the screen contradicting the button that reached
-  it. What it then offers is decided, not incidental:
-  - **One action, and no locked list.** *Sign out everywhere* is the only thing that is complete without names.
+  it. What it then offers is decided, not incidental — **three ways on, and still no list**:
+  - **A way in, and it is the constructive answer to the button's own sentence.** *"I don't have my Secret Key
+    with me"* has two honest endings, and only one of them existed before device linking: *"…but I have another
+    device"* is [uc.account.onboard-device](uc.account.onboard-device.md)'s **sign in with a QR code**, offered
+    first because it is what most people arriving here actually want. It needs nothing this state cannot
+    supply — an ephemeral keypair, a rendered code, a poll — and in particular it never reads the register, so
+    it is not the locked ceiling rising ([ADR 0059](../../../decisions/0059-device-linking.md) §1). *"…and the
+    device is gone"* is the sign-out below. The entry point conflated the two only because one answer existed.
+  - **No locked list — and that argument is about the *list*, not about how many actions belong here.**
+    *Sign out everywhere* is complete without names; a per-row pick is not.
     An anonymous list with dates loses on four counts, and the third is the one to keep: **the input that would
     justify sparing a row is unreadable in exactly this state.** The one reason to spare a row is *"that is my
     phone, which will otherwise ask for my Emergency Kit"* — and that fact lives in the register's `wraps` map,
@@ -158,10 +166,12 @@ Key again.
     anonymous per-row pick can, and leaves the user believing they cut it off. Do not re-open this without
     answering the third count.
   - **Then this device signs out too** — revoke first, logout second. *"I cut everything off"* means
-    everything, and nothing remains to do on that screen afterwards: no unlock (no kit, by premise), no list,
-    and a second revoke is idempotently pointless. Leaving a live authenticated session standing on a
-    stranger's browser as a receipt would trade the exact asset the flow protects for a UI nicety. A logout
-    that fails is reported as such, and the sign-in card's own sign-out button is the visible fallback.
+    everything, and nothing remains to do **once that path is taken**: no unlock (no kit, by premise), no list,
+    and a second revoke is idempotently pointless — and the constructive way on is gone with the sessions it
+    just ended, which is the correct reading of a user who chose it. Leaving a live authenticated session
+    standing on a stranger's browser as a receipt would trade the exact asset the flow protects for a UI
+    nicety. A logout that fails is reported as such, and the sign-in card's own sign-out button is the visible
+    fallback.
   - **`SESSION` scope is forced, and the copy says so.** The entry passes `SESSION` regardless of the
     remember-me toggle and enrols no wrap; without the force, an abandoned flow leaves a **persistent** refresh
     cookie on a foreign browser. Because that toggle is visible on the form the action sits on, the locked
@@ -180,9 +190,10 @@ Key again.
 
   And **the locked ceiling does not rise with the later increments**: the names and both joins — device↔family
   and device↔wrap — live in the Master-Key-sealed register, so a locked caller never gets them. The locked list
-  stays anonymous, the locked action stays session-level, and the wrap escalation is simply absent there, by
+  stays anonymous, the locked *revoke* stays session-level, and the wrap escalation is simply absent there, by
   construction rather than by omission. Do not plan a richer locked screen for "after naming"; there is no such
-  thing.
+  thing. Device linking is not the exception it looks like: it adds an action that reads **nothing** sealed —
+  it is a way *out* of the locked state, not a locked view of what unlocking would show.
 - **E4 — the register is missing or stale** (a new device, cleared storage, a write that never landed): the
   affected families render unnamed and offer no wrap escalation, since there is no wrap to name. Nothing is
   blocked, and nothing is silently hidden — a session the register cannot name must still be visible and still
@@ -225,8 +236,12 @@ Key again.
 - **Reaching into a signed-out device.** Removing its wrap takes away what the *server* held for it; the key
   material on that device stays until that device itself drops it, and no design here can change that. The
   screen must not imply otherwise.
-- **Device linking** (authorising a new device from a trusted one) is a separate use-case; it is the feature
-  this one exists to make reversible.
+- **Device linking** (authorising a new device from a trusted one) is its own use-case,
+  [uc.account.onboard-device](uc.account.onboard-device.md) — this screen is where a linked device is seen,
+  named and severed, and it hosts that flow's locked entry (E3) without owning it. What it gives a mistaken
+  grant is **containment, not reversal**: a revoke and a wrap removal cannot take back a Master Key already
+  handed over ([ADR 0059](../../../decisions/0059-device-linking.md) § Context). The earlier framing here —
+  that this use-case makes linking reversible — was wrong, and no copy on either screen may imply it.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -235,9 +250,10 @@ a laptop is lost, or you signed in on someone else's machine and forgot to sign 
 ends every other session in one go and keeps you signed in where you are. You don't need your Secret Key for
 any of this — and that holds on a borrowed or brand-new device too, which is the one you are most likely to be
 holding when a laptop goes missing. On the sign-in screen there, choose **"I don't have my Secret Key with
-me"**: you sign in, your memories stay locked, and the one thing offered is to sign every device out, this one
-included. That device keeps nothing afterwards — no saved key, and you stay signed in only until the browser
-closes. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
+me"**: you sign in and your memories stay locked. From there you have two ways on. If you still have a device
+you are signed in on, **sign in with a QR code** and let this one in properly — that is usually what you came
+for. If the device is really gone, the other way is to sign every device out, this one included; it keeps
+nothing afterwards — no saved key, and you stay signed in only until the browser closes. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
 out alone stops it reaching the server, but that device could still open your memories with just your password.
 Removing its saved key means whoever has it needs your password *and* your Secret Key — so keep that for
 devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
@@ -251,7 +267,9 @@ Abmelden vergessen hast. „Überall sonst abmelden" beendet alle anderen Sitzun
 dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht — auch nicht auf einem geliehenen
 oder nagelneuen Gerät, und genau so eines hast du meistens in der Hand, wenn ein Laptop verschwunden ist. Wähle
 auf dessen Anmeldeseite „Ich habe meinen Secret Key nicht dabei": Du meldest dich an, deine Erinnerungen
-bleiben gesperrt, und angeboten wird genau eines — jedes Gerät abmelden, dieses eingeschlossen. Dieses Gerät
+bleiben gesperrt. Von dort führen zwei Wege weiter. Hast du noch ein Gerät, an dem du angemeldet bist, dann
+nimm **„Über QR-Code anmelden"** und lass dieses Gerät richtig herein — meistens ist genau das der Grund, warum
+du hier bist. Ist das Gerät wirklich weg, ist der andere Weg, jedes Gerät abzumelden, dieses eingeschlossen. Es
 behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet bleibst du nur, bis der Browser
 geschlossen wird. Ist ein Gerät wirklich weg, nimm
 stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**: Abmelden allein hindert das Gerät nur daran,
@@ -278,4 +296,6 @@ verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewa
   form of the same coupling, and the argument this one is the per-device version of)
 - Related use-cases: [login](uc.account.login.md) (creates a family; logout ends the caller's own),
   [trust-device](uc.account.trust-device.md) + [remember-this-device](uc.account.remember-this-device.md) (the
-  wraps a revoked session deliberately does **not** touch); onboard device — planned
+  wraps a revoked session deliberately does **not** touch),
+  [onboard-device](uc.account.onboard-device.md) (the flow whose locked entry E3 hosts, and whose grants this
+  screen contains)

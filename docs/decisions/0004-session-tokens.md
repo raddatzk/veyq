@@ -35,8 +35,13 @@ into **named session families**. No JWTs.
   sent only to the refresh endpoint. Both are opaque and validated against server state; the server
   stores only their **hashes** (a DB dump yields no usable session — consistent with `authPublicKey`
   being a non-credential).
-- **Session family = one login/device.** A successful login creates a family. **Refresh rotates:** each
-  refresh mints a new access + new refresh token and supersedes the prior refresh (numbered generations).
+- **Session family = one login/device.** A successful login creates a family — and, since
+  [ADR 0059](0059-device-linking.md) §2, so does a **device-linking grant**: an unlocked session may mint one
+  further family for its own account and seal its refresh token to the device it is onboarding, because veyq's
+  auth keypair is password-derived and a device that never learns the password could otherwise never reach the
+  server. The second origin changes nothing else — such a family is listed, rotated and revoked like any
+  other. **Refresh rotates:** each refresh mints a new access + new refresh token and supersedes the prior
+  refresh (numbered generations).
 - **Reuse detection.** Presentation of a **superseded** refresh token (an older generation) is a clone
   signal ⇒ **revoke the entire family**. This catches the undetected-theft case that proactive revocation
   misses. To avoid a denial-of-service where a guessed `familyId` force-revokes a family, the superseded
