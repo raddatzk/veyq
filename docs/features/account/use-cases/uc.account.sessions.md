@@ -34,7 +34,8 @@ flowchart LR
 
 A locked device therefore shows a complete and fully actionable list — every session, every revoke — with
 coarse dates instead of names. That is the whole degradation, and it is deliberate: **the security action
-must never be gated behind the cosmetic half.**
+must never be gated behind the cosmetic half.** What a locked device still lacks is a *way in* — see **E3**,
+which owns that obligation.
 
 ## Main flow — see the sessions
 
@@ -82,6 +83,17 @@ local unlock tiers, so the next start on that device is a clean, fully-locked lo
 - **E2 — the caller revokes its own family:** permitted, and it means "log me out here too". The client treats
   the response as a logout and returns to the sign-in screen rather than continuing with dead tokens.
 - **E3 — locked vault:** the list renders with ids and coarse dates, no names. Revoking works normally.
+  **This flow needs an entry point of its own, and that entry point is owed.** Every shell route requires an
+  unlocked vault, and the sign-in form will not submit without a Secret Key on a device that holds no wrap for
+  the account — so on the fresh or foreign device this flow exists for, the locked state cannot be reached at
+  all. It belongs on the **sign-in form**: log in without attempting an unlock, then offer *"sign out
+  everywhere else"* — the one action that is complete without names. Two obligations follow. **The
+  plain-language section below must not be assembled into `wiki/` before it exists**, because that section
+  promises the Secret Key is not needed and for this flow it still is. And **the locked ceiling does not rise
+  with the later increments**: the names and the device↔family join both live in the Master-Key-sealed
+  register, so a locked caller never gets them — the locked list stays anonymous and the locked action stays
+  session-level, by construction rather than by omission. Do not plan a richer locked screen for "after
+  naming"; there is no such thing.
 - **E4 — the register is missing or stale** (a new device, cleared storage, a write that never landed): the
   affected families render unnamed. Nothing is blocked, and nothing is silently hidden — a session the register
   cannot name must still be visible, or a lost device could hide from the very screen that exists to find it.
