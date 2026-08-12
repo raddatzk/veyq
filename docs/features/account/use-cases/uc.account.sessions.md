@@ -82,6 +82,14 @@ keeps whatever convenience wrap it enrolled ([uc.account.trust-device](uc.accoun
 It can therefore still open content it already holds locally, and it can sign in again with the credentials it
 has: **on a trusted device that means the password alone reopens the vault, with no Secret Key.**
 
+**A device that was set to stay signed in is the sharper case, and every confirmation here has to say so.** Its
+convenience tier is a password-*less* saved key, and enrolling one **drops** the password wrap
+([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §9) — so once its next boot fails to
+restore and it drops that local key, there is nothing left below it but the Secret Key. *"It will have to sign
+in again"* understates a revoke there by a whole factor: what it will actually need is the Emergency Kit. The
+copy on the revoke, the sign-out-everywhere-else and the locked entry all name that consequence, in the same
+tone the wrap escalation beside them already uses.
+
 **Cutting a device off completely is therefore a second, separately named action**, offered beside the revoke
 wherever the register can name that device's wrap: *sign out **and** remove this device's saved key.* What it
 buys is exact — it restores the **Secret-Key floor** for that one device, so the password stops being enough
@@ -131,18 +139,50 @@ Key again.
   take, so the list cannot be used to probe which ids exist.
 - **E2 — the caller revokes its own family:** permitted, and it means "log me out here too". The client treats
   the response as a logout and returns to the sign-in screen rather than continuing with dead tokens.
-- **E3 — locked vault:** the list renders with ids and coarse dates, no names. Revoking works normally.
-  **This flow needs an entry point of its own, and that entry point is owed.** Every shell route requires an
-  unlocked vault, and the sign-in form will not submit without a Secret Key on a device that holds no wrap for
-  the account — so on the fresh or foreign device this flow exists for, the locked state cannot be reached at
-  all. It belongs on the **sign-in form**: log in without attempting an unlock, then offer *"sign out
-  everywhere else"* — the one action that is complete without names. Two obligations follow. **The
-  plain-language section below must not be assembled into `wiki/` before it exists**, because that section
-  promises the Secret Key is not needed and for this flow it still is. And **the locked ceiling does not rise
-  with the later increments**: the names and both joins — device↔family and device↔wrap — live in the
-  Master-Key-sealed register, so a locked caller never gets them. The locked list stays anonymous, the locked
-  action stays session-level, and the wrap escalation is simply absent there, by construction rather than by
-  omission. Do not plan a richer locked screen for "after naming"; there is no such thing.
+- **E3 — locked vault, and the way in.** The list renders with ids and coarse dates, no names; revoking works
+  normally. *Reaching* that state is the half that had to be built: every shell route requires an unlocked
+  vault — permanently now, `scripts/validate_shell_route_gate.py` — and the sign-in form's Secret-Key field is
+  `required` on a device holding no wrap for the account, so on the fresh or foreign device this flow exists
+  for there was no way in at all. The entry point therefore sits **on the sign-in form, not behind it**: a
+  secondary action offered exactly where that field is, which logs in and attempts **no** unlock — not
+  unlocking is the intent here, so a failed unlock would be the screen contradicting the button that reached
+  it. What it then offers is decided, not incidental:
+  - **One action, and no locked list.** *Sign out everywhere* is the only thing that is complete without names.
+    An anonymous list with dates loses on four counts, and the third is the one to keep: **the input that would
+    justify sparing a row is unreadable in exactly this state.** The one reason to spare a row is *"that is my
+    phone, which will otherwise ask for my Emergency Kit"* — and that fact lives in the register's `wraps` map,
+    which a locked caller structurally cannot read. The other three: precision only pays for someone who wants
+    to **keep** other sessions, which is not the goal anyone arrives here with; `lastUsedAt` is rewritten on
+    every refresh, so a lost laptop that kept refreshing shows a *recent* date and only `createdAt` anchors
+    anything; and the failure modes are asymmetric — the bulk action **cannot** miss the lost device, an
+    anonymous per-row pick can, and leaves the user believing they cut it off. Do not re-open this without
+    answering the third count.
+  - **Then this device signs out too** — revoke first, logout second. *"I cut everything off"* means
+    everything, and nothing remains to do on that screen afterwards: no unlock (no kit, by premise), no list,
+    and a second revoke is idempotently pointless. Leaving a live authenticated session standing on a
+    stranger's browser as a receipt would trade the exact asset the flow protects for a UI nicety. A logout
+    that fails is reported as such, and the sign-in card's own sign-out button is the visible fallback.
+  - **`SESSION` scope is forced, and the copy says so.** The entry passes `SESSION` regardless of the
+    remember-me toggle and enrols no wrap; without the force, an abandoned flow leaves a **persistent** refresh
+    cookie on a foreign browser. Because that toggle is visible on the form the action sits on, the locked
+    state carries a line saying this device keeps nothing — otherwise a visible control silently lies.
+  - **A way back to unlocking is offered, and it persists nothing.** It re-uses the form's own Secret-Key path
+    but suppresses every convenience tier — no wrap, no session vault, at any trust level — because that path
+    otherwise ends in an enrolment that would hand a foreign machine a saved key. The ambiguity behind it
+    (*"my kit was in my bag after all"* vs *"this is my new laptop"*) is resolved in favour of the flow's own
+    premise; the new-laptop case is one sign-out and one ordinary sign-in away from the full normal behaviour.
+  - **The two traces the way back still leaves are named, not suppressed:** `veyq:device-id` in
+    `localStorage`, and a device entry + family join in the sealed register. Both hang off `noteThisDevice()`
+    inside `openVault` — the one choke point every unlock path passes through, which is why the join
+    self-heals. Threading an opt-out through it would cost that property to avoid one evictable, sealed,
+    non-key-material row that only the user can ever read. **The pure entry path — log in, sign out everywhere,
+    sign out here — persists nothing at all.**
+
+  And **the locked ceiling does not rise with the later increments**: the names and both joins — device↔family
+  and device↔wrap — live in the Master-Key-sealed register, so a locked caller never gets them. The locked list
+  stays anonymous, the locked action stays session-level, and the wrap escalation is simply absent there, by
+  construction rather than by omission. Do not plan a richer locked screen for "after naming"; there is no such
+  thing.
 - **E4 — the register is missing or stale** (a new device, cleared storage, a write that never landed): the
   affected families render unnamed and offer no wrap escalation, since there is no wrap to name. Nothing is
   blocked, and nothing is silently hidden — a session the register cannot name must still be visible and still
@@ -193,7 +233,11 @@ Key again.
 **EN —** You can see every place you are currently signed in, and sign any of them out from here — useful when
 a laptop is lost, or you signed in on someone else's machine and forgot to sign out. "Sign out everywhere else"
 ends every other session in one go and keeps you signed in where you are. You don't need your Secret Key for
-any of this. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
+any of this — and that holds on a borrowed or brand-new device too, which is the one you are most likely to be
+holding when a laptop goes missing. On the sign-in screen there, choose **"I don't have my Secret Key with
+me"**: you sign in, your memories stay locked, and the one thing offered is to sign every device out, this one
+included. That device keeps nothing afterwards — no saved key, and you stay signed in only until the browser
+closes. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
 out alone stops it reaching the server, but that device could still open your memories with just your password.
 Removing its saved key means whoever has it needs your password *and* your Secret Key — so keep that for
 devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
@@ -204,7 +248,12 @@ reaches into the lost device itself; what it takes away is what the server was k
 **DE —** Du siehst hier jede Stelle, an der du gerade angemeldet bist, und kannst jede davon von hier aus
 abmelden — praktisch, wenn ein Laptop weg ist oder du dich auf einem fremden Rechner angemeldet und das
 Abmelden vergessen hast. „Überall sonst abmelden" beendet alle anderen Sitzungen auf einmal und lässt dich
-dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht. Ist ein Gerät wirklich weg, nimm
+dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht — auch nicht auf einem geliehenen
+oder nagelneuen Gerät, und genau so eines hast du meistens in der Hand, wenn ein Laptop verschwunden ist. Wähle
+auf dessen Anmeldeseite „Ich habe meinen Secret Key nicht dabei": Du meldest dich an, deine Erinnerungen
+bleiben gesperrt, und angeboten wird genau eines — jedes Gerät abmelden, dieses eingeschlossen. Dieses Gerät
+behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet bleibst du nur, bis der Browser
+geschlossen wird. Ist ein Gerät wirklich weg, nimm
 stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**: Abmelden allein hindert das Gerät nur daran,
 den Server zu erreichen — deine Erinnerungen könnte es mit deinem Passwort weiterhin öffnen. Ohne seinen
 gespeicherten Schlüssel braucht es dein Passwort *und* deinen Secret Key. Heb dir das also für wirklich

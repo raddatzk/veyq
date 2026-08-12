@@ -50,6 +50,30 @@ absichtlich langsam — ein Versprechen ist das trotzdem nicht, denn Passwörter
 Genau dafür ist der Secret Key da. Er ist lang und völlig zufällig, Raten ist also aussichtslos, und deine
 Erinnerungen brauchen ihn **zusätzlich** zum Passwort. Ein erratenes Passwort allein öffnet nichts.
 
+## Wenn ein Gerät weg ist
+
+Du siehst jede Stelle, an der dein Konto gerade angemeldet ist, und kannst jede davon von dort aus abmelden —
+praktisch, wenn ein Laptop verschwindet oder du dich auf einem fremden Rechner angemeldet und das Abmelden
+vergessen hast. **„Überall sonst abmelden"** beendet alle anderen Sitzungen auf einmal und lässt dich dort
+angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht.
+
+Das gilt auch auf einem **geliehenen oder nagelneuen Gerät** — und genau so eines hast du meistens in der Hand,
+wenn ein Laptop verschwunden ist. Wähle auf dessen Anmeldeseite **„Ich habe meinen Secret Key nicht dabei"**:
+Du meldest dich an, deine Erinnerungen bleiben gesperrt, und angeboten wird genau eines — jedes Gerät abmelden,
+dieses eingeschlossen. Dieses Gerät behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet
+bleibst du nur, bis der Browser geschlossen wird.
+
+**Abmelden ist nicht die ganze Geschichte, und diesen Teil liest du am besten zweimal.** Ein Gerät abzumelden
+hindert es daran, den Server zu erreichen; es hindert es *nicht* daran, deine Erinnerungen zu öffnen, denn ein
+Gerät, dem du vertraut hast, hält ein eigenes Schloss auf deinem Master-Schlüssel (das Bild oben auf dieser
+Seite). Ist ein Gerät wirklich weg, nimm stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**. Wer
+das Gerät dann hat, braucht dein Passwort *und* deinen Secret Key — heb dir das also für wirklich verlorene
+Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit.
+
+Zwei ehrliche Hinweise. Die Gerätenamen erfährt der Server nie: Sie liegen verschlüsselt und sind erst nach dem
+Entsperren lesbar, auf einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und nichts davon greift
+auf das verlorene Gerät selbst durch — entzogen wird ihm, was der Server für es aufbewahrt hat.
+
 ## Was der Server tatsächlich speichert
 
 Nur die **gesperrten** Kopien deines Master-Schlüssels — nie etwas, das sie öffnet. Das, was eine Kopie

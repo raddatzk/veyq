@@ -18,12 +18,22 @@ title: Manage active sessions — see every login, sign out remotely
 # contract and no backend changed — so its new criteria are all web-side, and `scripts/validate_device_shapes.py`
 # is the permanent guard on the two wire shapes that could leak the join.
 #
+# cr-locked-sign-out-entry-point closes E3: the locked entry point on the sign-in form, its forced SESSION scope,
+# its no-persist way back, and the sign-this-device-out-too tail. It is again purely web-side (no contract, no
+# backend — `POST /api/sessions/revoke-others` was already `@Authenticated` and needs no unlock), and it promotes
+# the structural invariant it rests on to `scripts/validate_shell_route_gate.py`: every `layout: 'app'` route
+# also declares `requiresUnlock: true`, so the shortcut E3's whole shape exists to avoid cannot be taken quietly.
+#
 # What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
 # than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
 # the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
-# tests exercise. Nor is E3 provable end to end on this surface: the settings hub route is `requiresUnlock`, so
-# a locked caller cannot yet REACH the panel. What the web suite proves is the half that is this CR's — the
-# panel itself takes no vault dependency and disables nothing when the vault is locked.
+# tests exercise. E3 used to be listed beside it as "not provable end to end on this surface" because the
+# settings hub route is `requiresUnlock` and a locked caller could not REACH the panel. That is now half false
+# and corrected rather than left: the entry point is not the panel, so what the web suite proves is the whole
+# flow at unit altitude — the entry is offered, forces SESSION, attempts no unlock, persists nothing on the way
+# back, and runs revoke-then-logout in that order. What stays unprovable here is only the LIVE end-to-end shape:
+# it needs two live sessions of one account, which the current e2e harness does not stand up (the same reason
+# the panel's own e2e was not extended).
 status: planned
 acceptanceCriteria:
   - id: list-shows-every-active-family
@@ -52,6 +62,21 @@ acceptanceCriteria:
       holds exactly what it held before (opaque id, coarse timestamps, count). A locked panel therefore also
       offers neither wrap action — both joins are sealed, so the locked ceiling does not rise with the
       escalation increment either (E3); their absence there is by construction, not by omission.
+  - id: the-locked-state-is-reachable-without-a-secret-key
+    text: >-
+      The device this flow exists for — fresh or foreign, no Emergency Kit — can REACH the locked state at all:
+      the sign-in form offers a second action exactly where its `required` Secret-Key field is, which logs in and
+      attempts no unlock. Four properties are the criterion, not one. It is offered only where that field is, with
+      the trusted device as its live control. It forces `SESSION` scope **even with the remember toggle on** — the
+      control on the same predicate is the ordinary submit, which must still honour the toggle, or the assertion
+      is about a constant rather than about the forcing. It persists **nothing** on the way back to unlocking, at
+      either toggle position, with the ordinary first sign-in as its positive control — a bare "nothing was
+      enrolled" is satisfied by any wholesale breakage of the enrolment path. And it signs this device out too,
+      revoke-then-logout, recorded as a sequence rather than as two independent call assertions; a logout that
+      fails is reported and leaves the card's own sign-out button reachable. The structural half — that no route
+      is session-gated but not unlock-gated — is a permanent guard rather than a claim, because the two obvious
+      shortcuts (drop `requiresUnlock` from the settings hub, or mint a locked-reachable shell route) both look
+      cheaper than this shape and were refused twice.
   - id: names-come-from-the-sealed-register
     text: >-
       An unlocked client labels each family the Master-Key-sealed device register can join to a device, and a
@@ -184,3 +209,22 @@ gaps:
     `localWrap.test.ts` pins where the "which wrap is mine" answer comes from — the local trust/remember record,
     never the register and never the server's list — including that an unusable local store answers "none"
     rather than throwing, which is the safe direction for both of its callers.
+    cr-locked-sign-out-entry-point adds E3's two files. `src/views/LoginView.test.ts` is that view's FIRST
+    harness — it had none at all, and E3 is a 100 % LoginView change, so standing it up was the largest single
+    cost of the increment. It covers the entry being offered exactly where the Secret-Key field is (with the
+    trusted device as its live control), the forced `SESSION` scope with the remember toggle ON (with the
+    ordinary submit's `PERSISTENT` as the control that keeps the forcing from being a constant), the way back
+    persisting nothing at either toggle position (with the ordinary first sign-in's `cacheSessionVault` /
+    `trustThisDevice` / `enrolDeviceKey` as the positive control on the same predicate), and both ends of the
+    sign-out tail — the success case leaving no session behind, the failed logout leaving the card's own
+    sign-out button reachable. `src/features/account/sessions/LockedSignOut.test.ts` owns the component: the
+    revoke-then-logout ORDER recorded as a sequence, the never-touch-the-session-on-a-failed-revoke case, the
+    half-success boolean, the declined confirmation, and the way-back emit touching neither call. Three of these
+    were bite-tested rather than trusted — dropping the no-persist guard, swapping revoke and logout, and passing
+    the remember toggle through each redden exactly their own case by name while their controls stay green.
+    The route-gate guard was bite-tested in the same way and its FIRST shape was wrong: blanking string bodies to
+    keep brace matching honest also blanked `'app'`, so it reported zero shell routes and passed everything. Its
+    bite is four cases — green untouched (three shell routes), red with `requiresUnlock` stripped from
+    `/settings/:section?`, red on a NEW shell route with no gate (so it is not merely pinned to the routes that
+    happen to exist), and GREEN on a comment carrying the phrase, which is the false positive the line-based
+    first probe produced.

@@ -48,6 +48,29 @@ guessable passwords.
 That is what the secret key is for. It is long and completely random, so guessing it is hopeless, and your
 memories need it *as well as* your password. A guessed password on its own opens nothing.
 
+## If a device is lost
+
+You can see every place your account is currently signed in, and sign any of them out from there — useful when
+a laptop goes missing, or you signed in on someone else's machine and forgot to sign out. **"Sign out
+everywhere else"** ends every other session in one go and keeps you signed in where you are. You don't need
+your secret key for any of this.
+
+That holds on a **borrowed or brand-new device** too, which is the one you're most likely to be holding when a
+laptop goes missing. On the sign-in screen there, choose **"I don't have my secret key with me"**: you sign in,
+your memories stay locked, and the one thing offered is to sign every device out, this one included. That
+device keeps nothing afterwards — no saved key, and you stay signed in only until the browser closes.
+
+**Signing out is not the whole story, and this is the part worth reading twice.** Signing a device out stops it
+reaching the server; it does *not* stop it opening your memories, because a device you trusted holds its own
+lock on your master key (the picture at the top of this page). If a device is really gone, use **"sign out and
+remove this device's saved key"** instead. Then whoever has it needs your password *and* your secret key —
+so keep that for devices you have actually lost, because it is your own device that will ask you for the
+Emergency Kit next time.
+
+Two honest details. The server never learns your device names: those are stored scrambled and are readable only
+after you unlock, so on a locked screen you'll see dates instead of names. And none of this reaches into the
+lost device itself — what it takes away is what the server was keeping for it.
+
 ## What the server actually stores
 
 Only the **locked** copies of your master key — never anything that opens them. The thing that unlocks a
