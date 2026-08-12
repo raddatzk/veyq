@@ -155,6 +155,14 @@
       "nonce": "0a0b0c0d0e0f101112131415",
       "plaintext": "7b2276657273696f6e223a312c2270696e73223a7b7d7d",
       "blob": "020a0b0c0d0e0f101112131415e2eae9ce6fe2a1109987502488210d9f8052f5f9a5d95b622b6db6450a34ca8c2561e8268b8a44"
+    },
+    "sym_device_register": {
+      "note": "cr-account-sealed-device-register (ADR 0004, en.account.device-register): the operator-blind device register sealed under the Master Key with the 'device-register' context. One opaque blob per ACCOUNT the server relays verbatim — it learns no device name, no device count, and above all no device<->family link, which is the link ADR 0004's unnamed families exist to withhold. The context is DISTINCT from 'identity-pins' (domain separation: a register blob can never be reinterpreted as a pin store, and vice versa). kek = sym_master_key.kek (the Master Key seals it); plaintext = utf8('{\"devices\":{},\"families\":{}}') (a born-empty register). Note the version is NOT in the plaintext — it is the cleartext wire counter the blind server compares.",
+      "kek": "aea8086000d1cee65ee4521561e6489492f67bf220ebc35dcac5a43d40c03542",
+      "context": "device-register",
+      "nonce": "0a0b0c0d0e0f101112131415",
+      "plaintext": "7b2264657669636573223a7b7d2c2266616d696c696573223a7b7d7d",
+      "blob": "020a0b0c0d0e0f101112131415e2eafbce6bf8ab1a8487506ed92f5f908f4cbeafb7c1555ee75f4f6e9d90ad9c198b0294df8a27ba0b7425f7"
     }
   },
   "group_name_key": {

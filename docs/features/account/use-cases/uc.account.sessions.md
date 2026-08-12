@@ -18,9 +18,10 @@ use-case work on a locked device:
 
 - **The set** — which families exist, when each was created, when each was last used, which one is *you* —
   comes from the server and needs **only a session**. So does revoking.
-- **The names** — "Kevin's iPhone" — come from the client's **Master-Key-sealed device register** and
-  therefore need an **unlocked** vault ([en.account.identity-pinning](../enablers/en.account.identity-pinning.md)
-  is the same shape: one sealed, synced blob the server cannot read).
+- **The names** — "Kevin's iPhone" — come from the client's **Master-Key-sealed device register**
+  ([en.account.device-register](../enablers/en.account.device-register.md)) and therefore need an **unlocked**
+  vault ([en.account.identity-pinning](../enablers/en.account.identity-pinning.md) is the same shape: one
+  sealed, synced blob the server cannot read).
 
 ```mermaid
 ---
@@ -46,9 +47,16 @@ which owns that obligation.
 3. If the vault is unlocked, the client reads its sealed device register and labels each family it recognises.
    Families the register does not know stay **unnamed and still revocable**; the register is an annotation
    layer over the server's list, never the list itself.
-4. While it is there, the client **prunes** register entries whose families the server no longer lists. Without
-   that, every login in a private window — where the local device id does not survive the window's close —
-   would add an entry nobody ever removes.
+4. While it is there, the client **reconciles** the register against the list it is holding — which is the only
+   moment it can, since the server's set is the authority and this is where that set is in hand. Two removals,
+   and they are deliberately not the same removal
+   ([en.account.device-register](../enablers/en.account.device-register.md) § Sync & merge owns the rule):
+   **family rows** whose families the server no longer lists are dropped straight away, as an explicit list of
+   ids — never as "keep only what I just saw", which would delete a family another device created between this
+   client's read and its write. **Device entries are kept**, because a device whose sessions have all expired is
+   still a device the user named; the register's growth is bounded by evicting the least-recently-seen devices
+   instead. Without that bound, every login in a private window — where the local device id does not survive
+   the window's close — would add an entry nobody ever removes.
 
 ## Main flow — sign out
 
@@ -124,9 +132,13 @@ local unlock tiers, so the next start on that device is a clean, fully-locked lo
 ## Out of scope (separate increments)
 
 - **Naming the sessions.** The sealed device register — the label, the stable client-side device id, and the
-  device↔family join — is its own increment; this use-case is built to degrade to unnamed and stay useful.
+  device↔**family** join — is its own increment, now refined as
+  [en.account.device-register](../enablers/en.account.device-register.md); this use-case is built to degrade to
+  unnamed and stay useful.
 - **"Revoke this device everywhere"** — dropping a device's session **and** its convenience wrap in one action.
-  It needs the register's join and belongs with it.
+  That needs a device↔**wrap** join, which the register above does not yet carry, and it is a further increment
+  again. The same join is what would let an orphaned convenience wrap ever be reclaimed: the wrap table holds
+  no timestamps, so without it there is not even an age heuristic to identify one by.
 - **Device linking** (authorising a new device from a trusted one) is a separate use-case; it is the feature
   this one exists to make reversible.
 
@@ -153,6 +165,8 @@ Geräteseite zusätzlich seinen gespeicherten Schlüssel.
 
 - Feature: [Account & auth](../_index.md)
 - Concepts: [Account & Key Model](../enablers/en.account.key-model.md) (auth ≠ unlock),
+  [en.account.device-register](../enablers/en.account.device-register.md) (the sealed register this view reads
+  its names from, writes to and repairs),
   [en.account.identity-pinning](../enablers/en.account.identity-pinning.md) (the sealed-synced-blob shape the
   device register reuses), [Security Model](../../../crosscutting/security-model.md)
 - Decisions: [ADR 0004](../../../decisions/0004-session-tokens.md) (families, rotation, reuse detection,

@@ -13,6 +13,7 @@ import {
 import {
   AccountApi,
   AccountIdentityPinsApi,
+  AccountDeviceRegisterApi,
   AccountProfileApi,
   AccountWrapsApi,
   Configuration as AccountConfiguration,
@@ -67,6 +68,10 @@ export function accountProfileApi(): AccountProfileApi {
 
 export function accountIdentityPinsApi(): AccountIdentityPinsApi {
   return new AccountIdentityPinsApi(new AccountConfiguration(bearerParams()))
+}
+
+export function accountDeviceRegisterApi(): AccountDeviceRegisterApi {
+  return new AccountDeviceRegisterApi(new AccountConfiguration(bearerParams()))
 }
 
 export function tenantsApi(): TenantsApi {

@@ -120,6 +120,22 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
   })
 
+  it('symmetric wrap with the device-register context (en.account.device-register)', () => {
+    const w = vectors.wrap.sym_device_register
+    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
+    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
+  })
+
+  it('the device-register and identity-pins contexts are domain-separated', () => {
+    // Same kek, same nonce, same plaintext, different context ⇒ different blob, and neither opens under the
+    // other's context. Without this a register blob could be replayed into the pin store's slot.
+    const r = vectors.wrap.sym_device_register
+    const p = vectors.wrap.sym_identity_pins
+    expect(r.kek).toBe(p.kek)
+    expect(hex(v1.symWrap(unhex(r.kek), unhex(r.plaintext), p.context, unhex(r.nonce)))).not.toBe(r.blob)
+    expect(() => v1.symUnwrap(unhex(r.kek), unhex(r.blob), p.context)).toThrow()
+  })
+
   it('asymmetric wrap round-trip (unwrap a recorded blob)', () => {
     const a = vectors.wrap.asym_scope_grant
     const d = vectors.kem_v1.decap_kat

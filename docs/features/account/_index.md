@@ -19,6 +19,10 @@ holds only **public** keys and ciphertext, never the password and never a conten
 - [en.account.identity-pinning](enablers/en.account.identity-pinning.md) — the operator-blind, cross-device
   **TOFU pin store** (one Master-Key-sealed blob) that remembers each contact's identity key, so a substituted
   key is caught on change (**web built, cr-0098**).
+- [en.account.device-register](enablers/en.account.device-register.md) — the **sealed device register** (one
+  Master-Key-sealed blob, same shape): a stable client-side device id, its renameable label, and the
+  device↔session-family join, so unnamed families can be *shown* named without the operator gaining anything
+  to correlate (**refined, not yet built**).
 
 ## Use-cases
 

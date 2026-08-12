@@ -44,9 +44,38 @@ acceptanceCriteria:
       a lost one — it renders ids and coarse dates in place of names. Correspondingly no request in this
       use-case carries a device name, user-agent or any client-built label, and no column stores one: the server
       holds exactly what it held before (opaque id, coarse timestamps, count).
+  - id: names-come-from-the-sealed-register
+    text: >-
+      An unlocked client labels each family the Master-Key-sealed device register can join to a device, and a
+      family the register cannot name renders under its anonymous heading with its revoke intact. Both halves
+      are the criterion, not one: a panel that dropped unnamed rows would satisfy the naming half perfectly
+      while hiding the very device this screen exists to find (E4). The register itself round-trips through real
+      crypto, and a blob sealed under a different key degrades to an empty register rather than throwing.
+  - id: the-register-is-repaired-never-queued
+    text: >-
+      The sessions view reconciles the register against the authoritative family list it is holding — pruning
+      families the server no longer lists, and recording the current family from the SERVER's own marker when
+      the unlock-time write could not (a cold boot restore never learned its own family id). There is no retry
+      queue: a register write that fails leaves rows unnamed and the next open repairs them. The load-bearing
+      case is the merge discipline, and it is the one case that distinguishes the two candidate implementations:
+      a family created by another device BETWEEN this client's read and its write must survive the stale-version
+      retry (a frozen id-delta), while eviction must be recomputed on the merged map. Every other assertion
+      passes under both formulations.
+  - id: rename-the-device-not-the-session
+    text: >-
+      A user renames the device behind a row, and the new name reaches every session of that device — a device
+      is one-to-many with its sessions, and the copy says so. A rename survives a concurrent write (later write
+      wins, because renaming is deliberate), a sign-in never reverts one, an empty rename is not written, and a
+      family the register cannot name offers no rename at all — while still offering its revoke.
 gaps:
   backend: >-
     The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
+    `DeviceRegisterSliceTest` (cr-account-sealed-device-register) covers the register's own endpoints: born-empty,
+    round-trip, bump, and four conflict cases — each of which also asserts the store is UNTOUCHED, because a 409
+    status alone does not show that, and the client's whole merge argument rests on being genuinely forced
+    through the re-read path. Its shape assertion (a register response is exactly `blob` + `version`) is the
+    server-side half of "no name ever reaches the server"; the contract-side half is now a permanent guard,
+    `scripts/validate_session_family_shape.py`, which fails if `SessionFamily` grows any field or any base64 one.
     `SessionManagerSliceTest` covers all four criteria over the full HTTP stack, with a second account live
     throughout — which is what turns "scoped to the caller" from a claim about the SQL into an observation at
     the boundary. Every negative carries a live control on the same predicate, because each is trivially
@@ -60,7 +89,18 @@ gaps:
     authenticated class with `@PermitAll` on logout — makes logout answer 401 to an invalid token. Both
     directions are asserted, so neither can be "fixed" into the other silently.
   web: >-
-    Same condition, same one event. `web/src/features/account/sessions/SessionsPanel.test.ts` covers the list
+    Same condition, same one event. The device register (cr-account-sealed-device-register) adds
+    `src/features/account/deviceRegister.test.ts` — real crypto, mocked API + vault, with a fake server that
+    reimplements the optimistic concurrency so the 409 path is exercised rather than stubbed — plus
+    `src/features/account/deviceIdentity.test.ts` for the stable id and the label guess, and six new cases in
+    `SessionsPanel.test.ts` (named row WITH the unnamed row as its control, the reconcile arguments incl. the
+    server-set current family, the locked case asserting the register is never touched, a throwing register that
+    leaves the list revocable, the rename, and the empty rename). Two of those tests were bite-tested rather
+    than trusted: injecting "keep only what I saw" in place of the frozen id-delta, and freezing eviction to the
+    first attempt, each reddens exactly its own case by name and nothing else — which is what makes them a
+    guard on the merge discipline rather than a description of it. The register's own AAD context is
+    vector-pinned (`sym_device_register`) and its domain separation from `identity-pins` is asserted in
+    `v1.conformance.test.ts`. `web/src/features/account/sessions/SessionsPanel.test.ts` covers the list
     (both dates, exactly one server-set "this device" marker, the short id as the handle an unnamed row goes
     by), the targeted revoke, the revoke-self path (treated as a logout, back to the sign-in screen), and the
     everywhere-else action — asserting it calls the ONE endpoint that spares the caller rather than fanning out

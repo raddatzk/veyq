@@ -7,7 +7,13 @@
 //     which would include the caller's own (A3);
 //   - revoking your OWN family is treated as a logout and returns to the sign-in screen (E2);
 //   - a LOCKED vault changes nothing: the list renders and every revoke stays enabled (E3/A4). That is the trap
-//     — a view that disables the action it exists to offer — so it is asserted against an unlocked control.
+//     — a view that disables the action it exists to offer — so it is asserted against an unlocked control;
+//   - names come from the sealed device register and are layered on AFTER the list, never awaited by it: a
+//     register that is empty, unreadable or unwritable leaves the list rendering and every revoke working (E4).
+//
+// The register is mocked to a NAMELESS default on purpose. That is the §E4 state, and it is the state the four
+// original behaviours above were written against — so they keep asserting exactly what they always did, and the
+// naming cases below opt in explicitly rather than silently changing everyone else's fixture.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -18,10 +24,20 @@ vi.mock('./sessions', () => ({
   revokeOtherSessionFamilies: vi.fn(),
 }))
 vi.mock('../login/signOut', () => ({ signOut: vi.fn() }))
+vi.mock('../deviceRegister', () => ({
+  deviceNames: vi.fn(),
+  reconcileWithSessions: vi.fn(),
+  renameDeviceOfFamily: vi.fn(),
+}))
+vi.mock('../deviceIdentity', () => ({
+  deviceId: () => 'this-device',
+  guessDeviceLabel: () => 'Firefox · macOS',
+}))
 
 import SessionsPanel from './SessionsPanel.vue'
 import { listSessionFamilies, revokeSessionFamily, revokeOtherSessionFamilies } from './sessions'
 import { signOut } from '../login/signOut'
+import { deviceNames, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
 import { vaultState } from '../../../app/vault'
 import { i18n } from '../../../i18n'
 
@@ -30,6 +46,11 @@ const OTHER = { id: 'bbbbbbbb-2222-4222-8222-222222222222', createdAt: new Date(
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  InputText: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
   Button: {
     props: ['label', 'icon', 'severity', 'loading', 'ariaLabel', 'title'],
     // `emits` is load-bearing: without it Vue also passes the parent's @click through as a native fallthrough
@@ -57,6 +78,9 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT, OTHER])
     vi.mocked(revokeSessionFamily).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
+    vi.mocked(deviceNames).mockResolvedValue({})
+    vi.mocked(reconcileWithSessions).mockResolvedValue(false)
+    vi.mocked(renameDeviceOfFamily).mockResolvedValue(undefined)
     window.confirm = vi.fn(() => true)
   })
 
@@ -165,5 +189,81 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await flushPromises()
     expect(revokeSessionFamily).not.toHaveBeenCalled()
     expect(signOut).not.toHaveBeenCalled()
+  })
+
+  // --- names from the sealed device register (en.account.device-register) ---
+
+  it('labels a row the register can name, and leaves the rest on the anonymous fallback (E4)', async () => {
+    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain('Arbeitslaptop')
+    // The control: the family the register does NOT know still renders, under its fallback heading. Without it,
+    // a panel that dropped unnamed rows entirely would satisfy the assertion above perfectly.
+    expect(wrapper.text()).toContain(i18n.global.t('sessions.thisDevice'))
+    expect(rowButtons(wrapper).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('reconciles the register with the list it is holding, passing the server-set current family', async () => {
+    await mountPanel()
+    expect(reconcileWithSessions).toHaveBeenCalledWith(
+      [CURRENT.id, OTHER.id],
+      'this-device',
+      'Firefox · macOS',
+      CURRENT.id, // from the SERVER's marker — not guessed, and the path a cold boot restore depends on
+    )
+  })
+
+  it('never touches the register while locked — it is sealed, so there is nothing to read or write', async () => {
+    vaultState.unlocked = false
+    const wrapper = await mountPanel()
+    expect(reconcileWithSessions).not.toHaveBeenCalled()
+    expect(deviceNames).not.toHaveBeenCalled()
+    // …and the list is unharmed by that: still rendered, still revocable. This is the whole locked contract.
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
+    expect(rowButtons(wrapper).every((b) => !b.attributes('disabled'))).toBe(true)
+  })
+
+  it('renders the list and keeps revoking when the register throws (E4)', async () => {
+    vi.mocked(reconcileWithSessions).mockRejectedValue(new Error('register unreachable'))
+    vi.mocked(deviceNames).mockRejectedValue(new Error('register unreachable'))
+    const wrapper = await mountPanel()
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.loadFailed'))
+    await rowButtons(wrapper)[1].trigger('click')
+    await flushPromises()
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+  })
+
+  it('renames the DEVICE behind a row, and only offers it where there is a device to rename', async () => {
+    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    const wrapper = await mountPanel()
+    const rows = wrapper.findAll('.session-row')
+    // The named row carries rename + revoke; the unnamed one carries revoke alone — a missing name never costs
+    // the row its revoke button.
+    expect(rows[0].findAll('button')).toHaveLength(1)
+    expect(rows[1].findAll('button')).toHaveLength(2)
+
+    await rows[1].findAll('button')[0].trigger('click')
+    await flushPromises()
+    const input = rows[1].find('input')
+    expect((input.element as HTMLInputElement).value).toBe('Arbeitslaptop')
+    await input.setValue('Kevins Laptop')
+    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Kevins Laptop' })
+    await rows[1].findAll('button')[0].trigger('click') // Save
+    await flushPromises()
+    expect(renameDeviceOfFamily).toHaveBeenCalledWith(OTHER.id, 'Kevins Laptop')
+    expect(wrapper.text()).toContain('Kevins Laptop')
+  })
+
+  it('does not write an empty rename', async () => {
+    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    const wrapper = await mountPanel()
+    const row = wrapper.findAll('.session-row')[1]
+    await row.findAll('button')[0].trigger('click')
+    await flushPromises()
+    await row.find('input').setValue('   ')
+    await row.findAll('button')[0].trigger('click')
+    await flushPromises()
+    expect(renameDeviceOfFamily).not.toHaveBeenCalled()
   })
 })

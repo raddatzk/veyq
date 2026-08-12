@@ -13,6 +13,10 @@ import { MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/g
 import * as device from '../trustDevice/deviceKey'
 import { restoreDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { loadSessionVault, clearSessionVault } from '../rememberMe/sessionVault'
+import { rememberThisDevice } from '../deviceRegister'
+import { deviceId, guessDeviceLabel } from '../deviceIdentity'
+import { session } from '../../../app/session'
+import { i18n } from '../../../i18n'
 
 function fetchKeyMaterial(): Promise<AccountKeyMaterial> {
   return withRefresh(() => accountApi().getAccountKeyMaterial())
@@ -24,6 +28,34 @@ function openVault(material: AccountKeyMaterial, masterKey: Uint8Array): void {
     v1.symUnwrap(masterKey, fromB64std(material.wrappedIdentityPrivateKey), 'identity-priv'),
   )
   setUnlocked(masterKey, identityPrivate)
+  noteThisDevice()
+}
+
+/**
+ * Write moment 1 of the device register (en.account.device-register): record this device and the family the
+ * preceding login created, so the sessions view can name it.
+ *
+ * Hooked **here** because [openVault] is the one choke point every unlock path passes through — floor, trusted
+ * device, remembered device and boot restore alike — and because the register is Master-Key-sealed, so this is
+ * the earliest moment it can be written at all. It is emphatically not "one write per login": at login there is
+ * no Master Key (auth ≠ unlock).
+ *
+ * **Fire-and-forget, and that is the design, not laziness.** Unlocking must not wait on, or fail because of, a
+ * cosmetic naming write. A write that never lands leaves the affected rows unnamed (uc.account.sessions §E4),
+ * and the sessions view repairs it on next open — which is why there is no retry queue here.
+ *
+ * `session.familyId` is absent on a cold boot restore (no login happened in this page load); the register then
+ * records the device without a family, and write moment 2 supplies the family from the server's own
+ * current-marker.
+ */
+function noteThisDevice(): void {
+  void rememberThisDevice(
+    deviceId(),
+    guessDeviceLabel(i18n.global.t('sessions.unknownDevice')),
+    session.familyId,
+  ).catch(() => {
+    /* best-effort: an unnamed row is a supported state, not an error to surface */
+  })
 }
 
 /**

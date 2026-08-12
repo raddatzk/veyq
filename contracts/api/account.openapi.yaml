@@ -35,6 +35,11 @@ tags:
     description: The caller's operator-blind identity-pin store — one Master-Key-sealed blob remembering each
       contact's identity key for TOFU change-detection (ADR 0028, en.account.identity-pinning). Separate tag →
       its own resource interface.
+  - name: account-device-register
+    description: The caller's operator-blind device register — one Master-Key-sealed blob holding a stable
+      client-side device id, its display label, and the device↔session-family join, so unnamed families
+      (ADR 0004) can be shown named without the server gaining anything to correlate
+      (en.account.device-register). Separate tag → its own resource interface.
 
 paths:
   /api/account/key-material:
@@ -265,6 +270,80 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: stale_version }
 
+  /api/account/device-register:
+    get:
+      tags: [account-device-register]
+      operationId: getDeviceRegister
+      summary: Fetch the caller's sealed device register.
+      description: >
+        Returns the authenticated caller's device register — one opaque blob sealed under the Master Key
+        (`symWrap(masterKey, blob, "device-register")`, en.account.device-register) plus its monotonic
+        `version` for optimistic concurrency. The server stores + relays the ciphertext verbatim and never
+        interprets it: it learns no device name, no device count, and above all **no device↔family link** —
+        the link ADR 0004's unnamed families exist to withhold. Born empty: an account that has never written
+        the register gets `{ blob: null, version: 0 }`. Keyed off the bearer token — only the caller's own
+        register.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's sealed device register (ciphertext only) + its version. `blob` is null when never written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceRegister" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+    put:
+      tags: [account-device-register]
+      operationId: putDeviceRegister
+      summary: Store the caller's sealed device register (optimistic concurrency).
+      description: >
+        Replaces the caller's sealed device-register blob. `version` is the version the client last read; the
+        write succeeds only if it still matches the server's stored version, which is then bumped and
+        returned. If the stored version moved since the client read (another device wrote), the server
+        responds `409 stale_version` and the client re-reads, merges, and retries
+        (en.account.device-register §Sync & merge — note that a family removal is applied as a frozen id-delta
+        and an eviction is recomputed on the merged map; the two are not the same operation). The first write
+        of a born-empty register sends `version: 0`. Operator-blind: the server never sees the plaintext.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceRegisterUpdate" }
+            example:
+              blob: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
+              version: 3
+      responses:
+        "200":
+          description: The register was written; the new (bumped) version is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeviceRegister" }
+        "400":
+          description: The request was malformed (missing/invalid blob or version).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "409":
+          description: The stored version moved since the client read it — re-read, merge, and retry.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: stale_version }
+
   /api/account/wraps/{id}:
     delete:
       tags: [account-wraps]
@@ -272,10 +351,11 @@ paths:
       summary: Remove a wrap by id (untrust this device).
       description: >
         Removes the caller's wrap with this id. **Idempotent** (like logout): the wrap is deleted only if it
-        is the caller's own **DEVICE** wrap (the only kind this untrust endpoint creates); an unknown id,
-        another account's wrap, the PASSWORD floor, or any other method is a silent no-op. Always 204 — no
-        cross-account enumeration, the 2SKD floor can never be removed, and the RECOVERY/PASSKEY methods are
-        out of reach of this endpoint.
+        is one of the caller's own **device-local convenience wraps** — **DEVICE** or **DEVICE_KEY**, the two
+        kinds `POST /api/account/wraps` creates (ADR 0005 §9: a device carries one at a time, so switching
+        level removes the old one through this endpoint). An unknown id, another account's wrap, the PASSWORD
+        floor, or any other method is a silent no-op. Always 204 — no cross-account enumeration, the 2SKD
+        floor can never be removed, and the RECOVERY/PASSKEY methods are out of reach of this endpoint.
       parameters:
         - name: id
           in: path
@@ -533,6 +613,60 @@ components:
           description: >
             The version the client last read (the write succeeds only if it still matches the stored version).
             `0` for the first write of a born-empty store.
+          minimum: 0
+          example: 3
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+
+    DeviceRegister:
+      type: object
+      description: >
+        The caller's sealed device register + its version. `blob` is one opaque ciphertext
+        (`symWrap(masterKey, blob, "device-register")`) the server relays verbatim; `version` is the monotonic
+        optimistic-concurrency counter. A born-empty register is `{ blob: null, version: 0 }`.
+      required: [blob, version]
+      properties:
+        blob:
+          type: [string, "null"]
+          description: >
+            The device-register plaintext sealed under the Master Key (opaque base64), or null when the
+            register has never been written. The server never interprets it — no device name, no count, and no
+            device↔family link.
+          contentEncoding: base64
+          maxLength: 65532
+          example: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
+        version:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            Monotonic version for optimistic concurrency. `0` for a born-empty register; bumped by one on
+            every successful write. A `PUT` must send the version it last read.
+          minimum: 0
+          example: 3
+
+    DeviceRegisterUpdate:
+      type: object
+      description: >
+        A new sealed device-register blob to store, guarded by the `version` the client last read (optimistic
+        concurrency → `409 stale_version` on a mismatch).
+      required: [blob, version]
+      properties:
+        blob:
+          type: string
+          description: >
+            The device-register plaintext sealed under the Master Key (opaque base64 ciphertext the server
+            stores verbatim).
+          contentEncoding: base64
+          maxLength: 65532
+          example: c2VhbGVkLWRldmljZS1yZWdpc3Rlcg==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65532) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        version:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            The version the client last read (the write succeeds only if it still matches the stored version).
+            `0` for the first write of a born-empty register.
           minimum: 0
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'

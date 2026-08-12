@@ -53,7 +53,9 @@ class KeyMaterialHandler(
         return AddWrapOutcome.Created(store.addWrap(userId, method, wrappedKey, kdfParams))
     }
 
-    /** Remove a wrap for the authenticated caller (idempotent) — a no-op for an unknown/other/non-DEVICE wrap. */
+    /** Remove a wrap for the authenticated caller (idempotent) — a no-op for an unknown or another account's
+     *  wrap, and for any method outside the two device-local convenience ones (DEVICE / DEVICE_KEY); the
+     *  whitelist and why it is a whitelist live on [KeyMaterialStore.deleteWrap]. */
     @Transactional
     fun deleteWrap(userId: String, id: String) {
         store.deleteWrap(userId, id)

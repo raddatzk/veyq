@@ -210,6 +210,24 @@ silently regress. The tell that this was needed: an audit finding for a rule tha
 nothing enforced (e.g. the styleguide mandated `@ConfigMapping`, yet 28 sites drifted). If a one-shot check
 genuinely suffices, the CR says why.
 
+### Run a new guard's predicate against the UNTOUCHED tree before you write it down
+
+**§ *Find the sites from two angles* applies to a guard's predicate, not only to a locator** — a guard is a
+locator that ships, so the first shape you reach for is a paraphrase of what you already believe, and it fails
+silently wherever that belief is wrong. `cr-account-sealed-device-register` needed *"a session family carries no
+per-family ciphertext"* and reached first for **"no `contentEncoding: base64` anywhere in
+`auth.openapi.yaml`"** — the file-scoped shape, because it is the easiest to express. That spec legitimately
+carries ten such fields (the login challenge/response, recovery material), so the guard would have been **red on
+arrival**. The predicate that holds is schema-scoped: `SessionFamily`'s property set, and no base64 within it.
+
+This is **upstream of the bite**, and it catches the opposite failure. Every rule below assumes the predicate is
+right and asks whether the lever reaches it — they test that the guard goes **red on a break**. This one tests
+that it is **green on the healthy tree**, which no injection can show: a guard that is red before the first
+injection makes every later bite unreadable, since red-because-broken and red-because-wrong look identical. So:
+run it once on the untouched tree, *then* write the sentence, *then* bite it. And when the wrong shape was
+reached for first, put it in the guard's docstring under its **limit** — the next reader will reach for the same
+easy shape, and "we tried that, here is why it cannot work" is the only thing that stops them.
+
 ### Bite-proof a guard by snapshot-and-restore, never `git checkout`
 
 To prove a new test bites, revert the
