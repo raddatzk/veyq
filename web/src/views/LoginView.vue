@@ -20,6 +20,7 @@ import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { importKitFromFile, type KitData } from '../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
 import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
+import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { vaultState, masterKey } from '../app/vault'
 import { takeAuthPrefill } from '../app/authPrefill'
@@ -56,6 +57,18 @@ const remember = ref(false)
 // wraps. When off, the toggle is hidden AND enrolConvenienceWrap enrols no wrap — matching the server, which
 // rejects enrolling one with 422 capability_disabled.
 const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
+// uc.account.sessions §E3 — the LOCKED entry point. The screen built for a lost laptop is reached from the
+// device you would actually be holding: a fresh or foreign one, with no Emergency Kit. The Secret-Key field is
+// `required`, and HTML5 constraint validation (not the router — `/login` carries no `meta` at all) is what
+// closes this form, so the entry is a `type="button"` beside the submit that logs in and attempts NO unlock.
+const lockedEntry = ref(false)
+// Set by that entry and by its way back: this device persists NOTHING at any tier — no convenience wrap, no
+// session vault. Without it the way-back unlock would end in `enrolConvenienceWrap()` and hand a foreign machine
+// a saved key, which is the exact asset the flow protects. Cleared only by a completed sign-out here, which is
+// what puts the "this is my new laptop after all" case one ordinary sign-in away from the normal behaviour.
+const noPersist = ref(false)
+// The confirmation the locked state leaves standing after it hands the screen back.
+const notice = ref('')
 const fileInput = ref<HTMLInputElement | null>(null)
 const showSecret = ref(false)
 const scanOpen = ref(false)
@@ -89,6 +102,9 @@ async function noteWrapOfThisDevice(wrapId: string | null) {
  *  One tier per device, so the other is dropped first. Best-effort — the unlock already succeeded, so a failed
  *  enrolment just means a bit more friction next time (no silent lockout). */
 async function enrolConvenienceWrap() {
+  // §E3: the locked entry and its way back persist nothing, at any tier. This is the single guard for both the
+  // convenience wrap and the session vault below, because every tier this screen enrols runs through here.
+  if (noPersist.value) return
   const mk = masterKey()
   if (!mk) return
   if (remember.value) {
@@ -131,7 +147,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
         // "remember me" on now → upgrade this device to the password-less wrap (the toggle is the per-device
         // choice, §18). Off → keep the DEVICE wrap, but refresh the session vault so reloads stay prompt-free.
         if (remember.value) await enrolConvenienceWrap()
-        else await cacheSessionVault(email.value, masterKey()!)
+        else if (!noPersist.value) await cacheSessionVault(email.value, masterKey()!)
         await finishAndRoute()
         return
       }
@@ -156,7 +172,59 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
 
 async function submit() {
   error.value = ''
+  notice.value = ''
   await runSubmit()
+}
+
+// --- §E3: the locked entry point ---
+
+/**
+ * Log in **without attempting an unlock**, and show the locked state. Two things are deliberate here.
+ *
+ * The scope is **forced to `SESSION`** regardless of the remember-me toggle: an abandoned flow on a foreign
+ * browser must not leave a persistent refresh cookie behind. Because that toggle is visible on the form this
+ * button sits on, the locked state says so in its own copy — otherwise the control would silently lie.
+ *
+ * And no unlock is attempted at all, rather than attempted and swallowed: not unlocking is the intent on this
+ * path, so a red "unlock failed" would be the screen contradicting the button that reached it.
+ */
+const { run: runLockedEntry, pending: enteringLocked } = useAsyncAction(
+  async () => {
+    // Re-entrant on purpose: the way back leaves the session up, so bailing out to the locked state a second
+    // time must not try to log in again.
+    if (!sessionReady.value) {
+      await login(email.value, password.value, LoginVerifyRequestSessionScopeEnum.Session)
+      sessionReady.value = true
+    }
+    lockedEntry.value = true
+  },
+  { onError: () => { error.value = t('login.failed') } },
+)
+
+async function enterLocked() {
+  error.value = ''
+  notice.value = ''
+  await runLockedEntry()
+}
+
+/** The action ran. The confirmation stands on the form it hands back to — there is nothing left to do there. */
+function onLockedDone(signedOut: boolean) {
+  lockedEntry.value = false
+  // A logout that failed leaves this session live, so `sessionReady` stays true and the form's own sign-out
+  // button (below) is the visible fallback the message points at.
+  sessionReady.value = !signedOut
+  notice.value = signedOut ? t('sessions.lockedDone') : t('sessions.lockedDoneStillHere')
+  if (signedOut) {
+    password.value = ''
+    secretKey.value = ''
+    noPersist.value = false
+  }
+}
+
+/** The way back: reveal the Secret-Key field again on the still-live session, persisting nothing. */
+function onLockedUnlock() {
+  lockedEntry.value = false
+  noPersist.value = true
 }
 
 function triggerUpload() {
@@ -191,9 +259,12 @@ function onScanned(kit: KitData) {
 async function signOut() {
   await logout() // revokes the session, drops tokens, and re-locks the vault (centralised in logout)
   sessionReady.value = false
+  lockedEntry.value = false
+  noPersist.value = false
   password.value = ''
   secretKey.value = ''
   error.value = ''
+  notice.value = ''
   await resolveDeviceState()
 }
 
@@ -233,11 +304,15 @@ onMounted(async () => {
 
 <template>
   <Card class="login-card">
-    <template #title>{{ t('login.title') }}</template>
+    <template #title>{{ lockedEntry ? t('sessions.lockedTitle') : t('login.title') }}</template>
     <template #content>
+      <!-- §E3's locked state: signed in, deliberately not unlocked, one action. It replaces the form rather than
+           sitting beside it — every field here would need the Secret Key this person does not have. -->
+      <LockedSignOut v-if="lockedEntry" @done="onLockedDone" @unlock="onLockedUnlock" />
+
       <!-- One adaptive sign-in: email + password always; the Secret-Key field only on the first sign-in per
            device (or when a device wrap is unusable). A single submit logs in AND unlocks. -->
-      <form v-if="!vaultState.unlocked" class="veyq-form" @submit.prevent="submit">
+      <form v-else-if="!vaultState.unlocked" class="veyq-form" @submit.prevent="submit">
         <label>
           {{ t('common.email') }}
           <InputText
@@ -328,6 +403,21 @@ onMounted(async () => {
           :loading="busy"
         />
         <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
+        <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
+        <!-- §E3's entry point. `type="button"` is what makes it work at all: the gate on this form is HTML5
+             constraint validation, which runs on submit only, so a submit-typed control would be blocked by the
+             very `required` Secret-Key field this person cannot fill. Offered exactly where that field is. -->
+        <Button
+          v-if="needsSecretKey"
+          type="button"
+          :label="t('sessions.lockedEntry')"
+          icon="pi pi-lock"
+          severity="secondary"
+          text
+          :loading="enteringLocked"
+          :disabled="!email || !password"
+          @click="enterLocked"
+        />
         <!-- Recovery needs no session, so it is reachable from here even when sign-in keeps failing — which is
              exactly when someone needs it. -->
         <Button

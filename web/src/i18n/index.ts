@@ -124,9 +124,13 @@ const en = {
     revoke: 'Sign this device out',
     revokeSelf: 'Sign out here',
     revokeOthers: 'Sign out everywhere else',
-    revokeConfirm: 'Sign this device out? It will have to sign in again.',
+    // Both confirmations name the consequence a sign-out really has: a device that was set to stay signed in
+    // holds a password-LESS saved key and no password wrap (ADR 0005 §9), so once it drops that key at its next
+    // start there is nothing left below it but the Secret Key. Saying only "it will have to sign in again"
+    // understates that by a whole factor.
+    revokeConfirm: 'Sign this device out? It will have to sign in again — and if it was set to stay signed in, it loses its saved key at its next start and then needs your password AND your Secret Key.',
     revokeSelfConfirm: 'This is the device you are using. Signing it out takes you back to the sign-in screen.',
-    revokeOthersConfirm: 'Sign out every other device? You stay signed in here.',
+    revokeOthersConfirm: 'Sign out every other device? You stay signed in here. Any of them that was set to stay signed in loses its saved key at its next start and then needs your password AND your Secret Key.',
     revoked: 'That device was signed out.',
     revokedOthers: 'Every other device was signed out.',
     revokeFailed: 'That session could not be ended. Please try again.',
@@ -151,6 +155,20 @@ const en = {
     removeOtherKeysConfirm: 'Remove every saved key except this device’s? Every one of your other devices will need your password AND your Secret Key again — have your Emergency Kit ready. This device keeps its own saved key.',
     otherKeysRemoved: 'Every saved key except this device’s was removed.',
     savedKeysHint: 'Removing a saved key takes away what the server was keeping for that device; it never reaches into the device itself.',
+    // §E3 — the locked entry point, on the sign-in form rather than behind it. Written for the person holding a
+    // fresh or foreign device with no Emergency Kit: exactly one action is complete without names, so exactly one
+    // is offered. `lockedScopeNote` is not decoration — the "stay signed in" toggle is visible on the form this
+    // was pressed from and is forced off here, so saying nothing would let a visible control lie.
+    lockedEntry: 'I don’t have my Secret Key with me',
+    lockedTitle: 'Signed in, still locked',
+    lockedNote: 'You are signed in, but your memories stay locked here — opening them needs your Secret Key. One thing does not need it: you can sign every device out from here, this one included. That is what to do when a device is lost.',
+    lockedScopeNote: 'This device keeps nothing: no saved key, and you stay signed in only until this browser closes — whatever “stay signed in on this device” was set to.',
+    lockedAction: 'Sign out everywhere, including here',
+    lockedConfirm: 'Sign every device out, this one included? Signing out cuts a device off from the server; it never reaches into the device itself. A device that was set to stay signed in loses its saved key at its next start and then needs your password AND your Secret Key — so have your Emergency Kit ready.',
+    lockedDone: 'Every device was signed out, this one included.',
+    lockedDoneStillHere: 'Every other device was signed out. This device could not be signed out — use “Sign out” below.',
+    lockedBack: 'I have my Secret Key after all',
+    lockedBackHint: 'Unlock here without saving anything on this device.',
     hint: 'Device names are stored scrambled and never reach the server, so they appear only once you unlock — on a locked screen you see dates instead. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server — if a device is really gone, use “sign out and remove this device’s saved key” instead, so your password alone no longer opens it there.',
   },
   profile: {
@@ -296,13 +314,9 @@ const en = {
     rememberMe: 'Stay signed in on this device',
     rememberMeHint:
       'On, this device opens straight to your memories next time; off, just your password — either way your Secret Key is never needed again here.',
-    lockedTitle: 'Signed in',
-    lockedNote: 'Your session is active. Unlocking your encrypted memories with your Secret Key arrives in a later change.',
     signOut: 'Sign out',
   },
   unlock: {
-    title: 'Unlock your memories',
-    note: 'Signed in. Enter your Secret Key from your Emergency Kit to open your encrypted memories on this device — it never leaves your device.',
     secretKey: 'Secret Key',
     secretKeyHint: 'First time on this device — paste or upload your Secret Key from your Emergency Kit. It never leaves this device and you won’t need it here again.',
     upload: 'Upload Emergency Kit',
@@ -310,12 +324,7 @@ const en = {
     scanHint: 'Point your camera at the QR code in your Emergency Kit.',
     scanError: 'Camera unavailable — upload your kit or paste your Secret Key.',
     kitUnreadable: 'Couldn’t read that kit. Try another file or paste your Secret Key.',
-    submit: 'Unlock',
-    submitting: 'Unlocking…',
     failed: 'Unlock failed. Check your password and Secret Key.',
-    unlockedTitle: 'Unlocked',
-    unlockedNote: 'Your memories are unlocked on this device for this session.',
-    trustFailed: 'Couldn’t trust this device — you unlocked fine, but you’ll need your Secret Key next time.',
     untrust: 'Untrust this device',
   },
   terms: {
@@ -894,9 +903,9 @@ const de: typeof en = {
     revoke: 'Dieses Gerät abmelden',
     revokeSelf: 'Hier abmelden',
     revokeOthers: 'Überall sonst abmelden',
-    revokeConfirm: 'Dieses Gerät abmelden? Es muss sich danach neu anmelden.',
+    revokeConfirm: 'Dieses Gerät abmelden? Es muss sich danach neu anmelden — und wenn es angemeldet bleiben sollte, verliert es beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key.',
     revokeSelfConfirm: 'Das ist das Gerät, das du gerade benutzt. Beim Abmelden landest du wieder auf der Anmeldeseite.',
-    revokeOthersConfirm: 'Alle anderen Geräte abmelden? Hier bleibst du angemeldet.',
+    revokeOthersConfirm: 'Alle anderen Geräte abmelden? Hier bleibst du angemeldet. Jedes davon, das angemeldet bleiben sollte, verliert beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key.',
     revoked: 'Das Gerät wurde abgemeldet.',
     revokedOthers: 'Alle anderen Geräte wurden abgemeldet.',
     revokeFailed: 'Die Sitzung konnte nicht beendet werden. Bitte versuche es erneut.',
@@ -921,6 +930,16 @@ const de: typeof en = {
     removeOtherKeysConfirm: 'Alle gespeicherten Schlüssel außer dem dieses Geräts entfernen? Jedes deiner anderen Geräte braucht danach wieder dein Passwort UND deinen Secret Key — halte dein Notfall-Kit bereit. Dieses Gerät behält seinen eigenen gespeicherten Schlüssel.',
     otherKeysRemoved: 'Alle gespeicherten Schlüssel außer dem dieses Geräts wurden entfernt.',
     savedKeysHint: 'Einen gespeicherten Schlüssel zu entfernen entzieht dem Gerät, was der Server für es aufbewahrt hat; auf das Gerät selbst greift es nie durch.',
+    lockedEntry: 'Ich habe meinen Secret Key nicht dabei',
+    lockedTitle: 'Angemeldet, aber gesperrt',
+    lockedNote: 'Du bist angemeldet, deine Erinnerungen bleiben hier aber gesperrt — zum Öffnen brauchst du deinen Secret Key. Eines geht auch ohne ihn: Du kannst von hier aus jedes Gerät abmelden, dieses eingeschlossen. Genau das tust du, wenn ein Gerät weg ist.',
+    lockedScopeNote: 'Dieses Gerät behält nichts: keinen gespeicherten Schlüssel, und angemeldet bleibst du nur, bis dieser Browser geschlossen wird — unabhängig davon, wie „Auf diesem Gerät angemeldet bleiben“ eingestellt war.',
+    lockedAction: 'Überall abmelden, auch hier',
+    lockedConfirm: 'Jedes Gerät abmelden, dieses eingeschlossen? Abmelden trennt ein Gerät vom Server; auf das Gerät selbst greift es nie durch. Ein Gerät, das angemeldet bleiben sollte, verliert beim nächsten Start seinen gespeicherten Schlüssel und braucht dann dein Passwort UND deinen Secret Key — halte also dein Notfall-Kit bereit.',
+    lockedDone: 'Alle Geräte wurden abgemeldet, dieses eingeschlossen.',
+    lockedDoneStillHere: 'Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — nutze unten „Abmelden“.',
+    lockedBack: 'Ich habe meinen Secret Key doch dabei',
+    lockedBackHint: 'Hier entsperren, ohne dass etwas auf diesem Gerät gespeichert wird.',
     hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie — sie erscheinen deshalb erst nach dem Entsperren, auf einem gesperrten Bildschirm siehst du stattdessen Daten. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server — ist ein Gerät wirklich weg, nimm stattdessen „Abmelden und gespeicherten Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet.',
   },
   profile: {
@@ -1067,13 +1086,9 @@ const de: typeof en = {
     rememberMe: 'Auf diesem Gerät angemeldet bleiben',
     rememberMeHint:
       'An öffnet dieses Gerät beim nächsten Mal direkt deine Erinnerungen; aus brauchst du nur dein Passwort — deinen Secret Key brauchst du hier so oder so nie wieder.',
-    lockedTitle: 'Angemeldet',
-    lockedNote: 'Deine Sitzung ist aktiv. Das Entsperren deiner verschlüsselten Erinnerungen mit deinem Secret Key kommt in einer späteren Änderung.',
     signOut: 'Abmelden',
   },
   unlock: {
-    title: 'Erinnerungen entsperren',
-    note: 'Angemeldet. Gib deinen Secret Key aus dem Notfall-Kit ein, um deine verschlüsselten Erinnerungen auf diesem Gerät zu öffnen — er verlässt dein Gerät nie.',
     secretKey: 'Secret Key',
     secretKeyHint: 'Erstes Mal auf diesem Gerät — füge deinen Secret Key aus dem Notfall-Kit ein oder lade ihn hoch. Er verlässt dieses Gerät nie und wird hier nicht wieder gebraucht.',
     upload: 'Notfall-Kit hochladen',
@@ -1081,12 +1096,7 @@ const de: typeof en = {
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',
     scanError: 'Kamera nicht verfügbar — lade dein Kit hoch oder füge deinen Secret Key ein.',
     kitUnreadable: 'Konnte das Kit nicht lesen. Versuche eine andere Datei oder füge deinen Secret Key ein.',
-    submit: 'Entsperren',
-    submitting: 'Wird entsperrt…',
     failed: 'Entsperren fehlgeschlagen. Prüfe Passwort und Secret Key.',
-    unlockedTitle: 'Entsperrt',
-    unlockedNote: 'Deine Erinnerungen sind auf diesem Gerät für diese Sitzung entsperrt.',
-    trustFailed: 'Konnte diesem Gerät nicht vertrauen — entsperrt hat es geklappt, aber beim nächsten Mal brauchst du deinen Secret Key.',
     untrust: 'Vertrauen aufheben',
   },
   terms: {

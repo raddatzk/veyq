@@ -1,0 +1,112 @@
+// @vitest-environment happy-dom
+// uc.account.sessions §E3 (web, cr-locked-sign-out-entry-point) — the locked state's own behaviour, as opposed
+// to how the sign-in form reaches it (LoginView.test.ts owns that half).
+//
+// What only this file can pin is the ORDER and the failure split. The revoke is the half that stops whoever is
+// holding the lost device, and it is the half that needs the session this screen is about to give up — so it
+// runs first, and it is recorded as a sequence rather than as two independent call assertions, because two
+// `toHaveBeenCalled` lines are satisfied just as well by the wrong order. A failed revoke must not cost the
+// session needed to retry it; a failed logout must be reported rather than swallowed, since the caller's own
+// sign-out button is the fallback the message points at.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+
+vi.mock('./sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
+vi.mock('../login/login', () => ({ logout: vi.fn() }))
+
+import LockedSignOut from './LockedSignOut.vue'
+import { revokeOtherSessionFamilies } from './sessions'
+import { logout } from '../login/login'
+import { i18n } from '../../../i18n'
+
+const stubs = {
+  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  Button: {
+    props: ['label', 'icon', 'severity', 'loading', 'disabled'],
+    // `emits` is load-bearing: without it Vue passes the parent's @click through as a native fallthrough
+    // listener too, so one trigger fires the handler twice and every call-count assertion reads double.
+    emits: ['click'],
+    template: '<button :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
+  },
+}
+
+const mountLocked = () => mount(LockedSignOut, { global: { plugins: [i18n], stubs } })
+
+const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+
+const pressAction = async (w: VueWrapper) => {
+  await buttonLabelled(w, i18n.global.t('sessions.lockedAction'))!.trigger('click')
+  await flushPromises()
+}
+
+describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.global.locale.value = 'en'
+    vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
+    vi.mocked(logout).mockResolvedValue(undefined)
+    window.confirm = vi.fn(() => true)
+  })
+
+  it('cuts the other sessions off FIRST and only then signs this device out', async () => {
+    const order: string[] = []
+    vi.mocked(revokeOtherSessionFamilies).mockImplementation(async () => void order.push('revoke'))
+    vi.mocked(logout).mockImplementation(async () => void order.push('logout'))
+
+    const wrapper = mountLocked()
+    await pressAction(wrapper)
+
+    // The sequence IS the assertion: logout drops the tokens the revoke needs, so the reverse order would leave
+    // the lost device signed in while this one is the only thing that got cut off.
+    expect(order).toEqual(['revoke', 'logout'])
+    expect(wrapper.emitted('done')).toEqual([[true]])
+  })
+
+  it('never signs this device out when the revoke failed — the session to retry with survives', async () => {
+    vi.mocked(revokeOtherSessionFamilies).mockRejectedValue(new Error('offline'))
+    const wrapper = mountLocked()
+    await pressAction(wrapper)
+
+    expect(logout).not.toHaveBeenCalled()
+    expect(wrapper.emitted('done')).toBeUndefined()
+    expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
+  })
+
+  it('reports a failed sign-out instead of claiming everything was cut off', async () => {
+    vi.mocked(logout).mockRejectedValue(new Error('offline'))
+    const wrapper = mountLocked()
+    await pressAction(wrapper)
+
+    // The other devices ARE gone, so this is not a failure to report as one — it is a half-success, and the
+    // caller needs the boolean to decide whether to keep its sign-out button standing.
+    expect(revokeOtherSessionFamilies).toHaveBeenCalledTimes(1)
+    expect(wrapper.emitted('done')).toEqual([[false]])
+  })
+
+  it('does nothing when the confirmation is declined', async () => {
+    window.confirm = vi.fn(() => false)
+    const wrapper = mountLocked()
+    await pressAction(wrapper)
+
+    expect(revokeOtherSessionFamilies).not.toHaveBeenCalled()
+    expect(logout).not.toHaveBeenCalled()
+  })
+
+  it('offers the way back to unlocking, and touches no session doing it', async () => {
+    const wrapper = mountLocked()
+    await buttonLabelled(wrapper, i18n.global.t('sessions.lockedBack'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.emitted('unlock')).toHaveLength(1)
+    expect(revokeOtherSessionFamilies).not.toHaveBeenCalled()
+    expect(logout).not.toHaveBeenCalled()
+  })
+
+  it('says this device keeps nothing, because the toggle that says otherwise is on the form behind it', async () => {
+    // Decision 3: the entry forces SESSION scope and enrols no wrap regardless of "stay signed in on this
+    // device". That control is visible on the form this screen was reached from, so its copy must be corrected
+    // here or it silently lies.
+    const wrapper = mountLocked()
+    expect(wrapper.text()).toContain(i18n.global.t('sessions.lockedScopeNote'))
+  })
+})
