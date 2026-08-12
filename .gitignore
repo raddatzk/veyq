@@ -279,3 +279,8 @@ gradle-app.setting
 # volume; a local dev/quarkusDev run drops one here.
 config-secret.key
 **/config-secret.key
+
+# graphify's build output (knowledge graph, report, caches). Derived from the tree on demand and rebuilt by
+# `/graphify --update`, so it is never a source of truth — and it embeds absolute local paths. `_SKIP_DIRS` in
+# graphify's own detector already ignores it, so the graph never ingests itself; this only keeps it out of git.
+graphify-out/
