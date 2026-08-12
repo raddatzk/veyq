@@ -9,7 +9,11 @@
 //   - a LOCKED vault changes nothing: the list renders and every revoke stays enabled (E3/A4). That is the trap
 //     — a view that disables the action it exists to offer — so it is asserted against an unlocked control;
 //   - names come from the sealed device register and are layered on AFTER the list, never awaited by it: a
-//     register that is empty, unreadable or unwritable leaves the list rendering and every revoke working (E4).
+//     register that is empty, unreadable or unwritable leaves the list rendering and every revoke working (E4);
+//   - the escalation (ADR 0058) cuts the family FIRST and the wrap second, is offered only where the register
+//     names a served wrap for that device, and on a half-success says exactly what did and did not happen (E5);
+//   - § Devices with a saved key is the retry surface for that half-success, and its bulk action is defined by
+//     EXCLUDING this device's own saved key — never by a claim about the others (ADR 0058 §5).
 //
 // The register is mocked to a NAMELESS default on purpose. That is the §E4 state, and it is the state the four
 // original behaviours above were written against — so they keep asserting exactly what they always did, and the
@@ -25,7 +29,7 @@ vi.mock('./sessions', () => ({
 }))
 vi.mock('../login/signOut', () => ({ signOut: vi.fn() }))
 vi.mock('../deviceRegister', () => ({
-  deviceNames: vi.fn(),
+  readRegisterView: vi.fn(),
   reconcileWithSessions: vi.fn(),
   renameDeviceOfFamily: vi.fn(),
 }))
@@ -33,11 +37,15 @@ vi.mock('../deviceIdentity', () => ({
   deviceId: () => 'this-device',
   guessDeviceLabel: () => 'Firefox · macOS',
 }))
+vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
+vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
 
 import SessionsPanel from './SessionsPanel.vue'
 import { listSessionFamilies, revokeSessionFamily, revokeOtherSessionFamilies } from './sessions'
 import { signOut } from '../login/signOut'
-import { deviceNames, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
+import { readRegisterView, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
+import { listSavedKeyWraps, removeSavedKey } from '../savedKeys'
+import { localWrapId } from '../localWrap'
 import { vaultState } from '../../../app/vault'
 import { i18n } from '../../../i18n'
 
@@ -70,6 +78,14 @@ async function mountPanel(): Promise<VueWrapper> {
 /** The per-row revoke buttons, in row order. */
 const rowButtons = (w: VueWrapper) => w.findAll('.session-row button')
 
+const EMPTY_VIEW = { names: {}, wrapsOfFamily: {}, savedKeyDevices: [] }
+
+/** The escalation button of a row, found by its aria-label rather than by position. */
+const escalateButton = (w: VueWrapper, row: number) =>
+  w.findAll('.session-row')[row].findAll('button').find((b) => b.attributes('aria-label') === i18n.global.t('sessions.escalate'))
+
+const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+
 describe('SessionsPanel (uc.account.sessions, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -78,9 +94,12 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT, OTHER])
     vi.mocked(revokeSessionFamily).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
-    vi.mocked(deviceNames).mockResolvedValue({})
+    vi.mocked(readRegisterView).mockResolvedValue(EMPTY_VIEW)
     vi.mocked(reconcileWithSessions).mockResolvedValue(false)
     vi.mocked(renameDeviceOfFamily).mockResolvedValue(undefined)
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([])
+    vi.mocked(removeSavedKey).mockResolvedValue(undefined)
+    vi.mocked(localWrapId).mockResolvedValue(null)
     window.confirm = vi.fn(() => true)
   })
 
@@ -194,7 +213,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   // --- names from the sealed device register (en.account.device-register) ---
 
   it('labels a row the register can name, and leaves the rest on the anonymous fallback (E4)', async () => {
-    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    vi.mocked(readRegisterView).mockResolvedValue({ ...EMPTY_VIEW, names: { [OTHER.id]: 'Arbeitslaptop' } })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain('Arbeitslaptop')
     // The control: the family the register does NOT know still renders, under its fallback heading. Without it,
@@ -207,6 +226,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await mountPanel()
     expect(reconcileWithSessions).toHaveBeenCalledWith(
       [CURRENT.id, OTHER.id],
+      [], // the served wrap list — an ARRAY because the fetch succeeded; see the null case below
       'this-device',
       'Firefox · macOS',
       CURRENT.id, // from the SERVER's marker — not guessed, and the path a cold boot restore depends on
@@ -217,7 +237,8 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vaultState.unlocked = false
     const wrapper = await mountPanel()
     expect(reconcileWithSessions).not.toHaveBeenCalled()
-    expect(deviceNames).not.toHaveBeenCalled()
+    expect(readRegisterView).not.toHaveBeenCalled()
+    expect(listSavedKeyWraps).not.toHaveBeenCalled()
     // …and the list is unharmed by that: still rendered, still revocable. This is the whole locked contract.
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
     expect(rowButtons(wrapper).every((b) => !b.attributes('disabled'))).toBe(true)
@@ -225,7 +246,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
 
   it('renders the list and keeps revoking when the register throws (E4)', async () => {
     vi.mocked(reconcileWithSessions).mockRejectedValue(new Error('register unreachable'))
-    vi.mocked(deviceNames).mockRejectedValue(new Error('register unreachable'))
+    vi.mocked(readRegisterView).mockRejectedValue(new Error('register unreachable'))
     const wrapper = await mountPanel()
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
     expect(wrapper.text()).not.toContain(i18n.global.t('sessions.loadFailed'))
@@ -235,7 +256,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   })
 
   it('renames the DEVICE behind a row, and only offers it where there is a device to rename', async () => {
-    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    vi.mocked(readRegisterView).mockResolvedValue({ ...EMPTY_VIEW, names: { [OTHER.id]: 'Arbeitslaptop' } })
     const wrapper = await mountPanel()
     const rows = wrapper.findAll('.session-row')
     // The named row carries rename + revoke; the unnamed one carries revoke alone — a missing name never costs
@@ -248,7 +269,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const input = rows[1].find('input')
     expect((input.element as HTMLInputElement).value).toBe('Arbeitslaptop')
     await input.setValue('Kevins Laptop')
-    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Kevins Laptop' })
+    vi.mocked(readRegisterView).mockResolvedValue({ ...EMPTY_VIEW, names: { [OTHER.id]: 'Kevins Laptop' } })
     await rows[1].findAll('button')[0].trigger('click') // Save
     await flushPromises()
     expect(renameDeviceOfFamily).toHaveBeenCalledWith(OTHER.id, 'Kevins Laptop')
@@ -256,7 +277,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   })
 
   it('does not write an empty rename', async () => {
-    vi.mocked(deviceNames).mockResolvedValue({ [OTHER.id]: 'Arbeitslaptop' })
+    vi.mocked(readRegisterView).mockResolvedValue({ ...EMPTY_VIEW, names: { [OTHER.id]: 'Arbeitslaptop' } })
     const wrapper = await mountPanel()
     const row = wrapper.findAll('.session-row')[1]
     await row.findAll('button')[0].trigger('click')
@@ -265,5 +286,175 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await row.findAll('button')[0].trigger('click')
     await flushPromises()
     expect(renameDeviceOfFamily).not.toHaveBeenCalled()
+  })
+
+  // --- the escalation: sign out AND remove that device's saved key (ADR 0058) ---
+
+  /** A register that names OTHER's device and joins it to a served wrap `w-other`. */
+  function withEscalatableOther() {
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-other', method: 'DEVICE' }])
+    vi.mocked(readRegisterView).mockResolvedValue({
+      names: { [OTHER.id]: 'Arbeitslaptop' },
+      wrapsOfFamily: { [OTHER.id]: ['w-other'] },
+      savedKeyDevices: [],
+    })
+  }
+
+  it('cuts the session first and the wrap second — the urgent half is never blocked by the other', async () => {
+    withEscalatableOther()
+    const order: string[] = []
+    vi.mocked(revokeSessionFamily).mockImplementation(async () => void order.push('family'))
+    vi.mocked(removeSavedKey).mockImplementation(async () => void order.push('wrap'))
+
+    const wrapper = await mountPanel()
+    await escalateButton(wrapper, 1)!.trigger('click')
+    await flushPromises()
+
+    expect(order).toEqual(['family', 'wrap'])
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+    expect(removeSavedKey).toHaveBeenCalledWith('w-other')
+  })
+
+  it('never touches the wrap when the revoke failed — the reverse half-failure cannot occur', async () => {
+    withEscalatableOther()
+    vi.mocked(revokeSessionFamily).mockRejectedValue(new Error('offline'))
+    const wrapper = await mountPanel()
+    await escalateButton(wrapper, 1)!.trigger('click')
+    await flushPromises()
+
+    expect(removeSavedKey).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
+  })
+
+  it('says exactly what did and did not happen when only the wrap deletion fails (E5)', async () => {
+    withEscalatableOther()
+    vi.mocked(removeSavedKey).mockRejectedValue(new Error('boom'))
+    const wrapper = await mountPanel()
+    await escalateButton(wrapper, 1)!.trigger('click')
+    await flushPromises()
+
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+    // The trap is a message that reads as either total success or total failure. The half-success has to name
+    // both halves, because the user's next move (retry below) depends on knowing which one is outstanding.
+    expect(wrapper.text()).toContain(i18n.global.t('sessions.escalateHalfFailed'))
+  })
+
+  it('offers the escalation only where the register names a served wrap for that device', async () => {
+    withEscalatableOther()
+    const wrapper = await mountPanel()
+    // The row the register can escalate has it…
+    expect(escalateButton(wrapper, 1)).toBeDefined()
+    // …and the row it cannot does not — while keeping its plain revoke. A missing join is a naming gap (§E4),
+    // never a reason to hide the action this screen exists for.
+    expect(escalateButton(wrapper, 0)).toBeUndefined()
+    expect(rowButtons(wrapper).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('does nothing when the escalation confirmation is declined', async () => {
+    withEscalatableOther()
+    window.confirm = vi.fn(() => false)
+    const wrapper = await mountPanel()
+    await escalateButton(wrapper, 1)!.trigger('click')
+    await flushPromises()
+    expect(revokeSessionFamily).not.toHaveBeenCalled()
+    expect(removeSavedKey).not.toHaveBeenCalled()
+  })
+
+  // --- § Devices with a saved key, and the exclusion-shaped bulk action (ADR 0058 §5) ---
+
+  it('lists a signed-out device that still holds a saved key, and removes it from there', async () => {
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-lost', method: 'DEVICE_KEY' }])
+    vi.mocked(readRegisterView).mockResolvedValue({
+      ...EMPTY_VIEW,
+      savedKeyDevices: [{ deviceId: 'lost', label: 'Lost laptop', wrapIds: ['w-lost'] }],
+    })
+    const wrapper = await mountPanel()
+
+    const rows = wrapper.findAll('.saved-key-row')
+    expect(rows).toHaveLength(1)
+    expect(rows[0].text()).toContain('Lost laptop')
+
+    await rows[0].find('button').trigger('click')
+    await flushPromises()
+    expect(removeSavedKey).toHaveBeenCalledWith('w-lost')
+  })
+
+  it('removes every saved key EXCEPT this device\'s own — the caller never breaks itself', async () => {
+    vi.mocked(localWrapId).mockResolvedValue('w-mine')
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([
+      { id: 'w-mine', method: 'DEVICE' },
+      { id: 'w-a', method: 'DEVICE' },
+      { id: 'w-b', method: 'DEVICE_KEY' },
+    ])
+    const wrapper = await mountPanel()
+    await buttonLabelled(wrapper, i18n.global.t('sessions.removeOtherKeys'))!.trigger('click')
+    await flushPromises()
+
+    expect(removeSavedKey).toHaveBeenCalledWith('w-a')
+    expect(removeSavedKey).toHaveBeenCalledWith('w-b')
+    // The whole point of the exclusion shape: this device keeps its own saved key.
+    expect(removeSavedKey).not.toHaveBeenCalledWith('w-mine')
+    expect(removeSavedKey).toHaveBeenCalledTimes(2)
+  })
+
+  it('a caller holding no saved key removes all of them, and is unharmed by that', async () => {
+    vi.mocked(localWrapId).mockResolvedValue(null)
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([
+      { id: 'w-a', method: 'DEVICE' },
+      { id: 'w-b', method: 'DEVICE_KEY' },
+    ])
+    const wrapper = await mountPanel()
+    await buttonLabelled(wrapper, i18n.global.t('sessions.removeOtherKeys'))!.trigger('click')
+    await flushPromises()
+
+    // Excluding nothing is correct — a device with no saved key has none to spare — and it is not a self-inflicted
+    // wound: this device unlocks from the floor either way, and its session is untouched.
+    expect(removeSavedKey).toHaveBeenCalledTimes(2)
+    expect(signOut).not.toHaveBeenCalled()
+    expect(revokeSessionFamily).not.toHaveBeenCalled()
+  })
+
+  it('hides the whole section when the only saved key is this device\'s own', async () => {
+    vi.mocked(localWrapId).mockResolvedValue('w-mine')
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-mine', method: 'DEVICE' }])
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    // The live control on the same predicate: one foreign saved key and the section IS there.
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-mine', method: 'DEVICE' }, { id: 'w-a', method: 'DEVICE' }])
+    const withForeign = await mountPanel()
+    expect(withForeign.text()).toContain(i18n.global.t('sessions.savedKeysTitle'))
+  })
+
+  it('a locked panel offers neither wrap action, and still lists and revokes', async () => {
+    // E3: both joins live in the Master-Key-sealed register, so a locked caller never gets them. The locked
+    // ceiling does not rise with this increment — the escalation is absent there by construction.
+    vaultState.unlocked = false
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-a', method: 'DEVICE' }])
+    const wrapper = await mountPanel()
+
+    expect(escalateButton(wrapper, 1)).toBeUndefined()
+    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
+    await rowButtons(wrapper)[1].trigger('click')
+    await flushPromises()
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+  })
+
+  it('offers nothing wrap-shaped when the served list could not be fetched — and says so by passing null', async () => {
+    // `null` is "we do not hold that list", which is NOT "the server serves none". Passing [] here would prune
+    // every join row in the register on a transport error.
+    vi.mocked(listSavedKeyWraps).mockRejectedValue(new Error('offline'))
+    const wrapper = await mountPanel()
+
+    expect(reconcileWithSessions).toHaveBeenCalledWith(
+      [CURRENT.id, OTHER.id],
+      null,
+      'this-device',
+      'Firefox · macOS',
+      CURRENT.id,
+    )
+    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    // …and the naming half is untouched by it: the list still renders and still revokes.
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
   })
 })

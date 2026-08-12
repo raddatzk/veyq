@@ -46,7 +46,9 @@ describe('trustThisDevice / untrustThisDevice', () => {
     const add = vi.fn().mockResolvedValue({ id: 'wrap-123' })
     mockWrapsApi(add, vi.fn())
 
-    await trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))
+    // The returned id is the ONLY moment the new wrap id exists anywhere (every enrolment mints a fresh one,
+    // ADR 0005 §9). Its caller records the device↔wrap join from it; this module stays ignorant of the register.
+    expect(await trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))).toBe('wrap-123')
 
     expect(add).toHaveBeenCalledOnce()
     const req = add.mock.calls[0][0].addWrapRequest
@@ -62,7 +64,7 @@ describe('trustThisDevice / untrustThisDevice', () => {
     const add = vi.fn().mockResolvedValue({ id: 'new-1' })
     mockWrapsApi(add, del)
 
-    await trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))
+    expect(await trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))).toBe('new-1')
 
     expect(del).toHaveBeenCalledWith({ id: 'old-1' })
     expect(device.clearTrust).toHaveBeenCalledWith(EMAIL)

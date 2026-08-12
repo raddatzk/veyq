@@ -64,6 +64,16 @@ under-count. Three reasons the number itself does not belong in the file:
   prose. cr-0171 could not under-deliver on 235 fields: the validator stays red while one is missing. Prefer
   that over a number every time (see *promote one-shot proofs*, below).
 
+**A locator whose Definition of done is "the same before and after" must ship in a form that COMPARES.** Most
+locators answer *"where are the sites?"* and are read once. A few are different: the DoD makes the *set itself*
+the condition — cr-device-wrap-join-and-remote-cutoff's anti-withholding sweep, whose done-when is *"the list is
+the same before and after"*. Written as a bare `grep -rni`, it returns 53 lines across 23 files, and the check
+degrades into comparing two screenfuls by eye — so it gets skipped, or worse, eyeballed and declared equal.
+Ship that kind as a **count plus the file set**, or as the narrower predicate the condition is actually about
+(there: the calls that delete local key material, which a `git diff | grep` answers in one line and which grew
+by exactly zero). The tell is in the DoD's own wording: *"unchanged"*, *"the same as"*, *"no new"* — a condition
+about a **set** needs a command that produces a comparable set, not a readable one.
+
 **Find the sites from two angles keyed on different things — the easiest command encodes what you already
 believe.** The locator you reach for first is a paraphrase of your own model of the code, so it fails exactly
 where that model is wrong: silently, and with a plausible number. Ask a second time on a **different key** — a
@@ -305,6 +315,14 @@ guard must also reject shapes that never occurred here, or when the case belongs
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
 harness that greps for a failing test name then reads *no match* as **green** reports the exact false negative
+**The same green-never-earned reaches a test through its own fixture, with no injection involved.** A test that
+asserts *"X survived a round-trip"* proves nothing if its setup hands X over a second time on the way through.
+cr-device-wrap-join-and-remote-cutoff's first round-trip case wrote the register twice and re-supplied the same
+wrap id on the second write, so it passed with the map dropped from `sealRegister` **or** from `unsealRegister` —
+the assertion was reading its own fixture back. The rule generalises past round-trips: **write the case so the
+step under test supplies neither of the things it asserts**, and bite it once per direction the property can
+fail, because a survival claim with two failure modes needs two bites, not one.
+
 the guard exists to prevent (cr-ratelimit-posture's first sweep-bite did this: the injection had swallowed two
 neighbouring methods, nothing compiled, and the run was scored as "the guard does not bite"). Two corollaries:
 read the full build output, not a filtered line; and for a **surgical** injection anchor on the target and cut

@@ -87,9 +87,17 @@ or its server wrap is unusable (E1), the client **falls back to the Secret-Key f
 
 Delete **this device's** DEVICE wrap server-side (by its stored id) **and** delete the IndexedDB entry. The
 account falls back to the PASSWORD floor on this device; other trusted devices keep their own wraps. Removing
-a trust removes **one wrap**; content is never re-encrypted. The endpoint deletes **only DEVICE wraps**
-(whitelist): the PASSWORD floor *and* the RECOVERY/PASSKEY methods are out of its reach, so this device-trust
-control can never strip the 2SKD floor or a recovery path.
+a trust removes **one wrap**; content is never re-encrypted. The endpoint deletes **only device-local
+convenience wraps** (whitelist: DEVICE and DEVICE_KEY): the PASSWORD floor *and* the RECOVERY/PASSKEY methods
+are out of its reach, so this control can never strip the 2SKD floor or a recovery path.
+
+**A device's trust can also be removed from another device.** The wrap endpoint is account-scoped, not
+device-scoped, so the same deletion is what
+[uc.account.sessions](uc.account.sessions.md)'s *"sign out and remove this device's saved key"* performs — for
+a device that is lost, where nobody can press "untrust" on the device itself. What reaches the removed device
+is nothing: its IndexedDB entry survives as an unusable handle and it falls back to the Secret-Key floor, which
+is E1 below reached deliberately instead of by accident. Whether a wrap may be removed remotely at all, and why
+a plain revoke does *not* do it, is [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md).
 
 ## Alternate / exception flows
 

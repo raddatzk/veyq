@@ -13,7 +13,7 @@ vi.mock('../../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 
-import { enrolDeviceKey, restoreDeviceKey, clearDeviceKey, isRemembered } from './deviceKeyWrap'
+import { enrolDeviceKey, restoreDeviceKey, clearDeviceKey, isRemembered, rememberedWrapId } from './deviceKeyWrap'
 import { accountWrapsApi } from '../../../api/client'
 import type { AccountKeyMaterial } from '../../../api/generated/account'
 
@@ -59,15 +59,32 @@ describe('deviceKeyWrap (web remember-me, cr-0054)', () => {
     expect(restored?.masterKey).toEqual(masterKey())
   })
 
+  // The returned id is the ONLY moment the new wrap id exists anywhere (ADR 0005 §9 mints a fresh one on every
+  // enrolment). Its caller records the device↔wrap join from it; this module stays ignorant of the register.
+  it('returns the new wrap id, and the local record answers with it', async () => {
+    const add = vi.fn().mockResolvedValue({ id: 'wrap-1' })
+    mockWrapsApi(add, vi.fn())
+
+    expect(await enrolDeviceKey('User@Example.com', masterKey())).toBe('wrap-1')
+    expect(await rememberedWrapId('user@example.com')).toBe('wrap-1')
+    // One remembered account per browser profile — a different email is not this device's wrap.
+    expect(await rememberedWrapId('someone@else.com')).toBeNull()
+  })
+
+  it('a device that was never enrolled holds no wrap id', async () => {
+    expect(await rememberedWrapId('a@b.com')).toBeNull()
+  })
+
   it('re-enrol replaces: uploads the new wrap, then deletes the prior one', async () => {
     const add1 = vi.fn().mockResolvedValue({ id: 'old-1' })
     const del = vi.fn().mockResolvedValue(undefined)
     mockWrapsApi(add1, del)
-    await enrolDeviceKey('a@b.com', masterKey())
+    expect(await enrolDeviceKey('a@b.com', masterKey())).toBe('old-1')
 
     const add2 = vi.fn().mockResolvedValue({ id: 'new-1' })
     mockWrapsApi(add2, del)
-    await enrolDeviceKey('a@b.com', masterKey())
+    expect(await enrolDeviceKey('a@b.com', masterKey())).toBe('new-1')
+    expect(await rememberedWrapId('a@b.com')).toBe('new-1') // the join follows the new id
 
     expect(del).toHaveBeenCalledWith({ id: 'old-1' }) // the prior DEVICE_KEY wrap is removed first
     expect(add2).toHaveBeenCalledOnce()

@@ -44,8 +44,12 @@ function loadRecord(): Promise<RememberRecord | null> {
  * intact rather than the device with no remember-me wrap. On a local-save failure the just-uploaded wrap is
  * rolled back so it isn't an orphan. (The Secret Key is never involved — the caller holds the unlocked Master
  * Key.)
+ *
+ * **Returns the new wrap id**, because this call is the only moment it exists anywhere: every enrolment mints a
+ * fresh one (ADR 0005 §9). The caller records the device↔wrap join in the sealed device register — this module
+ * deliberately knows nothing about the register, which is what keeps the register off every unlock path.
  */
-export async function enrolDeviceKey(email: string, masterKey: Uint8Array): Promise<void> {
+export async function enrolDeviceKey(email: string, masterKey: Uint8Array): Promise<string> {
   const prior = await loadRecord()
 
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
@@ -84,6 +88,18 @@ export async function enrolDeviceKey(email: string, masterKey: Uint8Array): Prom
       /* best-effort */
     }
   }
+  return result.id
+}
+
+/**
+ * The wrap id this device holds for `email` under remember-me, or null. Read from the **local** record, which is
+ * what makes it a fact this client can verify on its own — the register is never consulted for it, and the
+ * server's list is never treated as authority over it (ADR 0058 §5).
+ */
+export async function rememberedWrapId(email: string): Promise<string | null> {
+  const record = await loadRecord()
+  if (!record || record.email !== email.trim().toLowerCase()) return null
+  return record.wrapId
 }
 
 /**

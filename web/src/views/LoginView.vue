@@ -19,6 +19,8 @@ import { ACCOUNT_DEVICE_TRUST } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { importKitFromFile, type KitData } from '../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
+import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
+import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { vaultState, masterKey } from '../app/vault'
 import { takeAuthPrefill } from '../app/authPrefill'
 import { takeRoute } from '../app/pendingRoute'
@@ -70,6 +72,16 @@ async function resolveDeviceState() {
   needsSecretKey.value = email.value ? !(await isTrusted(email.value).catch(() => false)) : true
 }
 
+/** Write moment 2 of the device register (en.account.device-register): record the device↔wrap join at the ONE
+ *  moment the new wrap id exists — every enrolment mints a fresh one (ADR 0005 §9). Best-effort and silent: a
+ *  join that does not land leaves the device un-escalatable in the sessions view (§E4) and is re-asserted from
+ *  this device's local record at the next unlock (write moment 1). The enrolment modules stay ignorant of the
+ *  register — they hand the id back, and this caller records it. */
+async function noteWrapOfThisDevice(wrapId: string | null) {
+  if (!wrapId) return
+  await rememberThisDeviceWrap(deviceId(), guessDeviceLabel(t('sessions.unknownDevice')), wrapId).catch(() => {})
+}
+
 /** Auto-enrol this device's convenience tier from the in-memory Master Key, per "remember me" (§18, §22).
  *  - **on** (persistent): a password-less DEVICE_KEY wrap (IndexedDB) — opens straight in across a restart.
  *  - **off** (session-scoped): the Master Key in `sessionStorage` (this browser session) PLUS a password DEVICE
@@ -83,13 +95,13 @@ async function enrolConvenienceWrap() {
     await clearSessionVault() // drop the session-scoped vault — this device opts into persistence
     if (rememberSupported) {
       await untrustThisDevice(email.value).catch(() => {}) // drop a prior password DEVICE wrap
-      await enrolDeviceKey(email.value, mk).catch(() => {})
+      await noteWrapOfThisDevice(await enrolDeviceKey(email.value, mk).catch(() => null))
     }
   } else {
     await cacheSessionVault(email.value, mk) // survive reloads this browser session
     if (rememberSupported) {
       await clearDeviceKey().catch(() => {}) // drop a prior password-less DEVICE_KEY wrap
-      await trustThisDevice(email.value, password.value, mk).catch(() => {})
+      await noteWrapOfThisDevice(await trustThisDevice(email.value, password.value, mk).catch(() => null))
     }
   }
 }

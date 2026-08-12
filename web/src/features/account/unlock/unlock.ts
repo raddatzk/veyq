@@ -15,6 +15,8 @@ import { restoreDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { loadSessionVault, clearSessionVault } from '../rememberMe/sessionVault'
 import { rememberThisDevice } from '../deviceRegister'
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
+import { localWrapId } from '../localWrap'
+import { account } from '../../../app/account'
 import { session } from '../../../app/session'
 import { i18n } from '../../../i18n'
 
@@ -32,8 +34,15 @@ function openVault(material: AccountKeyMaterial, masterKey: Uint8Array): void {
 }
 
 /**
- * Write moment 1 of the device register (en.account.device-register): record this device and the family the
- * preceding login created, so the sessions view can name it.
+ * Write moment 1 of the device register (en.account.device-register): record this device, the family the
+ * preceding login created, and the convenience wrap this device already holds — so the sessions view can name
+ * it and, for a device that is not this one, offer ADR 0058's escalation.
+ *
+ * The wrap id is read from this device's **local** trust/remember record, never from the register and never
+ * from the server's list. Re-asserting it here on every unlock is what makes the join self-healing: a row lost
+ * to a prune, a failed write, or an operator that briefly withheld the wrap comes back on the next unlock. On a
+ * first sign-in there is no local record yet — the wrap is enrolled moments later, and write moment 2 records
+ * that id at the one instant it exists.
  *
  * Hooked **here** because [openVault] is the one choke point every unlock path passes through — floor, trusted
  * device, remembered device and boot restore alike — and because the register is Master-Key-sealed, so this is
@@ -49,13 +58,18 @@ function openVault(material: AccountKeyMaterial, masterKey: Uint8Array): void {
  * current-marker.
  */
 function noteThisDevice(): void {
-  void rememberThisDevice(
-    deviceId(),
-    guessDeviceLabel(i18n.global.t('sessions.unknownDevice')),
-    session.familyId,
-  ).catch(() => {
-    /* best-effort: an unnamed row is a supported state, not an error to surface */
-  })
+  void localWrapId(account.email)
+    .then((wrapId) =>
+      rememberThisDevice(
+        deviceId(),
+        guessDeviceLabel(i18n.global.t('sessions.unknownDevice')),
+        session.familyId,
+        wrapId,
+      ),
+    )
+    .catch(() => {
+      /* best-effort: an unnamed row is a supported state, not an error to surface */
+    })
 }
 
 /**

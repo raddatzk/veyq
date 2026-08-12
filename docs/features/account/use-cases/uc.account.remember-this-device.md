@@ -94,7 +94,19 @@ sequenceDiagram
 - **Operator-blind, unchanged.** The server holds only ciphertext wraps + an opaque cookie token; no KEK,
   Master Key, Secret Key, or password is ever server-side (ADR 0005 §12). The relaxation is **purely local**.
 - **Supersedes cr-0052's local cache.** The remember-me vault is the **server-stored** password-less wrap (+
-  the device key held locally), not the cr-0052 IndexedDB Master-Key blob — portable and server-revocable.
+  the device key held locally), not the cr-0052 IndexedDB Master-Key blob. It is **server-revocable** —
+  including from another device, which is what makes a lost remembered device recoverable at all. It is **not
+  portable**, and never was: the wrap is ciphertext that only this device's local key `K` opens, so it travels
+  nowhere and carrying it to another device gains that device nothing.
+
+## Removing it
+
+Untrusting from this device's own settings drops both local tiers and deletes the server wrap; removing it for
+a device that is **not** in hand — a lost phone — is the escalation beside that device's session row in
+[uc.account.sessions](uc.account.sessions.md), and the rule that a plain sign-out does *not* do it is
+[ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md). Both are the same account-scoped wrap
+deletion; only the surface differs. For a password-less wrap the consequence is the sharpest of any tier: the
+device goes from opening with no credentials at all to needing the password **and** the Secret Key.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -120,4 +132,5 @@ bleibt nichts zurück.
   one screen, one toggle, auto-enrol, the password-less wrap method, no public-device level),
   [ADR 0004](../../../decisions/0004-session-tokens.md) (the refresh-token cookie), [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) (Model B auth).
 - Related use-cases: [unlock](uc.account.unlock.md) (the floor — the first-sign-in path),
-  [trust-device](uc.account.trust-device.md) (the DEVICE wrap).
+  [trust-device](uc.account.trust-device.md) (the DEVICE wrap),
+  [sessions](uc.account.sessions.md) (removing this wrap for a device that is not in hand).

@@ -8,8 +8,10 @@
   control ([ADR 0004](../../../decisions/0004-session-tokens.md)).
 - **Postconditions (success):** The chosen session families are `REVOKED`; their refresh tokens are dead, so
   the devices holding them fall back to a full login. The caller's own session is untouched unless the caller
-  revoked it explicitly. No content key, and no wrap, is affected — a revoked session takes away *access to
-  the server*, never the ability to open already-held ciphertext.
+  revoked it explicitly. No content key, and **no wrap, is affected by a revoke** — a revoked session takes away
+  *access to the server*, never the ability to open already-held ciphertext. Removing a device's wrap is a
+  separate action of this use-case, and where it ran, that device's convenience wrap is gone server-side and it
+  is back to needing the password **and** the Secret Key.
 
 ## Two layers, one list
 
@@ -18,7 +20,8 @@ use-case work on a locked device:
 
 - **The set** — which families exist, when each was created, when each was last used, which one is *you* —
   comes from the server and needs **only a session**. So does revoking.
-- **The names** — "Kevin's iPhone" — come from the client's **Master-Key-sealed device register**
+- **The names** — "Kevin's iPhone" — and with them the device↔wrap join that the "remove this device's saved
+  key" escalation needs, come from the client's **Master-Key-sealed device register**
   ([en.account.device-register](../enablers/en.account.device-register.md)) and therefore need an **unlocked**
   vault ([en.account.identity-pinning](../enablers/en.account.identity-pinning.md) is the same shape: one
   sealed, synced blob the server cannot read).
@@ -72,15 +75,53 @@ so nothing new has to be tracked to make revoking reliable.
 
 ## What a revoked session can still do — and what it cannot
 
-Revoking a session removes **server access**, not **key material**. A device whose session was revoked keeps
-whatever convenience wrap it enrolled ([uc.account.trust-device](uc.account.trust-device.md),
+Revoking a session removes **server access**, not **key material**, and it does so *on purpose*
+([ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md)). A device whose session was revoked
+keeps whatever convenience wrap it enrolled ([uc.account.trust-device](uc.account.trust-device.md),
 [uc.account.remember-this-device](uc.account.remember-this-device.md)) — auth and unlock are separate layers.
 It can therefore still open content it already holds locally, and it can sign in again with the credentials it
-has. **Cutting a device off completely — session *and* wrap — is a further step** that needs the register's
-device↔family join, and it is out of scope here (below).
+has: **on a trusted device that means the password alone reopens the vault, with no Secret Key.**
+
+**Cutting a device off completely is therefore a second, separately named action**, offered beside the revoke
+wherever the register can name that device's wrap: *sign out **and** remove this device's saved key.* What it
+buys is exact — it restores the **Secret-Key floor** for that one device, so the password stops being enough
+there. It is deliberately not a default and not a checkbox: it costs the person holding that device their
+Emergency Kit, which is right for a lost laptop and wrong for tidying up an old login.
+
+**It is offered on every row but your own.** Your own device's equivalent is the untrust/forget on the device
+panel, which removes the local key *as well as* the server wrap; the remote-only half here would leave this
+browser holding a record whose wrap is gone — a state [uc.account.trust-device](uc.account.trust-device.md) E1
+tolerates when an operator withholds a wrap, and that this screen must not create on purpose.
+
+The two calls run in that order — **family first, then wrap** — because the revoke is what stops an attacker
+who is online *now*, while the wrap only matters at a future sign-in; the urgent half must not be blocked by the
+other. The cost is that a successful revoke removes the row the second half was offered from, so a wrap deletion
+that fails is retried from § Devices with a saved key rather than from the session list.
 
 The client on the revoked device is not left in a broken state: a failed refresh at boot already drops both
-local unlock tiers, so the next start on that device is a clean, fully-locked login screen.
+local unlock tiers, so the next start on that device is a clean, fully-locked login screen. Nothing done from
+here reaches into that device — its local key material is untouched, and after its wrap is gone that key is an
+unusable handle, which is exactly what [uc.account.trust-device](uc.account.trust-device.md) E1 already
+describes.
+
+## Devices with a saved key
+
+Below the session list, the view names the devices the **register** knows that hold a convenience wrap the
+server still serves and have **no active session** — a device that has been signed out but whose saved key
+outlived it. Each can have that key removed from here.
+
+The set is derived from two lists the view is already holding, so it invents nothing: the register's own
+device↔wrap join, and the server's family list. It is the retry surface for an escalation whose wrap deletion
+failed, and the only place a device that is signed out but still password-unlockable becomes visible at all.
+
+One action stands apart from it, and it is the only handle on a wrap the register has *never* known — one
+orphaned before the join shipped, or by a device that dropped its local key with no session to authorise the
+server delete: **remove every saved key except this device's.** It is defined by excluding what this client can
+verify locally, never by a claim about the others
+([ADR 0058 §5](../../../decisions/0058-revoke-never-takes-key-material.md) — a list of "wraps no device
+recognises" cannot tell an orphan from a device that has not signed in yet, and must not be offered). Its
+consequence is stated plainly where it is offered: every other device will need the password **and** the Secret
+Key again.
 
 ## Alternate / exception flows
 
@@ -98,13 +139,19 @@ local unlock tiers, so the next start on that device is a clean, fully-locked lo
   everywhere else"* — the one action that is complete without names. Two obligations follow. **The
   plain-language section below must not be assembled into `wiki/` before it exists**, because that section
   promises the Secret Key is not needed and for this flow it still is. And **the locked ceiling does not rise
-  with the later increments**: the names and the device↔family join both live in the Master-Key-sealed
-  register, so a locked caller never gets them — the locked list stays anonymous and the locked action stays
-  session-level, by construction rather than by omission. Do not plan a richer locked screen for "after
-  naming"; there is no such thing.
+  with the later increments**: the names and both joins — device↔family and device↔wrap — live in the
+  Master-Key-sealed register, so a locked caller never gets them. The locked list stays anonymous, the locked
+  action stays session-level, and the wrap escalation is simply absent there, by construction rather than by
+  omission. Do not plan a richer locked screen for "after naming"; there is no such thing.
 - **E4 — the register is missing or stale** (a new device, cleared storage, a write that never landed): the
-  affected families render unnamed. Nothing is blocked, and nothing is silently hidden — a session the register
-  cannot name must still be visible, or a lost device could hide from the very screen that exists to find it.
+  affected families render unnamed and offer no wrap escalation, since there is no wrap to name. Nothing is
+  blocked, and nothing is silently hidden — a session the register cannot name must still be visible and still
+  be revocable, or a lost device could hide from the very screen that exists to find it.
+- **E5 — the escalation half-succeeds.** The session is revoked and the wrap deletion fails (offline, a server
+  error). The user is told exactly that: signed out, saved key **not** removed. The register keeps the join row —
+  it is pruned only from a later read of the server's wrap list, never from a delete this client merely
+  attempted — so the device reappears under § Devices with a saved key and the removal is retried from there.
+  The reverse half-failure cannot occur: the wrap deletion is not attempted unless the revoke succeeded.
 
 ## Quality notes
 
@@ -135,10 +182,9 @@ local unlock tiers, so the next start on that device is a clean, fully-locked lo
   device↔**family** join — is its own increment, now refined as
   [en.account.device-register](../enablers/en.account.device-register.md); this use-case is built to degrade to
   unnamed and stay useful.
-- **"Revoke this device everywhere"** — dropping a device's session **and** its convenience wrap in one action.
-  That needs a device↔**wrap** join, which the register above does not yet carry, and it is a further increment
-  again. The same join is what would let an orphaned convenience wrap ever be reclaimed: the wrap table holds
-  no timestamps, so without it there is not even an age heuristic to identify one by.
+- **Reaching into a signed-out device.** Removing its wrap takes away what the *server* held for it; the key
+  material on that device stays until that device itself drops it, and no design here can change that. The
+  screen must not imply otherwise.
 - **Device linking** (authorising a new device from a trusted one) is a separate use-case; it is the feature
   this one exists to make reversible.
 
@@ -147,19 +193,25 @@ local unlock tiers, so the next start on that device is a clean, fully-locked lo
 **EN —** You can see every place you are currently signed in, and sign any of them out from here — useful when
 a laptop is lost, or you signed in on someone else's machine and forgot to sign out. "Sign out everywhere else"
 ends every other session in one go and keeps you signed in where you are. You don't need your Secret Key for
-any of this. Two honest details: the server never learns your device names — those are stored scrambled and are
-readable only after you unlock, so on a locked screen you'll see dates instead of names. And signing a device
-out stops it reaching the server, but it does not reach into that device — if it is truly gone, also remove its
-saved key on the device page.
+any of this. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
+out alone stops it reaching the server, but that device could still open your memories with just your password.
+Removing its saved key means whoever has it needs your password *and* your Secret Key — so keep that for
+devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
+time. Two honest details: the server never learns your device names — those are stored scrambled and are
+readable only after you unlock, so on a locked screen you'll see dates instead of names. And none of this
+reaches into the lost device itself; what it takes away is what the server was keeping for it.
 
 **DE —** Du siehst hier jede Stelle, an der du gerade angemeldet bist, und kannst jede davon von hier aus
 abmelden — praktisch, wenn ein Laptop weg ist oder du dich auf einem fremden Rechner angemeldet und das
 Abmelden vergessen hast. „Überall sonst abmelden" beendet alle anderen Sitzungen auf einmal und lässt dich
-dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht. Zwei ehrliche Hinweise: Die
-Gerätenamen erfährt der Server nie — sie liegen verschlüsselt und sind erst nach dem Entsperren lesbar, auf
-einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und ein abgemeldetes Gerät kommt nicht mehr an
-den Server, aber die Abmeldung greift nicht auf das Gerät selbst durch — ist es wirklich weg, entferne auf der
-Geräteseite zusätzlich seinen gespeicherten Schlüssel.
+dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht. Ist ein Gerät wirklich weg, nimm
+stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**: Abmelden allein hindert das Gerät nur daran,
+den Server zu erreichen — deine Erinnerungen könnte es mit deinem Passwort weiterhin öffnen. Ohne seinen
+gespeicherten Schlüssel braucht es dein Passwort *und* deinen Secret Key. Heb dir das also für wirklich
+verlorene Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit. Zwei ehrliche
+Hinweise: Die Gerätenamen erfährt der Server nie — sie liegen verschlüsselt und sind erst nach dem Entsperren
+lesbar, auf einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und nichts davon greift auf das
+verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewahrt hat.
 
 ## Related
 
@@ -171,7 +223,10 @@ Geräteseite zusätzlich seinen gespeicherten Schlüssel.
   device register reuses), [Security Model](../../../crosscutting/security-model.md)
 - Decisions: [ADR 0004](../../../decisions/0004-session-tokens.md) (families, rotation, reuse detection,
   revocation, and where a session name may live), [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)
-  (auth vs. unlock)
+  (auth vs. unlock), [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md) (a revoke never
+  takes key material; removing a wrap is a named escalation, and why no "unrecognised wraps" list may be
+  offered), [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §3 (the account-wide
+  form of the same coupling, and the argument this one is the per-device version of)
 - Related use-cases: [login](uc.account.login.md) (creates a family; logout ends the caller's own),
   [trust-device](uc.account.trust-device.md) + [remember-this-device](uc.account.remember-this-device.md) (the
   wraps a revoked session deliberately does **not** touch); onboard device — planned

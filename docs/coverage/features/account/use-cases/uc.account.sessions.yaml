@@ -12,6 +12,12 @@ title: Manage active sessions — see every login, sign out remotely
 # suites are locally. They DO exist and pass; naming them below keeps the later flip mechanical (docs/inbox.md
 # #26). The one remaining condition is an event, not a missing test.
 #
+# cr-device-wrap-join-and-remote-cutoff adds the second half of the same use-case: the device↔wrap join in the
+# sealed register, ADR 0058's named escalation (sign out AND remove that device's saved key), § Devices with a
+# saved key as its retry surface, and the exclusion-shaped bulk action. It is a client-side data problem — no
+# contract and no backend changed — so its new criteria are all web-side, and `scripts/validate_device_shapes.py`
+# is the permanent guard on the two wire shapes that could leak the join.
+#
 # What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
 # than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
 # the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
@@ -43,7 +49,9 @@ acceptanceCriteria:
       Listing and revoking require only a session, never an unlocked vault, so a locked device can still cut off
       a lost one — it renders ids and coarse dates in place of names. Correspondingly no request in this
       use-case carries a device name, user-agent or any client-built label, and no column stores one: the server
-      holds exactly what it held before (opaque id, coarse timestamps, count).
+      holds exactly what it held before (opaque id, coarse timestamps, count). A locked panel therefore also
+      offers neither wrap action — both joins are sealed, so the locked ceiling does not rise with the
+      escalation increment either (E3); their absence there is by construction, not by omission.
   - id: names-come-from-the-sealed-register
     text: >-
       An unlocked client labels each family the Master-Key-sealed device register can join to a device, and a
@@ -67,6 +75,52 @@ acceptanceCriteria:
       is one-to-many with its sessions, and the copy says so. A rename survives a concurrent write (later write
       wins, because renaming is deliberate), a sign-in never reverts one, an empty rename is not written, and a
       family the register cannot name offers no rename at all — while still offering its revoke.
+  - id: removing-a-device-key-is-a-named-escalation
+    text: >-
+      A revoke on its own never touches key material; removing a device's convenience wrap is a second,
+      separately named action, offered only where the register names a SERVED wrap for that device (ADR 0058).
+      Both halves are the criterion: the row the register can escalate offers it, and the row it cannot does not
+      — while keeping its plain revoke, since a missing join is a naming gap and never a reason to hide the
+      action this screen exists for. It is never a checkbox on the revoke and never a default, because the
+      consequence lands on a person holding another device, who then needs their Emergency Kit. It is also never
+      offered on the caller's OWN row: the local equivalent drops the local key too, and the remote-only half
+      would leave this browser holding a record whose wrap is gone.
+  - id: escalation-cuts-the-family-first-and-tells-the-truth-on-a-half-success
+    text: >-
+      The escalation runs family-first, wrap-second, and the ORDER is the assertion — the revoke stops an
+      attacker who is online now, the wrap only matters at a future sign-in, so the urgent half must never be
+      blocked by the other. When the revoke fails the wrap is never touched (the reverse half-failure cannot
+      occur). When only the wrap deletion fails, the user is told exactly that — signed out, saved key NOT
+      removed (E5) — rather than a message that reads as total success or total failure; the retry surface is §
+      Devices with a saved key, which the join row still feeds because a join row is pruned only from a later
+      read of the server's wrap list, never from a delete this client merely attempted.
+  - id: devices-with-a-saved-key-is-derived-not-invented
+    text: >-
+      Below the session list, a device the register knows that holds a served wrap and has NO live family is
+      listed with its own removal. The set is derived from the two lists the view already holds — the register's
+      device↔wrap join and the server's family list — so a device with a live session never appears there, and a
+      wrap the server no longer serves is never claimed into existence. When the served list could not be
+      fetched at all, that is carried as "unknown" and not as "there are none": no wrap-shaped action is
+      offered, and no join row is pruned — the difference is what keeps a transport error from emptying the
+      register's third map.
+  - id: reaching-an-unnameable-wrap-is-defined-by-exclusion
+    text: >-
+      The only handle on a wrap the register never knew is "remove every saved key except this device's",
+      defined by excluding what this client can verify locally (its own wrap id, read from its LOCAL trust or
+      remember record) and never by a claim about the others — no "these N wraps are recognised by no device"
+      list may be offered, because the wrap table has no timestamps and nothing can tell an orphan from a device
+      that has not signed in yet (ADR 0058 §5). The caller's own saved key survives it; a caller holding none
+      removes all of them and is unharmed by that. The client filters to the two device methods for honesty, but
+      the server's DELETE whitelist is the guarantee.
+  - id: the-device-wrap-join-never-reaches-the-server
+    text: >-
+      The join lives only inside the Master-Key-sealed register: the PUT body is exactly a sealed blob and a
+      version, and neither the wrap id nor the device label is legible in it. The wire shapes that would leak
+      the correlation while everything kept working — a cleartext wrap-id list on the register, or a deviceId /
+      label / timestamp on MasterKeyWrap — are pinned as a permanent contract guard rather than as prose, since
+      no test would catch either. The register also stays off every unlock path in both directions: a device
+      finds its own wrap by the id in its local record, so a pruned or withheld join row can never cost anyone
+      access.
 gaps:
   backend: >-
     The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
@@ -87,7 +141,10 @@ gaps:
     whole suite unlocks nothing. One further trap is pinned there rather than left to review: the resource
     mixes `@PermitAll` (logout) with `@Authenticated` (the manager), and the tidier-looking arrangement — an
     authenticated class with `@PermitAll` on logout — makes logout answer 401 to an invalid token. Both
-    directions are asserted, so neither can be "fixed" into the other silently.
+    directions are asserted, so neither can be "fixed" into the other silently. The wrap-join increment adds no
+    backend test because it adds no backend code: `DELETE /api/account/wraps/{id}` is already account-scoped and
+    already whitelists DEVICE + DEVICE_KEY, and `AccountWrapsSliceTest` / `AccountKeyMaterialSliceTest` already
+    pin that whitelist — the escalation is two calls the account could always make, newly joined on the client.
   web: >-
     Same condition, same one event. The device register (cr-account-sealed-device-register) adds
     `src/features/account/deviceRegister.test.ts` — real crypto, mocked API + vault, with a fake server that
@@ -108,3 +165,22 @@ gaps:
     unlocked mount as its control: with `vaultState.unlocked = false` the list still renders and every revoke
     button is still enabled, which is the trap this panel exists not to fall into. E2E is deliberately not
     extended here — the flow needs two live sessions of one account, which the current harness does not stand up.
+    cr-device-wrap-join-and-remote-cutoff extends the same two files rather than adding a surface. In
+    `deviceRegister.test.ts`: the wrap map's own frozen id-delta (a wrap another device minted between our read
+    and our write survives the 409 retry — the mirror of the family case, and the one that would otherwise
+    silently un-escalate the device it just named), eviction taking wrap rows with their device, the
+    null-vs-empty served list (unknown prunes nothing, a measured empty list does), and a sealed ROUND-TRIP that
+    supplies neither the family nor the wrap a second time — because `sealRegister`/`unsealRegister` enumerate
+    the maps by name, so a third map wired everywhere except those two is dropped on write while every
+    in-memory assertion stays green. That round-trip case was bite-tested in both directions (drop the map from
+    the seal, then from the unseal) and reddens by name each time. In `SessionsPanel.test.ts`: the escalation's
+    ordering (recorded as a sequence, not as two independent call assertions), the never-touch-the-wrap-on-a-
+    failed-revoke case, the E5 half-success message, the offered/not-offered pair, § Devices with a saved key and
+    its per-device removal, the exclusion-shaped bulk action with its own-wrap-survives assertion plus the
+    holds-no-wrap case, the section's absence when the only saved key is this device's own (with a foreign key
+    as its live control), the locked panel offering neither action while still revoking, and the failed
+    key-material fetch passing `null` rather than `[]`. The ordering and the exclusion were bite-tested too:
+    swapping the two halves reddens three cases by name, and dropping the exclusion filter reddens two.
+    `localWrap.test.ts` pins where the "which wrap is mine" answer comes from — the local trust/remember record,
+    never the register and never the server's list — including that an unusable local store answers "none"
+    rather than throwing, which is the safe direction for both of its callers.
