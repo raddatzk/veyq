@@ -16,6 +16,7 @@ vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn().mockResolved
 vi.mock('../features/admin/createTenant/tenants', () => ({ listTenants: vi.fn().mockResolvedValue([]) }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
 vi.mock('../features/account/trustDevice/DeviceTrustPanel.vue', () => ({ default: { template: '<div class="stub-device" />' } }))
+vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
 vi.mock('../features/admin/createTenant/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-tenant-detail" />' } }))
@@ -42,7 +43,8 @@ const i18n = createI18n({
       shell: { groups: 'Groups', groupCreate: 'New group' },
       settings: {
         title: 'Settings', back: 'Back', personal: 'Personal', tenant: 'Shared space', group: 'Group', server: 'Server',
-        appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', device: 'This device', serverTenants: 'Tenants',
+        appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', device: 'This device', sessions: 'Sessions',
+        serverTenants: 'Tenants',
       },
     },
   },
@@ -169,6 +171,18 @@ describe('SettingsHubView — split view index vs detail', () => {
     const w = await mountHub('/settings/appearance')
     expect(w.find('.stub-appearance').exists()).toBe(true)
     expect(w.get('.settings-hub').classes()).toContain('is-detail')
+  })
+
+  it('Sessions is a Personal section reachable with no scope at all (uc.account.sessions)', async () => {
+    // Account-wide, not scope-bound: it gates on a session, not on a space, so an account that has entered no
+    // tenant must still reach it. The unresolved-id fallback is the appearance panel, so mounting the sessions
+    // stub — rather than that one — is what says the route actually resolved.
+    clearActiveSpace()
+    serverRole.canManage = false
+    const w = await mountHub('/settings/sessions')
+    expect(navText(w)).toContain('Sessions')
+    expect(w.find('.stub-sessions').exists()).toBe(true)
+    expect(w.find('.stub-appearance').exists()).toBe(false)
   })
 
   it('the Server Tenants collection lists tenants; clicking one opens its detail page', async () => {

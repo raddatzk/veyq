@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppearancePanel from '../features/settings/AppearancePanel.vue'
 import DeviceTrustPanel from '../features/account/trustDevice/DeviceTrustPanel.vue'
+import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
 import TenantTermsPanel from '../features/admin/createTenant/TenantTermsPanel.vue'
@@ -74,6 +75,9 @@ const categories = computed<NavCategory[]>(() => {
         { id: 'appearance', label: t('settings.appearance'), icon: 'pi pi-palette' },
         // Device trust is device-local + always relevant (uc.account.trust-device § Untrust) — no scope needed.
         { id: 'device', label: t('settings.device'), icon: 'pi pi-desktop' },
+        // Every active session of the account + the remote sign-out (uc.account.sessions). Account-wide, not
+        // scope-bound, and gated on a session rather than an unlock — so it belongs beside device trust.
+        { id: 'sessions', label: t('settings.sessions'), icon: 'pi pi-mobile' },
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
       ],
@@ -163,6 +167,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id.startsWith('tenant-')) return { component: TenantDetailPanel, props: { tenantId: id.slice('tenant-'.length) } }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'device') return { component: DeviceTrustPanel, props: {} }
+  if (id === 'sessions') return { component: SessionsPanel, props: {} }
   return { component: AppearancePanel, props: {} }
 })
 

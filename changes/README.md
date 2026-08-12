@@ -118,6 +118,18 @@ password when the line it cited passes `username: null` *with the reason attache
 or one paragraph away. **Before a CR fixes a path, list what is there and paste the output in** — and read the
 neighbouring decision while you are at it, because nothing checks a document against itself.
 
+**A fourth tell: the CR located where the code goes and never located the GATE that decides who arrives.** An
+inventory naturally asks *"where is this added?"* and stops one question short of *"can the person in the
+exception flow get here?"* — and a use-case that names a degraded-access flow (locked vault, offline, no
+capability, unauthorized) has already asked it. `cr-account-sessions-list-and-revoke`'s phase 3 required a panel
+that renders and revokes with the vault **locked**, and the panel does exactly that; the locator list found
+where a settings tab is registered and never touched `web/src/router.ts`, whose `/settings/:section?` route is
+`requiresUnlock` — so the screen built for a lost device is reachable only with the vault open. Built, tested,
+and unreachable in the one state it was built for. **So: whenever a use-case carries a degraded-access
+exception flow, one locator line must find that surface's gate** — the route guard, the security annotation,
+the capability check — beside the line that finds the insertion point. It is one `grep`, it runs at refine, and
+it is the difference between a feature that is implemented and a feature that is reachable.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an

@@ -15,6 +15,19 @@ data class IssuedSession(val familyId: String, val accessToken: String, val refr
 data class RotatedTokens(val accessToken: String, val refreshToken: String)
 
 /**
+ * One active session family as the session list sees it (uc.account.sessions). Deliberately **nameless**: a
+ * family carries no name, user-agent or address, and none may be added — a per-family name blob would let the
+ * operator match a device across logins and re-link families that are otherwise unlinkable (ADR 0004). Names
+ * live only in the client's Master-Key-sealed device register and are joined in on-device.
+ */
+data class SessionFamilyView(
+    val id: String,
+    val createdAt: Instant,
+    val lastUsedAt: Instant,
+    val current: Boolean,
+)
+
+/**
  * Session families and their opaque, rotating access + refresh tokens (ADR 0004). The server stores only
  * token hashes; refresh rotates the pair and a replayed superseded refresh token revokes the whole
  * family (reuse detection). DoS-safe by construction: a family is only revoked when a presented token's
@@ -87,17 +100,82 @@ class SessionService {
     }
 
     /**
-     * Revoke **every** session family of one account (cr-account-recovery, ADR 0054).
+     * Revoke **every** session family of one account (cr-account-recovery, ADR 0054), optionally sparing one.
      *
-     * A password reset must not leave a live session behind: whoever prompted the reset may be holding one. This
-     * runs inside the caller's reset transaction, so sessions die with the wrap replacement or not at all.
+     * Two callers, one statement. A password reset must not leave a live session behind — whoever prompted the
+     * reset may be holding one — so recovery passes no exception and takes them all; it runs inside the caller's
+     * reset transaction, so sessions die with the wrap replacement or not at all. "Sign out everywhere else"
+     * (uc.account.sessions) passes the family the request arrived on, because a sign-out-everywhere that also
+     * ejects the person securing the account is a footgun, not a feature.
+     *
      * Returns how many families were revoked.
      */
     @Transactional
-    fun revokeAllForUser(userId: String): Long = SessionFamilyEntity.update(
-        "status = ?1 where userId = ?2 and status = ?3",
-        SessionFamilyEntity.REVOKED, userId, SessionFamilyEntity.ACTIVE,
-    ).toLong()
+    fun revokeAllForUser(userId: String, exceptFamilyId: String? = null): Long =
+        // Two statements, not one with `id <> ?`: in SQL every comparison against NULL is unknown, so a single
+        // parameterized `id <> :except` with a null parameter would match no row and revoke nothing at all.
+        if (exceptFamilyId == null) {
+            SessionFamilyEntity.update(
+                "status = ?1 where userId = ?2 and status = ?3",
+                SessionFamilyEntity.REVOKED, userId, SessionFamilyEntity.ACTIVE,
+            ).toLong()
+        } else {
+            SessionFamilyEntity.update(
+                "status = ?1 where userId = ?2 and status = ?3 and id <> ?4",
+                SessionFamilyEntity.REVOKED, userId, SessionFamilyEntity.ACTIVE, exceptFamilyId,
+            ).toLong()
+        }
+
+    /**
+     * "Sign out everywhere else" — revoke every ACTIVE family of the account except the one the presented
+     * access token belongs to (uc.account.sessions).
+     *
+     * The spared family is the one the **server** resolves from the token, never one the request named. If the
+     * token resolves to no family this revokes **nothing**: falling through to [revokeAllForUser]'s no-exception
+     * form would sign the caller out of the device it is holding, which is the single outcome this endpoint
+     * exists to avoid — so the trap is closed here rather than left to each caller to remember.
+     */
+    @Transactional
+    fun revokeOtherFamilies(userId: String, presentedAccessToken: String): Long {
+        val current = familyIdOf(presentedAccessToken) ?: return 0
+        return revokeAllForUser(userId, current)
+    }
+
+    /**
+     * Revoke one family **of the caller's own account** — the remote sign-out (uc.account.sessions).
+     *
+     * Scoped by `userId` in the statement itself rather than by a read-then-check, so a foreign id cannot be
+     * revoked and cannot be told apart from an unknown one: both update zero rows. Idempotent, and returns
+     * nothing on purpose — the endpoint above it answers 204 for every id, and a count handed up here is the
+     * first thing a later change would leak into that response.
+     */
+    @Transactional
+    fun revokeFamilyForUser(userId: String, familyId: String) {
+        SessionFamilyEntity.update(
+            "status = ?1 where id = ?2 and userId = ?3 and status = ?4",
+            SessionFamilyEntity.REVOKED, familyId, userId, SessionFamilyEntity.ACTIVE,
+        )
+    }
+
+    /**
+     * Every ACTIVE family of one account, most recently used first, with the one the presented access token
+     * belongs to marked `current`. The marker is the server's own knowledge of which family the request arrived
+     * on — self-knowledge about the caller, not a new fact about the account — and it is what keeps the client's
+     * "this device" and "sign out everywhere else" honest against each other.
+     */
+    @Transactional
+    fun listActiveFamilies(userId: String, presentedAccessToken: String?): List<SessionFamilyView> {
+        val currentFamilyId = presentedAccessToken?.let { familyIdOf(it) }
+        return SessionFamilyEntity
+            .find("userId = ?1 and status = ?2", userId, SessionFamilyEntity.ACTIVE)
+            .list()
+            .sortedByDescending { it.lastUsedAt }
+            .map { SessionFamilyView(it.id, it.createdAt, it.lastUsedAt, it.id == currentFamilyId) }
+    }
+
+    /** The family an access token belongs to, or null if the token is unknown. */
+    private fun familyIdOf(accessToken: String): String? =
+        AccessTokenEntity.find("tokenHash", Tokens.hash(accessToken)).firstResult()?.familyId
 
     // --- scheduled purge (see SessionPurge, cr-0011) ---
     // Physically remove rows that are no longer needed. Matching strictly by `expiresAt < now` preserves the

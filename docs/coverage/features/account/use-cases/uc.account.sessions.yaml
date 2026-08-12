@@ -1,19 +1,23 @@
 useCase: uc.account.sessions
 feature: account
 title: Manage active sessions — see every login, sign out remotely
-# `status: planned` because nothing is built yet: cr-account-sessions-list-and-revoke is the work order, and
-# until it lands there is no endpoint, no resource and no view to reference. Two conditions gate a flip to
-# refs, and the second one outlives this CR:
+# cr-account-sessions-list-and-revoke delivers it: `GET /api/sessions`, `DELETE /api/sessions/{id}` and
+# `POST /api/sessions/revoke-others` on the auth spec, a `SessionFamily` carrying its opaque id + both coarse
+# timestamps + the server-set current marker, the three endpoints over the existing session families, and the
+# Settings → Personal → Sessions panel with per-row revoke and sign-out-everywhere-else.
 #
-#  1. **The code has to exist.** The whole slice is net-new surface over the already-built session families.
-#  2. **A CI run has to execute it.** This repository has no remote and no workflow has ever run, so ADR 0040's
-#     rule — a test no CI run executes makes no coverage claim — leaves every criterion uncovered however green
-#     the suites are locally (docs/inbox.md #26 tracks that one event).
+# `status: planned` is nonetheless correct, and it is the same call uc.admin.identify-instance-release makes,
+# for the same single reason: **no CI run has ever executed here.** This repository has no remote, so ADR 0040's
+# rule — a test no CI run executes makes no coverage claim — leaves every criterion uncovered however green the
+# suites are locally. They DO exist and pass; naming them below keeps the later flip mechanical (docs/inbox.md
+# #26). The one remaining condition is an event, not a missing test.
 #
 # What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
 # than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
 # the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
-# tests exercise.
+# tests exercise. Nor is E3 provable end to end on this surface: the settings hub route is `requiresUnlock`, so
+# a locked caller cannot yet REACH the panel. What the web suite proves is the half that is this CR's — the
+# panel itself takes no vault dependency and disables nothing when the vault is locked.
 status: planned
 acceptanceCriteria:
   - id: list-shows-every-active-family
@@ -42,16 +46,25 @@ acceptanceCriteria:
       holds exactly what it held before (opaque id, coarse timestamps, count).
 gaps:
   backend: >-
-    Nothing exists to reference yet. When the CR lands, the criteria above are backend-provable end to end: a
-    slice test over the full HTTP stack can create two families, list them, revoke one from the other, and
-    assert the refused refresh by status code. Two controls belong in that suite by construction, because each
-    negative here is trivially satisfiable by an over-broad implementation — a live control that the caller's
-    own family still refreshes after a targeted revoke, and the same after "everywhere else". The operator-blind
-    criterion is partly structural (no name column exists to write), so the honest assertion is over the request
-    and response shapes plus the schema, not a claim that the server "cannot" learn a name.
+    The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
+    `SessionManagerSliceTest` covers all four criteria over the full HTTP stack, with a second account live
+    throughout — which is what turns "scoped to the caller" from a claim about the SQL into an observation at
+    the boundary. Every negative carries a live control on the same predicate, because each is trivially
+    satisfied by an over-broad implementation: a targeted revoke asserts the caller still refreshes (200) beside
+    the target's refusal (401 `refresh_rejected`), "everywhere else" asserts the same, and the two
+    same-answer-for-a-foreign-id cases assert that the foreign family still refreshes — the half a status code
+    cannot show. The operator-blind criterion is structural, so the assertion is over the response SHAPE (a
+    family exposes exactly id/createdAt/lastUsedAt/current, and no name-shaped field), plus the fact that the
+    whole suite unlocks nothing. One further trap is pinned there rather than left to review: the resource
+    mixes `@PermitAll` (logout) with `@Authenticated` (the manager), and the tidier-looking arrangement — an
+    authenticated class with `@PermitAll` on logout — makes logout answer 401 to an invalid token. Both
+    directions are asserted, so neither can be "fixed" into the other silently.
   web: >-
-    Nothing exists to reference yet. When the CR lands, the sessions view is unit-testable on this surface: the
-    list render including the "this device" marker, the locked render (dates, no names, revoke still enabled —
-    the trap being a view that disables the action it exists to offer), the revoke-self path returning to the
-    sign-in screen, and the unnamed-family render, which must show the family rather than hide it. Whether the
-    E2E suites gain a case here is the CR's call at implement time, not a promise made in advance.
+    Same condition, same one event. `web/src/features/account/sessions/SessionsPanel.test.ts` covers the list
+    (both dates, exactly one server-set "this device" marker, the short id as the handle an unnamed row goes
+    by), the targeted revoke, the revoke-self path (treated as a logout, back to the sign-in screen), and the
+    everywhere-else action — asserting it calls the ONE endpoint that spares the caller rather than fanning out
+    per-family revokes, which would include the caller's own. The locked render is its own case with the
+    unlocked mount as its control: with `vaultState.unlocked = false` the list still renders and every revoke
+    button is still enabled, which is the trap this panel exists not to fall into. E2E is deliberately not
+    extended here — the flow needs two live sessions of one account, which the current harness does not stand up.

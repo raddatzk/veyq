@@ -10,9 +10,7 @@ import Avatar from 'primevue/avatar'
 import TieredMenu from 'primevue/tieredmenu'
 import type { MenuItem } from 'primevue/menuitem'
 import { account } from '../../app/account'
-import { logout } from '../../features/account/login/login'
-import { resetServerRole } from '../../features/admin/serverRole'
-import { clearActiveSpace } from '../../app/activeSpace'
+import { signOut } from '../../features/account/login/signOut'
 import { setLocalePreference, localePreference, LOCALE_PREFERENCES, LOCALE_LABELS } from '../../i18n'
 
 defineProps<{ showName?: boolean }>()
@@ -44,18 +42,8 @@ const menuItems = computed<MenuItem[]>(() => [
   // always-present menu row here.
   { label: t('shell.language'), icon: 'pi pi-language', items: languageMenuItems.value },
   { separator: true },
-  { label: t('shell.logout'), icon: 'pi pi-sign-out', command: () => void signOut() },
+  { label: t('shell.logout'), icon: 'pi pi-sign-out', command: () => void signOut(router) },
 ])
-
-async function signOut() {
-  try {
-    await logout()
-  } finally {
-    resetServerRole()
-    clearActiveSpace()
-    await router.push({ name: 'login' })
-  }
-}
 </script>
 
 <template>

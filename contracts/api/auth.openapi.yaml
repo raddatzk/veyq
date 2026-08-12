@@ -26,7 +26,7 @@ tags:
   - name: token
     description: Session token rotation.
   - name: session
-    description: Session lifecycle (logout).
+    description: Session lifecycle (logout, list every active session, revoke one or all others remotely).
   - name: recovery
     description: >
       Password recovery (ADR 0054). Unauthenticated by necessity — the actor has no password — and gated on
@@ -146,6 +146,111 @@ paths:
       responses:
         "204":
           description: The session family is revoked (or was already gone).
+
+  /api/sessions:
+    get:
+      tags: [session]
+      operationId: listSessionFamilies
+      summary: List the account's active session families.
+      description: >
+        Returns every **ACTIVE** session family of the authenticated caller's own account — one per login /
+        device — with its opaque id, its created and last-used timestamps, and a flag marking the family this
+        request arrived on. Revoked and expired families are not listed; they are noise, and the purge removes
+        them anyway.
+
+        The server has nothing else to return, and that is the point: a family carries **no name, no
+        user-agent and no address** (ADR 0004), so this endpoint hands back exactly what the operator already
+        held. Display names live only in the client's Master-Key-sealed device register and are joined in
+        on-device — which is why this needs only a session and never an unlock (auth ≠ unlock, ADR 0003): a
+        locked client still renders the full list, with dates in place of names.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's active session families.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/SessionFamily" }
+              example:
+                - id: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+                  createdAt: 2026-08-01T09:12:00Z
+                  lastUsedAt: 2026-08-12T07:45:00Z
+                  current: true
+                - id: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  createdAt: 2026-07-03T18:30:00Z
+                  lastUsedAt: 2026-08-10T21:02:00Z
+                  current: false
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/sessions/revoke-others:
+    post:
+      tags: [session]
+      operationId: revokeOtherSessionFamilies
+      summary: Sign out everywhere else (revoke every family except the caller's own).
+      description: >
+        Revokes every ACTIVE session family of the caller's account **except** the one this request arrived
+        on. Signing out the device in hand is `/api/logout`, deliberately not this: a "sign out everywhere"
+        that also ejects the person securing the account is a footgun, not a feature.
+
+        Idempotent — an account with no other family still returns 204. The surviving caller session is the
+        contract, not an implementation detail.
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Every other session family is revoked; the caller's own is untouched.
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/sessions/{id}:
+    delete:
+      tags: [session]
+      operationId: revokeSessionFamily
+      summary: End one session remotely (revoke a family by id).
+      description: >
+        Revokes the caller's session family with this id — the remote sign-out that `/api/logout` cannot do,
+        because logout can only end the family it is presented from. **Idempotent** (like logout and the wrap
+        untrust): the family is revoked only if it is the caller's own; an unknown id, an already-revoked one,
+        or another account's family is a silent no-op with the **same 204**, so this cannot be used to probe
+        which ids exist.
+
+        Revoking the caller's **own** family is permitted and means "sign me out here too" — the client treats
+        the response as a logout.
+
+        What this takes away is **server access, not key material**: a device keeps any convenience wrap it
+        enrolled, which is removed separately (uc.account.trust-device).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: The opaque id of the session family to revoke (from the session list).
+          schema:
+            type: string
+            maxLength: 64
+            example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+            x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9-]+")'
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: The family is revoked (or there was no active family of yours with that id).
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
 
   /api/recovery/request:
     post:
@@ -350,14 +455,42 @@ components:
 
     SessionFamily:
       type: object
+      description: >
+        One session family — one login on one device (ADR 0004). It is **nameless by design**: a
+        client-encrypted name stored per family would be a blob the operator could match across logins, and so
+        re-link families that are otherwise unlinkable. Names therefore live only in the client's
+        Master-Key-sealed device register and are joined in on-device. **No name field may come back here.**
+
+        The three descriptive fields below are returned by the session list; where a family is handed back as
+        a bare reference to the login just issued (`SessionResponse.family`) only `id` is present.
       required: [id]
       properties:
         id:
           x-veyq-visibility: id
           type: string
           format: uuid
-          description: Opaque id of the session family (one login / device). The E2EE name is attached later by a planned use-case (uc.account.sessions — reserved in ADR 0004, not yet written or built).
+          description: Opaque id of the session family (one login / device).
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+        createdAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When this family was created — i.e. when that device last signed in.
+          example: 2026-08-01T09:12:00Z
+        lastUsedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When this family last rotated its tokens — the coarse "last seen" of that device.
+          example: 2026-08-12T07:45:00Z
+        current:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True for the family the request arrived on. Marked by the **server**, which knows it as
+            self-knowledge about the caller, rather than guessed by the client — that is what keeps "this
+            device" and "sign out everywhere else" honest against each other.
+          example: true
 
     TokenPair:
       type: object
@@ -520,5 +653,13 @@ components:
           example: bmV3LWF1dGgtcHVibGljLWtleQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256)'
 
+    # Point a response at THIS alias (`#/components/schemas/ErrorResponse`), not at the `_common` path directly.
+    # Both are the same single source (ADR 0038) and both are in use above, but they are not interchangeable at
+    # the generator: the three session-manager responses first written as
+    # `./_common.openapi.yaml#/components/schemas/ErrorResponse` made the backend generator mint a SECOND,
+    # identical model — `ListSessionFamilies401Response` — named after the operation, while the alias produced
+    # none. Measured, not reasoned: the cause was not pinned (the recovery paths use the external form and mint
+    # nothing), so this records the safe form rather than a rule about why. A duplicated error model is the
+    # "never hand-write a DTO that duplicates a generated one" defect arriving through the spec instead.
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
