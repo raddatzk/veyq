@@ -60,7 +60,11 @@ no per-device identity to provision — only a wrap addressed to the new device'
 - **No cross-device provisioning.** `POST /api/account/wraps` (`account.openapi.yaml:65-91`) is
   **caller-self-scoped** — it stores a wrap the caller *already computed* for *its own* device (method
   restricted to `[DEVICE, DEVICE_KEY]`), resolved from *this* device's token. It transports nothing
-  device-to-device. `DELETE …/wraps/{id}` only untrusts the caller's own wrap.
+  device-to-device. `DELETE …/wraps/{id}` is **account-scoped, not device-scoped** — its only checks are the
+  wrap's owner and its method (`KeyMaterialStore.deleteWrap`), so any of the account's devices may delete any
+  of the account's device wraps by id. Read as "the caller's own device's wrap" it reads like a blocker for
+  "revoke this device everywhere"; it is not one, and the missing piece there is purely the client-side
+  device↔wrap join.
 - **No per-device key.** ADR 0028's bundle is the **account-global** identity key — its QR proves *account*
   identity, **not** a per-device pairing key. A linking flow must mint an **ephemeral per-device transport
   keypair** and render *its* public key as the QR (reusing the fingerprint digest shape + KitScanner decode).
