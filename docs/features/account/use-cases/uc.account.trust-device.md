@@ -135,8 +135,9 @@ stateDiagram-v2
 - **Metadata exposed: a trusted-device count.** Because each trusted device is its own persistent wrap row,
   the operator can see *how many* devices an account trusts and their coarse creation times — the same
   device-*count* visibility already accepted for sessions ([ADR 0004](../../../decisions/0004-session-tokens.md)).
-  No per-login unlinkability dance (fresh nonces) is needed here: a DEVICE wrap is inherently per-device and
-  long-lived, not a re-uploaded blob, so there is nothing to correlate that the count doesn't already imply.
+  Nothing per-login is re-uploaded on either side: a DEVICE wrap is inherently per-device and long-lived, and
+  a session family carries no client blob at all, so there is nothing to correlate that the count doesn't
+  already imply.
 - **A password change invalidates every DEVICE wrap.** Since `KEK = Argon2id(deviceFactor + password)`,
   changing the account password makes every DEVICE wrap un-openable — and the password-change client can
   **not** re-wrap them (it lacks the other devices' `deviceFactor`). So after a password change each trusted

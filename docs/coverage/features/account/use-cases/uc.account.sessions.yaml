@@ -1,0 +1,57 @@
+useCase: uc.account.sessions
+feature: account
+title: Manage active sessions — see every login, sign out remotely
+# `status: planned` because nothing is built yet: cr-account-sessions-list-and-revoke is the work order, and
+# until it lands there is no endpoint, no resource and no view to reference. Two conditions gate a flip to
+# refs, and the second one outlives this CR:
+#
+#  1. **The code has to exist.** The whole slice is net-new surface over the already-built session families.
+#  2. **A CI run has to execute it.** This repository has no remote and no workflow has ever run, so ADR 0040's
+#     rule — a test no CI run executes makes no coverage claim — leaves every criterion uncovered however green
+#     the suites are locally (docs/inbox.md #26 tracks that one event).
+#
+# What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
+# than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
+# the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
+# tests exercise.
+status: planned
+acceptanceCriteria:
+  - id: list-shows-every-active-family
+    text: >-
+      An authenticated caller lists every ACTIVE session family of its own account and nothing else — each with
+      its opaque id, created and last-used timestamps, and exactly one marked as the family the request arrived
+      on. Revoked and expired families never appear, and no other account's family ever does. The current-marker
+      is the positive control for sign-out-everywhere-else: without it, a response that marks nothing satisfies
+      "the caller stayed signed in" for the wrong reason.
+  - id: revoke-one-family-remotely
+    text: >-
+      Revoking another family by its id ends it — a refresh presented from that family is refused afterwards —
+      while the caller's own session keeps working. The call is idempotent, and an unknown or another account's
+      id produces the same response as a real one, so the endpoint cannot be used to probe which ids exist. The
+      negative anchors on the specific observable (the refused refresh, by its status code), never on "it threw".
+  - id: sign-out-everywhere-else
+    text: >-
+      One call revokes every family of the account EXCEPT the caller's own, and the caller is still able to
+      refresh afterwards. This is the criterion that must not be satisfied by revoking everything: the surviving
+      caller session is the assertion, not a side note.
+  - id: works-locked-names-never-reach-the-server
+    text: >-
+      Listing and revoking require only a session, never an unlocked vault, so a locked device can still cut off
+      a lost one — it renders ids and coarse dates in place of names. Correspondingly no request in this
+      use-case carries a device name, user-agent or any client-built label, and no column stores one: the server
+      holds exactly what it held before (opaque id, coarse timestamps, count).
+gaps:
+  backend: >-
+    Nothing exists to reference yet. When the CR lands, the criteria above are backend-provable end to end: a
+    slice test over the full HTTP stack can create two families, list them, revoke one from the other, and
+    assert the refused refresh by status code. Two controls belong in that suite by construction, because each
+    negative here is trivially satisfiable by an over-broad implementation — a live control that the caller's
+    own family still refreshes after a targeted revoke, and the same after "everywhere else". The operator-blind
+    criterion is partly structural (no name column exists to write), so the honest assertion is over the request
+    and response shapes plus the schema, not a claim that the server "cannot" learn a name.
+  web: >-
+    Nothing exists to reference yet. When the CR lands, the sessions view is unit-testable on this surface: the
+    list render including the "this device" marker, the locked render (dates, no names, revoke still enabled —
+    the trap being a view that disables the action it exists to offer), the revoke-self path returning to the
+    sign-in screen, and the unnamed-family render, which must show the family rather than hide it. Whether the
+    E2E suites gain a case here is the CR's call at implement time, not a promise made in advance.

@@ -1,12 +1,13 @@
-# ADR 0004 — Session tokens: opaque, server-stored, rotating access + refresh in named families
+# ADR 0004 — Session tokens: opaque, server-stored, rotating access + refresh in revocable families
 
 - Status: Accepted
 - Date: 2026-06-25
-- Implementation: the **opaque two-token rotating scheme** (access + refresh, named families, reuse
+- Implementation: the **opaque two-token rotating scheme** (access + refresh, families, reuse
   detection ⇒ family revocation) is **built** (`features/account/login/*`, `V5__login_sessions.sql`). The
-  **E2EE named-sessions half** — `PUT …/sessions/{id}/name` + the unlocked "active sessions" decrypting
-  view (`uc.account.sessions`) — is **not yet built** (the contract reserves the family id; the name is
-  "attached later"). This ADR records the agreed design for that half.
+  **management half** — listing the account's families and revoking one remotely
+  ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **not yet built**: the
+  contract reserves the family id, and today only the caller's own family can be ended, by logout. This ADR
+  records the agreed design for that half.
 
 ## Context
 
@@ -44,27 +45,30 @@ into **named session families**. No JWTs.
   not a family-killer.
 - **Refresh expiry ⇒ full re-login** (challenge-response). Sliding lifetime via refresh; idle-expiry on
   the refresh token.
-- **Named families, E2EE, operator-blind.** A login creates a family **without a name** — the server
-  assigns only an opaque **family id**. The naming is **client-built and end-to-end encrypted**: once the
-  device is **unlocked**, it derives a best-effort display name from its own environment
-  (`navigator.userAgent` → a browser + platform guess), encrypts it **under the account
-  key** and stores the ciphertext on the family (`PUT …/sessions/{id}/name`). A later "active sessions"
-  view (any unlocked device of the account) lists families and **decrypts** each name; the locked view
-  shows only the id + a coarse created-date. Constraints that fall out of this:
-  - **Why post-unlock, not at login.** Auth produces only a signature, no symmetric key — the account key
-    exists only after **unlock** (auth ≠ unlock). The encrypted name is therefore attached **after**
-    unlock, not in the login call. (The plaintext name is known locally at login for immediate *local*
-    display; the server copy — which exists so *other* devices can show this session — is written once
-    unlocked.)
-  - **Re-encrypt fresh per login**, never resend a cached ciphertext: an identical name blob reused across
-    families would let the operator **correlate** a device's re-logins, re-linking otherwise-unlinkable
-    families. A fresh nonce each time keeps families unlinkable.
-  - **Best-effort, not a contract.** A browser cannot read the machine/hostname, so the name is coarse — a
-    browser + platform guess, never a device identity. Two of the account's laptops can name themselves
-    identically; that is accepted, not a bug to fix server-side.
-  - The operator sees only **ciphertext name blobs**, opaque family ids, coarse timestamps and a device
-    *count* — **never** a cleartext device/user-agent string. (A server-generated cleartext codename was
-    considered and **rejected** — superseded by this E2EE scheme.)
+- **Unnamed families — the name lives off the family entirely.** A login creates a family the server can
+  identify only by an opaque **family id**, and it stores **no name for it, not even ciphertext**. The
+  display name a user sees comes from the client's **Master-Key-sealed device register** — the same
+  sealed-synced-blob shape as
+  [en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md) — which also
+  carries the device↔family join. So an "active sessions" view on any **unlocked** device shows names, while
+  the **locked** view shows the id + a coarse created-date; listing and revoking themselves need only a
+  session. What this settles:
+  - **A per-family name ciphertext must not come back.** It was the earlier design here, and it carried a
+    standing obligation: a name blob resent unchanged across logins lets the operator **correlate** a
+    device's re-logins and re-link otherwise-unlinkable families, so every login had to re-encrypt with a
+    fresh nonce — a rule no test can see being broken. Keeping the name in the register removes the
+    mechanism instead of guarding it: with no per-family ciphertext there is nothing to correlate.
+  - **Why the register, not the family.** Auth produces only a signature, no symmetric key — the account key
+    exists only after **unlock** (auth ≠ unlock), so a name can never be attached in the login call wherever
+    it is stored. And a **device outlives its logins**: naming the device rather than each family is one
+    write instead of one per login, and it survives the family it was written during.
+  - **Best-effort as a seed, not a contract.** A browser cannot read the machine/hostname, so the initial
+    label is coarse — a browser + platform guess, never a device identity. Because it lives in a
+    user-owned register rather than on a family, the user can **rename it**; two identically-guessed laptops
+    are a starting point, not a dead end.
+  - The operator sees opaque family ids, coarse timestamps and a device *count* — **never** a cleartext
+    device/user-agent string, and no per-family blob at all. (A server-generated cleartext codename was
+    considered and **rejected** — operator-meaningless, and superseded by client-side naming.)
 - **Transport.** The refresh token rides an httpOnly + Secure + SameSite **cookie**. The contract still
   permits it in the request body (`RefreshRequest.refreshToken`) and the server accepts either, but **no
   client uses the body path** — it is unused surface, kept only because removing it is a contract break
@@ -94,10 +98,10 @@ The web client (cr-0055) is fully cookie-based (it keeps no body refresh token);
   and theft response are all one operation.
 - **Undetected theft is caught** by rotation + reuse detection — the gap a single revocable token leaves
   open.
-- **Operator stays blind.** The server sees only ciphertext name blobs, opaque family ids, coarse
-  timestamps, and a device *count* — never a cleartext device fingerprint. Revoking a session works at the
-  **auth layer** (no unlock needed); **reading** the names needs unlock (they are E2EE), so the locked
-  sessions view shows only id + coarse created-date.
+- **Operator stays blind.** The server sees opaque family ids, coarse timestamps, and a device *count* —
+  never a cleartext device fingerprint, and no name in any form. Listing and revoking work at the **auth
+  layer** (no unlock needed); **reading** the names needs unlock (they are sealed under the Master Key), so
+  the locked sessions view shows only id + coarse created-date.
 - **Smaller blast radius.** The powerful long-lived credential travels only to the refresh endpoint, not
   on every request.
 - **Cost:** more moving parts than a single token — a refresh endpoint, rotation/generation bookkeeping,
@@ -112,5 +116,9 @@ The web client (cr-0055) is fully cookie-based (it keeps no body refresh token);
 - **Rejected — cleartext device names server-side** (e.g. storing the user-agent as the session label):
   an operator-blind violation. Names are **E2EE** (client-built, encrypted under the account key).
 - **Rejected — server-generated cleartext codename** (e.g. `violet-otter`): operator-meaningless and
-  unlock-free, but superseded by the E2EE scheme, which gives **real, recognizable** names at no blindness
-  cost. Not worth carrying a second naming mechanism.
+  unlock-free, but superseded by client-side naming, which gives **real, recognizable** names at no
+  blindness cost. Not worth carrying a second naming mechanism.
+- **Rejected — an encrypted name stored per family** (`PUT …/sessions/{id}/name`): operator-blind on its
+  face, and it was this ADR's own earlier design, but it re-introduces a linkability surface that only a
+  never-forgotten per-login re-encryption keeps shut — and it is the *second* naming mechanism, next to the
+  device register that has to exist anyway for the device↔family join. One naming mechanism, off the family.

@@ -67,9 +67,10 @@ no per-device identity to provision — only a wrap addressed to the new device'
 - **No push.** Confirmed: no webpush/VAPID/WebSocket/SSE anywhere; explicitly deferred (ADR 0021 §1 "push
   channel … is a later seam"; ADR 0033 "Rejected (deferred) — WebSocket/SSE push"). Live features short-poll.
 - **No device registry/naming.** Session family = "one login / device" is **built** (`auth.openapi.yaml:251`,
-  ADR 0004), but the **E2EE named-sessions layer** (`uc.account.sessions`) is **designed-but-unbuilt** — the
-  use-case file doesn't even exist; `SessionFamily` carries only an opaque `id`. So "you're linking *Kevin's
-  iPhone*" has no data behind it yet.
+  ADR 0004), but the **session management + naming layer** ([uc.account.sessions](../docs/features/account/use-cases/uc.account.sessions.md))
+  is **refined-but-unbuilt** — `SessionFamily` carries only an opaque `id`, and the device names live in a
+  Master-Key-sealed client register that does not exist yet. So "you're linking *Kevin's iPhone*" has no data
+  behind it until #111's slices B/C land.
 
 ## 2. The design — reuse vs. new
 
@@ -144,7 +145,7 @@ The device **with a camera scans**; the device **without a camera displays**.
 | **1 — Ephemeral device-key + QR (enabler)** | New device mints an ephemeral transport keypair; render/scan its pubkey reusing `fingerprint()` + `KitScanner.vue` | ADR 1 |
 | **2 — Direction 1, push-free** | Relay endpoint (pending pairing + sealed-blob pickup); trusted device scans → approves (ceremony) → `asymWrap`s Master Key → new device unwraps → enrols its own `DEVICE_KEY` wrap | Slice 1, ADR 1/2 |
 | **3 — Direction 2, poll-woken** | Poll-for-pending-pairing on trusted online devices (ADR 0021 pattern) + the two-way QR bootstrap | Slice 2 |
-| **(precedes) — Device naming + revoke** | `uc.account.sessions` E2EE named-sessions + the sealed device register, so linking shows/lists named devices **and a mistaken grant can be taken back** | inbox #111 — decided to run first, **[DECISION C]** |
+| **(precedes) — Device naming + revoke** | `uc.account.sessions` list/revoke + the sealed device register, so linking shows/lists named devices **and a mistaken grant can be taken back** | inbox #111 — decided to run first, **[DECISION C]** |
 
 **Deliberately deferred:**
 
