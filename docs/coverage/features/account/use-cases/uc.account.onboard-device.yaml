@@ -1,16 +1,21 @@
 useCase: uc.account.onboard-device
 feature: account
 title: Onboard a device from one you are already signed in on
-# Refined 2026-08-12 (ADR 0059), nothing built. `status: planned` here is the strong form of the word — no
-# contract, no backend, no web code exists for this use-case, so every surface is a gap for the ordinary
-# reason rather than for ADR 0040's CI-run one.
+# Refined 2026-08-12 (ADR 0059). The **server half** is built: the five `pairing` endpoints on the auth spec,
+# `account/pairing/` behind them, and the session delegation on `SessionService`. Both web directions and the
+# live QR component are not, so every criterion below is still part web — see the two gaps.
 #
-# Two criteria below are **structural** and therefore owe a permanent guard rather than a test, which the CR
-# must carry into its Definition of done (`changes/README.md`):
-#   - `no-code-ever-names-a-server` — ADR 0059 §4. A URL-shaped field on the pairing payload would let an
-#     attacker's code redirect a trusted device's seal to a server they control, and everything would keep
-#     working, so no test would notice. This is the same shape as `scripts/validate_device_shapes.py`, one
-#     schema over, and it is the rule of that ADR a reviewer should look for by name.
+# `status: planned` is nonetheless correct, and for the same single reason uc.account.sessions gives:
+# **no CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
+# executes makes no coverage claim — leaves every criterion uncovered however green the suites are locally.
+# They DO exist and pass; the backend gap names them so the later flip is mechanical. Nothing here waits on a
+# missing test on that surface; the remaining condition is an event.
+#
+# Two criteria below are **structural** and are carried by permanent guards rather than by tests:
+#   - `no-code-ever-names-a-server` — ADR 0059 §4, and **no longer owed**: `scripts/validate_pairing_shapes.py`
+#     pins the seven pairing schemas as exact property sets, so a URL-shaped field cannot be added to any of
+#     them quietly. It is the same shape as `scripts/validate_device_shapes.py`, one flow over, and it was
+#     bite-tested with a `serverUrl` on `PairingOpenRequest`, which it fails naming the field.
 #   - `the-locked-entry-adds-no-shell-route` — already guarded: `scripts/validate_shell_route_gate.py`. The
 #     QR-sign-in entry joins E3 on the sign-in *form*; the shortcut it must not take is a locked-reachable
 #     shell route, which that guard already refuses.
@@ -88,19 +93,47 @@ acceptanceCriteria:
       regression a third option on that card most plausibly causes.
 gaps:
   backend: >-
-    Nothing is built. The contract does not yet describe a pairing channel, and no resource, entity or store
-    exists — so there is no test to cite and no CI condition to wait on. What the CR will owe: a slice test over
-    the full HTTP stack for the channel's lifecycle (create, answer, seal, pick up, spend) with a second account
-    live throughout, so "scoped to the account that scanned" is observed at the boundary rather than argued from
-    the SQL; the identical-answer cases for expired / spent / unknown, each with a fresh channel as its live
-    control; and the delegated family behaving like any other in `SessionManagerSliceTest`'s terms. The two
-    unauthenticated endpoints each owe an explicit `@RateLimit` posture — the wraps resource's `@RateLimitExempt`
-    reasoning ("bounded by the caller's own session") does not transfer to an endpoint with no caller.
+    The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
+    `PairingSliceTest` drives all five endpoints over the full HTTP stack, with a second account live throughout
+    — which is what turns "the grant is scoped to the account that delegated" from a claim about the SQL into an
+    observation at the boundary. It covers `a-pairing-is-single-use-short-lived-and-not-probeable` end to end:
+    the three dead-channel cases (unknown, expired, spent) each run a FRESH channel through the same verbs as
+    their live control, because "they all answer 404" is satisfied perfectly by an endpoint that refuses
+    everything; a fourth case compares the three answers byte for byte, which is E1's actual claim; the single-use
+    rule is asserted as the pair "polling for the answer spends nothing, taking the grant spends the channel";
+    and §8's one-outstanding rule is asserted as supersession WITH the revoke of the family that ceremony left
+    behind, against a second account's pairing that must survive it. `PairingPurgeTest` owns the sweep —
+    expire-then-delete in that order, and the uncollected family revoked — each with a COLLECTED channel beside
+    it as the live control, since a sweep that revoked on "overdue" alone would sign out the device that did
+    arrive. For `the-grant-carries-key-and-session` the backend proves the session half only: the delegated
+    family lists, rotates and revokes like any other, and revoking it leaves the granting session refreshing
+    (`SessionManagerSliceTest`, with the granting family as the control the criterion names). The Master-Key half
+    is client-side by construction — the server relays one sealed envelope it cannot open — and so is every
+    binding step: `add-a-device-is-gated-on-a-matching-check-number` and
+    `qr-sign-in-seals-only-after-the-returned-code-is-proven` are checked on the trusted device, and what the
+    backend contributes to them is an ABSENCE that is asserted rather than assumed — `/api/pairing/seal` takes no
+    code and verifies none, because a server that could release on a correct code would be past the only barrier
+    there is (ADR 0059 §6, ADR 0026). Of
+    `the-envelope-is-sealed-to-the-ephemeral-key-and-nothing-else-leaks` the backend covers the relay half:
+    collection is unauthenticated on purpose, the request names no account, and what comes out is byte for byte
+    what went in. `no-code-ever-names-a-server` is now carried by `scripts/validate_pairing_shapes.py` rather
+    than owed, with the slice test's response-shape assertion (the channel read exposes exactly `answer` and
+    `envelope`) as its server-side twin. Rate-limit posture is not asserted by hand: the three public endpoints
+    declare `@RateLimit(IP)` and the two authenticated ones `@RateLimit(USER)`, and
+    `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if one loses it — bite-
+    tested here, it names the endpoint. The wraps resource's `@RateLimitExempt` reasoning ("bounded by the
+    caller's own session") deliberately does not transfer: these endpoints have no caller. Three criteria have no
+    backend half at all — `the-onboarded-device-writes-its-own-register-entry` and
+    `a-linked-device-is-born-at-the-password-less-tier` are client writes onto endpoints that already existed, and
+    `the-locked-entry-adds-no-shell-route` is a route-gate property of the web surface.
   web: >-
-    Nothing is built. Both directions need a live on-screen QR renderer, which does not exist today either —
+    Nothing is built — the server half landed without either direction's screen, so **every** criterion above is
+    still part-owed here. Both directions need a live on-screen QR renderer, which does not exist today either —
     `qrcode` is a dependency but its only call site is inside `downloadKitPdf`, producing a PDF rather than a
     screen — and a foreground poll on the pairing screen, since none of the three existing poll loops can run
-    before unlock. What the CR will owe, beyond the per-direction ceremonies: the mismatch and wrong-code cases
+    before unlock. One trap the built endpoints hand the client: the collect that returns the sealed grant SPENDS
+    the channel whoever calls it, so a trusted device that keeps polling after it seals consumes the ceremony
+    before the new device arrives. What the two web slices owe, beyond the per-direction ceremonies: the mismatch and wrong-code cases
     with their matching controls, the no-persist behaviour of a declined "stay signed in", and the E3 card's
     existing two paths as regression controls. E2E is likely to stay out of reach for the same reason the
     sessions panel's did — the flow needs two live sessions of one account, which the current harness does not

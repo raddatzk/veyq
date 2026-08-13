@@ -1,7 +1,7 @@
 ---
 id: cr-device-pairing-channel-and-session-delegation
 title: The pairing channel and the delegated session — contracts + backend for both link directions
-status: in-progress
+status: done
 satisfies: [uc.account.onboard-device]
 adrs: ["0059", "0004", "0003", "0005", "0021", "0026", "0054"]
 invariants:
@@ -290,7 +290,7 @@ mean *"this CR broke something"* rather than *"it was already red"*.
   delegated family lists, rotates and revokes like any other **and** that revoking it leaves the delegating
   family refreshing — the granting session is the live control the coverage file names.
 
-- [ ] **3 coverage** — `docs/coverage/features/account/use-cases/uc.account.onboard-device.yaml`.
+- [x] **3 coverage** — `docs/coverage/features/account/use-cases/uc.account.onboard-device.yaml`.
       **Done when:** `python3 scripts/validate_coverage.py` green.
 
   **Sketch.** The backend gap is **rewritten, not removed, and `status:` stays `planned`.** *Measured:*
@@ -323,5 +323,33 @@ Phases 1–3 green, and:
 
 ## Retrospective
 
-<!-- Filled at close: what went wrong in planning, execution and process/collaboration; root cause; the one
-concrete "next time". Both directions. Harvest before deleting this file. -->
+**Planning — one real miss, and it is the interesting one.** The CR derived the "an abandoned ceremony must not
+leave a live refresh token" rule from the **expiry** case only ("a channel reaching `EXPIRED` without
+`COLLECTED` takes that family with it"), and separately specified superseding at `delegate`. Those two meet: a
+channel superseded *after* it delegated strands exactly the same family, immediately, and the sweep as
+specified would never have looked at it. Root cause is a shape, not an oversight: the cleanup was written
+against the terminal status that *caused* the thought rather than against the predicate ("terminal without
+collected"). Found while implementing, fixed by revoking at supersede time too — but a CR that names a sweep
+should not be the place that discovers its own second case.
+
+**Planning — one small ambiguity.** *"`refreshToken` is `x-veyq-visibility: token`, capped like its sibling in
+the same spec"* — the sibling with a `@Size` annotation is `RefreshRequest.refreshToken`, a **request** field;
+`PairingDelegateResult` is a response, and this spec's response tokens carry no bean-validation annotation. The
+CR's sentence resolved to two different answers depending on which sibling you reach for. Cost: one decision
+and one line in the report.
+
+**Execution — nothing failed, and one thing was nearly waved through.** The first full `./gradlew check` was
+green on the first attempt. It also printed an H2 `Statement was canceled` stack trace, which is exactly the
+kind of noise a green build invites you to skip; it is pre-existing (a baseline `check` in a throwaway worktree
+at the phase-1 commit prints it 15 times, in three *other* classes, and the classes vary per run). Two minutes,
+and the alternative was reporting either "it's fine" or "I broke something" with no basis for either.
+
+**Process — the phase-by-phase gate worked, and the CR carried itself.** No chat context was needed at any
+point; every claim the CR made that I re-measured held (the 23-guard baseline, 68/510/1, the 8 red-on-arrival
+hits, ADR 0004 already carrying the second origin at `0004-session-tokens.md:39-42`). The friction was mine:
+the shell's working directory drifts between `backend/` and the repo root across `cd` calls, and two commands
+failed on it before I switched to absolute paths.
+
+**Next time (concrete).** When a CR specifies a cleanup keyed on a terminal state, enumerate **every** terminal
+state in the same paragraph and say for each whether the cleanup applies. Here that one line would have turned
+`SUPERSEDED` from a finding into a specification.
