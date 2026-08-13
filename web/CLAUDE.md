@@ -90,5 +90,22 @@ here; the server is blind.
 - **Operator-blind:** seal/derive everything client-side; never send the password, plaintext or raw keys.
   See [security model](../docs/crosscutting/security-model.md) and
   [account & key model](../docs/crosscutting/account-key-model.md).
+- **`jsqr` is a knowingly-stale dependency — don't "fix" it, don't widen it.** The root `CLAUDE.md` forbids
+  *keeping* a dep abandoned by its maintainers; this is the one granted exception, so its reason lives here
+  and not in a commit nobody reads. *Measured 2026-08-13:* `cozmo/jsQR` is neither archived nor
+  npm-deprecated, but its default branch's HEAD is from **2021-08-24**, its last release from **2021-04-24**,
+  and its newest issue is an unanswered decoder correctness bug. **Its `pushed_at` reads 2026 and is a false
+  liveness signal** — that field fires on a push to *any* ref, so measure a default branch's HEAD, never
+  `pushed_at`; the same trap voids any replacement candidate checked the lazy way. Every alternative is worse
+  *here*: `qr-scanner` is the **same** Cosmo-Wolfe ZXing port with a 2022 HEAD; `barcode-detector` is
+  genuinely maintained but ships a ~1 MiB ZXing-C++ wasm **and fetches it from a jsDelivr CDN by default**,
+  which breaks a self-hosted instance and hands a third party the timing of every scan — a real
+  self-hostability regression traded for a theoretical decoder one; and the native `BarcodeDetector` is absent
+  from Firefox entirely and from desktop Chrome on Linux/Windows, so it removes no dependency at all. What
+  bounds the risk is the input class: we only ever decode QR codes **our own client produced** (low-version
+  `veyqkit:` / `veyqpair:` payloads, which the known version-23 defect cannot reach), pure JS is memory-safe
+  so a decoder bug is a wrong string rather than an exploit, and the decoded value is validated immediately
+  against the contract-pinned `[A-Za-z0-9+/]*={0,2}`. **Revisit on any of three triggers:** we need to decode
+  a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.
 
 Stack: Vue 3, PrimeVue, vue-router. Working rules: [`../docs/ai/README.md`](../docs/ai/README.md).
