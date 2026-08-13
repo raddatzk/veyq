@@ -16,9 +16,11 @@ title: Onboard a device from one you are already signed in on
 #     pins the seven pairing schemas as exact property sets, so a URL-shaped field cannot be added to any of
 #     them quietly. It is the same shape as `scripts/validate_device_shapes.py`, one flow over, and it was
 #     bite-tested with a `serverUrl` on `PairingOpenRequest`, which it fails naming the field.
-#   - `the-locked-entry-adds-no-shell-route` — already guarded: `scripts/validate_shell_route_gate.py`. The
-#     QR-sign-in entry joins E3 on the sign-in *form*; the shortcut it must not take is a locked-reachable
-#     shell route, which that guard already refuses.
+#   - `the-locked-entry-adds-no-shell-route` — **structurally** guarded, and only structurally:
+#     `scripts/validate_shell_route_gate.py` refuses the shortcut (a locked-reachable shell route) for both
+#     directions' entries, since neither adds a route at all. The behavioural half — the entry is offered, it
+#     attempts no unlock, and the paths already on that card are unchanged — is still a test's job, and is owed
+#     by whichever slice adds each entry.
 status: planned
 acceptanceCriteria:
   - id: the-grant-carries-key-and-session
@@ -86,11 +88,15 @@ acceptanceCriteria:
       enrolment path itself still works.
   - id: the-locked-entry-adds-no-shell-route
     text: >-
-      The *sign in with a QR code* entry sits on the sign-in form beside uc.account.sessions E3's other ways
-      out, reads nothing sealed, and adds no route that is session-gated but not unlock-gated. The structural
-      half is the existing route-gate guard; what a test owes is that the entry is offered on the locked card,
-      that choosing it attempts no unlock, and that E3's own two paths still behave exactly as they did — the
-      regression a third option on that card most plausibly causes.
+      **Both** routeless entries this feature puts on the sign-in form — *sign in with a QR code*, beside
+      uc.account.sessions E3's other ways out, and the *add a device* join the same scan control dispatches to —
+      read nothing sealed and add no route that is session-gated but not unlock-gated. One property, two
+      arrivals: the criterion was first written about the QR direction alone, and the second direction reaches
+      the same card, so covering only one would leave the other's regressions unowned. The structural half is
+      the existing route-gate guard. What a test owes, per entry: that it is offered on the locked card, that
+      choosing it attempts no unlock, and that every path already on that card still behaves exactly as it did
+      — E3's own two ways out **and** the Emergency-Kit scan, which is what a shared, dispatching scan control
+      most plausibly breaks.
 gaps:
   backend: >-
     The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
@@ -127,14 +133,32 @@ gaps:
     `a-linked-device-is-born-at-the-password-less-tier` are client writes onto endpoints that already existed, and
     `the-locked-entry-adds-no-shell-route` is a route-gate property of the web surface.
   web: >-
-    Nothing is built — the server half landed without either direction's screen, so **every** criterion above is
-    still part-owed here. Both directions need a live on-screen QR renderer, which does not exist today either —
-    `qrcode` is a dependency but its only call site is inside `downloadKitPdf`, producing a PDF rather than a
-    screen — and a foreground poll on the pairing screen, since none of the three existing poll loops can run
-    before unlock. One trap the built endpoints hand the client: the collect that returns the sealed grant SPENDS
-    the channel whoever calls it, so a trusted device that keeps polling after it seals consumes the ceremony
-    before the new device arrives. What the two web slices owe, beyond the per-direction ceremonies: the mismatch and wrong-code cases
-    with their matching controls, the no-persist behaviour of a declined "stay signed in", and the E3 card's
-    existing two paths as regression controls. E2E is likely to stay out of reach for the same reason the
-    sessions panel's did — the flow needs two live sessions of one account, which the current harness does not
-    stand up — and if so that limit belongs here, stated, rather than in a silently missing ref.
+    **The trusted half of *add a device* is built** (slice 2, `web/src/features/account/pairing/` plus the
+    shared `SlideToConfirm` primitive): open a channel, show the code, wait for the answer, compare the number,
+    take the deliberate confirmation, delegate then seal. Its suites pass locally and the only thing missing is
+    a CI run to execute them (ADR 0040) — the same single condition the backend gap names. They pin what no
+    `scripts/` validator can see without parsing TypeScript: the displayed payload is the marker and the handle
+    and can never read as a URL (§4, bitten by forcing the one draw whose base64 begins with a slash); the grant
+    round-trips only through the key whose number was compared, and not through any other; the check number is
+    the already-pinned safety-number digest's first group; declining the comparison reaches **neither**
+    `delegate` nor `seal` and the restart mints a different handle, each with its completing ceremony as the
+    live control; and the channel is never read again after the answer, at both altitudes (the loop's own suite
+    and the whole screen after a real seal), with "it polled before" as the control that stopping is not
+    vacuous. The scanner's first-ever harness came with the decoder refactor that made it serve both flows.
+    **What is still owed here, all of it slice 3's:** the onboarded device's half and the shared tail — so the
+    Master-Key half of `the-grant-carries-key-and-session`, the open half of
+    `the-envelope-is-sealed-to-the-ephemeral-key-and-nothing-else-leaks`,
+    `no-password-and-no-secret-key-reaches-the-new-device`, `the-onboarded-device-writes-its-own-register-entry`
+    and `a-linked-device-is-born-at-the-password-less-tier` — plus the whole QR-sign-in direction
+    (`qr-sign-in-seals-only-after-the-returned-code-is-proven`). Of
+    `the-locked-entry-adds-no-shell-route`, slice 2 carries only the regression half of the Emergency-Kit scan
+    across the decoder refactor; both entries' own behaviour is owed. **And one blocker found while building
+    slice 2, which is why the shared tail did not land with it:** `delegate` hands the trusted device a refresh
+    token in the response **body**, and this client has no way to keep one — `boot()` revives a session only
+    from the httpOnly cookie, `TokenResource` sets a cookie only for a request that already carried one, and a
+    token held in JS would be the first multi-tab-unsafe session here (two tabs presenting the same token is
+    ADR 0004's clone case, which revokes the family of a device that has no password to recover with). So an
+    onboarded device would be signed in for exactly one page load. The correction belongs to the delegated
+    session's transport, not to this screen. E2E stays out of reach for the reason the sessions panel's did —
+    the flow needs two live sessions of one account, which the current harness does not stand up — and that is
+    stated here rather than left as a silently missing ref.

@@ -11,6 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppearancePanel from '../features/settings/AppearancePanel.vue'
 import DeviceTrustPanel from '../features/account/trustDevice/DeviceTrustPanel.vue'
 import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
+import AddDevicePanel from '../features/account/pairing/AddDevicePanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
 import TenantTermsPanel from '../features/admin/createTenant/TenantTermsPanel.vue'
@@ -78,6 +79,10 @@ const categories = computed<NavCategory[]>(() => {
         // Every active session of the account + the remote sign-out (uc.account.sessions). Account-wide, not
         // scope-bound, and gated on a session rather than an unlock — so it belongs beside device trust.
         { id: 'sessions', label: t('settings.sessions'), icon: 'pi pi-mobile' },
+        // Adding a device (uc.account.onboard-device) sits beside the sessions it produces. The route's own
+        // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
+        // premise — it seals the Master Key it is holding.
+        { id: 'pairing', label: t('pairing.navTitle'), icon: 'pi pi-qrcode' },
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
       ],
@@ -168,6 +173,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'device') return { component: DeviceTrustPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
+  if (id === 'pairing') return { component: AddDevicePanel, props: {} }
   return { component: AppearancePanel, props: {} }
 })
 

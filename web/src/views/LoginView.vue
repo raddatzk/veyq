@@ -17,7 +17,7 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
 import { ACCOUNT_DEVICE_TRUST } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
-import { importKitFromFile, type KitData } from '../features/account/emergencyKit/emergencyKit'
+import { importKitFromFile, parseKit, type KitData } from '../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
 import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
@@ -251,8 +251,16 @@ async function onUpload(event: Event) {
   else error.value = t('unlock.kitUnreadable')
 }
 
-function onScanned(kit: KitData) {
-  applyKit(kit)
+/** Which decoded strings this screen's scanner should stop on. The scanner itself is decoder-agnostic (it hands
+ *  back whatever jsQR read), so recognising a payload is the caller's job — and keeping it a predicate is what
+ *  lets the camera scan past a foreign QR instead of reporting it as a failure. */
+function acceptsScan(text: string): boolean {
+  return parseKit(text) !== null
+}
+
+function onScanned(text: string) {
+  const kit = parseKit(text)
+  if (kit) applyKit(kit)
   scanOpen.value = false
 }
 
@@ -445,7 +453,7 @@ onMounted(async () => {
       </div>
     </template>
   </Card>
-  <KitScanner v-if="scanOpen" @found="onScanned" @close="scanOpen = false" />
+  <KitScanner v-if="scanOpen" :accepts="acceptsScan" @found="onScanned" @close="scanOpen = false" />
 </template>
 
 <style scoped>

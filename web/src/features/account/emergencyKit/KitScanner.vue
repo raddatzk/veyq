@@ -1,13 +1,23 @@
 <script setup lang="ts">
-// uc.account.unlock — scan the Emergency Kit QR with the device camera and emit the parsed kit. Entirely
-// client-side: the camera frames are decoded in-browser with jsQR; nothing leaves the device.
+// The camera scanner (uc.account.unlock, and uc.account.onboard-device since ADR 0059) — one overlay that owns
+// the camera lifecycle, the permission failure and the no-camera fallback. Entirely client-side: the frames are
+// decoded in-browser with jsQR; nothing leaves the device.
+//
+// **Decoder-agnostic on purpose.** It emits the RAW decoded string and knows nothing about what a payload means
+// — the caller dispatches (`veyqkit:` → the Emergency Kit, `veyqpair:` → a pairing join). That is what lets one
+// scan entry serve both flows instead of a second button whose difference a user cannot see.
+//
+// `accepts` is why this stayed one component rather than becoming two. A camera sees whatever is in the room,
+// so the loop must keep scanning past a QR that is not ours instead of surfacing it as a failure — and only the
+// caller knows which strings are ours. Without the predicate the component would have to stop on the first
+// decode of anything, which is the Emergency-Kit path's existing behaviour broken.
 import { onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import { parseKit, type KitData } from './emergencyKit'
 
-const emit = defineEmits<{ found: [KitData]; close: [] }>()
+const props = defineProps<{ accepts?: (text: string) => boolean }>()
+const emit = defineEmits<{ found: [string]; close: [] }>()
 const { t } = useI18n()
 
 const video = ref<HTMLVideoElement | null>(null)
@@ -40,11 +50,10 @@ async function scan() {
       ctx.drawImage(v, 0, 0, canvas.width, canvas.height)
       const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const jsQR = (await import('jsqr')).default
-      const code = jsQR(data, width, height)
-      const kit = code && parseKit(code.data)
-      if (kit) {
+      const text = jsQR(data, width, height)?.data
+      if (text && (props.accepts?.(text) ?? true)) {
         stop()
-        emit('found', kit)
+        emit('found', text)
         return
       }
     }

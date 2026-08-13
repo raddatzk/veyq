@@ -6,6 +6,7 @@ import { Configuration, SetupApi } from './generated'
 import {
   Configuration as AuthConfiguration,
   LoginApi,
+  PairingApi,
   RecoveryApi,
   SessionApi,
   TokenApi,
@@ -52,6 +53,23 @@ export function sessionApi(): SessionApi {
  *  the password that would get them a session — so the bearer params only supply the basePath. */
 export function recoveryApi(): RecoveryApi {
   return new RecoveryApi(new AuthConfiguration(bearerParams()))
+}
+
+/** Device pairing (ADR 0059) — the **authenticated** half. `delegate` and `seal` are the two calls that reach
+ *  the caller's account: delegation is where the channel is bound to it at all, and sealing is gated on having
+ *  delegated. Both therefore carry the bearer token of the trusted, unlocked device. */
+export function pairingApi(): PairingApi {
+  return new PairingApi(new AuthConfiguration(bearerParams()))
+}
+
+/** Device pairing — the **unauthenticated** half (`open`, `answer`, `collect`). No token, deliberately, and
+ *  for two different reasons: the device being onboarded has no session to send, and pickup is unauthenticated
+ *  by design (ADR 0059 §3) — the envelope is worthless without the ephemeral private key, so gating the fetch
+ *  would prove nothing and would force that device to name an account before it has one. Same shape as
+ *  [publicSharesApi]: the same generated class, constructed without the bearer credential, so no Authorization
+ *  header is ever sent from a device that has no business identifying itself. */
+export function publicPairingApi(): PairingApi {
+  return new PairingApi(new AuthConfiguration({ basePath: session.apiBase }))
 }
 
 export function accountApi(): AccountApi {
