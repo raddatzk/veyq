@@ -43,6 +43,13 @@ The durable state this builds on, all of it already written:
 - `contracts/api/auth.openapi.yaml` tag `pairing` — the wire, **unchanged by this CR**.
 - [ui-web-styleguide](../docs/crosscutting/ui-web-styleguide.md) § *Reuse first*.
 
+**This CR's phase 3 is not "slice 3", and one of the two live formulations is wrong.** `docs/inbox.md` #12
+lists what remains as *(1) slice 2's new-device half + the shared tail, (2) slice 3 (sign in with a QR code)* —
+two items. The coverage file's web gap instead opens its remaining list with *"What is still owed here, all of
+it slice 3's"* and then enumerates both under that one label. **The coverage sentence is the false one**, and it
+contradicts this CR's own D12 (*"They are built here; slice 3 reuses them"*) as well as the DoD, which requires
+all three web phases green. Phase 3 corrects it; nothing else in the gap's substance changes.
+
 **Three shapes are inherited from the server half and are not re-decided here.** If one of them turns out to
 be wrong, that is an escalation, not something this CR resolves:
 
@@ -61,6 +68,19 @@ be wrong, that is an escalation, not something this CR resolves:
 | `collect` marks `COLLECTED` **iff** `envelope != null`; reading the answer spends nothing | `…/pairing/PairingHandler.kt:105-109` |
 | `delegate` needs `ANSWERED && userId == null`; `seal` needs `ANSWERED && userId == caller` | `…/pairing/PairingHandler.kt:70, 92` |
 | `PairingChannel` carries **no status** — presence of `answer`/`envelope` is the whole state | `contracts/api/auth.openapi.yaml`, `validate_pairing_shapes.py` |
+
+**Measured facts about the adoption verb**, which did not exist when this CR was written (substrate: `main` @
+`8f00dac`, clean tree). Its *reasons* are durable state and are read there, not re-derived here — ADR 0004
+§ Transport, § web refresh cookie lifetimes and § Consequences (why it is a verb of its own, and why it is
+deliberately **not** narrowed to delegated families):
+
+| Fact | Where |
+|---|---|
+| `TokenAdoptRequest { refreshToken, sessionScope }` — **both required**, `sessionScope` ∈ `SESSION \| PERSISTENT` | `contracts/api/auth.openapi.yaml:745-780` |
+| `200` → `SessionResponse { accessToken, family: { id } }`, `refreshToken` **omitted**, refresh rides `Set-Cookie` (declared on the op) | `contracts/api/auth.openapi.yaml:150-192` |
+| `400` when the request already carries a refresh cookie; `401` for a refused token, undifferentiated | same |
+| Token ops emit **no `Authorization` header** — the auth spec declares no security on them — so `tokenApi()` works from a session-less device and **no `publicTokenApi()` factory is needed** | `web/src/api/generated/auth/apis/TokenApi.ts:77-101`; contrast `publicPairingApi()` at `web/src/api/client.ts:71` |
+| The generated client is **stale again** — `adoptSession` is absent, phase 1's regeneration predates the verb | `rg -n adoptSession web/src/api/generated` → empty |
 
 ## Decisions
 
@@ -220,11 +240,122 @@ destructive confirm is `window.confirm` (`SessionsPanel.vue:30-32`). So this is 
 pointer events and a progress track, reused by slice 3. **This is not a wrapper around an existing control**,
 and the estimate says so rather than discovering it at implement time.
 
-### D12 — Slice 2 owns the shared tail
+### D12 — Slice 2 owns the shared tail, and every value in it is named with its consuming call site
 
-Use-case steps 5–7 — open the envelope, take over the session, first unlock, register **write moment 1** with
-the handed-over label, `DEVICE_KEY` enrolment or a declined *stay signed in* — are identical in both
-directions. They are built here; slice 3 reuses them.
+Use-case steps 5–7 — open the envelope, adopt, first unlock, register **write moment 1** with the handed-over
+label, `DEVICE_KEY` enrolment or a declined *stay signed in* — are identical in both directions. They are built
+here; slice 3 reuses them.
+
+**This decision used to be those three words and nothing else, and that is what blocked phase 3.** So it is
+written out here in the form this CR's own retrospective asks for: for every value one step hands the next, the
+call site that consumes it, with the signature it actually has. Measured on `main` @ `8f00dac`.
+
+The order is fixed by ADR 0059 §2 and cannot be rearranged: **answer → adopt → unlock → register → enrol.**
+
+| # | Step | Value in | Produced by | Returns / effect |
+|---|---|---|---|---|
+| 0 | *stay signed in* | — | the join card's own control, **before any call** (D15) | `sessionScope: SESSION \| PERSISTENT` |
+| 1 | open the envelope | `priv` from `mintTransportKey()`; `envelope` from `collectPairingChannel(handle)` | `openGrant(priv, envelope)` — `pairing.ts:111` | `PairingGrant { email, masterKey, refreshToken, label }` |
+| 2 | adopt | `grant.refreshToken`, `sessionScope` | `tokenApi().adoptSession(…)` — **absent from the generated tree today**, see phase 3 | `SessionResponse { accessToken, family: { id } }`; **no** body `refreshToken`; `Set-Cookie` |
+| 3 | install the session | `res.accessToken`, `null`, `res.family.id` | `setTokens(accessToken, refreshToken, familyId?)` — `app/session.ts:17` | void; sets `session.familyId` — the reason adopt returns it |
+| 4 | install the account | `grant.email` | `setAccount(email)` — `app/account.ts:7` | void; sets `account.email`, which step 6 reads |
+| 5 | first unlock | `grant.masterKey`, `grant.email`, `grant.label` | **no exported function takes a Master Key** — `openVault(material, masterKey)` is module-private at `unlock/unlock.ts:28` (D13) | `setUnlocked(mk, identityPrivate)` + fires `noteThisDevice()` |
+| 6 | write moment 1 | `deviceId()`, a label, `session.familyId`, `await localWrapId(account.email)` | `noteThisDevice()` — `unlock/unlock.ts:60`, private, **takes no arguments** (D14) → `rememberThisDevice(thisDeviceId, fallbackLabel, familyId, wrapId)` — `deviceRegister.ts:289` | `reg.devices[id] = { label: prior?.label ?? fallbackLabel }` |
+| 7a | enrol (accepted) | `grant.email`, `masterKey()` | `enrolDeviceKey(email, masterKey)` — `rememberMe/deviceKeyWrap.ts:52` | `Promise<string>` — the new wrap id |
+| 7b | record the wrap | that wrap id | `rememberThisDeviceWrap(thisDeviceId, fallbackLabel, wrapId)` — `deviceRegister.ts:314` (write moment 2) | void |
+| 7c | declined | `grant.email`, `masterKey()` | `cacheSessionVault(email, masterKey)` — `rememberMe/sessionVault.ts:47` | void; and **no wrap of either kind** |
+
+**Reading that table produced three findings, and each is a decision below rather than a discovery at implement
+time.** They are the same class the retrospective already named — a value with no consumer — found this time by
+running the locator instead of by building against it:
+
+- **`grant.label` has no consuming call site at all** (row 6) → **D14**.
+- **`grant.masterKey` has no consuming call site either** (row 5) → **D13**.
+- **The tail it would "reuse" is not a module.** `enrolConvenienceWrap()` is a `<script setup>` local inside
+  `LoginView.vue:104`, reading the component's own `remember` / `noPersist` / `email` / `password` refs, and its
+  declined branch calls `trustThisDevice(email, password, mk)` (`trustDevice/trustDevice.ts:27`) — a **password**
+  this device never learns. So the tail is *extracted*, not reused → **D13**, **D15**.
+
+**Two values that need no work, stated so nobody re-derives them.** `res.family.id` reaches write moment 1
+through `session.familyId` because the tail's unlock happens in the **same page load** as its adopt — the
+cold-boot hole `noteThisDevice`'s own comment describes does not apply here. And `grant.email` survives the
+reload without being persisted separately: both stores the tail writes are keyed by it
+(`cacheSessionVault` → the `sessionStorage` record; `enrolDeviceKey` → the IndexedDB `RememberRecord`), and
+`restoreVaultFromCache()` (`unlock.ts:105`) calls `setAccount(source.email)` from whichever one answers.
+
+### D13 — The tail is a module, and unlocking from a handed-over Master Key is a new exported entry
+
+The tail lives in `web/src/features/account/pairing/onboardTail.ts` — one function taking the opened grant and
+the answered scope, running rows 2–7 of D12's table in that order. It is in `pairing/` and not in `login/`
+because its two callers are this direction's join card and slice 3's, and D12 promises slice 3 reuses it.
+
+It needs one thing that does not exist: **an exported unlock that takes a Master Key.** Measured — `unlock.ts`
+exports `unlockMasterKey(password, secretKeyB64)`, `restoreVaultFromCache()` and `unlockWithDevice(email,
+password)`; the shape the grant fits, `openVault(material, masterKey)`, is module-private (`unlock.ts:28`) and
+every export reaches it through a factor this device does not have. So `unlock.ts` gains one export that
+fetches the key material and opens the vault from a Master Key it is handed. `restoreVaultFromCache()` is its
+template and its proof that the shape is right: it already does exactly this — `setAccount(email)` **before**
+`openVault`, because `noteThisDevice()` reads `account.email` — for the cached-key case.
+
+`openVault` stays the single choke point. Nothing here adds a second way into the vault; it adds a second way
+to *reach* the one that exists.
+
+### D14 — The handed-over label is threaded into write moment 1, and no fourth write moment is created
+
+*Measured, and this is the finding D12's table was written to produce.* `rememberThisDevice(thisDeviceId,
+fallbackLabel, familyId, wrapId)` (`deviceRegister.ts:289`) writes `label: prior?.label ?? fallbackLabel`, so on
+a device with no prior entry — every onboarded device — `fallbackLabel` **is** the label. Its only caller,
+`noteThisDevice()` (`unlock.ts:60`), takes no arguments and hardcodes
+`guessDeviceLabel(i18n.global.t('sessions.unknownDevice'))`. D4 therefore seals a `label` that, as the code
+stands, is opened and thrown away, and the device would appear in the sessions list under a user-agent guess.
+
+The fix is to thread it: the new unlock entry (D13) carries an optional label through `openVault` into
+`noteThisDevice`, which passes it where it passes the guess today. Every other unlock path keeps the guess,
+unchanged.
+
+*Rejected — a separate write after unlock.* It is a **fourth write moment**, which
+`en.account.device-register` and the coverage criterion `the-onboarded-device-writes-its-own-register-entry`
+both forbid by name, and it would race the fire-and-forget moment 1 for the same key. *Rejected — pre-seeding
+the register before unlock:* the register is Master-Key-sealed, so there is no "before unlock" to write in.
+
+### D15 — *Stay signed in* is answered on the join card before adopt, and it decides two things at once
+
+ADR 0059 §2 and ADR 0004 § web refresh cookie lifetimes: the device **being onboarded** answers it, before its
+session exists, because the lifetime is fixed at adoption and no later refresh can move it. The same answer is
+ADR 0005 §22's tier choice. Both arms are the criterion (D8's third row):
+
+- **Accepted** → `sessionScope: PERSISTENT`, then `enrolDeviceKey(grant.email, mk)` → `rememberThisDeviceWrap`.
+- **Declined** → `sessionScope: SESSION`, then `cacheSessionVault(grant.email, mk)` and **no wrap at all**.
+
+**The declined arm is not `enrolConvenienceWrap`'s declined arm.** That one also calls `trustThisDevice(email,
+password, mk)` to keep a password `DEVICE` wrap; this device has no password, and ADR 0005 §22 carries the
+carve-out explicitly — a linked device's Off tier is that recipe *minus* the `DEVICE` wrap, so closing the
+browser ends it and the next visit is a fresh pairing, not email + password. `trustThisDevice` is never called
+on this path, and that absence is asserted, not assumed.
+
+**Where the question cannot be asked**, the answer is `SESSION` with no wrap. `LoginView.vue:59` gates the
+existing checkbox on `isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)`; with no IndexedDB or the
+capability off, `enrolDeviceKey` has nowhere to write, and the declined arm is the only reachable tier. The
+card shows the choice only when it can honour it — which is what the existing form already does.
+
+### D16 — Every terminal state of the tail, and the one call that may never be retried
+
+D9 enumerates the *pairing* terminal states; the tail adds two more, on a different verb, and the fifth tell in
+`changes/README.md` is why they are enumerated here rather than folded into D9's single message:
+
+| State | Cause | What the client does |
+|---|---|---|
+| `404` on any `/api/pairing/*` | expired, superseded, or already collected — indistinguishable by design | D9's one terminal message; **never** a retry |
+| `401` on `adopt` | the grant token was unknown, expired, superseded, or its family revoked | the same terminal message as D9 — but the grant is now spent, so *"start again"* means a **new ceremony on the trusted device**, not a reload here |
+| `400` on `adopt` | **this browser already carries a refresh cookie** — adoption is only for a device that holds no session here | a **different** message, because the remedy is different: this browser is already signed in somewhere. Do not fold it into D9's |
+| anything else | transport | leave the poll running; only a `404` ends it (D7's template) |
+
+**And the one that is not an error state at all: `adopt` may be presented exactly once.** The rotation supersedes
+the token, so a second presentation is ADR 0004's clone case and takes the whole family down — the device that
+just arrived, with no password to recover by. So the adopt call is **not** wrapped in `withRefresh`, is not
+reached by any generic retry, and a lost response is a terminal state and not a case to try again. This is
+D7's hazard in a second place: a call whose retry eats the ceremony. Like D7 it ships as a comment on the call
+site, because it is the line someone later "hardens" with a retry.
 
 ### The wiki bolt
 
@@ -254,6 +385,11 @@ Locators, not tallies — run them at implement time and read the list.
 | The generated client is **stale** — pairing ops are absent | `rg -li pairing web/src/api/generated \|\| echo "absent → npm run generate:api"` |
 | Unauthenticated API-factory precedents | `rg -n "recoveryApi\|publicSharesApi\|sessionApi" web/src/api/client.ts` |
 | Test-tree blast radius | `rg -ln "KitScanner\|deviceRegister\|deviceKeyWrap\|LoginView" web/src --glob '*.test.ts'` |
+| **Phase 3 — the gate that decides who arrives at the join entry.** Two angles, and the router is deliberately the second: `/login` carries no `meta` at all, so the gate is the **form's own** `v-if` | `rg -n "needsSecretKey\|isTrusted\|scanSupported\|rememberSupported" web/src/views/LoginView.vue` **and** `rg -n "name: 'login'\|requiresUnlock\|beforeEach" web/src/router.ts` |
+| Phase 3 — is the generated client current for `adopt`? (empty = regenerate) | `rg -n "adoptSession\|TokenAdoptRequest" web/src/api/generated \|\| echo "absent → npm run generate:api"` |
+| Phase 3 — the tail's consuming call sites, D12's table re-run as one command | `rg -n "export (async )?function (openVault\|noteThisDevice\|rememberThisDevice\|rememberThisDeviceWrap\|enrolDeviceKey\|cacheSessionVault\|trustThisDevice\|setTokens\|setAccount\|localWrapId)\b" web/src -A3` |
+| Phase 3 — what phase 1 built and nothing yet calls (the toolkit this phase consumes) | `rg -n "parsePairingPayload\|mintTransportKey\|transportAnswer\|openGrant\|answerPairingChannel" web/src --glob '!*.test.ts' --glob '!src/api/generated/**'` |
+| Phase 3 — every retry wrapper that must **not** reach `adopt` (D16) | `rg -n "withRefresh" web/src \| wc -l && rg -n "export async function withRefresh" -A12 web/src/features/account/login/login.ts` |
 
 ## Phases
 
@@ -270,23 +406,61 @@ Locators, not tallies — run them at implement time and read the list.
       `delegate` → `seal` → stop.
       *Done when:* `npm run check` green, with tests for D8's first, second and fourth rows and for D7's stop
       condition (a `collect` call count that does **not** grow after `seal`).
-- [ ] **3 web — the new-device half and the shared tail.** BLOCKED, and not on anything this CR can decide.
-      The sign-in-form scan entry and its dispatch, mint → `answer` → show the number → poll `collect` → open →
-      unlock → session takeover → register write moment 1 → `DEVICE_KEY` enrol or decline.
-      *Done when:* `npm run check` green, with tests for D9's single terminal message, D8's third, fifth and
-      sixth rows, and a regression control that the sign-in form's existing paths are unchanged.
+- [ ] **3 web — the new-device half and the shared tail.** **Unblocked 2026-08-13**: the transport correction
+      this phase waited on landed as `POST /api/token/adopt` (contracts + backend, `b15d8d0`), and the CR that
+      built it is consumed. What the blocker paragraph used to say is now durable state in ADR 0004
+      § Transport / § web refresh cookie lifetimes and in the coverage file's backend gap — including the part
+      of it that turned out to be **false** (nothing in this client serializes refresh, so a script-held token
+      would not have been the *first* multi-tab-unsafe session; that defect predates linking and is inbox #123,
+      which this phase inherits like every other web session and does **not** fix).
 
-      **The blocker, measured at implement time.** `delegate` returns the refresh token in the response
-      **body**, and this client cannot keep a body token: `boot()` (`web/src/app/boot.ts`) revives a session
-      only through `refreshSession()` with an empty body, i.e. from the httpOnly cookie, and `TokenResource`
-      sets a cookie only when the request already carried one. `session.refreshToken` is in memory. So the
-      onboarded device would be signed in for **exactly one page load**, hold a `DEVICE_KEY` wrap it can never
-      reach again, and have no password to fall back to — which contradicts the use-case's own postcondition.
-      Persisting the token client-side was rejected as the fix: it would be the first multi-tab-unsafe session
-      in this client, and its failure mode is not "sign in again" but ADR 0004's clone case — two tabs
-      presenting the same token revoke the family of a device that has no password to recover with. **The
-      correction belongs to the delegated session's transport (contracts → backend), i.e. to a slice-1 follow-up
-      and its own refine, not to this web slice.** Phase 3 resumes once that lands.
+      **What the phase builds, in the order ADR 0059 §2 fixes.**
+
+      1. **Regenerate first.** *Measured:* `rg -n "adoptSession" web/src/api/generated` is **empty** — phase 1's
+         regeneration predates the adopt contract, and `web/src/api/generated/` is gitignored, so a green
+         `npm run check` here would be a green run against a client that has never seen the verb
+         (`web/CLAUDE.md` § Prove your work names exactly this trap).
+      2. **The entry and its dispatch (D6).** `LoginView.vue:254-265` is the site: `acceptsScan` widens from
+         `parseKit(text) !== null` to either payload, and `onScanned` dispatches — `veyqkit:` → `applyKit`
+         unchanged, `veyqpair:` → the join card. `KitScanner.vue` needs no further change; phase 1 already made
+         it decoder-agnostic (`props: { accepts?: (text: string) => boolean }`, emits `found: [string]`).
+      3. **The join card**, routeless, replacing the form the way `LockedSignOut.vue` does
+         (`LoginView.vue:317-323` is the mechanism, a `v-if` inside the sign-in `Card`): mint the transport key,
+         show the check number derived **locally at mint time** (D2), `answer` the channel, poll `collect` until
+         an `envelope` is present, then run the tail.
+      4. **The grant poll.** A sibling of `pairingAnswerPolling.ts`, not a reuse of it: same structure (fire
+         once immediately, skip hidden ticks, re-fire on `visibilitychange`, idempotent `start`, `404` → one
+         terminal call), opposite stop condition — it stops on `envelope`, where the trusted device's stops on
+         `answer`. The three older loops still cannot be reused, for the reason `pairingAnswerPolling.ts:3-10`
+         already records.
+      5. **The tail (D12–D16).** `onboardTail.ts`, the new Master-Key unlock export (D13), the label threaded
+         into write moment 1 (D14), the *stay signed in* answer taken before adopt and driving both the scope
+         and the tier (D15), and the terminal-state handling (D16).
+      6. **One coverage correction, because durable state is wrong today.** The web gap says *"What is still
+         owed here, all of it slice 3's"* over a list whose first item is **this** phase. Phase 3 and slice 3
+         are different things (see the note below); the sentence is relabelled, the gap is otherwise narrowed
+         to what actually remains, and **`status: planned` and both gaps stay** — `validate_coverage.py` forbids
+         test refs under `planned`, and the standing reason (no CI run has ever executed here) is unchanged.
+
+      *Done when:* `npm run generate:api && npm run check` green, plus
+      `for f in scripts/validate_*.py; do python3 "$f"; done` green, with:
+      - D8's **third** row both ways — declined → `trustThisDevice` and `enrolDeviceKey` are **neither** called
+        and no wrap of either kind exists, with the accepted arm enrolling a `DEVICE_KEY` and the ordinary
+        remembered device still enrolling as the control that the path itself works;
+      - D8's **fifth** row — the onboarded device writes its own register entry, **under the label it was
+        handed** (D14; the negative that this is the UA guess is what a happy-path test cannot see), and the
+        trusted device writes none for it;
+      - D8's **sixth** row — no password and no Secret Key reaches this device, with the ordinary first sign-in
+        still demanding both as the positive control;
+      - **the ordering ADR 0059 §2 forces** — adopt is called **before** unlock, register and enrol, asserted
+        as an order and not as a set, since every one of them "happened" in a wrong-order implementation too;
+      - D16's three terminal states told apart — `404` and adopt's `401` reach the terminal message, adopt's
+        `400` reaches a different one, and **adopt is called exactly once** across a failed tail (the assertion
+        is a call count, because a retry here revokes the family rather than failing);
+      - `the-locked-entry-adds-no-shell-route`'s behavioural half **for this entry**: it is offered on the
+        locked card, choosing it attempts no unlock, and every path already on that card behaves as before —
+        E3's two ways out **and** the Emergency-Kit scan through the widened dispatch;
+      - `validate_shell_route_gate.py` green **and unchanged** — this phase adds no route at all.
 - [x] **4 coverage.** Narrow the `web:` gap in
       `docs/coverage/features/account/use-cases/uc.account.onboard-device.yaml` to what slice 3 still owes, and
       state the E2E limit rather than leaving it a silently missing ref. **Keep `status: planned` and both
@@ -304,6 +478,17 @@ routes nor the pairing wire.
 
 **No new dependency.** `jsqr@1.4.0` and `qrcode@1.5.4` are already present and already used; nothing is added
 and nothing is swapped (D6).
+
+**No contracts phase and no backend phase, still.** `POST /api/token/adopt` is already on the spec and built;
+phase 3 consumes it and changes neither surface. What phase 3 owes the contract is a **regeneration**, not an
+edit.
+
+**Explicitly out of scope, and not to be quietly absorbed.** Inbox **#123** — nothing in this client serializes
+refresh, so two tabs can revoke their own family — is a real, older defect that every web session carries; the
+adopted session inherits it exactly like the rest and this CR neither fixes nor hides it. Inbox **#124** —
+`Set-Cookie` is undeclared across the contracts — is fixed *only* where `adopt` already declares it; the sweep
+across login/refresh/logout is that row's. And the `wiki/` section stays unassembled until slice 3 (§ The wiki
+bolt).
 
 **On promoting a proof to a guard:** the two structural invariants at risk here already have permanent guards
 (`validate_pairing_shapes.py` for ADR 0059 §4 on the wire, `validate_shell_route_gate.py` for the route
