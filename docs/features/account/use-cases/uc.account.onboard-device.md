@@ -39,7 +39,10 @@ flowchart TB
 ## Main flow — add a new device
 
 1. On the signed-in, unlocked device the account holder opens **add a device**. It mints a pairing channel on
-   its own server and displays the channel's public key as a code.
+   its own server and displays the channel's **handle** as a code. The handle is a routing secret the client
+   mints, not a key: in this direction the trusted device holds no keypair at all — only the new device mints
+   one ([ADR 0059](../../../decisions/0059-device-linking.md) §3) — and keeping the two apart is what lets the
+   displayed code mean one thing in both directions.
 2. The new device scans it. It mints a single-use **ephemeral transport keypair** and posts its public key to
    that channel — reaching the server it already has open, never one named by the code
    ([ADR 0059](../../../decisions/0059-device-linking.md) §4).
