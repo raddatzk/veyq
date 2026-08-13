@@ -193,7 +193,11 @@ in-memory-only session that dies on the first reload).
     - **Off** → a **session refresh cookie** (no `Max-Age`, [ADR 0004](0004-session-tokens.md)) **+** the
       unlocked Master Key cached in **`sessionStorage`**. A reload re-opens the vault with **no prompt**; closing
       the browser drops both. Off **also** keeps its password **DEVICE** wrap (§18), so the *next launch after a
-      close* is **email + password only** — never the Secret Key.
+      close* is **email + password only** — never the Secret Key. **Except where there is no password to keep a
+      wrap with:** a device linked by a grant ([ADR 0059](0059-device-linking.md) §10) never typed one, so its
+      Off tier is this one *minus* the `DEVICE` wrap — closing the browser ends it and the next visit is a fresh
+      pairing, not email + password. Do not reach for this bullet's recipe wholesale there; half of it has no
+      ingredients.
     - **On** → the **persistent** cookie + the password-less **`DEVICE_KEY`** wrap in IndexedDB (§18-20) → opens
       straight in across a full restart.
     - The Secret-Key floor is still typed **once per device** (§3, §14, §17); neither tier re-asks it.

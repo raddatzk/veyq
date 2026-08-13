@@ -52,6 +52,16 @@ and hand that family's refresh token to the device it is granting. This is a sec
 the login ([ADR 0004](0004-session-tokens.md)); the family is ordinary in every other respect — it is listed,
 it is revocable, it rotates.
 
+**And the granted device keeps that family the way every other device keeps one.** The refresh token travels in
+the envelope because there is no other way into a device that holds no cookie — but it is not what that device
+holds afterwards. On arrival it spends the token once against [ADR 0004](0004-session-tokens.md)'s adoption
+verb, which rotates it and returns the successor in the ordinary httpOnly cookie; the handed-over value is dead
+before the ceremony ends. Two orderings follow, and both are load-bearing rather than stylistic: the device
+**adopts before it unlocks, registers or enrols**, because that whole tail runs on an ordinary authenticated
+session; and the *"stay signed in"* question is answered **on the new device, before its session exists**,
+because the lifetime is fixed at adoption and no later refresh can move it. A grant whose token were simply
+kept in script would satisfy every visible step of this ceremony and lose the session on the next page load.
+
 **3. One envelope, sealed to the new device's ephemeral transport key.** The new device mints a single-use
 keypair; the trusted device `asymWrap`s **both** the Master Key and the refresh token to its public key and
 posts the result. **Pickup is unauthenticated on purpose**: the envelope is worthless without the ephemeral

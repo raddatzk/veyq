@@ -31,6 +31,17 @@ acceptanceCriteria:
       only the key would leave a device that can open a vault it cannot reach a server with, and a family that
       behaved specially would be a second class of session nobody audits. The granting session's own family is
       the live control — it must still refresh afterwards.
+  - id: the-onboarded-device-keeps-the-session-it-was-granted
+    text: >-
+      The onboarded device survives a reload. The handed-over refresh token reaches it in the envelope, is spent
+      exactly once on arrival, and what it holds afterwards is the same httpOnly cookie every other web session
+      holds — never a token in script. The second half is the one a happy-path test cannot see: an
+      implementation that simply kept the body token would pass "the device is signed in" perfectly and lose
+      everything on the next page load, with no password to recover by. Three things are the criterion together:
+      the exchange returns a cookie and no body token; it returns the family id, without which the device cannot
+      appear named in uc.account.sessions at all; and re-presenting the spent grant token is ADR 0004's clone
+      case and takes the family down. The live control on that last one is the adopted session refreshing
+      normally beforehand, since "everything is refused" satisfies a bare negative just as well.
   - id: no-password-and-no-secret-key-reaches-the-new-device
     text: >-
       Neither the password nor the Secret Key is typed on, sent to, or derivable by the onboarded device, at any
@@ -128,7 +139,11 @@ gaps:
     declare `@RateLimit(IP)` and the two authenticated ones `@RateLimit(USER)`, and
     `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if one loses it — bite-
     tested here, it names the endpoint. The wraps resource's `@RateLimitExempt` reasoning ("bounded by the
-    caller's own session") deliberately does not transfer: these endpoints have no caller. Three criteria have no
+    caller's own session") deliberately does not transfer: these endpoints have no caller.
+    **`the-onboarded-device-keeps-the-session-it-was-granted` is owed here and is not yet built**: the delegated
+    token is handed over in a response body, and the verb that converts it into the cookie transport every web
+    session uses does not exist yet (ADR 0004 § Transport). It is a contracts + backend correction to the server
+    half, and until it lands the web slice that would consume it cannot be built at all. Three criteria have no
     backend half at all — `the-onboarded-device-writes-its-own-register-entry` and
     `a-linked-device-is-born-at-the-password-less-tier` are client writes onto endpoints that already existed, and
     `the-locked-entry-adds-no-shell-route` is a route-gate property of the web surface.
@@ -154,11 +169,18 @@ gaps:
     `the-locked-entry-adds-no-shell-route`, slice 2 carries only the regression half of the Emergency-Kit scan
     across the decoder refactor; both entries' own behaviour is owed. **And one blocker found while building
     slice 2, which is why the shared tail did not land with it:** `delegate` hands the trusted device a refresh
-    token in the response **body**, and this client has no way to keep one — `boot()` revives a session only
-    from the httpOnly cookie, `TokenResource` sets a cookie only for a request that already carried one, and a
-    token held in JS would be the first multi-tab-unsafe session here (two tabs presenting the same token is
-    ADR 0004's clone case, which revokes the family of a device that has no password to recover with). So an
-    onboarded device would be signed in for exactly one page load. The correction belongs to the delegated
-    session's transport, not to this screen. E2E stays out of reach for the reason the sessions panel's did —
+    token in the response **body**, and this client keeps a session only in the httpOnly cookie — `boot()`
+    revives one solely from there, and `TokenResource` sets a cookie only for a request that already carried
+    one, so an onboarded device would be signed in for exactly one page load with no password to recover by.
+    The reason first recorded here was **wrong, and is corrected rather than dropped**, because the wrong
+    version is the one someone reaches for again: holding the token in script was called "the first
+    multi-tab-unsafe session in this client", and it would not have been the first — nothing in this client
+    serializes refresh at all, so the clone case that argument invokes is reachable *today*, with cookies, and
+    now has its own inbox row. What actually decides the transport is ADR 0004's own § Context (a body token is
+    one XSS away) plus the fact that a cookie is self-updating across tabs where a script-held copy silently
+    goes stale. Adoption is the correction and it belongs to the delegated session's transport, not to this
+    screen: `the-onboarded-device-keeps-the-session-it-was-granted` is owed on contracts + backend first, and
+    only then here, where the shared tail must adopt before it unlocks, registers or enrols. E2E stays out of
+    reach for the reason the sessions panel's did —
     the flow needs two live sessions of one account, which the current harness does not stand up — and that is
     stated here rather than left as a silently missing ref.

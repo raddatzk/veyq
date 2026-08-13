@@ -52,9 +52,14 @@ flowchart TB
    that states what is being granted and that signing the device out later will not take it back.
 5. The trusted device seals the **Master Key, a freshly minted session's refresh token, and the label** to the
    answering public key and posts the envelope.
-6. The new device picks the envelope up, opens it with its ephemeral private key, unlocks, and takes over its
-   session. On that first unlock it writes its own register entry using the label it was handed
-   ([en.account.device-register](../enablers/en.account.device-register.md), write moment 1).
+6. The new device picks the envelope up and opens it with its ephemeral private key. Before anything else it
+   answers the ordinary *"stay signed in"* question (E5) and **adopts** the handed-over refresh token into a
+   session of its own — spending it, and receiving in exchange the same httpOnly cookie every other session
+   here rides on ([ADR 0004](../../../decisions/0004-session-tokens.md) § Transport). Only then does it unlock,
+   and on that first unlock it writes its own register entry using the label it was handed
+   ([en.account.device-register](../enablers/en.account.device-register.md), write moment 1). The order is
+   forced twice over: unlocking and the register write need an authenticated session, and the lifetime chosen
+   in that one question can never be changed afterwards.
 7. It enrols a `DEVICE_KEY` wrap, exactly as any remembered device does, and the pairing row is spent.
 
 ## Main flow — sign in with a QR code

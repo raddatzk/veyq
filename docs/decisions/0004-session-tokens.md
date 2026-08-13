@@ -40,7 +40,10 @@ into **named session families**. No JWTs.
   further family for its own account and seal its refresh token to the device it is onboarding, because veyq's
   auth keypair is password-derived and a device that never learns the password could otherwise never reach the
   server. The second origin changes nothing else — such a family is listed, rotated and revoked like any
-  other. **Refresh rotates:** each refresh mints a new access + new refresh token and supersedes the prior
+  other — and it is **indistinguishable**: the family row records no origin, so no endpoint can key a rule on
+  one. That is a decision, not an omission, and it is what settles the transport question below: cookie
+  issuance cannot be narrowed to delegated families without first making them a recognisable class.
+  **Refresh rotates:** each refresh mints a new access + new refresh token and supersedes the prior
   refresh (numbered generations).
 - **Reuse detection.** Presentation of a **superseded** refresh token (an older generation) is a clone
   signal ⇒ **revoke the entire family**. This catches the undetected-theft case that proactive revocation
@@ -74,10 +77,20 @@ into **named session families**. No JWTs.
   - The operator sees opaque family ids, coarse timestamps and a device *count* — **never** a cleartext
     device/user-agent string, and no per-family blob at all. (A server-generated cleartext codename was
     considered and **rejected** — operator-meaningless, and superseded by client-side naming.)
-- **Transport.** The refresh token rides an httpOnly + Secure + SameSite **cookie**. The contract still
-  permits it in the request body (`RefreshRequest.refreshToken`) and the server accepts either, but **no
-  client uses the body path** — it is unused surface, kept only because removing it is a contract break
-  nobody has needed yet.
+- **Transport — a cookie for a browser, and one body-carried exception that exists to be spent.** The refresh
+  token rides an httpOnly + Secure + SameSite **cookie**; for a browser that is the only form it is ever kept
+  in, because a token in the response body is one XSS away from exfiltration (§ Context). `/api/token/refresh`
+  answers in kind — cookie in, cookie out; body in, body out — and it still permits
+  `RefreshRequest.refreshToken`, which **no client sends**.
+  What is no longer unused is the body *form*: a device-linking grant (§ Session family, and
+  [ADR 0059](0059-device-linking.md) §2) hands a refresh token to a device that holds no cookie yet, so a body
+  is the only way it can arrive. That device converts it once, at **`POST /api/token/adopt`**, which rotates
+  the presented token and returns its successor in a cookie. The handed-over token is therefore a **one-shot
+  bearer** — readable by script for the span of a single request, and superseded by the time the response
+  lands. Adoption changes **transport, never authority**: its caller must already present a valid CURRENT
+  refresh token, which is exactly what refresh demands, and what comes back is strictly less exfiltrable than
+  what went in. So it is deliberately **not** gated on how the family was born — it could not be, and the
+  rejected alternative below says why that is the right way round.
 
 ## Decision — web refresh cookie lifetimes (session vs persistent)
 
@@ -96,6 +109,14 @@ session-restore ("continue where you left off") may extend across a restart anyw
 contract as the superseded flag and is honoured (→ `PERSISTENT`) only when `sessionScope` is absent. Both lifetimes carry the **same opaque token** — no key material — so the server stays operator-blind.
 The web client (cr-0055) is fully cookie-based (it keeps no body refresh token); see ADR 0005 §22 for how the
 **vault key** is persisted to match each lifetime.
+
+**Adoption is the only place besides login where a lifetime is *chosen*.** A device onboarded by a grant never
+answered "stay signed in", and it holds no cookie to inherit a lifetime from — so `POST /api/token/adopt`
+carries the same `sessionScope` login does, and the device **being onboarded** answers it, never the one
+granting: only the person holding the new machine knows whether it is theirs (uc.account.onboard-device E5).
+Refresh is untouched by this and still cannot raise or lower a lifetime, which is precisely why the choice
+needed its own verb instead of a new field on `RefreshRequest` — a `sessionScope` there would let *every*
+refresh re-decide its own lifetime, breaking the same-named-cookie rule this section rests on.
 
 ## Consequences
 
@@ -118,6 +139,14 @@ The web client (cr-0055) is fully cookie-based (it keeps no body refresh token);
 - **Rejected — single opaque token (no refresh):** simplest and already revocable, but no
   undetected-theft detection, and the long-lived credential rides every request. The family/rotation
   machinery — and the named-session management it enables — justified building it now.
+- **Rejected — an `origin`/`kind` column on the family, so that adoption could accept only delegated tokens:**
+  it would turn the second origin into a recognisable class, which the family bullet deliberately refuses, and
+  it buys nothing that can be named — whoever presents a valid CURRENT refresh token already holds that
+  session, and adoption hands back a *less* reachable form of it. The narrower variant, keying adoption on the
+  pairing channel instead of on the family, is not merely undesirable but **impossible**: collecting the grant
+  marks the channel spent, so by the time a device could redeem, the row it would be checked against is already
+  terminal. Restricting adoption would therefore cost a migration, a contradiction, and a change to the pairing
+  ceremony's single-use rule, to remove an exposure nobody could state.
 - **Rejected — cleartext device names server-side** (e.g. storing the user-agent as the session label):
   an operator-blind violation. Names are **E2EE** (client-built, encrypted under the account key).
 - **Rejected — server-generated cleartext codename** (e.g. `violet-otter`): operator-meaningless and
