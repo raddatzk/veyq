@@ -147,6 +147,65 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: refresh_rejected }
 
+  /api/token/adopt:
+    post:
+      tags: [token]
+      operationId: adoptSession
+      summary: Convert a handed-over refresh token into this device's own cookie-borne session.
+      description: >
+        The login-equivalent for a device that has no password. A device-linking grant
+        (ADR 0059 §2) hands a refresh token to a device that
+        holds no cookie yet, so the token arrives in a **body** — the one place ADR 0004 § Transport permits
+        that. This verb spends it: the presented token is rotated through the same rotation refresh uses, and
+        the successor comes back as an httpOnly refresh cookie plus the session's own family id, never as a
+        body token. The handed-over token is therefore a **one-shot bearer**, superseded by the time the
+        response lands; presenting it a second time is ADR 0004's clone case and revokes the family.
+
+        Adoption changes **transport, never authority** — its caller must already present a valid CURRENT
+        refresh token, exactly what refresh demands — so it is deliberately not gated on how the family was
+        born. A request that already carries a refresh cookie is **refused**, not honoured: this device is
+        supposed to have no session here, and honouring it would silently swap one session for another.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenAdoptRequest" }
+            example: { refreshToken: cmVmcmVzaC10b2tlbi1vcGFxdWU, sessionScope: SESSION }
+      responses:
+        "200":
+          description: >
+            The grant is spent and this device now holds its own session. The rotated refresh token rides the
+            `Set-Cookie` header; the body carries the access token and the family id (which the device needs to
+            write its own entry in the Master-Key-sealed device register, ADR 0004 § Session family) and
+            **omits** `refreshToken`.
+          headers:
+            Set-Cookie:
+              description: >
+                The rotated refresh token as an httpOnly + SameSite=Strict cookie scoped to
+                `/api/token/refresh` — `veyq_refresh` for `PERSISTENT` (with `Max-Age`), `veyq_refresh_session`
+                for `SESSION` (no `Max-Age`). A clearing cookie for the other lifetime is sent alongside, so
+                exactly one refresh cookie ever exists (ADR 0004 § web refresh cookie lifetimes).
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SessionResponse" }
+        "400":
+          description: >
+            The request was malformed, or it already carried a refresh cookie — adoption is only for a device
+            that holds no session here.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: >
+            The presented token is unknown, expired, superseded, or its family was revoked — the same
+            undifferentiated failure refresh gives.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: refresh_rejected }
+
   /api/logout:
     post:
       tags: [session]
@@ -683,6 +742,43 @@ components:
           example: cmVmcmVzaC10b2tlbi1vcGFxdWU
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512)'
 
+    TokenAdoptRequest:
+      type: object
+      description: >
+        A handed-over refresh token being converted into this device's own cookie-borne session (ADR 0004
+        § Transport). Both fields are **required**, unlike their counterparts on `RefreshRequest` and
+        `LoginVerifyRequest`: there is no cookie to fall back to and no legacy caller to be lenient towards.
+      required: [refreshToken, sessionScope]
+      properties:
+        refreshToken:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            The opaque refresh token this device was granted, carried in the body because a device with no
+            cookie has no other way to receive one. It is spent by this call: the rotation supersedes it, so a
+            second presentation is the clone case and revokes the family (ADR 0004).
+          maxLength: 512
+          example: cmVmcmVzaC10b2tlbi1vcGFxdWU
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        sessionScope:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            Cookie lifetime for the adopted session — the same closed set login offers (ADR 0004 § web refresh
+            cookie lifetimes). **PERSISTENT** → `veyq_refresh`, surviving a browser restart; **SESSION** →
+            `veyq_refresh_session`, dropped when the browser closes. Required here because adoption is the only
+            place besides login where a lifetime is *chosen*: the device being onboarded holds no cookie to
+            inherit one from, and a default would be the server answering a question ADR 0059 §2 assigns to the
+            person holding the new machine.
+          enum: [SESSION, PERSISTENT]
+          example: SESSION
+          # No `@NotNull` via x-field-extra-annotation, deliberately: `required:` alone already yields a 400
+          # for a missing scope here, because the generated Kotlin property is non-null and deserialization
+          # refuses it before the handler — measured by adding the annotation and removing it again with
+          # `TokenAdoptSliceTest.theScopeIsRequiredAndAMissingOneIsRefusedAtTheBoundary` green both ways. The
+          # explicit annotations elsewhere on this spec are `@NotBlank`, which catches a *blank* string that
+          # nullability cannot see; an enum has no blank form, so one here would be ceremony.
+
     SessionFamily:
       type: object
       description: >
@@ -755,8 +851,9 @@ components:
           x-veyq-visibility: token
           type: string
           description: >
-            Opaque refresh token (long-lived); send only to /api/token/refresh. **Omitted** when `remember` was
-            true — the token is then set as an httpOnly cookie instead (web "remember me").
+            Opaque refresh token (long-lived); send only to /api/token/refresh. **Omitted** whenever the token
+            rides an httpOnly cookie instead: a login that chose a `sessionScope` (or the legacy `remember`),
+            and every adoption, which has no other transport by definition.
           maxLength: 512
           example: cmVmcmVzaC10b2tlbg
         family: { $ref: "#/components/schemas/SessionFamily" }

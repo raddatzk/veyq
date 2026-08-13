@@ -2,8 +2,10 @@ useCase: uc.account.onboard-device
 feature: account
 title: Onboard a device from one you are already signed in on
 # Refined 2026-08-12 (ADR 0059). The **server half** is built: the five `pairing` endpoints on the auth spec,
-# `account/pairing/` behind them, and the session delegation on `SessionService`. Both web directions and the
-# live QR component are not, so every criterion below is still part web — see the two gaps.
+# `account/pairing/` behind them, the session delegation on `SessionService`, and `POST /api/token/adopt`, which
+# gives the delegated session the cookie transport every other web session has (ADR 0004 § Transport). The
+# onboarded device's own web half and the live QR component are not, so every criterion below is still part
+# web — see the two gaps.
 #
 # `status: planned` is nonetheless correct, and for the same single reason uc.account.sessions gives:
 # **no CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
@@ -140,10 +142,24 @@ gaps:
     `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if one loses it — bite-
     tested here, it names the endpoint. The wraps resource's `@RateLimitExempt` reasoning ("bounded by the
     caller's own session") deliberately does not transfer: these endpoints have no caller.
-    **`the-onboarded-device-keeps-the-session-it-was-granted` is owed here and is not yet built**: the delegated
-    token is handed over in a response body, and the verb that converts it into the cookie transport every web
-    session uses does not exist yet (ADR 0004 § Transport). It is a contracts + backend correction to the server
-    half, and until it lands the web slice that would consume it cannot be built at all. Three criteria have no
+    **`the-onboarded-device-keeps-the-session-it-was-granted` now has its backend half, and it is in the same
+    state as everything else here** — the suite exists and passes locally, and the only missing thing is a CI
+    run to execute it (ADR 0040). `POST /api/token/adopt` is the verb that converts the handed-over grant token
+    into the cookie transport every web session uses (ADR 0004 § Transport), and `TokenAdoptSliceTest` drives it
+    over the full HTTP stack: per scope, that the response names the **family the rotation produced** and omits
+    the body token while setting exactly one refresh cookie — the other lifetime's clearing cookie beside it —
+    with `httpOnly` asserted on the attribute and `SESSION` asserted to carry no `Max-Age` at all; that the
+    required `sessionScope` is refused at the boundary when absent, with the same request carrying one as its
+    control; that the adopted session then rotates **through the cookie alone**, which runs *before* the replay
+    because afterwards the family is dead and every later assertion is vacuum; and that re-presenting the spent
+    grant token is ADR 0004's clone case — anchored on the family's own status reaching `REVOKED`, not on "the
+    call failed", with a second family of the same account as the control that the revoke was targeted rather
+    than a blanket refusal. A request already bearing a refresh cookie is refused under **both** cookie names,
+    with the same request minus the cookie succeeding — which is also what proves the refusal precedes the
+    rotation, so the endpoint cannot be used to burn someone else's grant. Rate-limit posture is not asserted by
+    hand here either: the method inherits the class-level `@RateLimit(IP)` and
+    `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if it loses it. The
+    web half is still owed and is slice 3's — see the web gap. Three criteria have no
     backend half at all — `the-onboarded-device-writes-its-own-register-entry` and
     `a-linked-device-is-born-at-the-password-less-tier` are client writes onto endpoints that already existed, and
     `the-locked-entry-adds-no-shell-route` is a route-gate property of the web surface.
@@ -179,8 +195,10 @@ gaps:
     now has its own inbox row. What actually decides the transport is ADR 0004's own § Context (a body token is
     one XSS away) plus the fact that a cookie is self-updating across tabs where a script-held copy silently
     goes stale. Adoption is the correction and it belongs to the delegated session's transport, not to this
-    screen: `the-onboarded-device-keeps-the-session-it-was-granted` is owed on contracts + backend first, and
-    only then here, where the shared tail must adopt before it unlocks, registers or enrols. E2E stays out of
+    screen — and it is **built on contracts + backend now** (`POST /api/token/adopt`, see the backend gap), so
+    this is no longer a blocker but an available verb: what remains of
+    `the-onboarded-device-keeps-the-session-it-was-granted` is this surface's half, where the shared tail must
+    adopt before it unlocks, registers or enrols. E2E stays out of
     reach for the reason the sessions panel's did —
     the flow needs two live sessions of one account, which the current harness does not stand up — and that is
     stated here rather than left as a silently missing ref.

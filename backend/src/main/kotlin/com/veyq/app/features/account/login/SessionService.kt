@@ -11,8 +11,15 @@ import java.util.UUID
 /** A freshly issued session: the family id plus the opaque token pair handed to the client. */
 data class IssuedSession(val familyId: String, val accessToken: String, val refreshToken: String)
 
-/** A rotated token pair. */
-data class RotatedTokens(val accessToken: String, val refreshToken: String)
+/**
+ * A rotated token pair, plus the family it belongs to. The family id is carried because **adoption** answers
+ * with it (`POST /api/token/adopt`, ADR 0004 § Transport): a device onboarded by a grant has no login to learn
+ * its family from, and without it the device↔family join in its Master-Key-sealed register points at nothing,
+ * so it could never appear named in uc.account.sessions. Rotation already holds the family row, so this costs
+ * no extra read — and `/api/token/refresh` deliberately does **not** put it on the wire: refresh answers a
+ * client that has known its family since login.
+ */
+data class RotatedTokens(val accessToken: String, val refreshToken: String, val familyId: String)
 
 /**
  * A family minted for a device being linked (ADR 0059 §2): the id the granting channel records so an abandoned
@@ -105,7 +112,7 @@ class SessionService {
         row.status = RefreshTokenEntity.SUPERSEDED
         family.lastUsedAt = now
         val (access, refresh) = mint(family.id, row.generation + 1, now)
-        return RotatedTokens(access, refresh)
+        return RotatedTokens(access, refresh, family.id)
     }
 
     /**

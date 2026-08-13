@@ -1,7 +1,7 @@
 ---
 id: cr-delegated-session-cookie-transport
 title: A delegated session is adopted into the cookie transport every other web session uses
-status: planned
+status: done
 satisfies: [uc.account.onboard-device]
 adrs: ["0004", "0059", "0005", "0051", "0044", "0026"]
 invariants:
@@ -161,7 +161,7 @@ Locators, not tallies — run them at implement time and read the list.
 
 ## Phases
 
-- [ ] **1 contracts — the verb.** `POST /api/token/adopt` on `contracts/api/auth.openapi.yaml`, tag `token`:
+- [x] **1 contracts — the verb.** `POST /api/token/adopt` on `contracts/api/auth.openapi.yaml`, tag `token`:
       `TokenAdoptRequest { refreshToken (required), sessionScope (required, SESSION|PERSISTENT) }`, `200` →
       the existing `SessionResponse` with the `Set-Cookie` response header declared (D6), `400` for a request
       that already carries a session cookie, `401` for a rejected token. Both new properties carry
@@ -171,7 +171,7 @@ Locators, not tallies — run them at implement time and read the list.
       `validate_pairing_shapes.py` + `validate_session_family_shape.py` are green with **no edit to either** —
       that pair being untouched is the structural claim of D1/D2, so a diff on them is a failed phase, not a
       fixup.
-- [ ] **2 backend — the handler.** A second method on `TokenResource` (no new resource class, so the class's
+- [x] **2 backend — the handler.** A second method on `TokenResource` (no new resource class, so the class's
       `@PermitAll` + `@RateLimit(IP)` carry over; do not re-declare them). Rotate via the existing
       `sessions.refresh`, refuse a request that carries a session cookie, issue via the existing
       `SessionCookie.issue`. No migration, no new column, no change to `SessionService`, `PairingHandler` or
@@ -190,7 +190,7 @@ Locators, not tallies — run them at implement time and read the list.
         as its positive control on the same predicate;
       - `@RateLimit` posture: `RateLimitPostureSweepTest` reddens by itself if the new method loses one — do
         not hand-assert it.
-- [ ] **3 coverage.** `docs/coverage/features/account/use-cases/uc.account.onboard-device.yaml` — move
+- [x] **3 coverage.** `docs/coverage/features/account/use-cases/uc.account.onboard-device.yaml` — move
       `the-onboarded-device-keeps-the-session-it-was-granted` in the backend gap from *"owed and not built"* to
       the ADR-0040 wording the rest of that gap already uses (the suite exists and passes locally; the missing
       thing is a CI run), and name the new tests so the later flip is mechanical. **Keep `status: planned` and
@@ -226,5 +226,52 @@ hide a general defect inside a feature correction.
 
 ## Retrospective
 
-*(to be filled at implement time — what went wrong in planning, execution, and process/collaboration; both
-directions; ending with one concrete "next time".)*
+**Planning — the CR contradicted itself, and the contradiction was one `grep` away.** D2's whole argument is
+*"the response must carry the family id"*; phase 2's constraint list says *"no change to `SessionService`"*.
+But `RotatedTokens` is `(accessToken, refreshToken)` and `familyIdOf` is **private** — so the family id is
+unreachable from the adapter, and the two statements cannot both hold. The refine session measured
+`sessions.refresh` twice (the facts table cites `SessionService.kt:93-108`) and read it for *rotation
+semantics*, never for *what it returns* — the exact shape of `changes/README.md` § upstream of every trap: the
+claim did not feel like a claim, because "rotate via the existing refresh" reads as settled. The locator that
+would have caught it is not exotic: **D2 names a value the CR never asked where it comes from.** Resolved by
+escalation rather than silently — `RotatedTokens` gained `familyId`, which is additive, costs no read (the
+rotation already holds the family row) and changes no rotation semantics, so it honours the constraint's
+*intent* while breaking its letter. That call was the user's, not the implementer's, which is the right
+place for it.
+
+**Planning — D1's rationale describes a hazard that cannot occur.** *"A browser that already holds one would
+otherwise silently swap its own session for another"* is false as written: the cookie's `Path` is
+`/api/token/refresh`, so RFC 6265 path-matching means no browser ever sends it to `/api/token/adopt`. The CR
+had that fact in its own measured-facts table one screen earlier and used it for the opposite direction (a
+`Set-Cookie` from another path still *lands*). Nothing checks a document against itself — the same failure
+`changes/README.md` records for `cr-instance-backup-and-restore`. The **rule** survives the correction (it is
+a server-side rule against non-browser callers and against a later `Path` widening, and it is what keeps that
+`Path` from quietly becoming load-bearing), so it was built as specified with the reason corrected in the
+code comment rather than the wrong reason carried forward.
+
+**Execution — I added ceremony on a remembered rule, then measured it away.** D3's whole claim is that
+`sessionScope` is *required*, and the generated model carries no `@NotNull` — so I added one via
+`x-field-extra-annotation`, reasoning from `backend/CLAUDE.md`'s "validation belongs in the spec". Removing it
+again and re-running left the boundary test **green**: the generated property is non-null, so deserialization
+already refuses a missing scope before the handler. The explicit annotations elsewhere on that spec are
+`@NotBlank`, which catches a *blank* string nullability cannot see; an enum has no blank form. Kept the
+measurement, dropped the annotation, and wrote the reason at both sites — the rule was right, its application
+here was not, and *"is this already enforced?"* is a 35-second build, not a judgement call.
+
+**What went right, and is worth keeping.** The CR's own completeness proof worked exactly as advertised:
+after phase 1, `TokenResource` failed to compile naming the missing method, so "did I build all of it?" was
+answered by the compiler rather than by reading. And the three bite tests (drop the cookie refusal; force one
+lifetime for both scopes; answer with a family id the rotation did not produce) each went red **by name**,
+each restored byte-identically against the snapshot — the uncommitted-baseline form, not `git checkout`.
+
+**Process & collaboration.** Two directions. Mine: I nearly widened the phase-1 diff on my own judgement (the
+now-stale `SessionResponse.refreshToken` description) without saying so up front — small and defensible, but
+the honest move is to name a scope decision when making it, not in the summary afterwards. The user's: the
+session prompt did the heavy lifting the CR could not — naming the three inherited forms, the guard traps, the
+ordering constraint and the *"report, don't repair"* rule up front is what turned the `RotatedTokens`
+collision into a two-minute escalation instead of a silent design decision. That framing should be the default
+for implement sessions, not something re-derived each time.
+
+**Next time:** at refine, for every value a decision says the response must carry, run one line that asks
+**where that value comes from** — the function that produces it and its return type — and paste the output.
+D2 named `family id` five times and never once looked at the type `refresh` returns.
