@@ -1,7 +1,7 @@
 ---
 id: cr-device-pairing-channel-and-session-delegation
 title: The pairing channel and the delegated session — contracts + backend for both link directions
-status: planned
+status: in-progress
 satisfies: [uc.account.onboard-device]
 adrs: ["0059", "0004", "0003", "0005", "0021", "0026", "0054"]
 invariants:
@@ -214,7 +214,7 @@ mean *"this CR broke something"* rather than *"it was already red"*.
 
 ## Phases
 
-- [ ] **1 contracts** — the `pairing` tag, its five paths and seven schemas in `contracts/api/auth.openapi.yaml`;
+- [x] **1 contracts** — the `pairing` tag, its five paths and seven schemas in `contracts/api/auth.openapi.yaml`;
       `scripts/validate_pairing_shapes.py`.
       **Done when:** `for f in scripts/validate_*.py; do python3 "$f"; done` is green across **24** guards
       (baseline 23, measured above), **and** the bite below has been run and its red read by name.
