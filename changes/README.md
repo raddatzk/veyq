@@ -140,6 +140,17 @@ exception flow, one locator line must find that surface's gate** — the route g
 the capability check — beside the line that finds the insertion point. It is one `grep`, it runs at refine, and
 it is the difference between a feature that is implemented and a feature that is reachable.
 
+**A fifth tell: the cleanup was specified against the state that prompted the thought, not against the
+predicate.** A CR that says *"a row reaching `EXPIRED` unspent revokes what it minted"* has written the case it
+was thinking about, and every other terminal state reaches the same hazard unasked. The device-pairing CR did
+exactly that: it specified the expiry revoke **and**, three paragraphs apart, that delegating supersedes the
+account's other live channels — so a channel superseded seconds after it delegated stranded a live 30-day
+refresh token that the sweep, as written, would never have looked at. It surfaced at implement time, which is
+the expensive place to find a specification gap. **So: where a CR keys any cleanup on a terminal state,
+enumerate every terminal state in that same paragraph and say for each whether it applies.** The tell is the
+singular — one status named where the vocabulary has three or four; the fix is one line, and it converts a
+finding into a specification.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an
