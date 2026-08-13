@@ -151,6 +151,22 @@ enumerate every terminal state in that same paragraph and say for each whether i
 singular — one status named where the vocabulary has three or four; the fix is one line, and it converts a
 finding into a specification.
 
+**A sixth tell: the decision *demands* a value and never locates where that value comes from.** Every tell above
+is about a **stated** fact nobody measured; this one is about a **demanded** one, and it hides better, because a
+requirement does not read as a claim at all. The delegated-session transport CR argued at length that adoption's
+response must carry the **family id** — it named it five times and it was the entire reason the response shape
+changed from a token pair to the login response — while a constraint three paragraphs later forbade touching the
+service that would produce it. That service's rotation returns `(accessToken, refreshToken)` and its family
+lookup is `private`, so the two requirements could not both hold; it surfaced at implement time as a blocking
+escalation. The refine had measured that very function **twice**, both times for its *rotation semantics*, never
+once for its **return type**. So: **for every value a decision says a response must carry, run the one line that
+names the function producing it and prints its signature, and paste the output** — a demanded value is a locator
+too. Two corollaries, both cheap: the tell is a decision that says *"it returns X"* where no inventory row says
+which call hands X over; and where a constraint forbids touching something, **state the intent rather than the
+letter** ("rotation and reuse detection stay semantically unchanged", not "no change to `SessionService`") —
+an absolute reading collides with the additive detail the decision itself requires, and the implementer then
+cannot tell a real invariant from a phrase that was never meant that strictly.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an
