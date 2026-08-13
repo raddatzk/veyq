@@ -15,6 +15,13 @@ data class IssuedSession(val familyId: String, val accessToken: String, val refr
 data class RotatedTokens(val accessToken: String, val refreshToken: String)
 
 /**
+ * A family minted for a device being linked (ADR 0059 §2): the id the granting channel records so an abandoned
+ * ceremony can revoke it, and the refresh token that is sealed to the new device. **No access token** — see
+ * [SessionService.issueDelegated].
+ */
+data class DelegatedSession(val familyId: String, val refreshToken: String)
+
+/**
  * One active session family as the session list sees it (uc.account.sessions). Deliberately **nameless**: a
  * family carries no name, user-agent or address, and none may be added — a per-family name blob would let the
  * operator match a device across logins and re-link families that are otherwise unlinkable (ADR 0004). Names
@@ -50,6 +57,30 @@ class SessionService {
         family.persist()
         val (access, refresh) = mint(family.id, generation = 1, now)
         return IssuedSession(family.id, access, refresh)
+    }
+
+    /**
+     * Mint one further family for an account that is **already** authenticated, and hand back only its refresh
+     * token — the device-linking grant (ADR 0059 §2), and ADR 0004's second origin for a family beside the login.
+     *
+     * It exists because a device let in by linking never learns the password, and veyq's auth keypair is derived
+     * from the password (ADR 0003): that device cannot obtain a session by itself, however much key material it
+     * is handed.
+     *
+     * Deliberately **not** a general `issueFor(userId)`, and deliberately narrower than [issue]:
+     * - it is reachable only through the pairing handler, against a live channel the caller delegated, so what
+     *   this adds to the server is *"a device-linking grant"* and not *"any authenticated caller may mint a
+     *   session"*;
+     * - it returns **no access token**. The delegating device rotates nothing — the granted device turns this
+     *   refresh token into its own pair — and an access token for a family that is not the caller's own is
+     *   something no caller has a use for.
+     *
+     * The family itself is ordinary in every respect ADR 0004 names: it is listed, it rotates, it is revocable.
+     */
+    @Transactional
+    fun issueDelegated(userId: String): DelegatedSession {
+        val issued = issue(userId)
+        return DelegatedSession(issued.familyId, issued.refreshToken)
     }
 
     /** Rotate a refresh token. Returns null (→ 401) on any failure; a superseded-token replay revokes

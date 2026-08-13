@@ -29,6 +29,7 @@ interface VeyqConfig {
     fun tenant(): Tenant
     fun session(): Session
     fun recovery(): Recovery
+    fun pairing(): Pairing
     fun scope(): Scope
     fun media(): Media
     fun blob(): Blob
@@ -118,6 +119,24 @@ interface VeyqConfig {
 
             /** How long spent/expired rows are kept, so a replay reads as spent rather than unknown. */
             @WithDefault("P7D")
+            fun retention(): Duration
+        }
+    }
+
+    /** Device linking (ADR 0059) — how long a pairing channel lives, and how long a spent one is kept. */
+    interface Pairing {
+        fun channel(): Channel
+        fun purge(): Interval
+
+        interface Channel {
+            /** How long a channel stays open. Shorter than anything else here on purpose: both devices are in
+             *  the person's hands for the whole ceremony, so this bounds an abandoned one, not a slow user. */
+            @WithDefault("PT10M")
+            fun ttl(): Duration
+
+            /** How long terminal rows are kept, so a replayed handle reads as spent rather than unknown
+             *  (uc.account.onboard-device E1). */
+            @WithDefault("P1D")
             fun retention(): Duration
         }
     }

@@ -248,7 +248,7 @@ mean *"this CR broke something"* rather than *"it was already red"*.
   on the tree as it stands. This is the same trap `validate_device_shapes.py` records in its own docstring, met
   a second time; the next reader will reach for the same easy shape, so the guard must say why it cannot work.
 
-- [ ] **2 backend** — `account/pairing/` (entity, store, purge, handler, resource), `V46__device_pairing.sql`,
+- [x] **2 backend** — `account/pairing/` (entity, store, purge, handler, resource), `V46__device_pairing.sql`,
       the delegation on `SessionService`, and the config keys.
       **Done when:** `cd backend && ./gradlew check` green — including
       `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture`, which reddens by itself if any of the

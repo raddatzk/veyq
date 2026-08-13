@@ -5,6 +5,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -36,6 +37,9 @@ import java.util.UUID
  */
 @QuarkusTest
 class SessionManagerSliceTest {
+
+    @Inject
+    lateinit var sessions: SessionService
 
     @BeforeEach
     fun seedAccountsAndClearSessions() {
@@ -171,6 +175,54 @@ class SessionManagerSliceTest {
         revokeOthers(caller.accessToken).then().statusCode(204)
 
         refresh(caller.refreshToken).then().statusCode(200)
+    }
+
+    // --- a delegated family is an ordinary family ------------------------------------------------------------
+
+    @Test
+    fun aDelegatedFamilyListsRotatesAndRevokesLikeAnyOtherAndTakesNothingWithIt() {
+        // ADR 0059 §2 gives a family a second origin beside the login: an unlocked session may mint one for its
+        // own account and hand its refresh token to a device it is linking. ADR 0004's claim is that the family
+        // is then *ordinary in every other respect*, and this is where that claim is checked rather than
+        // asserted — through the session manager's own endpoints, with no pairing channel in sight.
+        val granting = login()
+        val stranger = loginOther()
+        val delegated = sessions.issueDelegated(USER_ID)
+
+        // It lists, next to the login family and marked exactly as not-current...
+        val families = listSessions(granting.accessToken)
+        assertEquals(
+            setOf(granting.familyId, delegated.familyId),
+            families.map { it["id"] }.toSet(),
+            "a delegated family is listed like any other — it is a device the account can see",
+        )
+        assertEquals(
+            listOf(granting.familyId),
+            families.filter { it["current"] == true }.map { it["id"] },
+            "and it is not the family this request arrived on",
+        )
+        assertTrue(
+            families.none { it["id"] == stranger.familyId },
+            "the account boundary is unchanged by delegation",
+        )
+
+        // ...it rotates, which is how the granted device turns one refresh token into a session of its own...
+        val rotated = refresh(delegated.refreshToken).then().statusCode(200).extract()
+        val rotatedRefresh = rotated.path<String>("refreshToken")
+
+        // ...and it revokes, which is the containment ADR 0059 § Context promises: a linked device can be cut
+        // off from the server, whatever key material it already holds.
+        revoke(granting.accessToken, delegated.familyId).then().statusCode(204)
+        refresh(rotatedRefresh).then().statusCode(401).body("code", equalTo("refresh_rejected"))
+
+        // THE live control: revoking the granted device must not sign out the device that granted it. Without
+        // this line, "the delegated family is gone" is satisfied by a revoke that took the whole account.
+        refresh(granting.refreshToken).then().statusCode(200)
+        assertEquals(
+            listOf(granting.familyId),
+            listSessions(granting.accessToken).map { it["id"] },
+            "the granting session survives, and it is the only one left",
+        )
     }
 
     // --- works-locked-names-never-reach-the-server -----------------------------------------------------------
