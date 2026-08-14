@@ -207,6 +207,27 @@ remove. Deleting them was right — § *deleting beats reformatting* in
 but it was a judgement call about **durable state**, taken at implement time, which is the most expensive
 place to take one. One word in the phase removes it.
 
+**And name every SITE, which needs its own locator: a claim is prose, so no inventory row keyed on a symbol
+will ever find it.** The rule above fixes *how* a sentence is corrected; this one is *how many* copies there
+were. `cr-pairing-qr-sign-in-web`'s phase 1 listed the two schema descriptions carrying *"the answer is a key
+**or** a commitment"*; the same sentence also sat in the operation description directly above them, in the
+entity's column KDoc, and in the guard's own `EXPECTED` comment — **five copies, two named**. The locator had
+asked *"which schemas change?"*, which is the right question for a shape change and the wrong one for a
+correction. So: **when a phase supersedes a claim, `grep -rn` a distinctive FRAGMENT of the claim across
+`contracts/`, `backend/`, `web/`, `docs/` and `scripts/` before writing the site list.** Two things fall out of
+that one command that nothing else produces: the true count, and — because `scripts/` is in it — any collision
+with a guard the CR forbids editing, surfaced at refine time instead of as a blocking question at implement
+time. (That collision is also § *sixth tell*'s corollary met from the other side: the CR's done-when said the
+guard must stay *"unedited"* where its own inventory row gave the intent, *"a phase editing it has changed a
+wire shape"*. A comment changes no shape. **State the intent, not the letter** — an absolute reading collides
+with the very correction the CR mandates.)
+
+**A listed invariant with no phase behind it reads as covered.** The same CR's front-matter named
+*"`web/CLAUDE.md`'s jsQR exception holds only while our own codes stay low-version"* and no phase touched that
+file. The stated invariant held — the new payload is QR version 4 — but the exception's prose **enumerates the
+markers**, so a third marker falsified it silently while the named bound stayed true. An invariant list is a
+list of things that can break; each entry owes either a phase or one sentence saying why nothing can reach it.
+
 ### The trust-chain guards stay green
 
 *Every* deterministic check in `scripts/` gates a CR — all of them, not
@@ -382,6 +403,16 @@ as it should have. A second one used `rm` against an interactive `rm -i` alias, 
 the run came back green again. Both were caught only by reading the full output. So an injection asserts its own
 arrival — `grep` the marker out of the file, or `test ! -e` the thing you deleted — **before** the run starts, and
 scores an unconfirmed injection as a failed bite, never as a passing one.
+
+**But do not spell that check as "the original text is gone."** It is the obvious shape and it is wrong for
+every injection that **wraps or appends** rather than replaces — `if (x)` → `if (false && x)`, or a line added
+after the anchor. The old text is still there, verbatim, in a file that was patched perfectly, so the harness
+reports *"did not land"* and scores a landed injection as a failed bite; `cr-pairing-qr-sign-in-web`'s harness
+did this to two of five injections. The check that holds for every injection shape is **the NEW text is present
+AND the file's bytes differ from the snapshot** — and the snapshot is already there, because the restore needs
+it. Its sibling holds too: when a bite asserts that an injection reddens **one** case and not another, compare
+against the *named* other case, never against "nothing else went red" — the injection legitimately reddens
+every test that depends on the same branch, and rejecting those turns a correct bite into a false alarm.
 
 ### A new universal check meets every existing local one
 
