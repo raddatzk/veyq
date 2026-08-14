@@ -95,10 +95,19 @@ device being granted is one the user is holding.
 
 **6. The proof of the transcribed code gates the sealing, never the release.** The new device commits to the
 code together with its public key; the trusted device checks that commitment against the code it displayed and
-only then seals. Three attempts, then the pairing is abandoned. The two tempting alternatives are both wrong:
-letting the **server** release the envelope on a correct code puts a malicious operator past the only barrier
-([ADR 0026](0026-client-trust-tiers.md)), and mixing the code into the envelope's encryption hands the holder
-of the ephemeral private key — the attacker, in the case this defends — a six-digit offline search.
+only then seals. There is exactly **one** attempt, and that is structural rather than a policy: the commitment
+travels in the channel's single relayed answer, that slot is write-once, and the channel carries no status — so
+nothing can tell the new device its proof was refused, and a retry would need a field this relay must not have.
+The transcription is therefore editable on the new device until it is sent; a sent wrong proof abandons the
+pairing, and retrying is a fresh ceremony. That is the shape
+[uc.account.onboard-device](../features/account/use-cases/uc.account.onboard-device.md) E2 already required of
+the other direction's mismatch, for the same reason: offering "try again" in place invites the user to grant
+past the one signal they have.
+
+The two tempting alternatives are both wrong: letting the **server** release the envelope on a correct code
+puts a malicious operator past the only barrier ([ADR 0026](0026-client-trust-tiers.md)), and mixing the code
+into the envelope's encryption hands the holder of the ephemeral private key — the attacker, in the case this
+defends — a six-digit offline search.
 
 **7. Both confirmations are a deliberate gesture, not a tap, and they name the consequence.** A slide rather
 than a button, the device's name in the sentence, and the truth § Context establishes: signing this device out

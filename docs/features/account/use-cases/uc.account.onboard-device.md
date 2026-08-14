@@ -31,7 +31,7 @@ scans, and neither direction is the "phone" one.
 title: What each direction has to prove, and how
 ---
 flowchart TB
-  Q["The scanned code is just a public key —<br>nothing about it says whose device it is"]
+  Q["The scanned code is just a routing handle —<br>nothing about it says whose device it is"]
   Q --> A["Add a device: my own screen showed it<br>→ compare the codes, both screens are here"]
   Q --> B["QR sign-in: someone else may have shown it<br>→ send a code back the attacker cannot read"]
 ```
@@ -68,15 +68,28 @@ flowchart TB
    [uc.account.sessions](uc.account.sessions.md) E3's other two ways in, and like them without a session and
    without a shell route.
 2. The new device mints its **ephemeral transport keypair**, opens a pairing channel on the instance it has
-   open, and displays the public key as a code. It sends **no account identifier** — which account this
-   becomes is decided by whoever scans.
+   open, and displays that channel's **handle** as a code — the same routing-only payload the other direction
+   displays, under its own marker so a code shown for one direction cannot be scanned into the other. The key
+   itself does **not** travel in the code: a post-quantum transport bundle serialises to 1260 bytes, which is a
+   129-module QR nobody scans reliably and which sits past the decoder defect
+   [`web/CLAUDE.md`](../../../../web/CLAUDE.md) grants its QR reader an exception around. Nothing is lost by
+   relaying it instead, because in this direction the scan authenticates nothing anyway — the code does (§5),
+   and the key is bound to it. It sends **no account identifier** — which account this becomes is decided by
+   whoever scans.
 3. The account holder picks up the signed-in, unlocked device and scans.
-4. That device asks what is being granted, takes the device's name, and takes the **slide** confirmation — and
-   then displays a short **pairing code**, which the account holder types into the **new** device.
-5. The new device proves it knows that code, bound to its own public key. The trusted device checks the proof
-   against the code it displayed and seals only then; three wrong proofs abandon the pairing
-   ([ADR 0059](../../../decisions/0059-device-linking.md) §6).
-6. From here it is steps 5–7 of the other direction, unchanged.
+4. That device states what is being granted and displays a short **pairing code**, which the account holder
+   types into the **new** device.
+5. The new device sends its transport public key together with a proof that it knows that code, bound to that
+   key, as the channel's one relayed answer. The trusted device checks the proof against the code it displayed.
+   The transcription is editable until it is sent and there is exactly **one** send: the answer slot is
+   write-once and the channel carries no status to refuse through, so a wrong proof abandons the pairing rather
+   than offering a retry ([ADR 0059](../../../decisions/0059-device-linking.md) §6).
+6. **Only once the proof holds** does the trusted device take the device's name and the **slide** confirmation,
+   and seal. The gesture is the last step before the irreversible one in *both* directions, and for the same
+   reason: it is a deliberate act over a device that has already proven it is the one in front of you
+   ([ADR 0059](../../../decisions/0059-device-linking.md) §7). What is being granted is on screen from step 4 —
+   information comes early, the commitment comes last.
+7. From here it is steps 5–7 of the other direction, unchanged.
 
 ## Alternate / exception flows
 
@@ -86,7 +99,9 @@ flowchart TB
 - **E2 — the codes do not match** (add-a-device), or **the pairing code is refused** (QR sign-in). The
   confirmation is declined, nothing is sealed, and the channel is abandoned rather than retried in place: a
   mismatch is the one signal that something other than the intended device answered, and offering "try again"
-  on the same channel would invite the user to grant past it.
+  on the same channel would invite the user to grant past it. In the QR-sign-in direction the new device learns
+  this only as the channel going quiet and then expiring — there is no refusal to relay back to it — so its copy
+  tells the account holder to start again rather than to keep waiting.
 - **E3 — the new device never picks the envelope up** (it was closed, the network dropped). The envelope
   expires with the row. Because it is sealed to a key only that device holds, an envelope left lying is not a
   secret in the open — but it is still swept, and a new pairing must be started rather than resumed.
@@ -127,8 +142,9 @@ to confirm. Or, standing at the new device with nothing but the app open, choose
 it shows a code, you scan it with your phone, and your phone then gives you a short code to type into the new
 device. That last step feels like an extra hoop and it is the one that matters: it is how your phone can tell
 that the thing it just scanned is really the device in front of you, and not a code someone sent you. Never
-type a code someone gave you over the phone or in a message — nobody legitimate will ever ask you for one. Two
-honest details. Adding a device gives it **everything**, permanently: it can read every memory you have, and
+type a code someone gave you over the phone or in a message — nobody legitimate will ever ask you for one. If
+the code is typed wrong, that attempt is over: your phone says so, and you simply start the whole thing again on
+the new device. Two honest details. Adding a device gives it **everything**, permanently: it can read every memory you have, and
 signing it out later stops it reaching the server but does not take the key back — so only ever add a device
 you are holding. And a device added this way has no password saved on it, so if it ever forgets its key it
 will ask you for your password or your Emergency Kit.
@@ -142,8 +158,9 @@ dann wählst du dort **„Über QR-Code anmelden"** — es zeigt einen Code, du 
 dein Handy nennt dir dann eine kurze Zahl, die du am neuen Gerät eintippst. Dieser letzte Schritt wirkt wie
 eine Hürde zu viel und ist genau der wichtige: nur so kann dein Handy erkennen, dass das gerade Gescannte
 wirklich das Gerät vor dir ist und nicht ein Code, den dir jemand geschickt hat. Tippe deshalb nie eine Zahl
-ein, die dir jemand am Telefon oder in einer Nachricht durchgibt — seriös fragt danach niemand. Zwei ehrliche
-Hinweise: Ein hinzugefügtes Gerät bekommt **alles**, dauerhaft — es kann jede deiner Erinnerungen lesen, und
+ein, die dir jemand am Telefon oder in einer Nachricht durchgibt — seriös fragt danach niemand. Wird die Zahl
+falsch eingetippt, ist dieser Versuch vorbei: dein Handy sagt es dir, und du fängst am neuen Gerät einfach neu
+an. Zwei ehrliche Hinweise: Ein hinzugefügtes Gerät bekommt **alles**, dauerhaft — es kann jede deiner Erinnerungen lesen, und
 späteres Abmelden hindert es nur daran, den Server zu erreichen, den Schlüssel nimmt es ihm nicht zurück. Füge
 also nur Geräte hinzu, die du in der Hand hältst. Und ein so hinzugefügtes Gerät hat kein Passwort gespeichert:
 Sollte es seinen Schlüssel je verlieren, fragt es dich nach deinem Passwort oder deinem Notfall-Kit.

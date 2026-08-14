@@ -70,8 +70,9 @@ acceptanceCriteria:
       knowledge of the code the trusted device displayed, bound to its own public key. The negative is that on
       an unproven or wrong code **no envelope is ever posted** — not merely that an error surfaced — because a
       design that sealed first and released later would satisfy an error-shaped assertion perfectly while
-      handing the operator the only barrier (ADR 0059 §6). Three wrong proofs abandon the pairing; the valid
-      proof is the live control.
+      handing the operator the only barrier (ADR 0059 §6). There is exactly one committed proof per ceremony —
+      the answer slot is write-once and the channel carries no status to refuse through — so a wrong proof
+      abandons the pairing rather than retrying in place, and the valid proof is the live control.
   - id: no-code-ever-names-a-server
     text: >-
       Nothing carried by a scanned code can name an endpoint, and no client follows one out of a scan — each
