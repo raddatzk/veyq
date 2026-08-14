@@ -176,29 +176,31 @@ gaps:
     live control; and the channel is never read again after the answer, at both altitudes (the loop's own suite
     and the whole screen after a real seal), with "it polled before" as the control that stopping is not
     vacuous. The scanner's first-ever harness came with the decoder refactor that made it serve both flows.
-    **What is still owed here, all of it slice 3's:** the onboarded device's half and the shared tail — so the
-    Master-Key half of `the-grant-carries-key-and-session`, the open half of
-    `the-envelope-is-sealed-to-the-ephemeral-key-and-nothing-else-leaks`,
-    `no-password-and-no-secret-key-reaches-the-new-device`, `the-onboarded-device-writes-its-own-register-entry`
-    and `a-linked-device-is-born-at-the-password-less-tier` — plus the whole QR-sign-in direction
-    (`qr-sign-in-seals-only-after-the-returned-code-is-proven`). Of
-    `the-locked-entry-adds-no-shell-route`, slice 2 carries only the regression half of the Emergency-Kit scan
-    across the decoder refactor; both entries' own behaviour is owed. **And one blocker found while building
-    slice 2, which is why the shared tail did not land with it:** `delegate` hands the trusted device a refresh
-    token in the response **body**, and this client keeps a session only in the httpOnly cookie — `boot()`
-    revives one solely from there, and `TokenResource` sets a cookie only for a request that already carried
-    one, so an onboarded device would be signed in for exactly one page load with no password to recover by.
-    The reason first recorded here was **wrong, and is corrected rather than dropped**, because the wrong
-    version is the one someone reaches for again: holding the token in script was called "the first
-    multi-tab-unsafe session in this client", and it would not have been the first — nothing in this client
-    serializes refresh at all, so the clone case that argument invokes is reachable *today*, with cookies, and
-    now has its own inbox row. What actually decides the transport is ADR 0004's own § Context (a body token is
-    one XSS away) plus the fact that a cookie is self-updating across tabs where a script-held copy silently
-    goes stale. Adoption is the correction and it belongs to the delegated session's transport, not to this
-    screen — and it is **built on contracts + backend now** (`POST /api/token/adopt`, see the backend gap), so
-    this is no longer a blocker but an available verb: what remains of
-    `the-onboarded-device-keeps-the-session-it-was-granted` is this surface's half, where the shared tail must
-    adopt before it unlocks, registers or enrols. E2E stays out of
-    reach for the reason the sessions panel's did —
-    the flow needs two live sessions of one account, which the current harness does not stand up — and that is
-    stated here rather than left as a silently missing ref.
+    **The onboarded device's half and the shared tail are built too** — the join card the sign-in form's scan
+    entry dispatches to, the grant poll, and `onboardTail.ts`, which the QR direction will reuse rather than
+    rebuild. Same state, same single missing condition: the suites pass locally and no CI run has executed them
+    (ADR 0040). What they pin is the set of things a happy path cannot see. The order ADR 0059 §2 forces is
+    asserted as an ORDER, not a set — the key-material fetch and write moment 1 are anchored on an access token
+    and a family id that only the adoption could have installed, because a wrong-order build calls every one of
+    those steps too. Adoption is presented **exactly once**, and the control that makes the count mean anything
+    is on the same predicate: the rest of the tail *does* refresh-and-retry on a 401, so "once" is about the
+    absent `withRefresh` around adopt and not about a client with no retry anywhere. Adopt's `400` reaches a
+    different message than its `401` — the remedies differ, so they may not collapse. The device writes its own
+    register entry under the label it was handed and not the user-agent guess, with an ordinary unlock still
+    writing the guess as the live control and the trusted panel writing no entry for it at all. The declined
+    tier enrols no wrap of **either** kind — never the password `DEVICE` wrap the ordinary Off tier keeps, which
+    this device has no password to key — against an accepted tier that does enrol a `DEVICE_KEY`. And the
+    widened scan entry accepts both of this app's codes while scanning past a foreign QR, with the
+    Emergency-Kit path asserted unchanged, which is the regression a shared dispatching control most plausibly
+    causes.
+
+    **What is still owed here is slice 3's, and that is now the whole of it:** the QR-sign-in direction —
+    `qr-sign-in-seals-only-after-the-returned-code-is-proven`, and that entry's behavioural half of
+    `the-locked-entry-adds-no-shell-route`, of which the *add a device* entry's half is covered above. The
+    `wiki/` section is assembled with it, not before, because the plain-language text promises both directions.
+
+    **Two things this surface inherits rather than owns.** The adopted session carries inbox #123 — nothing in
+    this client serializes refresh, so two tabs can revoke their own family — exactly as every other web session
+    does; it predates device linking and is not fixed by this flow. And E2E stays out of reach for the reason
+    the sessions panel's did — the flow needs two live sessions of one account, which the current harness does
+    not stand up — which is stated here rather than left as a silently missing ref.

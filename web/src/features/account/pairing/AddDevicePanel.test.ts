@@ -24,6 +24,12 @@ vi.mock('./pairingChannel', () => ({
 const MASTER_KEY = new Uint8Array(32).fill(7)
 vi.mock('../../../app/vault', () => ({ masterKey: () => MASTER_KEY }))
 
+// A tripwire, not a dependency: this panel does not import the device register today, and the point of the spy
+// is that it fires the day somebody adds it. The onboarded device writes its own entry (write moment 1, from
+// its own unlock) — a grant that wrote the entry from this side would work perfectly and quietly re-open the
+// merge hazard en.account.device-register's single-writer rule exists to close.
+vi.mock('../deviceRegister', () => ({ rememberThisDevice: vi.fn(), rememberThisDeviceWrap: vi.fn() }))
+
 import AddDevicePanel from './AddDevicePanel.vue'
 import SlideToConfirm from '../../../shared/ui/SlideToConfirm.vue'
 import {
@@ -33,6 +39,7 @@ import {
   sealPairingChannel,
 } from './pairingChannel'
 import { mintTransportKey, transportAnswer, checkNumber, openGrant, parsePairingPayload } from './pairing'
+import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
 
@@ -231,6 +238,23 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     const atTheEnd = collect.mock.calls.length
     await vi.advanceTimersByTimeAsync(60_000)
     expect(collect).toHaveBeenCalledTimes(atTheEnd)
+  })
+
+  // D8 row 5, this side of it: the name is sealed into the envelope and NOT written here. The device it names
+  // writes it itself, on its own first unlock, which is what keeps the register single-writer.
+  it('writes no register entry for the device it grants — it only seals the name', async () => {
+    const w = mountPanel()
+    await showCode(w)
+    await answerArrives(w)
+    await nameAndSlide(w, 'Arbeitslaptop')
+
+    // The control on the same predicate: the ceremony really completed, so "nothing was written" is not
+    // satisfied by a run that never got as far as granting anything.
+    expect(seal).toHaveBeenCalledTimes(1)
+    expect(openGrant(transport.priv, seal.mock.calls[0][1]).label).toBe('Arbeitslaptop')
+
+    expect(rememberThisDevice).not.toHaveBeenCalled()
+    expect(rememberThisDeviceWrap).not.toHaveBeenCalled()
   })
 
   it('cannot be confirmed before the device is named', async () => {

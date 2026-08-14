@@ -24,13 +24,18 @@ function fetchKeyMaterial(): Promise<AccountKeyMaterial> {
   return withRefresh(() => accountApi().getAccountKeyMaterial())
 }
 
-/** Unwrap the identity private key with the opened Master Key and store both in the in-memory vault. */
-function openVault(material: AccountKeyMaterial, masterKey: Uint8Array): void {
+/** Unwrap the identity private key with the opened Master Key and store both in the in-memory vault.
+ *
+ *  `label` is the name this device was handed by whoever onboarded it (uc.account.onboard-device step 6). It is
+ *  threaded through to write moment 1 rather than written afterwards, because a write after the unlock would be
+ *  a **fourth** write moment — which en.account.device-register forbids — and would race the fire-and-forget
+ *  one for the same key. Every other unlock path passes nothing and keeps the user-agent guess. */
+function openVault(material: AccountKeyMaterial, masterKey: Uint8Array, label?: string): void {
   const identityPrivate = v1.deserializeIdentityPrivate(
     v1.symUnwrap(masterKey, fromB64std(material.wrappedIdentityPrivateKey), 'identity-priv'),
   )
   setUnlocked(masterKey, identityPrivate)
-  noteThisDevice()
+  noteThisDevice(label)
 }
 
 /**
@@ -56,13 +61,18 @@ function openVault(material: AccountKeyMaterial, masterKey: Uint8Array): void {
  * `session.familyId` is absent on a cold boot restore (no login happened in this page load); the register then
  * records the device without a family, and write moment 2 supplies the family from the server's own
  * current-marker.
+ *
+ * `label` is present only for a device onboarded by a grant, which was named during that ceremony and carries
+ * the name in its envelope (ADR 0059 §9). `rememberThisDevice` writes `prior?.label ?? fallbackLabel`, and an
+ * onboarded device has no prior entry — so on that one path the fallback IS the label, and passing the guess
+ * there would list the new device under a user-agent string nobody chose.
  */
-function noteThisDevice(): void {
+function noteThisDevice(label?: string): void {
   void localWrapId(account.email)
     .then((wrapId) =>
       rememberThisDevice(
         deviceId(),
-        guessDeviceLabel(i18n.global.t('sessions.unknownDevice')),
+        label?.trim() || guessDeviceLabel(i18n.global.t('sessions.unknownDevice')),
         session.familyId,
         wrapId,
       ),
@@ -87,6 +97,29 @@ export async function unlockMasterKey(password: string, secretKeyB64: string): P
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   const masterKey = v1.symUnwrap(kek, fromB64std(passwordWrap.wrappedKey), 'master-key')
   openVault(material, masterKey)
+}
+
+/**
+ * First unlock on a device onboarded by a grant (uc.account.onboard-device step 6): the Master Key was handed
+ * over inside the sealed envelope, so there is no factor to derive here — this device has never seen the
+ * password or the Secret Key, and never will.
+ *
+ * It exists because every other export reaches [openVault] through a factor this device does not have. It adds
+ * no second way **into** the vault — `openVault` stays the single choke point — only a second way to reach it.
+ * `restoreVaultFromCache` is the template: `setAccount` runs **before** the open, because write moment 1 reads
+ * `account.email` for the local wrap lookup and would otherwise look it up under an empty address.
+ *
+ * Requires a live session — the key material fetch is session-gated — which is why the caller adopts first.
+ * Throws exactly as the floor path does when the handed-over key does not fit the served material.
+ */
+export async function unlockWithGrantedMasterKey(
+  email: string,
+  masterKey: Uint8Array,
+  label?: string,
+): Promise<void> {
+  setAccount(email)
+  const material = await fetchKeyMaterial()
+  openVault(material, masterKey, label)
 }
 
 /**

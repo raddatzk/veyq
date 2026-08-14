@@ -19,6 +19,8 @@ import { ACCOUNT_DEVICE_TRUST } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { importKitFromFile, parseKit, type KitData } from '../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
+import { parsePairingPayload } from '../features/account/pairing/pairing'
+import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
 import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
@@ -73,6 +75,10 @@ const fileInput = ref<HTMLInputElement | null>(null)
 const showSecret = ref(false)
 const scanOpen = ref(false)
 const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+// uc.account.onboard-device — the handle of a pairing channel this device just scanned. Non-empty means the
+// join card has replaced the form (routeless, like the locked state above it): this device is being let in from
+// one that is already signed in, so it has no email, no password and no Secret Key to type here.
+const joinHandle = ref('')
 
 /** Decide whether to show the Secret-Key field for the entered email: needed unless this device already has a
  *  password DEVICE wrap for it (a remembered device auto-opens at boot, so if it reached this screen its
@@ -253,15 +259,36 @@ async function onUpload(event: Event) {
 
 /** Which decoded strings this screen's scanner should stop on. The scanner itself is decoder-agnostic (it hands
  *  back whatever jsQR read), so recognising a payload is the caller's job — and keeping it a predicate is what
- *  lets the camera scan past a foreign QR instead of reporting it as a failure. */
+ *  lets the camera scan past a foreign QR instead of reporting it as a failure.
+ *
+ *  ONE scan entry serves both codes this app produces: an Emergency Kit (`veyqkit:`) and a pairing channel
+ *  (`veyqpair:`). A second button would be a second camera lifecycle, a second permission prompt and a second
+ *  no-camera path — in the one place where a subtly different second solution is worst — and it would ask the
+ *  user to know which of two visually identical codes they are holding. */
 function acceptsScan(text: string): boolean {
-  return parseKit(text) !== null
+  return parseKit(text) !== null || parsePairingPayload(text) !== null
 }
 
 function onScanned(text: string) {
   const kit = parseKit(text)
   if (kit) applyKit(kit)
+  // Dispatch on the prefix, not on which of the two happens to parse: a pairing payload cannot be a kit and
+  // vice versa, and reading it in this order keeps the Emergency-Kit path byte-identical to what it was.
+  else joinHandle.value = parsePairingPayload(text) ?? ''
   scanOpen.value = false
+}
+
+/** The join completed: this device now holds its own session and an open vault, so it leaves like any other
+ *  successful unlock does. */
+async function onJoinDone() {
+  joinHandle.value = ''
+  await finishAndRoute()
+}
+
+/** Back to the sign-in form. Nothing was granted, or nothing more can be done on that channel — the next
+ *  attempt is a fresh ceremony on the other device, started by a fresh scan. */
+function onJoinCancel() {
+  joinHandle.value = ''
 }
 
 async function signOut() {
@@ -312,11 +339,23 @@ onMounted(async () => {
 
 <template>
   <Card class="login-card">
-    <template #title>{{ lockedEntry ? t('sessions.lockedTitle') : t('login.title') }}</template>
+    <template #title>
+      {{ lockedEntry ? t('sessions.lockedTitle') : joinHandle ? t('pairing.joinTitle') : t('login.title') }}
+    </template>
     <template #content>
       <!-- §E3's locked state: signed in, deliberately not unlocked, one action. It replaces the form rather than
            sitting beside it — every field here would need the Secret Key this person does not have. -->
       <LockedSignOut v-if="lockedEntry" @done="onLockedDone" @unlock="onLockedUnlock" />
+
+      <!-- uc.account.onboard-device — the device being let in. Same shape as the locked state and for the same
+           reason: routeless, replacing the form, because none of these fields applies to a device that is about
+           to be handed everything by another one. No route is added for it anywhere. -->
+      <JoinDeviceCard
+        v-else-if="joinHandle"
+        :handle="joinHandle"
+        @done="onJoinDone"
+        @cancel="onJoinCancel"
+      />
 
       <!-- One adaptive sign-in: email + password always; the Secret-Key field only on the first sign-in per
            device (or when a device wrap is unusable). A single submit logs in AND unlocks. -->

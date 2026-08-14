@@ -19,6 +19,9 @@
  */
 export const HttpStatus = {
   notModified: 304,
+  /** Distinguished from a refusal only where the remedy differs — e.g. `POST /api/token/adopt` refusing a
+   *  browser that already carries a refresh cookie (ADR 0004 § Transport), which is not "start again". */
+  badRequest: 400,
   unauthorized: 401,
   forbidden: 403,
   notFound: 404,

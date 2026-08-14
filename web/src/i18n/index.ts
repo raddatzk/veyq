@@ -199,6 +199,20 @@ const en = {
     gone: 'This code is no longer valid — start again.',
     startFailed: 'The code could not be created. Please try again.',
     grantFailed: 'Access could not be given. No device was let in — start over.',
+    // --- The device being let in (uc.account.onboard-device steps 2-7). ---
+    joinTitle: 'Adding this device',
+    joinIntro: 'Your other device is waiting. It will show a number — check it is the same one you see here.',
+    joinCompare: 'If the numbers differ, stop: something other than this device answered.',
+    joinStayHint: 'This device gets no password, so if you do not stay signed in, closing the browser ends it and you add it again next time.',
+    joinWaiting: 'Waiting for the other device…',
+    joinFinishing: 'Setting this device up…',
+    joinGoneHint: 'Start again on the device you are signed in on — this one cannot pick the same code back up.',
+    // Deliberately NOT the message above: nothing here has expired, and starting the ceremony over would not
+    // change anything. This browser is already signed in somewhere.
+    joinOccupied: 'This browser is already signed in. Sign out here first, then add this device again.',
+    joinAnswerFailed: 'This device could not answer the code. Check your connection and scan it again.',
+    joinFailed: 'This device could not be set up. Start again on your other device.',
+    joinBack: 'Back to sign in',
   },
   profile: {
     title: 'Your profile',
@@ -995,6 +1009,17 @@ const de: typeof en = {
     gone: 'Dieser Code gilt nicht mehr — fang neu an.',
     startFailed: 'Der Code konnte nicht erstellt werden. Bitte versuch es erneut.',
     grantFailed: 'Der Zugriff konnte nicht freigegeben werden. Es wurde kein Gerät hereingelassen — fang neu an.',
+    joinTitle: 'Dieses Gerät wird hinzugefügt',
+    joinIntro: 'Dein anderes Gerät wartet. Es zeigt gleich eine Zahl — prüfe, dass es dieselbe ist wie hier.',
+    joinCompare: 'Wenn die Zahlen nicht übereinstimmen: abbrechen. Dann hat etwas anderes als dieses Gerät geantwortet.',
+    joinStayHint: 'Dieses Gerät bekommt kein Passwort. Bleibst du nicht angemeldet, endet der Zugang mit dem Schließen des Browsers und du fügst es beim nächsten Mal erneut hinzu.',
+    joinWaiting: 'Warten auf das andere Gerät…',
+    joinFinishing: 'Dieses Gerät wird eingerichtet…',
+    joinGoneHint: 'Fang an dem Gerät neu an, an dem du angemeldet bist — hier lässt sich derselbe Code nicht noch einmal abholen.',
+    joinOccupied: 'In diesem Browser ist bereits jemand angemeldet. Melde dich hier zuerst ab und füge dieses Gerät dann erneut hinzu.',
+    joinAnswerFailed: 'Dieses Gerät konnte nicht auf den Code antworten. Prüfe die Verbindung und scanne ihn noch einmal.',
+    joinFailed: 'Dieses Gerät konnte nicht eingerichtet werden. Fang an deinem anderen Gerät neu an.',
+    joinBack: 'Zurück zur Anmeldung',
   },
   profile: {
     title: 'Dein Profil',

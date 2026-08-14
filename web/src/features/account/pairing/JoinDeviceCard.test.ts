@@ -1,0 +1,246 @@
+// @vitest-environment happy-dom
+// uc.account.onboard-device § Main flow — add a new device, the half that runs on the device being let in.
+//
+// Real crypto, the real poll loop, the real card; only the wire and the tail are mocked. Three properties live
+// here and nowhere else:
+//   - **the number on screen belongs to the key that answered** — derived locally at mint time, so it is there
+//     before the channel is touched and is still the right number when the answer is refused;
+//   - **the *stay signed in* answer is taken BEFORE the first call and reaches adoption**, because the refresh
+//     lifetime is fixed there and no later refresh can move it (ADR 0004 § web refresh cookie lifetimes);
+//   - **the tail is entered at most once.** Its first call spends the only token this device is ever handed, so
+//     every failure after the envelope arrives is terminal — a screen that offered a retry would revoke the
+//     family of the device standing in front of the user.
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+
+vi.mock('./pairingChannel', () => ({
+  answerPairingChannel: vi.fn(),
+  collectPairingChannel: vi.fn(),
+}))
+vi.mock('./onboardTail', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./onboardTail')>()),
+  runOnboardTail: vi.fn(),
+}))
+const rememberSupported = vi.fn(() => true)
+vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRememberSupported: () => rememberSupported() }))
+const capable = vi.fn(() => true)
+vi.mock('../../../shared/state/useCapabilities', () => ({
+  useCapabilities: () => ({ hasCapability: () => capable() }),
+}))
+
+import JoinDeviceCard from './JoinDeviceCard.vue'
+import { answerPairingChannel, collectPairingChannel } from './pairingChannel'
+import { runOnboardTail, OnboardTailError } from './onboardTail'
+import { readTransportAnswer, checkNumber, sealGrant, type PairingGrant } from './pairing'
+import { i18n } from '../../../i18n'
+
+const answer = vi.mocked(answerPairingChannel)
+const collect = vi.mocked(collectPairingChannel)
+const tail = vi.mocked(runOnboardTail)
+
+const HANDLE = 'aGFuZGxlLXZhbHVl'
+const MASTER_KEY = new Uint8Array(32).fill(9)
+const GRANT: PairingGrant = {
+  email: 'kevin@example.com',
+  masterKey: MASTER_KEY,
+  refreshToken: 'the-grant-token',
+  label: 'Kevin’s iPad',
+}
+
+const httpError = (status: number) => Object.assign(new Error('http'), { response: { status } })
+
+const stubs = {
+  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  Button: {
+    props: ['label', 'icon', 'severity', 'disabled', 'text'],
+    emits: ['click'],
+    template: '<button :disabled="disabled" @click="$emit(\'click\')">{{ label }}</button>',
+  },
+  Checkbox: {
+    props: ['modelValue', 'inputId', 'binary', 'disabled'],
+    emits: ['update:modelValue'],
+    template:
+      '<input type="checkbox" :id="inputId" :checked="modelValue" :disabled="disabled" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
+}
+
+const t = (key: string) => i18n.global.t(key)
+const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+
+const mountCard = () => mount(JoinDeviceCard, { props: { handle: HANDLE }, global: { plugins: [i18n], stubs } })
+
+/** Let the answer POST settle and the poll arm. */
+const started = async (w: VueWrapper) => {
+  await flushPromises()
+  await vi.advanceTimersByTimeAsync(0)
+  await flushPromises()
+  await w.vm.$nextTick()
+}
+
+/** Seal a grant to whatever key this card actually answered with — the only way the envelope can be opened by
+ *  the private half the card kept, and therefore the only honest fixture. */
+const sealToTheCard = (grant: PairingGrant = GRANT) =>
+  sealGrant(readTransportAnswer(answer.mock.calls[0][1]), grant)
+
+const grantArrives = async (w: VueWrapper, envelope = sealToTheCard()) => {
+  collect.mockResolvedValue({ envelope })
+  await vi.advanceTimersByTimeAsync(2_000)
+  await flushPromises()
+  await w.vm.$nextTick()
+}
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.useFakeTimers()
+  i18n.global.locale.value = 'en'
+  rememberSupported.mockReturnValue(true)
+  capable.mockReturnValue(true)
+  answer.mockResolvedValue(undefined)
+  collect.mockResolvedValue({})
+  tail.mockResolvedValue(undefined)
+})
+
+afterEach(() => vi.useRealTimers())
+
+describe('JoinDeviceCard — the device being let in (uc.account.onboard-device, ADR 0059)', () => {
+  it('shows the check number before it touches the channel, and answers with that same key', async () => {
+    answer.mockReturnValue(new Promise(() => {})) // the POST never settles
+    const w = mountCard()
+    await w.vm.$nextTick()
+
+    const shown = w.find('[data-testid="join-check-number"]').text()
+    expect(shown).toMatch(/^\d{5}$/)
+    // The number is local, so a channel that never answered — or one an attacker answered first — cannot move
+    // it. That is the whole reason the comparison means anything.
+    expect(answer).toHaveBeenCalledTimes(1)
+    expect(answer.mock.calls[0][0]).toBe(HANDLE)
+    expect(checkNumber(readTransportAnswer(answer.mock.calls[0][1]))).toBe(shown)
+  })
+
+  it('opens the grant with the private half it kept, and runs the tail with it', async () => {
+    const w = mountCard()
+    await started(w)
+    await grantArrives(w)
+
+    expect(tail).toHaveBeenCalledTimes(1)
+    // Equality of the whole grant is the proof that the envelope was opened with THIS card's key and not with
+    // some other key it happened to hold.
+    expect(tail.mock.calls[0][0]).toEqual(GRANT)
+    expect(w.emitted('done')).toHaveLength(1)
+  })
+
+  it('takes the “stay signed in” answer before any call, and hands it to the tail — both ways', async () => {
+    for (const stay of [false, true]) {
+      vi.clearAllMocks()
+      answer.mockResolvedValue(undefined)
+      collect.mockResolvedValue({})
+      tail.mockResolvedValue(undefined)
+
+      const w = mountCard()
+      // Answered while the card is still waiting: adoption has not happened, and after it the lifetime is fixed.
+      if (stay) await w.find('#join-stay').setValue(true)
+      await started(w)
+      expect(tail).not.toHaveBeenCalled()
+
+      await grantArrives(w)
+      expect(tail.mock.calls[0][1]).toBe(stay)
+      w.unmount()
+    }
+  })
+
+  it('does not ask where it cannot honour the answer, and then takes the only reachable tier', async () => {
+    // ADR 0005 §22 / the sign-in form's own gate: with no IndexedDB or device trust switched off there is
+    // nowhere to enrol a wrap, so the question is not put and the declined arm is the only tier there is.
+    rememberSupported.mockReturnValue(false)
+    const w = mountCard()
+    await started(w)
+
+    expect(w.find('#join-stay').exists()).toBe(false)
+    await grantArrives(w)
+    expect(tail.mock.calls[0][1]).toBe(false)
+  })
+
+  it('shows one terminal message when the channel is already gone, and never answers twice', async () => {
+    answer.mockRejectedValue(httpError(404))
+    const w = mountCard()
+    await started(w)
+
+    expect(w.find('.msg').text()).toBe(t('pairing.gone'))
+    expect(w.text()).toContain(t('pairing.joinGoneHint'))
+    await vi.advanceTimersByTimeAsync(600_000)
+    expect(answer).toHaveBeenCalledTimes(1)
+    expect(collect).not.toHaveBeenCalled()
+    expect(tail).not.toHaveBeenCalled()
+
+    // Terminal is not a dead end: the way out is back to the sign-in form, where a fresh scan starts a fresh
+    // ceremony. What is NOT offered is a retry of this channel — E2's whole point.
+    await buttonLabelled(w, t('pairing.joinBack'))!.trigger('click')
+    expect(w.emitted('cancel')).toHaveLength(1)
+    expect(buttonLabelled(w, t('common.cancel'))).toBeUndefined()
+  })
+
+  it('shows the same terminal message when the channel dies while waiting', async () => {
+    const w = mountCard()
+    await started(w)
+    collect.mockRejectedValue(httpError(404))
+    await vi.advanceTimersByTimeAsync(2_000)
+    await flushPromises()
+    await w.vm.$nextTick()
+
+    expect(w.find('.msg').text()).toBe(t('pairing.gone'))
+    expect(tail).not.toHaveBeenCalled()
+  })
+
+  it('tells adoption’s two failures apart — and enters the tail exactly once for either', async () => {
+    for (const [reason, message] of [
+      ['gone', t('pairing.gone')],
+      ['session_present', t('pairing.joinOccupied')],
+    ] as const) {
+      vi.clearAllMocks()
+      answer.mockResolvedValue(undefined)
+      collect.mockResolvedValue({})
+      tail.mockRejectedValue(new OnboardTailError(reason))
+
+      const w = mountCard()
+      await started(w)
+      await grantArrives(w)
+
+      expect(w.find('.msg').text()).toBe(message)
+      // The grant token is spent by now. Nothing on this screen may lead back into the tail — a second adoption
+      // is ADR 0004's clone case and revokes this device's own family.
+      await vi.advanceTimersByTimeAsync(600_000)
+      await flushPromises()
+      expect(tail).toHaveBeenCalledTimes(1)
+      expect(w.emitted('done')).toBeUndefined()
+      w.unmount()
+    }
+  })
+
+  it('reports an unclassified failure as its own message, and still does not retry', async () => {
+    tail.mockRejectedValue(new Error('offline'))
+    const w = mountCard()
+    await started(w)
+    await grantArrives(w)
+
+    // Distinct from both terminal states above: a bare "an error was shown" would be satisfied by all three.
+    expect(w.find('.msg').text()).toBe(t('pairing.joinFailed'))
+    await vi.advanceTimersByTimeAsync(600_000)
+    await flushPromises()
+    expect(tail).toHaveBeenCalledTimes(1)
+  })
+
+  it('stops polling when it is dismissed, so an abandoned card cannot eat the envelope', async () => {
+    const w = mountCard()
+    await started(w)
+    const atDismissal = collect.mock.calls.length
+    expect(atDismissal).toBeGreaterThanOrEqual(1) // the control: it really was polling
+
+    w.unmount()
+    await vi.advanceTimersByTimeAsync(600_000)
+    await flushPromises()
+
+    // A collect that returns the envelope spends the channel whoever asked, so an orphaned loop does not leak a
+    // timer — it takes the grant the real attempt is waiting for.
+    expect(collect).toHaveBeenCalledTimes(atDismissal)
+  })
+})

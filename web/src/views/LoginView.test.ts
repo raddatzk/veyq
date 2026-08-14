@@ -32,7 +32,14 @@ vi.mock('../features/account/rememberMe/sessionVault', () => ({
   clearSessionVault: vi.fn(),
 }))
 vi.mock('../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => true }) }))
-vi.mock('../features/account/emergencyKit/emergencyKit', () => ({ importKitFromFile: vi.fn() }))
+// `parseKit` mirrors the real contract (a kit payload or `null`) rather than being asserted on: what this file
+// owns is the DISPATCH between the two codes, and the payload formats themselves are pinned in their own
+// modules' tests (`emergencyKit`, and `pairing.test.ts` for D5, both directions).
+vi.mock('../features/account/emergencyKit/emergencyKit', () => ({
+  importKitFromFile: vi.fn(),
+  parseKit: (text: string) =>
+    text.startsWith('veyqkit:') ? { email: 'scanned@example.com', secretKey: 'scanned-secret-key' } : null,
+}))
 vi.mock('../features/account/deviceRegister', () => ({ rememberThisDeviceWrap: vi.fn() }))
 vi.mock('../features/account/deviceIdentity', () => ({
   deviceId: () => 'this-device',
@@ -84,6 +91,10 @@ const stubs = {
     template: '<input type="checkbox" :id="inputId" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
   },
   KitScanner: true,
+  // Stubbed because the real one mints a transport key and touches the channel the moment it is rendered —
+  // its own behaviour is `JoinDeviceCard.test.ts`'s. What this file asserts is that it is REACHED, with the
+  // scanned handle, and that reaching it disturbs nothing else on the card.
+  JoinDeviceCard: true,
 }
 
 // The view debounces its IndexedDB trust lookup on a timer and clears it on unmount; a wrapper left mounted
@@ -119,6 +130,17 @@ async function enterLocked(w: VueWrapper) {
   await flushPromises()
 }
 
+const scanButton = (w: VueWrapper) =>
+  w.findAll('button').find((b) => b.attributes('aria-label') === t('unlock.scan'))
+
+/** Open the shared scan control and hand it a decoded string, the way the camera would. */
+async function scan(w: VueWrapper, text: string) {
+  await scanButton(w)!.trigger('click')
+  const scanner = w.findComponent({ name: 'KitScanner' })
+  scanner.vm.$emit('found', text)
+  await flushPromises()
+}
+
 describe('LoginView (uc.account.sessions §E3, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -137,6 +159,8 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(clearSessionVault).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
     window.confirm = vi.fn(() => true)
+    // The scan entry is capability-gated on a camera; happy-dom has none, so the control would not render.
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
 
   afterEach(() => {
@@ -257,6 +281,74 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(wrapper.text()).toContain(t('sessions.lockedDone'))
     // Nothing is left to do here, so nothing is left standing: no live session means no sign-out button.
     expect(buttonLabelled(wrapper, t('login.signOut'))).toBeUndefined()
+  })
+
+  // --- uc.account.onboard-device: the join entry, `the-locked-entry-adds-no-shell-route`'s behavioural half ---
+
+  it('offers the join through the SAME scan entry, which now accepts both of this app’s codes', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    // Offered exactly where the Emergency-Kit scan already was — one control, one camera lifecycle, one
+    // permission prompt, and no second button whose difference a user cannot see.
+    expect(scanButton(wrapper)).toBeDefined()
+    await scanButton(wrapper)!.trigger('click')
+    const accepts = wrapper.findComponent({ name: 'KitScanner' }).props('accepts') as (t: string) => boolean
+    expect(accepts('veyqpair:aGFuZGxl')).toBe(true)
+    expect(accepts('veyqkit:whatever')).toBe(true)
+    // The negative, on the same predicate: a foreign QR is scanned PAST, not reported as a failure.
+    expect(accepts('https://example.com/')).toBe(false)
+    expect(accepts('')).toBe(false)
+  })
+
+  it('a scanned pairing code opens the join card with that handle — and attempts no unlock, and no login', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    await scan(wrapper, 'veyqpair:aGFuZGxl')
+
+    const join = wrapper.findComponent({ name: 'JoinDeviceCard' })
+    expect(join.exists()).toBe(true)
+    expect(join.props('handle')).toBe('aGFuZGxl')
+    expect(wrapper.text()).toContain(t('pairing.joinTitle'))
+    // This device is about to be handed everything by another one. Nothing here may reach for a credential it
+    // does not have — a "login failed" or "unlock failed" would be the screen contradicting the code it scanned.
+    expect(login).not.toHaveBeenCalled()
+    expect(unlockMasterKey).not.toHaveBeenCalled()
+    expect(unlockWithDevice).not.toHaveBeenCalled()
+    // The form is replaced, not hidden behind a route: no navigation happened.
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('the Emergency-Kit scan still applies the kit through the widened dispatch — the regression control', async () => {
+    // This is what a shared, dispatching scan control most plausibly breaks, and a bare "the join opened" would
+    // not notice it: the widening must leave the older path byte-identical in behaviour.
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    await scan(wrapper, 'veyqkit:whatever')
+
+    expect((wrapper.find('input[name="email"]').element as HTMLInputElement).value).toBe('scanned@example.com')
+    expect((wrapper.find('input[name="secret-key"]').element as HTMLInputElement).value).toBe('scanned-secret-key')
+    expect(wrapper.findComponent({ name: 'JoinDeviceCard' }).exists()).toBe(false)
+    expect(wrapper.find('form').exists()).toBe(true)
+  })
+
+  it('leaving the join hands the sign-in form back, and finishing it routes into the shell', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+    await scan(wrapper, 'veyqpair:aGFuZGxl')
+
+    wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('cancel')
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'JoinDeviceCard' }).exists()).toBe(false)
+
+    await scan(wrapper, 'veyqpair:aGFuZGxl')
+    wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('done')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'home' })
   })
 
   it('a failed sign-out leaves this device’s own sign-out button reachable', async () => {
