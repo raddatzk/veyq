@@ -167,6 +167,14 @@ letter** ("rotation and reuse detection stay semantically unchanged", not "no ch
 an absolute reading collides with the additive detail the decision itself requires, and the implementer then
 cannot tell a real invariant from a phrase that was never meant that strictly.
 
+**A third corollary, one altitude down: a decision that branches on a STATUS CODE is a locator too.** A CR can
+demand a behaviour the client has no vocabulary for. `cr-pairing-add-a-device-web` required adoption's `400`
+(this browser already holds a session) to reach a *different* message than its `401` (the grant is gone) —
+their remedies differ, so folding them is the defect — over a `HttpStatus` map that carried no `400` at all;
+`rg -n badRequest web/src` returns empty and takes one second. It cost three additive lines there, which is
+precisely why it is worth writing down: the same miss over something that **cannot** be added additively is
+the expensive version of it.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an
@@ -187,6 +195,17 @@ use-case(s) it `satisfies:` — each new acceptance criterion gets a test ref (o
 entry with a reason) — and leaves `python3 scripts/validate_coverage.py` **green**. A CR is not done
 while the trust chain is red. (A use-case refined ahead of any implementation ships a `status: planned`
 coverage file that gaps every target surface.)
+
+### A phase that supersedes prose names the SHAPE of the correction, not only the sentence
+
+Edited, narrowed, or deleted — say which. A phase that names one false sentence *reads* as precise while
+saying nothing about the paragraph around it that the same work falsifies wholesale:
+`cr-pairing-add-a-device-web`'s phase 3 said the one mislabelled sentence is relabelled and the coverage gap
+"otherwise narrowed", directly above fifteen lines of blocker narrative that this very phase existed to
+remove. Deleting them was right — § *deleting beats reformatting* in
+[`../docs/ai/README.md`](../docs/ai/README.md), and the corrected reason already lived in its own inbox row —
+but it was a judgement call about **durable state**, taken at implement time, which is the most expensive
+place to take one. One word in the phase removes it.
 
 ### The trust-chain guards stay green
 

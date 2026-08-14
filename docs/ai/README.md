@@ -88,6 +88,13 @@ Five rules follow:
    is the **whole branch** — `git log --all --grep` plus the files' existence — never the recent log window,
    which is how the 2026-07-22 sweep found seven rows that had been stale for weeks.
 
+   **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
+   whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`
+   mapping spawned just after an implement session's first `npm run generate:api` reported the work order's
+   own — correct, when written — *"the generated client does not carry this verb"* as **stale**: which reads
+   as a fault in the work order and is in fact the effect of the step above it. So **name in the subagent's
+   prompt what you have already changed**, or its report hands back a contradiction only you can resolve.
+
    **What this step cannot see: a rule the docs never wrote.** A public share served trashed media for the
    whole retention window because the trash CR and the sharing CRs both read `veyq_media` and never met —
    the doc↔code delta there was **empty**, and the defect was real. Doc drift and cross-feature gaps are
