@@ -77,7 +77,8 @@ EXPECTED = {
     "PairingCollectRequest": {"handle"},
     "PairingDelegateRequest": {"handle"},
     # The handle plus the one opaque value that step relays. `answer` is an ephemeral transport key in one
-    # direction and a code commitment in the other, and the server must not be able to tell which (§6).
+    # direction and that key plus a code commitment in the other, and the server must not be able to tell the
+    # two forms apart (§6). Only the property SET is pinned here — the value's shape is the client's.
     "PairingAnswerRequest": {"handle", "answer"},
     "PairingSealRequest": {"handle", "envelope"},
     # The delegated family's token, returned to the TRUSTED device only; it reaches the onboarded one solely

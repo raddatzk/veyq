@@ -469,9 +469,12 @@ paths:
       summary: Post the one opaque answer this channel relays.
       description: >
         Writes the channel's single `answer`. The server stores it verbatim and derives nothing from it: it is
-        the new device's ephemeral transport public key when *adding a device*, and the commitment to the
-        transcribed pairing code when *signing in with a QR code* (ADR 0059 §5, §6). One shape for both, so
-        the relay cannot tell the two ceremonies apart.
+        the new device's ephemeral transport public key when *adding a device*, and that same key **together
+        with** a commitment to the transcribed pairing code when *signing in with a QR code* (ADR 0059 §5, §6).
+        The key travels in both directions because the trusted device has to seal to it either way; what the
+        second direction adds is the proof binding it to the code, and it rides in this one slot because the
+        seal takes no code and never may (§6). One shape for both, so the relay cannot tell the two ceremonies
+        apart.
 
         Unauthenticated on purpose — in the *add a device* direction the caller is the device being onboarded,
         which has no session and must not have to name an account before it has one (ADR 0059 §3).
@@ -1014,8 +1017,10 @@ components:
           type: string
           description: >
             The one opaque answer this channel relays — the answering device's ephemeral transport public key
-            when *adding a device*, the commitment to the transcribed pairing code when *signing in with a QR
-            code* (ADR 0059 §5, §6). The server stores it verbatim and must not be able to tell which it is.
+            when *adding a device*, and that key together with a commitment to the transcribed pairing code
+            when *signing in with a QR code* (ADR 0059 §5, §6). Both directions carry the key, because the
+            grant is sealed to it either way; the second adds the proof that binds it to the displayed code.
+            The server stores the value verbatim and must not be able to tell the two forms apart.
           contentEncoding: base64
           maxLength: 8192
           example: ZXBoZW1lcmFsLXRyYW5zcG9ydC1wdWJsaWMta2V5
@@ -1100,8 +1105,9 @@ components:
         answer:
           type: string
           description: >
-            The relayed answer, once posted — an ephemeral transport public key or a code commitment,
-            depending on the direction the server cannot see (ADR 0059 §5, §6).
+            The relayed answer, once posted — an ephemeral transport public key, or that key together with a
+            commitment to the transcribed code, depending on the direction the server cannot see (ADR 0059 §5,
+            §6). One opaque value either way; the two forms differ only in length.
           contentEncoding: base64
           maxLength: 8192
           example: ZXBoZW1lcmFsLXRyYW5zcG9ydC1wdWJsaWMta2V5

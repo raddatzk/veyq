@@ -102,8 +102,13 @@ here; the server is blind.
   which breaks a self-hosted instance and hands a third party the timing of every scan — a real
   self-hostability regression traded for a theoretical decoder one; and the native `BarcodeDetector` is absent
   from Firefox entirely and from desktop Chrome on Linux/Windows, so it removes no dependency at all. What
-  bounds the risk is the input class: we only ever decode QR codes **our own client produced** (low-version
-  `veyqkit:` / `veyqpair:` payloads, which the known version-23 defect cannot reach), pure JS is memory-safe
+  bounds the risk is the input class: we only ever decode QR codes **our own client produced** — the three
+  markers `veyqkit:`, `veyqpair:` and `veyqsignin:`, all of which stay far below the known version-23 defect
+  (*measured:* a 44-char handle gives **version 3** under `veyqpair:` and **version 4** under the two-character-
+  longer `veyqsignin:`). **The bound is a property of what the payloads CARRY, not of how many markers there
+  are:** a marker plus a handle is ~55 characters, while the transport key `veyqsignin:` deliberately does not
+  carry would be 1260 bytes and **version 28** — so the thing that would void this exception is a payload
+  growing a key, not a fourth marker. Pure JS is memory-safe
   so a decoder bug is a wrong string rather than an exploit, and the decoded value is validated immediately
   against the contract-pinned `[A-Za-z0-9+/]*={0,2}`. **Revisit on any of three triggers:** we need to decode
   a *foreign* QR code, jsQR gets a CVE, or `BarcodeDetector` reaches Firefox and desktop Chrome.

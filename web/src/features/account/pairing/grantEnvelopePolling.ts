@@ -3,9 +3,11 @@
 // This is `pairingAnswerPolling`'s **sibling, not a reuse of it**: same structure (fire once immediately, skip
 // ticks while the tab is hidden, re-fire on `visibilitychange`, idempotent `start()`, a `404` ends it once and
 // for all), opposite stop condition. That one stops on `answer` because reading the answer spends nothing; this
-// one stops on `envelope`, which is the read that spends the channel. Sharing one module would mean sharing one
-// module-level timer between two screens that are, in the *sign in with a QR code* direction, the same screen —
-// so each keeps its own state.
+// one stops on `envelope`, which is the read that spends the channel. That inversion is the whole reason for the
+// split: one shared module-level timer would be one place for *reading costs nothing* and *reading spends the
+// channel* to be conflated, and the conflation is silent in exactly the direction that loses the grant. (It is
+// NOT that the two ever run on one screen — in both directions the new device polls only the envelope and the
+// trusted device only the answer, one loop per device.) So each keeps its own state.
 //
 // The three older loops (`grantDeliveryPolling`, `scopeRotationPolling`, `mediaRevisionPolling`) remain
 // unusable here for the reason `pairingAnswerPolling` already records, and harder: this is the only loop in the

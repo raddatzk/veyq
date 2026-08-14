@@ -95,6 +95,10 @@ const stubs = {
   // its own behaviour is `JoinDeviceCard.test.ts`'s. What this file asserts is that it is REACHED, with the
   // scanned handle, and that reaching it disturbs nothing else on the card.
   JoinDeviceCard: true,
+  // Same reason: the real one mints a transport key and opens a channel the moment it renders. Its behaviour is
+  // `SignInWithCodeCard.test.ts`'s; what this file owns is that it is REACHED without a camera and without a
+  // credential, and that reaching it disturbs nothing else on the card.
+  SignInWithCodeCard: true,
 }
 
 // The view debounces its IndexedDB trust lookup on a timer and clears it on unmount; a wrapper left mounted
@@ -347,6 +351,82 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
     await scan(wrapper, 'veyqpair:aGFuZGxl')
     wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('done')
+    await flushPromises()
+    expect(push).toHaveBeenCalledWith({ name: 'home' })
+  })
+
+  // --- uc.account.onboard-device: the OTHER direction's entry, and its behavioural half of the same criterion ---
+
+  it('offers the QR sign-in entry with and without a camera — where the scan control is camera-gated', async () => {
+    // Both halves are the assertion. Without the no-camera case the entry could be quietly gated and nobody
+    // would notice; without the with-camera case "it is always absent" would pass the no-camera half.
+    const withCamera = mountView()
+    await fillCredentials(withCamera)
+    expect(scanButton(withCamera)).toBeDefined()
+    expect(buttonLabelled(withCamera, t('pairing.signInEntry'))).toBeDefined()
+
+    // A camera-less laptop is PRECISELY this direction's case: this device only displays a code, and the camera
+    // it needs is on the other one (ADR 0059 §1 — no direction is the camera one).
+    Object.defineProperty(navigator, 'mediaDevices', { value: undefined, configurable: true })
+    const withoutCamera = mountView()
+    await fillCredentials(withoutCamera)
+
+    expect(scanButton(withoutCamera)).toBeUndefined() // the control on the same predicate: that one IS gated
+    expect(buttonLabelled(withoutCamera, t('pairing.signInEntry'))).toBeDefined()
+  })
+
+  it('choosing it swaps in the routeless card — and attempts no login, no unlock, no navigation', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    await buttonLabelled(wrapper, t('pairing.signInEntry'))!.trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findComponent({ name: 'SignInWithCodeCard' }).exists()).toBe(true)
+    expect(wrapper.text()).toContain(t('pairing.signInTitle'))
+    // This device is about to be handed everything by another one. Nothing here may reach for a credential it
+    // does not have — and the entry sits beside a `required` Secret-Key field it must not trip.
+    expect(login).not.toHaveBeenCalled()
+    expect(unlockMasterKey).not.toHaveBeenCalled()
+    expect(unlockWithDevice).not.toHaveBeenCalled()
+    // The form is replaced, not hidden behind a route: no navigation happened.
+    expect(wrapper.find('form').exists()).toBe(false)
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('the sign-in form’s own ways out are untouched by the new entry — the regression control', async () => {
+    // What a third button on this card most plausibly breaks: E3's locked entry and recovery, which sit beside
+    // it, and the Emergency-Kit scan the same card already carries.
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+
+    expect(buttonLabelled(wrapper, t('sessions.lockedEntry'))).toBeDefined()
+    expect(buttonLabelled(wrapper, t('recovery.forgot'))).toBeDefined()
+    await scan(wrapper, 'veyqkit:whatever')
+    expect((wrapper.find('input[name="email"]').element as HTMLInputElement).value).toBe('scanned@example.com')
+    expect(wrapper.findComponent({ name: 'SignInWithCodeCard' }).exists()).toBe(false)
+
+    // The kit above authoritatively overwrote the email, which is the Emergency-Kit path working; E3's entry
+    // then logs in with what is on the form, still SESSION-scoped and still attempting no unlock.
+    await enterLocked(wrapper)
+    expect(login).toHaveBeenCalledWith('scanned@example.com', 'the-password', LoginVerifyRequestSessionScopeEnum.Session)
+    expect(unlockMasterKey).not.toHaveBeenCalled()
+  })
+
+  it('leaving the QR sign-in hands the form back, and finishing it routes into the shell', async () => {
+    const wrapper = mountView()
+    await fillCredentials(wrapper)
+    await buttonLabelled(wrapper, t('pairing.signInEntry'))!.trigger('click')
+    await flushPromises()
+
+    wrapper.findComponent({ name: 'SignInWithCodeCard' }).vm.$emit('cancel')
+    await flushPromises()
+    expect(wrapper.find('form').exists()).toBe(true)
+    expect(wrapper.findComponent({ name: 'SignInWithCodeCard' }).exists()).toBe(false)
+
+    await buttonLabelled(wrapper, t('pairing.signInEntry'))!.trigger('click')
+    await flushPromises()
+    wrapper.findComponent({ name: 'SignInWithCodeCard' }).vm.$emit('done')
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'home' })
   })

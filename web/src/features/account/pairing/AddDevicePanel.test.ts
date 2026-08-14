@@ -2,6 +2,11 @@
 // uc.account.onboard-device § Main flow — add a new device (web). The ceremony end to end on the trusted side,
 // with the real poll loop, the real slide and the real crypto underneath; only the wire is mocked.
 //
+// Since the scan arm landed it carries BOTH directions, and the scanned one adds the property this whole
+// feature turns on: **two gates in series** (ADR 0059 §6, §7 — the proof verified AND the slide completed).
+// Either gate alone satisfies "no envelope was posted", so they are driven separately, one bite each — a suite
+// that only drove a wrong code could not say which of the two held.
+//
 // Three properties live here and nowhere else:
 //   - **E2 abandons, it does not retry.** Declining the comparison must reach NEITHER `delegate` nor `seal` —
 //     and the restart must mint a different handle, because offering "try again" on the same channel is an
@@ -38,7 +43,16 @@ import {
   delegatePairingSession,
   sealPairingChannel,
 } from './pairingChannel'
-import { mintTransportKey, transportAnswer, checkNumber, openGrant, parsePairingPayload } from './pairing'
+import {
+  mintTransportKey,
+  transportAnswer,
+  checkNumber,
+  openGrant,
+  parsePairingPayload,
+  pairingPayload,
+  signInPayload,
+  signInAnswer,
+} from './pairing'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
@@ -67,6 +81,9 @@ const stubs = {
   // The QR encoder is loaded lazily from a dynamic import and draws nothing a test can read; what matters here
   // is WHICH payload it is handed, so the stub renders it.
   PairingCode: { props: ['payload'], template: '<div class="qr">{{ payload }}</div>' },
+  // Stubbed for its camera, kept for its contract: `accepts` is a prop this file reads, and `found` is emitted
+  // the way the decoder would.
+  KitScanner: true,
 }
 
 const t = (key: string, named?: Record<string, unknown>) => i18n.global.t(key, named ?? {})
@@ -91,6 +108,31 @@ const answerArrives = async (w: VueWrapper) => {
   collect.mockResolvedValue({ answer: ANSWER })
   await pollOnce()
   await w.vm.$nextTick()
+}
+
+const SCANNED_HANDLE = 'c2Nhbm5lZC1oYW5kbGU='
+
+/** Take the *scan a code* arm and hand the scanner the other device's payload, the way the camera would. */
+const scanCode = async (w: VueWrapper, handle = SCANNED_HANDLE) => {
+  await buttonLabelled(w, t('pairing.scanStart'))!.trigger('click')
+  w.findComponent({ name: 'KitScanner' }).vm.$emit('found', signInPayload(handle))
+  await flushPromises()
+  await w.vm.$nextTick()
+  return handle
+}
+
+/** The six digits this device drew and is asking the account holder to transcribe. */
+const shownCode = (w: VueWrapper) => w.find('[data-testid="pairing-code"]').text()
+
+/** Any other six digits — the mistyped transcription, or an attacker who never saw this screen. */
+const someOtherCode = (code: string) => String((Number(code) + 1) % 1_000_000).padStart(6, '0')
+
+/** The other device answers with its key and a proof of `code`. */
+const proofArrives = async (w: VueWrapper, code: string, key = mintTransportKey()) => {
+  collect.mockResolvedValue({ answer: signInAnswer(key.pub, code) })
+  await pollOnce()
+  await w.vm.$nextTick()
+  return key
 }
 
 const nameAndSlide = async (w: VueWrapper, label = 'Küchen-Tablet') => {
@@ -272,5 +314,136 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     // The control: the same slide, once a name is there.
     await nameAndSlide(w)
     expect(seal).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('AddDevicePanel — the scanned arm (sign in with a QR code, ADR 0059 §6/§7, D9)', () => {
+  it('scans only this direction’s marker, and never the code it shows itself', async () => {
+    const w = mountPanel()
+    await buttonLabelled(w, t('pairing.scanStart'))!.trigger('click')
+
+    const accepts = w.findComponent({ name: 'KitScanner' }).props('accepts') as (s: string) => boolean
+    expect(accepts(signInPayload('aGFuZGxl'))).toBe(true)
+    // A `veyqpair:` code is one THIS device showed. Accepting it here would have the panel pair with itself —
+    // and on the sign-in card the mirror-image mis-scan burns the write-once answer slot (D1).
+    expect(accepts(pairingPayload('aGFuZGxl'))).toBe(false)
+    expect(accepts('veyqkit:whatever')).toBe(false)
+    // The negative on the same predicate: a foreign QR is scanned PAST, not reported as a failure.
+    expect(accepts('https://example.com/')).toBe(false)
+  })
+
+  it('states what is being granted with the code, and shows no comparison number', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+
+    expect(shownCode(w)).toMatch(/^\d{6}$/)
+    // D9's "information early": the consequence is on screen from the moment the code is, long before the
+    // gesture that commits to it.
+    expect(w.text()).toContain(t('pairing.consequence'))
+    // ADR 0059 §5 — comparing is theatre where the attacker authored one of the two screens, so this direction
+    // shows no check number at all. The other arm's own number is the control that the element exists.
+    expect(w.find('[data-testid="check-number"]').exists()).toBe(false)
+    // And nothing is committed yet: the slide is not even on screen.
+    expect(w.findComponent(SlideToConfirm).exists()).toBe(false)
+  })
+
+  // --- The two gates, separately. Either alone satisfies "no envelope was posted". ---
+
+  it('GATE 1 — a wrong proof does not so much as offer the slide, and reaches neither delegate nor seal', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+    const shown = shownCode(w)
+
+    await proofArrives(w, someOtherCode(shown))
+
+    // Not merely "an error was shown": the gesture is never offered, so there is nothing for the user to
+    // complete past the one signal they have (§7).
+    expect(w.findComponent(SlideToConfirm).exists()).toBe(false)
+    expect(w.find('input').exists()).toBe(false) // not even the name field
+    expect(delegate).not.toHaveBeenCalled()
+    expect(seal).not.toHaveBeenCalled()
+    expect(w.text()).toContain(t('pairing.scanRefused'))
+    // Terminal, and deliberately so: the answer slot is write-once, so there is no second proof to accept.
+    await vi.advanceTimersByTimeAsync(600_000)
+    await flushPromises()
+    expect(seal).not.toHaveBeenCalled()
+  })
+
+  it('GATE 2 — a VERIFIED proof whose slide is left untouched still seals nothing', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+    const shown = shownCode(w)
+
+    await proofArrives(w, shown)
+
+    // The control that this case is about the slide and not about a refusal: the proof HELD.
+    expect(w.text()).toContain(t('pairing.scanProven'))
+    expect(w.findComponent(SlideToConfirm).exists()).toBe(true)
+    // Named, and still not confirmed — the label gates the gesture, it does not replace it.
+    await w.find('input').setValue('Kevin’s laptop')
+    await flushPromises()
+
+    expect(delegate).not.toHaveBeenCalled()
+    expect(seal).not.toHaveBeenCalled()
+  })
+
+  it('the completed ceremony delegates and seals exactly once — the live control on both gates', async () => {
+    const w = mountPanel()
+    const handle = await scanCode(w)
+    const shown = shownCode(w)
+    const answering = await proofArrives(w, shown)
+    const readsBeforeSeal = collect.mock.calls.length
+    expect(readsBeforeSeal).toBeGreaterThanOrEqual(1) // the control: it really was polling
+
+    await nameAndSlide(w)
+
+    expect(delegate).toHaveBeenCalledTimes(1)
+    expect(seal).toHaveBeenCalledTimes(1)
+    expect(delegate.mock.calls[0][0]).toBe(handle)
+    expect(seal.mock.calls[0][0]).toBe(handle)
+
+    // Sealed to the key that carried the proof, and to no other. Anchored on a real second key failing to open
+    // a real envelope — not on "it threw", which a malformed input produces just as well.
+    const envelope = seal.mock.calls[0][1]
+    const opened = openGrant(answering.priv, envelope)
+    expect(opened.masterKey).toEqual(MASTER_KEY)
+    expect(opened.refreshToken).toBe(REFRESH_TOKEN)
+    expect(opened.label).toBe('Küchen-Tablet')
+    expect(() => openGrant(mintTransportKey().priv, envelope)).toThrow()
+
+    // The channel is never read again after the seal: a collect from ANY caller returns the envelope and marks
+    // the row COLLECTED, so this device would eat its own grant and the other one would wait forever.
+    await vi.advanceTimersByTimeAsync(600_000)
+    await flushPromises()
+    expect(collect).toHaveBeenCalledTimes(readsBeforeSeal)
+    expect(w.text()).toContain(t('pairing.sealed'))
+  })
+
+  it('an unreadable answer is the ordinary terminal state, and seals nothing', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+    // The other direction's answer shape: a key with no proof at all. Nothing can be sealed against it.
+    collect.mockResolvedValue({ answer: transportAnswer(mintTransportKey().pub) })
+    await pollOnce()
+    await w.vm.$nextTick()
+
+    expect(w.text()).toContain(t('pairing.gone'))
+    expect(delegate).not.toHaveBeenCalled()
+    expect(seal).not.toHaveBeenCalled()
+  })
+
+  it('starting over after a refusal mints a fresh code, never resuming the spent channel', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+    const first = shownCode(w)
+    await proofArrives(w, someOtherCode(first))
+
+    await buttonLabelled(w, t('pairing.again'))!.trigger('click')
+    await flushPromises()
+
+    // Back at the scanner, with nothing carried over — a resumed channel is exactly what E2 forbids.
+    expect(w.findComponent({ name: 'KitScanner' }).exists()).toBe(true)
+    expect(w.find('[data-testid="pairing-code"]').exists()).toBe(false)
+    expect(seal).not.toHaveBeenCalled()
   })
 })

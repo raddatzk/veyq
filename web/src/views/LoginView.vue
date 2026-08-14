@@ -21,6 +21,7 @@ import { importKitFromFile, parseKit, type KitData } from '../features/account/e
 import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
 import { parsePairingPayload } from '../features/account/pairing/pairing'
 import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
+import SignInWithCodeCard from '../features/account/pairing/SignInWithCodeCard.vue'
 import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
@@ -79,6 +80,11 @@ const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevic
 // join card has replaced the form (routeless, like the locked state above it): this device is being let in from
 // one that is already signed in, so it has no email, no password and no Secret Key to type here.
 const joinHandle = ref('')
+// uc.account.onboard-device § Main flow — sign in with a QR code. The OTHER direction's entry, and the other
+// routeless card: this device displays a code and the signed-in one scans it. Deliberately NOT gated on
+// `scanSupported` — a camera-less laptop is precisely this direction's case, and ADR 0059 §1's "no direction is
+// the camera one" is only true if this way in is offered without one.
+const signInWithCode = ref(false)
 
 /** Decide whether to show the Secret-Key field for the entered email: needed unless this device already has a
  *  password DEVICE wrap for it (a remembered device auto-opens at boot, so if it reached this screen its
@@ -285,6 +291,19 @@ async function onJoinDone() {
   await finishAndRoute()
 }
 
+/** The QR sign-in completed. Same shape as the join above and for the same reason — the tail both directions
+ *  share is what left this device signed in and unlocked. */
+async function onSignInWithCodeDone() {
+  signInWithCode.value = false
+  await finishAndRoute()
+}
+
+/** Back to the sign-in form. Nothing was granted; the next attempt is a fresh channel from a fresh start here,
+ *  never a resume of the one just left (the answer slot is write-once — ADR 0059 §6). */
+function onSignInWithCodeCancel() {
+  signInWithCode.value = false
+}
+
 /** Back to the sign-in form. Nothing was granted, or nothing more can be done on that channel — the next
  *  attempt is a fresh ceremony on the other device, started by a fresh scan. */
 function onJoinCancel() {
@@ -340,7 +359,12 @@ onMounted(async () => {
 <template>
   <Card class="login-card">
     <template #title>
-      {{ lockedEntry ? t('sessions.lockedTitle') : joinHandle ? t('pairing.joinTitle') : t('login.title') }}
+      {{
+        lockedEntry ? t('sessions.lockedTitle')
+        : joinHandle ? t('pairing.joinTitle')
+        : signInWithCode ? t('pairing.signInTitle')
+        : t('login.title')
+      }}
     </template>
     <template #content>
       <!-- §E3's locked state: signed in, deliberately not unlocked, one action. It replaces the form rather than
@@ -355,6 +379,14 @@ onMounted(async () => {
         :handle="joinHandle"
         @done="onJoinDone"
         @cancel="onJoinCancel"
+      />
+
+      <!-- uc.account.onboard-device — the other direction, from the same card and by the same mechanism: this
+           device displays, the signed-in one scans. Routeless like the two above it; nothing reaches router.ts. -->
+      <SignInWithCodeCard
+        v-else-if="signInWithCode"
+        @done="onSignInWithCodeDone"
+        @cancel="onSignInWithCodeCancel"
       />
 
       <!-- One adaptive sign-in: email + password always; the Secret-Key field only on the first sign-in per
@@ -464,6 +496,23 @@ onMounted(async () => {
           :loading="enteringLocked"
           :disabled="!email || !password"
           @click="enterLocked"
+        />
+        <!-- uc.account.onboard-device — the way in for a device that has neither a password nor an Emergency
+             Kit: another device it is signed in on hands it everything. `type="button"` for the same reason
+             §E3's entry above is one — the gate on this form is HTML5 constraint validation, which a
+             submit-typed control would trip on the very fields this person cannot fill.
+
+             It carries NO `scanSupported` gate, unlike the scan icon in the Secret-Key field. This device only
+             DISPLAYS a code; the camera it needs is on the other one. Gating it here would withhold the entry
+             from exactly the hardware it exists for (ADR 0059 §1). -->
+        <Button
+          v-if="!sessionReady"
+          type="button"
+          :label="t('pairing.signInEntry')"
+          icon="pi pi-qrcode"
+          severity="secondary"
+          text
+          @click="signInWithCode = true"
         />
         <!-- Recovery needs no session, so it is reachable from here even when sign-in keeps failing — which is
              exactly when someone needs it. -->

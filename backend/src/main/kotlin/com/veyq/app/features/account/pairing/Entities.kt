@@ -43,8 +43,9 @@ class DevicePairingEntity : PanacheEntityBase {
     @Column(name = "delegated_family_id", length = 36)
     var delegatedFamilyId: String? = null
 
-    /** The answering device's ephemeral transport key, or its commitment to the transcribed code. The server
-     *  cannot tell which, and §6 is why it must not be able to. */
+    /** The answering device's ephemeral transport key — and, when *signing in with a QR code*, that key
+     *  together with its commitment to the transcribed code. The server cannot tell the two forms apart, and
+     *  §6 is why it must not be able to. */
     @Column(name = "answer", columnDefinition = "TEXT")
     var answer: String? = null
 
@@ -81,9 +82,13 @@ class DevicePairingEntity : PanacheEntityBase {
         const val EXPIRED = "EXPIRED"
 
         /**
-         * There is deliberately no `ABANDONED` and no abandon endpoint. §6's three-attempt ceiling is counted on
-         * the trusted device, which never tells the server — an abandoned ceremony simply expires, which is
-         * already what uc.account.onboard-device E3 describes for an uncollected grant.
+         * There is deliberately no `ABANDONED` and no abandon endpoint. In the *sign in with a QR code*
+         * direction there is exactly **one** attempt at the transcribed code, and that is structural rather
+         * than a ceiling anybody counts: [answer] is written once — `PairingStore.recordAnswer` updates only a
+         * row still `PENDING` — and this channel carries no status field, so nothing can tell the answering
+         * device its proof was refused. A retry would need a back-channel this relay must not have. Neither
+         * device can therefore report giving up, and a ceremony given up on simply expires, which is already
+         * what uc.account.onboard-device E3 describes for an uncollected grant.
          */
         val TERMINAL = listOf(COLLECTED, SUPERSEDED, EXPIRED)
 

@@ -178,6 +178,15 @@ const en = {
     sub: 'Let another device in from this one — no Secret Key, and no password typed over there.',
     intro: 'This device shows a code. The device you want to add scans it, both screens then show a short number, and you check they match before you confirm.',
     start: 'Show a code',
+    // ADR 0059 §1 — the other half, on this same screen: whichever device has a camera is the one that scans.
+    scanIntro: 'Or, if the other device is showing a code: scan it here, and it will ask you for a short number.',
+    scanStart: 'Scan a code',
+    scanCodePrompt: 'Type this number into the other device. Do not read it out to anyone — nobody legitimate will ever ask you for it.',
+    scanWaiting: 'Waiting for the other device to send it back…',
+    // D9: the refusal arrives BEFORE anything was committed, so it is one honest sentence and not a retry.
+    scanRefused: 'That number came back wrong — nothing was given away.',
+    scanRefusedHint: 'Either it was mistyped, or something other than the device in front of you answered. Nothing was granted and this code is finished. Start again on the other device, then scan the new code.',
+    scanProven: 'That is the right device. Name it and confirm to give it access.',
     scanHint: 'Scan this with the device you want to add. The code is good for about ten minutes.',
     waiting: 'Waiting for your other device…',
     codeAlt: 'The code your new device should scan',
@@ -213,6 +222,23 @@ const en = {
     joinAnswerFailed: 'This device could not answer the code. Check your connection and scan it again.',
     joinFailed: 'This device could not be set up. Start again on your other device.',
     joinBack: 'Back to sign in',
+    // --- The other direction: sign in with a QR code (uc.account.onboard-device § Main flow). ---
+    // The entry sits on the sign-in card and is deliberately NOT gated on a camera: a camera-less laptop is
+    // precisely this direction's case (ADR 0059 §1 — no direction is the camera one).
+    signInEntry: 'Sign in with a QR code',
+    signInTitle: 'Sign in with a QR code',
+    signInOpening: 'Preparing a code…',
+    signInIntro: 'Scan this with a device you are already signed in on.',
+    signInScanHint: 'On that device, open “add a device” and choose to scan. It will then show you a six-digit number.',
+    signInCodeField: 'The six-digit number your other device shows',
+    // The honesty this copy owes: there is exactly one attempt, and it is structural — the channel has no way
+    // to carry a refusal back here (ADR 0059 §6). Saying so is what stops someone waiting at a dead screen.
+    signInCodeHint: 'Check it before you confirm — you get one try. If it is wrong, nothing happens here and you start again.',
+    signInSend: 'Confirm this number',
+    signInWaiting: 'Waiting for your other device…',
+    signInGoneHint: 'Either the number was not right, or the code ran out. Start again here — your other device will show a new number.',
+    signInOpenFailed: 'A code could not be prepared. Check your connection and try again.',
+    signInAnswerFailed: 'That number could not be sent. Check your connection and start again.',
   },
   profile: {
     title: 'Your profile',
@@ -991,6 +1017,14 @@ const de: typeof en = {
     sub: 'Lass von hier aus ein weiteres Gerät herein — ohne Secret Key und ohne dort ein Passwort einzutippen.',
     intro: 'Dieses Gerät zeigt einen Code. Das Gerät, das du hinzufügen möchtest, scannt ihn; danach zeigen beide Bildschirme eine kurze Zahl, und du prüfst, dass sie übereinstimmt, bevor du bestätigst.',
     start: 'Code anzeigen',
+    // ADR 0059 §1 — die andere Hälfte auf demselben Bildschirm: es scannt das Gerät, das eine Kamera hat.
+    scanIntro: 'Oder, wenn das andere Gerät einen Code zeigt: scanne ihn hier — es fragt dich dann nach einer kurzen Zahl.',
+    scanStart: 'Code scannen',
+    scanCodePrompt: 'Tippe diese Zahl am anderen Gerät ein. Gib sie niemandem durch — seriös fragt danach niemand.',
+    scanWaiting: 'Warten darauf, dass das andere Gerät sie zurückschickt…',
+    scanRefused: 'Die Zahl kam falsch zurück — es wurde nichts weitergegeben.',
+    scanRefusedHint: 'Entweder wurde sie vertippt, oder es hat etwas anderes geantwortet als das Gerät vor dir. Es wurde nichts freigegeben und dieser Code ist verbraucht. Fang am anderen Gerät neu an und scanne dann den neuen Code.',
+    scanProven: 'Das ist das richtige Gerät. Gib ihm einen Namen und bestätige, um Zugriff zu geben.',
     scanHint: 'Scanne das mit dem Gerät, das du hinzufügen möchtest. Der Code gilt etwa zehn Minuten.',
     waiting: 'Warten auf dein anderes Gerät…',
     codeAlt: 'Der Code, den dein neues Gerät scannen soll',
@@ -1020,6 +1054,19 @@ const de: typeof en = {
     joinAnswerFailed: 'Dieses Gerät konnte nicht auf den Code antworten. Prüfe die Verbindung und scanne ihn noch einmal.',
     joinFailed: 'Dieses Gerät konnte nicht eingerichtet werden. Fang an deinem anderen Gerät neu an.',
     joinBack: 'Zurück zur Anmeldung',
+    // --- Die andere Richtung: über QR-Code anmelden (uc.account.onboard-device § Main flow). ---
+    signInEntry: 'Über QR-Code anmelden',
+    signInTitle: 'Über QR-Code anmelden',
+    signInOpening: 'Code wird vorbereitet…',
+    signInIntro: 'Scanne das mit einem Gerät, an dem du schon angemeldet bist.',
+    signInScanHint: 'Öffne dort „Gerät hinzufügen“ und wähle Scannen. Danach zeigt dir das Gerät eine sechsstellige Zahl.',
+    signInCodeField: 'Die sechsstellige Zahl, die dein anderes Gerät zeigt',
+    signInCodeHint: 'Prüfe sie, bevor du bestätigst — du hast einen Versuch. Stimmt sie nicht, passiert hier nichts und du fängst neu an.',
+    signInSend: 'Zahl bestätigen',
+    signInWaiting: 'Warten auf dein anderes Gerät…',
+    signInGoneHint: 'Entweder war die Zahl nicht richtig, oder der Code ist abgelaufen. Fang hier neu an — dein anderes Gerät zeigt dann eine neue Zahl.',
+    signInOpenFailed: 'Es konnte kein Code vorbereitet werden. Prüfe deine Verbindung und versuch es noch einmal.',
+    signInAnswerFailed: 'Die Zahl konnte nicht gesendet werden. Prüfe deine Verbindung und fang neu an.',
   },
   profile: {
     title: 'Dein Profil',

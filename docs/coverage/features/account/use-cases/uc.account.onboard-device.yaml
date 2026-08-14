@@ -1,11 +1,11 @@
 useCase: uc.account.onboard-device
 feature: account
 title: Onboard a device from one you are already signed in on
-# Refined 2026-08-12 (ADR 0059). The **server half** is built: the five `pairing` endpoints on the auth spec,
-# `account/pairing/` behind them, the session delegation on `SessionService`, and `POST /api/token/adopt`, which
-# gives the delegated session the cookie transport every other web session has (ADR 0004 § Transport). The
-# onboarded device's own web half and the live QR component are not, so every criterion below is still part
-# web — see the two gaps.
+# Refined 2026-08-12 (ADR 0059). **Both surfaces are now built, in both directions.** The server half is the
+# five `pairing` endpoints on the auth spec, `account/pairing/` behind them, the session delegation on
+# `SessionService`, and `POST /api/token/adopt`, which gives the delegated session the cookie transport every
+# other web session has (ADR 0004 § Transport). The web half is both devices of *add a device* and both of
+# *sign in with a QR code*, plus the tail they share — see the two gaps for what each suite pins.
 #
 # `status: planned` is nonetheless correct, and for the same single reason uc.account.sessions gives:
 # **no CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
@@ -110,7 +110,12 @@ acceptanceCriteria:
       the existing route-gate guard. What a test owes, per entry: that it is offered on the locked card, that
       choosing it attempts no unlock, and that every path already on that card still behaves exactly as it did
       — E3's own two ways out **and** the Emergency-Kit scan, which is what a shared, dispatching scan control
-      most plausibly breaks.
+      most plausibly breaks. **The QR entry owes one more, and it is a gate rather than a behaviour: it must be
+      offered on a device with NO camera.** That device only displays a code; the camera it needs is on the
+      other one, so a `scanSupported` gate copied from the scan control beside it would withhold the entry from
+      exactly the hardware the direction exists for (ADR 0059 §1 — no direction is the camera one). It is
+      asserted against the camera-gated scan control in that same state as the control, because "the button is
+      there" is satisfied equally well by a button that is always there and by one that is correctly ungated.
 gaps:
   backend: >-
     The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
@@ -195,10 +200,33 @@ gaps:
     Emergency-Kit path asserted unchanged, which is the regression a shared dispatching control most plausibly
     causes.
 
-    **What is still owed here is slice 3's, and that is now the whole of it:** the QR-sign-in direction —
-    `qr-sign-in-seals-only-after-the-returned-code-is-proven`, and that entry's behavioural half of
-    `the-locked-entry-adds-no-shell-route`, of which the *add a device* entry's half is covered above. The
-    `wiki/` section is assembled with it, not before, because the plain-language text promises both directions.
+    **The *sign in with a QR code* direction is built too**, and it is in the same state as everything above:
+    the suites pass locally and the only missing thing is a CI run to execute them (ADR 0040). What they pin is
+    what a happy path cannot see. `pairing.test.ts` carries the wire form: the displayed payload is the second
+    marker and the handle and can never read as a URL (bitten under this marker too, by forcing the one draw
+    whose base64 begins with a slash — the re-mint lives in `mintHandle` and carries over only while this
+    direction mints there); neither marker parses as the other's, in both directions, with each parser's own
+    payload as the control, because a sign-in code read as a pairing one would burn the write-once answer slot
+    before any screen looked wrong; the commitment binds ONE key to ONE code, with a wrong key, a wrong code and
+    a wrong-length commitment each refused against the matching triple as control; the answer reader rejects a
+    buffer it does not consume exactly, **anchored on its own refusal message** rather than on "it threw", which
+    the inherited reader produces just as well several layers down; and the pairing code rejects a draw past its
+    uniform ceiling instead of folding it, which a shape assertion cannot see — both are six digits.
+    `SignInWithCodeCard.test.ts` owns the new device: the code carries the handle and never the transport key,
+    the answer carries key AND proof, the *stay signed in* answer is taken before any call and reaches the tail
+    both ways, and there is exactly ONE send — driven by clicks landing inside a single tick, because `disabled`
+    is patched on the next one and a test that awaits between clicks passes with no guard at all. A refused
+    proof ends in the ordinary expiry told to start again, against an accepted one reaching the tail as the
+    control, since "the tail never ran" is satisfied by a card that never works.
+    `AddDevicePanel.test.ts` owns the trusted device's scan arm and
+    `qr-sign-in-seals-only-after-the-returned-code-is-proven` with it. **The two gates are driven separately,
+    one bite each**, because either alone satisfies the criterion's negative and a suite that only drove a wrong
+    code could not say which held: a wrong proof does not so much as offer the slide and reaches neither
+    `delegate` nor `seal`, and a **verified** proof whose slide is left untouched still reaches neither — with
+    the completed ceremony calling each exactly once as the live control on both. The envelope opens with the
+    private half of the bundle that carried the proof and with no other key, the scanner refuses the code this
+    device shows itself, and the channel is never read again after the seal. `LoginView.test.ts` covers that
+    entry's behavioural half, including the camera gate the criterion names.
 
     **Two things this surface inherits rather than owns.** The adopted session carries inbox #123 — nothing in
     this client serializes refresh, so two tabs can revoke their own family — exactly as every other web session
