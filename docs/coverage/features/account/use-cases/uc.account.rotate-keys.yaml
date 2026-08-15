@@ -2,7 +2,7 @@ useCase: uc.account.rotate-keys
 feature: account
 title: Rotate my keys after a compromise
 status: planned
-# Refined 2026-08-14 (ADR 0060, settling ADR 0028 Decision 5). NOTHING is built: `grep -rniE
+# Refined 2026-08-15 (ADR 0060, settling ADR 0028 Decision 5). NOTHING is built: `grep -rniE
 # "rotateIdentity|identityRotation" web/src backend/src contracts/` is empty and `git log --all --grep=rotat -i`
 # returns only device-pairing token commits. What the flow DRIVES is built end-to-end and is covered under its
 # own use-cases: the epoch chain + POST /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation),

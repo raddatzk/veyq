@@ -1,7 +1,7 @@
 # ADR 0060 — Key rotation after a compromise: one mode, a cold-credential gate, re-admission by human review
 
 - Status: Accepted
-- Date: 2026-08-14
+- Date: 2026-08-15
 
 ## Context
 
