@@ -22,6 +22,11 @@ info:
     `DELETE /api/account/wraps/{id}` removes a device-local wrap (untrust). Both act only on the caller's own
     wraps and receive only ciphertext + KDF params — never a key, a password, or the Secret Key. The PASSWORD
     floor (and RECOVERY/PASSKEY) cannot be removed this way.
+
+    `POST /api/account/rotation` ends a compromise (uc.account.rotate-keys, ADR 0060): the Master Key and the
+    identity keypair are replaced **together**, in one transaction, and every scope the account shares gets a
+    queued rotation for a different key-holder. It is forward secrecy, not repair — what the old identity
+    already read stays read — and it receives, as everything here does, only ciphertext and a public key.
 tags:
   - name: account
     description: Authenticated account key material (for client-side unlock).
@@ -40,6 +45,9 @@ tags:
       client-side device id, its display label, and the device↔session-family join, so unnamed families
       (ADR 0004) can be shown named without the server gaining anything to correlate
       (en.account.device-register). Separate tag → its own resource interface.
+  - name: account-rotation
+    description: Key rotation after a compromise — the account-side half of uc.account.rotate-keys (ADR 0060).
+      Separate tag → its own resource interface.
 
 paths:
   /api/account/key-material:
@@ -378,6 +386,74 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
 
+  /api/account/rotation:
+    post:
+      tags: [account-rotation]
+      operationId: rotateAccountKeys
+      summary: Replace the Master Key and the identity keypair together after a compromise.
+      description: >
+        Applies the account half of a key rotation as **one transaction, all writes or none**
+        (uc.account.rotate-keys, ADR 0060): publish the new identity public key; replace
+        `wrappedIdentityPrivateKey` with the identity private key sealed under the new Master Key; rewrite the
+        `PASSWORD` and `RECOVERY` wraps; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their
+        key material is device-held and cannot be rewritten from here); replace `recoveryMasterKeyTag`;
+        supersede every live pairing channel (an unspent envelope carries the *old* Master Key and a live
+        delegated session, so a later collect would hand a device a dead key and a working login); revoke every
+        other session; and originate a `scope-rotation` job for each scope the caller shares with somebody.
+
+        **One mode, and the request cannot express another.** There is no `mode`, no `identityOnly`, no
+        `scopes` subset. Every path to the identity private key runs through the Master Key, so an identity
+        compromise implies a Master-Key compromise, and rotating only one half is the variant
+        [ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) already rejected as
+        useless (ADR 0060 Decision 1). `scripts/validate_rotation_shape.py` pins the request's property set so
+        that negative cannot be undone by an additive field.
+
+        **The cold-credential gate is client-side, and cannot be otherwise.** The rotation is refused unless the
+        caller's vault was opened by a `PASSWORD` or released `RECOVERY` wrap — the two that take the Secret
+        Key, which is precisely what a phished device-link grant never hands over (ADR 0060 Decision 2). The
+        server holds no evidence of *which* wrap opened a vault, the Secret Key never reaches it, and a blind
+        server must not adjudicate a crypto claim; so this is client-enforced, at ADR 0026's usual tier. What
+        the server does enforce is the *shape*: both cold wraps rewritten together, or nothing written.
+
+        **Forward secrecy, not repair.** What the old identity already read stays read. The response is a
+        per-scope split rather than a success tick, because between rotating and being re-admitted the caller is
+        outside every shared scope — the property that stops an attacker rotating their way back in (Decision 6).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RotateAccountKeysRequest" }
+      responses:
+        "200":
+          description: >
+            Applied. The body says which scopes the caller must re-key alone and which now carry a queued
+            rotation for somebody else — uc.account.rotate-keys §9's honest per-scope status.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RotateAccountKeysResult" }
+        "400":
+          description: The request was malformed (a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "409":
+          description: >
+            The account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the rotation cannot be
+            applied whole. **Nothing was written** — a half-rotated account is a lockout, not a degraded state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rotation_unavailable }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -670,6 +746,124 @@ components:
           minimum: 0
           example: 3
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+
+    RotatedWrap:
+      type: object
+      description: >
+        One cold wrap, rewritten to hold the **new** Master Key under the same secret it always took — password
+        + Secret Key for the `PASSWORD` floor, the Secret Key alone for `RECOVERY`.
+
+        It carries **no `method`**: which wrap this is, is the field it arrived in. That is what makes "rewrite
+        one cold wrap and leave the other holding the old Master Key" unsayable rather than merely rejected —
+        a `RECOVERY` wrap left on the old key would survive as a working path back into a compromised account.
+
+        The salt is **fresh** on both, and that is why no previously-stored `kdfParams` is needed here: the
+        `RECOVERY` wrap is deliberately withheld from `GET /api/account/key-material`
+        ([ADR 0054](../../docs/decisions/0054-password-recovery-two-factor-release.md)), so its salt is not the
+        client's to read, and re-using a salt would leak the rewrite to anyone diffing two dumps. The Emergency
+        Kit stays valid because the *Secret Key* is unchanged — not because the salt is.
+      required: [wrappedKey, kdfParams]
+      properties:
+        wrappedKey:
+          type: string
+          description: The **new** Master Key wrapped to this method's KEK (opaque base64 ciphertext).
+          contentEncoding: base64
+          maxLength: 8192
+          example: cm90YXRlZC13cmFwcGVkLW1hc3Rlci1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        kdfParams:
+          type: string
+          description: Argon2id parameters + the **fresh** salt for this rewritten wrap (opaque base64).
+          contentEncoding: base64
+          maxLength: 1024
+          example: a2RmLXBhcmFtcy1yb3RhdGVk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotateAccountKeysRequest:
+      type: object
+      description: >
+        Everything the account half of a rotation replaces, in one body, applied atomically or not at all — a
+        partial apply leaves an account nothing can unlock.
+
+        **This property set is pinned by `scripts/validate_rotation_shape.py`.** ADR 0060 Decision 1 says there
+        is exactly one mode, and the shortcut that would quietly undo it is a *request field*: a `mode`, an
+        `identityOnly`, a `scopes` subset would let identity-only rotation return as a flag while every test
+        stayed green. A negative has nothing else that can hold it.
+
+        What is deliberately absent, so the next reader does not add it back: no `authPublicKey` — the password
+        does not change, so what logs in is untouched and the Emergency Kit survives; no wrap `method` — see
+        `RotatedWrap`; no list of wraps to delete — every non-cold wrap goes, always, because device-held key
+        material cannot be rewritten from here.
+      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, recoveryMasterKeyTag]
+      properties:
+        identityPublicKey:
+          type: string
+          description: >
+            The freshly minted identity public bundle (serialized, opaque base64) — replaces the directory
+            value. From the moment it lands, every contact who ever pinned this account reads `changed` and
+            every automated wrap to it declines (ADR 0028); that is the intended effect, not a side effect.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LWlkZW50aXR5LXB1YmxpYy1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedIdentityPrivateKey:
+          type: string
+          description: The **new** identity private key wrapped under the **new** Master Key (opaque base64).
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LXdyYXBwZWQtaWRlbnRpdHktcHJpdmF0ZS1rZXk=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        passwordWrap:
+          $ref: "#/components/schemas/RotatedWrap"
+        recoveryWrap:
+          $ref: "#/components/schemas/RotatedWrap"
+        recoveryMasterKeyTag:
+          type: string
+          description: >
+            `sha256("veyq/v1/recovery-auth" ‖ newMasterKey)` — the commitment recovery compares against,
+            re-derived from the new Master Key. Without it a later recovery would prove possession of a key the
+            account no longer has, and the reset would be refused.
+          contentEncoding: base64
+          maxLength: 128
+          example: bmV3LXJlY292ZXJ5LWF1dGgtdGFn
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    RotateAccountKeysResult:
+      type: object
+      description: >
+        What the rotation left, and for whom (uc.account.rotate-keys §9). The two lists partition the caller's
+        scopes on the only thing that decides who may re-key: whether anybody else is in there. Neither is a
+        success tick — `queuedScopeIds` is precisely the set the caller is **outside** until a human there
+        accepts their new identity key.
+      required: [soleMemberScopeIds, queuedScopeIds]
+      properties:
+        soleMemberScopeIds:
+          x-veyq-visibility: id
+          type: array
+          description: >
+            Scopes where the caller is the **only** member: nobody to be re-admitted by, and nobody to exclude
+            but their own old identity. The client mints the next epoch for each itself
+            (`POST /api/scopes/{scopeId}/epochs`) and grants it to the new identity. The personal scope is the
+            ordinary case; a group nobody else has joined behaves identically, which is why the split is drawn
+            on member count rather than on scope kind.
+          items:
+            type: string
+            maxLength: 36
+          example: [7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c]
+        queuedScopeIds:
+          x-veyq-visibility: id
+          type: array
+          description: >
+            Shared scopes that now carry a `scope-rotation` job for a **different** key-holder to complete — the
+            rotator is excluded from claiming their own (ADR 0060 Decision 4: a rotator who could drive their own
+            re-grant would let an attacker holding the old identity re-admit only themselves). A scope whose
+            rotation was already queued is listed here too: queued is queued, and the client's status must not
+            read differently for a coalesced job. Until someone accepts the changed key there, the caller is
+            outside these scopes.
+          items:
+            type: string
+            maxLength: 36
+          example: [1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f]
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

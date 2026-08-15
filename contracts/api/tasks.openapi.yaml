@@ -37,6 +37,12 @@ info:
     target); the worker reads the member directory + epoch links it already has endpoints for. Idempotent +
     first-online-wins; one live job per scope coalesces multiple removals.
 
+    `scope-rotation` has a **second originator**: an account rotating its keys after a compromise
+    (`POST /api/account/rotation`, ADR 0060) queues one per shared scope. The job is identical; what differs is
+    that the originator is also a member, and must **not** complete their own — a rotator who re-granted
+    themselves would let an attacker holding the old identity re-admit only themselves. The exclusion rides on
+    the same per-key-holder decline mechanism the TOFU seam uses, written at origination.
+
     Every operation requires an authenticated caller; authorization (scope membership) is enforced by code, not
     this spec (ADR 0008). Field validation is declared here via `x-field-extra-annotation`, so malformed input
     is rejected at the boundary (400) before any handler runs.
@@ -285,10 +291,15 @@ paths:
         decline is recorded so the reconciler **does not re-offer this job to this same worker**. This is the
         grant-delivery TOFU seam (ADR 0028 / en.account.identity-pinning): a worker that holds a **different**
         pin for the target's identity key blocks the wrap and declines the job + raises a human-review flag,
-        rather than sealing `K_SC` to a possibly-substituted key. **Per-device, not a global veto** — a
-        different key-holder without a conflicting pin can still TOFU-deliver (ADR 0028 §Consequences). Unlike
-        `fail`, `attempts` is **not** incremented (a legitimate decline must not dead-letter the job). The
-        caller must hold the job's lease.
+        rather than sealing `K_SC` to a possibly-substituted key. **Per key-holder, not a global veto** — a
+        *different* key-holder without a conflicting pin can still TOFU-deliver (ADR 0028 §Consequences), while
+        the declining worker's own other devices stay excluded, because the exclusion is keyed on the account
+        that declined, not on the browser it declined from. Unlike `fail`, `attempts` is **not** incremented (a
+        legitimate decline must not dead-letter the job). The caller must hold the job's lease.
+
+        A decline is otherwise **permanent** — nothing expires it — which is correct for an unresolved key
+        conflict and wrong once a human resolves it. `POST /api/tasks/declines/clear` is that resolution
+        (ADR 0060 Decision 7).
       security:
         - bearerAuth: []
       parameters:
@@ -327,6 +338,63 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_lease_holder }
+
+  /api/tasks/declines/clear:
+    post:
+      tags: [tasks]
+      operationId: clearDeclinesForAcceptedKey
+      summary: Drop my own declines against a contact whose changed identity key I just accepted.
+      description: >
+        The other half of the TOFU seam above. A worker that declined `identity_changed` is excluded from that
+        job **permanently**, so
+        [ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) (2)'s promise that on
+        accept *"the wrap then proceeds"* did not hold: the accept authorised a wrap that nothing performed.
+        Nothing exercised it before, because a changed key could until now only be an attack — key rotation
+        after a compromise
+        ([ADR 0060](../../docs/decisions/0060-key-rotation-after-compromise.md) Decision 7) is what makes a
+        legitimate change routine, and a rotation whose re-admission cannot be delivered strands the account.
+
+        **Deliberately narrow, in three ways that are each load-bearing.** It clears only the **caller's own**
+        decline rows — the accept is one human's decision on one client, and a blind server must never
+        generalise it to another key-holder who has not looked (ADR 0028 § Consequences). It clears only rows on
+        **`grant-delivery`** jobs whose target is `targetUserId` — a decline about a *different* contact is not
+        resolved by this accept. And because a `scope-rotation` job has no delivery target at all, this can
+        never reach the exclusion that keeps a rotator from claiming their **own** rotation (ADR 0060
+        Decision 4) — that invariant is preserved by the shape of the query, not by a special case in it.
+
+        Idempotent, and `cleared: 0` is an ordinary answer: the common case is that this caller never declined
+        anything for that contact. The server learns only that one account cleared declines against another —
+        the membership and decline facts it already holds. It does **not** learn that a key was accepted, which
+        pin moved, or what either key is.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ClearDeclinesRequest" }
+            example: { targetUserId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+      responses:
+        "200":
+          description: >
+            Applied. Any cleared job is claimable by this worker again; the caller re-drives delivery by
+            claiming as usual.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DeclinesCleared" }
+              example: { cleared: 1 }
+        "400":
+          description: The request was malformed (missing or invalid `targetUserId`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
 
 components:
   securitySchemes:
@@ -560,6 +628,37 @@ components:
           type: integer
           format: int32
           description: The attempt count after this failure.
+          example: 1
+
+    ClearDeclinesRequest:
+      type: object
+      description: >
+        The contact whose changed identity key the caller just accepted. It names a *person*, never a job: the
+        human decision was about an identity, and the jobs it unblocks are whichever ones happen to target that
+        identity — the caller has no reason to know their ids, and asking for them would make the client
+        enumerate its own past refusals.
+      required: [targetUserId]
+      properties:
+        targetUserId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The contact whose new identity key the caller accepted (opaque user id).
+          maxLength: 36
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 36)'
+
+    DeclinesCleared:
+      type: object
+      description: How many of the caller's own decline rows were dropped. `0` is an ordinary answer, not an error.
+      required: [cleared]
+      properties:
+        cleared:
+          x-veyq-visibility: measure
+          type: integer
+          format: int32
+          description: The number of decline rows removed.
+          minimum: 0
           example: 1
 
     ErrorResponse:
