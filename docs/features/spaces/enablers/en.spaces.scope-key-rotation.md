@@ -9,8 +9,12 @@
   only to the **remaining** members — so a removed member can read pre-removal content but **never** post-removal
   content, **even against a malicious operator**, and **without re-encrypting anything** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)).
 - **Serves (use-cases/enablers):** [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
-  (member removal triggers a rotation) — and, scope-generically, any future scope that needs forward-confidential
-  removal (a tenant scope could rotate the same way; personal scopes never rotate).
+  (member removal triggers a rotation) and [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
+  (a compromise re-keys **every** scope the holder is in). The two are different triggers on one mechanism, and
+  the *scope-type policy* in [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) governs only
+  the first: on **removal** a tenant is ACL-revoked and a personal scope has nobody to rotate away from, but on
+  **compromise** both rotate — the tenant by ADR 0025 §2's explicit owner-triggered re-key, the personal scope
+  self-served by its single owner.
 - **Depends on:** [en.spaces.group-scope](en.spaces.group-scope.md) (the scope + its grant), the
   **grant-distribution primitive** generalized to re-grant existing members ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)),
   **grant-delivery** with a *stale-epoch* trigger ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
@@ -66,12 +70,21 @@ sequenceDiagram
   first-online-wins. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
   co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4); when the
   remover *is* a key-holder the rotation runs synchronously (cr-0088/0089). Not a hole.
-- **E2 — a remaining member's grant can't be re-wrapped** (rotated identity, corrupt pubkey): that member's grant
-  stays stale (they hold `E_n` while the scope is at `E_{n+1}`) → they fall to *awaiting access*, but are
-  **auto-re-granted** by the grant-delivery **stale-epoch trigger** (cr-0093): the reconciler treats
-  `grantedEpoch < currentEpoch` like a grant-less member and queues a delivery, so the next online key-holder
-  re-wraps `E_current` to them and records `grantedEpoch = currentEpoch`. The scope is not wiped; no manual
-  intervention needed.
+- **E2 — a remaining member's grant can't be re-wrapped:** that member's grant stays stale (they hold `E_n`
+  while the scope is at `E_{n+1}`) → they fall to *awaiting access*. **Two cases that must not be confused,
+  because only one self-heals.**
+  - **A corrupt or unreadable pubkey** — the grant-delivery **stale-epoch trigger** (cr-0093) treats
+    `grantedEpoch < currentEpoch` like a grant-less member and queues a delivery, so the next online key-holder
+    re-wraps `E_current` and records `grantedEpoch = currentEpoch`. No manual intervention needed.
+  - **A *changed* identity key (a rotation, or a substitution — indistinguishable on-wire)** — the reconciler
+    **must not** auto-re-grant, and does not: every wrap-to-foreign-identity site is TOFU-gated
+    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md),
+    [en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)), so the worker
+    **declines** the job and the re-grant loop **skips** that member while the rotation itself proceeds. They
+    stay *awaiting access* until a human accepts the new key in the changed-key review. That is the intended
+    behaviour and the reason an attacker cannot rotate their way back into a scope
+    ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)); it is also why an accept must clear
+    the declining worker's exclusion, or the re-admission it authorises is never delivered.
 
 ## Quality notes
 

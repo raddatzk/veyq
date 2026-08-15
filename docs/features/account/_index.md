@@ -45,6 +45,10 @@ holds only **public** keys and ciphertext, never the password and never a conten
   re-issue the kit. An instance that cannot send mail refuses the request with `503 mail_unavailable` rather than
   a silent `202` ([ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md)); the sign-in screen
   offers the link unconditionally and lets it fail honestly
+- [Rotate my keys after a compromise](use-cases/uc.account.rotate-keys.md) — **refined, not yet built**
+  (end a compromise: the Master Key **and** the identity are replaced together and every scope re-keyed; gated
+  on the Secret Key, because that is the one thing a phished device never received; forward secrecy, **not**
+  repair; [ADR 0060](../../decisions/0060-key-rotation-after-compromise.md))
 - [Manage active sessions](use-cases/uc.account.sessions.md) — **refined** (see every login and end any of them remotely; the set + the revoke need only a session, the **names** come from a Master-Key-sealed device register and need unlock; [ADR 0004](../../decisions/0004-session-tokens.md))
 
 **Terms gate** — an *operational* gate that sits on a **session**, above unlock ([ADR 0035](../../decisions/0035-server-terms-of-service.md)):

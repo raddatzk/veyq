@@ -22,12 +22,11 @@ one human confirmation. That single fact sets everything below.
 version is what sets the ceremony's floor.** It was deferred so that a phished grant could be taken back. It
 cannot be. A revoke cuts the granted device off the server; the Master Key it already holds stays, and the
 account's identity private key travels with it, so a phished grant is an identity takeover and not merely a
-read. The only true cure is master-key **and** identity rotation, which
-[ADR 0028](0028-identity-authenticity-tofu-verification.md) considered and deferred to its own refine
-(rejected-alternative (d) — master-key rotation alone is useless, because the master-key holder already holds
-the identity key). So what the session manager actually bought this feature is **containment and discovery**,
-not reversal: the grant is visible, nameable and severable. Ship no copy that implies otherwise, and treat
-rotation as the live obligation this feature creates.
+read. The cure is master-key **and** identity rotation
+([ADR 0060](0060-key-rotation-after-compromise.md)) — and it is a cure in one direction only: it **ends** the
+compromise, it does not undo it, because what was already read stays read. So what the session manager
+actually bought this feature is **containment and discovery**, and what rotation adds is **an end date**;
+neither is reversal. The grant is visible, nameable and severable. Ship no copy that implies otherwise.
 
 ## Decision
 
@@ -141,9 +140,11 @@ unlocked session can mint a session. That adds no class of exposure (an unlocked
 everything) but it is new surface, and both pairing endpoints are unauthenticated, so each owes an explicit
 rate-limit posture rather than the wraps resource's exemption, whose reasoning does not transfer.
 
-**The live obligation this feature creates.** Until master-key + identity rotation exists
-([ADR 0028](0028-identity-authenticity-tofu-verification.md) (d)), a phished grant is unrecoverable. That is an
-argument for building rotation, never for softening §5–§7.
+**The obligation this feature created, and what discharging it does not buy.** A phished grant was
+unrecoverable until [ADR 0060](0060-key-rotation-after-compromise.md); with rotation it becomes *stoppable*.
+It never becomes reversible, and rotation depends on the **Secret Key** — which a device linked here has never
+seen (§10), and which the account holder may not have to hand. So §5–§7 carry the same weight after rotation
+exists as before: they are the only barrier that acts *before* the key leaves.
 
 **Rejected alternatives.**
 
@@ -173,6 +174,6 @@ argument for building rotation, never for softening §5–§7.
   visible, nameable and severable; its **E3** is the entry point the QR-sign-in direction lives on
 - [ADR 0004](0004-session-tokens.md) (families, and the second origin §2 adds),
   [ADR 0005](0005-unlock-methods-and-device-trust.md) (the wraps, and the reservation this fills),
-  [ADR 0028](0028-identity-authenticity-tofu-verification.md) (the safety-number digest reused for the codes;
-  the deferred rotation §Context leans on), [ADR 0058](0058-revoke-never-takes-key-material.md) (why a revoke
-  cannot undo a grant), [ADR 0026](0026-client-trust-tiers.md) (why §6 refuses a server-side gate)
+  [ADR 0028](0028-identity-authenticity-tofu-verification.md) (the safety-number digest reused for the codes),
+  [ADR 0060](0060-key-rotation-after-compromise.md) (the rotation §Context leans on),
+  [ADR 0058](0058-revoke-never-takes-key-material.md) (why a revoke cannot undo a grant), [ADR 0026](0026-client-trust-tiers.md) (why §6 refuses a server-side gate)

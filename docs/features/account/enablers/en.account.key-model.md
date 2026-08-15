@@ -8,7 +8,8 @@
   the key chain** the scope + content keys extend downstream.
 - **Serves (use-cases):** [login](../use-cases/uc.account.login.md), [unlock](../use-cases/uc.account.unlock.md),
   [trust-device](../use-cases/uc.account.trust-device.md),
-  [remember-this-device](../use-cases/uc.account.remember-this-device.md); and downstream
+  [remember-this-device](../use-cases/uc.account.remember-this-device.md),
+  [rotate-keys](../use-cases/uc.account.rotate-keys.md); and downstream
   [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) →
   [en.memory.tree](../../memory/enablers/en.memory.tree.md) build their scope/content keys on it.
 - **Depends on:** the crypto strategy ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md))
@@ -37,7 +38,7 @@ title: One Master Key, one wrap per unlock method
 flowchart TB
   pw["Password + Secret Key<br>(mandatory floor)"]
   pk["Passkey (PRF)"]
-  rec["Recovery code<br>(single-use)"]
+  rec["Recovery<br>(Secret Key alone)"]
   dev["Trusted device"]
   muk["Master Key<br>(32-byte account root)"]
   idk["Identity private key"]
@@ -65,7 +66,7 @@ always ciphertext the server stores but cannot open.
 | Unlock KEK | Derived in-memory wrapping key | **Never** stored server-side | Opens exactly one Master Key wrap. Derived on the client, then discarded. |
 | Identity public key (`identityPublicKey`) | Hybrid KEM public bundle + signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; signature verification for key/device changes. |
 | Identity private key (`wrappedIdentityPrivateKey`) | Hybrid KEM private bundle + signing private key | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs account/key operations. |
-| Recovery code | Single-use high-entropy code | Stored only as a verifiable proof, never the code itself | Independently opens a Master Key wrap when no device/password is available. Redeeming reissues a fresh code. |
+| `RECOVERY` wrap | A `MasterKeyWrap` opened by the **Secret Key alone** (`kekRecovery(secretKey, salt)` — no password) | `MasterKeyWrap.wrappedKey`, **withheld** server-side until a two-factor release | Opens the Master Key when the password is gone. There is **no separate recovery code**: the recovery factor *is* the Secret Key from the Emergency Kit ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
 | Recovery master-key tag (`recoveryMasterKeyTag`) | Master-key commitment/tag, **not** an unlock key | A one-way tag derived from the Master Key | Proves during reset/recovery that the client recovered the **same** Master Key before replacing auth material. Not a login token; decrypts nothing. |
 
 ## Auth vs. unlock — two separate layers
@@ -82,7 +83,7 @@ These are deliberately distinct (this is the crux of operator-blind sign-in):
   keypair is Ed25519 now and moves to a PQ/hybrid signature later (no harvest-now-decrypt-later for
   authentication — see [Security Model](../../../crosscutting/security-model.md) and [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)).
 - **Unlock (client-side):** a **Unlock KEK** derived on the device opens one Master Key wrap. The KEK's
-  source (password+Secret Key, passkey PRF, recovery code, device key) is never sent to the server.
+  source (password+Secret Key, passkey PRF, the Secret Key alone, device key) is never sent to the server.
 
 Don't confuse the public keys: the **identity public key** grants you *access to content* (others wrap
 scope keys to it), while the **auth public key** only *proves your login* (verifies your signed
@@ -95,7 +96,7 @@ signature authenticates and its **PRF** secret derives an unlock KEK.)
 |---|---|---|
 | **Password + Secret Key** | `Argon2id(password ‖ secretKey, salt)` | The **mandatory floor** — always present, cannot be removed. The Secret Key (never sent) is what stops a cracked password from opening content. |
 | **Passkey (PRF)** | the authenticator's PRF output | Passwordless; one credential covers auth (signature) and unlock (PRF). |
-| **Recovery code** | the high-entropy code itself | Single-use; standalone bypass of both password and Secret Key. |
+| **Recovery (`RECOVERY`)** | `Argon2id(secretKey, recoverySalt)` | Bypasses the **password**, never the Secret Key. Released only against address control + proof of the Secret Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
 | **Trusted device (`DEVICE`)** | `Argon2id(password ‖ HMAC(deviceKey, "veyq/v1/device-bind"), salt)` | Two factors — the password **+** a device-bound key — swapping the *cold* Secret Key for a device-local one; this device unlocks with the **password alone** (no Secret Key). Still password-gated: a stolen device alone opens nothing. |
 | **Passwordless device (`DEVICE_KEY`)** | a device-held **random** key `K` (`wrap = symWrap(K, masterKey)`) | **No password** — the device holds `K` ungated, so a stolen *unlocked* device opens content. Explicit opt-in, never a default: [remember-this-device](../use-cases/uc.account.remember-this-device.md). |
 
@@ -115,11 +116,21 @@ Adding a method writes **one new wrap** of the Master Key; removing one deletes 
 never touched. The **password + Secret Key floor cannot be removed** (it guarantees at least one
 breach-resistant path always exists).
 
-## Identity rotation
+## Rotation after a compromise
 
-The identity keypair can be replaced without losing access: the client generates a new identity, then
-re-wraps every scope grant from the old identity to the new one. The Master Key is unchanged. The exact
-flow is an account/keys use-case (refined later); the scope-side re-wrap belongs to the scopes model.
+When key material has been handed to someone it should not have been — a phished device-link grant is the
+case that forces it ([ADR 0059](../../../decisions/0059-device-linking.md)) — the Master Key **and** the
+identity keypair are replaced **together**. There is one mode and no choice: the identity private key exists
+only wrapped under the Master Key, so an identity compromise implies a Master-Key compromise, and rotating the
+identity alone would re-wrap a new identity under the leaked Master Key. Rotation is gated on the **Secret
+Key** — a cold unlock (`PASSWORD` or `RECOVERY`), never a device wrap — because that is exactly the material a
+linked device never received, and an attacker who could rotate first would lock the holder out permanently.
+The Secret Key itself is not rotated, so the Emergency Kit stays valid.
+
+Rotation is **forward secrecy, not repair**: what was already read stays read. The full decision, its costs
+and the re-admission ceremony are [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md); the
+flow is [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md); the scope-side re-key belongs to
+[en.spaces.scope-key-rotation](../../spaces/enablers/en.spaces.scope-key-rotation.md).
 
 ## Recovery — three independent paths, no escrow
 
@@ -129,23 +140,27 @@ scopes at once:
 
 1. **Another enrolled device** — still holds the keys; set a new password from there.
 2. **Emergency Kit (Secret Key) + master password** — sign in on a fresh device.
-3. **Recovery code** — single-use standalone unlock; redeeming it **reissues a fresh Emergency Kit**
-   (new Secret Key + recovery code), since a used code may have been exposed.
+3. **The withheld `RECOVERY` wrap** — released against **two** factors, a mailed one-time token (address
+   control) and possession of the Secret Key, proven by reproducing `recoveryMasterKeyTag`
+   ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md),
+   [uc.account.recover-access](../use-cases/uc.account.recover-access.md)).
 
-After recovery the user sets a new password (and, via path 3, a new Secret Key); setting a new password
-re-derives the auth keypair and re-registers its public key. The Master Key itself is unchanged, so
+Every path runs through the Secret Key or an already-enrolled device — there is **no** standalone code, so
+losing the Emergency Kit narrows recovery to path 1. After recovery the user sets a new password, which
+re-derives the auth keypair and re-registers its public key; the Emergency Kit stays valid, because the
+Secret Key is unchanged. The Master Key itself is unchanged, so
 content stays intact. The `recoveryMasterKeyTag` lets the flow prove the same Master Key
 was recovered before any auth material is replaced.
 
-**The one unrecoverable case (stated up front):** losing *every* path — no device, no Emergency Kit, no
-recovery code, no password — means the content is gone. The same property that blinds the operator stops
+**The one unrecoverable case (stated up front):** losing *every* path — no device, no Emergency Kit,
+no password — means the content is gone. The same property that blinds the operator stops
 it rescuing data.
 
 ## Registration (account creation) — high level
 
 On registration the **device** generates the identity keypair, the **auth keypair** (derived from the
 password), and the Master Key, writes one wrap per chosen unlock method, and the user saves the
-**Emergency Kit** (Secret Key + recovery code). The server only ever receives ciphertext (`wrapped*`) and
+**Emergency Kit** (the Secret Key). The server only ever receives ciphertext (`wrapped*`) and
 public keys — **never the password**. The **onboarding key transfer** that grants a new member access to
 an existing space (the temporary invite-wrap) is a scopes & tenancy concern, refined there.
 

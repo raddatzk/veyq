@@ -238,7 +238,8 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   proceeds (*pinned, unverified*). The **pin store is client-side, synced across the user's devices, and
   sealed under the master key** — the server never sees a pin or the who-trusts-whom graph (operator-blind).
 - **A key change is surfaced, split by whether a human is present.** A key ≠ pin is "**attack OR a
-  legitimate identity rotation**" (post-compromise recovery), indistinguishable on-wire. In the **UI** it is
+  legitimate identity rotation**" ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md)),
+  indistinguishable on-wire. In the **UI** it is
   a **notice** (not a lock-out); the user reviews and, on **accept**, re-pins. The **automated grant-delivery
   worker** (no human) **blocks** — it will not wrap `K_SC` to a changed key (delivery is irreversible) — and
   **declines the job** back to the server + flags it for human review.
@@ -256,6 +257,13 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   Deliberate — the blind server must not adjudicate a crypto claim, and a global quarantine on one worker's
   say-so would be a DoS. The value is raised detection.
 - **Trust anchors stay client-side:** a client verifies against its own sealed pin, never the server's copy.
+- **Rotation is how a compromise ends, and it is the only remedy that reaches key material.** A revoke takes
+  server access and never keys ([ADR 0058](../decisions/0058-revoke-never-takes-key-material.md)); rotation
+  replaces the Master Key and the identity together and re-keys every scope
+  ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md)). It is **forward secrecy, not repair** —
+  what was already read stays read — it is gated on the **Secret Key** so the attacker it defends against
+  cannot rotate first, and re-admission to each shared scope runs through the human change-review above, which
+  is what stops a stolen identity rotating its way back in.
 - **First consumer:** adding a member to a shared scope ([uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md),
   [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) is the first flow to wrap a scope key to
   *another* member via this directory; it adopts the model above.

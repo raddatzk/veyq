@@ -9,7 +9,9 @@
   to *verified*. Used by every client that wraps a scope key or invite to **another** member's identity public
   key — the grant authorities, the grant-delivery worker, the invite name-key.
 - **Serves (use-cases):** [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the
-  human ceremony this sealed pin store + its TOFU change-response backs).
+  human ceremony this sealed pin store + its TOFU change-response backs) and
+  [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md) (which produces the one legitimate key
+  change this store exists to let a human accept).
 - **Depends on:** [en.account.key-model](en.account.key-model.md) — the Master Key that seals the pin store, so
   the account must be **unlocked** for any of this to run.
 - **Postconditions:** after wrapping to a contact for the first time, the client holds a **pin** of that contact's

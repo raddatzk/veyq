@@ -1,0 +1,142 @@
+# ADR 0060 — Key rotation after a compromise: one mode, a cold-credential gate, re-admission by human review
+
+- Status: Accepted
+- Date: 2026-08-14
+
+## Context
+
+[ADR 0059](0059-device-linking.md) shipped device linking and named what it created: a device receives the
+Master Key **and** the identity private key on one human confirmation, and a revoke takes neither back
+([ADR 0058](0058-revoke-never-takes-key-material.md)). A phished grant is therefore an identity takeover,
+containable and visible but **not reversible**. That ADR calls rotation *"the live obligation this feature
+creates"*; [ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 5 deferred the mechanics to
+this record and left three things standing: identity rotation is the core, the Master Key rotates **only** if
+it was itself exposed, and the other members must rotate every shared `K_SC` to exclude the old identity.
+
+**What forces the decision now is that only the account-side operation is missing.** Everything it drives is
+built: the epoch chain and `POST /api/scopes/{scopeId}/epochs` (owner-gated), the grant-delivery *stale-epoch*
+reconcile, the `SCOPE_ROTATION` job for when no key-holder is online, the TOFU pin check at all three
+foreign-wrap surfaces, the worker's decline seam, and the changed-key review with its accept path. So this is a
+trigger and a ceremony, not a mechanism — and the design questions it has to settle are about **who may do it**
+and **what it honestly buys**, not about crypto.
+
+Two facts from the key model decide most of what follows. The identity private key exists **only** wrapped
+under the Master Key ([en.account.key-model](../features/account/enablers/en.account.key-model.md)), and a
+linked device is born at the password-less tier and has never seen the password or the Secret Key
+([ADR 0059](0059-device-linking.md) §10).
+
+## Decision
+
+**1. One mode: the Master Key and the identity keypair rotate together, always.** ADR 0028 Decision 5's
+conditional — identity-only when the Master Key was never exposed — is retired, because its case has no
+population. Every path to the identity private key runs through the Master Key, so an identity compromise
+*implies* a Master-Key compromise; and the driver, a phished pairing grant, hands the Master Key over by
+construction. An identity-only mode is [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s
+rejected-alternative (d) with a button in front of it: a new identity re-wrapped under the leaked Master Key is
+still readable. Offering the choice would ask the user a question they cannot answer and let them pick the
+useless half.
+
+**2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The gate is
+not new machinery: it is *which* `MasterKeyWrap` the caller opened. The `PASSWORD` floor takes password +
+Secret Key; the `RECOVERY` wrap takes the Secret Key alone, released against address control
+([ADR 0054](0054-password-recovery-two-factor-release.md) — there is **no** separate recovery code, so both
+cold paths run through the Secret Key). A `DEVICE`, `DEVICE_KEY` or session-restored unlock may not rotate.
+
+This gate is what keeps the feature from being net-negative, and it is the sharpest thing in this record. The
+attacker this exists for holds the Master Key and the identity key and can therefore rotate too — **first**,
+locking the legitimate holder out of their own account permanently. What that attacker does *not* hold is the
+Secret Key, which a linked device never receives. Gating on the material the attacker lacks is the whole
+defence; without it, building rotation makes veyq worse than not having it.
+
+**3. Rotation is forward secrecy, not repair.** What the attacker already read stays read, and nothing here
+retracts it — the same shape [ADR 0058](0058-revoke-never-takes-key-material.md) states for a revoke and
+[ADR 0025](0025-forward-secrecy-policy-per-scope.md) for a removal, one layer up. No copy on any surface may
+imply that rotating undoes a compromise; it ends it.
+
+**4. The rotator does not re-admit themselves.** The scope rotation that excludes the old identity must be
+performed by a **different** key-holder, and per-scope re-admission runs through the human change-review
+([ADR 0028](0028-identity-authenticity-tofu-verification.md) (2)+(3)). Two independent reasons, either
+sufficient: `rotateScope` is owner-gated, so a rotating plain member cannot drive it at all; and if the rotator
+could, an attacker holding the old identity would mint the new epoch, wrap it to their **own** new identity and
+exclude the legitimate owner — turning the exclusion mechanism into the takeover's final step. This is
+ADR 0028 Decision 5's *"the other members must rotate"* with its reason attached rather than asserted.
+
+**5. Every shared scope rotates, the tenant included — and this is not a new policy.**
+[ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 already reserves an **explicit, owner-triggered
+"re-key this space"** for exactly the compromise case, running async over grant-delivery so no single device
+bears the `O(N)` burst. Rotation is its first caller; nothing about routine removal changes. Personal scopes
+rotate too, self-served (one member, who is the owner) — the *"personal scopes never rotate"* line in
+[en.spaces.scope-key-rotation](../features/spaces/enablers/en.spaces.scope-key-rotation.md) was written about
+removal, where there is nobody to rotate away from, and does not survive a compromise, where the old identity
+is exactly that somebody.
+
+**6. The state in between is stated, not hidden.** Between rotating and being re-admitted, the rotator is
+**outside every shared scope**: their new key is `changed` for every contact, the worker declines delivery to
+them, and the re-grant loop skips them while the rotation proceeds. That is not a defect to smooth over — it is
+the property that stops an attacker rotating their way back in, and the honest surface is a per-scope status,
+not a spinner.
+
+**7. Accepting a changed key must clear that worker's decline.** A worker that declined `identity_changed` is
+excluded from the job **permanently** — no code deletes a decline row — so ADR 0028 (2)'s promise that on accept
+*"the wrap then proceeds"* does not hold today. Nothing exercised it before, because a changed key could until
+now only be an attack. Rotation is what makes a legitimate change routine, so this is on the critical path: a
+rotation whose re-admission cannot be delivered is a rotation that strands the account.
+
+## Consequences
+
+- **Rotation is a re-onboarding ceremony, not a button, and its cost is stated up front.** Every `DEVICE` and
+  `DEVICE_KEY` wrap dies — their key material is device-held and cannot be rewritten — so every other device
+  needs the password (or a fresh link) again. The `recoveryMasterKeyTag` must be re-derived or recovery breaks.
+  The pin store and the device register are Master-Key-sealed and must be re-sealed.
+- **The Emergency Kit stays valid.** The Secret Key is not rotated: the `PASSWORD` and `RECOVERY` wraps are
+  rewritten under the *same* KEK. Rotating the Secret Key is a separate operation
+  ([ADR 0054](0054-password-recovery-two-factor-release.md)), and folding it in would make the one operation
+  that requires the kit also invalidate it.
+- **Losing the Emergency Kit means losing the ability to rotate** — accepted, and the honest form of the same
+  no-escrow property that makes losing every path terminal. The alternative, a warmer gate, hands the operation
+  to the attacker it defends against.
+- **The tenant re-key is `O(N)` and lands on a compromise, which is when it is worth paying**
+  ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) already reasoned this through and chose async delivery
+  for it).
+- **A pending group invitation does not survive the rotation.** The invitee's `sealed_name_key` is wrapped to
+  the old identity and has no re-mint path; the proposal must be withdrawn and re-issued.
+- **Operator-blindness is unchanged.** The server learns that an account published a new identity public key
+  and that scopes rotated — both already-visible classes of metadata (a directory value, an epoch index). No
+  key, no trust graph, no new correlation.
+- **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** The gate and the re-admission review are
+  client-enforced, so they are crypto-grade on a self-hosted or trusted client and honest-operator elsewhere —
+  the same tier as all veyq E2EE.
+
+**Alternatives rejected.**
+
+- **(a) Identity-only rotation as a selectable mode** — Decision 1. Its case is empty, and offering it lets the
+  user pick the variant ADR 0028 already rejected as useless.
+- **(b) Asking the user whether the Master Key was exposed** — they cannot know. A coin flip wearing consent.
+- **(c) Gating on the password alone** — it does exclude the phishing attacker, who never typed one. Rejected
+  because a password leaks in a breach and is used silently, which is ADR 0059's own reasoning for preferring
+  the transcribed code over a password; for an operation this destructive the two-secret floor is the right bar.
+- **(d) Letting the rotator drive their own scope re-grant** — Decision 4; it converts the exclusion into the
+  attacker's finishing move.
+- **(e) Leaving the tenant scope out and stating it as an honest limit** — the tenant scope holds sealed content
+  and a browsable Memory tree, and is veyq's *primary* shared home
+  ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) § Context). A rotation that clears the groups and leaves
+  the attacker in the main space would be a limit nobody could sensibly explain, and ADR 0025 §2 had already
+  decided the operation anyway.
+- **(f) A server-side "this user rotated" broadcast that auto-accepts the new key** — it is precisely the
+  key-substitution the whole TOFU model exists to catch, and a blind server must not adjudicate a crypto claim
+  ([ADR 0028](0028-identity-authenticity-tofu-verification.md) § Consequences).
+- **(g) Key Transparency** — the correct end-state and materially heavier
+  ([ADR 0028](0028-identity-authenticity-tofu-verification.md) (f)); it subsumes the re-admission review rather
+  than competing with it.
+
+## Related
+
+- [uc.account.rotate-keys](../features/account/use-cases/uc.account.rotate-keys.md) — the flow this ADR governs
+- [ADR 0028](0028-identity-authenticity-tofu-verification.md) (the TOFU model this rotation is accepted through;
+  its Decision 5 is settled here), [ADR 0059](0059-device-linking.md) (the obligation), [ADR 0058](0058-revoke-never-takes-key-material.md)
+  (why a revoke cannot substitute), [ADR 0025](0025-forward-secrecy-policy-per-scope.md) (the tenant re-key this
+  is the first caller of), [ADR 0024](0024-scope-key-rotation.md) (the epoch mechanism), [ADR 0054](0054-password-recovery-two-factor-release.md)
+  (the cold paths and why there is no recovery code)
+- [en.account.key-model](../features/account/enablers/en.account.key-model.md),
+  [en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md),
+  [en.spaces.scope-key-rotation](../features/spaces/enablers/en.spaces.scope-key-rotation.md)

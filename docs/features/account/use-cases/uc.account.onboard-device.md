@@ -105,12 +105,14 @@ flowchart TB
 - **E3 — the new device never picks the envelope up** (it was closed, the network dropped). The envelope
   expires with the row. Because it is sealed to a key only that device holds, an envelope left lying is not a
   secret in the open — but it is still swept, and a new pairing must be started rather than resumed.
-- **E4 — the grant was a mistake.** It is contained, not reversed. The device is visible and named in
-  [uc.account.sessions](uc.account.sessions.md), where its session can be revoked and its saved key removed —
-  which restores the Secret-Key floor for it but does **not** take back the Master Key it already holds
-  ([ADR 0059](../../../decisions/0059-device-linking.md) § Context). The honest advice at that point is a
-  password change plus the rotation that does not exist yet; the copy must not promise more than the buttons
-  do.
+- **E4 — the grant was a mistake.** It is contained, then ended — never reversed. The device is visible and
+  named in [uc.account.sessions](uc.account.sessions.md), where its session can be revoked and its saved key
+  removed, which restores the Secret-Key floor for it but does **not** take back the Master Key it already
+  holds ([ADR 0059](../../../decisions/0059-device-linking.md) § Context). The remedy that does take it back
+  going forward is [uc.account.rotate-keys](uc.account.rotate-keys.md): the Master Key and the identity are
+  replaced together and every scope re-keyed, which locks the granted device out of everything **future**.
+  Two things the copy must say and not soften: what that device already read stays read, and rotation needs
+  the **Secret Key**, which this device never received — so the Emergency Kit has to be to hand.
 - **E5 — the new device is only borrowed.** The ordinary "stay signed in" choice applies: declined, the device
   enrols no wrap and holds the Master Key for the session only, so closing the browser ends it and a later
   visit is a fresh pairing. This is the right shape for a machine that is not yours, and it is the same

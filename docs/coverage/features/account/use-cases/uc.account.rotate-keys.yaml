@@ -1,0 +1,33 @@
+useCase: uc.account.rotate-keys
+feature: account
+title: Rotate my keys after a compromise
+status: planned
+# Refined 2026-08-14 (ADR 0060, settling ADR 0028 Decision 5). NOTHING is built: `grep -rniE
+# "rotateIdentity|identityRotation" web/src backend/src contracts/` is empty and `git log --all --grep=rotat -i`
+# returns only device-pairing token commits. What the flow DRIVES is built end-to-end and is covered under its
+# own use-cases: the epoch chain + POST /api/scopes/{scopeId}/epochs (ADR 0024, en.spaces.scope-key-rotation),
+# the grant-delivery stale-epoch reconcile, the SCOPE_ROTATION job, the TOFU gate at all three foreign-wrap
+# sites, the decline seam and the changed-key review (uc.spaces.verify-identity, cr-0098/cr-0099). So every gap
+# below is the ACCOUNT-side operation and its trigger, not the machinery.
+acceptanceCriteria:
+  - id: one-mode-master-and-identity
+    text: Rotation replaces the Master Key and the identity keypair together — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, and recoveryMasterKeyTag is re-derived.
+  - id: cold-credential-gate
+    text: Rotation runs only from a vault opened by the PASSWORD or RECOVERY wrap (both of which require the Secret Key). A DEVICE, DEVICE_KEY, PASSKEY or restored-session unlock is refused and prompted to supply the cold credential in place — the attacker this defends against holds a device wrap and never the Secret Key.
+  - id: wraps-and-sealed-blobs-follow
+    text: The PASSWORD and RECOVERY wraps are rewritten under their existing KEKs (so the Emergency Kit stays valid), every DEVICE/DEVICE_KEY/PASSKEY wrap is deleted because its key material cannot be rewritten, and every Master-Key-sealed blob (identity-pin store, device register) is re-sealed under the new Master Key.
+  - id: self-served-scopes-rekeyed
+    text: Every scope the holder is the sole member of (the personal scope) is advanced to a new epoch, chain-linked to its predecessor and granted to the NEW identity, so the old identity reads no post-rotation content there.
+  - id: shared-scopes-queued-not-self-served
+    text: Every shared scope gets a SCOPE_ROTATION job that a DIFFERENT key-holder completes; the rotator may never drive their own re-grant. Without this an attacker holding the old identity would mint the new epoch, wrap it to their own new identity and exclude the legitimate holder.
+  - id: outside-until-readmitted
+    text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state.
+  - id: accept-clears-the-decline
+    text: Accepting a changed key clears the declining worker's per-job exclusion, so ADR 0028 (2)'s "the wrap then proceeds" actually holds. Today no code deletes a job-decline row, so an accepted rotation would authorise a wrap that is never delivered.
+  - id: forward-secrecy-not-repair
+    text: No surface of the flow implies that rotating undoes a compromise. Content the old identity already read is not retracted; rotation ends the exposure going forward, and the copy says so before the confirmation, not after it.
+  - id: operator-blind-rotation
+    text: The server sees only a replaced directory value, rewritten ciphertext wraps, epoch indices and queued jobs — the same metadata classes it already holds. It never learns a key, and the re-admission decision is never made server-side.
+gaps:
+  backend: "Unbuilt, and so is the contract it would implement. There is no write path for a new identity public key: AccountStore.createAccount is the only writer of veyq_user.identity_public_key, and /api/account/* carries six paths (key-material, wraps, wraps/{id}, profile, identity-pins, device-register), none of which rotate. Needs the rotation verb + its transactional write (identity public key, wrappedIdentityPrivateKey, the wrap set and recoveryMasterKeyTag together), the origination of SCOPE_ROTATION jobs from an account-level call, the claim rule that excludes the rotator from their own such job (rotateScope is owner-gated today and carries no such exclusion), and the deletion of the job-decline row on an accepted key change."
+  web: "Unbuilt. Needs the entry surface + its pre-confirmation copy, the cold-credential gate (which wrap opened this vault), the mint + re-wrap + re-seal sequence, the self-served personal re-key, the per-scope result status, and the accept path that re-drives delivery."
