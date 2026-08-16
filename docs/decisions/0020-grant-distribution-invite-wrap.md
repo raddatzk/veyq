@@ -115,7 +115,7 @@ key, wraps, or unwraps.** Concretely:
   more eligible wrappers is a negligible amplification, and moot for an honest/self-hosted operator. The hardening
   that reintroduces a human checkpoint only on a *changed* key is now defined by
   [ADR 0028](0028-identity-authenticity-tofu-verification.md) (TOFU pinning + safety-number verification); note
-  the first-online-wins fan-out means one pinning key-holder's refusal is a per-device signal, not a global veto
+  the first-online-wins fan-out means one pinning key-holder's refusal is a per-key-holder signal, not a global veto
   (ADR 0028 § Consequences). Key Transparency remains the end-state. Not hidden.
 - **Revocation & rotation are out of scope.** Removing a member, rotating `K_SC` so a removed member can't read
   future content, and re-inviting after removal are a later slice (as [ADR 0014](0014-group-scopes-and-governance.md)

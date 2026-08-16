@@ -91,13 +91,23 @@ class PairingStore {
         )
     }
 
+    /**
+     * Every live (non-terminal) channel of an account.
+     *
+     * A key rotation supersedes all of them (ADR 0060): a `PENDING`, `ANSWERED` or `SEALED` channel's envelope
+     * carries — or is about to carry — the **old** Master Key and a delegated refresh token, so a later collect
+     * would hand a device a dead key and a working login. `COLLECTED`, `SUPERSEDED` and `EXPIRED` are terminal
+     * and need nothing: the first is covered by the wrap deletion and the session revoke, the other two are
+     * already handled by `PairingPurge`.
+     */
+    @Transactional
+    fun liveChannels(userId: String): List<DevicePairingEntity> =
+        DevicePairingEntity.find("userId = ?1 and status not in ?2", userId, DevicePairingEntity.TERMINAL).list()
+
     /** The account's other live channels — what §8's one-outstanding-pairing rule supersedes at delegation. */
     @Transactional
     fun otherLiveChannels(userId: String, exceptId: String): List<DevicePairingEntity> =
-        DevicePairingEntity.find(
-            "userId = ?1 and id <> ?2 and status not in ?3",
-            userId, exceptId, DevicePairingEntity.TERMINAL,
-        ).list()
+        liveChannels(userId).filter { it.id != exceptId }
 
     @Transactional
     fun supersede(ids: List<String>): Long =

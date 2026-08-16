@@ -216,6 +216,30 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
 }
 
 /**
+ * Re-seal the device register from the **old** Master Key to a **new** one — key rotation (ADR 0060, step 4).
+ * The sibling of `resealPinsUnderNewMasterKey`, and it exists for the same reason: mid-rotation the vault still
+ * holds the old Master Key, so [mutateAndSave] would seal under the key being retired.
+ *
+ * Best-effort: an unreadable register renders rows unnamed and blocks nothing (uc.account.sessions §E4), so a
+ * re-seal that never lands costs display names, not access — and the sessions panel repairs it on next open.
+ *
+ * The contents cross unchanged, including the wrap join rows. That looks wrong for a moment and is right: the
+ * rotation deletes every device wrap server-side, so those rows are already stale — and pruning them **here**
+ * would be an internal removal (the rule above forbids it), where the honest path is the next
+ * [reconcileWithSessions], whose frozen delta against the server's served wrap list removes them as derived
+ * truth.
+ */
+export async function resealRegisterUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
+  const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
+  const reg = unsealRegister(oldMk, res.blob)
+  await withRefresh(() =>
+    accountDeviceRegisterApi().putDeviceRegister({
+      deviceRegisterUpdate: { blob: sealRegister(newMk, reg), version: res.version },
+    }),
+  )
+}
+
+/**
  * Everything the sessions view reads out of the register, against the two **server-authoritative** lists it is
  * holding — the live families and the served wrap ids. The register annotates those lists; it never replaces
  * them, so anything it does not know still renders and is still revocable (§E4).

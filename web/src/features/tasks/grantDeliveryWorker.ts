@@ -38,8 +38,9 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
     // TOFU gate (cr-0098, ADR 0028): pin the target's identity key on first sight, proceed on a match, but on a
     // CHANGED key never seal K_SC to a possibly-substituted key. This worker is human-less, so it BLOCKS +
     // DECLINES the job (release to other key-holders + never re-offer it to this worker) instead of wrapping — a
-    // human resolves the change in the UI. Per-device, not a global veto: a key-holder without a conflicting pin
-    // still TOFU-delivers.
+    // human resolves the change in the UI. Per key-holder, not a global veto: the exclusion is keyed on this
+    // account (its other devices too), while a *different* key-holder without a conflicting pin still
+    // TOFU-delivers. `acceptKeyChange` is what lifts it once a human resolves the change (ADR 0060 Decision 7).
     if ((await checkAndPin(target.targetUserId, target.identityPublicKey)) === 'changed') {
       await declineJob(job.jobId, 'identity_changed')
       continue

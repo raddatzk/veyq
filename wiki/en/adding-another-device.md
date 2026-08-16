@@ -62,6 +62,10 @@ out later stops it reaching the server, but it does **not** take the key back �
 [Is my data safe?](is-my-data-safe.md) for what a sign-out does and does not do. So only ever add a device
 you are holding.
 
+If you ever approve a code that turns out not to be your own device, there is one thing that ends it:
+[replacing your keys](account-keys-and-recovery.md#if-someone-got-into-your-account). It shuts that device
+out from that moment on — it cannot take back what was already read, and it needs your Emergency Kit.
+
 **A device added this way has no password saved on it.** You never typed one there, and it never learns
 one. If it ever forgets its key — you clear the browser, or another device removes its saved key — it will
 ask you for your password or your Emergency Kit, neither of which was ever typed on it. Keep the Emergency

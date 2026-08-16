@@ -118,6 +118,20 @@ subtly wrong — it is no locator at all, because the claim did not feel like a 
 one-line `grep` goes **before** the sentence, not after the correction. The tell is the feeling of already
 knowing — that is exactly where the imported prior is, and exactly where this repo most often inverts it.
 
+**And it reaches the question you put to the USER, which is where it costs the most.** Every tell above is
+about a claim written into a document; this one is about a claim embedded in the *framing of a decision you are
+asking someone to make*. A question carries its premises, the user answers the question rather than auditing
+them, and their "yes" then reads as agreement with the whole framing — so a wrong premise is not merely wrong,
+it has been **ratified**. `cr-account-key-rotation-after-compromise` did this at implement time: it asked
+whether the cold-credential gate should refuse a device-opened session *before* offering the form, and the
+use-case's own E1 already said the opposite in five words — *"asks for the password + Secret Key in place"*.
+The premise had never been grepped; the option was approved; the wrong behaviour was built, tested and
+documented into two durable docs before a later reading of E1 caught it. The rule is § *upstream of every
+trap* pointed one step earlier: **before writing an option that contradicts refined state, re-read the exception
+flow that governs it and quote it in the question.** A question that quotes the doc it is about lets the user
+overrule the doc knowingly, which is a decision; one that paraphrases it from memory takes that choice away
+from them without either of you noticing.
+
 **A third tell, and the cheapest to act on: the claim is about a PATH.** A mount point, a `WORKDIR`, a restore
 target, a file a plan writes into — a location reads as a coordinate rather than as a claim, so nobody asks what
 already lives there. cr-instance-backup-and-restore made that mistake three times in one document: it put the
@@ -240,6 +254,13 @@ no file restates it, because a restated list drifts out of step with the one tha
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
 local green.)
 
+**Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
+A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
+session that cannot commit is a session holding that rule open across every phase it finishes.
+`cr-account-key-rotation-after-compromise` lost the signing agent to an idle-lock after its contracts phase and
+carried four more phases uncommitted; nothing was lost, and every green in that window was weaker than it read.
+Confirm the commit path works **before** phase 1 — it is one throwaway commit, and the alternative is
+discovering it at the point where you have the most to lose.
 **Where a CR's done-when says "green in CI", know which jobs can even run.** Two independent gates, and both bit
 during cr-e2e-orchestrator:
 - **Branch filters.** [`ci.yml`](../.github/workflows/ci.yml) triggers only on `main` and on PRs *targeting*

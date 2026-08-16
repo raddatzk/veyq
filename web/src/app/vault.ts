@@ -8,19 +8,38 @@
 import { reactive } from 'vue'
 import type { Identity } from '../shared/crypto/v1'
 
+/**
+ * What opened this vault — the input ADR 0060's cold-credential gate reads (uc.account.rotate-keys §2).
+ *
+ * **Three-valued, and the third value is the reason this is not a boolean.** A `PASSWORD` or released
+ * `RECOVERY` wrap takes the Secret Key, which is precisely what a phished device-link grant never hands over,
+ * so those two are `cold`. A `DEVICE` or `DEVICE_KEY` wrap is opened by material the device itself holds →
+ * `device`. And the boot restore from the session vault opens **no wrap at all** — the Master Key was cached
+ * in `sessionStorage`, so there is no method to name and `none` is its only honest entry; the same is true of
+ * a vault opened from a Master Key handed over by a pairing grant. A boolean would force one of those two to
+ * be labelled with a method it never used, and `none` is exactly the state ADR 0060 Decision 2 refuses.
+ */
+export type UnlockOrigin = 'cold' | 'device' | 'none'
+
 const keys = {
   masterKey: null as Uint8Array | null,
   identityPrivate: null as Identity['priv'] | null,
 }
 
-/** Reactive unlock flag for the UI — never holds key material. */
-export const vaultState = reactive({ unlocked: false })
+/** Reactive unlock flag + how the vault was opened — never holds key material. `origin` is null while locked. */
+export const vaultState = reactive({ unlocked: false, origin: null as UnlockOrigin | null })
 
-/** Hold the freshly opened Master Key + identity private key for this working session. */
-export function setUnlocked(masterKey: Uint8Array, identityPrivate: Identity['priv']): void {
+/** Hold the freshly opened Master Key + identity private key for this working session, and how it was opened. */
+export function setUnlocked(masterKey: Uint8Array, identityPrivate: Identity['priv'], origin: UnlockOrigin): void {
   keys.masterKey = masterKey
   keys.identityPrivate = identityPrivate
   vaultState.unlocked = true
+  vaultState.origin = origin
+}
+
+/** How this vault was opened, or null while locked. See {@link UnlockOrigin}. */
+export function unlockOrigin(): UnlockOrigin | null {
+  return vaultState.origin
 }
 
 /** Drop all key material (sign-out / re-lock). Zeroes the key bytes before releasing the references, so
@@ -34,6 +53,7 @@ export function clearVault(): void {
   keys.masterKey = null
   keys.identityPrivate = null
   vaultState.unlocked = false
+  vaultState.origin = null
 }
 
 export function isUnlocked(): boolean {

@@ -62,6 +62,11 @@ Abmelden hindert es daran, den Server zu erreichen, nimmt ihm den Schlüssel abe
 Abmelden bewirkt und was nicht, steht in [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Füge also
 nur Geräte hinzu, die du in der Hand hältst.
 
+Solltest du doch einmal einen Code bestätigen, der nicht dein eigenes Gerät war, gibt es genau eine Sache,
+die das beendet: [deine Schlüssel ersetzen](konto-schluessel-und-wiederherstellung.md#wenn-jemand-in-dein-konto-gekommen-ist).
+Damit ist dieses Gerät ab diesem Moment ausgesperrt — zurückholen kann es nichts, was schon gelesen wurde,
+und du brauchst dafür dein Notfall-Kit.
+
 **Ein so hinzugefügtes Gerät hat kein Passwort gespeichert.** Du hast dort nie eines eingetippt, und es
 lernt auch keines. Sollte es seinen Schlüssel je verlieren — du löschst die Browserdaten, oder ein anderes
 Gerät entfernt seinen gespeicherten Schlüssel — fragt es dich nach deinem Passwort oder deinem Notfall-Kit,

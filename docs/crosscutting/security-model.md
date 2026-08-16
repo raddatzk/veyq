@@ -252,7 +252,8 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
 - **The first-use gap (honest, unchanged):** if the operator substitutes Bob's key *before* Alice ever
   pinned the real one — and re-wraps genuine content too — nothing looks wrong until **manual verification**
   or **Key Transparency** (the eventual end-state). TOFU cannot detect a lie told before first sight.
-- **First-online-wins is a per-device honesty measure, not a global veto:** a key-holder who pinned the old
+- **First-online-wins is a per-key-holder honesty measure (keyed on the declining account, so its other
+  devices are excluded too), not a global veto:** a key-holder who pinned the old
   key refuses + flags, but a *different* key-holder who never saw Bob has no conflicting pin and TOFU-accepts.
   Deliberate — the blind server must not adjudicate a crypto claim, and a global quarantine on one worker's
   say-so would be a DoS. The value is raised detection.

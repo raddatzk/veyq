@@ -30,11 +30,26 @@ acceptanceCriteria:
     text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key, optionally verified) or refuses (leave blocked, the wrap/delivery stays gated).
     # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
     # read is trustState/trustStates, both unit-tested; the ChangedKeyReviewDialog renders the side-by-side compare.
+    # The accept was only HALF an accept until cr-account-key-rotation-after-compromise: a decline is permanent —
+    # nothing expired one — so the re-pin authorised a wrap that nothing then performed (ADR 0028 (2)'s "the wrap
+    # then proceeds" did not hold; ADR 0060 Decision 7). `acceptKeyChange` now also clears this key-holder's own
+    # declines against that contact, and the backend refs below are that seam: the delivery becomes claimable
+    # again, and — the half that shares a table with it — a rotator's exclusion from their own rotation does not.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
   - id: strict-mode
     text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
   - id: operator-blind-pinning
     text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
+# The backend endpoints this use-case leans on ARE built and ARE tested — the sealed pin-store sync, the decline
+# seam, and now POST /api/tasks/declines/clear — but their refs deliberately live on
+# `uc.account.rotate-keys`, which is the use-case that owns the clearing seam. Listing them here as well would
+# make `backend` a covered area, and a covered area may not also be a gap (ADR 0040) — while this file is still
+# `status: planned` and the model requires a planned file to declare one. That collision is worth naming rather
+# than working around: the coverage model has `planned` and implemented, and this use-case is neither. It has
+# been half-built since cr-0099 and the backend "gap" below has been carrying a build-note in a gap's clothes
+# ever since. Nothing caught it because the surface carried no ref; adding one made the guard say so
+# immediately. Left as-is here on purpose — closing it means either splitting the use-case or teaching the model
+# a third state, and both are decisions for a refine, not for an implement session.
 gaps:
-  backend: "Built (cr-0098): the sealed pin-store sync (GET/PUT /api/account/identity-pins, optimistic-concurrency 409 stale_version) + the grant-delivery decline seam (POST /api/tasks/{jobId}/decline, per-worker exclusion). No verify/strict-mode server state (client-only ceremony; strict-mode is the follow-up)."
+  backend: "No backend ref on this use-case: the endpoints it leans on are covered where the CR that built them owns them — the pin-store sync + decline seam under cr-0098's own slice tests, and the accept-side clearing under uc.account.rotate-keys (TasksSliceTest.acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain + .clearingDeclinesNeverFreesARotationExclusion). What is genuinely unbuilt server-side is verify/strict-mode state: the ceremony is client-only, and strict-mode needs the redesign noted in the header before it can exist at all."

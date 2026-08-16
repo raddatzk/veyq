@@ -2,6 +2,8 @@ package com.veyq.app.features.tasks
 
 import com.veyq.app.generated.api.TasksApi
 import com.veyq.app.generated.model.ClaimRequest
+import com.veyq.app.generated.model.ClearDeclinesRequest
+import com.veyq.app.generated.model.DeclinesCleared
 import com.veyq.app.generated.model.ClaimedJob
 import com.veyq.app.generated.model.CompleteRequest
 import com.veyq.app.generated.model.DeclineRequest
@@ -88,6 +90,11 @@ class TasksResource(
             is DeclineResult.Released -> Response.ok(JobStatus(status = JobStatus.Status.valueOf(r.status.lowercase()), attempts = r.attempts)).build()
             is HttpFailure -> httpError(r)
         }
+
+    override fun clearDeclinesForAcceptedKey(clearDeclinesRequest: ClearDeclinesRequest): Response =
+        Response.ok(
+            DeclinesCleared(cleared = handler.clearDeclines(me, clearDeclinesRequest.targetUserId.toString())),
+        ).build()
 
     private fun ClaimedJobView.toDto() = ClaimedJob(
         jobId = UUID.fromString(jobId),

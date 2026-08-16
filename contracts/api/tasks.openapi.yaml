@@ -644,9 +644,8 @@ components:
           type: string
           format: uuid
           description: The contact whose new identity key the caller accepted (opaque user id).
-          maxLength: 36
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 36)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
 
     DeclinesCleared:
       type: object

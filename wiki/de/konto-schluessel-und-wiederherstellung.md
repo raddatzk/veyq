@@ -74,6 +74,43 @@ Zwei ehrliche Hinweise. Die Gerätenamen erfährt der Server nie: Sie liegen ver
 Entsperren lesbar, auf einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und nichts davon greift
 auf das verlorene Gerät selbst durch — entzogen wird ihm, was der Server für es aufbewahrt hat.
 
+## Wenn jemand in dein Konto gekommen ist
+
+Manchmal reicht Abmelden nicht — weil es nie die ganze Geschichte war. Angenommen, du hast einen
+Anmelde-Code bestätigt, der gar nicht dein neues Handy war. Dieses Gerät hat die Schlüssel zu deinen
+Erinnerungen, und kein Abmelden nimmt sie zurück.
+
+**Deine Schlüssel zu ersetzen beendet das.** Du findest es unter Einstellungen → Persönlich → Sicherheit.
+Deine Räume bekommen neue Schlösser, das alte Gerät ist ab diesem Moment von allem ausgesperrt, und alle
+anderen Geräte müssen sich neu anmelden.
+
+Lies diese vier Punkte, bevor du anfängst. Sie sind das ganze Bild, und keiner davon ist Kleingedrucktes.
+
+**Es stoppt, was danach kommt — es holt nichts zurück.** Was diese Person schon gesehen hat, hat sie
+weiterhin. Es gibt keine Variante davon, die in ihr Gerät greift und Gelesenes löscht. Was es tut, ist einen
+Strich ziehen: ab hier nichts Neues mehr.
+
+**Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel.** Jedes braucht danach
+wieder dein Passwort, und ein Gerät, das nur einen gespeicherten Schlüssel hatte — eines, das du per Code
+hinzugefügt hast — braucht dein Notfall-Kit. Mach das also dort, wo du an dein Kit kommst, nicht zwischen
+Tür und Angel.
+
+**Du brauchst dein Notfall-Kit, und genau das ist der Punkt.** Es ist das Einzige, was die andere Person
+nicht hat. Ohne diese Bedingung könnte *sie* die Schlüssel zuerst ersetzen und *dich* dauerhaft aussperren —
+womit diese Funktion schlechter wäre als gar keine. Die Prüfung ist also keine Hürde, sie ist der ganze
+Schutz.
+
+**In geteilten Räumen muss dich jemand anderes wieder hereinlassen.** Deine neuen Schlüssel sehen für alle,
+die dich kennen, aus wie eine fremde Person, die behauptet, du zu sein — und genau das soll die App ja
+merken. Jemand anderes im jeweiligen Raum bestätigt, dass du wirklich du bist, am besten indem ihr die
+Sicherheitsnummer am Telefon vergleicht. Erst dann bist du wieder drin. Bis dahin bist du draußen, und daran
+ändert nichts, was du allein tust.
+
+Eine Sache lohnt sich, *bevor* du das je brauchst: **mach in einem Raum, den nur du besitzt, jemanden zur
+zweiten Besitzerin oder zum zweiten Besitzer.** Sonst ist dort niemand, der dich wieder hereinlassen kann.
+
+Dein Notfall-Kit funktioniert danach weiter — dein Secret Key ändert sich nicht, nur das, was er öffnet.
+
 ## Was der Server tatsächlich speichert
 
 Nur die **gesperrten** Kopien deines Master-Schlüssels — nie etwas, das sie öffnet. Das, was eine Kopie

@@ -7,7 +7,7 @@ import { unlockKekAsync, deviceKekAsync } from '../../../shared/crypto/argonWork
 import { fromB64std } from '../../../shared/base64'
 import { accountApi } from '../../../api/client'
 import { withRefresh } from '../login/login'
-import { setUnlocked } from '../../../app/vault'
+import { setUnlocked, type UnlockOrigin } from '../../../app/vault'
 import { setAccount } from '../../../app/account'
 import { MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/generated/account'
 import * as device from '../trustDevice/deviceKey'
@@ -26,15 +26,26 @@ function fetchKeyMaterial(): Promise<AccountKeyMaterial> {
 
 /** Unwrap the identity private key with the opened Master Key and store both in the in-memory vault.
  *
+ *  `origin` is what opened it, and every path must state its own honestly — this choke point cannot infer it,
+ *  which is why it is a parameter rather than something derived here. It is the input ADR 0060's cold gate
+ *  reads (uc.account.rotate-keys §2), and the value that is easiest to get wrong is `none`: the boot restore
+ *  and the pairing-grant path open **no wrap at all**, so naming a method for them would be a lie the gate
+ *  then trusts. See {@link UnlockOrigin}.
+ *
  *  `label` is the name this device was handed by whoever onboarded it (uc.account.onboard-device step 6). It is
  *  threaded through to write moment 1 rather than written afterwards, because a write after the unlock would be
  *  a **fourth** write moment — which en.account.device-register forbids — and would race the fire-and-forget
  *  one for the same key. Every other unlock path passes nothing and keeps the user-agent guess. */
-function openVault(material: AccountKeyMaterial, masterKey: Uint8Array, label?: string): void {
+function openVault(
+  material: AccountKeyMaterial,
+  masterKey: Uint8Array,
+  origin: UnlockOrigin,
+  label?: string,
+): void {
   const identityPrivate = v1.deserializeIdentityPrivate(
     v1.symUnwrap(masterKey, fromB64std(material.wrappedIdentityPrivateKey), 'identity-priv'),
   )
-  setUnlocked(masterKey, identityPrivate)
+  setUnlocked(masterKey, identityPrivate, origin)
   noteThisDevice(label)
 }
 
@@ -96,7 +107,8 @@ export async function unlockMasterKey(password: string, secretKeyB64: string): P
   const { params, salt } = v1.decodeKdfParams(fromB64std(passwordWrap.kdfParams))
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   const masterKey = v1.symUnwrap(kek, fromB64std(passwordWrap.wrappedKey), 'master-key')
-  openVault(material, masterKey)
+  // The 2SKD floor: password AND Secret Key. `cold` is what ADR 0060's rotation gate is looking for.
+  openVault(material, masterKey, 'cold')
 }
 
 /**
@@ -119,7 +131,9 @@ export async function unlockWithGrantedMasterKey(
 ): Promise<void> {
   setAccount(email)
   const material = await fetchKeyMaterial()
-  openVault(material, masterKey, label)
+  // `none`, not `device`: no wrap was opened here — the Master Key arrived inside the sealed envelope. This is
+  // also the exact path a phished grant takes (ADR 0059), so it is the one that must never read as cold.
+  openVault(material, masterKey, 'none', label)
 }
 
 /**
@@ -144,7 +158,9 @@ export async function restoreVaultFromCache(): Promise<boolean> {
   if (!source) return false
   setAccount(source.email)
   try {
-    openVault(material, source.masterKey)
+    // The two tiers differ in what they opened, and only one of them opened anything: the session vault handed
+    // back a cached Master Key (no wrap → `none`), the persistent tier unwrapped this device's DEVICE_KEY wrap.
+    openVault(material, source.masterKey, sessionVault ? 'none' : 'device')
     return true
   } catch {
     // The cached Master Key no longer fits the served key material (e.g. rotated) — don't keep retrying the
@@ -174,6 +190,7 @@ export async function unlockWithDevice(email: string, password: string): Promise
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = await deviceKekAsync(deviceFactor, password, salt, params)
   const masterKey = v1.symUnwrap(kek, fromB64std(wrap.wrappedKey), 'master-key')
-  openVault(material, masterKey)
+  // A DEVICE wrap mixes the password into a device-held factor — password, but no Secret Key, so not cold.
+  openVault(material, masterKey, 'device')
   return true
 }

@@ -98,9 +98,13 @@ trust state is shared across the account, not re-TOFU'd per device.
 - **The first-use gap (honest).** A pin can only catch a key that *changes* after first sight. If the operator
   substitutes a contact's key **before** this client ever pinned the real one, nothing looks wrong until manual
   verification or Key Transparency (the end-state).
-- **First-online-wins is per-device, not a global veto.** The worker block is one honest device refusing; another
-  key-holder without a conflicting pin still TOFU-delivers. The value is raised detection, not a hard stop — the
-  blind server must not adjudicate a crypto claim (ADR 0028 § Consequences).
+- **First-online-wins is per key-holder, not a global veto.** The worker block is one honest **account**
+  refusing — the decline is keyed on the declining user, so that account's other devices are excluded too, which
+  is the correct reading of a refusal about an *identity*. Another key-holder without a conflicting pin still
+  TOFU-delivers. The value is raised detection, not a hard stop — the blind server must not adjudicate a crypto
+  claim (ADR 0028 § Consequences). [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
+  Decision 4 now rests on that granularity: the rotation exclusion is a decline row for the rotator, and a
+  per-*device* one would be claimable from any other tab.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Crypto-grade on a trusted
   client, honest-operator on operator-served web — a tampered client could ignore its own pin.
 

@@ -197,8 +197,9 @@ class TasksSliceTest {
     @Test
     fun declineReleasesJobToOtherWorkersButNeverBackToTheDecliner() {
         // cr-0098 / ADR 0028: a worker that refuses a job (a conflicting identity pin) releases it back to
-        // PENDING — still claimable by OTHER workers — but is itself never re-offered it (per-device, not a
-        // global veto). The declined attempt is rolled back, so a legitimate decline never dead-letters the job.
+        // PENDING — still claimable by OTHER workers — but is itself never re-offered it (per KEY-HOLDER, not a
+        // global veto; the exclusion is keyed on the account, so the decliner's other devices stay out too).
+        // The declined attempt is rolled back, so a legitimate decline never dead-letters the job.
         val scopeId = seedTenantScope()
         val workerA = seedUser()
         val workerB = seedUser()
@@ -218,6 +219,60 @@ class TasksSliceTest {
         claim(workerA, tag).then().statusCode(204)
         // B has no conflicting decline → the job is still delivered to B (attempts freshly 1).
         claim(workerB, tag).then().statusCode(200).body("jobId", equalTo(jobId)).body("attempts", equalTo(1))
+    }
+
+    @Test
+    fun acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain() {
+        // ADR 0028 (2) promised that on accept "the wrap then proceeds", and nothing made it true: no code
+        // deleted a decline row, so the accept authorised a wrap that never happened (ADR 0060 Decision 7).
+        // This is the failure mode that strands a rotated account — its re-admission is exactly a delivery to a
+        // contact somebody already declined.
+        val scopeId = seedTenantScope()
+        val worker = seedUser()
+        seedGrantedMembership(worker, scopeId, "worker-grant")
+        val target = seedUser()
+        seedGrantlessMembership(target, scopeId)
+
+        val jobId = claimGrantDelivery(worker)
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
+            .body("""{"reason":"identity_changed"}""")
+            .`when`().post("/api/tasks/$jobId/decline").then().statusCode(200)
+        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
+
+        // The control the positive needs: clearing for a DIFFERENT contact must change nothing. Without it, a
+        // clear that simply dropped every row of the caller's would pass the happy path identically.
+        clearDeclines(worker, seedUser()).then().statusCode(200).body("cleared", equalTo(0))
+        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
+
+        clearDeclines(worker, target).then().statusCode(200).body("cleared", equalTo(1))
+        claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(jobId))
+    }
+
+    @Test
+    fun clearingDeclinesNeverFreesARotationExclusion() {
+        // The two mechanisms share a table, so the accept path could trivially have unblocked the rotation
+        // exclusion that keeps a rotator off their own re-grant (ADR 0060 Decision 4) — the takeover's finishing
+        // move, handed over by a cleanup. It cannot, because a scope-rotation job has no delivery target for a
+        // membership id to resolve to; this asserts that in the one run where both rows belong to one worker.
+        val scopeId = seedTenantScope()
+        val rotator = seedUser()
+        seedGrantedMembership(rotator, scopeId, "rotator-grant")
+        val target = seedUser()
+        seedGrantlessMembership(target, scopeId)
+
+        val rotationJob = seedJob(scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.PENDING, attempts = 0, resourceRef = scopeId)
+        seedDecline(rotationJob, rotator, "rotation_originator")
+
+        val deliveryJob = claimGrantDelivery(rotator)
+        given().header("Authorization", bearer(rotator)).contentType(ContentType.JSON)
+            .body("""{"reason":"identity_changed"}""")
+            .`when`().post("/api/tasks/$deliveryJob/decline").then().statusCode(200)
+
+        clearDeclines(rotator, target).then().statusCode(200).body("cleared", equalTo(1))
+
+        // The delivery is unblocked; the rotation exclusion is not.
+        claim(rotator, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).body("jobId", equalTo(deliveryJob))
+        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
     }
 
     @Test
@@ -366,6 +421,18 @@ class TasksSliceTest {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["$tag"]}""")
             .`when`().post("/api/tasks/claim")
+
+    private fun clearDeclines(userId: String, targetUserId: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"targetUserId":"$targetUserId"}""")
+            .`when`().post("/api/tasks/declines/clear")
+
+    private fun seedDecline(jobId: String, workerId: String, reason: String) = QuarkusTransaction.requiringNew().run {
+        JobDeclineEntity().apply {
+            id = UUID.randomUUID().toString(); this.jobId = jobId; this.workerId = workerId
+            this.reason = reason; declinedAt = Instant.now()
+        }.persist()
+    }
 
     private fun claimGrantDelivery(userId: String): String =
         claim(userId, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).extract().path("jobId")

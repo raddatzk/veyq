@@ -75,7 +75,8 @@ export async function become(a: Actor): Promise<void> {
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = v1.kekPasswordSecret(fromB64std(a.built.emergencyKit.secretKey), a.password, salt, params)
   const masterKey = v1.symUnwrap(kek, fromB64std(wrap.wrappedKey), 'master-key')
-  setUnlocked(masterKey, a.built.identity.priv)
+  // It opened the PASSWORD wrap with password + Secret Key, so `cold` is what actually happened here.
+  setUnlocked(masterKey, a.built.identity.priv, 'cold')
 }
 
 export type BirthedInstance = {

@@ -11,6 +11,7 @@ import { useRoute, useRouter } from 'vue-router'
 import AppearancePanel from '../features/settings/AppearancePanel.vue'
 import DeviceTrustPanel from '../features/account/trustDevice/DeviceTrustPanel.vue'
 import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
+import KeyRotationPanel from '../features/account/rotation/KeyRotationPanel.vue'
 import AddDevicePanel from '../features/account/pairing/AddDevicePanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
@@ -83,6 +84,13 @@ const categories = computed<NavCategory[]>(() => {
         // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
         // premise — it seals the Master Key it is holding.
         { id: 'pairing', label: t('pairing.navTitle'), icon: 'pi pi-qrcode' },
+        // Replacing the account's keys after a compromise (uc.account.rotate-keys). It sits below the two
+        // sections whose failure it answers — a device trusted by mistake, a session that revoking cannot
+        // reach — because that is the order the person arrives in. The route's `requiresUnlock: true` is the
+        // right gate: the rotation rewrites Master-Key-sealed material, so a locked vault could not run it at
+        // all; its OWN gate is narrower still and lives in the panel (ADR 0060 Decision 2 — a device wrap
+        // opened this vault is refused before the form is offered).
+        { id: 'security', label: t('settings.security'), icon: 'pi pi-shield' },
         // Per-tenant identity (username + real name) needs any tenant context (ADR 0023).
         ...(activeSpace.tenantId ? [{ id: 'profile', label: t('profile.title'), icon: 'pi pi-user' }] : []),
       ],
@@ -174,6 +182,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'device') return { component: DeviceTrustPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }
+  if (id === 'security') return { component: KeyRotationPanel, props: {} }
   return { component: AppearancePanel, props: {} }
 })
 

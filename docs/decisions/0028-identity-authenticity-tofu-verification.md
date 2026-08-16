@@ -72,7 +72,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 - **The first-use gap remains (honest).** If the operator substitutes a key **before** a client ever pinned the
   real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** or Key
   Transparency. TOFU cannot detect a lie told before first sight.
-- **Grant-delivery is first-online-wins across key-holders, so a worker block is per-device, not a global veto.**
+- **Grant-delivery is first-online-wins across key-holders, so a worker block is per key-holder — keyed on the
+  declining account, not on the browser it declined from — and not a global veto.**
   A key-holder who pinned the old key refuses + flags; a *different* key-holder who never saw the contact has no
   conflicting pin → TOFU-accepts the new key and delivers. This is deliberate: the blind server **must not**
   adjudicate a crypto claim, and a server-side **global quarantine** on one worker's say-so would be a **DoS**

@@ -36,11 +36,26 @@ rejected-alternative (d) with a button in front of it: a new identity re-wrapped
 still readable. Offering the choice would ask the user a question they cannot answer and let them pick the
 useless half.
 
-**2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The gate is
-not new machinery: it is *which* `MasterKeyWrap` the caller opened. The `PASSWORD` floor takes password +
-Secret Key; the `RECOVERY` wrap takes the Secret Key alone, released against address control
-([ADR 0054](0054-password-recovery-two-factor-release.md) — there is **no** separate recovery code, so both
-cold paths run through the Secret Key). A `DEVICE`, `DEVICE_KEY` or session-restored unlock may not rotate.
+**2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The
+`PASSWORD` floor takes password + Secret Key; the `RECOVERY` wrap takes the Secret Key alone, released against
+address control ([ADR 0054](0054-password-recovery-two-factor-release.md) — there is **no** separate recovery
+code, so both cold paths run through the Secret Key). A `DEVICE`, `DEVICE_KEY` or session-restored unlock may
+not rotate.
+
+**The gate is a live proof, not a memory, and the difference decides what the client has to store.** Rewriting
+the two cold wraps needs the password and the Secret Key as *material* — no KEK survives the unlock — so every
+path through the screen supplies them anyway. Re-deriving the floor KEK from what was just typed, opening the
+stored `PASSWORD` wrap with it, and requiring the result to equal the Master Key the vault already holds is
+therefore free, and it proves possession **now** rather than at some earlier point in the session. That is the
+binding refusal.
+
+*Which* `MasterKeyWrap` opened this vault is recorded too — new client state, three-valued, because the
+session-restore path opens no wrap at all and `none` is its only honest entry (a boolean would have to label it
+with a method it never used). But it **gates nothing**: a session opened by a device wrap upgrades *in place*
+by supplying the cold credential, which is the same proof a cold session gives. Turning it away would add
+nothing over the proof and would send somebody already holding their Emergency Kit back to the sign-in screen.
+What the record earns is the *sentence on the screen* — why the Secret Key is being asked for here — so the
+demand reads as the defence it is rather than as an unexplained hurdle.
 
 This gate is what keeps the feature from being net-negative, and it is the sharpest thing in this record. The
 attacker this exists for holds the Master Key and the identity key and can therefore rotate too — **first**,

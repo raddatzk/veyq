@@ -17,8 +17,18 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **Validation + sanitization belong in the spec** via `x-field-extra-annotation` (bean-validation
   `@NotBlank`/`@Size`/`@Pattern` + a Jackson trim deserializer) → enforced by `@Valid` at the boundary,
   **400 before the handler**. Don't re-validate field shape in the handler.
+  **Match the annotation to the GENERATED type, not to the wire type.** A property with `format: uuid`
+  generates as `java.util.UUID`, and a String validator on it is not a stricter check — it is a
+  `UnexpectedTypeException` at request time, i.e. a **500 on a well-formed request** instead of the 400 the
+  annotation was reaching for. A uuid field takes `@NotNull` and nothing else; `maxLength` on one is dead text,
+  since the length is the type's. Same trap for any `format:` that changes the generated type.
 - **Migrations:** Flyway, append-only `V<n>__*.sql`; `schema-management.strategy=none` — Flyway owns the
-  schema. Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
+  schema. **Append-only means an applied migration is never edited — not even a comment in it.** Flyway
+  validates the checksum of every applied migration at `migrate-at-start`, so a one-word fix to a `--` comment
+  fails startup on every instance that already ran it; `%dev` hides this behind `repair-at-start=true`, so it is
+  green exactly where you would test it and red only on somebody else's server. A migration's comment is a
+  historical artifact: correct the live copy of that rule (the entity KDoc, the ADR) and leave the file alone.
+  Column types: `TEXT` for opaque base64 (65 535 bytes on MariaDB, so a base64 cap must be ≤ 65 532 —
   guarded by `scripts/validate_maxlength_storage.py`), `MEDIUMTEXT` where a cap needs more (16 MiB), `VARCHAR`
   for short. The test datasource runs H2 with **`MODE=MariaDB`** (`application-test.properties`) so it parses
   what prod parses — a **parity** measure, not a workaround: a type-change is `MODIFY COLUMN` (MariaDB-only

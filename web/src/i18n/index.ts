@@ -109,6 +109,45 @@ const en = {
     untrustFailed: 'This device could not be forgotten. Please try again.',
     serverTenants: 'Tenants',
     serverTenantsEmpty: 'No tenants on this server yet.',
+    security: 'Security',
+  },
+  rotation: {
+    title: 'Replace your keys',
+    sub: 'If someone else got hold of your account, this is how you shut them out.',
+    factNotRepair:
+      'It stops what comes next — it can’t take back what’s gone. Anything that person already saw, they still have.',
+    factSignsOut:
+      'Every other device is signed out and loses its saved key. Each one needs your password again to get back in.',
+    factNeedsKit:
+      'You need your Emergency Kit. That’s on purpose: it’s the one thing they don’t have, and it’s what stops them doing this to you.',
+    factSharedSpaces:
+      'In shared spaces, someone else has to confirm it’s really you — best by comparing the security number over a call — before you’re back in. In a space you own alone, make someone else an owner first, or nobody there can let you back in.',
+    gateNotCold:
+      'This device unlocked without your Secret Key, so it asks for it here. That’s the check that stops someone who got into your account from doing this to you — they don’t have your Emergency Kit.',
+    passwordLabel: 'Your password',
+    secretKeyLabel: 'Your Secret Key',
+    secretKeyHint: 'From your Emergency Kit.',
+    action: 'Replace my keys',
+    confirmTitle: 'Replace your keys?',
+    confirmBody:
+      'Your spaces get new locks and every other device is signed out. What that person already saw stays with them. This can’t be undone.',
+    errorLocked: 'Unlock your memories on this device first, then replace your keys.',
+    errorCredential: 'That password or Secret Key didn’t match. Nothing was changed.',
+    errorNoFloor: 'This account has no password sign-in to check against, so its keys can’t be replaced here.',
+    errorFailed: 'Your keys could not be replaced. Nothing was changed — please try again.',
+    doneNotRepair:
+      'Your keys are replaced. From now on the old device is shut out — but what it already saw, it still has.',
+    status: {
+      secured: 'Secured',
+      waiting: 'Waiting for someone else',
+      failed: 'Not secured',
+    },
+    statusHint: {
+      secured: 'This space has a new lock and only your new keys open it.',
+      waiting:
+        'Someone else in this space has to confirm it’s really you before you’re back in. Until then you’re outside it, and nothing you do alone changes that.',
+      failed: 'This space still has its old lock. Try replacing your keys again.',
+    },
   },
   sessions: {
     title: 'Sessions',
@@ -957,6 +996,46 @@ const de: typeof en = {
     untrustFailed: 'Dieses Gerät konnte nicht vergessen werden. Bitte versuche es erneut.',
     serverTenants: 'Tenants',
     serverTenantsEmpty: 'Auf diesem Server gibt es noch keine Tenants.',
+    security: 'Sicherheit',
+  },
+  rotation: {
+    title: 'Schlüssel ersetzen',
+    sub: 'Wenn jemand anderes an dein Konto gekommen ist, sperrst du die Person hier aus.',
+    factNotRepair:
+      'Es stoppt, was danach kommt — es holt nichts zurück. Was diese Person schon gesehen hat, hat sie weiterhin.',
+    factSignsOut:
+      'Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel. Jedes braucht danach wieder dein Passwort.',
+    factNeedsKit:
+      'Du brauchst dein Notfall-Kit. Das ist Absicht: es ist das Einzige, was die Person nicht hat, und genau das hindert sie daran, das mit dir zu machen.',
+    factSharedSpaces:
+      'In geteilten Räumen muss jemand anderes bestätigen, dass du wirklich du bist — am besten, indem ihr die Sicherheitsnummer am Telefon vergleicht — bevor du wieder drin bist. In einem Raum, den nur du besitzt, mach vorher jemanden zur Besitzerin oder zum Besitzer, sonst kann dich dort niemand wieder hineinlassen.',
+    gateNotCold:
+      'Dieses Gerät wurde ohne deinen Secret Key entsperrt, deshalb wird er hier abgefragt. Genau diese Prüfung hindert jemanden, der in dein Konto gekommen ist, daran, das mit dir zu tun — dein Notfall-Kit hat die Person nicht.',
+    passwordLabel: 'Dein Passwort',
+    secretKeyLabel: 'Dein Secret Key',
+    secretKeyHint: 'Aus deinem Notfall-Kit.',
+    action: 'Schlüssel ersetzen',
+    confirmTitle: 'Schlüssel wirklich ersetzen?',
+    confirmBody:
+      'Deine Räume bekommen neue Schlösser und alle anderen Geräte werden abgemeldet. Was diese Person schon gesehen hat, bleibt bei ihr. Das lässt sich nicht rückgängig machen.',
+    errorLocked: 'Entsperre auf diesem Gerät zuerst deine Erinnerungen, dann kannst du die Schlüssel ersetzen.',
+    errorCredential: 'Passwort oder Secret Key haben nicht gepasst. Es wurde nichts geändert.',
+    errorNoFloor:
+      'Für dieses Konto gibt es keine Passwort-Anmeldung zum Abgleichen, deshalb lassen sich die Schlüssel hier nicht ersetzen.',
+    errorFailed: 'Deine Schlüssel konnten nicht ersetzt werden. Es wurde nichts geändert — bitte versuche es erneut.',
+    doneNotRepair:
+      'Deine Schlüssel sind ersetzt. Ab jetzt ist das alte Gerät ausgesperrt — was es schon gesehen hat, hat es aber weiterhin.',
+    status: {
+      secured: 'Gesichert',
+      waiting: 'Wartet auf jemand anderen',
+      failed: 'Nicht gesichert',
+    },
+    statusHint: {
+      secured: 'Dieser Raum hat ein neues Schloss, und nur deine neuen Schlüssel öffnen es.',
+      waiting:
+        'Jemand anderes in diesem Raum muss bestätigen, dass du wirklich du bist, bevor du wieder drin bist. Bis dahin bist du draußen, und daran ändert nichts, was du allein tust.',
+      failed: 'Dieser Raum hat noch sein altes Schloss. Versuche das Ersetzen noch einmal.',
+    },
   },
   sessions: {
     title: 'Sitzungen',

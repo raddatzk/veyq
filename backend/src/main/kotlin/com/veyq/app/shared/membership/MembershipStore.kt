@@ -45,4 +45,27 @@ class MembershipStore {
     /** Whether the user holds a grant in this scope (is a key-holder there) — the member-directory gate. */
     fun holdsGrant(userId: String, scopeId: String): Boolean =
         MembershipEntity.count("userId = ?1 and scopeId = ?2 and wrappedGrant is not null", userId, scopeId) > 0
+
+    /**
+     * Every scope this user belongs to, mapped to how many members that scope has (ADR 0060, key rotation).
+     *
+     * The count is what decides **who may re-key** after a rotation, and it is drawn on member count rather
+     * than on scope kind on purpose: a scope with one member has nobody to re-admit the rotator and nobody to
+     * exclude but the rotator's own old identity, so it is self-served — the personal scope is the ordinary
+     * case, and a group nobody else has joined behaves identically. Anything else must be rotated by a
+     * *different* key-holder (ADR 0060 Decision 4).
+     *
+     * A `pendingConsent` proposal is **not** a member: it holds no grant, cannot complete a rotation job, and
+     * is deliberately skipped by grant-delivery until the invitee accepts (ADR 0014 §5). Counting one would
+     * queue a rotation in a scope where nobody can ever claim it, which is a permanent `awaiting access` for
+     * the rotator with no human anywhere who could resolve it.
+     */
+    fun memberCountsByScopeFor(userId: String): Map<String, Long> {
+        val mine = MembershipEntity.find("userId = ?1 and pendingConsent = false", userId).list()
+            .map { it.scopeId }.toSet()
+        if (mine.isEmpty()) return emptyMap()
+        return MembershipEntity.find("scopeId in ?1 and pendingConsent = false", mine).list()
+            .groupingBy { it.scopeId }.eachCount()
+            .mapValues { (_, count) -> count.toLong() }
+    }
 }

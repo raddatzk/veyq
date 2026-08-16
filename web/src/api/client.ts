@@ -16,6 +16,7 @@ import {
   AccountIdentityPinsApi,
   AccountDeviceRegisterApi,
   AccountProfileApi,
+  AccountRotationApi,
   AccountWrapsApi,
   Configuration as AccountConfiguration,
 } from './generated/account'
@@ -90,6 +91,10 @@ export function accountIdentityPinsApi(): AccountIdentityPinsApi {
 
 export function accountDeviceRegisterApi(): AccountDeviceRegisterApi {
   return new AccountDeviceRegisterApi(new AccountConfiguration(bearerParams()))
+}
+
+export function accountRotationApi(): AccountRotationApi {
+  return new AccountRotationApi(new AccountConfiguration(bearerParams()))
 }
 
 export function tenantsApi(): TenantsApi {

@@ -56,11 +56,11 @@ describe('login (uc.account.login)', () => {
     vi.mocked(sessionApi).mockReturnValue({
       logout: () => Promise.resolve(),
     } as unknown as ReturnType<typeof sessionApi>)
-    setUnlocked(new Uint8Array(32).fill(7), {
-      kemX: new Uint8Array(1),
-      mlkemSeed: new Uint8Array(1),
-      sign: new Uint8Array(1),
-    })
+    setUnlocked(
+      new Uint8Array(32).fill(7),
+      { kemX: new Uint8Array(1), mlkemSeed: new Uint8Array(1), sign: new Uint8Array(1) },
+      'cold',
+    )
     expect(isUnlocked()).toBe(true)
 
     await logout()

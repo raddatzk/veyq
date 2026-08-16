@@ -24,9 +24,12 @@
 1. **Entry.** Settings → Personal → security. The screen states, before any button, the three things that
    decide whether the user should be here at all: it ends the compromise but retracts nothing; it signs every
    other device out and takes their saved keys; and it needs the Emergency Kit.
-2. **The cold gate.** The client checks *which* wrap opened this vault. If it was a device wrap or a restored
-   session, it asks for the password + Secret Key here and re-derives the floor KEK — the rotation runs from a
-   cold credential or it does not run (E1).
+2. **The cold gate.** The client asks for the password + Secret Key — on **every** path, cold ones included,
+   because rewriting the two cold wraps needs both as material and no KEK survives the unlock — re-derives the
+   floor KEK, and requires it to open the stored `PASSWORD` wrap to the Master Key already held. That live
+   proof *is* the gate ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2): the
+   rotation runs from a cold credential proven **now**, or it does not run. *Which* wrap opened this vault is
+   read only to say why the Secret Key is being asked for here (E1).
 3. **Mint.** The device generates a fresh Master Key `MK'` and a fresh identity keypair, entirely on-device.
 4. **Re-wrap the account.** `symWrap(MK', identityPriv')` replaces `wrappedIdentityPrivateKey`; the `PASSWORD`
    and `RECOVERY` wraps are rewritten under their existing KEKs; every `DEVICE`, `DEVICE_KEY` and `PASSKEY`
@@ -74,10 +77,12 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **E1 — the vault was opened by a device wrap.** The gate refuses and asks for the password + Secret Key in
-  place. This is the flow's whole security value, so it is never softened into a warning: the attacker this
-  defends against holds a `DEVICE_KEY` wrap and nothing colder, and if they could rotate they would lock the
-  legitimate holder out permanently.
+- **E1 — the vault was opened by a device wrap.** The screen says so and asks for the password + Secret Key in
+  place; the session upgrades by supplying them, it is not sent back to sign in. This is the flow's whole
+  security value, so the demand is never softened into a warning or made skippable: the attacker this defends
+  against holds a `DEVICE_KEY` wrap and nothing colder, so they fail the proof from whichever screen they reach
+  it — and if they could rotate they would lock the legitimate holder out permanently. What the "opened by a
+  device wrap" record buys is the *explanation*, not the refusal.
 - **E2 — no Emergency Kit.** Rotation is impossible, and the screen says so rather than failing halfway. What
   remains is containment: revoke the sessions and remove the saved keys
   ([uc.account.sessions](uc.account.sessions.md), [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md)).

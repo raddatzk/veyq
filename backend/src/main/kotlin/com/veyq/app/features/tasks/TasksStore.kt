@@ -96,7 +96,13 @@ class TasksStore {
         // Claimable candidates (auto-flush picks up the reconciled inserts). Managed entities, but never
         // mutated — we CAS via a bulk update and build the view from known values, so nothing dirties at flush.
         // Exclude jobs this worker has DECLINED (cr-0098): a worker that refused a job (a conflicting identity pin)
-        // must never be re-offered it — but it stays claimable by other workers (per-device, not a global veto).
+        // must never be re-offered it — but it stays claimable by other workers (not a global veto).
+        //
+        // `?6` is the **userId**, so the exclusion is per KEY-HOLDER, not per device: a second browser of the
+        // same account is excluded too. That is the correct reading of a decline (the refusal was a decision
+        // about an identity, not about a browser), and ADR 0060 Decision 4 now rests on it — the rotation
+        // exclusion is a decline row for the rotator, and a per-device exclusion would let them claim their own
+        // rotation from any other tab.
         val candidates = JobEntity.find(
             "scopeId in ?1 and capabilityTag in ?2 and attempts < maxAttempts and " +
                 "(status = ?3 or (status = ?4 and leaseExpiresAt < ?5)) and " +
@@ -207,8 +213,14 @@ class TasksStore {
      * [claim]'s candidate query). Unlike [fail], the claim's attempt increment is **rolled back** (`attempts - 1`),
      * so a legitimately-declined job is never dead-lettered by declines alone. Only the lease-holder may decline
      * (`and leaseHolder = ?`), else [DeclineResult.NotHolder] → 409. The job must be in a scope the caller holds a
-     * grant in, else [DeclineResult.NotFound] → 404. Per-device, not a global veto: the blind server never
-     * adjudicates the crypto claim, it only removes this worker from the candidate set.
+     * grant in, else [DeclineResult.NotFound] → 404. Per **key-holder**, not a global veto: `workerId` is the
+     * user id, so the decliner's other devices are excluded too — the refusal was a decision about an identity,
+     * not about a browser — while a different key-holder still delivers. The blind server never adjudicates the
+     * crypto claim, it only removes this worker from the candidate set.
+     *
+     * (The `V30__job_decline.sql` comment still says *per-device*. It is left alone deliberately: Flyway
+     * validates the checksum of an applied migration, so editing even a comment there fails startup on every
+     * instance that already ran it. This KDoc and [JobDeclineEntity] are the live home of the rule.)
      */
     @Transactional
     fun decline(userId: String, jobId: String, reason: String?): DeclineResult {
@@ -291,6 +303,88 @@ class TasksStore {
         return true
     }
 
+    /**
+     * Originate a scope rotation the originator must **not** complete — key rotation after a compromise
+     * (ADR 0060 Decision 4, uc.account.rotate-keys §7).
+     *
+     * The exclusion rides on the **existing** decline mechanism rather than on a new column: a
+     * `(job, worker)` row is already exactly "this worker may not claim this job", and it is already what
+     * [claim]'s candidate query filters on. Written at origination instead of after a refusal, which is the
+     * only thing new here.
+     *
+     * **The decline is written whether or not this call created the job**, and that is the part a coalescing
+     * origination gets wrong by default: a scope that already carries a live rotation (a removal cut moments
+     * earlier) must still exclude the rotator from *that* job — otherwise the rotation this account triggered
+     * is completable by the very account it is meant to lock out. So the row is found-or-created and the
+     * exclusion is unconditional; the return value reports only whether the job itself is new.
+     *
+     * **Its bound, stated rather than engineered around:** the exclusion binds this job. If the job
+     * dead-letters and a later removal originates a fresh one, the rotator is not excluded from *that* job.
+     * They also could not perform it — after the rotation their grant is sealed to an identity they no longer
+     * hold a private key for — so the residue is a claim that fails, not a re-admission. The exclusion matters
+     * in the minutes right after rotating, when the old identity key is still in the rotator's memory, and
+     * there it is exact.
+     */
+    @Transactional
+    fun originateScopeRotationExcluding(scopeId: String, excludedWorkerId: String, maxAttempts: Int): Boolean {
+        val live = JobEntity.find(
+            "scopeId = ?1 and capabilityTag = ?2 and status in ?3",
+            scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
+        ).firstResult()
+
+        val jobId = live?.id ?: UUID.randomUUID().toString().also { fresh ->
+            JobEntity().apply {
+                id = fresh
+                this.scopeId = scopeId
+                capabilityTag = CapabilityTags.SCOPE_ROTATION
+                resourceRef = scopeId
+                status = JobEntity.PENDING
+                attempts = 0
+                this.maxAttempts = maxAttempts
+                createdAt = Instant.now()
+            }.persist()
+        }
+
+        if (JobDeclineEntity.count("jobId = ?1 and workerId = ?2", jobId, excludedWorkerId) == 0L) {
+            JobDeclineEntity().apply {
+                id = UUID.randomUUID().toString()
+                this.jobId = jobId
+                this.workerId = excludedWorkerId
+                reason = ROTATION_ORIGINATOR
+                declinedAt = Instant.now()
+            }.persist()
+        }
+        return live == null
+    }
+
+    /**
+     * Drop the caller's own declines against a contact whose changed identity key they just accepted
+     * (ADR 0028 (2), ADR 0060 Decision 7).
+     *
+     * Nothing expires a decline, which is right while a key conflict is unresolved and wrong the moment a human
+     * resolves it: without this, the accept authorises a wrap that nothing performs, and a rotated account is
+     * stranded outside every scope whose deliverer had already declined.
+     *
+     * **Narrow in three ways, each load-bearing.** Only the caller's own rows (`workerId = ?1`) — the accept was
+     * one human's decision on one client, and a blind server must not generalise it to a key-holder who has not
+     * looked. Only jobs targeting `targetUserId` — a decline about a different contact is not resolved by this
+     * accept. And only `grant-delivery` jobs, which is what keeps this away from the rotation exclusion above:
+     * a `scope-rotation` job's `resourceRef` is a **scopeId** and it has no delivery target at all, so no
+     * membership id can ever resolve to one. That invariant holds by the shape of this query rather than by a
+     * special case inside it — which is why the tag filter is written even though the membership-id join would
+     * already imply it.
+     */
+    @Transactional
+    fun clearDeclinesForTarget(workerId: String, targetUserId: String): Int {
+        val membershipIds = MembershipEntity.find("userId = ?1", targetUserId).list().map { it.id }
+        if (membershipIds.isEmpty()) return 0
+        val jobIds = JobEntity.find(
+            "capabilityTag = ?1 and resourceRef in ?2", CapabilityTags.GRANT_DELIVERY, membershipIds,
+        ).list().map { it.id }
+        if (jobIds.isEmpty()) return 0
+        return JobDeclineEntity.delete("workerId = ?1 and jobId in ?2", workerId, jobIds).toInt()
+    }
+
     // --- grant-delivery structural origination + dead-letter sweep -------------------------------------------
 
     /**
@@ -354,5 +448,11 @@ class TasksStore {
         val m = membershipId?.let { MembershipEntity.findById(it) } ?: return null
         val user = VeyqUser.findById(m.userId) ?: return null
         return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey)
+    }
+
+    private companion object {
+        /** The `reason` on a decline written at origination rather than after a refusal — greppable, and it is
+         *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. */
+        private const val ROTATION_ORIGINATOR = "rotation_originator"
     }
 }

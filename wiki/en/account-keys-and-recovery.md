@@ -71,6 +71,40 @@ Two honest details. The server never learns your device names: those are stored 
 after you unlock, so on a locked screen you'll see dates instead of names. And none of this reaches into the
 lost device itself — what it takes away is what the server was keeping for it.
 
+## If someone got into your account
+
+Sometimes signing a device out is not enough — because it never was the whole story. Say you approved a
+sign-in code that wasn't really your own new phone. That device holds the keys to your memories, and no
+amount of signing it out takes them back.
+
+**Replacing your keys is what ends that.** You'll find it under Settings → Personal → Security. Your spaces
+get new locks, the old device is shut out of everything from that moment on, and every other device has to
+sign in again.
+
+Read these four before you start. They are the whole picture, and none of them is small print.
+
+**It stops what comes next — it can't take back what's gone.** Anything that person already saw, they still
+have. There is no version of this that reaches into their device and deletes what they read. What it does is
+draw a line: from here on, nothing new.
+
+**Every other device signs out and loses its saved key.** Each one needs your password again, and a device
+that only ever had a saved key — one you added by scanning a code — will need your Emergency Kit. Do this
+when you are somewhere you can get to your kit, not on the way out the door.
+
+**You need your Emergency Kit, and that is the point.** It's the one thing the other person doesn't have.
+Without that requirement, *they* could replace the keys first and lock *you* out permanently — which would
+make this feature worse than not having it at all. So the check isn't friction; it's the whole defence.
+
+**Shared spaces need someone else to let you back in.** Your new keys look, to everyone who knows you, like
+a stranger claiming to be you — which is exactly what the app is supposed to notice. Someone else in each
+shared space confirms it's really you, best by comparing the security number over a call, and only then are
+you back in. Until they do, you're outside that space, and nothing you do alone changes it.
+
+One thing worth setting up *before* you ever need this: **in a space only you own, make someone else an owner
+too.** Otherwise there is nobody there who can let you back in.
+
+Your Emergency Kit keeps working afterwards — your secret key doesn't change, only what it opens.
+
 ## What the server actually stores
 
 Only the **locked** copies of your master key — never anything that opens them. The thing that unlocks a

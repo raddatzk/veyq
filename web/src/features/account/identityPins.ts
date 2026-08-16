@@ -10,7 +10,7 @@
 // account across tenants (ADR 0023), so there is one pin per contact everywhere.
 import * as v1 from '../../shared/crypto/v1'
 import { b64std, fromB64std } from '../../shared/base64'
-import { accountIdentityPinsApi } from '../../api/client'
+import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { withRefresh } from './login/login'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
@@ -165,6 +165,18 @@ export async function checkAndPin(userId: string, identityPublicKeyB64: string):
  * Accept a **changed** key for a contact (ADR 0028 human path): re-pin `userId := new key`, preserving the
  * original `firstSeenAt`. Drops back to `state: pinned` (the `verified` elevation via the QR safety-number compare
  * is the follow-up CR). Overwrites unconditionally — the human explicitly accepted this key.
+ *
+ * **Two writes, because a re-pin alone does not deliver anything.** A worker that declined `identity_changed`
+ * is excluded from that job permanently — nothing expires a decline — so before ADR 0060 Decision 7 the accept
+ * authorised a wrap that nothing then performed. That is uc.account.rotate-keys §E6, the failure mode that
+ * strands a rotated account outside the scopes it was rotating to rejoin. Clearing this worker's own declines
+ * against this contact is what makes ADR 0028 (2)'s *"the wrap then proceeds"* true; delivery is re-driven by
+ * the ordinary next claim.
+ *
+ * The clear's failure is **not** swallowed, and that is deliberate: silently dropping it would re-create the
+ * exact stranding this exists to end. Re-accepting is idempotent — the re-pin overwrites unconditionally and
+ * the clear deletes nothing the second time — so a caller that reports the error and lets the human retry ends
+ * up in the right state, whereas one that reports success cannot.
  */
 export async function acceptKeyChange(userId: string, identityPublicKeyB64: string): Promise<void> {
   const store = await loadStore()
@@ -172,6 +184,36 @@ export async function acceptKeyChange(userId: string, identityPublicKeyB64: stri
     const prior = pins[userId]
     pins[userId] = { key: identityPublicKeyB64, state: 'pinned', firstSeenAt: prior?.firstSeenAt ?? Date.now() }
   })
+  await withRefresh(() =>
+    tasksApi().clearDeclinesForAcceptedKey({ clearDeclinesRequest: { targetUserId: userId } }),
+  )
+}
+
+/**
+ * Re-seal the pin store from the **old** Master Key to a **new** one — key rotation (ADR 0060, step 4).
+ *
+ * It takes both keys explicitly instead of reading the vault, and that is the whole reason it exists: during a
+ * rotation the vault still holds the *old* Master Key (it must — the sole-member scope re-key that follows opens
+ * grants with the old identity), so every other function in this file would seal under exactly the key the
+ * rotation is retiring.
+ *
+ * **Best-effort by design, and the failure is a degradation rather than a lockout.** An unreadable blob already
+ * degrades to an empty store ({@link unsealPins} swallows), so a re-seal that never lands costs the pins, not
+ * the account: every contact falls back to `unpinned` and is re-pinned on first use. That is why the rotation
+ * runs this *after* the irreversible publish — a re-seal before it would, on a failed publish, have thrown the
+ * pins away for a rotation that never happened.
+ *
+ * The pins themselves are carried across verbatim: rotating **this** account's identity says nothing about
+ * anybody else's key, so dropping them would manufacture a `changed` for every contact at once.
+ */
+export async function resealPinsUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
+  const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
+  const pins = unsealPins(oldMk, res.blob)
+  await withRefresh(() =>
+    accountIdentityPinsApi().putIdentityPins({
+      identityPinsUpdate: { blob: sealPins(newMk, pins), version: res.version },
+    }),
+  )
 }
 
 /** Read a contact's current pin (or null), for a UI surface that shows trust state. No write. */

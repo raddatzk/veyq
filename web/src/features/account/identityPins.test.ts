@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // The pin store's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so the tests
 // prove a genuine round-trip and the version-guarded union-merge, not a stub.
-vi.mock('../../api/client', () => ({ accountIdentityPinsApi: vi.fn() }))
+vi.mock('../../api/client', () => ({ accountIdentityPinsApi: vi.fn(), tasksApi: vi.fn() }))
 vi.mock('./login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn() }))
 
@@ -18,7 +18,7 @@ import {
   IdentityMovedError,
   IDENTITY_PINS,
 } from './identityPins'
-import { accountIdentityPinsApi } from '../../api/client'
+import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { masterKey, identityPrivate } from '../../app/vault'
 import * as v1 from '../../shared/crypto/v1'
 import { b64std, fromB64std } from '../../shared/base64'
@@ -57,9 +57,19 @@ function fakeServer(initial: { blob: string | null; version: number } = { blob: 
   return { state, getIdentityPins, putIdentityPins, stale }
 }
 
+/** The decline-clearing an accept drives (ADR 0060 Decision 7) — installed per test so each can read its calls. */
+function fakeDeclines() {
+  const clearDeclinesForAcceptedKey = vi.fn(async () => ({ cleared: 1 }))
+  vi.mocked(tasksApi).mockReturnValue(
+    { clearDeclinesForAcceptedKey } as unknown as ReturnType<typeof tasksApi>,
+  )
+  return clearDeclinesForAcceptedKey
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  fakeDeclines()
 })
 
 describe('checkAndPin (TOFU)', () => {
@@ -134,6 +144,30 @@ describe('acceptKeyChange (human accept → re-pin)', () => {
     expect(pins.u1.firstSeenAt).toBe(42) // preserved across the re-pin
     expect((await getPin('u1'))?.key).toBe('bmV3LWtleQ==')
     expect(await checkAndPin('u1', 'bmV3LWtleQ==')).toBe('match') // the changed key now trusted
+  })
+
+  it('clears this worker\u2019s declines against that contact, so the accept actually delivers', async () => {
+    // ADR 0028 (2) promised the wrap proceeds on accept and nothing made it true: a decline is permanent, so
+    // the re-pin alone authorises a wrap that never happens (uc.account.rotate-keys \u00a7E6 \u2014 the failure mode that
+    // strands a rotated account). The re-pin is only half of an accept.
+    const clear = fakeDeclines()
+    fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }), version: 1 })
+
+    await acceptKeyChange('u1', 'bmV3LWtleQ==')
+
+    expect(clear).toHaveBeenCalledWith({ clearDeclinesRequest: { targetUserId: 'u1' } })
+  })
+
+  it('surfaces a failed clear instead of reporting an accept that delivers nothing', async () => {
+    // Swallowing it would re-create the exact stranding above, and report success while doing so. Re-accepting
+    // is idempotent, so a caller that raises the error ends up in the right state; one that hides it cannot.
+    const clear = fakeDeclines()
+    clear.mockRejectedValueOnce(new Error('offline'))
+    const srv = fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }), version: 1 })
+
+    await expect(acceptKeyChange('u1', 'bmV3LWtleQ==')).rejects.toThrow()
+    // The re-pin itself landed \u2014 which is why a retry is safe rather than a second, conflicting write.
+    expect(unsealPins(srv.state.blob!).u1.key).toBe('bmV3LWtleQ==')
   })
 })
 

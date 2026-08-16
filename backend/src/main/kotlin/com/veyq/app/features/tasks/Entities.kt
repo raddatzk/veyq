@@ -75,7 +75,9 @@ class JobEntity : PanacheEntityBase {
  * A per-worker decline of a job (cr-0098, ADR 0028 §Consequences). Recorded when a grant-delivery worker refuses
  * a job because it holds a DIFFERENT pin for the target's identity key: it releases the claim back to PENDING (the
  * job stays claimable by OTHER workers) and writes this row so the claim/reconcile machinery never re-offers THIS
- * job to THIS worker again. Per-device, not a global veto — the blind server never adjudicates the crypto claim.
+ * job to THIS worker again. `workerId` is the **user** id, so the exclusion is per key-holder (the decliner's
+ * other devices are excluded too) and not a global veto — the blind server never adjudicates the crypto claim.
+ * ADR 0060 Decision 4 rests on that granularity: a rotation exclusion is a row here for the rotator.
  * Operational metadata only (no key, no trust graph); surrogate id + a unique (job, worker) index.
  */
 @Entity
