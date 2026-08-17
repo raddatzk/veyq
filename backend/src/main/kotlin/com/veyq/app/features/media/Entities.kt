@@ -11,7 +11,13 @@ import java.time.Instant
 /**
  * An OPEN upload session (cr-0028): opened by `start` (which presigns a PUT per chunk under `storageKey`),
  * consumed by `complete` (stat + attach). Operator-blind: `wrappedBlobKey` is opaque ciphertext; `storageKey`
- * is a random object-key prefix. Abandoned sessions are reclaimed by GC (a later slice).
+ * is a random object-key prefix. There is no status column: a row exists ⇒ the session is OPEN.
+ *
+ * This row is the **only** pointer to its `storage_key`, so nothing else can find the chunks a client staged
+ * under it — reclaiming it and reclaiming those objects is one job, and it is [UploadSessionPurge]'s
+ * (`veyq.media.upload.retention`). `V11__media.sql`'s "a later slice" note is a historical artifact of the
+ * migration that created this table; Flyway checksums applied migrations, so it is left alone and this KDoc is
+ * the live statement of the rule.
  */
 @Entity
 @Table(name = "veyq_upload_session")

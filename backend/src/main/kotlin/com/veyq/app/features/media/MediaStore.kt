@@ -289,6 +289,24 @@ class MediaStore(private val membership: MembershipStore) {
         return expired.flatMap { purgeMediaRows(it) }
     }
 
+    /**
+     * Hard-delete every OPEN upload session created before [cutoff], across all scopes, and return the chunk
+     * keys its client may already have staged in the object store (uc.memory.upload E2 / en.memory.media E3).
+     * The row is the **only** pointer to its `storage_key`, so dropping it without the keys orphans those
+     * objects permanently — the caller must purge them (best-effort, after this tx commits). Two sources feed
+     * this: an upload cancelled or killed mid-flight, and a session the `complete` budget gate rejected
+     * ([MediaHandler] purges that one's objects but leaves the row). Keys are enumerated for the full declared
+     * `chunk_count`; an abandoned session has an unknown number of them actually present, so the store delete
+     * must tolerate absent keys — as the budget path already does.
+     */
+    @Transactional
+    fun purgeSessionsStartedBefore(cutoff: Instant): List<String> {
+        val stale = UploadSessionEntity.find("createdAt < ?1", cutoff).list()
+        val reclaimKeys = stale.flatMap { s -> (0 until s.chunkCount).map { chunkKey(s.storageKey, it) } }
+        stale.forEach { UploadSessionEntity.deleteById(it.id) }
+        return reclaimKeys
+    }
+
     /** Map a media entity to its read-back row, resolving the original + derivative blobs; null when the original blob is missing. */
     private fun toRow(m: MediaEntity): MediaRow? {
         val blob = BlobEntity.findById(m.blobId) ?: return null

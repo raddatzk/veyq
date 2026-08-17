@@ -1,6 +1,10 @@
 package com.veyq.app.features.media
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.shared.blobstore.BlobStore
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.RecordingBlobStore
+import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -26,7 +30,8 @@ import java.util.UUID
  * MediaTrashPurge job hard-deletes past the retention window. Reuses the cr-0107 delete_revision reconcile
  * (a trash bumps BOTH counters + drops the id from the id-set) and the cr-0102 blob-reclaim (the purge). Covers:
  * trash hides + reconciles; restore brings it back; the state=trashed listing carries deletedAt/deletedBy;
- * idempotency; unknown/non-member 404; the retention purge hard-deletes rows. In-memory store (metadata only).
+ * idempotency; unknown/non-member 404; the retention purge hard-deletes rows AND hands their chunk keys to
+ * the store (via the RecordingBlobStore seam — the in-memory store's delete is a no-op that proves nothing).
  */
 @QuarkusTest
 class MediaTrashSliceTest {
@@ -36,6 +41,15 @@ class MediaTrashSliceTest {
 
     @Inject
     lateinit var store: MediaStore
+
+    @Inject
+    lateinit var trashPurge: MediaTrashPurge
+
+    @Inject
+    lateinit var blobStore: BlobStore
+
+    @Inject
+    lateinit var config: VeyqConfig
 
     private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
@@ -182,6 +196,39 @@ class MediaTrashSliceTest {
         }
         assertNull(goneB)
         assert(liveA != null) { "a live media must not be purged" }
+    }
+
+    /**
+     * The **store half** of the retention purge, which nothing asserted before cr-abandoned-upload-session-reclaim:
+     * `purgeHardDeletesTrashedPastRetention` above calls the store method directly, so it proves the reclaim keys
+     * were *computed* and never that they reached the object store — the failure the invariant is actually about
+     * (a row-only delete orphans the bytes permanently). This drives the real `@Scheduled` [MediaTrashPurge] and
+     * reads what the store was handed off the [RecordingBlobStore] seam.
+     */
+    @Test
+    fun retentionPurgeHandsTheTrashedMediasChunkKeysToTheStore() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val b = completeOne(userId, scopeId, memory, wrap = "Yg==")
+
+        given().header("Authorization", token(userId)).`when`().delete("/api/scopes/$scopeId/media/$b").then().statusCode(204)
+
+        // backdate past the configured retention so the job's own cutoff (not a hand-passed one) selects it
+        val storageKey = QuarkusTransaction.requiringNew().call {
+            val media = MediaEntity.findById(b)!!
+            media.deletedAt = Instant.now().minus(config.media().trash().retention()).minusSeconds(60)
+            media.persist()
+            BlobEntity.findById(media.blobId)!!.storageKey
+        }
+
+        val recorder = blobStore as RecordingBlobStore
+        recorder.reset()
+        trashPurge.run()
+
+        assertNull(QuarkusTransaction.requiringNew().call { MediaEntity.findById(b) })
+        assert(chunkKey(storageKey, 0) in recorder.deletedKeys) {
+            "the trash purge must hand the reclaimed chunk keys to the store; handed: ${recorder.deletedKeys}"
+        }
     }
 
     @Test

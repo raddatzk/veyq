@@ -280,7 +280,11 @@ class MediaHandler(
         return BlobVerify.Ok(sizes.filterNotNull())
     }
 
-    /** Best-effort purge of every chunk object staged for the item's sessions (after a budget failure). */
+    /**
+     * Best-effort purge of every chunk object staged for the item's sessions (after a budget failure). Objects
+     * only — the sessions' **rows** are deliberately left standing here rather than deleted inline, and
+     * [UploadSessionPurge] reclaims them on the same age predicate as a genuinely abandoned upload.
+     */
     private fun purge(sessions: List<UploadSessionEntity>) {
         if (!blobStore.canPresign) return
         blobStore.delete(sessions.flatMap { s -> (0 until s.chunkCount).map { chunkKey(s.storageKey, it) } })

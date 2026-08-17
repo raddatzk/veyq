@@ -155,10 +155,24 @@ interface VeyqConfig {
 
     interface Media {
         fun trash(): Trash
+        fun upload(): Upload
 
         interface Trash {
             /** Trashed-media restorable window before the hard purge. */
             @WithDefault("P30D")
+            fun retention(): Duration
+
+            fun purge(): Interval
+        }
+
+        interface Upload {
+            /** How long an OPEN upload session is kept before the sweep reclaims its row + staged chunk objects.
+             *  Deliberately far shorter than the trash/scope/invite windows, and the floor is **measured, not
+             *  chosen**: a session's presigned PUTs are signed once at `start` under
+             *  `veyq.blob-store.presign-ttl-seconds` and nothing re-signs them, so no client can write another
+             *  byte past that TTL. What this buffers is only a PUT that started inside the TTL and is still
+             *  streaming — one 256 KiB web chunk. */
+            @WithDefault("PT1H")
             fun retention(): Duration
 
             fun purge(): Interval
