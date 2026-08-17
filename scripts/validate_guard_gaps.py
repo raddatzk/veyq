@@ -20,9 +20,10 @@ The coupling is the point: if someone tightens a validator to close a gap, the d
 happens the fix is *not* to relax this guard blindly: confirm the gap really closed, then move the skill's map
 and this table together.
 
-Scope — nine file-based cases: four the guard must **reject** (a closed hole, pinned so it can't silently
-re-open) and five still-**open** gaps (the limit is documented, not yet closed). Two further documented gaps
-stay out on purpose (below).
+Scope — file-based cases only, each either one the guard must **reject** (a closed hole, pinned so it can't
+silently re-open) or a still-**open** gap (the limit is documented, not yet closed). `CASES` below is the
+list and the only place the tally lives: a count restated here rots, and did — it said "nine" while eleven
+ran. Two further documented gaps stay out on purpose (below).
 
 Rejected — regression-pins for closed holes (a forgery the guard must now catch):
   1  a web coverage ref at a *non-test* file — closed: a web ref must exist AND match *.test|*.spec, so a real
@@ -33,6 +34,14 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   7  a base64 field's `maxLength` pushed above 65 532 (more than a `TEXT` column holds) on a non-allowlisted
      field — rejected: `validate_maxlength_storage` ties every base64 cap to its storage, so the #94 class
      (a cap larger than its column) can't silently re-enter
+  11 the app's config-secret volume removed from the production compose file — rejected:
+     `validate_config_secret_persistence` pins the mount, so the KEK cannot silently stop surviving a
+     container recreate (the hole ADR 0056 § Consequences surfaced)
+  12 a fourth column referencing `veyq_blob`, declared in Kotlin and in a migration with its own foreign key —
+     rejected: `validate_blob_reference_arity` pins the three arms by name, so an arm added without teaching
+     the predicates that enumerate them cannot land quietly. It is the one case here whose cost is *user
+     data*: a reclaim predicate short by one arm deletes live content, and the arm it would miss
+     (`veyq_node.cover_blob_id`) is the one with no foreign key to refuse
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false*: `uc.spaces.verify-identity` is legitimately `planned` yet carries
@@ -107,6 +116,11 @@ FREETEXT_CAP_ANCHOR = ("contracts/api/_common.openapi.yaml", "maxLength: 20000",
 # surfaced and cr-instance-backup-and-restore closed. Removing it is the whole forgery.
 PROD_COMPOSE = "infra/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
+# Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
+# and it is one of the entities the delete paths already touch.
+SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/features/spaces/scope/Entities.kt"
+SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
+BANNER_MIGRATION = "backend/src/main/resources/db/migration/V99__guard_gap_scope_banner.sql"
 
 
 def _sub(text: str, old: str, new: str) -> str:
@@ -239,6 +253,29 @@ def forge_scoped_policy_gains_unlisted_dependency(root: pathlib.Path) -> str:
     return "a mutated policy depending on a file in no `paths:` filter (the transitive-dependency open gap)"
 
 
+def forge_fourth_blob_reference_arm(root: pathlib.Path) -> str:
+    # A fourth place referencing veyq_blob, declared the way a real one would be: a Kotlin @Column plus the
+    # migration that adds the column and its foreign key. It is deliberately spelled the way the NAIVE locators
+    # miss — the column name is not the annotation's first argument, and `references` is lowercase — because
+    # that pair reports an unchanged 3 and 2 on exactly this forgery, which is the reason the arity guard
+    # exists at all. Two files, so the entity key and the schema/backstop keys each see it independently.
+    entity = root / SCOPE_ENTITY
+    src = entity.read_text()
+    entity.write_text(_sub(src, SCOPE_ENTITY_ANCHOR, SCOPE_ENTITY_ANCHOR + textwrap.dedent("""\
+
+            /** A guard-gap probe: a fourth arm referencing veyq_blob. */
+            @Column(length = 36, name="banner_blob_id")
+            var bannerBlobId: String? = null
+        """)))
+    (root / BANNER_MIGRATION).write_text(textwrap.dedent("""\
+        -- A guard-gap probe: the SQL half of a fourth arm referencing veyq_blob.
+        ALTER TABLE veyq_scope ADD COLUMN banner_blob_id VARCHAR(36) NULL;
+        ALTER TABLE veyq_scope ADD CONSTRAINT fk_scope_banner_blob
+            FOREIGN KEY (banner_blob_id) references veyq_blob (id);
+        """))
+    return "a fourth column referencing veyq_blob, in Kotlin and SQL (must be REJECTED — consumers are now short an arm)"
+
+
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     f = root / PROD_COMPOSE
     if not f.is_file():
@@ -260,6 +297,7 @@ CASES = [
     ("9",  "validate_ratelimit_core.py",    forge_ratelimit_state_under_another_name, True),
     ("10", "validate_mutation_trigger_paths.py", forge_scoped_policy_gains_unlisted_dependency, True),
     ("11", "validate_config_secret_persistence.py", forge_unmounted_config_secret, False),
+    ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
 ]
 
 

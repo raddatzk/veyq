@@ -143,7 +143,7 @@ value in the same `@Transactional` before reassigning, so the update path orphan
       deleting the `coverBlobId` arm from `subtreeBlobIds` turns it red naming that function — two bites,
       because the guard now makes two claims that fail independently.
 
-- [ ] **3 scripts** — promote that injection into `scripts/validate_guard_gaps.py` as a rejected-case pin, so
+- [x] **3 scripts** — promote that injection into `scripts/validate_guard_gaps.py` as a rejected-case pin, so
       the guard's bite is re-run on every trust-chain run rather than remembered from this CR. The harness
       already has the exact shape (copy tree → forge → run → discard); the injection is the one bitten above.
       **Lever checked against the mechanism** (`changes/README.md` § *first check the lever is wired*): a forgery
