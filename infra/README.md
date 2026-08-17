@@ -103,12 +103,8 @@ service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` password
 
 ```sh
 cp infra/.env.example infra/.env          # then fill in every value (it is gitignored)
-docker compose -p veyq -f infra/docker-compose.prod.yml up -d
+docker compose -f infra/docker-compose.prod.yml up -d
 ```
-
-**Always name the project (`-p veyq`).** Compose otherwise derives it from the compose file's *directory*, which
-both files share — so an unqualified `down -v` meant for the dev stack would destroy the production volumes. With
-the project named, `docker volume ls` shows `infra_*` and `veyq_*` side by side and the two never touch.
 
 **Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
 rather than starting an instance on a password that is printed in this repository.
@@ -198,8 +194,9 @@ python3 scripts/instance_backup.py verify infra/backups/<stamp>
 # 5. Start the application again. The downtime was the capture, and nothing else.
 ```
 
-`--docker-network` is the network the pinned `rclone` container joins; for the bundled stack it is
-`infra_default` (the project name comes from the compose file's **directory**). List them with
+`--docker-network` is the network the pinned `rclone` container joins; it is `<project>_default`, so for the
+**dev** stack above it is `infra_default` — that file declares no project, so Compose derives one from its
+directory. The production file declares `name: veyq`, so there it is `veyq_default`. List them with
 `docker network ls`. An operator with their own `rclone` install can pass `--rclone-binary rclone` instead, and
 one whose database is not this compose service passes `--db-host`/`--db-port` (the client then runs from `PATH`
 if installed, else in the pinned `mariadb:11.4` image on `--docker-network`).

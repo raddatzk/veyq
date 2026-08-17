@@ -98,8 +98,10 @@ WEB = REPO / "web"
 COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
 COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE), "--profile", "s3", "--profile", "mail"]
 # The network a group's capture/restore containers join to reach the store by its INTERNAL name. Compose derives
-# a project name from the compose file's DIRECTORY, so this is `infra_default` — derived rather than hardcoded,
-# because the derivation is the rule and the string is only today's answer to it.
+# a project name from the compose file's DIRECTORY unless the file declares one, and this one deliberately does
+# not (a `name:` here would change the real network while this derivation kept naming the old one) — so this is
+# `infra_default`, derived rather than hardcoded, because the derivation is the rule and the string is only
+# today's answer to it.
 DOCKER_NETWORK = f"{COMPOSE_FILE.parent.name}_default"
 
 # The production stack is a SECOND compose project on the same host, and the line above is exactly why that is a

@@ -1,13 +1,7 @@
 # Production stack for a self-hosted veyq instance: the app, its database, the bundled object store, and a
 # Traefik that terminates TLS in front of both. See infra/README.md § Running in production.
 #
-# ALWAYS run it with an explicit project name:
-#
-#     docker compose -p veyq -f infra/docker-compose.prod.yml up -d
-#
-# The project name otherwise comes from this file's DIRECTORY, which both compose files share — so an
-# unqualified `down -v` on the dev stack would destroy the production volumes. Naming the project is what keeps
-# `infra_*` (dev) and `veyq_*` (prod) apart on one host.
+#     docker compose -f infra/docker-compose.prod.yml up -d
 #
 # It is a STANDALONE file, deliberately not an override of docker-compose.yml. That file has no app service at
 # all (the backend is run from the IDE), publishes 3306/19000/18080, and ships `change-me` passwords — an
@@ -17,6 +11,15 @@
 # Every secret is REQUIRED and has no default: `${VAR:?…}` fails the `up` when it is unset. A prod stack that
 # boots with `change-me` is worse than one that refuses to boot. Copy infra/.env.example to infra/.env
 # (gitignored) and fill it in.
+
+# The project name is a property of THIS FILE — not of the directory it is run from, and not of a flag an
+# operator has to remember on every command. Without it Compose derives the project from the file's directory,
+# which both compose files share, and two things follow that no amount of prose prevents: an unqualified
+# `down -v` meant for the dev stack destroys the production volumes, and `scripts/instance_backup.py` — whose
+# `docker compose … exec` emits no `-p` — aims the documented production capture at whatever happens to be
+# running out of `infra/`, backing up the wrong instance and reporting success. Naming it here is what keeps
+# `infra_*` (dev) and `veyq_*` (prod) apart on one host. `scripts/validate_release_identity.py` holds it.
+name: veyq
 
 services:
   mariadb:
