@@ -387,6 +387,18 @@ run it once on the untouched tree, *then* write the sentence, *then* bite it. An
 reached for first, put it in the guard's docstring under its **limit** — the next reader will reach for the same
 easy shape, and "we tried that, here is why it cannot work" is the only thing that stops them.
 
+### A guard that scans for a literal must not spell that literal in its own documentation
+
+**Its own file is part of what it scans.** `validate_release_identity.py` gained an assertion that no file of
+durable state instructs a retired compose flag, and its first run on a healthy tree came back red naming *itself*
+— twice, in the docstring paragraph explaining the flag and in the comment above the regex. The repair that
+suggests itself is the wrong one: excluding the guard's own file puts a hole in exactly the place a future
+instruction could hide, and it is invisible from the outside because the guard still reports green. Describe the
+literal instead of writing it, and build the pattern from the value the guard already read (`re.escape(name)`)
+rather than typing it, so the code cannot become a copy of what it forbids. The general form: **whenever a
+predicate's subject is text, ask whether the predicate's own source is in its corpus** — the answer is yes for
+every `scripts/` guard, because `git ls-files` and an `rglob` over the repo both return it.
+
 ### Bite-proof a guard by snapshot-and-restore, never `git checkout`
 
 To prove a new test bites, revert the

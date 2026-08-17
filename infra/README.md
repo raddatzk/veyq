@@ -130,27 +130,19 @@ Two things worth knowing rather than discovering:
   docker provider is not project-aware: unconstrained, it discovers *every* container on the host — which both
   exposes whatever else the machine runs and, with two veyq stacks side by side, collides on the router name and
   makes Traefik drop the router for both.
-- **Upgrading** means changing `VEYQ_IMAGE` and running `up -d`. The schema migrates at boot with no gate and
-  there is no downgrade path, so **take a backup first** (§ Backup & restore) — restoring it is the only way back.
-  **Name the version you are coming from before you leave it.** A release is `<major>.<minor>`, and a publish
-  onto an existing tag fails rather than replacing it ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)),
-  so that tag names one fixed set of bits for good — which is what makes it a rollback target rather than a
-  label. Read the running one as the Server Owner under **Settings → Server → Release**; the capture writes it
-  into `manifest.json` as `app.version` beside the schema version, so the way back is *restore that backup and
-  pin `VEYQ_IMAGE` to the release the manifest names*. A manifest that records no release is still a valid
-  backup — it just cannot tell you which image to start it under, and it says so rather than implying one.
+- **Upgrading is a procedure, not a flag change.** It has its own section — § *An upgrade, step by step* — and
+  the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
 - **The compose file and the env template ride inside the image.** Every published image carries the recipe it
   was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
-  describes, and it inherits the image's cosign signature instead of needing a second trust decision:
+  describes, and it inherits the image's cosign signature instead of needing a second trust decision. Read one
+  out of an image without running it:
 
   ```sh
   docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/docker-compose.prod.yml
-  docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/.env.example
   ```
 
-  Diff those against your copies before an upgrade — a version that adds a service or a required variable has
-  no other delivery path to you. (Note the current limit: the recipe is the two files, so the store's
-  `garage.toml` / `garage-init.sh` still come from this repository.)
+  (Note the current limit: the recipe is those two files, so the store's `garage.toml` / `garage-init.sh` still
+  come from this repository.)
 
 ## Backup & restore
 
@@ -265,11 +257,92 @@ default writes snapshots **inside** `metadata_dir` — i.e. into the very volume
 snapshot grows the thing being snapshotted. An instance created before that setting still carries the old
 snapshots under `meta/snapshots/`; they are safe to delete once.
 
-### An upgrade begins with a backup
+### An upgrade, step by step
 
-The schema migrates at boot with no operator gate and the migration set carries no downgrade path, so returning
-to the previous image means restoring a backup (ADR 0056 §6). Take one **before** you pull a new tag. There is no
-upgrade runbook yet; this section is its precondition, not its substitute.
+The schema migrates at boot with no operator gate and the migration set carries no downgrade path, so the backup
+is not a precaution taken *around* this procedure — it **is** the way back ([ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md) §6).
+Everything else below exists to keep that backup usable: to name the release you are leaving, and to notice a
+recipe change before it becomes a failed `up`.
+
+**Which of these steps has ever been executed — because the answer is "one".** Step 2 is rehearsed on every
+`scripts/run_web_e2e.py` run: it captures a live instance, destroys it, restores it and runs a suite against the
+result, and it holds the production capture to resolving the production project instead of whatever happens to
+run out of `infra/`. **No image has ever been published**, so no other step here has ever run — not the stop,
+not the pull, not the recipe diff, not the rollback. This is a procedure derived from the decisions that govern
+it, not from a rehearsal, and you are the one finding out where it is wrong. Read it that way.
+
+1. **Stop the application — and only the application.** *Cold* means the **writer** is stopped; MariaDB and
+   Garage stay up, because the capture reads through their own interfaces (ADR 0056 §2).
+
+   ```sh
+   docker compose -f infra/docker-compose.prod.yml stop app
+   ```
+
+   **`scripts/instance_backup.py` does not check this, and does not pretend to** — it cannot know what "the
+   app" is on your host. It is the one precondition you own, and the entire consistency argument rests on it:
+   with the app down the database gains no rows, so a row whose object was never captured is impossible and
+   there is no ordering to get right.
+
+2. **Capture, then check the capture.** § Backup & restore owns the commands and the credentials; two arguments
+   differ here from the dev examples there. The network is `veyq_default` — the production compose file declares
+   `name: veyq`, so that is the project, and nothing has to be passed on the command line to make it so. And
+   leg (c) lives on a **volume**, not on your filesystem, so it has to be addressed there:
+
+   ```sh
+   python3 scripts/instance_backup.py capture \
+       --compose-file infra/docker-compose.prod.yml \
+       --docker-network veyq_default \
+       --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key"
+   python3 scripts/instance_backup.py verify infra/backups/<stamp>
+   ```
+
+   Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
+   the day you need it, which is the day you find out.
+
+3. **Confirm the backup can name the release you are leaving.** Read `app.version` in the capture's
+   `manifest.json`. A release is `<major>.<minor>`, and a publish onto an existing tag **fails** rather than
+   replacing it ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)), so that tag
+   names one fixed set of bits for good — which is what makes it a rollback target rather than a label. If the
+   manifest records no release, the backup is still valid and still restorable; what it cannot tell you is which
+   image to start it under, so write that down yourself now, from **Settings → Server → Release**, while the
+   instance you are leaving still exists to be asked.
+
+4. **Pull the new tag**, so the download is not part of the outage:
+
+   ```sh
+   docker pull ghcr.io/<owner>/veyq:<new-version>
+   ```
+
+5. **Diff the new image's recipe against the one you are running.** The image's copy is authoritative for the
+   version it belongs to (ADR 0057), and a version that adds a service or a required variable has **no other
+   delivery path to you** — the first sign of one you missed is a `up` that dies on a missing variable.
+
+   ```sh
+   docker create --name veyq-recipe ghcr.io/<owner>/veyq:<new-version> >/dev/null
+   docker cp veyq-recipe:/opt/veyq/deploy/. ./recipe-<new-version>/
+   docker rm veyq-recipe >/dev/null
+   diff -u infra/docker-compose.prod.yml ./recipe-<new-version>/docker-compose.prod.yml
+   diff -u infra/.env.example            ./recipe-<new-version>/.env.example
+   ```
+
+6. **Apply what the diff showed, then bring the new version up.** Take the new compose file as yours, carry any
+   new variable into `infra/.env`, set `VEYQ_IMAGE` to the tag you pulled, and:
+
+   ```sh
+   docker compose -f infra/docker-compose.prod.yml up -d
+   ```
+
+   The schema migrates during this boot. There is no gate and no prompt.
+
+7. **Verify, and not by "it started".** Read the instance's config-secret state as the Server Owner
+   (`GET /api/tenants/{id}/mail-settings` → `configSecretState: OK`), then have a person sign in and **open a
+   Memory that contains media**. That is the one assertion touching all three legs at once — the row, the
+   object and the key are three different failures wearing the same "it looked fine".
+
+**Rollback is the backup plus the tag, and both are nameable only because a release is immutable.** Stop the
+app, restore the capture from step 2 onto an empty instance (§ Restore), and pin `VEYQ_IMAGE` to the release
+step 3 recorded. There is no other way back: the migrations carry no down path, so an instance that has booted
+on the new schema cannot be handed to the old image.
 
 ## Seeding a reproducible dev instance (cr-0046)
 

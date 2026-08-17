@@ -1,7 +1,7 @@
 ---
 id: cr-production-backup-and-upgrade-runbook
 title: Make the documented backup reach production, prove it, then write the upgrade runbook on top
-status: in-progress
+status: done
 satisfies: ["uc.admin.back-up-and-restore-instance"]
 adrs: ["0056", "0057"]
 invariants:
@@ -129,7 +129,7 @@ returns two guards reading it as text, and nothing else.
       about whether the project the operator actually brought the stack up under matches. ·
       **Done when:** the guard is green, and re-injecting the removal of `name:` turns it red.
 
-- [ ] **4 docs — the runbook, and the published claim it corrects.** Replace `infra/README.md`'s
+- [x] **4 docs — the runbook, and the published claim it corrects.** Replace `infra/README.md`'s
       *"There is no upgrade runbook yet"* stub with the procedure: stop the app service (the cold
       precondition, stated as a step the tool does not verify) → capture → record the release you are on →
       pull the new tag → extract that image's recipe and diff it against the running one → apply → up →
@@ -157,5 +157,51 @@ Its capture step is proven; the rest is prose until a publish gives it two relea
 
 ## Retrospective
 
-*(filled at implementation close — planning, execution, and process/collaboration, both directions, ending in
-one concrete "next time")*
+**Planning — the defect was measured statically and the proof was specified live, and nothing joined the two.**
+The defect section is three greps and they are all correct. Phase 1 then specified a *running* rehearsal whose
+mechanism was never executed once, not even as a single command, and all three of its load-bearing assumptions
+were wrong: the dev stack cannot come up under a second project name (`container_name:` on every service),
+`capture` needs a populated instance rather than a running stack, and the predicted red does not occur on a host
+that runs the dev stack — there the production capture *succeeds* against the wrong instance. `changes/README.md`
+already carries the rule that would have caught it — § *first check the lever is wired to the mechanism at all* —
+and it was not applied; this is a fresh instance of an existing rule, not a missing one. Cost: the whole phase
+was redesigned at implement time, which is the most expensive place to take a design decision.
+
+**Planning — the inventory greps were shaped like the symbol, not like the claim.** `grep -rn -- '-p veyq'`
+found three sites. Three more state the same retired claim in other words and no flag grep reaches them:
+`infra/README.md`'s `--docker-network … (the project name comes from the compose file's **directory**)`,
+`run_web_e2e.py`'s derivation comment, and `docs/features/admin/_index.md`'s *"Upgrade the instance — planned
+(runbook) … Blocked on the release identity above"*, which this CR falsifies outright. § *a phase that supersedes
+prose names the SHAPE of the correction* says to grep a distinctive **fragment of the claim** for exactly this
+reason, and the CR ran the symbol grep instead.
+
+**Execution — the first rehearsal reported a green it had not earned.** The subject capture "correctly refused",
+and it had refused on `required variable MARIADB_PASSWORD is missing a value`: Compose died interpolating the
+production file before resolving any project at all. The one-flag-apart control was designed to prevent precisely
+this and did not, because the two compose files differ in a **second** way the control could not see — the
+production file requires nine variables the dev file does not. Root cause: I checked that the lever reached the
+mechanism, and not that the control controlled for everything that differs between the two runs. The repair lives
+in the rehearsal (the required set is derived from the file, and a `config -q` precondition reports INCONCLUSIVE
+rather than letting an unresolvable file pass as a verdict), so it cannot recur silently.
+
+**Execution — the new guard's first run flagged itself**, its own docstring being durable state that quoted the
+literal it forbids. One cycle, and the tempting repair would have opened a hole where an instruction could hide.
+Harvested to `changes/README.md` as a rule, because it generalises to every text-scanning guard.
+
+**Process — the hand-off carried the CR's shape as a fact about the machine.** The session brief stated Phase 1
+needs a built fast-jar and warned that `./gradlew check` does not build it. True of the rehearsal the CR
+described; false of the one that exists, which needs no jar and no instance and runs in about thirty seconds. No
+harm done — but the warning was inherited from the plan rather than from the work, and a premature operational
+constraint is the kind of thing that quietly narrows what gets considered. Worth noting the other direction too:
+the brief's insistence that a wrong-reason red is the real risk in phase 1 is what made me measure before
+building, and the three findings above are that instruction paying off.
+
+**Process — tool friction changed how the work was done, not just how fast.** Several `docker compose` probes and
+every heredoc that wrote a repo file were refused by the sandbox classifier, so measurements had to be routed
+through scratchpad Python scripts and file edits through the editing tool. It cost maybe fifteen minutes and, more
+importantly, it made the cheap-probe-first habit expensive at exactly the moment the CR most needed cheap probes.
+
+**Next time:** at refine, run the rehearsal's **first command** once — not the rehearsal, the single invocation
+its lever depends on — and paste the output into the CR. Every finding above except the guard's self-flagging was
+one two-second command away, and the CR would have been written against what the machine does instead of against
+what the compose files say.

@@ -14,12 +14,18 @@ If you are here to find out whether your memories are safe, you want
 read "optional profile" as "optional in a real instance": without a store there is no media, and without
 working email nobody can be invited and nobody can reset a password.
 
-A **backup-and-restore procedure is now written down and tested**, and that is the part of this page that
-changed. What is still missing is an **upgrade path**: veyq migrates its database on start with no way back, so
-moving to a newer version means taking a backup first and restoring it if the new version does not work out.
+A **backup-and-restore procedure is written down and tested**, and there is now an **upgrade runbook** beside
+it — but the two are not equally proven, and the difference matters more than either heading. The backup is
+rehearsed automatically: every build captures a real instance, destroys it, restores it, and checks that what
+came back works. The upgrade runbook has been **performed by nobody**, because no version of veyq has been
+published yet, so there is no second release to move between. It is a careful procedure derived from how the
+system is built, not a path anyone has walked.
 
-Until that lands, running veyq means reading the repository and making your own operational decisions. Please
-do not put memories you cannot afford to lose on an instance you set up from the dev stack.
+What has not changed is the shape of the risk: veyq migrates its database on start with no way back, so moving
+to a newer version means taking a backup first and restoring it if the new version does not work out.
+
+So running veyq still means reading the repository and making your own operational decisions. Please do not put
+memories you cannot afford to lose on an instance you set up from the dev stack.
 
 ## What you are responsible for
 
