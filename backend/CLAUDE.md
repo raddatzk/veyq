@@ -11,6 +11,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
 - **API-first.** Edit the spec in `../contracts/api/*.openapi.yaml`; the Gradle build generates Kotlin
   models + JAX-RS interfaces (`openApiGenerateSpecs`). Never hand-write a DTO that duplicates a generated model.
+  **Nothing generated is tracked** (`backend/build/` is gitignored), and the generator emits no descriptions —
+  `useSwaggerAnnotations` / `useMicroProfileOpenAPIAnnotations` are both `false` in `gradle/openapi.gradle.kts`.
+  So a spec edit that changes only `description:` / `summary:` text produces **no backend delta at all** and
+  needs no backend phase: the contracts guards are its whole check. A shape change — a property, a type, a
+  `format:`, an enum, a required flag — is the opposite, and always does.
 - **Feature-slice + two axes ([ADR 0001](../docs/decisions/0001-backend-http-adapter-vs-application-slicing.md)):**
   `features/<area>/<usecase>/…`. A `…Resource` implements the generated `…Api` (thin adapter), delegates to
   a `…Handler`; persistence in a `…Store` (Panache). Resources are resource-shaped, not per-use-case.

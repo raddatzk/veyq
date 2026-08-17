@@ -85,6 +85,18 @@ Ship that kind as a **count plus the file set**, or as the narrower predicate th
 by exactly zero). The tell is in the DoD's own wording: *"unchanged"*, *"the same as"*, *"no new"* — a condition
 about a **set** needs a command that produces a comparable set, not a readable one.
 
+**And the DoD's own BASELINE is that same locator, which is why it is the number most likely to be wrong.** The
+rule above is about locators inside the phases; this is it turned on the section that grades them. A Definition
+of done that says *"baseline: N guards green, so a red after this CR is this CR's"* has written a set
+comparison as a tally, and nothing in the pipeline re-runs it — the implementer is explicitly told not to
+rebuild the inventory, and the baseline reads like part of that inventory.
+`cr-blob-reference-arity-guard` shipped *"26 guards, all `rc=0`"* at a commit where `ls scripts/validate_*.py`
+returned **25**, at the moment it was written. What makes this worth a rule rather than a shrug is the failure
+mode: that CR's own work **adds one guard**, so the finished tree stands at exactly 26 — the wrong baseline
+would have been confirmed by the work it was meant to grade, and the "a red after this is mine" mechanism would
+have been disarmed with every check green. So: **a baseline ships as the command that produces it, and the
+implementer runs it before the first edit** — one line, before anything can be attributed to it.
+
 **Find the sites from two angles keyed on different things — the easiest command encodes what you already
 believe.** The locator you reach for first is a paraphrase of your own model of the code, so it fails exactly
 where that model is wrong: silently, and with a plausible number. Ask a second time on a **different key** — a
@@ -288,7 +300,13 @@ in a feature `_index.md`, and a locator shaped like the flag (`grep -rn -- '-p v
 Two things fall out of that one command that nothing else produces: the true count, and — because `scripts/` is
 swept too — any collision
 with a guard the CR forbids editing, surfaced at refine time instead of as a blocking question at implement
-time. (That collision is also § *sixth tell*'s corollary met from the other side: the CR's done-when said the
+time. **Re-run that sweep at the phase, not only at refine: a CR that both writes new prose and
+deletes old prose changes its own corpus.** The site list is measured before the earlier phases exist, so a
+phase that *authors* something — a guard docstring, an ADR, a comment — can add a site to the very claim a
+later phase supersedes. `cr-blob-reference-arity-guard` did exactly that: its phase 2 wrote a guard whose
+docstring cited *"the sweep ADR 0013 §3 promised"*, and its phase 4 deleted that promise from ADR 0013 — a
+dangling citation authored by the same CR, three commits apart, invisible to a sweep run before either
+existed. The handed-over site list is a floor, not the set. (That collision is also § *sixth tell*'s corollary met from the other side: the CR's done-when said the
 guard must stay *"unedited"* where its own inventory row gave the intent, *"a phase editing it has changed a
 wire shape"*. A comment changes no shape. **State the intent, not the letter** — an absolute reading collides
 with the very correction the CR mandates.)
