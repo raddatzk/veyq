@@ -576,8 +576,12 @@ def backup_tool_result(*args: str, env_extra: dict[str, str] | None = None) -> s
 def backup_tool(*args: str) -> None:
     """Run the DOCUMENTED tool, as an operator would, rather than reaching into its internals.
 
-    That is the point of the rehearsal: what the suites prove restorable is the procedure `infra/README.md`
-    prints, not a private path this harness happens to take.
+    That is the point of the rehearsal: what the suites prove restorable is a procedure `infra/README.md`
+    prints, not a private path this harness happens to take. **Which one, precisely:** the group hooks capture
+    and restore the *bundled dev* stack — that is the one they run against, and for a long time this line said
+    "the procedure" as though there were only one, while the production procedure named a different project and
+    a different network and was never exercised at all. [rehearse_production_project] covers the part of that
+    gap a host without a production stack can cover; the rest is stated as a limit there.
     """
     result = backup_tool_result(*args)
     if result.returncode != 0:

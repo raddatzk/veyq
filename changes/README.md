@@ -281,9 +281,12 @@ were. `cr-pairing-qr-sign-in-web`'s phase 1 listed the two schema descriptions c
 **or** a commitment"*; the same sentence also sat in the operation description directly above them, in the
 entity's column KDoc, and in the guard's own `EXPECTED` comment — **five copies, two named**. The locator had
 asked *"which schemas change?"*, which is the right question for a shape change and the wrong one for a
-correction. So: **when a phase supersedes a claim, `grep -rn` a distinctive FRAGMENT of the claim across
-`contracts/`, `backend/`, `web/`, `docs/` and `scripts/` before writing the site list.** Two things fall out of
-that one command that nothing else produces: the true count, and — because `scripts/` is in it — any collision
+correction. So: **when a phase supersedes a claim, `grep -rn` a distinctive FRAGMENT of the claim across the
+WHOLE tree before writing the site list** — not an enumerated set of directories, which is a list that drifts:
+the retired *"always name the compose project on the command line"* rule had sites in `infra/`, in `wiki/` and
+in a feature `_index.md`, and a locator shaped like the flag (`grep -rn -- '-p veyq'`) found three of six.
+Two things fall out of that one command that nothing else produces: the true count, and — because `scripts/` is
+swept too — any collision
 with a guard the CR forbids editing, surfaced at refine time instead of as a blocking question at implement
 time. (That collision is also § *sixth tell*'s corollary met from the other side: the CR's done-when said the
 guard must stay *"unedited"* where its own inventory row gave the intent, *"a phase editing it has changed a
@@ -434,6 +437,19 @@ exact failure the bite exists to detect, one level up. Write the mechanism and i
 ask *does turning this knob change that code path?* Where the answer is no, one of the two is wrong — there it
 was both, and keeping each for its own job (the healthcheck wait for readiness, a bounded poll for the address
 the tool actually exports) is what made the constant load-bearing.
+
+**Asking is not enough where the lever is a command — RUN IT ONCE, at refine, and paste the output in.** The
+check above is a thinking check, and thinking is exactly what fails when the lever's behaviour is a property of
+a tool rather than of this repository. A CR that measured its defect with three correct greps then specified a
+rehearsal that would *bring the dev stack up under a second compose project* and *capture against it*, and all
+three of that plan's load-bearing beliefs were wrong: the dev compose pins `container_name:` so it cannot come
+up twice, `capture` refuses a stack that holds no tenant so a running stack is not an instance, and the
+predicted red does not occur on a developer's host at all — there the production capture **succeeds** against
+the dev stack, which is the worse defect and the opposite verdict. Every one of the three was a two-second
+command away, and none of them was reachable by reading the compose files. So: where a phase's lever is a
+shell command, the refine runs **its first invocation** — not the rehearsal, the one call the plan hangs on —
+and the CR carries that output. The cost is seconds; the alternative is redesigning the phase at implement
+time, which is the most expensive place there is to take a design decision.
 
 **And check the lever survives the tool.** An injection is only an injection if the thing under test cannot undo
 it. cr-e2e-orchestrator planned *"store absent — stop the garage container"*; the orchestrator's own
