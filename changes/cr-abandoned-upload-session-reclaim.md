@@ -56,22 +56,30 @@ already ran it — and `%dev`'s `repair-at-start=true` hides that in the one pla
 ([`backend/CLAUDE.md`](../backend/CLAUDE.md) § Migrations). The comment is a historical artifact; the live
 statement of the rule is the sweep's own KDoc.
 
-## Decisions this CR must settle before it is built
+## The one decision left — the other dissolved when it was measured
 
-Both are open, and neither is mine to choose alone.
+**"How long can a session still be in flight?" is not a judgement call: it is bounded by construction at
+600 seconds.** All of a session's presigned PUT URLs are signed **once, at `start`**
+(`MediaHandler.kt:206` — the only `presignPut` call site in the slice), under
+`veyq.blob-store.presign-ttl-seconds=600` (`application.properties:138`,
+`BlobStore.kt:88`). There is **no re-presign path**: `media.openapi.yaml` carries `blob-uploads-batch` (start)
+and `blob-downloads-batch` (read) and nothing that re-signs a live session. So a client past the TTL holds
+only dead URLs and can never PUT another byte for that session, however good its connection.
 
-1. **The retention window.** Every sibling is `P30D`, and copying that is the wrong reflex: trash retention is a
-   *user-visible grace period* ("I can still get it back"), while an abandoned upload is garbage the moment the
-   client stops. What bounds it from below is the **longest plausible in-flight upload** — the session row is
-   created at `start` and nothing heartbeats it, so a sweep that fires while a large file is still PUTting its
-   chunks deletes the staging area out from under a live upload. That is the only real constraint; above it the
-   choice is how long an operator pays to store garbage. A window in hours (e.g. `PT12H`) fits the hazard; `P30D`
-   fits the copy-paste.
-2. **Whether the sweep also needs a heartbeat.** If (1) cannot be answered without one — a genuinely slow
-   connection on a large file — then the honest fix is a `touched_at` the presign path bumps, which is a schema
-   change and probably its own CR. **Decide (1) first**; a window comfortably above the largest upload the
-   declared caps allow may make this moot, and the caps are measurable (`start` caps `byteSize`/`chunkCount`,
-   ADR 0013 § 3).
+Two consequences, and the second is the one that saves work:
+
+1. **The window's floor is the presign TTL plus streaming slack** — S3 honours a request whose signature was
+   valid when it *started*, so a chunk of a 2 GiB blob (`veyq.blob.max-bytes=2147483648`, `:139`) can still be
+   arriving after the URL expires. **Recommended: `PT1H`** — six times the TTL, and still 720× tighter than the
+   `P30D` every sibling uses. What is *not* acceptable is copying `P30D`: it stores a month of garbage to
+   protect a window that closes in ten minutes.
+2. **The heartbeat question is moot — drop it.** There is nothing to heartbeat: the session dies with its URLs
+   regardless of connection speed, so a slow uploader is not helped by a longer window or a `touched_at`. What
+   they would need is **re-signing**, which does not exist and is [ADR 0013](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)
+   § Rejected's *"single most expensive add"* (resumable uploads). Not this CR, and not a schema change either.
+
+**So one thing is open: is `PT1H` the number?** It is an operator-facing config key with a documented default,
+so getting it wrong is cheap to correct — but it should be chosen, not inherited.
 
 ## Phases
 
@@ -80,8 +88,11 @@ Both are open, and neither is mine to choose alone.
       that transaction commits** — deletes `chunkKey(storage_key, 0 … chunk_count-1)` from the object store,
       best-effort. Order is load-bearing in that direction only: an object delete that fails leaves a reclaimable
       object and no pointer, whereas deleting objects first would leave a row pointing at nothing if the tx rolled
-      back. The store delete must tolerate keys that were never uploaded — an abandoned session has, by
-      definition, an unknown number of its chunks actually present. Config keys follow the sibling shape.
+      back. **The key enumeration already exists — reuse it, do not re-derive it:** `MediaHandler.kt:286` is
+      exactly `blobStore.delete(sessions.flatMap { s -> (0 until s.chunkCount).map { chunkKey(s.storageKey, it) } })`,
+      written for the budget-exceeded purge (E2). The store delete must tolerate keys that were never uploaded —
+      an abandoned session has, by definition, an unknown number of its chunks actually present, and that path
+      already relies on the same tolerance. Config keys follow the sibling shape.
       · Done when: `./gradlew check` green, including a slice test that a session past the window loses **both**
       its row and its chunk keys, and one that a session inside the window loses neither.
 - [ ] **2 coverage** — `docs/coverage/features/memory/use-cases/uc.memory.upload.yaml` gains the acceptance
