@@ -156,7 +156,7 @@ value in the same `@Transactional` before reassigning, so the update path orphan
       **Done when:** `python3 scripts/validate_guard_gaps.py` green, and removing the new guard's arity check
       turns it red.
 
-- [ ] **4 docs** — supersede the claim at every site the fragment sweep found. The sweep is
+- [x] **4 docs** — supersede the claim at every site the fragment sweep found. The sweep is
       `git grep -niI 'unreferenced'` over the **whole tracked tree** — not an enumerated directory list, which
       drifts, and which here also drags in 14 `web/node_modules` hits that bury the six real ones. **Do not
       "sharpen" it to `unreferenced-blob`:** `en.memory.media.md` wraps the compound across a newline, so the

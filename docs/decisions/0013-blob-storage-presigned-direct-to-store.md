@@ -73,7 +73,7 @@ per-object short-TTL URLs) and this is **greenfield** (no installed base to keep
 The backend cannot see bytes mid-`PUT`, so per-frame size is bounded at **declare** time (`start` caps
 `byteSize`/`chunkCount`; the open-session cap still applies) and the **actual** object sizes are verified
 against the budget at `complete`, **purging** staged objects that exceed it. Abandoned uploads are reclaimed by
-GC (stale OPEN sessions + the unreferenced-blob sweep).
+the stale-OPEN-session GC.
 
 ### 4. The store must be client-reachable (public endpoint + CORS)
 

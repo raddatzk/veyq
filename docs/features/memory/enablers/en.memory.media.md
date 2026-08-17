@@ -95,8 +95,7 @@ sequenceDiagram
   ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)).
 - **E2 — declared budget exceeded** (or actual object sizes exceed it at complete): the server rejects and
   **purges** the staged objects (declare-then-verify, ADR 0013 §3).
-- **E3 — abandoned upload:** an OPEN session never completed → reclaimed by GC (stale sessions + unreferenced
-  -blob sweep).
+- **E3 — abandoned upload:** an OPEN session never completed → reclaimed by the stale-session GC.
 - **E4 — vault locked / Memory not open:** without `K_mem` the client can neither key nor read a blob → the
   action is unavailable until unlock + the Memory is opened.
 - **E5 — chunk tampered / reordered:** `openFrame` fails the AAD position check → the frame is rejected (the

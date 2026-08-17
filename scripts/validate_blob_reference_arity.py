@@ -26,8 +26,8 @@ and that third is a standalone cover, user content, reclaimed irreversibly. Any 
 stopped by anything but the code being right.
 
 **The defect that bought it.** No incident — nothing has shipped a reclaim job. It was built with
-cr-blob-reference-arity-guard, whose refinement set out to *build* the unreferenced-blob sweep ADR 0013 §3
-promised and measured the set that sweep would act on: **empty by construction**, because every blob row is
+cr-blob-reference-arity-guard, whose refinement set out to *build* the long-promised sweep over blob rows
+nothing points at, and measured the set that sweep would act on: **empty by construction**, because every row is
 created in the same transaction as its reference and no delete or update path removes a reference while
 leaving the blob. So the sweep would have shipped a job whose Definition of done is "finds nothing", carrying
 its entire blast radius on the one arm the database does not protect. What was worth building instead is the
