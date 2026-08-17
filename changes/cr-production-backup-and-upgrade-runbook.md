@@ -110,7 +110,7 @@ returns two guards reading it as text, and nothing else.
       **derived from the file** (`${VAR:?}`), and a `docker compose config -q` precondition runs first and
       reports INCONCLUSIVE rather than letting an unresolvable file pass as a verdict.
 
-- [ ] **2 infra — the one-line fix, and the prose it retires.** Add top-level `name: veyq` to
+- [x] **2 infra — the one-line fix, and the prose it retires.** Add top-level `name: veyq` to
       `infra/docker-compose.prod.yml`. Then supersede the rule it replaces at every site
       (`grep -rn -- '-p veyq' .` outside `.git`), with the shape of each correction named: the command at
       `infra/README.md:106` **loses the flag**; the *"Always name the project"* paragraph at `:109` is
@@ -120,7 +120,7 @@ returns two guards reading it as text, and nothing else.
       **Done when:** phase 1's rehearsal is green, `grep -rn -- '-p veyq'` finds only prose that is *about* the
       retired rule, and the full glob is green.
 
-- [ ] **3 scripts — promote the one-shot proof.** The invariant *"the production project name is a property of
+- [x] **3 scripts — promote the one-shot proof.** The invariant *"the production project name is a property of
       the compose file, not a rule stated in prose"* becomes permanent. Extend
       `scripts/validate_release_identity.py`, which already owns the recipe pair and parses this file, rather
       than adding a near-duplicate guard: assert the production compose declares `name:`, and that no tracked

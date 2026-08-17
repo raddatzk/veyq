@@ -22,6 +22,13 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      to the same destination, and that destination is neither `/work` (it holds `quarkus-app/`; a mount there
      freezes an upgrade — see the Dockerfile's own comment) nor under `/var/lib/veyq` (the config-secret
      volume). Plus: every veyq image tag written down under `infra/` matches a tag the pipeline emits.
+  5. **The production project name is a property of the compose file, not a rule stated in prose.**
+     `infra/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
+     `-p <that name>` / `--project-name <that name>`. Compose derives a project from the compose file's
+     *directory* when the file names none, and both compose files sit in `infra/` — so a production procedure
+     that depends on an operator remembering a flag is one shell away from addressing the wrong stack. The two
+     halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
+     flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
 
 **The defect that bought it.** All of it was live when this guard was written (2026-08-11), and the first run
 was the discovery: there was no `VERSION` file at all, so `container.yml`'s first command
@@ -30,6 +37,19 @@ the operator to pin `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0`, a three-part shape 
 `infra/docker-compose.prod.yml`'s `${VEYQ_IMAGE:?…}` message repeated the invented shape as `…/veyq:1.2.3`. The
 file had been deleted by a "cleanup" commit that also took `Dockerfile` and `scripts/run_web_e2e.py`; those two
 were recovered and this one was not, and nothing noticed for the two months in which no container run happened.
+
+Assertion 5 was bought separately and just as concretely (2026-08-17). `scripts/instance_backup.py` builds
+`docker compose -f <file> exec` with **no `-p`**, and no compose file declared a `name:`, so the documented
+production capture resolved project `infra`. Measured on a host running the dev stack, that does not fail:
+`docker compose -f infra/docker-compose.prod.yml ps` listed all four *dev* containers as its own and the
+capture completed, writing a manifest for the wrong instance and reporting success. The rule it was supposed to
+obey — *always name the project on the command line* — existed in exactly two places, both prose, enforced by
+nothing.
+
+**A note for whoever edits this next, because the first run of assertion 5 tripped on it:** this guard scans
+durable state for a literal, and its own file is durable state, so spelling that literal here makes the guard
+flag itself. Describe the flag, do not write it. The repair that suggests itself — excluding this file from the
+scan — puts a hole in exactly the place a future instruction would hide.
 
 **Its limit — what a green run does NOT prove.** It reads **files**, and executes exactly one of them (the
 version step's shell). It cannot prove a publish ever ran, that a tag was created, that a republish was
@@ -41,6 +61,16 @@ back out, which is cr-release-identity's phase-2 done-when and not a guard. It s
 manifest's `app.version` (its observable is a capture run against a live instance, not a file), and its scan
 for written-down image tags covers `infra/` only: `docs/` quotes the *old, wrong* shapes on purpose, as the
 defect being described.
+
+Assertion 5 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
+nothing about the project the operator actually brought their stack up under.** `docker compose -p something-else
+-f infra/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
+green here means the *procedure* can no longer be wrong by default, never that a given host is right. Only a
+tool that owns the operator's shell can close that, which is inbox #121's job and explicitly not this guard's.
+Second, the flag scan covers **durable state only**: `changes/` and `docs/inbox.md` are the flow surfaces
+(`docs/ai/README.md` § State vs. flow) and necessarily go on naming a retired rule in order to record that it
+was retired, so an instruction hidden in a work order is out of reach. The line drawn is the repository's own,
+not a convenience — a whitelist of files that happened to be red would have been the convenience.
 """
 from __future__ import annotations
 
@@ -383,6 +413,62 @@ for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
                 f"operator pins and rolls back to (ADR 0056 §6)."
             )
 
+# ---- 5. the production project is declared by the file, and no state instructs the flag it replaced ---------
+
+PROD_COMPOSE = INFRA / "docker-compose.prod.yml"
+# The flow surfaces. They record what was decided and retired, so a retired rule's name necessarily survives
+# there — excluding them is the repository's own state/flow line, not a list of files that happened to be red.
+FLOW_PREFIXES = ("changes/", "docs/inbox.md")
+
+prod_project: str | None = None
+if not PROD_COMPOSE.is_file():
+    fail(f"`{PROD_COMPOSE.relative_to(ROOT)}` is missing — there is no production stack to name a project for")
+else:
+    try:
+        prod_doc = yaml.safe_load(PROD_COMPOSE.read_text()) or {}
+    except yaml.YAMLError as e:
+        prod_doc = {}
+        fail(f"{PROD_COMPOSE.relative_to(ROOT)} is not readable YAML: {e}")
+    prod_project = prod_doc.get("name") if isinstance(prod_doc.get("name"), str) else None
+    if not prod_project:
+        fail(
+            f"{PROD_COMPOSE.relative_to(ROOT)} declares no top-level `name:`. Compose then derives the project "
+            f"from the file's DIRECTORY — `{PROD_COMPOSE.parent.name}` — which the dev compose file shares, so "
+            f"an unqualified `down -v` reaches the production volumes and `scripts/instance_backup.py`'s "
+            f"`docker compose … exec` (which emits no `-p`) aims the documented production capture at whatever "
+            f"runs out of that directory. On a host that also runs the dev stack it does not fail: it captures "
+            f"the wrong instance and reports success."
+        )
+
+if prod_project:
+    # The project flag in either spelling, carrying the declared name, wherever it is written — a fenced
+    # command and a prose sentence are the same instruction, and the sentence is the shape this rule actually
+    # took before the file carried it. Built from `prod_project` rather than typed, which is also what keeps
+    # this line from being a copy of the very literal it forbids.
+    flag = re.compile(rf"(?<![\w-])(?:-p|--project-name)[ =]\s*{re.escape(prod_project)}(?![\w.-])")
+    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True)
+    if tracked.returncode != 0:
+        fail(
+            "`git ls-files` failed, so this guard cannot enumerate durable state and its flag scan checked "
+            f"NOTHING ({tracked.stderr.strip()[-200:]}). It is scoped to tracked files on purpose — an "
+            "untracked build tree is not something this repository states."
+        )
+    for rel in sorted(tracked.stdout.split()):
+        if rel.startswith(FLOW_PREFIXES):
+            continue
+        try:
+            body = (ROOT / rel).read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        for number, line in enumerate(body.splitlines(), 1):
+            if flag.search(line):
+                fail(
+                    f"{rel}:{number} instructs `-p {prod_project}`, which "
+                    f"{PROD_COMPOSE.relative_to(ROOT)} now carries as `name: {prod_project}`. Two statements of "
+                    f"one project name drift, and the one a reader obeys is whichever they saw last — while the "
+                    f"one the tooling obeys is the file. Drop the flag; the file is what makes that safe."
+                )
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -399,6 +485,7 @@ if errors:
 print(
     f"release identity OK: VERSION {version_value} is derived offline by the publish workflow, a republish is "
     f"refused, ref v{version_value} is created, the recipe is declared in "
-    f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), and {written_tags} written-down image "
-    f"tag(s) name a shape the pipeline emits"
+    f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
+    f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
+    f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced"
 )
