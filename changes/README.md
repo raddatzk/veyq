@@ -202,6 +202,37 @@ a CR, run *everything it names*, not only the commands under § Locators. The sa
 class one paragraph earlier — a recorded sweep output naming two files that match nothing — and fixed only that
 instance instead of re-checking its siblings; one found instance of an unrun claim is the cue to sweep the rest.
 
+#### A SETTLED decision carries the one line that settles it
+
+**A CR marks what is open. Nothing marks what is closed — so a closed decision that is wrong is the one thing
+in the document nobody looks at.** This is the tells chain applied to the CR's own structure rather than to a
+sentence in it: an open question invites a reader to check it, and *"decided in ADR X"* invites them to move on.
+Both are claims; only one is dressed as one.
+
+`cr-account-key-rotation-after-compromise` is the worked example, and it named its open questions **well** — two
+of them, handed over with the evidence to settle them, both closed in one exchange. It took four. The other two
+were hiding inside decisions the CR believed settled: ADR 0060 said the cold wraps are rewritten *"under the
+same KEK"*, and the `RECOVERY` wrap is withheld from `GET /api/account/key-material` (`KeyMaterialHandler.kt:43`,
+one grep) so the client cannot read its salt; and it said the gate *is* "which `MasterKeyWrap` the caller
+opened", which cannot be the whole gate because the rewrite needs the password and Secret Key as *material*.
+Neither is a locator that was run and got the wrong answer. Neither was a locator at all.
+
+So: **every decision the CR relies on carries either the command that settles it or the `file:line` that does.**
+Not a re-derivation — one pointer, the same length as the assertion it replaces. Three things fall out, and the
+third is the reason this is worth the keystrokes:
+
+- The reader can **check it in a second**, which is the whole difference between prose and a locator.
+- Writing it is where the author notices there is nothing to point at — which is exactly when the question is
+  cheap. Both misses above would have surfaced *while writing the sentence*, not at implement time.
+- It **survives the ADR being right and the CR being wrong about it**, which is the actual failure here: ADR 0060
+  Decision 2 was a reasonable decision that the code could not honour, and only building it made that visible.
+  A pointer at the code the decision constrains is what makes an unbuildable decision loud (§ *doc unbuildable*,
+  [`../docs/ai/README.md`](../docs/ai/README.md)) instead of a surprise four phases in.
+
+The bar is judgement, not ceremony: a decision that binds this CR's work, on a surface it touches. Not every
+ADR it cites for context, and never a second copy of the ADR's reasoning — a pointer, or the sentence stays as
+it is and takes its chances.
+
 ### Coverage is part of the work, not a follow-up
 
 Every CR updates `docs/coverage/` for the
