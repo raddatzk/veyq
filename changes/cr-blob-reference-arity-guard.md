@@ -48,7 +48,18 @@ both of its keys were on the *name* `blob_id` and would miss an arm under anothe
 | entity | `grep -rnoE '@Column\([^)]*"[a-z_]*blob_id"' --include='*.kt' backend/src/main/kotlin` | the Kotlin declaration sites |
 | schema | `grep -rniE '^\s+[a-z_]*blob_id\s+VARCHAR\|ADD COLUMN [a-z_]*blob_id' backend/src/main/resources/db/migration/*.sql` | the SQL declaration sites |
 | backstop | `grep -rniE 'references +veyq_blob\b' backend/src/main/resources/db/migration/*.sql` | which arms a foreign key refuses to orphan |
-| live twin | `grep -n -A14 'fun subtreeBlobIds' backend/src/main/kotlin/com/veyq/app/features/sharing/SharingStore.kt` | the same predicate, already running in production code |
+| live twin | `sed -n '/fun subtreeBlobIds/,/^    }/p' backend/src/main/kotlin/com/veyq/app/features/sharing/SharingStore.kt` | which arms the one predicate already running in production enumerates |
+
+**Run 2026-08-17 against `main` @ `021bc66`, clean tree** — the hardening pass ran all four keys rather than
+inheriting them, because a guard that is red on arrival makes every later bite unreadable (`changes/README.md`
+§ *run a new guard's predicate against the UNTOUCHED tree*):
+
+```
+entity   -> 3   content/Entities.kt:55 (cover_blob_id), media/Entities.kt:104, media/Entities.kt:168
+schema   -> 3   V13__media_derivatives.sql:13, V11__media.sql:45, V19__node_cover.sql:9
+backstop -> 2   V13 fk_derivative_blob, V11 fk_media_blob
+live twin-> 3/3 ids.add(m.blobId) | MediaDerivativeEntity | coverBlobId, all present in the function body
+```
 
 The **gap between the schema key and the backstop key is the finding, and it names the arm**:
 `veyq_node.cover_blob_id` (`V19__node_cover.sql`, a plain nullable column) has no foreign key, where
@@ -73,6 +84,13 @@ grep -rn --include='*.kt' -iE 'delete from|executeUpdate|createNativeQuery' back
 
 No path removes a reference and leaves the blob. **The unreferenced-blob set is empty on today's code.**
 
+**Spot-check run 2026-08-17 @ `021bc66`:** the table survives — 10 call sites grouping into exactly the four
+functions above, **no sixth site**, and the raw-SQL locator returns 0. One angle was added, because a
+delete-keyed locator structurally cannot see the way the *FK-less* arm would become unreferenced — an UPDATE
+that nulls it. `grep -rn --include='*.kt' 'coverBlobId' backend/src/main/kotlin` finds both writers
+(`MediaStore.commitCover:352-354`, `MediaStore.clearCover:372-373`); each calls `deleteBlobRow` on the old
+value in the same `@Transactional` before reassigning, so the update path orphans nothing either.
+
 ### Settled decisions, each with the line that settles it
 
 - **No grace period is needed against the writer.** `MediaStore.kt:112` (`attach`) and `MediaStore.kt:351`
@@ -89,6 +107,8 @@ No path removes a reference and leaves the blob. **The unreferenced-blob set is 
 - **The naive locators are not fit to be the guard.** Bitten 2026-08-17 on a throwaway copy: a fourth arm
   injected as `@Column(length = 36, name="banner_blob_id")` plus a lowercase `references veyq_blob (id)` left
   the inbox row's two locators reporting **3 and 2, unchanged**. The hardened keys above went to 4 / 4 / 3.
+  **Re-run 2026-08-17 @ `021bc66`** on a fresh copy — reproduced exactly (naive `3` / `2`; hardened `4` / `4` /
+  `3`), so the lever is wired to all three keys and the CR is not carrying a remembered bite.
   The tree carries a live lowercase `references veyq_membership`, so the case-insensitive spelling is not
   hypothetical.
 - **No web phase.** `web/src/api/generated/` is gitignored (`git check-ignore -v` → `web/.gitignore:4`) and
@@ -105,24 +125,45 @@ No path removes a reference and leaves the blob. **The unreferenced-blob set is 
       **Done when:** `python3 scripts/validate_contracts_common.py` green and
       `grep -rn 'unreferenced' contracts/` returns nothing.
 
-- [ ] **2 scripts** — add `scripts/validate_blob_reference_arity.py`, asserting all three hardened keys above
+- [ ] **2 scripts** — add `scripts/validate_blob_reference_arity.py`, asserting **all four** hardened keys above
       with the **named site set**, not only the counts (a list can look wrong; a number cannot). The FK key is
       asserted at 2 deliberately: an arm gaining a foreign key is a real state change that should turn this red
-      and be recorded, not land silently. Docstring carries the three required fields, and its **limit** field
-      states both known blind spots — (a) it counts *declaration sites*, so a column not named `*blob_id`
-      escapes both keys, and (b) it says nothing about whether any consumer *handles* all three arms, so
-      `SharingStore.subtreeBlobIds` could enumerate two of three and stay green. ·
+      and be recorded, not land silently. The **live-twin key is what carries the front-matter invariant**: the
+      three declaration keys pin how many arms *exist*, and only this one pins that the one predicate already
+      running over them *enumerates* all three — asserted as the three accessor spellings inside
+      `subtreeBlobIds`' own function body, so the guard stays a buildless grep. (Python 3.9 on the dev host:
+      a new guard using `X | None` needs `from __future__ import annotations`, as `validate_guard_gaps.py`
+      already does.) Docstring carries the three required fields, and its **limit** field states what is left
+      open — (a) it counts *declaration sites*, so a column not named `*blob_id` escapes the first two keys,
+      as does a `@Column(` whose name literal sits on a later line (none exist today: `grep -rn '@Column($'`
+      → 0), and (b) the live-twin key reads **text in one named function**, so it sees neither a *second*
+      consumer written later nor an arm that is named but unreachable. ·
       **Done when:** `python3 scripts/validate_blob_reference_arity.py` green on the untouched tree **before**
-      the injection, and the injection from § settled decisions turns it red naming the fourth site.
+      any injection, the arity injection from § settled decisions turns it red naming the fourth site, and
+      deleting the `coverBlobId` arm from `subtreeBlobIds` turns it red naming that function — two bites,
+      because the guard now makes two claims that fail independently.
 
 - [ ] **3 scripts** — promote that injection into `scripts/validate_guard_gaps.py` as a rejected-case pin, so
       the guard's bite is re-run on every trust-chain run rather than remembered from this CR. The harness
-      already has the exact shape (copy tree → forge → run → discard); the injection is the one bitten above. ·
+      already has the exact shape (copy tree → forge → run → discard); the injection is the one bitten above.
+      **Lever checked against the mechanism** (`changes/README.md` § *first check the lever is wired*): a forgery
+      is a function over the copied root and may write any number of files — case `10`
+      (`forge_scoped_policy_gains_unlisted_dependency`) already writes two — so the `.kt` + `.sql` arity injection
+      fits with no harness change, as `expect_pass=False`. Its `check_case` runs the target guard on the
+      *un-forged* copy first, so both ways of removing the arity check turn this red: a neutered check fails the
+      `expect_pass` comparison, a deleted file fails the un-forged pre-run. Its `_IGNORE` list excludes neither
+      `backend/src/main` nor `db/migration`, so the copy carries everything the new predicate reads. ·
       **Done when:** `python3 scripts/validate_guard_gaps.py` green, and removing the new guard's arity check
       turns it red.
 
-- [ ] **4 docs** — supersede the claim at every site the fragment sweep found
-      (`grep -rni 'unreferenced' contracts backend web docs scripts wiki changes infra`), with the shape of each
+- [ ] **4 docs** — supersede the claim at every site the fragment sweep found. The sweep is
+      `git grep -niI 'unreferenced'` over the **whole tracked tree** — not an enumerated directory list, which
+      drifts, and which here also drags in 14 `web/node_modules` hits that bury the six real ones. **Do not
+      "sharpen" it to `unreferenced-blob`:** `en.memory.media.md` wraps the compound across a newline, so the
+      more distinctive fragment silently drops one of the two sites this phase exists to fix (6 hits / 4 files
+      instead of 9 / 7). Run 2026-08-17 @ `021bc66`, CR excluded — 9 hits in 7 files, of which **two are
+      homonyms** and stay untouched (`docs/decisions/0038-…md:56` is about an unreferenced generated clone;
+      `web/src/app/devAutoUnlock.ts` about an unreferenced function). The rest, with the shape of each
       correction named:
       - `docs/decisions/0013-…md:76` — the clause `+ the unreferenced-blob sweep` is **deleted**. The sentence
         is about abandoned uploads; an abandoned upload never reaches `persistBlob`, so `UploadSessionPurge`
@@ -130,15 +171,28 @@ No path removes a reference and leaves the blob. **The unreferenced-blob set is 
       - `docs/features/memory/enablers/en.memory.media.md:98` (E3) — the same clause **deleted**, same reason.
       - `backend/…/UploadSessionPurge.kt:12` — **unchanged**, deliberately. It records *why* the two halves are
         split, which is still true and is the reason this CR did not fold them together.
-      - `docs/inbox.md` #26 item (3) — **rewritten** to what is actually left: the sweep is deferred because
+      - `docs/inbox.md` — the sweep returns **three** hits, not one. Only #26 item (3) is **rewritten**; the
+        other two are the rows for the two leaks below, which already describe this sweep correctly (one of
+        them already names this CR as what puts it out of scope) and are left **unchanged**. Item (3) becomes
+        what is actually left: the sweep is deferred because
         its set is empty by construction; it names the guard as its precondition, the reader-side read-ordering
         constraint, and the two leaks below as separate rows. ·
       **Done when:** `for f in scripts/validate_*.py; do python3 "$f"; done` green over the **committed** tree.
 
 ## Definition of done
 
-All four phases green, the full guard glob green over the committed tree, and the structural invariant in the
-front-matter enforced by `scripts/validate_blob_reference_arity.py` — not by a sentence. No coverage change:
+All four phases green, and — since there is no remote and **no CI run has ever executed** — "green" means the
+full glob run locally over the **committed** tree: `for f in scripts/validate_*.py; do python3 "$f"; done`,
+which is also the strongest form the per-phase done-whens above are measured against. Baseline for that run,
+2026-08-17 @ `021bc66`: **26 guards, all `rc=0`** — so a red after this CR is this CR's.
+
+The front-matter invariant is enforced by `scripts/validate_blob_reference_arity.py` rather than by a sentence,
+and the CR states how far that reaches instead of implying it is total: the three declaration keys pin the arm
+*count and identity*, the live-twin key pins that the one predicate running over them today enumerates all
+three, and a **future** consumer is covered by neither — that residue is the guard's documented limit (b), not
+an unstated gap. Bitten both ways 2026-08-17: dropping the cover arm from `subtreeBlobIds` leaves the three
+declaration keys at an unchanged `3/3/2`, which is exactly why the fourth key is in the guard and not only in
+the table above. No coverage change:
 `satisfies:` names an enabler, and `docs/coverage/` models use-cases only (`find docs/coverage -name 'en.*'`
 → empty).
 
