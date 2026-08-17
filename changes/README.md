@@ -299,10 +299,17 @@ during cr-e2e-orchestrator:
   the push produced zero runs. `ci.yml` carries `workflow_dispatch`, so `gh workflow run ci.yml --ref <branch>`
   is how a branch gets a real run.
 - **`workflow_dispatch` resolves against the DEFAULT branch.** A workflow file that exists only on the feature
-  branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. `trust-chain.yml`,
-  `mutation*.yml` and `wiki-sync.yml` are in exactly that state: they live on `starting-something-new` and not on
-  `main`, so **the whole trust-chain job has never executed in CI** and cannot until the branch lands. Its local
-  run over the committed tree is the strongest available proof; say that, rather than "green in CI".
+  branch cannot be dispatched at all — `HTTP 404: not found on the default branch`. This once described
+  `trust-chain.yml`, `mutation*.yml` and `wiki-sync.yml`, which lived on a feature branch and not on `main`; that
+  is **no longer true** (measured 2026-08-17: `git branch -a` → `main` alone, and all seven workflow files are on
+  it). Keep the gate written down anyway — it is a property of `workflow_dispatch`, not of one branch, and the
+  next long-lived branch meets it again.
+- **A third gate now outranks both, and it is the one in force: there is no remote.** `git remote -v` is empty
+  (measured 2026-08-17), so **no CI run has ever executed** — not the trust chain, not `ci.yml`, not `web-e2e`.
+  No branch filter and no dispatch trick changes that; only publishing the repository does, which is the owner's
+  call and tracked as inbox **#26** item (1). Until then, a local run over the **committed** tree is the
+  strongest available proof, and a done-when must say exactly that rather than "green in CI". The two gates
+  above stay because they are what bites *after* the remote exists.
 
 Then **read the job's log, not its tick**: a job that ran nothing and a job whose suites all passed render
 identically, which is why `scripts/validate_e2e_discovery.py` exists at all.

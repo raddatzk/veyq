@@ -1,0 +1,108 @@
+---
+id: cr-abandoned-upload-session-reclaim
+title: Reclaim abandoned upload sessions — the row and the bytes it staged
+status: planned
+satisfies: [uc.memory.upload]
+adrs: ["0013"]
+invariants:
+  - Operator-blind E2EE — the sweep reads `created_at` and `storage_key` and deletes opaque objects; it opens nothing and needs no key. Untouched, but the phase that deletes bytes states it.
+  - Self-hostability — the store is the operator's own; a GC that never runs is a bill they pay forever, so this is a self-hosting obligation rather than a tidiness one.
+  - API-first — no wire change: a scheduled sweep has no contract surface, so this CR has no `contracts` phase.
+  - Product language (Memory / Chapter) — untouched; no user-facing copy.
+---
+
+## Goal
+
+An upload that is cancelled or dies mid-flight leaves a `veyq_upload_session` row **and** the chunks the client
+already PUT straight into the object store. Nothing reclaims either. Build the sweep three documents already
+describe in the present tense, so an abandoned upload stops being permanent.
+
+## Context & constraints
+
+**This is a *doc-ahead* gap** (`docs/ai/README.md` § 3): the decision exists, nobody built it. Three
+independent copies agree on the behaviour and on its shape, so nothing here is being invented —
+
+- [ADR 0013](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md):75 — *"Abandoned uploads are
+  reclaimed by GC (stale OPEN sessions + the unreferenced-blob sweep)."*
+- [en.memory.media](../docs/features/memory/enablers/en.memory.media.md):98 § E3 — same, as an exception flow.
+- [uc.memory.upload](../docs/features/memory/use-cases/uc.memory.upload.md):39 § E2 — *"The abandoned upload
+  session is reclaimed by the store-side GC."*
+
+**Measured against `main` (2026-08-17), so no phase re-derives it:**
+
+| Fact | Where |
+|---|---|
+| An OPEN session is a plain row — **no status column**; `complete` deletes it | `V11__media.sql:10-19`, `MediaStore.kt:152` + `:339` |
+| Seven `@Scheduled` sweeps exist; **none** names `UploadSessionEntity` | `grep -rln "@Scheduled" backend/src/main/kotlin` |
+| The unreferenced-blob half does not exist either | `grep -rn "unreferenced\|orphanBlob\|blobsWithoutMedia" backend/src/main/kotlin` → empty |
+| The template: purge the rows in a tx, then delete the store keys **after** it commits | `MediaTrashPurge.kt:28-32` |
+| The object key for a chunk | `BlobStore.chunkKey(storageKey, index)` = `"$storageKey/$index"`, `BlobStore.kt:51` |
+| Deleting objects | `BlobStore.delete(keys: List<String>)`, `BlobStore.kt:47`; the `%test` store is a deliberate no-op, `:66` |
+| Config shape for a sweep | `veyq.<area>.retention` + `veyq.<area>.purge.every`, ISO-8601 — `application.properties:40`, `:52`, `:58` |
+| `uc.memory.upload` coverage carries **7 criteria and no `gaps:`**, none of them about the reclaim | `docs/coverage/features/memory/use-cases/uc.memory.upload.yaml` |
+
+**Scoped to the session half. The unreferenced-blob sweep is a separate CR, and the reason is risk class, not
+size.** This sweep deletes objects that **nothing can reach**: the session row is the only pointer to that
+`storage_key`, so dropping both reclaims something already unreachable — a wrong predicate costs a stale row.
+An unreferenced-*blob* sweep deletes objects the database might still reach through a path the predicate
+missed, and blob references are **not** in one place: `MediaEntity.blobId`, `MediaDerivativeEntity.blobId`, and
+node **covers** (`NodesStore.kt:140` deletes cover blobs by id, so a cover holds one too). A predicate that
+enumerates two of those three destroys user content irreversibly. Same sentence in the docs, opposite blast
+radius — they do not belong in one CR.
+
+**`V11__media.sql:9` says *"Reclaimed by GC when abandoned (a later slice)"* and must be left exactly as it
+is.** Flyway checksums applied migrations, so correcting that parenthesis fails startup on every instance that
+already ran it — and `%dev`'s `repair-at-start=true` hides that in the one place it would be tested
+([`backend/CLAUDE.md`](../backend/CLAUDE.md) § Migrations). The comment is a historical artifact; the live
+statement of the rule is the sweep's own KDoc.
+
+## Decisions this CR must settle before it is built
+
+Both are open, and neither is mine to choose alone.
+
+1. **The retention window.** Every sibling is `P30D`, and copying that is the wrong reflex: trash retention is a
+   *user-visible grace period* ("I can still get it back"), while an abandoned upload is garbage the moment the
+   client stops. What bounds it from below is the **longest plausible in-flight upload** — the session row is
+   created at `start` and nothing heartbeats it, so a sweep that fires while a large file is still PUTting its
+   chunks deletes the staging area out from under a live upload. That is the only real constraint; above it the
+   choice is how long an operator pays to store garbage. A window in hours (e.g. `PT12H`) fits the hazard; `P30D`
+   fits the copy-paste.
+2. **Whether the sweep also needs a heartbeat.** If (1) cannot be answered without one — a genuinely slow
+   connection on a large file — then the honest fix is a `touched_at` the presign path bumps, which is a schema
+   change and probably its own CR. **Decide (1) first**; a window comfortably above the largest upload the
+   declared caps allow may make this moot, and the caps are measurable (`start` caps `byteSize`/`chunkCount`,
+   ADR 0013 § 3).
+
+## Phases
+
+- [ ] **1 backend** — `UploadSessionPurge`, mirroring `MediaTrashPurge`'s shape exactly: a `@Scheduled` job that
+      asks the store layer for sessions older than the window, deletes their rows in one transaction, and — **after
+      that transaction commits** — deletes `chunkKey(storage_key, 0 … chunk_count-1)` from the object store,
+      best-effort. Order is load-bearing in that direction only: an object delete that fails leaves a reclaimable
+      object and no pointer, whereas deleting objects first would leave a row pointing at nothing if the tx rolled
+      back. The store delete must tolerate keys that were never uploaded — an abandoned session has, by
+      definition, an unknown number of its chunks actually present. Config keys follow the sibling shape.
+      · Done when: `./gradlew check` green, including a slice test that a session past the window loses **both**
+      its row and its chunk keys, and one that a session inside the window loses neither.
+- [ ] **2 coverage** — `docs/coverage/features/memory/use-cases/uc.memory.upload.yaml` gains the acceptance
+      criterion this behaviour has never had (E2's *"reclaimed by the store-side GC"* is asserted by no test
+      today), with a backend ref. Note in the file that the **web** half of E2 — cancel stops before `complete` —
+      is a different claim already covered by `progress-and-cancel`.
+      · Done when: `python3 scripts/validate_coverage.py` green.
+
+## Definition of done
+
+`./gradlew check` green; `docs/coverage/` updated for `uc.memory.upload`; the whole guard glob green over the
+**committed** tree (`for f in scripts/validate_*.py; do python3 "$f"; done`).
+
+**No new guard, and the reason is stated rather than assumed.** The invariant worth protecting is *"a sweep that
+deletes a row carrying a `storage_key` also deletes the objects under it"* — a row-only delete is strictly worse
+than no GC, because it orphans the bytes permanently. It is not promoted to a `scripts/` validator because the
+proof is behavioural, not structural: the slice test in phase 1 asserts both halves against a fake store, which
+is a stronger check than any static sweep over `@Scheduled` classes could be, and there are only three such
+purges to keep honest. If a fourth arrives, revisit — three is where the rule of three starts.
+
+## Retrospective
+
+<!-- Filled at implement time: what went wrong in planning, in execution, AND in process/collaboration —
+     both directions — with the root cause and one concrete "next time". -->
