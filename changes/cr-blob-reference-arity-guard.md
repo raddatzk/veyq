@@ -116,7 +116,7 @@ value in the same `@Transactional` before reassigning, so the update path orphan
 
 ## Phases
 
-- [ ] **1 contracts** — `media.openapi.yaml` `deleteCoverBlob`: the final clause *"the deferred
+- [x] **1 contracts** — `media.openapi.yaml` `deleteCoverBlob`: the final clause *"the deferred
       unreferenced-blob sweep (ADR 0013 §3) is the crash-safety backstop"* is **replaced, not deleted**. The
       residual risk it names is real but misattributed: every cover path is transactional, so a crash leaves no
       unreferenced *row*; what it can leave is an orphaned store *object* (the post-commit `blobStore.delete`,

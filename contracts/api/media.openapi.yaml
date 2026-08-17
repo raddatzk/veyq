@@ -469,7 +469,9 @@ paths:
         when an uploaded cover is removed (the sealed node meta drops its `cover` separately, via `updateNode`).
         Idempotent — a node with no cover blob answers `204`. Guards: the caller holds a grant for the scope.
         `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the explicit
-        client-driven detach; the deferred unreferenced-blob sweep (ADR 0013 §3) is the crash-safety backstop.
+        client-driven detach. The row and its reference are cleared in one transaction, so a crash leaves no
+        blob row behind; the store delete is best-effort and post-commit, so what a failure can leave is an
+        orphaned store object — invisible to any query over `veyq_blob`, and reclaimed by no job today.
       security:
         - bearerAuth: []
       parameters:
