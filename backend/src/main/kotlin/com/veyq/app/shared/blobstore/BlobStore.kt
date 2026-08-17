@@ -63,6 +63,15 @@ class InMemoryBlobStore : BlobStore {
     override fun presignPut(key: String): String? = null
     override fun presignGet(key: String): String? = null
     override fun stat(key: String): Long? = null
+
+    /**
+     * A no-op, and therefore an **oracle hole**: every scheduled purge is specified as "delete the rows, then
+     * delete the objects those rows pointed at", and against this store the second half is invisible — a purge
+     * that silently dropped its `delete(…)` call would pass the whole hermetic suite. Do not assert a purge's
+     * store half by calling the store method and checking the keys it *returns*; that proves they were computed,
+     * never that they arrived. Assert it through the test-scope `RecordingBlobStore` `@Alternative`, which
+     * records what this was handed and delegates the rest.
+     */
     override fun delete(keys: List<String>) {}
 }
 

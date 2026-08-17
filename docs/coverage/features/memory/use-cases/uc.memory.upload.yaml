@@ -26,6 +26,24 @@ acceptanceCriteria:
         unit:
           - src/features/memory/media.test.ts
           - src/features/memory/uploadQueue.test.ts
+  - id: abandoned-session-reclaimed
+    text: >-
+      An upload that never reaches `complete` — cancelled, killed mid-flight, or rejected by the complete-time
+      budget gate — is reclaimed by the store-side GC past `veyq.media.upload.retention`: the OPEN
+      `veyq_upload_session` row AND the chunk objects the client already PUT direct-to-store, since that row is
+      the only pointer to their `storage_key` and a row-only delete would orphan the bytes permanently. A
+      session still inside the window loses neither half. The window is bounded by construction rather than
+      chosen — all of a session's PUT URLs are signed once at `start` and nothing re-signs them, so a client
+      past the presign TTL can write no further byte. This is the SERVER half of E2; the client half (cancelling
+      an in-flight upload aborts its PUTs and stops before `complete`, so no media is attached) is a different
+      claim, covered by `progress-and-cancel` above.
+    coverage:
+      backend:
+        integration:
+          - UploadSessionPurgeSliceTest.purgeReclaimsBothTheRowAndTheStagedChunkObjectsOfAnAbandonedSession
+          - UploadSessionPurgeSliceTest.purgeLeavesBothHalvesOfASessionInsideTheRetentionWindow
+          - UploadSessionPurgeSliceTest.purgeAlsoReclaimsTheRowLeftBehindByABudgetRejection
+          - UploadSessionPurgeSliceTest.retentionDefaultsToTheMeasuredPresignBound
   - id: transient-retry
     text: A transient upload failure is retried once automatically; a hard failure is marked failed and retried only on explicit request.
     coverage:

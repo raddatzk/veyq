@@ -202,6 +202,18 @@ a CR, run *everything it names*, not only the commands under § Locators. The sa
 class one paragraph earlier — a recorded sweep output naming two files that match nothing — and fixed only that
 instance instead of re-checking its siblings; one found instance of an unrun claim is the cue to sweep the rest.
 
+**A seventh tell: the CR named TWO exemplars and never diffed them against each other.** A phase that says
+*"mirror X's shape"* and, a clause later, *"reuse Y's expression"* reads as unusually well-grounded — it cites
+working code twice. But two templates are two claims, and the CR has asserted a third one it never checked:
+that they agree. `cr-abandoned-upload-session-reclaim` pointed its sweep at `MediaTrashPurge` for shape and at
+`MediaHandler`'s chunk-key enumeration for the expression; those two sites disagree on exactly the line that
+decided whether the CR was testable at all — the trash purge calls `blobStore.delete` unconditionally, the
+budget purge gates it behind `if (!blobStore.canPresign) return`, and the hermetic store cannot presign. Copying
+the second would have produced a job whose store half no test could observe, which is the hole that CR's *other*
+decision existed to close. **So: where a phase names two exemplars, read the lines it is actually copying and
+say which one wins.** It is one `sed -n` per site, it runs at refine, and the tell is purely syntactic — an
+"and" joining two `file:line` citations in one instruction.
+
 #### A SETTLED decision carries the one line that settles it
 
 **A CR marks what is open. Nothing marks what is closed — so a closed decision that is wrong is the one thing
