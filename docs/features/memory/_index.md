@@ -76,6 +76,11 @@ media + sensitive metadata; **the share grain**) `→ K_blob` (per media blob). 
   trash/restore, audited `deleted_by`; lightbox-only delete + Delete-key culling; reuses the cr-0107
   `delete_revision` reconcile + the cr-0102 blob-reclaim; **cr-0110 + cr-0111** (member-expedited purge + Trash-tab
   redesign on the shared grid + the upload/delete reconcile fixes))
+- [uc.memory.delete-node](use-cases/uc.memory.delete-node.md) — **refined** ([ADR 0061](../../decisions/0061-node-deletion-reversible-node-trash.md)):
+  delete a Memory/Chapter and its whole subtree into a recoverable **space** trash — soft-delete → hidden from
+  every read (both public-share paths included) → retention → scheduled hard-purge of nodes + media + derivatives
+  + buckets + blobs. Replaces today's immediate hard delete, which reclaimed only the cover blobs and orphaned the
+  rest (inbox #131). The trash hangs off the **space**, not the node: a trashed Memory has no Memory to hang from
 - [uc.memory.buckets](use-cases/uc.memory.buckets.md) — **built (web)** (cr-0113, curation authz relaxed to
   member-gated by cr-0123) ([ADR 0034](../../decisions/0034-media-uploader-buckets.md),
   on [en.memory.buckets](enablers/en.memory.buckets.md)): group a Memory's media by **who contributed it** — the

@@ -32,7 +32,8 @@
    detail view is a later slice). The breadcrumb walks back up the local tree.
 5. **Organize:** *create folder* / *create Memory* seal the name + blinded slug under `K_SC` and POST only
    ciphertext (a Memory also births its random `K_mem` wrapped under `K_SC`); *rename* re-seals the name +
-   recomputes the slug; *delete* removes the node and its subtree. All via [en.memory.tree](../enablers/en.memory.tree.md).
+   recomputes the slug; *delete* takes the node and its whole subtree into the space's recoverable trash
+   ([uc.memory.delete-node](uc.memory.delete-node.md)). All via [en.memory.tree](../enablers/en.memory.tree.md).
 
 ## Alternate / exception flows
 

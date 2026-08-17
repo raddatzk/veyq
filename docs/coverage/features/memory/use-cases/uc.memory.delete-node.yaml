@@ -1,0 +1,31 @@
+useCase: uc.memory.delete-node
+feature: memory
+title: Delete a Memory or Chapter — remove a whole subtree into a recoverable space trash
+# Decided by ADR 0061 (2026-08-17), not yet built. Soft-delete the whole subtree -> hidden from every read ->
+# per-space node trash -> scheduled hard-purge of nodes + media + derivatives + buckets + blobs + store objects.
+# Replaces today's immediate hard delete, which reclaimed only the subtree's cover blobs and orphaned its media,
+# derivative and bucket rows (inbox #131). The sharpest acceptance criterion is the share one: with deleted_at
+# set but the two share reads unfiltered, a share on a deleted Memory goes from serving an EMPTY subtree to
+# serving the full sealed subtree plus presigned blobs, unauthenticated — the column meant to make deletion
+# safer is what introduces the regression, so that pair must be bite-tested independently.
+status: planned
+acceptanceCriteria:
+  - id: delete-soft-deletes-the-whole-subtree
+    text: "Deleting a node marks the node AND every descendant soft-deleted in one transaction, and destroys nothing — its media, derivative, bucket and blob rows and every store object survive untouched, which is what makes the restore complete. Deleting an already-deleted subtree is a no-op. A non-member gets a non-enumerable 404; a delete inside a scope that is itself pending deletion is a conflict."
+  - id: subtree-leaves-every-read
+    text: "A soft-deleted subtree disappears from the tree listing, from the media and bucket listings, and from cover operations — 11 read call-sites across NodesStore, MediaStore and SharingStore carry the new predicate, and the two bucket handlers that reach a node without passing the node gate (renameBucket, deleteBucket) are closed explicitly."
+  - id: subtree-leaves-both-share-paths
+    text: "A soft-deleted subtree leaves a public share on BOTH guest paths at once — the anonymous resolve stops listing it AND its blobs stop being authorized for a presign — and comes back on both on restore. Filtering only the listing leaves a Memory invisible in the share and fully downloadable by anyone holding a blobId for the whole retention window. Each predicate is bite-tested on its own: removing either must redden exactly its own assertion and leave the other's control green."
+  - id: reads-that-must-not-filter
+    text: "Three reads deliberately keep seeing soft-deleted rows, and each has a failure mode if filtered — slug uniqueness (else validation passes and the database rejects the insert afterwards, turning a clean rejection into a 500), the delete's own subtree traversal (else re-deleting a partially deleted subtree stops early and strands the rest), and the whole-space erase (which must remove every node row including trashed ones)."
+  - id: slug-freed-on-delete-and-resupplied-on-restore
+    text: "The soft-delete frees the node's slug by replacing slugToken with the node's own id, so the name is immediately reusable — required because UNIQUE(parent_id, slug_token) is a plain index and MariaDB has no filtered indexes. Restore carries a freshly client-computed slugToken; a collision with a node created in the meantime is rejected on the same constraint a create hits, and the client disambiguates."
+  - id: restore-returns-the-subtree-intact
+    text: "Restore clears deleted_at across the subtree and writes the supplied token back, returning every descendant, photo, bucket and cover exactly as it was. Restoring an already-purged subtree is a non-enumerable 404."
+  - id: space-trash-lists-deleted-subtree-roots
+    text: "The space's Trash lists only the ROOT of each soft-deleted subtree (descendants went with it and return with it), each carrying when it was deleted and when it will be purged — purgeAfter derived at the resource boundary from deleted_at plus the configured retention, never stored."
+  - id: scheduled-purge-erases-the-subtree
+    text: "A scheduled job hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows inside the transaction, store objects best-effort after commit) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."
+gaps:
+  backend: "Nothing is built: ADR 0061 decided the lifecycle on 2026-08-17 and the CR that implements it has not run. The migration (deleted_at on veyq_node), the 11 read predicates, the restore endpoint and the node purge worker do not exist yet — no ref here would resolve to anything."
+  web: "Nothing is built. Hiding needs no web change (the delete handler already refetches the whole tree rather than splicing locally), but the space Trash surface and its restore affordance are unbuilt, so there is no test file to cite."

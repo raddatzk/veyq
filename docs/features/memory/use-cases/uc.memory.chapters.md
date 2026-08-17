@@ -24,7 +24,8 @@ in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
 2. The Memory view **lists its chapters** (decrypted titles) alongside its own media.
 3. **Open a chapter** → it behaves like a Memory: its own gallery of media, and it may nest further chapters.
 4. **Upload into a chapter:** media is sealed under the **chapter's `K_mem`** ([en.memory.media](../enablers/en.memory.media.md)) and attached to the chapter node.
-5. **Rename / delete** a chapter like any node (delete removes its subtree).
+5. **Rename / delete** a chapter like any node (delete takes its subtree into the space's recoverable trash —
+  [uc.memory.delete-node](uc.memory.delete-node.md)).
 
 ## Alternate / exception flows
 

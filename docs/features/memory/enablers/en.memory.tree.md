@@ -7,7 +7,8 @@
   (the content unit, nested **Chapters**) — with **encrypted names**, **blinded slug tokens** for permalinks,
   and a **per-Memory content key `K_mem`** born on creation. Tree + names + keys only.
 - **Serves (use-cases):** [uc.memory.browse](../use-cases/uc.memory.browse.md) (tree navigation + node CRUD),
-  [uc.memory.gallery](../use-cases/uc.memory.gallery.md), [uc.memory.chapters](../use-cases/uc.memory.chapters.md).
+  [uc.memory.gallery](../use-cases/uc.memory.gallery.md), [uc.memory.chapters](../use-cases/uc.memory.chapters.md),
+  [uc.memory.delete-node](../use-cases/uc.memory.delete-node.md) (the node lifecycle — delete, trash, restore, purge).
   Media, the sealed node-meta (date / place), journal and sharing build on it **indirectly**, through
   [en.memory.media](en.memory.media.md) / [en.memory.node-meta](en.memory.node-meta.md). Creating an empty named
   node is not itself a user goal; it is the substrate those carry.
@@ -78,6 +79,33 @@ sequenceDiagram
   cycle / containment checks. **No cross-scope move** — that is a copy + re-encrypt under the target scope's
   `K_SC`/`K_mem` (a separate use-case), never a tree move.
 - **Reorder:** update `orderIndex` among siblings.
+
+## Delete — soft-delete, trash, purge
+
+A node delete is **reversible** and takes the **whole subtree** with it
+([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md),
+[uc.memory.delete-node](../use-cases/uc.memory.delete-node.md)). It is the same
+**soft-delete → trash → retention → scheduled hard-purge** mechanism the
+[security model](../../../crosscutting/security-model.md) mandates for every destruction — a node is not an
+exception to it.
+
+- **Delete:** mark the node and every descendant `deletedAt = now` in one transaction. **Nothing is destroyed** —
+  the subtree's media, derivatives, buckets and blobs are untouched, which is what makes a restore complete.
+- **The slug is freed at delete**, so the name is immediately reusable: the deleted node's `slugToken` is replaced
+  by its own id. `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
+  subset, so a partial index over live rows is not available. The server **cannot** recompute a slug token (it is
+  a blinded MAC under `K_SC`), so the original is not kept — **restore carries a freshly client-computed token**,
+  and a collision is the ordinary disambiguation a create already handles.
+- **Hidden, not marked.** Every user- and guest-facing read carries `deletedAt is null`. Three reads deliberately
+  do **not**: slug uniqueness (it must keep seeing the row, or validation passes and the database rejects the
+  insert afterwards), the delete's own subtree traversal (or re-deleting a partially deleted subtree stops early),
+  and the whole-space erase (which must remove trashed rows too).
+- **Both share reads carry the predicate** — the anonymous resolve *and* the blob authorization. With `deletedAt`
+  set but these unfiltered, a share on a deleted Memory serves the full sealed subtree and presigns every blob
+  under it. The row surviving is exactly what makes this dangerous.
+- **Purge:** a scheduled job hard-erases expired subtrees — media, derivative, bucket and blob rows in FK order,
+  then the store objects, then the node rows. The **cover-blob reclaim belongs here, not in the delete**, or a
+  restore returns a Memory whose cover is already gone.
 
 ## Alternate / exception flows
 
