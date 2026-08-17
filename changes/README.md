@@ -448,6 +448,24 @@ function does to its input, both one second away. This is § upstream of every t
 more reason the live defect (§ below) beats a forged one — a real leak already arrives in the form the oracle
 sees.
 
+### A CR that calls an existing test too weak proves it with an injection BOTH tests see
+
+**Otherwise "proven by nothing" is prose, and prose about a test cannot be wrong out loud.** A CR whose
+justification is *"the check that exists does not cover the half that matters"* has made a claim about code that
+is already green, which is the one kind of claim no run contradicts — the suite passes either way, before and
+after. The form that settles it is a single injection of the defect, run against the old case and the new one
+together: the new test goes red **by name** and the old one stays **green**, which is the claim, demonstrated.
+`cr-abandoned-upload-session-reclaim` argued that `MediaTrashPurge`'s object delete was asserted by nothing;
+dropping that delete reddened only the retro-fitted case, while `purgeHardDeletesTrashedPastRetention` passed
+untouched — because it calls the store method and reads the keys it *returns*, so it proves they were computed
+and never that they arrived. Note the shape: this is the *green* half doing the work, and § *a bite test must
+tell "the guard held" apart from "nothing ran"* is its mirror — there an unexpected green is the failure, here
+the **named** green is the evidence. Compare against the named other case, never against "nothing else broke".
+
+**And the depth is not overhead at this size.** Three injections over a two-class sweep — the positive, the
+window control, the retro-fit — cost less than deciding whether they were warranted. Where a CR's own argument
+rests on which tests bite, bite them.
+
 ### Where the defect is still live, order it guard → red → fix → green
 
 **The unfixed defect is a stronger bite test than any injection, and it is free.** A forged one proves the guard fires on a shape *you*
