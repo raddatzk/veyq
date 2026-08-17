@@ -81,6 +81,22 @@ Two consequences, and the second is the one that saves work:
 **So one thing is open: is `PT1H` the number?** It is an operator-facing config key with a documented default,
 so getting it wrong is cheap to correct — but it should be chosen, not inherited.
 
+**And a second, found by asking where phase 1's assertion would come from: the store half is unobservable
+today.** This CR's done-when says the sweep deletes *both* the row and the chunk keys — and nothing in the
+hermetic tier can see the second. `InMemoryBlobStore.delete` is an empty no-op (`BlobStore.kt:66`), and the
+precedent this CR mirrors does not assert it either: `MediaTrashSliceTest`'s own header says *"In-memory store
+(metadata only)"* and it checks only that rows are hard-deleted, leaving `MediaTrashPurge.kt:31`'s
+`blobStore.delete(reclaimKeys)` proven by nothing. So the invariant this CR calls load-bearing — *a row-only
+delete is strictly worse than no GC* — is exactly the half no existing test covers. Two ways, and they are not
+equivalent:
+
+- **A recording `BlobStore` test double** that captures the keys it was handed. Costs a small test-scope bean;
+  buys the assertion this CR needs **and** retro-fits one onto `MediaTrashPurge`, so the seam is shared rather
+  than scaffolding for one job. **Recommended.**
+- **Assert at the store layer** — call the purge's store method directly and check the reclaim keys it returns.
+  Cheaper, and strictly weaker: it proves the keys were *computed*, never that they reached the store, which is
+  the failure the invariant is about.
+
 ## Phases
 
 - [ ] **1 backend** — `UploadSessionPurge`, mirroring `MediaTrashPurge`'s shape exactly: a `@Scheduled` job that
@@ -109,9 +125,11 @@ so getting it wrong is cheap to correct — but it should be chosen, not inherit
 **No new guard, and the reason is stated rather than assumed.** The invariant worth protecting is *"a sweep that
 deletes a row carrying a `storage_key` also deletes the objects under it"* — a row-only delete is strictly worse
 than no GC, because it orphans the bytes permanently. It is not promoted to a `scripts/` validator because the
-proof is behavioural, not structural: the slice test in phase 1 asserts both halves against a fake store, which
-is a stronger check than any static sweep over `@Scheduled` classes could be, and there are only three such
-purges to keep honest. If a fourth arrives, revisit — three is where the rule of three starts.
+proof is behavioural, not structural: phase 1's slice test asserts both halves through the recording double
+decided above, which is a stronger check than any static sweep over `@Scheduled` classes could be, and there are
+only three such purges to keep honest. If a fourth arrives, revisit — three is where the rule of three starts.
+**Note what that leaves open:** until the double exists, `MediaTrashPurge`'s object delete is unasserted too, so
+"three purges kept honest" is an aspiration on the day this CR starts and a fact on the day it lands.
 
 ## Retrospective
 
