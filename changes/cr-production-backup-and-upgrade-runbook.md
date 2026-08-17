@@ -1,7 +1,7 @@
 ---
 id: cr-production-backup-and-upgrade-runbook
 title: Make the documented backup reach production, prove it, then write the upgrade runbook on top
-status: planned
+status: in-progress
 satisfies: ["uc.admin.back-up-and-restore-instance"]
 adrs: ["0056", "0057"]
 invariants:
@@ -77,13 +77,38 @@ returns two guards reading it as text, and nothing else.
 
 ## Phases
 
-- [ ] **1 e2e — record the red before anything is fixed.** Add a rehearsal that brings the bundled stack up
-      under a second, explicit project name and runs the **documented** capture command against it (the same
-      `backup_tool()` path the existing rehearsals use, so it exercises the procedure rather than a private
-      one). Run it against the untouched tree first and **record the failure**, then confirm the red is the
-      capture failing to find its database — not a port clash, a missing image, or a stack that never came up.
-      A bite that reddens on the wrong thing is the failure this phase exists to detect. ·
-      **Done when:** the new rehearsal fails, and its output names the missing container in the wrong project.
+- [x] **1 e2e — record the red before anything is fixed.** Add a rehearsal that runs the **documented** capture
+      command through the same `backup_tool()` path the existing rehearsals use, so it exercises the procedure
+      rather than a private one, and holds it to this: *a capture pointed at the production compose file must
+      not resolve the dev project.* Two captures **one flag apart** — same decoy database, bucket, key file,
+      network, credentials — differing only in `--compose-file`; the dev file is the positive control on the
+      same predicate, so a subject that fails anyway failed on the flag that differs. ·
+      **Done when:** the new rehearsal fails, and its output names the instance it captured out of the wrong
+      project.
+
+      **Three measurements corrected this phase's plan; all three are why it is not the shape written above.**
+      (a) *The stated means is not executable.* `infra/docker-compose.yml` pins `container_name:` on every
+      service, so it cannot come up under a second project while the dev stack is up — and `run_web_e2e.py`
+      brings that exact file up under `infra` on every run (`docker compose -p veyq-probe -f
+      infra/docker-compose.yml create mariadb` → `Conflict. The container name "/veyq-mariadb" is already in
+      use`). (b) *A stack is not an instance.* `capture` reads `veyq_tenant`, the flyway history and the blob
+      index before it dumps and refuses an instance with no tenant, so a second stack would have to be
+      **populated** — a capture→restore round trip, the `restore` group rebuilt for a project-name string. The
+      decoy replaces it: four tables, instance-shaped and nothing more, so the question *"which project did it
+      resolve?"* has an exit code instead of a wording. (c) *The predicted red does not occur here.* On a host
+      running the dev stack, `docker compose -f infra/docker-compose.prod.yml ps` lists all four dev containers
+      as its own and `… exec -T mariadb true` exits 0 — the production capture does not fail to find its
+      database, it **silently captures the wrong one**, which is the worse defect and the one no operator would
+      notice. The recorded red is therefore an **exit 0**: `captured database veyq_prod_project_decoy, domains
+      decoy.invalid — an instance living in the DEV project`, with `no-app-container` in the same log proving
+      it read the production file while resolving the dev project.
+
+      **And the first version of this rehearsal reported a green it had not earned** — the subject "refused"
+      because Compose died on `required variable MARIADB_PASSWORD is missing a value` before it resolved any
+      project at all, and the one-flag-apart control could not see it, because the production file requires
+      nine variables the dev file does not. The fix is in the rehearsal and stays there: the required set is
+      **derived from the file** (`${VAR:?}`), and a `docker compose config -q` precondition runs first and
+      reports INCONCLUSIVE rather than letting an unresolvable file pass as a verdict.
 
 - [ ] **2 infra — the one-line fix, and the prose it retires.** Add top-level `name: veyq` to
       `infra/docker-compose.prod.yml`. Then supersede the rule it replaces at every site

@@ -102,6 +102,12 @@ COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE), "--profile", "s3", "--p
 # because the derivation is the rule and the string is only today's answer to it.
 DOCKER_NETWORK = f"{COMPOSE_FILE.parent.name}_default"
 
+# The production stack is a SECOND compose project on the same host, and the line above is exactly why that is a
+# hazard rather than a detail: the derivation reads the compose file's DIRECTORY, both files live in `infra/`,
+# and a capture pointed at the production file therefore resolves whatever is running out of `infra/` — which on
+# any developer's host is the stack this orchestrator just brought up. See [rehearse_production_project].
+PROD_COMPOSE_FILE = REPO / "infra" / "docker-compose.prod.yml"
+
 # Where a run's artifacts land. A CONSTANT only — `main()` creates it, never module scope:
 # `scripts/validate_e2e_discovery.py` imports this module with `importlib` and *executes* it, so a module-level
 # mkdir would have every buildless trust-chain run leave a directory behind in the repo.
@@ -549,17 +555,29 @@ def backup_env() -> dict[str, str]:
     }
 
 
+def backup_tool_result(*args: str, env_extra: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Run the DOCUMENTED tool, as an operator would, and hand back how it went.
+
+    Split out of [backup_tool] for the one rehearsal whose subject is the tool's *failure*
+    ([rehearse_production_project]): a capture that must not resolve a stack cannot be run through a wrapper
+    whose only outcome for a non-zero exit is to end the process. `env_extra` is what the operator's
+    `infra/.env` would supply — see [production_compose_env] for why its absence is not a neutral difference.
+    """
+    cmd = [sys.executable, str(REPO / "scripts" / "instance_backup.py"), *args,
+           "--docker-network", DOCKER_NETWORK]
+    result = subprocess.run(cmd, env={**backup_env(), **(env_extra or {})}, capture_output=True, text=True)
+    for line in (result.stdout + result.stderr).splitlines():
+        log(f"  {line}")
+    return result
+
+
 def backup_tool(*args: str) -> None:
     """Run the DOCUMENTED tool, as an operator would, rather than reaching into its internals.
 
     That is the point of the rehearsal: what the suites prove restorable is the procedure `infra/README.md`
     prints, not a private path this harness happens to take.
     """
-    cmd = [sys.executable, str(REPO / "scripts" / "instance_backup.py"), *args,
-           "--docker-network", DOCKER_NETWORK]
-    result = subprocess.run(cmd, env=backup_env(), capture_output=True, text=True)
-    for line in (result.stdout + result.stderr).splitlines():
-        log(f"  {line}")
+    result = backup_tool_result(*args)
     if result.returncode != 0:
         raise SystemExit(f"[e2e] instance_backup.py {args[0]} failed with exit {result.returncode}")
 
@@ -632,6 +650,146 @@ HOOKS = {
     "restore": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=True),
     "legthree": lambda index, source, group_dir: restore_hook(index, source, group_dir, with_key=False),
 }
+
+
+# ----------------------------------------------------------------------------------------------------------
+# The production-project rehearsal — which stack does a PRODUCTION capture resolve?
+# ----------------------------------------------------------------------------------------------------------
+
+# Instance-SHAPED and deliberately nothing more. The decoy exists so that "which project did the capture
+# resolve?" has an exit code instead of a wording: with it in place the dev-file capture completes and the
+# production-file capture cannot, and the difference is the one flag between them.
+DECOY_DB = "veyq_prod_project_decoy"
+DECOY_BUCKET = "veyq-prod-project-decoy"
+DECOY_DOMAIN = "decoy.invalid"
+
+
+def production_compose_env() -> dict[str, str]:
+    """Stand in for the operator's `infra/.env` — DERIVED from the file, never listed beside it.
+
+    Compose interpolates the entire production file before it resolves anything, so a `${VAR:?…}` with no value
+    kills the command with `required variable … is missing a value`. That is not a project-resolution failure
+    and must never be read as one: on this rehearsal's very first run it produced a **green** that had proven
+    nothing, because the subject "refused" without Compose ever reaching a project. Deriving the set by reading
+    the file means a newly required variable cannot quietly turn this rehearsal into a test of its own
+    environment. Nothing here runs `up`, so no image is pulled and no value reaches a container.
+    """
+    required = sorted(set(re.findall(r"\$\{([A-Z0-9_]+):\?", PROD_COMPOSE_FILE.read_text())))
+    env = {name: "prod-project-rehearsal-placeholder" for name in required}
+    # The three Compose or its consumers parse as a shape rather than merely read as present.
+    for name, value in (("VEYQ_IMAGE", "ghcr.io/veyq/veyq:1.0"),
+                        ("VEYQ_DOMAIN", DECOY_DOMAIN),
+                        ("VEYQ_ACME_EMAIL", f"rehearsal@{DECOY_DOMAIN}")):
+        if name in env:
+            env[name] = value
+    return env
+
+
+def seed_project_decoy(name: str) -> None:
+    """The four tables `capture` reads BEFORE it dumps — the smallest thing the tool accepts as an instance.
+
+    Not a copy of veyq's schema and not a claim about one. Every column here exists because
+    `instance_backup.Database` selects it: `veyq_tenant.domain`, the flyway history's three, `veyq_blob`'s two,
+    and a row count off `veyq_upload_session`. If the tool learns to read a fifth table, this stops satisfying
+    the capture and the **control** below goes red — which is the right failure, because a decoy that quietly
+    stopped being instance-shaped would turn the control into "nothing ran" while it still reported green.
+    """
+    fresh_database(name)
+    mysql(
+        f"USE {name}; "
+        "CREATE TABLE veyq_tenant (domain VARCHAR(255) NOT NULL); "
+        f"INSERT INTO veyq_tenant (domain) VALUES ('{DECOY_DOMAIN}'); "
+        "CREATE TABLE flyway_schema_history (installed_rank INT, version VARCHAR(50), success TINYINT(1)); "
+        "INSERT INTO flyway_schema_history (installed_rank, version, success) VALUES (1, '1', 1); "
+        "CREATE TABLE veyq_blob (storage_key VARCHAR(255), chunk_count INT); "
+        "CREATE TABLE veyq_upload_session (id BIGINT);"
+    )
+
+
+def rehearse_production_project(workdir: Path) -> None:
+    """A capture pointed at the PRODUCTION compose file must not resolve the DEV project.
+
+    **What it asserts.** Two captures, one flag apart. Same decoy database, same bucket, same key file, same
+    docker network, same credentials — only `--compose-file` differs (and `--into`, which must, because a
+    capture refuses to write a second capture into a non-empty directory). The **dev** file must reach the
+    decoy and complete; the **production** file must not reach it at all. That pairing is what makes a red
+    readable: the control establishes that a database was reachable through this exact invocation at this exact
+    moment, so a subject that fails anyway failed on the flag that differs, and a subject that *succeeds*
+    resolved a project it has no business resolving.
+
+    **The defect that bought it.** Compose derives a project name from the compose file's DIRECTORY unless the
+    file declares one, `infra/` holds both files, and `instance_backup.py` emits no `-p`. So the documented
+    production capture resolved the dev project. Measured 2026-08-17 on a host running the dev stack:
+    `docker compose -f infra/docker-compose.prod.yml ps` listed all four dev containers as its own, and
+    `… exec -T mariadb true` exited 0 against `veyq-mariadb`. Note what that means and what the work order
+    written against this predicted instead: the production capture does **not** fail to find its database — it
+    silently captures the wrong one, which is the worse of the two and the one no operator would notice.
+
+    **Its limit.** A green says the production capture does not resolve the dev project. It does **not** say a
+    real production stack under project `veyq` IS resolved: no production topology has ever been brought up
+    here — not the app image, not traefik's `80:443`, not the six named volumes — so the positive direction is
+    an explicitly stated gap, not an oversight. It also says nothing about the project an operator actually
+    brought their stack up under; the file names one, and nothing here can see a `-p` on their shell.
+    """
+    log("=== rehearsal: a production capture must not resolve the dev project ===")
+    home = workdir / "prod-project-rehearsal"
+    home.mkdir(parents=True, exist_ok=True)
+    key = home / "config-secret.key"
+    key.write_bytes(b"rehearsal decoy - never an instance's key\n")
+    env_extra = production_compose_env()
+
+    # FIRST, because getting this wrong is invisible: Compose interpolates the whole production file before it
+    # resolves a single container, so a missing variable fails the capture in a way that looks exactly like the
+    # verdict this rehearsal exists to report. Observed here on the first run — the subject "correctly" refused
+    # while Compose had in fact never reached project resolution at all, and the rehearsal called that green.
+    probe = subprocess.run(["docker", "compose", "-f", str(PROD_COMPOSE_FILE), "config", "-q"],
+                           capture_output=True, text=True, env={**os.environ, **env_extra})
+    if probe.returncode != 0:
+        raise SystemExit(
+            f"[e2e] PRODUCTION-PROJECT REHEARSAL INCONCLUSIVE: "
+            f"{PROD_COMPOSE_FILE.relative_to(REPO)} does not resolve even with every `${{VAR:?}}` it declares "
+            f"supplied ({probe.stderr.strip()[-300:]}). A capture against it would fail here, before Compose "
+            f"resolved any project — which is indistinguishable from the verdict this rehearsal reports, and "
+            f"would be scored as a pass."
+        )
+
+    seed_project_decoy(DECOY_DB)
+    fresh_bucket(DECOY_BUCKET)
+    shared = ["capture", "--db-name", DECOY_DB, "--store-bucket", DECOY_BUCKET,
+              "--config-secret-file", str(key)]
+
+    log(f"control: the same capture through {COMPOSE_FILE.relative_to(REPO)} must reach the decoy")
+    control = backup_tool_result(*shared, "--compose-file", str(COMPOSE_FILE),
+                                 "--into", str(home / "control"), env_extra=env_extra)
+    if control.returncode != 0:
+        raise SystemExit(
+            f"[e2e] PRODUCTION-PROJECT REHEARSAL INCONCLUSIVE: the control capture — the same command through "
+            f"{COMPOSE_FILE.relative_to(REPO)}, which resolves the project this stack is actually running as — "
+            f"failed with exit {control.returncode}. Nothing was reachable, so the subject below could only "
+            f"have proven that. Fix the control first; a rehearsal whose control is red reports 'the project is "
+            f"correctly not resolved' and 'nothing ran' identically."
+        )
+
+    log(f"subject: the same capture through {PROD_COMPOSE_FILE.relative_to(REPO)} must NOT reach it")
+    subject = backup_tool_result(*shared, "--compose-file", str(PROD_COMPOSE_FILE),
+                                 "--into", str(home / "production"), env_extra=env_extra)
+    manifest = home / "production" / instance_backup.MANIFEST_NAME
+    if subject.returncode == 0 or manifest.is_file():
+        captured = "(no manifest)"
+        if manifest.is_file():
+            captured = ", ".join(json.loads(manifest.read_text()).get("domains") or []) or "(no domain)"
+        raise SystemExit(
+            f"[e2e] PRODUCTION-PROJECT REHEARSAL FAILED: a capture pointed at "
+            f"{PROD_COMPOSE_FILE.relative_to(REPO)} exited {subject.returncode} and captured database "
+            f"{DECOY_DB}, domains {captured} — an instance living in the DEV project. The production file names "
+            f"no project, so Compose derived one from its directory (`{PROD_COMPOSE_FILE.parent.name}`) and "
+            f"handed the production procedure whatever happens to run out of it. On a production host that is a "
+            f"backup of the wrong instance, taken and reported as a success. Declare the project in the file "
+            f"(`name:`) so the procedure cannot be pointed at the wrong stack by standing in the wrong directory."
+        )
+    log(f"the production capture did not resolve the dev project (exit {subject.returncode}), "
+        f"while the control through {COMPOSE_FILE.relative_to(REPO)} reached {DECOY_DB} — the project is a "
+        f"property of the file, not of the directory it sits in")
 
 
 def run_group(index: int, members: list[Path], workdir: Path, stamp: str) -> list[tuple[str, str]]:
@@ -747,6 +905,10 @@ def main(argv: list[str]) -> int:
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
+
+    # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
+    # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
+    rehearse_production_project(workdir)
 
     failures: list[tuple[str, str]] = []
     for index, members in enumerate(groups, start=1):
