@@ -64,6 +64,17 @@ under-count. Three reasons the number itself does not belong in the file:
   prose. cr-0171 could not under-deliver on 235 fields: the validator stays red while one is missing. Prefer
   that over a number every time (see *promote one-shot proofs*, below).
 
+**"Measured against `main`, so no phase re-derives it" means *don't rebuild the inventory* — never *believe every
+row*.** A CR that carries its measurements in a table earns the implementer's time, and the clause that hands
+them over is doing the opposite of what it reads as: it suppresses re-derivation of the whole set, which is
+right, while sounding like a warrant on each row, which is wrong. Nothing in the pipeline re-checks a handed-over
+measurement — § *a settled decision* below is the same failure one altitude up — so the row that is wrong is the
+one nobody looks at. `cr-abandoned-upload-session-reclaim` shipped *"the `P30D` every sibling uses"* under
+exactly that clause; two of five siblings are not `P30D`, and the implement session only caught it by reading
+`application.properties` for an unrelated reason. **So: an implementer spot-checks one row of a handed-over
+table — the one the CR's own argument leans on hardest — and the author writes the clause to invite that.** One
+row, one command; the point is that the table has *a* reader, not that it is re-derived.
+
 **A locator whose Definition of done is "the same before and after" must ship in a form that COMPARES.** Most
 locators answer *"where are the sites?"* and are read once. A few are different: the DoD makes the *set itself*
 the condition — cr-device-wrap-join-and-remote-cutoff's anti-withholding sweep, whose done-when is *"the list is
