@@ -125,7 +125,7 @@ value in the same `@Transactional` before reassigning, so the update path orphan
       **Done when:** `python3 scripts/validate_contracts_common.py` green and
       `grep -rn 'unreferenced' contracts/` returns nothing.
 
-- [ ] **2 scripts** — add `scripts/validate_blob_reference_arity.py`, asserting **all four** hardened keys above
+- [x] **2 scripts** — add `scripts/validate_blob_reference_arity.py`, asserting **all four** hardened keys above
       with the **named site set**, not only the counts (a list can look wrong; a number cannot). The FK key is
       asserted at 2 deliberately: an arm gaining a foreign key is a real state change that should turn this red
       and be recorded, not land silently. The **live-twin key is what carries the front-matter invariant**: the
