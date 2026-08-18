@@ -90,7 +90,7 @@ makes the isolation test red.** Repair the FK first and that bite has to be reco
       and continuing past a failure — mirroring `NodeSubtreePurge`. Rewrite the `:39-42` comment. `purge(scopeId)`
       stays the transactional external entry. · Done when: the clean scope is erased while the poisoned one is
       not, and `./gradlew check` shows only the still-unfixed FK bites red.
-- [ ] **3 backend — the job family.** Bite-test (**live defect**, already written and measured red at
+- [x] **3 backend — the job family.** Bite-test (**live defect**, already written and measured red at
       `ScopesSliceTest.purgeErasesAGroupThatEverEnqueuedAJob`, currently in the working tree): extend it to seed a
       **decline** on the job as well, so one test covers the whole `veyq_job` → `veyq_job_decline` chain and
       cannot go green on half a fix. Fix: delete declines by job id, then jobs by `scope_id`, both before

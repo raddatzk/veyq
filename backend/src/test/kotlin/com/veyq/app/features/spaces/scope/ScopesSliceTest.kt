@@ -5,6 +5,8 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.tasks.CapabilityTags
+import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.blobstore.BlobStore
@@ -871,9 +873,14 @@ class ScopesSliceTest {
      * final `ScopeEntity.deleteById` hits the FK and rolls the sweep back.
      *
      * `clean` is the positive control on the same predicate: without it a red is equally produced by a purge that
-     * is simply broken. It also measures the blast radius the row only guessed at — `run()` wraps the whole tick
-     * in one transaction, so if `clean` dies too, one poisoned group stops every other group from ever being
-     * reclaimed.
+     * is simply broken. It also measured the blast radius the row only guessed at — before the tick was isolated,
+     * `run()` wrapped the whole sweep in one transaction and this scope took `clean` down with it.
+     *
+     * **The job is DECLINED, so one test covers the whole `veyq_job` -> `veyq_job_decline` chain and cannot go
+     * green on half a fix.** Deleting jobs without their declines only moves the violation one table down, which
+     * is the correction the closure forced on the inbox row (it asked one-hop and said two; the answer is four).
+     * The decline goes through the real claim-then-decline path rather than a hand-written row, so the arrangement
+     * is a thing the product actually produces.
      */
     @Test
     fun purgeErasesAGroupThatEverEnqueuedAJob() {
@@ -883,6 +890,12 @@ class ScopesSliceTest {
 
         // The real enqueue path (the member-removal rotation backstop, cr-0092) — not a hand-written row.
         assertTrue(tasks.originateScopeRotation(poisoned, 3), "a rotation job was enqueued on the group")
+        val claimed = tasks.claim(owner, listOf(CapabilityTags.SCOPE_ROTATION), poisoned, Duration.ofMinutes(5), 3)
+        assertNotNull(claimed, "the owner holds a grant on the group, so the rotation job is claimable")
+        tasks.decline(owner, claimed!!.jobId, "bite-test")
+        QuarkusTransaction.requiringNew().run {
+            assertEquals(1, JobDeclineEntity.count("jobId", claimed.jobId), "the decline row landed")
+        }
 
         listOf(poisoned, clean).forEach {
             given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
@@ -899,6 +912,7 @@ class ScopesSliceTest {
             QuarkusTransaction.requiringNew().run {
                 assertNull(ScopeEntity.findById(poisoned), "the group that ran a job is hard-purged")
                 assertEquals(0, JobEntity.count("scopeId", poisoned), "its job rows are erased with it")
+                assertEquals(0, JobDeclineEntity.count("jobId", claimed.jobId), "and the declines under them")
                 assertNull(ScopeEntity.findById(clean), "a co-purgeable group is not taken down with it")
             }
         } finally {
@@ -906,7 +920,10 @@ class ScopesSliceTest {
             // survives as still-purgeable and every later `purge.run()` in this JVM dies on it — which took the
             // neighbouring purgeErasesExpiredScopeAndContentButKeepsFreshOnes down with it on the first run. A
             // bite-test must name itself, not redden its neighbours.
-            QuarkusTransaction.requiringNew().run { JobEntity.delete("scopeId", poisoned) }
+            QuarkusTransaction.requiringNew().run {
+                JobDeclineEntity.delete("jobId", claimed.jobId)
+                JobEntity.delete("scopeId", poisoned)
+            }
             purge.purge(poisoned)
         }
     }

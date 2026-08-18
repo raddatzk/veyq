@@ -7,6 +7,8 @@ import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.UploadSessionEntity
+import com.veyq.app.features.tasks.JobDeclineEntity
+import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.config.VeyqConfig
@@ -66,7 +68,14 @@ class ScopePurge(
     /**
      * Erase one scope and everything under it, FK-safe: the blob **objects** go to the store first (their rows
      * still name the storage keys), then the DB rows child-first — epoch links before the scope row that owns the
-     * FK. All child tables carry `scope_id` except `veyq_media_derivative`, deleted by its media ids.
+     * FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids and
+     * `veyq_job_decline` by its job ids.
+     *
+     * **This list is the enumeration, and `scripts/validate_scope_erasure_arity.py` is what keeps it complete.**
+     * The rule is not "remember to add the new table" but *every table reachable by foreign key from
+     * `veyq_scope` is deleted here or carries `ON DELETE CASCADE`* — anything else refuses the final
+     * `ScopeEntity.deleteById` and the group can never be erased at all. Four tables were missing when the guard
+     * was written, and the two job ones had been blocking every real tick since `veyq_job` was introduced.
      */
     private fun eraseScope(scopeId: String) {
         val blobs = BlobEntity.find("scopeId", scopeId).list()
@@ -81,6 +90,11 @@ class ScopePurge(
         NodeEntity.delete("scopeId", scopeId)
         ScopeEpochEntity.delete("scopeId", scopeId)
         MembershipEntity.delete("scopeId", scopeId)
+
+        val jobIds = JobEntity.find("scopeId", scopeId).list().map { it.id }
+        if (jobIds.isNotEmpty()) JobDeclineEntity.delete("jobId in ?1", jobIds)
+        JobEntity.delete("scopeId", scopeId)
+
         ScopeEntity.deleteById(scopeId)
     }
 }
