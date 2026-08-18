@@ -7,6 +7,8 @@ import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.UploadSessionEntity
+import com.veyq.app.features.sharing.ShareEntity
+import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.BlobStore
@@ -68,8 +70,8 @@ class ScopePurge(
     /**
      * Erase one scope and everything under it, FK-safe: the blob **objects** go to the store first (their rows
      * still name the storage keys), then the DB rows child-first — epoch links before the scope row that owns the
-     * FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids and
-     * `veyq_job_decline` by its job ids.
+     * FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids,
+     * `veyq_job_decline` by its job ids and `veyq_share_identity` by its share ids.
      *
      * **This list is the enumeration, and `scripts/validate_scope_erasure_arity.py` is what keeps it complete.**
      * The rule is not "remember to add the new table" but *every table reachable by foreign key from
@@ -94,6 +96,14 @@ class ScopePurge(
         val jobIds = JobEntity.find("scopeId", scopeId).list().map { it.id }
         if (jobIds.isNotEmpty()) JobDeclineEntity.delete("jobId in ?1", jobIds)
         JobEntity.delete("scopeId", scopeId)
+
+        // Dormant today — v1 shares are personal-scope-only (ADR 0029 §6) and this runs on GROUP scopes — and
+        // erasing rather than retaining is the operator-blind answer, not a concession to the foreign key: the
+        // row holds the owner, the node and a sealed name of a group whose erasure its owner asked for, and with
+        // the scope gone there is no capability left for it to revoke.
+        val shareIds = ShareEntity.find("scopeId", scopeId).list().map { it.id }
+        if (shareIds.isNotEmpty()) ShareIdentityEntity.delete("shareId in ?1", shareIds)
+        ShareEntity.delete("scopeId", scopeId)
 
         ScopeEntity.deleteById(scopeId)
     }

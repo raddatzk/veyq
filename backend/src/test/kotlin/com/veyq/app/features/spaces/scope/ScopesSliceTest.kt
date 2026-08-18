@@ -5,6 +5,8 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.sharing.ShareEntity
+import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
@@ -982,6 +984,64 @@ class ScopesSliceTest {
             recorder.failOnKeyMarker = null
             QuarkusTransaction.requiringNew().run { BlobEntity.delete("scopeId", poisoned) }
             listOf(poisoned, clean).forEach { purge.purge(it) }
+        }
+    }
+
+    /**
+     * BITE-TEST for the share arm of the same closure — a **live defect on a seeded arm**, and the seeding is the
+     * honest part rather than a shortcut. `veyq_share.scope_id` references `veyq_scope(id)` with no `ON DELETE`
+     * (V31__share.sql:20) and `veyq_share_identity.share_id` references the share (V32__contributor_share.sql:13),
+     * so both refuse the scope row exactly as the job tables did; but v1 shares are personal-scope-only
+     * (ADR 0029 §6) while this purge runs on GROUP scopes, so **no product path can arrange this today**. Going
+     * through the API would mean building group sharing first, which is the thing this pins the schema for.
+     *
+     * What it therefore proves is the *schema* requirement, and that is what will still be true when sharing
+     * reaches group scopes: at that moment this arm arms itself, and a purge that never learned to delete a share
+     * would silently stop erasing groups again. Erasing the share is also what operator-blindness asks for — the
+     * row holds the owner, the node and a sealed name belonging to a group whose erasure the owner requested, and
+     * there is no capability left to revoke.
+     */
+    @Test
+    fun purgeErasesAGroupThatCarriesAShare() {
+        val (owner, domain) = seedMember()
+        val scopeId = createGroupAs(owner, domain)
+        val nodeId = createNodeIn(owner, scopeId, "shared-memory")
+        val shareId = UUID.randomUUID().toString()
+
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity().apply {
+                id = shareId; ownerAccount = owner; this.scopeId = scopeId; this.nodeId = nodeId
+                role = ShareEntity.CONTRIBUTOR; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
+                createdAt = Instant.now()
+            }.persist()
+            ShareIdentityEntity().apply {
+                id = UUID.randomUUID().toString(); this.shareId = shareId
+                sealedDisplayName = "c2VhbGVkLW5hbWU="; tokenHash = UUID.randomUUID().toString().replace("-", "")
+                createdAt = Instant.now()
+            }.persist()
+        }
+
+        given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$scopeId").then().statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+        }
+
+        try {
+            purge.run()
+
+            QuarkusTransaction.requiringNew().run {
+                assertNull(ScopeEntity.findById(scopeId), "the group that carries a share is hard-purged")
+                assertEquals(0, ShareEntity.count("scopeId", scopeId), "its shares are erased with it")
+                assertEquals(0, ShareIdentityEntity.count("shareId", shareId), "and the identities under them")
+            }
+        } finally {
+            // Same shared-JVM hygiene as the job bite: while the defect is live the scope survives as purgeable
+            // and would meet every later sweep in this JVM.
+            QuarkusTransaction.requiringNew().run {
+                ShareIdentityEntity.delete("shareId", shareId)
+                ShareEntity.delete("scopeId", scopeId)
+            }
+            purge.purge(scopeId)
         }
     }
 

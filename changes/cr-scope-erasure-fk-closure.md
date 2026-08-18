@@ -95,7 +95,7 @@ makes the isolation test red.** Repair the FK first and that bite has to be reco
       **decline** on the job as well, so one test covers the whole `veyq_job` → `veyq_job_decline` chain and
       cannot go green on half a fix. Fix: delete declines by job id, then jobs by `scope_id`, both before
       `ScopeEntity.deleteById`. · Done when: red before, green after; the guard drops to two.
-- [ ] **4 backend — the share family.** Bite-test (**live defect, seeded arm** — not the real path, and the CR
+- [x] **4 backend — the share family.** Bite-test (**live defect, seeded arm** — not the real path, and the CR
       says so on purpose: v1 cannot create a share on a GROUP scope, so the test seeds `ShareEntity` +
       `ShareIdentityEntity` directly. It pins the *schema* requirement, which is the thing that will still be
       true when sharing reaches group scopes). Fix: delete share identities by share id, then shares by
