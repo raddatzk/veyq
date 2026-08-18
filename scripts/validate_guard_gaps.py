@@ -42,6 +42,12 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      the predicates that enumerate them cannot land quietly. It is the one case here whose cost is *user
      data*: a reclaim predicate short by one arm deletes live content, and the arm it would miss
      (`veyq_node.cover_blob_id`) is the one with no foreign key to refuse
+  13 a scheduled purge deleting store objects inline, under a receiver named something other than `blobStore`
+     and typed with a fully-qualified name — rejected: `validate_store_reclaim_arity` keys on the declared
+     type, not on one spelling. The shape is chosen because it is the one that got through: that guard's first
+     predicate matched only an unqualified `: BlobStore` and reported **green** over a tree carrying this exact
+     bypass. What a bypass costs is the whole of ADR 0062 — a delete with no failure channel, at a point where
+     the row naming the key is already gone
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false*: `uc.spaces.verify-identity` is legitimately `planned` yet carries
@@ -121,6 +127,11 @@ CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/features/spaces/scope/Entities.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 BANNER_MIGRATION = "backend/src/main/resources/db/migration/V99__guard_gap_scope_banner.sql"
+# Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
+# reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
+TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPurge.kt"
+TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
+TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
 
 def _sub(text: str, old: str, new: str) -> str:
@@ -276,6 +287,24 @@ def forge_fourth_blob_reference_arm(root: pathlib.Path) -> str:
     return "a fourth column referencing veyq_blob, in Kotlin and SQL (must be REJECTED — consumers are now short an arm)"
 
 
+def forge_direct_store_delete_bypass(root: pathlib.Path) -> str:
+    # A purge that deletes store objects inline instead of recording them for the sweep. Spelled the way the
+    # NAIVE locator misses, and this one is not hypothetical: the receiver is named something other than
+    # `blobStore` AND its type is fully qualified, which is exactly the shape that ran GREEN against this
+    # guard's first predicate over a tree carrying the bypass. Pinning that shape is the point of the case —
+    # the easy `grep 'blobStore.delete'` reports nothing here.
+    f = root / TRASH_PURGE
+    if not f.is_file():
+        raise ForgeError(f"{TRASH_PURGE} is missing — the media trash purge moved or was deleted")
+    src = _sub(
+        f.read_text(),
+        TRASH_PURGE_CTOR_ANCHOR,
+        TRASH_PURGE_CTOR_ANCHOR + "    private val objects: com.veyq.app.shared.blobstore.BlobStore,\n",
+    )
+    f.write_text(_sub(src, TRASH_PURGE_BODY_ANCHOR, TRASH_PURGE_BODY_ANCHOR + '        objects.delete(listOf("k/0"))\n'))
+    return "a purge deleting store objects inline under a renamed, fully-qualified receiver (must be REJECTED)"
+
+
 def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     f = root / PROD_COMPOSE
     if not f.is_file():
@@ -298,6 +327,7 @@ CASES = [
     ("10", "validate_mutation_trigger_paths.py", forge_scoped_policy_gains_unlisted_dependency, True),
     ("11", "validate_config_secret_persistence.py", forge_unmounted_config_secret, False),
     ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
+    ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
 ]
 
 
