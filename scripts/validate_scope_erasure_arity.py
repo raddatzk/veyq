@@ -18,8 +18,8 @@ The closure is read from three keys that are all cheap and all textual:
   - *erased* — the entities `eraseScope` deletes, resolved through their `@Table(name = …)` to table names, so
     the guard compares schema against schema and never against a Kotlin class name.
 
-**The defect that bought it.** `docs/inbox.md` #132, refined into `cr-scope-erasure-fk-closure`. `eraseScope`
-deleted eight tables and left **four** in its closure undeleted — `veyq_job`, `veyq_job_decline`, `veyq_share`,
+**The defect that bought it.** A live one, found 2026-08-17 and fixed with `cr-scope-erasure-fk-closure`:
+`eraseScope` deleted eight tables and left **four** in its closure undeleted — `veyq_job`, `veyq_job_decline`, `veyq_share`,
 `veyq_share_identity` — so every scheduled tick died on `FK_JOB_SCOPE` the moment one purgeable group had ever
 enqueued a rotation job. Measured, not reasoned: `ScopesSliceTest.purgeErasesAGroupThatEverEnqueuedAJob` reddened
 with `JdbcSQLIntegrityConstraintViolationException … delete from veyq_scope where id=?` against the untouched

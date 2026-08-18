@@ -566,6 +566,25 @@ was scored red on a step the test does not exist to check. The tell is purely me
 **read which assertion reddened, not that the test reddened** — a red on a setup line is an unbitten test wearing
 a bitten one's clothes, and it is re-bitten by injection once the earlier fix lands.
 
+### A bite's lever must survive the CR's own later phases
+
+**A CR that fixes a defect and also pins a property against that defect will, if it is not careful, lever the
+second on the first — and then its own completion disarms the bite.** The check is one question at refine, asked
+per bite-test: *after which phase does this lever stop being pullable?* An answer naming a phase inside the same
+CR is the fault, and it is invisible from the phase being written, because there the bite is genuinely red.
+
+`cr-scope-erasure-fk-closure` staged the tick-isolation bite (*"one scope that cannot be erased must not stop the
+others"*) on a scope carrying a job row, which was exactly the FK gap its next two phases closed. Two phases
+later nothing could poison a scope any more — by construction, since a guard now enforces that — so the test
+would have degenerated into *"two erasable scopes both get erased"*, and its done-when (*"the poisoned one is
+**not** erased"*) would have gone red on a correct tree. The property is permanent; the lever had a two-phase
+life. The repair is to lever on a failure the CR does **not** remove — there, a store that refuses, which is
+also the realistic residual failure once the schema can no longer produce one.
+
+Note what this is *not*. § *a bite test you cannot make red* is about a lever that never worked; § *a live-defect
+red can land on the wrong STEP* is about ordering **within** the run. This one passes both: the lever works, the
+red lands correctly, and the bite still dies — of the fix, three phases later, silently and green.
+
 ### A bite test you cannot make red is telling you the design is not the one the doc describes
 
 **Reach for the design before reaching for a stronger injection.** The reflex when a new test stays green under

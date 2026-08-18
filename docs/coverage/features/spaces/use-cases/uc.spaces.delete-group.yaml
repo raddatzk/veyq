@@ -20,9 +20,13 @@ acceptanceCriteria:
       backend: { integration: [ScopesSliceTest.deleteGroupSoftThenRestoreWithReadOnlyGrace, ScopesSliceTest.deleteRestoreGuards] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: hard-purge-erases
-    text: At purgeAfter the scheduled job hard-erases the scope — its nodes + blob objects + memberships + epoch links + the scope row; a not-yet-expired pending scope is left untouched.
+    text: At purgeAfter the scheduled job hard-erases the scope — every table reachable by FK from veyq_scope, including its nodes, blob objects, memberships, epoch links, background jobs and their declines, shares and their contributor identities, and the scope row; a not-yet-expired pending scope is left untouched.
     coverage:
-      backend: { integration: [ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes] }
+      backend: { integration: [ScopesSliceTest.purgeErasesExpiredScopeAndContentButKeepsFreshOnes, ScopesSliceTest.purgeErasesAGroupThatEverEnqueuedAJob, ScopesSliceTest.purgeErasesAGroupThatCarriesAShare] }
+  - id: purge-isolates-a-stuck-scope
+    text: A scope whose erasure fails is confined to its own transaction and logged — the other purgeable scopes in the same tick are still erased, so one stuck group cannot halt all reclamation.
+    coverage:
+      backend: { integration: [ScopesSliceTest.purgeIsolatesAScopeItCannotEraseFromTheRestOfTheTick] }
   - id: operator-blind-purge
     text: The server only flips a lifecycle timestamp and, at purge, deletes ciphertext rows + blob objects — never a key or a name (erasure the blind server may perform, unlike a removal's rotation).
     coverage:

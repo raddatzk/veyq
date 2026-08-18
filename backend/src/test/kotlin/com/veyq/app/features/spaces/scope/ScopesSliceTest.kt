@@ -868,21 +868,23 @@ class ScopesSliceTest {
     }
 
     /**
-     * BITE-TEST for docs/inbox.md #132 — a **live defect** if the row is right, so it must be RED against the
-     * untouched tree before any fix is designed (changes/README.md § bite-proof a guard). The claim: a group that
-     * ever had a background job enqueued cannot be erased, because `veyq_job.scope_id` references `veyq_scope(id)`
-     * with no `ON DELETE` clause (V20__background_jobs.sql:26) and `eraseScope` never deletes job rows — so its
-     * final `ScopeEntity.deleteById` hits the FK and rolls the sweep back.
+     * The job arm of uc.spaces.delete-group's total erasure, and the one that was **live**: a group that had ever
+     * enqueued a background job could not be erased at all. `veyq_job.scope_id` references `veyq_scope(id)` with
+     * no `ON DELETE` clause (V20__background_jobs.sql:26) and nothing anywhere deleted a job row, so
+     * `eraseScope`'s final `ScopeEntity.deleteById` raised `FK_JOB_SCOPE` — on every scheduled tick, forever,
+     * with the group's bytes never reclaimed on the operator's own disk. That is what this reddened on before the
+     * fix, which is why it is written as a group that *ever ran* a job rather than as a row count.
      *
      * `clean` is the positive control on the same predicate: without it a red is equally produced by a purge that
-     * is simply broken. It also measured the blast radius the row only guessed at — before the tick was isolated,
-     * `run()` wrapped the whole sweep in one transaction and this scope took `clean` down with it.
+     * is simply broken. It also measured the blast radius, which was worse than the defect report assumed —
+     * before the tick was isolated, `run()` wrapped the whole sweep in one transaction and this one scope took
+     * `clean` down with it, so a single stuck group halted all reclamation.
      *
      * **The job is DECLINED, so one test covers the whole `veyq_job` -> `veyq_job_decline` chain and cannot go
-     * green on half a fix.** Deleting jobs without their declines only moves the violation one table down, which
-     * is the correction the closure forced on the inbox row (it asked one-hop and said two; the answer is four).
-     * The decline goes through the real claim-then-decline path rather than a hand-written row, so the arrangement
-     * is a thing the product actually produces.
+     * green on half a fix.** Deleting jobs without their declines only moves the violation one table down — the
+     * correction the closure forced on a defect report that had asked one-hop and answered two where the answer
+     * is four. The decline goes through the real claim-then-decline path rather than a hand-written row, so the
+     * arrangement is a thing the product actually produces.
      */
     @Test
     fun purgeErasesAGroupThatEverEnqueuedAJob() {
@@ -918,10 +920,11 @@ class ScopesSliceTest {
                 assertNull(ScopeEntity.findById(clean), "a co-purgeable group is not taken down with it")
             }
         } finally {
-            // Leave the JVM-shared H2 DB clean. While the defect is live the sweep rolls back, so `poisoned`
-            // survives as still-purgeable and every later `purge.run()` in this JVM dies on it — which took the
-            // neighbouring purgeErasesExpiredScopeAndContentButKeepsFreshOnes down with it on the first run. A
-            // bite-test must name itself, not redden its neighbours.
+            // Leave the JVM-shared H2 DB clean, and keep it that way when this test is next made to bite: with
+            // the fix reverted the sweep rolls back, `poisoned` survives as still-purgeable, and every later
+            // `purge.run()` in this JVM dies on it — which took the neighbouring
+            // purgeErasesExpiredScopeAndContentButKeepsFreshOnes down with it on the very first run. A bite-test
+            // must name itself, not redden its neighbours.
             QuarkusTransaction.requiringNew().run {
                 JobDeclineEntity.delete("jobId", claimed.jobId)
                 JobEntity.delete("scopeId", poisoned)

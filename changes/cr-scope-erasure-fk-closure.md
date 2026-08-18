@@ -1,7 +1,7 @@
 ---
 id: cr-scope-erasure-fk-closure
 title: A group erasure completes over the whole FK closure, and one stuck scope no longer halts the sweep
-status: planned
+status: done
 satisfies: [uc.spaces.delete-group]
 adrs: ["0014", "0021", "0029"]
 invariants: [operator-blind-e2ee, self-hostable-by-default]
@@ -100,7 +100,7 @@ makes the isolation test red.** Repair the FK first and that bite has to be reco
       `ShareIdentityEntity` directly. It pins the *schema* requirement, which is the thing that will still be
       true when sharing reaches group scopes). Fix: delete share identities by share id, then shares by
       `scope_id`. · Done when: red before, green after; **the guard goes green**.
-- [ ] **5 coverage + docs.** Update
+- [x] **5 coverage + docs.** Update
       [uc.spaces.delete-group.yaml](../docs/coverage/features/spaces/use-cases/uc.spaces.delete-group.yaml):
       `hard-purge-erases` names jobs and shares, plus a new criterion for the isolation. Correct `docs/inbox.md`
       #132 (two arms → four, the tick-wide blast radius, the H2-not-MariaDB caveat) and delete it on completion.
@@ -124,4 +124,31 @@ MariaDB, and no claim here should be read as if something did.
 
 ## Retrospective
 
-_(filled at implementation)_
+**Planning — the phase-2 bite was levered on a defect this CR's own later phases remove.** Phase 2 specified
+*"two purgeable group scopes, one carrying a job row"* with a done-when of *"the clean scope is erased **while
+the poisoned one is not**"*. That assertion is true only between phases 2 and 3: phase 3 makes the job-carrying
+scope erasable, so the test would either have inverted (red on a correct tree) or degenerated into *"two clean
+scopes both get erased"*, which pins nothing about isolation. The property outlives the CR and the lever did
+not. It cost a re-designed lever at implement time — a refusing `BlobStore` through the existing
+`RecordingBlobStore` seam, which the CR never scoped — where one question at refine would have caught it. That
+question is now `changes/README.md` § *a bite's lever must survive the CR's own later phases*.
+
+**Planning — the implement brief's central ordering claim was true of the planned CR, not the built one.** It
+said the job-FK defect *is* the live lever that reddens the isolation bite, and that repairing the FK first
+would destroy the evidence. The phase order was kept and is still right, but the premise is not: the tick-wide
+transaction is its own live defect and reddens an isolation bite against **any** erasure that throws. Nothing
+was lost — the reasoning simply pointed at a different lever than the one that shipped.
+
+**Execution — retiring the inbox row was not a one-line delete.** Three places cited `#132` (the bite's KDoc,
+the new guard's docstring, and row #130's own prose), and #130 additionally carried *measured* line anchors into
+`ScopePurge.kt` that phase 2 had moved — `@Transactional at :43/:50` describes a shape that no longer exists.
+Grepping the row number **before** deleting it is what found all four; deleting first would have left a guard
+docstring pointing at nothing and a neighbouring row asserting something false about the code this CR changed.
+
+**What went right, and is worth keeping:** every phase's red landed on the assertion it was supposed to. The
+guard's first run *was* the discovery, the bite and the fix-list in one output; the job bite's red moved from
+`purge.run()` to its own assertion the moment isolation landed, which is the isolation working, visible without
+being asserted for.
+
+**Next time:** at refine, for every bite-test, name the lever **and the phase after which that lever stops being
+pullable**. If the answer is "a phase inside this CR", the bite needs a different lever before the CR is frozen.
