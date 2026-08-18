@@ -12,8 +12,8 @@
 - **Postconditions (success):** The group is in **pending-deletion** (a `deletedAt` marker + a `purgeAfter` date); it
   stays readable but **read-only** for every member and is flagged as deleting. **Restore** (any owner, in-window)
   returns it to fully active. At `purgeAfter`, the scheduled job **hard-erases** the group and all its content —
-  nodes, their blob objects in the store, memberships, epoch links, favorites, and the scope row. The server saw
-  only a lifecycle timestamp + opaque deletions — never a key or a name.
+  nodes, their blob objects in the store, memberships, epoch links, favorites, queued background jobs, shares, and
+  the scope row. The server saw only a lifecycle timestamp + opaque deletions — never a key or a name.
 
 ## Main flow
 
@@ -28,8 +28,20 @@
    group is **fully active** again for everyone, exactly as before (nothing was moved).
 5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it reuses the existing blob-aware delete
    paths ([BlobStore.delete] + node-subtree erasure, cr-0073) to remove every node's **blob objects from the
-   store**, then the media/node rows, memberships, epoch-chain links, favorites, and finally the scope row.
-   **Irreversible** — nothing is recoverable after this.
+   store**, then the media/node rows, memberships, epoch-chain links, favorites, queued background jobs, shares,
+   and finally the scope row. **Irreversible** — nothing is recoverable after this.
+
+   **Erasure is total, and that is a schema-level rule rather than a list to keep in step:** every table that
+   references `veyq_scope` is either named by the purge or carries `ON DELETE CASCADE`; a table that is neither
+   holds the scope row hostage on its foreign key and the purge can never complete. The list above is therefore
+   the *consequence* and not the requirement — `scripts/validate_scope_erasure_arity.py` is what binds it, and a
+   new table referencing the scope must satisfy the guard before it lands. **A share is erased, not retained:**
+   it is a capability record for a scope that no longer exists, so there is nothing left to revoke, and its row
+   holds the owner, the node and a sealed name belonging to a group whose erasure the owner asked for.
+
+   **One scope that cannot be erased must not stop the others.** The sweep isolates each scope in its own
+   transaction, so a failure is confined to that scope and the rest of the tick still completes; a tick-wide
+   transaction turns any single stuck scope into a permanent, silent halt of *all* reclamation.
 
 ## Alternate / exception flows
 
