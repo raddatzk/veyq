@@ -40,29 +40,38 @@ can no longer die with the row that held it. This needs no listing of the bucket
 `BlobStore` has no `list` operation and `storage_key` is a flat UUID with no scope prefix — a listing would be
 an unpartitionable full-bucket scan.
 
-**2. Exactly one component deletes store objects.** `StoreReclaimSweep` drains the list; no other code calls
+**2. `BlobStore.delete` reports what it could not delete.** It returns the keys that failed instead of `Unit`,
+and `S3BlobStore` stops swallowing per-key failures silently. Without this the rest of this ADR is inert: the
+sweep would hand its keys over, see a normal return, and clear the reclaim row whether or not the bytes went —
+the list would be written and drained faithfully while leaking exactly as before. **And it would be green
+everywhere**, because the test-scope `RecordingBlobStore` *throws* on a refused key while the real
+`S3BlobStore` does not, so the hermetic suite would prove a retry path production can never enter. Returning
+rather than throwing is what the sweep needs: a batch is partly deletable, and *which* keys failed is what
+decides whether the row stays.
+
+**3. Exactly one component deletes store objects.** `StoreReclaimSweep` drains the list; no other code calls
 `blobStore.delete`. This collapses nine call sites to one, so there is exactly one place that can fail, one
 place that retries, and one place to read to know what the system does with bytes. The cost is latency: bytes
 linger up to one sweep interval after the rows are gone. Nothing user-facing depends on the object being gone
 at the instant the row is — every one of these paths has already removed the item from every read.
 
-**3. `ScopePurge` loses its exception.** It writes reclaim rows inside its per-scope transaction like everyone
+**4. `ScopePurge` loses its exception.** It writes reclaim rows inside its per-scope transaction like everyone
 else, and stops deleting objects itself. Its mirror hazard disappears without needing a design of its own, and
 the *objects-first* shape its docstring defends is no longer needed by anything.
 
-**4. The retry is bounded and its give-up state is named.** After a configured number of attempts with backoff,
+**5. The retry is bounded and its give-up state is named.** After a configured number of attempts with backoff,
 the row is marked abandoned and logged once at `ERROR`. This is the point of the whole decision: the leak is not
 claimed to be impossible — a permanently unreachable store still loses bytes — but it is now **a row you can
 count**. `SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL` is the answer to *"how many
 bytes survived a failed delete?"*, which nothing could answer before. An unbounded retry was rejected for the
 reason this ADR exists: a queue that grows silently is the same disease one level up.
 
-**5. A reclaim row holds an opaque key and nothing else.** No `scope_id`, no `media_id`, no node. Group erasure
+**6. A reclaim row holds an opaque key and nothing else.** No `scope_id`, no `media_id`, no node. Group erasure
 must leave nothing behind that describes the erased group, and a per-scope count of object sizes is exactly
 such a description. The list is legible to the operator only as "n objects pending deletion", which is what
 they already learn from the bucket.
 
-**6. It is called a reclaim list — not a job, not a purge, not an outbox.** `veyq_job` is taken and means the
+**7. It is called a reclaim list — not a job, not a purge, not an outbox.** `veyq_job` is taken and means the
 operator-blind member task queue; a reader who follows the word lands in the wrong feature. Every existing
 `*Purge` finds rows older than a retention window and hard-deletes them, and this one has no retention window at
 all — it drains a work list — so the `Sweep` suffix marks the different shape deliberately. *Outbox* imports a
@@ -73,6 +82,10 @@ messaging pattern this codebase does not have.
 - **The leak becomes measurable, which was the whole ask.** A failed delete is a row with `attempts > 0`; a
   permanently failed one is a row with `abandoned_at`. Both are countable with SQL, on any instance, without a
   bucket listing, a metrics stack, or a log parser.
+- **The test seam is stronger than production, and that had to be decided, not discovered.** A refused delete
+  is reachable in the hermetic suite only because `RecordingBlobStore` throws; the real store swallows. Any
+  design here that leaves `BlobStore.delete` returning `Unit` is provable in tests and broken in production —
+  which is why Decision 2 is a decision and not an implementation detail.
 - **A structural invariant worth guarding falls out.** "Exactly one call site of `blobStore.delete` outside the
   store itself" is a one-line grep, and it pins Decision 2 — which is the decision every future reclaim path
   will be tempted to bypass by calling the store directly. It ships as a permanent guard, not a one-shot check.

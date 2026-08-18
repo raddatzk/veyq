@@ -5,7 +5,7 @@ status: planned
 satisfies: [uc.memory.delete-media, uc.memory.delete-node, en.memory.media]
 adrs: ["0062", "0013", "0056", "0061"]
 invariants:
-  - Operator-blind E2EE — a reclaim row must describe nothing about the scope, node or media it came from; after a group erasure it is the only surviving trace and must not be a size histogram of the erased group (ADR 0062 Decision 5).
+  - Operator-blind E2EE — a reclaim row must describe nothing about the scope, node or media it came from; after a group erasure it is the only surviving trace and must not be a size histogram of the erased group (ADR 0062 Decision 6).
   - Self-hostable by default — the sweep must work against any S3-compatible store and must not gate on `canPresign`, or the `%test` store makes its own half unobservable (the reason `UploadSessionPurge.kt:43-45` gives for not gating).
   - API-first — the one contract description that asserts the current behaviour is corrected in phase 1, before the backend contradicts it.
 ---
@@ -49,34 +49,84 @@ after a permanently unreachable store is then a row you can count, which is the 
    `QuarkusTransaction`, `ScopePurge.kt:55-62`) and `MediaHandler`'s over-budget purge (`MediaHandler.kt:288`,
    which deliberately leaves its session rows standing — so it is the one site that cannot lose its keys today
    and must keep that property).
-3. **`ScopePurge` stops deleting objects first.** ADR 0062 Decision 3. The *objects-first* rationale in its own
+3. **`ScopePurge` stops deleting objects first.** ADR 0062 Decision 4. The *objects-first* rationale in its own
    docstring (`ScopePurge.kt:70-76`) goes with it.
-4. **The sweep does not gate on `canPresign`.** `UploadSessionPurge.kt:43-45` states the reason in its own
+4. **The port returns the keys it could not delete** ([ADR 0062](../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)
+   Decision 2), and `S3BlobStore` stops swallowing (`BlobStore.kt:121-125`). Three implementations move:
+   `S3BlobStore`, `InMemoryBlobStore` (empty — it deletes nothing and fails at nothing), and the test-scope
+   `RecordingBlobStore`. **Without this the CR is inert and still green:** `RecordingBlobStore.delete` throws
+   on a marked key (`RecordingBlobStore.kt:66-69`) while `S3BlobStore.delete` cannot fail at all, so a sweep
+   built on the current signature would pass every bite-test below and clear reclaim rows in production
+   regardless of what the store did.
+5. **The sweep does not gate on `canPresign`.** `UploadSessionPurge.kt:43-45` states the reason in its own
    source; the gate at `MediaHandler.kt:289` belongs to a path that will no longer delete.
 
 ## Inventory — locators, run at refine against `main` @ `3dcd28e`
 
-Spot-check one row before the first edit; the argument leans hardest on the *call sites* row.
+Spot-check one row before the first edit; the argument leans hardest on the two-angle comparison below.
 
-| What | Locator (re-run it) |
-|---|---|
-| Every site handing keys to the store | `grep -rn --include='*.kt' 'blobStore.delete' backend/src/main/kotlin` — **read as a list**: one hit is a KDoc mention (`MediaStore.kt:262`), not a call |
-| **Second angle, keyed on the keys rather than the call** | `grep -rn --include='*.kt' 'reclaimKeys\|purgeMediaRows\|chunkKey(' backend/src/main/kotlin` — this finds the paths that *compute* keys, which is the set that must write reclaim rows. **The disagreement between the two lists is the finding**, and it is the whole risk of this CR: a path that computes keys and does not hand them over today is a path that will silently write none |
-| Prose that asserts the behaviour being replaced | `grep -rn --exclude-dir=node_modules -i 'best-effort' docs/ changes/ infra/ scripts/ wiki/ contracts/ backend/src/main \| grep -i 'store\|object\|blob\|delet\|reclaim\|purge'` |
-| Guards anchored on anything reshaped here | `grep -rln 'blobStore\|veyq_blob\|storage_key\|BlobStore' scripts/` — run **before** reshaping, not after |
-| Trust-chain baseline | `for f in scripts/validate_*.py; do python3 "$f" >/dev/null 2>&1 \|\| echo "RED $f"; done` — run before the first edit; this CR adds one guard, so a count taken afterwards would be confirmed by the work it grades |
+**Angle 1 — where keys are handed to the store.** Read as a list: one hit is a KDoc mention
+(`MediaStore.kt:262`), not a call.
 
-**The prose sweep was run here and named these doc-side sites — treat it as a floor, not the set.** ADR 0056
-§ Context 2, ADR 0061 Decision 7, `docs/features/memory/use-cases/uc.memory.delete-node.md:101`, the coverage
-criterion **text** at `docs/coverage/features/memory/use-cases/uc.memory.delete-node.yaml:79`,
-`contracts/api/media.openapi.yaml:473`, `infra/README.md:202`, `scripts/instance_backup.py:44`, and
-`BlobStore.kt:46`'s own port KDoc — plus roughly a dozen KDoc/comment sites under `backend/src/main`. **Re-run
-the sweep at phase 4**, because phases 2 and 3 author new prose (a migration comment, a class docstring, a guard
-docstring) into the same corpus.
+```bash
+grep -rn --include='*.kt' 'blobStore.delete' backend/src/main/kotlin
+```
 
-Two sites the sweep found that are **stale for an unrelated reason and are already corrected** (this session,
-before the CR): three places claimed the upload-session GC "was never built", which `UploadSessionEntity`'s KDoc
+**Angle 2 — where keys are computed and carried across a transaction boundary.**
+
+```bash
+grep -rn --include='*.kt' 'reclaimKeys\|purgeMediaRows\|chunkKey(' backend/src/main/kotlin
+```
+
+**The comparison was run, and the disagreement is the finding — it names the sites.** Angle 1 returns nine
+calls, all in handlers and scheduled jobs. Angle 2 returns those *plus* the places the work actually
+is, and Decision 1 puts the insert in every one of them: `MediaStore.purgeMediaRows` and its four callers
+(`MediaStore.kt:265/281/292/308`), the two cover paths (`:357/:377`), `deleteBlobRow` (`:387`),
+`SharingStore.deleteContributedMedia` (`:213-219`), and `NodeSubtreePurge.eraseExpired` (`:63-84`) — none of
+which Angle 1 can see. It also surfaces a **data class that carries reclaim keys across the boundary**,
+`CoverCommitRows(val ref, val reclaimKeys)` at `MediaStore.kt:61`, which Decision 1 dissolves: a shape change,
+not a call rewire. **An implementer working from Angle 1 alone would rewire nine call sites and leave the
+transaction-side untouched, which is where this CR's guarantee lives.**
+
+Angle 2's false positives are the read paths — `chunkKey` used for presign or `stat`
+(`MediaHandler.kt:206/277/406`, `SharingHandler.kt:362`, and the helper itself at `BlobStore.kt:51`). Leave
+them alone.
+
+**Prose that asserts the behaviour being replaced.**
+
+```bash
+grep -rn --exclude-dir=node_modules -i 'best-effort' docs/ changes/ infra/ scripts/ wiki/ contracts/ backend/src/main | grep -i 'store\|object\|blob\|delet\|reclaim\|purge'
+```
+
+Run here; it named these doc-side sites — **a floor, not the set**: ADR 0056 § Context 2, ADR 0061 Decision 7,
+`docs/features/memory/use-cases/uc.memory.delete-node.md:101`, the coverage criterion **text** at
+`docs/coverage/features/memory/use-cases/uc.memory.delete-node.yaml:79`, `contracts/api/media.openapi.yaml:473`,
+`infra/README.md:202`, `scripts/instance_backup.py:44`, and `BlobStore.kt:46`'s own port KDoc — plus roughly a
+dozen KDoc/comment sites under `backend/src/main`. **Re-run it at phase 4**: phases 2 and 3 author new prose
+(a migration comment, a class docstring, a guard docstring) into the same corpus.
+
+Two sites the sweep found are stale for an unrelated reason and are **already corrected** (this session, before
+the CR): three places claimed the upload-session GC "was never built", which `UploadSessionEntity`'s KDoc
 (`Entities.kt:14-20`) has contradicted since it shipped. Do not re-fix them.
+
+**Guards anchored on anything reshaped here.**
+
+```bash
+grep -rln 'blobStore\|veyq_blob\|storage_key\|BlobStore' scripts/
+```
+
+Run here: `validate_blob_reference_arity.py` is the only guard at risk, and it stays green — its live-twin key
+reads `SharingStore.subtreeBlobIds`, which this CR does not touch (Decision 1 changes
+`SharingStore.deleteContributedMedia`, a different function in the same file). **Confirm that before reshaping,
+not after.** Its own documented limit — *"a new reclaim predicate elsewhere gets no protection from this guard
+at all"* — is exactly what phase 3's guard covers from the other side.
+
+**Trust-chain baseline.** Run before the first edit; this CR adds one guard, so a count taken afterwards would
+be confirmed by the work it grades.
+
+```bash
+for f in scripts/validate_*.py; do python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done
+```
 
 ## Phases
 
@@ -88,12 +138,16 @@ before the CR): three places claimed the upload-session GC "was never built", wh
       `next_attempt_at`, `abandoned_at`; no scope, no media, no node — invariant 1), `StoreReclaimEntity` +
       store + `StoreReclaimSweep` in `shared/blobstore/`, the config block under `veyq.store-reclaim.*`
       (`@ConfigMapping` on `VeyqConfig`, defaults mirrored into `application.properties` — the `Interval`
-      convention already carries `sweep.every`), and every site from the inventory rewired per Decisions 1–4.
+      convention already carries `sweep.every`), and every site from the inventory rewired per Decisions 1–5.
       · Done when: `./gradlew check` green **and** the fault-injection test below passes.
 - [ ] **3 guard** — `scripts/validate_store_reclaim_arity.py`: exactly one call site of `blobStore.delete`
-      outside `shared/blobstore/` itself, and it is in `StoreReclaimSweep`. This is ADR 0062 Decision 2's
+      outside `shared/blobstore/` itself, and it is in `StoreReclaimSweep`. This is ADR 0062 Decision 3's
       completeness proof, and it is the decision every future reclaim path will be tempted to bypass.
-      · Done when: green on the untouched phase-2 tree **and** bite-proven red (below).
+      Register its bite as a **case in `scripts/validate_guard_gaps.py`**, so the injection below becomes a
+      permanent assertion rather than a one-shot run — that guard's `CASES` list is the only place its tally
+      lives, and it does not require an entry per guard, which is precisely why one has to be chosen.
+      · Done when: green on the untouched phase-2 tree, bite-proven red (below), and `validate_guard_gaps.py`
+      green with the new case.
 - [ ] **4 docs + coverage** — ADR 0056 § Context 2, ADR 0061 Decision 7, `uc.memory.delete-node.md`,
       `en.memory.media.md` (a new **E6 — the store refuses the delete**), `infra/README.md` § *What `verify`
       tells you* (the tolerance survives, on ADR 0062's new reason: reclaim *pending*, not deletion
