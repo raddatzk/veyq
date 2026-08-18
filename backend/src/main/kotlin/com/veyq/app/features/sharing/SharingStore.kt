@@ -202,21 +202,21 @@ class SharingStore(
      * Delete one contributed media the caller owns (cr-0102, the UPLOADER/CONTRIBUTOR delete-own). Authorized
      * **iff** the media is in [scopeId] and its `share_identity_id` equals [identityId] — a single-row
      * **ownership** check, never gallery filtering. Deletes the media row + its derivative rows + all blob rows,
-     * and returns the store chunk keys to purge (original + every derivative). Null when no such media is owned
-     * by this identity (→ a non-enumerable 404).
+     * and puts their store objects (original + every derivative) on the reclaim list in the same transaction.
+     * False when no such media is owned by this identity (→ a non-enumerable 404).
      */
     @Transactional
-    fun deleteContributedMedia(scopeId: String, mediaId: String, identityId: String): List<String>? {
+    fun deleteContributedMedia(scopeId: String, mediaId: String, identityId: String): Boolean {
         val media = MediaEntity.findById(mediaId)
-            ?.takeIf { it.scopeId == scopeId && it.shareIdentityId == identityId } ?: return null
+            ?.takeIf { it.scopeId == scopeId && it.shareIdentityId == identityId } ?: return false
         val nodeId = media.nodeId // captured before the row is deleted — the node whose gallery must reconcile
-        val reclaimKeys = mediaStore.purgeMediaRows(media) // derivative → media → blob rows, FK order (shared helper)
+        mediaStore.purgeMediaRows(media) // derivative → media → blob rows, FK order (shared helper)
         // cr-0107 (ADR 0033): a media-row removal moves BOTH counters — media_revision (the change signal) and
         // delete_revision (which gates the id-set), so an open gallery's next poll gets the current mediaId set
         // and drops the removed tile. Same transaction ⇒ atomic with the delete. (A LIVE media is removed here —
         // unlike the two trash purges — so it bumps; purgeMediaRows leaves the revision bump to the caller.)
         mediaStore.bumpMediaRevision(nodeId, deleted = true)
-        return reclaimKeys
+        return true
     }
 
     /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the `K_mem` chain) + its live media. */

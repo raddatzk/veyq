@@ -43,8 +43,19 @@ interface BlobStore {
     /** Stored object size in bytes, or null if the object is absent (or the store has no transport). */
     fun stat(key: String): Long?
 
-    /** Best-effort delete of chunk objects (purge on budget excess); a no-op on the dev store. */
-    fun delete(keys: List<String>)
+    /**
+     * Delete chunk objects and **return the keys it could not delete** — an empty list means every key is gone
+     * (ADR 0062 Decision 2). The failure channel is a return value, not an exception, because a batch is partly
+     * deletable and *which* keys failed is what decides whether a reclaim row stays; and it is in the type at all
+     * because this returned `Unit` while [S3BlobStore] swallowed every per-key failure, so no caller could report
+     * one even if it wanted to. Absent keys count as deleted: a reclaim row enumerates a session's full declared
+     * `chunk_count`, of which an abandoned upload staged an unknown subset.
+     *
+     * The one caller is [StoreReclaimSweep]; `scripts/validate_store_reclaim_arity.py` keeps it the only one.
+     * Implementations do not throw — the sweep treats a throw as a wholly-refused batch, which is a deferral,
+     * not a drop.
+     */
+    fun delete(keys: List<String>): List<String>
 
     companion object {
         /** The object key for chunk [index] under a blob's [storageKey] prefix. */
@@ -65,14 +76,17 @@ class InMemoryBlobStore : BlobStore {
     override fun stat(key: String): Long? = null
 
     /**
-     * A no-op, and therefore an **oracle hole**: every scheduled purge is specified as "delete the rows, then
-     * delete the objects those rows pointed at", and against this store the second half is invisible — a purge
-     * that silently dropped its `delete(…)` call would pass the whole hermetic suite. Do not assert a purge's
-     * store half by calling the store method and checking the keys it *returns*; that proves they were computed,
-     * never that they arrived. Assert it through the test-scope `RecordingBlobStore` `@Alternative`, which
-     * records what this was handed and delegates the rest.
+     * A no-op that fails at nothing, so it refuses nothing: the empty list is the honest answer here, not a
+     * convenient one — this store holds no bytes, so every key it is handed is already absent.
+     *
+     * It is still an **oracle hole**: the reclaim sweep is specified as "hand the row's keys to the store, then
+     * settle the row", and against this store the first half is invisible — a sweep that silently dropped its
+     * `delete(…)` call would pass the whole hermetic suite and clear every reclaim row. Do not assert the store
+     * half by reading what a store method *returns*; that proves the keys were computed, never that they
+     * arrived. Assert it through the test-scope `RecordingBlobStore` `@Alternative`, which records what this was
+     * handed and delegates the rest.
      */
-    override fun delete(keys: List<String>) {}
+    override fun delete(keys: List<String>): List<String> = emptyList()
 }
 
 /**
@@ -118,11 +132,20 @@ class S3BlobStore(
             null // the object is not present
         }
 
-    override fun delete(keys: List<String>) {
-        keys.forEach { key ->
-            runCatching { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()) }
+    /**
+     * Per-key, and a failure is **reported** rather than swallowed. This method used to be
+     * `keys.forEach { runCatching { … } }` returning `Unit`: a 503, a network blip or an expired credential left
+     * the object standing while the caller saw a normal return and dropped the only pointer to it. The
+     * `runCatching` stays — one unreachable key must not cost the batch its other keys — but what it catches now
+     * leaves the method.
+     *
+     * `NoSuchKeyException` is deliberately NOT special-cased: `deleteObject` is idempotent at every
+     * S3-compatible store and answers 204 for an absent key, which is the outcome the caller wants anyway.
+     */
+    override fun delete(keys: List<String>): List<String> =
+        keys.filter { key ->
+            runCatching { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()) }.isFailure
         }
-    }
 }
 
 /**

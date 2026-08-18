@@ -3,6 +3,8 @@ package com.veyq.app.features.media
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.StoreObjectRef
+import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.FailureStatus.BAD_REQUEST
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
@@ -11,6 +13,7 @@ import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.UUID
 
@@ -176,6 +179,7 @@ sealed interface MoveMediaOutcome {
 class MediaHandler(
     private val store: MediaStore,
     private val blobStore: BlobStore,
+    private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
@@ -281,13 +285,21 @@ class MediaHandler(
     }
 
     /**
-     * Best-effort purge of every chunk object staged for the item's sessions (after a budget failure). Objects
+     * Record every chunk object staged for the item's sessions for reclaim (after a budget failure). Objects
      * only — the sessions' **rows** are deliberately left standing here rather than deleted inline, and
-     * [UploadSessionPurge] reclaims them on the same age predicate as a genuinely abandoned upload.
+     * [UploadSessionPurge] reclaims them on the same age predicate as a genuinely abandoned upload. That makes
+     * this the one site whose keys were never at risk under the old best-effort delete, and it keeps that
+     * property: the row still names the `storage_key` afterwards.
+     *
+     * **Its own transaction, because this path has none** (ADR 0062 Decision 2): the handler is not
+     * `@Transactional` and `StoreReclaimStore.record` is `MANDATORY`, so the requirement is enforced rather than
+     * remembered. The old `canPresign` gate is gone with the delete it guarded — recording is cheap, correct on
+     * every store, and gating it would put a hole in the hermetic suite's only view of this path.
      */
     private fun purge(sessions: List<UploadSessionEntity>) {
-        if (!blobStore.canPresign) return
-        blobStore.delete(sessions.flatMap { s -> (0 until s.chunkCount).map { chunkKey(s.storageKey, it) } })
+        QuarkusTransaction.requiringNew().run {
+            reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
+        }
     }
 
     /**
@@ -352,12 +364,11 @@ class MediaHandler(
     /**
      * Permanently delete a trashed media NOW (uc.memory.delete-media, cr-0111): any member may expedite the purge
      * of an already-trashed item (the security-model reversible/irreversible split). Non-member, unknown, or a
-     * still-LIVE media → NoMedia (a 404). The blob-object purge is best-effort.
+     * still-LIVE media → NoMedia (a 404). The blob objects go on the reclaim list with the rows.
      */
     fun purgeMedia(userId: String, scopeId: String, mediaId: String): PurgeMediaOutcome {
         if (!store.isMember(userId, scopeId)) return PurgeMediaOutcome.NoMedia
-        val reclaimKeys = store.purgeMedia(scopeId, mediaId) ?: return PurgeMediaOutcome.NoMedia
-        blobStore.delete(reclaimKeys) // best-effort store purge
+        if (!store.purgeMedia(scopeId, mediaId)) return PurgeMediaOutcome.NoMedia
         return PurgeMediaOutcome.Done
     }
 
@@ -365,7 +376,7 @@ class MediaHandler(
      * Commit an uploaded blob as the node's **standalone cover** (cr-0073): resolve the node + session, run the
      * same declare-then-verify as `complete` (stat the stored objects against the byte budget, purge + fail on
      * excess), then persist one `veyq_blob` + point the node's `cover_blob_id` at it, atomically reclaiming any
-     * prior cover blob (its store objects are purged here). No `veyq_media` row — the cover never lists in the
+     * prior cover blob (its row goes and its store objects are recorded for reclaim, in the same transaction). No `veyq_media` row — the cover never lists in the
      * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), FOLDER → IllegalTarget/422.
      */
     fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): CoverCommitOutcome {
@@ -380,17 +391,14 @@ class MediaHandler(
                 return CoverCommitOutcome.Budget
             }
         }
-        val rows = store.commitCover(node.id, session, manifest)
-        blobStore.delete(rows.reclaimKeys) // best-effort purge of the superseded prior cover blob's objects
-        return CoverCommitOutcome.Ok(rows.ref)
+        return CoverCommitOutcome.Ok(store.commitCover(node.id, session, manifest))
     }
 
     /** Detach + reclaim the node's standalone cover blob (cr-0073). Idempotent — a node with no cover → Done. */
     fun deleteCover(userId: String, scopeId: String, nodeId: String): CoverDeleteOutcome {
         if (!store.isMember(userId, scopeId)) return CoverDeleteOutcome.NoTarget
         if (store.findNode(scopeId, nodeId) == null) return CoverDeleteOutcome.NoTarget
-        val reclaimKeys = store.clearCover(scopeId, nodeId)
-        blobStore.delete(reclaimKeys) // best-effort store purge
+        store.clearCover(scopeId, nodeId)
         return CoverDeleteOutcome.Done
     }
 

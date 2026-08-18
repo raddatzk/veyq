@@ -3,6 +3,8 @@ package com.veyq.app.features.media
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.blobstore.RecordingBlobStore
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
+import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
@@ -29,6 +31,12 @@ import java.util.UUID
  * the bucket — and the in-memory store's `delete` is a no-op that can prove nothing. The object half is
  * therefore asserted through [RecordingBlobStore], the `@Alternative` that records what the store was handed.
  * Each case seeds its own storage keys and asserts on containment of those, never on the recording's size.
+ *
+ * **Since ADR 0062 the two halves are two components**, so each case drives `purge.run()` *and then*
+ * `sweep.run()`. That is deliberately end-to-end rather than an assertion on `veyq_store_reclaim`: the property
+ * these cases exist for is that the bytes reach the store, and a test that stopped at the reclaim row would
+ * re-create the very hole [RecordingBlobStore] was built to close — proving the keys were computed, never that
+ * they arrived.
  */
 @QuarkusTest
 class UploadSessionPurgeSliceTest {
@@ -38,6 +46,9 @@ class UploadSessionPurgeSliceTest {
 
     @Inject
     lateinit var purge: UploadSessionPurge
+
+    @Inject
+    lateinit var sweep: StoreReclaimSweep
 
     @Inject
     lateinit var blobStore: BlobStore
@@ -55,8 +66,10 @@ class UploadSessionPurgeSliceTest {
         // the client PUT its chunks, then went away: backdate past the retention window
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
+        clearReclaim()
         recorder.reset()
         purge.run()
+        sweep.run()
 
         // the row is physically gone
         assertNull(QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(sessionId) })
@@ -74,13 +87,17 @@ class UploadSessionPurgeSliceTest {
         // a live upload: started just now, still well inside the window
         val sessionId = store.createSession(scopeId, storageKey, chunkCount = 2, byteSize = 600, wrappedBlobKey = "d3JhcA==")
 
+        clearReclaim()
         recorder.reset()
         purge.run()
+        sweep.run()
 
         // the row survives — a slow uploader is not a garbage collector's business
         assertNotNull(QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(sessionId) })
-        // ...and NOT ONE of its objects was touched. The control the positive case needs: a purge that deleted
-        // everything unconditionally would satisfy the case above perfectly.
+        // ...and NOT ONE of its objects was touched, by the purge or by the sweep that ran right after it. The
+        // control the positive case needs: a purge that reclaimed everything unconditionally would satisfy the
+        // case above perfectly. It discriminates only because the sweep runs here too — without it the recording
+        // would be empty for every input and the assertion would pass on a purge that did nothing at all.
         val untouched = (0 until 2).map { chunkKey(storageKey, it) }
         assertTrue(recorder.deletedKeys.none { it in untouched }) {
             "a session inside the window must lose no object; handed: ${recorder.deletedKeys}"
@@ -96,12 +113,14 @@ class UploadSessionPurgeSliceTest {
         val sessionId = store.createSession(scopeId, storageKey, chunkCount = 1, byteSize = 300, wrappedBlobKey = "d3JhcA==")
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
+        clearReclaim()
         recorder.reset()
         purge.run()
+        sweep.run()
 
         assertNull(QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(sessionId) })
         // the re-delete of an already-purged key must be tolerated, not skipped: an abandoned session has an
-        // unknown number of its chunks actually present, so the store delete is defined as best-effort.
+        // unknown number of its chunks actually present, and `deleteObject` is idempotent for the absent ones.
         assertTrue(chunkKey(storageKey, 0) in recorder.deletedKeys)
     }
 
@@ -115,6 +134,14 @@ class UploadSessionPurgeSliceTest {
             "the retention window must outlast the presign TTL it buffers"
         }
     }
+
+    /**
+     * Drop the JVM-shared reclaim backlog before the action. `StoreReclaimSweep` takes a bounded batch of the
+     * OLDEST due rows, and every purge in every earlier test class of this JVM leaves rows behind — so without
+     * this the row this case just wrote is the newest in the table and can be crowded out of the batch. A flake
+     * that would read as "the sweep did not hand the keys over".
+     */
+    private fun clearReclaim() = QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() }
 
     private fun backdate(sessionId: String, at: Instant) {
         QuarkusTransaction.requiringNew().run {

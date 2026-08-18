@@ -4,6 +4,8 @@ import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.blobstore.RecordingBlobStore
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
+import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
@@ -44,6 +46,9 @@ class MediaTrashSliceTest {
 
     @Inject
     lateinit var trashPurge: MediaTrashPurge
+
+    @Inject
+    lateinit var sweep: StoreReclaimSweep
 
     @Inject
     lateinit var blobStore: BlobStore
@@ -186,9 +191,20 @@ class MediaTrashSliceTest {
 
         given().header("Authorization", token(userId)).`when`().delete("/api/scopes/$scopeId/media/$b").then().statusCode(204)
 
-        // the retention purge (cutoff just after now) hard-deletes the trashed media row + reclaims its blob keys
-        val reclaimKeys = store.purgeTrashedBefore(Instant.now().plusSeconds(60))
-        assert(reclaimKeys.isNotEmpty()) { "the purge should reclaim the trashed media's blob chunk keys" }
+        // the key the purge must not lose — read while the row that holds it still exists
+        val storageKey = QuarkusTransaction.requiringNew().call {
+            BlobEntity.findById(MediaEntity.findById(b)!!.blobId)!!.storageKey
+        }
+
+        // the retention purge (cutoff just after now) hard-deletes the trashed media row and writes its blob's
+        // key to the reclaim list IN THE SAME TRANSACTION (ADR 0062). Asserting the row, not a returned list, is
+        // the point of the redesign: a returned list proved the keys were computed and died with the caller.
+        // The purge's own return is a count over EVERY scope, so it is not assertable from here — this reads back
+        // the one key this case seeded instead, which is the same rule the recorder assertions follow.
+        store.purgeTrashedBefore(Instant.now().plusSeconds(60))
+        assert(QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", storageKey) } == 1L) {
+            "the purge must leave a durable reclaim row for the blob it deleted the only pointer to"
+        }
 
         // b's row is physically gone; a (never trashed) survives
         val (goneB, liveA) = QuarkusTransaction.requiringNew().call {
@@ -200,10 +216,11 @@ class MediaTrashSliceTest {
 
     /**
      * The **store half** of the retention purge, which nothing asserted before cr-abandoned-upload-session-reclaim:
-     * `purgeHardDeletesTrashedPastRetention` above calls the store method directly, so it proves the reclaim keys
-     * were *computed* and never that they reached the object store — the failure the invariant is actually about
-     * (a row-only delete orphans the bytes permanently). This drives the real `@Scheduled` [MediaTrashPurge] and
-     * reads what the store was handed off the [RecordingBlobStore] seam.
+     * `purgeHardDeletesTrashedPastRetention` above stops at the reclaim row, so it proves the key was *recorded*
+     * and never that it reached the object store — the failure the invariant is actually about (a row-only delete
+     * orphans the bytes permanently). This drives the real `@Scheduled` [MediaTrashPurge] **and then**
+     * [StoreReclaimSweep], the only component that deletes objects since ADR 0062, and reads what the store was
+     * handed off the [RecordingBlobStore] seam. The two cases together are the two halves; neither alone is.
      */
     @Test
     fun retentionPurgeHandsTheTrashedMediasChunkKeysToTheStore() {
@@ -222,12 +239,16 @@ class MediaTrashSliceTest {
         }
 
         val recorder = blobStore as RecordingBlobStore
+        // Drop the JVM-shared reclaim backlog first: the sweep takes a bounded batch of the OLDEST due rows, and
+        // this case's own row is the newest in a table every earlier test class has been writing to.
+        QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() }
         recorder.reset()
         trashPurge.run()
+        sweep.run()
 
         assertNull(QuarkusTransaction.requiringNew().call { MediaEntity.findById(b) })
         assert(chunkKey(storageKey, 0) in recorder.deletedKeys) {
-            "the trash purge must hand the reclaimed chunk keys to the store; handed: ${recorder.deletedKeys}"
+            "the purge + sweep must hand the reclaimed chunk keys to the store; handed: ${recorder.deletedKeys}"
         }
     }
 

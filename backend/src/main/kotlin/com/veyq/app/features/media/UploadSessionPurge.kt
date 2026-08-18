@@ -1,6 +1,5 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
@@ -14,11 +13,13 @@ import java.time.Instant
  * `complete` budget gate leaves a `veyq_upload_session` row behind, and — for the first two — the chunks the
  * client already PUT **straight into the object store**. This is what reclaims both.
  *
- * **The row and the bytes are one unit of work, and the order is load-bearing in one direction only:** rows in
- * a transaction first, store objects after it commits. A failed object delete then leaves a reclaimable object
- * and no pointer to it; deleting objects first would leave a row pointing at nothing if the tx rolled back. A
- * row-only delete is strictly *worse* than no GC at all — the session row is the only thing that knows the
- * `storage_key`, so dropping it alone orphans those bytes for the life of the bucket.
+ * **The row and the bytes are one unit of work, and ADR 0062 finally makes them one transaction.** A row-only
+ * delete is strictly *worse* than no GC at all — the session row is the only thing that knows the `storage_key`,
+ * so dropping it alone orphans those bytes for the life of the bucket. This job therefore no longer deletes
+ * objects at all: `purgeSessionsStartedBefore` writes each session's key prefix to `veyq_store_reclaim` inside
+ * the same transaction that deletes the row, and `StoreReclaimSweep` — the one deleter — drains that list. The
+ * old shape (rows in a tx, a best-effort `blobStore.delete` after the commit) could not fail out loud: the
+ * delete swallowed every per-key failure and the pointer was already gone.
  *
  * **The retention window is bounded by construction, not by taste** (`veyq.media.upload.retention`): every
  * presigned PUT of a session is signed once at `start` under `veyq.blob-store.presign-ttl-seconds` and no
@@ -32,17 +33,15 @@ import java.time.Instant
 @ApplicationScoped
 class UploadSessionPurge(
     private val store: MediaStore,
-    private val blobStore: BlobStore,
     config: VeyqConfig,
 ) {
     private val retention: Duration = config.media().upload().retention()
 
     @Scheduled(every = "{veyq.media.upload.purge.every}")
     fun run() {
-        val reclaimKeys = store.purgeSessionsStartedBefore(Instant.now().minus(retention))
-        // Best-effort store purge, after the DB tx commits. Unconditional — NOT behind `canPresign` like the
-        // budget-failure purge in MediaHandler: a store that cannot presign still has to be told, and gating
-        // here would make the half this job exists for unobservable in the hermetic suite.
-        if (reclaimKeys.isNotEmpty()) blobStore.delete(reclaimKeys)
+        // Unconditional — NOT behind `canPresign`: a store that cannot presign still has to be told, and gating
+        // would make the half this job exists for unobservable in the hermetic suite. That reasoning moved with
+        // the delete itself and now governs `StoreReclaimSweep`, which is not gated either.
+        store.purgeSessionsStartedBefore(Instant.now().minus(retention))
     }
 }

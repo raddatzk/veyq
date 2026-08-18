@@ -35,6 +35,7 @@ interface VeyqConfig {
     fun node(): Node
     fun blob(): Blob
     fun blobStore(): BlobStore
+    fun storeReclaim(): StoreReclaim
     fun tasks(): Tasks
     fun ratelimit(): RateLimit
     fun share(): Share
@@ -190,6 +191,29 @@ interface VeyqConfig {
 
             fun purge(): Interval
         }
+    }
+
+    /** `veyq.store-reclaim.*` — the single store-object deleter (ADR 0062). */
+    interface StoreReclaim {
+        /** How often the sweep drains the reclaim list. This is also the **latency the design accepts**: bytes
+         *  linger up to one interval after the rows that named them are gone (Decision 3). */
+        fun sweep(): Interval
+
+        /** Refusals a row survives before it is stamped abandoned and its bytes become a countable leak. An
+         *  unbounded retry was rejected in Decision 5 — a queue that grows silently is the same disease one
+         *  level up. */
+        @WithDefault("5")
+        fun maxAttempts(): Int
+
+        /** Base retry delay after a refusal, doubling per attempt. The sweep interval is the resolution floor,
+         *  so a value below it simply means "next tick"; at the defaults a dead store is given up on after
+         *  roughly eight hours. */
+        @WithDefault("PT15M")
+        fun backoff(): Duration
+
+        /** Rows one tick attempts. Bounds the batch handed to the store, not the list — the rest waits a tick. */
+        @WithDefault("500")
+        fun batchSize(): Int
     }
 
     interface Blob {

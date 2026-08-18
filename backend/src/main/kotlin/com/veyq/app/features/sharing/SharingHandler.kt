@@ -327,8 +327,8 @@ class SharingHandler(
     /**
      * Delete one of your own contributions (cr-0102 delete-own). Gated on the share (contributable + enabled) +
      * a valid token; the store authorizes the delete by a **single-row ownership** check (the media's
-     * `share_identity_id` equals the token's identity), never gallery filtering, and reclaims its blobs. A
-     * foreign/unknown media is a non-enumerable 404.
+     * `share_identity_id` equals the token's identity), never gallery filtering, and puts its blob objects on the
+     * reclaim list (ADR 0062 — `StoreReclaimSweep` deletes them). A foreign/unknown media is a non-enumerable 404.
      */
     fun deleteMedia(shareId: String, pwToken: String?, contributorToken: String, mediaId: String): ShareDeleteOutcome {
         val share = activeShare(shareId) ?: return ShareDeleteOutcome.NotFound
@@ -340,9 +340,7 @@ class SharingHandler(
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareDeleteOutcome.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareDeleteOutcome.NotContributable
-        val reclaimKeys = store.deleteContributedMedia(share.scopeId, mediaId, identity.id)
-            ?: return ShareDeleteOutcome.NotFound
-        blobStore.delete(reclaimKeys) // best-effort store purge of the original + derivative objects
+        if (!store.deleteContributedMedia(share.scopeId, mediaId, identity.id)) return ShareDeleteOutcome.NotFound
         return ShareDeleteOutcome.Done
     }
 

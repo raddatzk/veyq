@@ -2,7 +2,8 @@ package com.veyq.app.features.media
 
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.StoreObjectRef
+import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
 import jakarta.enterprise.context.ApplicationScoped
@@ -57,9 +58,6 @@ data class BlobRefData(
     val manifest: List<Long>?,
 )
 
-/** The outcome of committing a cover blob: the new ref + the superseded prior blob's chunk keys to purge from the store. */
-data class CoverCommitRows(val ref: BlobRefData, val reclaimKeys: List<String>)
-
 /** A node's uploader bucket for the "Beiträge" tab (en.memory.buckets, cr-0113): opaque owner_key + structure + count. */
 data class BucketRow(
     val bucketId: String,
@@ -76,7 +74,7 @@ data class BucketRow(
  * sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
 @ApplicationScoped
-class MediaStore(private val membership: MembershipStore) {
+class MediaStore(private val membership: MembershipStore, private val reclaim: StoreReclaimStore) {
 
     fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
 
@@ -256,58 +254,65 @@ class MediaStore(private val membership: MembershipStore) {
             .list().mapNotNull(::toRow)
 
     /**
-     * Hard-delete one media's rows in FK order (derivative → media → blob) and return the store chunk keys to
-     * reclaim — the single shared body behind the retention purge, the member-expedited purge and the
-     * contributor delete-own. The caller owns the `@Transactional` boundary, the best-effort post-commit
-     * `blobStore.delete` of the returned keys, and any revision bump (only a LIVE-media removal bumps a revision;
-     * a trashed row is already hidden from every list, so the two trash purges don't).
+     * Hard-delete one media's rows in FK order (derivative → media → blob) and put their store objects on the
+     * reclaim list — the single shared body behind the retention purge, the member-expedited purge and the
+     * contributor delete-own. The caller owns the `@Transactional` boundary and any revision bump (only a
+     * LIVE-media removal bumps a revision; a trashed row is already hidden from every list, so the two trash
+     * purges don't).
+     *
+     * It **records** rather than returning keys (ADR 0062 Decision 1): the guarantee is "the same transaction as
+     * the row delete", and the transaction is this method's caller's, not something a returned list can carry
+     * across. `StoreReclaimStore.record` is `MANDATORY`, so a caller without one fails loudly here.
      */
-    fun purgeMediaRows(media: MediaEntity): List<String> {
+    fun purgeMediaRows(media: MediaEntity) {
         val derivatives = MediaDerivativeEntity.find("mediaId = ?1", media.id).list()
         val blobIds = listOf(media.blobId) + derivatives.map { it.blobId }
         derivatives.forEach { MediaDerivativeEntity.deleteById(it.id) } // FK: the referencing rows go first
         MediaEntity.deleteById(media.id)
-        return blobIds.flatMap { deleteBlobRow(it) }
+        blobIds.forEach { deleteBlobRow(it) }
     }
 
     /**
      * Hard-delete a single **trashed** media now (cr-0111, the member-expedited purge). Only a trashed media
-     * (`deletedAt != null`) is purgeable — a live or unknown media returns null (⇒ a 404). No revision bump: a
-     * trashed row is already excluded from every list. The blob-object purge is the caller's (best-effort).
+     * (`deletedAt != null`) is purgeable — a live or unknown media returns false (⇒ a 404). No revision bump: a
+     * trashed row is already excluded from every list. Its store objects go on the reclaim list in this tx.
      */
     @Transactional
-    fun purgeMedia(scopeId: String, mediaId: String): List<String>? {
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId && it.deletedAt != null } ?: return null
-        return purgeMediaRows(media)
+    fun purgeMedia(scopeId: String, mediaId: String): Boolean {
+        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId && it.deletedAt != null } ?: return false
+        purgeMediaRows(media)
+        return true
     }
 
     /**
      * Hard-delete every media trashed before [cutoff] — the retention purge (cr-0110, MediaTrashPurge), across
-     * all scopes. NO revision bump: trashed rows are already excluded from every list, so no client ever saw
-     * them. The blob-object purge is the caller's (best-effort, after this tx).
+     * all scopes, putting their store objects on the reclaim list in the same tx. NO revision bump: trashed rows
+     * are already excluded from every list, so no client ever saw them. Returns how many media were purged.
      */
     @Transactional
-    fun purgeTrashedBefore(cutoff: Instant): List<String> {
+    fun purgeTrashedBefore(cutoff: Instant): Int {
         val expired = MediaEntity.find("deletedAt is not null and deletedAt < ?1", cutoff).list()
-        return expired.flatMap { purgeMediaRows(it) }
+        expired.forEach { purgeMediaRows(it) }
+        return expired.size
     }
 
     /**
-     * Hard-delete every OPEN upload session created before [cutoff], across all scopes, and return the chunk
-     * keys its client may already have staged in the object store (uc.memory.upload E2 / en.memory.media E3).
-     * The row is the **only** pointer to its `storage_key`, so dropping it without the keys orphans those
-     * objects permanently — the caller must purge them (best-effort, after this tx commits). Two sources feed
-     * this: an upload cancelled or killed mid-flight, and a session the `complete` budget gate rejected
-     * ([MediaHandler] purges that one's objects but leaves the row). Keys are enumerated for the full declared
-     * `chunk_count`; an abandoned session has an unknown number of them actually present, so the store delete
-     * must tolerate absent keys — as the budget path already does.
+     * Hard-delete every OPEN upload session created before [cutoff], across all scopes, recording the objects
+     * its client may already have staged in the store (uc.memory.upload E2 / en.memory.media E3). The row is the
+     * **only** pointer to its `storage_key`, so dropping it without recording orphans those objects permanently
+     * — and the record is written **in this transaction**, which is the guarantee the old post-commit delete
+     * could not give. Two sources feed this: an upload cancelled or killed mid-flight, and a session the
+     * `complete` budget gate rejected ([MediaHandler] reclaims that one's objects but leaves the row). The
+     * reclaim row carries the full declared `chunk_count`; an abandoned session has an unknown number of those
+     * actually present, so the store delete must tolerate absent keys — which it does, `deleteObject` being
+     * idempotent. Returns how many sessions were purged.
      */
     @Transactional
-    fun purgeSessionsStartedBefore(cutoff: Instant): List<String> {
+    fun purgeSessionsStartedBefore(cutoff: Instant): Int {
         val stale = UploadSessionEntity.find("createdAt < ?1", cutoff).list()
-        val reclaimKeys = stale.flatMap { s -> (0 until s.chunkCount).map { chunkKey(s.storageKey, it) } }
+        reclaim.record(stale.map { StoreObjectRef(it.storageKey, it.chunkCount) })
         stale.forEach { UploadSessionEntity.deleteById(it.id) }
-        return reclaimKeys
+        return stale.size
     }
 
     /** Map a media entity to its read-back row, resolving the original + derivative blobs; null when the original blob is missing. */
@@ -346,47 +351,45 @@ class MediaStore(private val membership: MembershipStore) {
     /**
      * Commit a verified session as the node's **standalone cover** blob (cr-0073): persist one `veyq_blob`
      * (NO `veyq_media` row, so it never lists in the gallery), point the node's `cover_blob_id` at it, and
-     * **atomically reclaim** any prior cover blob (its row is deleted here; its store objects are purged by the
-     * caller via the returned chunk keys). Consumes the upload session. Returns the new ref + the reclaim keys.
+     * **atomically reclaim** any prior cover blob (its row is deleted and its store objects go on the reclaim
+     * list, both in this transaction). Consumes the upload session. Returns the new ref.
      */
     @Transactional
-    fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): CoverCommitRows {
+    fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): BlobRefData {
         // No `deletedAt` predicate: the handler already resolved this node through the filtering [findNode]
         // gate before the verify step; this is the in-tx reload of that same row.
         val node = NodeEntity.findById(nodeId)!! // resolved by the handler before verify; reloaded in-tx
-        val reclaimKeys = deleteBlobRow(node.coverBlobId)
+        deleteBlobRow(node.coverBlobId)
         val blobId = persistBlob(session, manifest)
         node.coverBlobId = blobId
         node.coverByteSize = session.byteSize
         node.persist()
         UploadSessionEntity.deleteById(session.id)
-        return CoverCommitRows(
-            BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest),
-            reclaimKeys,
-        )
+        return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest)
     }
 
     /**
-     * Detach the node's cover blob (cr-0073): clear its `cover_blob_id`/`cover_byte_size` and delete the
-     * `veyq_blob` row. Returns the blob's chunk keys for a best-effort store purge (empty when the node — or
-     * scope — has no cover blob; idempotent). Null node ⇒ empty (the endpoint answers 204 either way).
+     * Detach the node's cover blob (cr-0073): clear its `cover_blob_id`/`cover_byte_size`, delete the
+     * `veyq_blob` row and put its store objects on the reclaim list — all in one transaction. A node (or scope)
+     * with no cover blob records nothing and is idempotent; a null node likewise (the endpoint answers 204
+     * either way).
      */
     @Transactional
-    fun clearCover(scopeId: String, nodeId: String): List<String> {
-        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null } ?: return emptyList()
-        val reclaimKeys = deleteBlobRow(node.coverBlobId)
+    fun clearCover(scopeId: String, nodeId: String) {
+        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null } ?: return
+        deleteBlobRow(node.coverBlobId)
         node.coverBlobId = null
         node.coverByteSize = null
         node.persist()
-        return reclaimKeys
     }
 
-    /** Delete a blob row by id (if present) and return its chunk keys for a best-effort store purge (cover + trash purge). */
-    private fun deleteBlobRow(blobId: String?): List<String> {
-        val blob = blobId?.let { BlobEntity.findById(it) } ?: return emptyList()
-        val keys = (0 until blob.chunkCount).map { chunkKey(blob.storageKey, it) }
+    /** Delete a blob row by id (if present) and put its store objects on the reclaim list, in the caller's
+     *  transaction (cover + trash purge). The row is the only thing that knows the `storage_key`, so the record
+     *  and the delete are one step, not two. */
+    private fun deleteBlobRow(blobId: String?) {
+        val blob = blobId?.let { BlobEntity.findById(it) } ?: return
+        reclaim.record(blob.storageKey, blob.chunkCount)
         BlobEntity.deleteById(blob.id)
-        return keys
     }
 
     // Manifest = a JSON array of per-chunk ciphertext sizes; tiny and integer-only, so encoded by hand.

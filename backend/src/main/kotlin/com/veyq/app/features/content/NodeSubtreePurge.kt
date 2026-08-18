@@ -4,8 +4,8 @@ import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
-import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.StoreObjectRef
+import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
@@ -29,41 +29,41 @@ import java.time.Instant
  * Two shape decisions, both deliberate:
  * - **Rows through [MediaStore.purgeMediaRows]**, the shared per-media body — so the FK order (derivative →
  *   media → blob) and the chunk-key enumeration stay in one place rather than becoming a fourth copy. Not
- *   `ScopePurge.eraseScope`'s set-based, objects-first shape: that erases by *scope* and lets the scope-row
- *   delete cascade the rest, and its own docstring says a per-media copy is the wrong shape **there**. A node
- *   subtree is not a scope — neighbouring nodes, buckets and the scope row all survive it.
- * - **The transaction commits before the store delete.** `QuarkusTransaction`, not `@Transactional` on [run]:
- *   the rows go inside the transaction and the objects are reclaimed best-effort after it commits, and a
- *   self-invoked `@Transactional` method would not be intercepted at all.
+ *   `ScopePurge.eraseScope`'s set-based shape: that erases by *scope* and lets the scope-row delete cascade the
+ *   rest, and its own docstring says a per-media copy is the wrong shape **there**. A node subtree is not a
+ *   scope — neighbouring nodes, buckets and the scope row all survive it.
+ * - **One transaction covers the rows AND the reclaim entries** (ADR 0062). `QuarkusTransaction`, not
+ *   `@Transactional` on [run]: a self-invoked `@Transactional` method would not be intercepted at all. This job
+ *   deletes no store objects itself — it records the key prefixes and `StoreReclaimSweep` drains them. The old
+ *   shape reclaimed best-effort after the commit, which is unobservable by construction: the row that named the
+ *   key was already gone when the delete failed.
  */
 @ApplicationScoped
 class NodeSubtreePurge(
     private val mediaStore: MediaStore,
-    private val blobStore: BlobStore,
+    private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
 ) {
     private val retention: Duration = config.node().trash().retention()
 
     @Scheduled(every = "{veyq.node.trash.purge.every}")
     fun run() {
-        val reclaimKeys = QuarkusTransaction.requiringNew().call { eraseExpired(Instant.now().minus(retention)) }
-        if (reclaimKeys.isNotEmpty()) blobStore.delete(reclaimKeys) // best-effort, after the DB tx commits
+        QuarkusTransaction.requiringNew().run { eraseExpired(Instant.now().minus(retention)) }
     }
 
     /**
-     * Erase every node whose marker is older than [cutoff], returning the store chunk keys to reclaim. The whole
+     * Erase every node whose marker is older than [cutoff], recording every store object it drops. The whole
      * subtree shares one `deletedAt` — `NodesStore.deleteSubtree` re-stamps even already-trashed descendants
      * precisely so it ages out together — so selecting on the marker alone reaches a complete subtree, never
      * half of one.
      */
-    private fun eraseExpired(cutoff: Instant): List<String> {
+    private fun eraseExpired(cutoff: Instant) {
         val expired = NodeEntity.find("deletedAt is not null and deletedAt < ?1", cutoff).list()
-        if (expired.isEmpty()) return emptyList()
+        if (expired.isEmpty()) return
         val nodeIds = expired.map { it.id }
-        val reclaimKeys = mutableListOf<String>()
 
         // 1. media + derivatives + their blobs, one media at a time through the shared FK-ordered body.
-        MediaEntity.find("nodeId in ?1", nodeIds).list().forEach { reclaimKeys += mediaStore.purgeMediaRows(it) }
+        MediaEntity.find("nodeId in ?1", nodeIds).list().forEach { mediaStore.purgeMediaRows(it) }
 
         // 2. the subtree's buckets — rows only; every medium that lived in them went above. No revision bump:
         //    a trashed node is already out of every listing, so no open gallery can be watching it.
@@ -74,13 +74,11 @@ class NodeSubtreePurge(
         //    back a Memory whose cover is already gone. `cover_blob_id` is the only reference to these rows.
         val coverBlobIds = expired.mapNotNull { it.coverBlobId }
         if (coverBlobIds.isNotEmpty()) {
-            BlobEntity.find("id in ?1", coverBlobIds).list().forEach { b ->
-                reclaimKeys += (0 until b.chunkCount).map { chunkKey(b.storageKey, it) }
-            }
+            val covers = BlobEntity.find("id in ?1", coverBlobIds).list()
+            reclaim.record(covers.map { StoreObjectRef(it.storageKey, it.chunkCount) })
             BlobEntity.delete("id in ?1", coverBlobIds)
         }
 
         expired.forEach { NodeEntity.deleteById(it.id) }
-        return reclaimKeys
     }
 }

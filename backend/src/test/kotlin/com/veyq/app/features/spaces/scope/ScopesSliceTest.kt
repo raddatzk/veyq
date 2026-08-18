@@ -11,8 +11,8 @@ import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.features.tasks.TasksStore
-import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.RecordingBlobStore
+import com.veyq.app.shared.blobstore.RefusingStoreReclaimStore
+import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -54,7 +54,7 @@ class ScopesSliceTest {
     lateinit var tasks: TasksStore
 
     @Inject
-    lateinit var blobStore: BlobStore
+    lateinit var reclaimStore: StoreReclaimStore
 
     private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ=" // "personal-scope-grant"
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
@@ -939,12 +939,15 @@ class ScopesSliceTest {
      * scope whose erasure throws takes the transaction down and every other purgeable scope in that tick with
      * it, permanently and on every later tick.
      *
-     * **The lever is a refusing store, not the FK gap this CR closes, and that is the point.** Once the closure
+     * **The lever is a refused reclaim INSERT, and it is the second lever this case has had.** Once the closure
      * below `veyq_scope` is complete, no *schema* can poison a scope any more — `validate_scope_erasure_arity`
-     * exists to keep that true — so a bite levered on the FK would stop biting the moment the fix beneath it
-     * landed, and go green for a reason that has nothing to do with isolation. What can still throw mid-sweep
-     * is the store, and that is also the realistic shape of it: an S3 outage while the tick is running.
-     * `eraseScope` deletes objects first, so the refusal lands before any row of `poisoned` is touched.
+     * exists to keep that true — so a bite levered on the FK stopped biting the moment the fix beneath it landed.
+     * The lever then became a refusing object store, because `eraseScope` deleted objects first, inside the
+     * transaction. ADR 0062 Decision 4 removed that call too: the purge now records key prefixes and
+     * `StoreReclaimSweep` deletes them. The property outlived both levers, which is the lesson worth keeping —
+     * so the injection follows the fallible work rather than the other way round, and what `eraseScope` still
+     * does in its own transaction is the reclaim write. [RefusingStoreReclaimStore] makes that write refuse, and
+     * it lands before any row of `poisoned` is touched, exactly as the store refusal used to.
      *
      * `clean` is the assertion and `poisoned` is its control: without the second, a purge that simply erases
      * everything regardless would pass, and without the first the defect is invisible.
@@ -956,7 +959,7 @@ class ScopesSliceTest {
         val clean = createGroupAs(owner, domain)
         val marker = "refuse-${UUID.randomUUID()}"
 
-        // The one object `eraseScope` will hand to the store for `poisoned` — its storage key carries the marker.
+        // The one blob `eraseScope` will record for reclaim for `poisoned` — its storage key carries the marker.
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = poisoned; storageKey = marker
@@ -972,7 +975,7 @@ class ScopesSliceTest {
             }
         }
 
-        val recorder = blobStore as RecordingBlobStore
+        val recorder = reclaimStore as RefusingStoreReclaimStore
         recorder.failOnKeyMarker = marker
         try {
             purge.run() // must not throw: a failure is caught, logged and confined to its own scope

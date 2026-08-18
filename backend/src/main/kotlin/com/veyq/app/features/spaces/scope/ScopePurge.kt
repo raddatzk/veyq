@@ -11,8 +11,8 @@ import com.veyq.app.features.sharing.ShareEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
-import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.StoreObjectRef
+import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
@@ -25,19 +25,25 @@ import java.time.Instant
 /**
  * Scheduled hard-purge of soft-deleted groups (uc.spaces.delete-group, cr-0090, ADR 0014 §6). A group the owner
  * soft-deleted enters a grace period; once its `deletedAt` is older than the retention window, this erases it for
- * good — the blob **objects** in the store (originals + derivatives + covers all live in `veyq_blob`, which carries
- * the scope) and then every row that references the scope. Operator-blind-safe: erasure only, no key/plaintext
- * (unlike a removal's key rotation). Mirrors the soft-then-hard purge pattern (`TenantInvitePurge`/`SessionPurge`,
- * cr-0011).
+ * good — every row that references the scope, plus a reclaim entry for each blob's store objects (originals +
+ * derivatives + covers all live in `veyq_blob`, which carries the scope). Operator-blind-safe: erasure only, no
+ * key/plaintext (unlike a removal's key rotation). Mirrors the soft-then-hard purge pattern
+ * (`TenantInvitePurge`/`SessionPurge`, cr-0011).
+ *
+ * **This job no longer deletes store objects, and that removed a hazard rather than adding latency** (ADR 0062
+ * Decision 4). It used to delete them *first, inside* the per-scope transaction — so a rollback restored rows
+ * pointing at bytes that were already gone, a presigned URL that 404s, which ADR 0056 § Context 2 names as the
+ * skew the read path does not handle. Writing reclaim rows in that same transaction has no such mirror: a
+ * rollback takes the reclaim entries with it, exactly as it takes the row deletes.
  *
  * Deliberately **not** routed through `MediaStore.purgeMediaRows` (the shared FK-ordered per-media purge,
- * cr-0135): that helper erases one media's rows, while this erases set-based by scope and objects-first. It is
- * the wrong shape here, not a fourth copy of it.
+ * cr-0135): that helper erases one media's rows, while this erases set-based by scope. It is the wrong shape
+ * here, not a fourth copy of it.
  */
 @ApplicationScoped
 class ScopePurge(
     private val store: ScopesStore,
-    private val blobStore: BlobStore,
+    private val reclaim: StoreReclaimStore,
     config: VeyqConfig,
 ) {
     private val log = Logger.getLogger(ScopePurge::class.java)
@@ -68,10 +74,13 @@ class ScopePurge(
     fun purge(scopeId: String) = eraseScope(scopeId)
 
     /**
-     * Erase one scope and everything under it, FK-safe: the blob **objects** go to the store first (their rows
-     * still name the storage keys), then the DB rows child-first — epoch links before the scope row that owns the
-     * FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids,
+     * Erase one scope and everything under it, FK-safe: each blob's store objects are recorded for reclaim while
+     * their rows still name the storage keys, then the DB rows go child-first — epoch links before the scope row
+     * that owns the FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids,
      * `veyq_job_decline` by its job ids and `veyq_share_identity` by its share ids.
+     *
+     * The read-before-delete order survives; only what it feeds changed. The objects themselves are
+     * `StoreReclaimSweep`'s, which is why nothing here can leave a row pointing at bytes that are already gone.
      *
      * **This list is the enumeration, and `scripts/validate_scope_erasure_arity.py` is what keeps it complete.**
      * The rule is not "remember to add the new table" but *every table reachable by foreign key from
@@ -81,7 +90,7 @@ class ScopePurge(
      */
     private fun eraseScope(scopeId: String) {
         val blobs = BlobEntity.find("scopeId", scopeId).list()
-        blobStore.delete(blobs.flatMap { b -> (0 until b.chunkCount).map { chunkKey(b.storageKey, it) } })
+        reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
 
         val mediaIds = MediaEntity.find("scopeId", scopeId).list().map { it.id }
         if (mediaIds.isNotEmpty()) MediaDerivativeEntity.delete("mediaId in ?1", mediaIds)

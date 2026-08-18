@@ -11,6 +11,8 @@ import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.blobstore.RecordingBlobStore
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
+import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -48,7 +50,9 @@ import java.util.UUID
  *   cover is already gone.
  *
  * The store half is observed through the [RecordingBlobStore] seam — the in-memory store's `delete` is a no-op
- * that proves nothing. UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
+ * that proves nothing — and it takes **two** components since ADR 0062: the purge records the key prefixes in
+ * its own transaction, [StoreReclaimSweep] is the only thing that deletes objects, so the purge case drives both.
+ * UUID-unique seeds so the JVM-lived H2 mem DB can't bleed across tests/classes.
  */
 @QuarkusTest
 class NodeTrashSliceTest {
@@ -61,6 +65,9 @@ class NodeTrashSliceTest {
 
     @Inject
     lateinit var purge: NodeSubtreePurge
+
+    @Inject
+    lateinit var sweep: StoreReclaimSweep
 
     @Inject
     lateinit var blobStore: BlobStore
@@ -343,8 +350,12 @@ class NodeTrashSliceTest {
             all.flatMap { b -> (0 until b.chunkCount).map { chunkKey(b.storageKey, it) } }
         }
 
+        // Drop the JVM-shared reclaim backlog: the sweep takes a bounded batch of the OLDEST due rows, and this
+        // case's rows are the newest in a table every earlier test class has been writing to.
+        QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() }
         recorder.reset()
         purge.run()
+        sweep.run()
 
         QuarkusTransaction.requiringNew().run {
             assertNull(NodeEntity.findById(memory)) { "the node row must be gone" }
@@ -359,7 +370,7 @@ class NodeTrashSliceTest {
             assertNotNull(MediaEntity.findById(freshMediaId)) { "its media must survive too" }
         }
         assertTrue(recorder.deletedKeys.containsAll(keys)) {
-            "the purge must hand every reclaimed chunk key (original + derivative + cover) to the store; " +
+            "the purge + sweep must hand every reclaimed chunk key (original + derivative + cover) to the store; " +
                 "expected $keys, handed ${recorder.deletedKeys}"
         }
     }
