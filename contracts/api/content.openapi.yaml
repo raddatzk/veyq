@@ -19,8 +19,11 @@ info:
 tags:
   - name: content
     description: >
-      The Memory tree under a scope (create / list / update / delete nodes). One tag = one resource interface
-      owning the `/api/scopes/{scopeId}/nodes` subtree (distinct from the `/api/scopes` scopes resource).
+      The Memory tree under a scope (create / list / update / soft-delete / restore nodes) **and** the space's
+      node trash. One tag = one resource interface owning the `/api/scopes/{scopeId}/nodes` subtree plus
+      `/api/scopes/{scopeId}/trash/nodes` — the trash hangs off the *space*, not the node, because a trashed
+      Memory has no Memory to hang a tab from ([ADR 0061](../../docs/decisions/0061-node-deletion-reversible-node-trash.md)).
+      Distinct from the `/api/scopes` scopes resource.
   - name: favorites
     description: >
       The caller's **per-(user, scope) favorites** — the set of pinned Memory ids, sealed client-side under
@@ -157,10 +160,17 @@ paths:
     delete:
       tags: [content]
       operationId: deleteNode
-      summary: Delete a node (and its subtree).
+      summary: Delete a node — soft-delete the whole subtree into the space's trash (uc.memory.delete-node).
       description: >
-        Removes the node and its descendants. Idempotent (a missing node is still 204). Media/journal cleanup
-        for a deleted subtree is handled by the content-purge job (later slices).
+        **Soft-delete** the node and every descendant in one transaction (`deleted_at = now`, ADR 0061). The
+        subtree leaves every read at once — the tree listing, the media/bucket listings, and **both** public-share
+        paths: the anonymous resolve stops listing it *and* its blobs stop being authorized for a presign.
+        **Nothing is destroyed** — its media, derivative, bucket and blob rows and every store object survive
+        untouched, which is what makes `restoreNode` complete rather than partial. The deleted node's `slugToken`
+        is replaced by its own id, so the **name is immediately reusable**; restore carries a freshly
+        client-computed token. A scheduled job hard-erases the subtree once its `deleted_at` is older than the
+        retention window. Idempotent — re-deleting an already-trashed subtree is still `204`. **Any member** may
+        delete (reversible, recovery-not-destruction — the irreversible purge is the system job).
       security:
         - bearerAuth: []
       parameters:
@@ -168,7 +178,7 @@ paths:
         - $ref: "#/components/parameters/NodeId"
       responses:
         "204":
-          description: The node is gone.
+          description: The subtree is in the space's trash (or already was).
         "401":
           description: Generic authentication failure.
           content:
@@ -181,6 +191,81 @@ paths:
           description: The scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
+
+  /api/scopes/{scopeId}/nodes/{nodeId}/restore:
+    post:
+      tags: [content]
+      operationId: restoreNode
+      summary: Restore a soft-deleted subtree out of the space's trash (uc.memory.delete-node).
+      description: >
+        Clears `deleted_at` across the subtree and writes the supplied `slugToken` back onto its root, returning
+        every descendant, photo, bucket and cover exactly as it was — none of it was ever removed. The client
+        **must** supply the token: the delete freed the name by overwriting `slug_token` with the node's own id,
+        and the server cannot recompute a blinded MAC under `K_SC` (ADR 0012). A node created in the meantime
+        that already holds the name is a `409 slug_taken` — the same disambiguation a create takes, never a
+        silent rename. **Any member** of the scope may restore. A subtree the scheduled job already purged is
+        gone (`404`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RestoreNodeRequest" }
+            example: { slugToken: c2x1Zy10b2tlbi1iYXNlNjQ= }
+      responses:
+        "204":
+          description: The subtree is back in the tree.
+        "400":
+          description: Malformed request (missing/invalid `slugToken`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such trashed node (unknown, already purged, or still live), or the caller holds no grant for the scope.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409":
+          description: A live sibling already holds that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+
+  /api/scopes/{scopeId}/trash/nodes:
+    get:
+      tags: [content]
+      operationId: listTrashedNodes
+      summary: The space's node trash — the soft-deleted subtree roots (uc.memory.delete-node).
+      description: >
+        Lists only the **root** of each soft-deleted subtree: its descendants went with it and come back with it,
+        so listing them too would offer a restore that cannot be honoured on its own. Each row carries when it was
+        deleted and when it will be purged. The trash hangs off the *space* rather than the node — a trashed
+        Memory has no Memory to hang a tab from (ADR 0061 Decision 3). Newest-deleted first.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      responses:
+        "200":
+          description: The scope's soft-deleted subtree roots (empty when the trash is empty).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/TrashedNodeSummary" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
 
   /api/scopes/{scopeId}/favorites:
     get:
@@ -419,6 +504,76 @@ components:
           maxLength: 8192
           description: A MEMORY's or CHAPTER's curated metadata (date/place) — a client-versioned JSON blob sealed under this node's `K_mem` (AAD context `node-meta`); null when unset. Lets a browse card show + sort by the date without loading the Memory's media. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
+
+    RestoreNodeRequest:
+      type: object
+      required: [slugToken]
+      description: >
+        The freshly computed slug token the restored root takes under its parent. The server cannot recompute one
+        (it is a blinded MAC under `K_SC`, ADR 0012) and the original was consumed when the delete freed the name,
+        so the client supplies it (ADR 0061 Decision 5).
+      properties:
+        slugToken:
+          type: string
+          description: Blinded slug token — a keyed MAC under `K_SC` over (parent ‖ slug), recomputed by the client for the restore. A collision with a node created while this one sat in the trash is the ordinary `slug_taken` rejection (opaque base64).
+          contentEncoding: base64
+          maxLength: 128
+          example: c2x1Zy10b2tlbi1iYXNlNjQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        encryptedName:
+          type: [string, "null"]
+          description: >
+            Optionally re-seal the node's name in the same write — the A1 disambiguation. A restore into a taken
+            name is retried under a different one, exactly as a create is, and the name and the token it is
+            derived from have to land **together**: sent apart, the node is briefly live carrying a slug its own
+            name does not produce, and a failure in between leaves it that way. Absent = the stored name is
+            untouched (the ordinary restore). Sealed under the node's own epoch key, opaque base64.
+          contentEncoding: base64
+          maxLength: 4096
+          example: cmVzdG9yZWQtbmFtZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    TrashedNodeSummary:
+      type: object
+      description: >
+        One soft-deleted subtree **root** in the space's trash. `parentId` is the slot the client recomputes the
+        restore's slug token against, and it always names a live parent (or the scope root) — a node whose own
+        parent is trashed went down with that parent and is not a root.
+      required: [id, kind, encryptedName, epoch, deletedAt, purgeAfter]
+      properties:
+        id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
+        parentId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: The live parent slot the subtree restores under, or null at the scope root.
+          example: null
+        kind:
+          $ref: "#/components/schemas/NodeKind"
+        encryptedName:
+          type: string
+          description: The node name, AEAD-sealed under `K_SC` (opaque base64) — the trash renders it by decrypting client-side, exactly as the tree does.
+          contentEncoding: base64
+          maxLength: 4096
+          example: ZW5jcnlwdGVkLW5hbWU=
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The scope content-key epoch this node's name is sealed under (ADR 0024); 0 for pre-rotation nodes.
+          minimum: 0
+          example: 0
+        deletedAt:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the subtree was soft-deleted. Operational metadata — coarse, and of the same kind the media trash already discloses.
+          example: "2026-08-17T10:15:30Z"
+        purgeAfter:
+          x-veyq-visibility: time
+          type: string
+          format: date-time
+          description: When the scheduled job will hard-erase this subtree — `deletedAt + retention`, **derived** at the resource boundary from the operator's configured window and never stored, so it follows a reconfigured window instead of freezing it at deletion time (ADR 0061 Decision 6). After this instant the subtree is gone and a restore answers 404.
+          example: "2026-09-16T10:15:30Z"
 
     Favorites:
       type: object
