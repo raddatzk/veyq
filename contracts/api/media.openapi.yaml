@@ -419,8 +419,8 @@ paths:
         Promote one `startBlobUploads` session into a **standalone cover blob** attached to the node. The server
         verifies the upload session (declare-then-verify: stats the stored chunk objects against the declared
         count + byte budget, purging + failing on mismatch), records one `veyq_blob`, and sets the node's
-        `cover_blob_id` to it — **atomically replacing + reclaiming** any prior cover blob (its store objects +
-        `veyq_blob` row are purged). Unlike `completeMedia` this creates **no `veyq_media` row** (no gallery
+        `cover_blob_id` to it — **atomically replacing + reclaiming** any prior cover blob (its `veyq_blob` row is
+        deleted and its store objects go on the reclaim list, both in the same transaction). Unlike `completeMedia` this creates **no `veyq_media` row** (no gallery
         entry, no derivative tiers): the cover is a single blob the client downscaled on device. Serving reuses
         `presignBlobDownloads`. Returns the committed `BlobRef`. Guards: the caller holds a grant for the scope;
         the target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER). Operator-blind — the
@@ -465,13 +465,15 @@ paths:
       operationId: deleteCoverBlob
       summary: Detach + reclaim the node's standalone cover blob.
       description: >
-        Clear the node's `cover_blob_id`, delete its `veyq_blob` row, and purge the blob's store objects. Used
-        when an uploaded cover is removed (the sealed node meta drops its `cover` separately, via `updateNode`).
-        Idempotent — a node with no cover blob answers `204`. Guards: the caller holds a grant for the scope.
-        `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the explicit
-        client-driven detach. The row and its reference are cleared in one transaction, so a crash leaves no
-        blob row behind; the store delete is best-effort and post-commit, so what a failure can leave is an
-        orphaned store object — invisible to any query over `veyq_blob`, and reclaimed by no job today.
+        Clear the node's `cover_blob_id`, delete its `veyq_blob` row, and hand the blob's store objects to the
+        reclaim list. Used when an uploaded cover is removed (the sealed node meta drops its `cover` separately,
+        via `updateNode`). Idempotent — a node with no cover blob answers `204`. Guards: the caller holds a grant
+        for the scope. `deleteNode` performs the same reclaim via the `cover_blob_id` column, so this is the
+        explicit client-driven detach. The row, its reference and the reclaim entry are written in **one**
+        transaction, so a crash can leave neither a blob row nor a forgotten object; one scheduled sweep then
+        drains that list, retrying a refused delete and marking a permanently failed one
+        ([ADR 0062](../../docs/decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The objects
+        therefore go up to one sweep interval after the `204` — nothing readable references them in between.
       security:
         - bearerAuth: []
       parameters:
@@ -479,7 +481,7 @@ paths:
         - $ref: "#/components/parameters/NodeId"
       responses:
         "204":
-          description: The cover blob was detached + reclaimed (or the node had none).
+          description: The cover blob row is gone and its objects are queued for reclaim (or the node had none).
         "401":
           description: Generic authentication failure.
           content:
@@ -627,7 +629,8 @@ paths:
       summary: Permanently delete a trashed media now — expedite the retention purge (uc.memory.delete-media).
       description: >
         **Hard-delete** a media that is currently **in the trash**: remove its derivative + media + blob rows and
-        the store objects (the same reclaim the scheduled `MediaTrashPurge` runs, expedited by a member). This is
+        put their store objects on the reclaim list, drained by the scheduled sweep (the same reclaim
+        `MediaTrashPurge` runs, expedited by a member). This is
         **irreversible**. **Any member** may purge an already-trashed item — the security model's reversible/
         irreversible split lets a member expedite the purge of an item that was already reversibly removed. Only a
         **trashed** media can be purged: a live (untrashed) or unknown media answers `404` (a live media is deleted
@@ -639,7 +642,7 @@ paths:
         - $ref: "#/components/parameters/MediaId"
       responses:
         "204":
-          description: The trashed media was permanently deleted (rows + blob objects reclaimed).
+          description: The trashed media was permanently deleted (rows gone; their blob objects queued for reclaim).
         "401":
           description: Generic authentication failure.
           content:

@@ -470,7 +470,7 @@ paths:
         (the `UPLOADER` drop-box, cr-0102, [ADR 0031](../../docs/decisions/0031-uploader-public-share.md); also a
         `CONTRIBUTOR`). The `contributorToken` rides the **`X-Contributor-Token`** header (no body on DELETE). Gated
         on the share (exists + `enabled` + role ∈ {CONTRIBUTOR, UPLOADER}) + a valid token; the server deletes the
-        media (and its derivatives + reclaims all blobs from the store) **iff** the media's `share_identity_id`
+        media (and its derivatives, and puts all their blob objects on the reclaim list) **iff** the media's `share_identity_id`
         equals the token's identity — a single-row **ownership** check, never gallery filtering. `404` for any other
         media id (a foreign or unknown media is indistinguishable from a missing one). Idempotent-safe: a second
         delete of the same id is `404`.
