@@ -64,6 +64,16 @@ under-count. Three reasons the number itself does not belong in the file:
   prose. cr-0171 could not under-deliver on 235 fields: the validator stays red while one is missing. Prefer
   that over a number every time (see *promote one-shot proofs*, below).
 
+**And where the inventory classifies a SHARED read, classify its callers, not the read.** A sweep that adds a
+predicate splits its sites into "takes it" and "must not" — and a `grep` returns *reads*, so a read with two
+callers gets one verdict and is silently wrong for one of them. cr-node-delete-reversible-trash's inventory named
+three reads that must not filter; there were four. The fourth was `NodesStore.findInScope`, correctly classified
+as *taking* the predicate for its **update** caller and wrong for its **delete** caller, where filtering turns a
+promised idempotent no-op into a 404 while a foreign node must keep answering the identical 404 — so the two
+callers need two lookups, not one. No locator over reads can see this; the follow-up is one `grep` for the read's
+own callers, run only for the sites the CR puts on the "must not" side, because that is the side making a
+completeness claim about an **absence**.
+
 **"Measured against `main`, so no phase re-derives it" means *don't rebuild the inventory* — never *believe every
 row*.** A CR that carries its measurements in a table earns the implementer's time, and the clause that hands
 them over is doing the opposite of what it reads as: it suppresses re-derivation of the whole set, which is
@@ -512,6 +522,29 @@ the **named** green is the evidence. Compare against the named other case, never
 window control, the retro-fit — cost less than deciding whether they were warranted. Where a CR's own argument
 rests on which tests bite, bite them.
 
+### The CR says PER bite-test how it will be bitten — live defect or injection, and with which lever
+
+**"Write these RED first" is not a method, and for some of them it is not even possible.** A CR that lists its
+bite-tests has decided *what* must be proven and left *how* to the implementer — who discovers, one test at a
+time and at the most expensive moment, that the list is two different kinds of test wearing one heading. Both
+kinds are covered by the two sections below; the CR's job is to say which one each test takes:
+
+- **Live defect** — the test asserts behaviour the fix introduces, so it reddens on the untouched tree and the
+  ordering below applies. Free, and the strongest kind.
+- **Injection** — the test pins a deliberate *non*-change (a read that must keep its old shape, a traversal that
+  must not skip). Nothing in the CR's own diff makes it red, so it is green from the first run and § *bite-proof
+  by snapshot-and-restore* applies. **Name the lever in the CR**, because a bite whose lever the author never
+  chose is a bite the implementer improvises under time pressure — and § *upstream of every trap* is a list of
+  the ways an improvised lever misses.
+
+cr-node-delete-reversible-trash paid for both halves of this in one session. Its six bite-tests were four live
+defects and two injections, unmarked — so one injection-shaped test was run against the untouched tree, came back
+green, and had to be re-planned. A third failed differently: it was a live defect whose **setup** depended on a
+fix scheduled later in the same phase, so its first red landed on a `createNode` in the arrangement rather than
+on the assertion (§ *a live-defect red can land on the wrong STEP*, below). Marking the method also orders the
+phase, which is the second thing it buys: the live defects run first, against the least-changed tree there will
+ever be.
+
 ### Where the defect is still live, order it guard → red → fix → green
 
 **The unfixed defect is a stronger bite test than any injection, and it is free.** A forged one proves the guard fires on a shape *you*
@@ -523,6 +556,30 @@ red**; reaching for the fix first destroys the evidence and leaves you injecting
 does not replace snapshot-and-restore — that is what you fall back to when the defect is already fixed, when the
 guard must also reject shapes that never occurred here, or when the case belongs in
 `validate_guard_gaps.py`'s repeated harness.
+
+**But a live-defect red can land on the wrong STEP, and then it is not a bite either.** § *a bite test must tell
+"the guard held" apart from "nothing ran"* catches an injection that breaks compilation instead of the assertion;
+this is the same failure arriving through the **ordering**. Where several fixes land in sequence, a test staged
+before an *earlier* one fails in its own setup — cr-node-delete-reversible-trash's "restore into a taken name is a
+clean rejection" ran before the slug-freeing write existed, so its second `createNode` answered `409` and the run
+was scored red on a step the test does not exist to check. The tell is purely mechanical and costs one line:
+**read which assertion reddened, not that the test reddened** — a red on a setup line is an unbitten test wearing
+a bitten one's clothes, and it is re-bitten by injection once the earlier fix lands.
+
+### A bite test you cannot make red is telling you the design is not the one the doc describes
+
+**Reach for the design before reaching for a stronger injection.** The reflex when a new test stays green under
+every lever is that the lever is too weak. Sometimes it is; sometimes the property has **no observable
+consequence under the implementation you just wrote**, and the sentence you are pinning quietly assumed a
+different one. cr-node-delete-reversible-trash had to pin *"the delete's traversal must not skip already-deleted
+descendants"*. Its first implementation left an already-trashed descendant's earlier marker alone — under which
+skipping them and reaching them produce **byte-identical** state, so no injection could ever redden it. The
+sentence only means something if the delete **re-stamps** the whole subtree, and re-stamping is what makes the
+failure real and observable: a subtree ageing out on two timestamps has its inner rows purged first, and the
+restore hands back an empty shell. The test did not get stronger; the semantics changed, and only the failed
+attempt to bite it surfaced which semantics the use-case had meant all along. So: **an unbiteable test is a
+design question, asked in the cheapest possible place**, and it is worth one round of "what *would* this cost, in
+what the user sees?" before deciding the lever is at fault.
 
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
