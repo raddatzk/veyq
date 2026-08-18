@@ -222,8 +222,15 @@ class SharingStore(
     /** The sealed subtree rooted at [rootNodeId] within [scopeId]: nodes (for the `K_mem` chain) + its live media. */
     fun subtree(scopeId: String, rootNodeId: String): SubtreeData {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
-        val nodeById = NodeEntity.find("scopeId", scopeId).list().associateBy { it.id }
-        val nodes = subtreeIds.mapNotNull { nodeById[it] }.map { n ->
+        // `deletedAt is null` — a soft-deleted node (uc.memory.delete-node, ADR 0061) keeps its ROW, unlike the
+        // hard delete this replaced, so without this predicate the guest resolve serves the full sealed subtree
+        // of a Memory the user deleted. Its sibling in [subtreeBlobIds] authorizes the blob GET and carries the
+        // predicate SEPARATELY on purpose: either one covering for the other is how a later change to the other
+        // reopens the hole silently. `ShareDeletedNodeSliceTest` bites each on its own.
+        val nodeById = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().associateBy { it.id }
+        val liveIds = subtreeIds.filter { it in nodeById }
+        if (liveIds.isEmpty()) return SubtreeData(emptyList(), emptyList()) // the shared root itself is trashed
+        val nodes = liveIds.map { nodeById.getValue(it) }.map { n ->
             ShareNodeRow(
                 id = n.id,
                 parentId = if (n.id == rootNodeId) null else n.parentId,
@@ -236,7 +243,7 @@ class SharingStore(
         // `deletedAt is null` — a trashed medium (uc.memory.delete-media, cr-0110) is a soft-delete, so without
         // this predicate the guest paths keep serving it for the whole retention window. Both share reads must
         // carry it: this listing and [subtreeBlobIds], which authorizes the blob GET.
-        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, subtreeIds).list().mapNotNull { m ->
+        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveIds).list().mapNotNull { m ->
             val blob = BlobEntity.findById(m.blobId) ?: return@mapNotNull null
             val derivatives = MediaDerivativeEntity.find("mediaId = ?1", m.id).list().mapNotNull { d ->
                 val derivBlob = BlobEntity.findById(d.blobId) ?: return@mapNotNull null
@@ -261,23 +268,29 @@ class SharingStore(
     /** Every blob id attached under the subtree: live media originals + derivatives + node cover blobs. */
     private fun subtreeBlobIds(scopeId: String, rootNodeId: String): Set<String> {
         val subtreeIds = collectSubtreeIds(scopeId, rootNodeId)
+        // `deletedAt is null` — the sibling of [subtree]'s predicate, deliberately its OWN read (ADR 0061).
+        // Filtering only the listing leaves a Memory invisible in the share and still fully downloadable by
+        // anyone holding a blobId, unauthenticated, for the whole retention window.
+        val liveNodes = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().filter { it.id in subtreeIds }
+        if (liveNodes.isEmpty()) return emptySet() // the shared root itself is trashed
+        val liveIds = liveNodes.map { it.id }
         val ids = HashSet<String>()
         // Trashed media are excluded here too — else the listing hides a medium the blob GET still presigns.
-        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, subtreeIds).list()
+        val media = MediaEntity.find("scopeId = ?1 and nodeId in ?2 and deletedAt is null", scopeId, liveIds).list()
         for (m in media) {
             ids.add(m.blobId)
             MediaDerivativeEntity.find("mediaId = ?1", m.id).list().forEach { ids.add(it.blobId) }
         }
-        NodeEntity.find("scopeId", scopeId).list()
-            .filter { it.id in subtreeIds }
-            .mapNotNull { it.coverBlobId }
-            .forEach { ids.add(it) }
+        liveNodes.mapNotNull { it.coverBlobId }.forEach { ids.add(it) }
         return ids
     }
 
     /** BFS the node tree within the scope from [rootNodeId], collecting the root + every descendant id. */
     private fun collectSubtreeIds(scopeId: String, rootNodeId: String): List<String> {
-        val byParent = NodeEntity.find("scopeId", scopeId).list().groupBy { it.parentId }
+        // `deletedAt is null` on the DESCENDANTS. The seed root is deliberately not filtered here: whether the
+        // shared root itself is live is decided by each caller's own predicate above, so removing one of those
+        // reddens exactly its own guest path instead of both at once.
+        val byParent = NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().groupBy { it.parentId }
         val out = LinkedHashSet<String>()
         val stack = ArrayDeque(listOf(rootNodeId))
         while (stack.isNotEmpty()) {

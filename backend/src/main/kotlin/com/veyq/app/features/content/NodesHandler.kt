@@ -31,6 +31,18 @@ sealed interface DeleteNodeOutcome {
     object ScopeDeleting : DeleteNodeOutcome, HttpFailure by Failures.scopeDeleting
 }
 
+sealed interface RestoreNodeOutcome {
+    object Restored : RestoreNodeOutcome
+    object NotFound : RestoreNodeOutcome, HttpFailure by Failures.nodeNotFound
+    object ScopeDeleting : RestoreNodeOutcome, HttpFailure by Failures.scopeDeleting
+    object SlugTaken : RestoreNodeOutcome, HttpFailure by Failures.slugTaken
+}
+
+sealed interface ListTrashOutcome {
+    data class Trash(val rows: List<TrashedNodeRow>) : ListTrashOutcome
+    object NoScope : ListTrashOutcome, HttpFailure by Failures.scopeNotFound
+}
+
 /**
  * Use-case logic for the Memory tree (en.memory.tree, cr-0027). Scope access = the caller holds a membership
  * for the scope (operator-blind: a non-member sees a 404, not a reveal). Structural rules: FOLDER/MEMORY live
@@ -99,8 +111,32 @@ class NodesHandler(private val store: NodesStore) {
         // Bind the node to THIS scope before deleting (mirrors update, cr-0126): membership on scopeId alone does
         // not authorize deleting a node that lives in another scope. Same NoScope 404 whether the node is foreign
         // or absent — non-enumerable, and it stops the cross-scope delete the primary-key path used to allow.
-        store.findInScope(scopeId, nodeId) ?: return DeleteNodeOutcome.NoScope
+        // Deliberately the trash-blind lookup: an already-trashed subtree is a no-op 204 (E3), a foreign or
+        // unknown node is still the non-enumerable 404 the cross-scope case pins.
+        store.findDeletableInScope(scopeId, nodeId) ?: return DeleteNodeOutcome.NoScope
         store.deleteSubtree(scopeId, nodeId)
         return DeleteNodeOutcome.Deleted
+    }
+
+    /**
+     * Restore a trashed subtree (uc.memory.delete-node step 6). The client supplies the freshly computed
+     * `slugToken` — the server cannot recompute a blinded MAC under `K_SC`, and the delete consumed the
+     * original when it freed the name.
+     */
+    fun restore(
+        userId: String, scopeId: String, nodeId: String, slugToken: String, encryptedName: String?,
+    ): RestoreNodeOutcome {
+        if (!store.isMember(userId, scopeId)) return RestoreNodeOutcome.NotFound
+        if (store.isPendingDeletion(scopeId)) return RestoreNodeOutcome.ScopeDeleting // read-only during grace (cr-0090)
+        return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName)) {
+            NodesStore.RestoreResult.DONE -> RestoreNodeOutcome.Restored
+            NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken
+            NodesStore.RestoreResult.NOT_FOUND -> RestoreNodeOutcome.NotFound
+        }
+    }
+
+    fun listTrash(userId: String, scopeId: String): ListTrashOutcome {
+        if (!store.isMember(userId, scopeId)) return ListTrashOutcome.NoScope
+        return ListTrashOutcome.Trash(store.listTrashRoots(scopeId))
     }
 }

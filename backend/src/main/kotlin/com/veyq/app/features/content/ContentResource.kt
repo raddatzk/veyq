@@ -5,12 +5,18 @@ import com.veyq.app.generated.model.CreateNodeRequest
 import com.veyq.app.generated.model.NodeCreated
 import com.veyq.app.generated.model.NodeKind
 import com.veyq.app.generated.model.NodeSummary
+import com.veyq.app.generated.model.RestoreNodeRequest
+import com.veyq.app.generated.model.TrashedNodeSummary
 import com.veyq.app.generated.model.UpdateNodeRequest
+import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
+import java.time.Duration
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.util.UUID
 import com.veyq.app.shared.ratelimit.RateLimitExempt
 
@@ -29,7 +35,13 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 class ContentResource(
     private val handler: NodesHandler,
     private val identity: SecurityIdentity,
+    config: VeyqConfig,
 ) : ContentApi {
+
+    // ADR 0061 Decision 6 / rejected (e): `purgeAfter` is DERIVED here from `deletedAt` + the operator's
+    // configured window, never stored — a column would freeze the window at deletion time and drift from the
+    // configuration. Same shape as the group grace period (`ScopesResource`).
+    private val trashRetention: Duration = config.node().trash().retention()
 
     override fun createNode(scopeId: UUID, createNodeRequest: CreateNodeRequest): Response {
         val outcome = handler.create(
@@ -68,6 +80,33 @@ class ContentResource(
             DeleteNodeOutcome.Deleted -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }
+
+    override fun restoreNode(scopeId: UUID, nodeId: UUID, restoreNodeRequest: RestoreNodeRequest): Response =
+        when (val o = handler.restore(
+            identity.principal.name, scopeId.toString(), nodeId.toString(),
+            restoreNodeRequest.slugToken, restoreNodeRequest.encryptedName,
+        )) {
+            RestoreNodeOutcome.Restored -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun listTrashedNodes(scopeId: UUID): Response {
+        val sid = scopeId.toString()
+        return when (val o = handler.listTrash(identity.principal.name, sid)) {
+            is ListTrashOutcome.Trash -> Response.ok(o.rows.map { it.toTrashSummary(sid) }).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
+    private fun TrashedNodeRow.toTrashSummary(scopeId: String) = TrashedNodeSummary(
+        id = UUID.fromString(id),
+        kind = NodeKind.decode(kind),
+        encryptedName = encryptedName,
+        epoch = epoch,
+        deletedAt = OffsetDateTime.ofInstant(deletedAt, ZoneOffset.UTC),
+        purgeAfter = OffsetDateTime.ofInstant(deletedAt.plus(trashRetention), ZoneOffset.UTC),
+        parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
+    )
 
     /** Map a stored row to the API shape: the root's parent slot (= scope id) surfaces as `parentId = null`. */
     private fun NodeRow.toSummary(scopeId: String) = NodeSummary(

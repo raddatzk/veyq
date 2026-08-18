@@ -72,6 +72,13 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "delete_revision", nullable = false)
     var deleteRevision: Int = 0
 
+    /** When this node was soft-deleted (uc.memory.delete-node, ADR 0061), or null while it is live. Set on the
+     *  node **and every descendant** in one transaction; cleared by a restore. Every user- and guest-facing read
+     *  carries `deletedAt is null` — three deliberately do not (slug uniqueness, the delete's own traversal, and
+     *  the whole-space erase), each documented at its site. */
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 

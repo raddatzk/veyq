@@ -80,9 +80,12 @@ class MediaStore(private val membership: MembershipStore) {
 
     fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
 
-    /** The node, if it exists in this scope (its `kind` decides the media-target rule). */
+    /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
+     *  null` (ADR 0061): this is the gate every media/bucket/cover handler routes through, so filtering it once
+     *  takes a soft-deleted subtree out of the gallery, the bucket listings and the cover operations together —
+     *  a poll on a trashed node answers 404 rather than a stale set. */
     fun findNode(scopeId: String, nodeId: String): NodeEntity? =
-        NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId }
+        NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }
 
     @Transactional
     fun createSession(scopeId: String, storageKey: String, chunkCount: Int, byteSize: Long, wrappedBlobKey: String): String {
@@ -348,6 +351,8 @@ class MediaStore(private val membership: MembershipStore) {
      */
     @Transactional
     fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): CoverCommitRows {
+        // No `deletedAt` predicate: the handler already resolved this node through the filtering [findNode]
+        // gate before the verify step; this is the in-tx reload of that same row.
         val node = NodeEntity.findById(nodeId)!! // resolved by the handler before verify; reloaded in-tx
         val reclaimKeys = deleteBlobRow(node.coverBlobId)
         val blobId = persistBlob(session, manifest)
@@ -368,7 +373,7 @@ class MediaStore(private val membership: MembershipStore) {
      */
     @Transactional
     fun clearCover(scopeId: String, nodeId: String): List<String> {
-        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId } ?: return emptyList()
+        val node = NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null } ?: return emptyList()
         val reclaimKeys = deleteBlobRow(node.coverBlobId)
         node.coverBlobId = null
         node.coverByteSize = null

@@ -32,6 +32,7 @@ interface VeyqConfig {
     fun pairing(): Pairing
     fun scope(): Scope
     fun media(): Media
+    fun node(): Node
     fun blob(): Blob
     fun blobStore(): BlobStore
     fun tasks(): Tasks
@@ -146,6 +147,18 @@ interface VeyqConfig {
 
         interface Delete {
             /** Group soft-delete grace window before the hard purge. */
+            @WithDefault("P30D")
+            fun retention(): Duration
+
+            fun purge(): Interval
+        }
+    }
+
+    interface Node {
+        fun trash(): Trash
+
+        interface Trash {
+            /** Trashed-subtree restorable window before `NodeSubtreePurge` hard-erases it (uc.memory.delete-node). */
             @WithDefault("P30D")
             fun retention(): Duration
 

@@ -439,6 +439,10 @@ class MediaHandler(
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */
     fun renameBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String): RenameBucketOutcome {
         if (!store.isMember(userId, scopeId)) return RenameBucketOutcome.NoBucket
+        // ADR 0061: the bucket lookup is keyed on (scope, node, bucket) and never touches the node row, so the
+        // node gate every sibling op passes through has to be spelled out here — else a trashed subtree's
+        // buckets stay writable while everything else about it is hidden.
+        if (store.findNode(scopeId, nodeId) == null) return RenameBucketOutcome.NoBucket
         val b = store.findBucket(scopeId, nodeId, bucketId) ?: return RenameBucketOutcome.NoBucket
         if (b.isPrimary) return RenameBucketOutcome.Forbidden
         val row = store.renameBucket(bucketId, sealedName) ?: return RenameBucketOutcome.NoBucket
@@ -452,6 +456,7 @@ class MediaHandler(
      */
     fun deleteBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): DeleteBucketOutcome {
         if (!store.isMember(userId, scopeId)) return DeleteBucketOutcome.NoNode
+        if (store.findNode(scopeId, nodeId) == null) return DeleteBucketOutcome.NoNode // ADR 0061, as in renameBucket
         val b = store.findBucket(scopeId, nodeId, bucketId) ?: return DeleteBucketOutcome.Done // idempotent
         if (b.isPrimary) return DeleteBucketOutcome.Forbidden
         store.deleteBucketReparent(bucketId)
