@@ -69,7 +69,11 @@ reason this ADR exists: a queue that grows silently is the same disease one leve
 **6. A reclaim row holds an opaque key and nothing else.** No `scope_id`, no `media_id`, no node. Group erasure
 must leave nothing behind that describes the erased group, and a per-scope count of object sizes is exactly
 such a description. The list is legible to the operator only as "n objects pending deletion", which is what
-they already learn from the bucket.
+they already learn from the bucket. **The cost is stated here rather than discovered later: nothing can
+attribute a stuck object.** An operator sees *n pending, n abandoned* and cannot tell which space, Memory or
+group the bytes belonged to. Making the row source-dependent — opaque only where a scope was erased — would buy
+that back, and was rejected: a row whose shape varies by writer is read wrong by whoever meets the other shape
+first, and the erasure path is the one that matters most.
 
 **7. It is called a reclaim list — not a job, not a purge, not an outbox.** `veyq_job` is taken and means the
 operator-blind member task queue; a reader who follows the word lands in the wrong feature. Every existing
@@ -106,6 +110,13 @@ messaging pattern this codebase does not have.
   It cannot count the bytes, cannot retry, cannot see the `ScopePurge` rollback (there the delete *succeeds*),
   and is unobservable in the hermetic suite, because the `%test` store's `delete` is a no-op and the failure
   would live in the S3 implementation the suite never reaches.
+- **Rejected — keep the immediate delete at every call site and use the list only as a safety net**, clearing
+  the row on a confirmed success. It removes the latency Decision 3 accepts: bytes would go the moment the rows
+  do, rather than up to one sweep interval later. It loses on what that latency buys — two deleters means two
+  bookkeeping paths and two places that can fail, and the *exactly one call site* invariant, this ADR's
+  completeness proof and the one every future reclaim path will be tempted to bypass, becomes unstateable. The
+  latency is invisible to the user (the rows, and therefore every read, are already gone) and visible only to
+  whoever watches the bucket.
 - **Rejected — a `deleted_at` tombstone on `veyq_blob` instead of a separate table.** It saves the table by
   reusing the key and chunk count already on the row, and it is the same guarantee. It loses on the edges: the
   keys live in **two** tables (`veyq_blob` and `veyq_upload_session`), so the flag and the sweep are needed
