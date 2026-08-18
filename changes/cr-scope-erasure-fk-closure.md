@@ -79,7 +79,7 @@ Ordering is deliberate and follows `changes/README.md` § *where the defect is s
 fix → green*: **the isolation fix is staged before the FK fix, because the job-FK defect is the live lever that
 makes the isolation test red.** Repair the FK first and that bite has to be reconstructed by injection.
 
-- [ ] **1 backend — the guard, red first.** Add `scripts/validate_scope_erasure_arity.py`, porting the probe's
+- [x] **1 backend — the guard, red first.** Add `scripts/validate_scope_erasure_arity.py`, porting the probe's
       predicate **and its two documented limits**; record its first run naming the four tables. The probe is then
       a second copy of a live rule and dies with this CR. · Done when: it prints exactly those four and the rest
       of the chain is green
