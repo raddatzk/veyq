@@ -25,6 +25,7 @@ import MemoryDetail from '../features/memory/components/MemoryDetail.vue'
 import NodeMutationDialog from '../features/memory/components/NodeMutationDialog.vue'
 import DeleteNodeDialog from '../features/memory/components/DeleteNodeDialog.vue'
 import ShareDialog from '../features/memory/components/ShareDialog.vue'
+import SpaceTrashDialog from '../features/memory/components/SpaceTrashDialog.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -81,6 +82,7 @@ const mutationVisible = ref(false)
 const mutationMode = ref<Mode>('create-folder')
 const mutationNode = ref<TreeNode | null>(null)
 const deleteVisible = ref(false)
+const trashVisible = ref(false) // the SPACE's node trash (uc.memory.delete-node) — not the per-Memory media trash
 const deleteTarget = ref<TreeNode | null>(null)
 
 // The breadcrumb root label reflects the **active** scope (the tenant's name vs. Personal), not the URL token —
@@ -156,6 +158,11 @@ function startDelete(node: TreeNode) {
 async function onMutationDone() {
   await loadTree()
 }
+/** A restore puts a whole subtree back, so the tree is refetched exactly as a delete refetches it — no local
+ *  splice. The position stays where it is: the restored node reappears wherever it belonged. */
+async function onTrashRestored() {
+  await loadTree()
+}
 async function onDeleteDone() {
   const parentId = deleteTarget.value?.parentId ?? null
   await loadTree()
@@ -210,6 +217,7 @@ async function onDeleteDone() {
         @create-memory="startCreate('create-memory')"
         @rename-folder="currentFolder && startRename(currentFolder)"
         @delete-folder="currentFolder && startDelete(currentFolder)"
+        @open-trash="trashVisible = true"
       />
     </template>
 
@@ -230,6 +238,13 @@ async function onDeleteDone() {
       :node="deleteTarget"
       @done="onDeleteDone"
       @close="deleteVisible = false"
+    />
+    <SpaceTrashDialog
+      v-if="trashVisible && epochs && activeSpace.scopeId"
+      :scope-id="activeSpace.scopeId"
+      :epochs="epochs"
+      @restored="onTrashRestored"
+      @close="trashVisible = false"
     />
     <ShareDialog
       v-if="shareVisible && currentNode && memoryKey"

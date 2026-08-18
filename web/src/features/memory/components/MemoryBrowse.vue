@@ -36,6 +36,7 @@ const emit = defineEmits<{
   createMemory: []
   renameFolder: []
   deleteFolder: []
+  openTrash: []
 }>()
 
 const { t } = useI18n()
@@ -103,6 +104,19 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
 <template>
   <div class="memory-route-surface">
     <div class="memory-browse-toolbar">
+      <!-- The space's node trash (uc.memory.delete-node): a deleted Memory has no Memory to hang a Trash tab
+           from, so it lives on the SPACE and opens from here. Hidden during a pending-deletion grace window,
+           like every other write affordance — a restore is a write. -->
+      <Button
+        v-if="!readonly"
+        type="button"
+        :label="t('memory.spaceTrash.open')"
+        icon="pi pi-trash"
+        severity="secondary"
+        outlined
+        size="small"
+        @click="$emit('openTrash')"
+      />
       <ViewModeToggle show-map />
     </div>
     <section v-if="folder" class="veyq-section memory-section">
@@ -210,6 +224,8 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
 <style scoped>
 .memory-browse-toolbar {
   display: flex;
+  align-items: center;
+  gap: 0.5rem;
   justify-content: flex-end;
   margin-bottom: 0.75rem;
 }

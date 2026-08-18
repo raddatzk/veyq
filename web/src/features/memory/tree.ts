@@ -14,7 +14,7 @@ import * as v1 from '../../shared/crypto/v1'
 import { b64std, fromB64std } from '../../shared/base64'
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
-import { NodeKind, type NodeSummary } from '../../api/generated/content'
+import { NodeKind, type NodeSummary, type TrashedNodeSummary } from '../../api/generated/content'
 import { writeKey, keyAt, type EpochKeys } from '../spaces/epochs'
 import { sealNodeMeta } from './nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
@@ -204,7 +204,69 @@ export async function renameNode(
   )
 }
 
-/** Delete a node and its subtree. */
+/** Delete a node and its subtree — a SOFT delete into the space's trash (uc.memory.delete-node, ADR 0061).
+ *  Nothing is destroyed: the subtree's media, buckets, covers and blobs survive until the scheduled purge, which
+ *  is what makes {@link restoreNode} complete. The name is freed server-side at once, so it is immediately
+ *  reusable — and that is why a restore has to bring a fresh slug token with it. */
 export async function deleteNode(scopeId: string, nodeId: string): Promise<void> {
   await withRefresh(() => contentApi().deleteNode({ scopeId, nodeId }))
+}
+
+/** One soft-deleted subtree ROOT in the space's trash, its name decrypted client-side. */
+export type TrashedNode = {
+  id: string
+  parentId: string | null
+  kind: NodeKind
+  epoch: number
+  name: string
+  /** When the subtree was deleted. */
+  deletedAt: Date
+  /** When the scheduled job erases it for good — derived server-side from the operator's window, not stored. */
+  purgeAfter: Date
+}
+
+/** The space's node trash: the ROOT of each deleted subtree (the descendants went with it and return with it),
+ *  each name opened under **its own** epoch key `E_{node.epoch}`, exactly as {@link listTree} does. */
+export async function listTrash(scopeId: string, epochs: EpochKeys): Promise<TrashedNode[]> {
+  const rows = await withRefresh(() => contentApi().listTrashedNodes({ scopeId }))
+  return rows.map((r: TrashedNodeSummary) => ({
+    id: r.id,
+    parentId: r.parentId ?? null,
+    kind: r.kind,
+    epoch: r.epoch,
+    name: openName(keyAt(epochs, r.epoch), r.encryptedName),
+    deletedAt: r.deletedAt,
+    purgeAfter: r.purgeAfter,
+  }))
+}
+
+/**
+ * Restore a trashed subtree. The client **must** supply the slug token: it is a blinded MAC under `K_SC`, so the
+ * server cannot recompute one, and the delete consumed the original when it freed the name. It is derived under
+ * the node's **own** epoch key — its epoch is fixed at birth and a restore does not re-tag it, same rule as a
+ * rename (ADR 0024).
+ *
+ * `newName` is the A1 retry after a `slug_taken`: a node created while this one sat in the trash already holds
+ * the name, so the user picks another. The re-sealed name travels in the SAME request as the token derived from
+ * it — sent as two calls, the node would be briefly live carrying a slug its own name does not produce.
+ */
+export async function restoreNode(
+  scopeId: string,
+  epochs: EpochKeys,
+  node: { id: string; parentId: string | null; epoch: number; name: string },
+  newName?: string,
+): Promise<void> {
+  const parentSlot = node.parentId ?? scopeId
+  const key = keyAt(epochs, node.epoch)
+  const name = newName ?? node.name
+  await withRefresh(() =>
+    contentApi().restoreNode({
+      scopeId,
+      nodeId: node.id,
+      restoreNodeRequest: {
+        slugToken: slugTokenFor(key, parentSlot, name),
+        encryptedName: newName === undefined ? undefined : sealName(key, newName),
+      },
+    }),
+  )
 }

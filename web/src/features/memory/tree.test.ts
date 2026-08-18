@@ -7,7 +7,7 @@ vi.mock('../../api/client', () => ({
   sessionApi: vi.fn(),
 }))
 
-import { listTree, createFolder, createMemory, createChapter, openMemory, openContentKey, nodeContentKey, type TreeNode } from './tree'
+import { listTree, listTrash, restoreNode, createFolder, createMemory, createChapter, openMemory, openContentKey, nodeContentKey, type TreeNode } from './tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
 import * as v1 from '../../shared/crypto/v1'
@@ -16,12 +16,14 @@ import { b64std } from '../../shared/base64'
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)
 
-function mockContent(over: Partial<Record<'createNode' | 'listNodes' | 'updateNode' | 'deleteNode', unknown>>) {
+function mockContent(over: Partial<Record<'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode', unknown>>) {
   vi.mocked(contentApi).mockReturnValue({
     createNode: vi.fn().mockResolvedValue({ nodeId: 'n1' }),
     listNodes: vi.fn().mockResolvedValue([]),
     updateNode: vi.fn(),
     deleteNode: vi.fn(),
+    listTrashedNodes: vi.fn().mockResolvedValue([]),
+    restoreNode: vi.fn(),
     ...over,
   } as unknown as ReturnType<typeof contentApi>)
 }
@@ -114,4 +116,66 @@ describe('listTree', () => {
 
 function fromB64(s: string): Uint8Array {
   return Uint8Array.from(atob(s), (c) => c.charCodeAt(0))
+}
+
+// --- the space node trash (uc.memory.delete-node, ADR 0061) ------------------
+
+describe('listTrash', () => {
+  it('opens each trashed root\'s name under ITS OWN epoch key and carries both lifecycle dates', async () => {
+    const e0 = v1.randomBytes(32)
+    const e1 = v1.randomBytes(32)
+    const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
+    const deletedAt = new Date('2026-08-17T10:15:30Z')
+    const purgeAfter = new Date('2026-09-16T10:15:30Z')
+    mockContent({
+      listTrashedNodes: vi.fn().mockResolvedValue([
+        { id: 'old', parentId: null, kind: 'MEMORY', epoch: 0, encryptedName: sealUnder(e0, 'Rom 2024'), deletedAt, purgeAfter },
+        { id: 'new', parentId: 'f1', kind: 'FOLDER', epoch: 1, encryptedName: sealUnder(e1, 'Reisen'), deletedAt, purgeAfter },
+      ]),
+    })
+
+    const rows = await listTrash(SCOPE_ID, epochs)
+    // a trash spanning a rotation decrypts fully — the pre-rotation root opens under E_0, not the write key
+    expect(rows.map((r) => r.name)).toEqual(['Rom 2024', 'Reisen'])
+    expect(rows[0].parentId).toBeNull()
+    expect(rows[1].parentId).toBe('f1')
+    expect(rows[0].purgeAfter).toEqual(purgeAfter)
+  })
+})
+
+describe('restoreNode', () => {
+  it('derives the slug token under the node\'s OWN epoch key and sends no name when the name is unchanged', async () => {
+    const e0 = v1.randomBytes(32)
+    const e1 = v1.randomBytes(32)
+    const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
+    const restore = vi.fn()
+    mockContent({ restoreNode: restore })
+
+    await restoreNode(SCOPE_ID, epochs, { id: 'n1', parentId: null, epoch: 0, name: 'Rom 2026' })
+
+    const req = restore.mock.calls[0][0].restoreNodeRequest
+    // E_0, because the node's epoch is fixed at birth and a restore does not re-tag it (as a rename does not)
+    expect(req.slugToken).toBe(b64std(v1.slugToken(e0, SCOPE_ID, 'rom-2026')))
+    expect(req.slugToken).not.toBe(b64std(v1.slugToken(e1, SCOPE_ID, 'rom-2026')))
+    // an ordinary restore leaves the stored name alone
+    expect(req.encryptedName).toBeUndefined()
+  })
+
+  it('re-seals the name in the SAME request as the token derived from it, on the taken-name retry', async () => {
+    const restore = vi.fn()
+    mockContent({ restoreNode: restore })
+    const epochs = epochsOf(scopeKey)
+
+    await restoreNode(SCOPE_ID, epochs, { id: 'n1', parentId: 'f1', epoch: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
+
+    const req = restore.mock.calls[0][0].restoreNodeRequest
+    // both halves describe the NEW name, and they travel together — a node is never live carrying a slug its
+    // own name does not produce
+    expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, 'f1', 'rom-2026-2')))
+    expect(new TextDecoder().decode(v1.symUnwrap(scopeKey, fromB64(req.encryptedName), 'node-name'))).toBe('Rom 2026 (2)')
+  })
+})
+
+function sealUnder(key: Uint8Array, name: string): string {
+  return b64std(v1.symWrap(key, v1.utf8(name), 'node-name', v1.randomBytes(12)))
 }
