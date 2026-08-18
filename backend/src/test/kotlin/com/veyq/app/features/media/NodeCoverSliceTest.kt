@@ -24,7 +24,8 @@ import java.util.UUID
  * (dev/test metadata only — no byte transfer; the byte path is the opt-in [BlobBatchE2ETest]). A cover blob is
  * a `veyq_blob` attached to a node via `cover_blob_id` with **no `veyq_media` row** (never in the gallery).
  * Covers: commit → the blob is download-authorized (proving the row + authz) with no media row; replace
- * reclaims the prior blob; `deleteCoverBlob` + `deleteNode` reclaim it; a FOLDER is `illegal_target`; unknown
+ * reclaims the prior blob; `deleteCoverBlob` reclaims it while `deleteNode` deliberately does NOT (ADR 0061
+ * moved that to the purge, so a restore gets its cover back); a FOLDER is `illegal_target`; unknown
  * node/upload + non-member are 404 and a cross-scope upload is 404; operator-blindness (the node row holds only
  * `cover_blob_id` + size — the wrap stays on the blob, the crop never reaches the server).
  *
@@ -115,18 +116,26 @@ class NodeCoverSliceTest {
             .then().statusCode(204)
     }
 
+    /**
+     * cr-0073 reclaimed the cover blob at delete time; ADR 0061 moved that into `NodeSubtreePurge`, and this
+     * test asserts the *reversal*, not a weakening. Under a soft-delete the cover MUST survive the delete —
+     * reclaiming it there would hand a restore back a Memory whose cover is already gone, which is exactly the
+     * "nothing is destroyed by the user's action" property that makes the restore complete. The reclaim itself
+     * is still asserted, one step later, in `NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects`.
+     */
     @Test
-    fun deleteNodeReclaimsCoverBlob() {
+    fun deleteNodeKeepsTheCoverBlobForTheRestore() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "bm9kZQ=="))
 
-        // deleting the node cascades to its cover blob (the cover_blob_id column is the only reference)
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
 
-        assertEquals("upload_not_found", downloadError(userId, scopeId, blobId))
+        // `store_unavailable` = the blob row is still there and authorization passed (only the transport is
+        // absent on the hermetic store); `upload_not_found` would mean the row was reclaimed.
+        assertEquals("store_unavailable", downloadError(userId, scopeId, blobId))
     }
 
     @Test
