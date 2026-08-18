@@ -30,8 +30,10 @@ two flows [ADR 0054](0054-password-recovery-two-factor-release.md) and [ADR 0055
 exist to protect.
 
 **2. The read path tolerates one skew and not its mirror.** Every store deletion runs best-effort *after* the
-database transaction commits, so an object with no row is an ordinary steady state — orphans accumulate, and
-the upload-session GC that `V11__media.sql` promised as "a later slice" was never built. The mirror case is
+database transaction commits, so an object with no row is an ordinary steady state — orphans accumulate
+wherever a delete fails, and nothing records that one did. (Abandoned upload *sessions* themselves are
+reclaimed, by `UploadSessionPurge`; `V11__media.sql`'s "a later slice" note is a historical artifact of that
+migration, and `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
 handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
 object is missing becomes a valid URL that 404s, with no server-side signal and a broken picture as the only
 symptom.
