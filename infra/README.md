@@ -199,9 +199,13 @@ database password through `MYSQL_PWD`, both handed to the child as bare `-e NAME
 file is written.
 
 **What `verify` tells you, and its one deliberate asymmetry.** An **object with no row** is an ordinary steady
-state: every store deletion is best-effort *after* the commit and nothing records one that failed, so orphans
-are counted and tolerated. (Abandoned upload sessions themselves are reclaimed — `V11__media.sql:9`'s "a later
-slice" note is a historical artifact of that migration.) A **row with no object** is fatal (A4): it
+state, and since ADR 0062 for a better reason: the row delete and the reclaim entry share one transaction, and a
+single sweep drains that list, so a capture taken between the two legitimately holds objects whose rows are gone
+— a reclaim *pending*, not a deletion that failed unnoticed. Orphans are therefore still counted and tolerated,
+but a stuck one is now visible on the instance itself
+(`SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL`). (Abandoned upload sessions
+themselves are reclaimed — `V11__media.sql:9`'s "a later slice" note is a historical artifact of that
+migration.) A **row with no object** is fatal (A4): it
 restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
 backup is structurally intact but carries no leg (c).

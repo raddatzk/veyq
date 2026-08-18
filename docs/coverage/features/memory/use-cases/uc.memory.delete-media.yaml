@@ -27,7 +27,7 @@ acceptanceCriteria:
       backend:
         integration: [MediaTrashSliceTest.trashedListingCarriesTheAuditAndExcludesFromActive]
   - id: member-expedited-purge
-    text: A member may permanently delete an ALREADY-TRASHED media now (the expedited purge, cr-0111) — hard-deleting its derivative + media + blob rows + store objects, bypassing the retention window; a live (untrashed) or unknown media is a 404 (destruction always goes trash → purge, never a one-step delete-forever of a live item). The Trash tab's 3-dot menu + batch toolbar drive it behind a confirm on the irreversible action. Matches the sharpened security-model `Deletion & erasure` (purge = the scheduled job OR a member expediting an already-trashed item).
+    text: A member may permanently delete an ALREADY-TRASHED media now (the expedited purge, cr-0111) — hard-deleting its derivative + media + blob rows and putting their store objects on the reclaim list, bypassing the retention window; a live (untrashed) or unknown media is a 404 (destruction always goes trash → purge, never a one-step delete-forever of a live item). The Trash tab's 3-dot menu + batch toolbar drive it behind a confirm on the irreversible action. Matches the sharpened security-model `Deletion & erasure` (purge = the scheduled job OR a member expediting an already-trashed item).
     coverage:
       backend:
         integration: [MediaTrashSliceTest.purgeTrashedMediaHardDeletesNow, MediaTrashSliceTest.purgingALiveMediaIs404, MediaTrashSliceTest.purgeByNonMemberIs404]
@@ -50,10 +50,21 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: scheduled-hard-purge
-    text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order and the store objects reclaimed, reusing the cr-0102 blob-reclaim path. The purge is irreversible and is not a member action.
+    text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order, with their store objects written to the reclaim list in the SAME transaction and deleted by the reclaim sweep on its next tick. The purge is irreversible and is not a member action.
     coverage:
       backend:
-        integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention]
+        integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention, MediaTrashSliceTest.retentionPurgeHandsTheTrashedMediasChunkKeysToTheStore]
+  - id: store-objects-survive-a-refused-delete
+    text: "The keys to reclaim outlive the rows that named them (ADR 0062, en.memory.media E6). Every purge path writes the storage-key prefix to veyq_store_reclaim in the same transaction as the row delete, and exactly one component — StoreReclaimSweep — deletes store objects. A store that refuses a key leaves that reclaim row standing with its attempt counted and the retry deferred, while the rest of the tick is reclaimed normally; past a bounded number of attempts the row is stamped abandoned and KEPT, so the bytes a permanently unreachable store loses are countable in one SQL query rather than invisible. Nothing user-facing depends on the timing: the item has already left every read before the sweep runs."
+    coverage:
+      # The two halves are two components since ADR 0062, so they are proven separately and neither alone is
+      # enough: the purge case reads back the reclaim ROW it wrote (the guarantee that the key survived the
+      # transaction), and the sweep cases drive the refusal and the give-up through the RecordingBlobStore seam
+      # — the in-memory store's delete is a no-op that would pass either way. The structural half of the
+      # decision (exactly one deleter) is not a test at all but a permanent guard,
+      # scripts/validate_store_reclaim_arity.py, pinned in turn as case 13 of validate_guard_gaps.py.
+      backend:
+        integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention, StoreReclaimSweepSliceTest.aRefusedKeyKeepsItsRowCountedAndDeferredWhileTheRestOfTheTickIsReclaimed, StoreReclaimSweepSliceTest.aRowRefusedToTheThresholdIsAbandonedAndThenLeftAlone]
   - id: reversible-audit-vs-irreversible
     text: The reversible trash step is any-member and audited (deleted_by/deleted_at, surfaced in the trashed listing); the irreversible purge is the scheduled system job — no member can delete-forever another member's content by hand. Trashing is idempotent. Matches the security-model `Deletion & erasure` reversible/irreversible split; the trash state (flag + actor + timestamp) is the disclosed server-visible operational metadata.
     coverage:

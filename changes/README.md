@@ -585,6 +585,31 @@ Note what this is *not*. § *a bite test you cannot make red* is about a lever t
 red can land on the wrong STEP* is about ordering **within** the run. This one passes both: the lever works, the
 red lands correctly, and the bite still dies — of the fix, three phases later, silently and green.
 
+### A test the CR CITES as evidence is a test the CR can disarm
+
+**The rule above asks whether a *new* bite survives the CR's own phases. This one asks it of the tests that are
+already there — and it bites hardest on the one test the CR names approvingly.** A CR that writes *"the seam we
+need already exists, it is used at X"* has cited X as proof the mechanism works, which is exactly the shape
+§ *a SETTLED decision* describes: a sentence that invites the reader to move on. Nothing then asks whether the
+CR's own decisions leave X able to run.
+
+`cr-store-object-reclaim-list` did this in one document. Its constraints said the refusing-store seam *"is
+already used this way at `ScopesSliceTest` (the poisoned-scope isolation case). This CR does not need a new
+seam."* Its Decision 3 removed `blobStore.delete` from `ScopePurge.eraseScope` — the only thing that test could
+poison, as that test's own docstring says in so many words. The cited proof and the decision that voided it sat
+four paragraphs apart, and the CR's inventory never greps the **test** tree (§ the locator, which already
+requires it), so nothing brought them together. It surfaced at implement time as a red on a correct tree, and
+the repair was the new seam the CR had declared unnecessary.
+
+Note what makes this different from a test that merely needs updating. A test whose *assertion* the CR changes
+goes red and says why. A test whose *lever* the CR removes goes red on an unrelated line, reads as a regression,
+and invites the wrong fix — deleting the case, or weakening it into the tautology it has become. So: **for every
+existing test a CR cites, and every existing test that injects a failure into a path the CR touches, say in the
+CR whether its lever survives** — and where it does not, the CR owns the replacement, because the property is
+almost always permanent while the lever was only ever the most convenient thing that could fail. That one was on
+its *second* lever: the FK gap first (closed by `cr-scope-erasure-fk-closure`), then the store delete. Levers
+move to wherever the fallible work went; the property does not move at all.
+
 ### A bite test you cannot make red is telling you the design is not the one the doc describes
 
 **Reach for the design before reaching for a stronger injection.** The reflex when a new test stays green under

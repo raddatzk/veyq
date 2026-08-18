@@ -76,10 +76,12 @@ at the resource boundary from `deleted_at` plus the configured retention, not st
 soft-delete precedents.
 
 **7. Row-then-object ordering, via the shared per-media body.** The purge routes through
-`MediaStore.purgeMediaRows` (rows in FK order inside the transaction, store objects best-effort after it commits)
-rather than the set-based objects-first shape of `ScopePurge.eraseScope`. `ScopePurge`'s own docstring says why it
-is the exception: it erases set-based *by scope*, and its final scope-row delete lets the database cascade the
-rest. A node subtree is not a scope — neighbouring nodes, buckets and the scope row all survive — so the
+`MediaStore.purgeMediaRows` (rows in FK order inside the transaction, and the store objects recorded for reclaim
+in that same transaction — [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) replaced the
+best-effort post-commit delete this decision originally specified, and `ScopePurge.eraseScope` lost its
+objects-first exception at the same time) rather than the set-based shape of `ScopePurge.eraseScope`.
+`ScopePurge`'s own docstring says why it is the exception: it erases set-based *by scope*, and its final
+scope-row delete lets the database cascade the rest. A node subtree is not a scope — neighbouring nodes, buckets and the scope row all survive — so the
 FK-ordered shared body is the correct shape, and a set-based copy would be the fourth copy that docstring warns
 against.
 

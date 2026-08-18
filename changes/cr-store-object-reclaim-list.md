@@ -183,5 +183,49 @@ invariant is not left as a one-shot grep — it ships as that guard.
 
 ## Retrospective
 
-_(filled at the end of the implement session — planning, execution, and the process/collaboration side, both
-directions, ending with one concrete "next time".)_
+**Planning — the CR was strong on the thing that would have gone wrong silently, and blind to the test tree.**
+
+- **It cited a test its own decision disarms.** § Context named `ScopesSliceTest`'s poisoned-scope case as proof
+  the refusing-store seam already exists and concluded *"This CR does not need a new seam."* Decision 3/4 removes
+  `blobStore.delete` from `ScopePurge.eraseScope` — the only thing that case can poison, as its own docstring
+  states outright. The cited proof and the decision voiding it sat four paragraphs apart. It cost a red on a
+  correct tree and the `RefusingStoreReclaimStore` the CR had declared unnecessary. **Harvested** as a new rule
+  in [`changes/README.md`](README.md) § *a test the CR CITES is a test the CR can disarm* — the general form,
+  because the lever had already moved once before (FK gap → store delete → reclaim insert) while the property
+  never moved at all.
+- **The inventory never greps the test tree, against this repo's own standing rule.** § the locator already says
+  *"the inventory greps the **test** trees too"*. Both angles here read `backend/src/main/kotlin` only. The real
+  blast radius was four tests reddened by the timing change, one compile break on a changed return type
+  (`MediaTrashSliceTest:190`), one control quietly turned vacuous, and one dead lever — every one found at
+  implement time, by a subagent, in five minutes. The same five minutes were available at refine.
+- **`max-attempts` is a decision, not a keystroke, and the CR handed it over as one.** The config block is
+  named (`veyq.store-reclaim.*`) but every value is left open. Three are genuinely keystrokes; the attempt
+  ceiling is not — it sets how long a dead store takes to become countable, which is the ADR's whole point.
+  Chosen here as 5 attempts / `PT15M` doubling ≈ 8h, and written into `VeyqConfig` with that reasoning attached.
+
+**Execution — one guard shipped green over the defect it exists to catch, and only the second bite found it.**
+
+- **The predicate matched an unqualified `: BlobStore` only.** A bite forged as a fully-qualified declaration
+  under a renamed receiver ran **green** over a tree carrying a live bypass. This is § *run a new guard's
+  predicate against the untouched tree* meeting its opposite: the guard was green on arrival *and* green on the
+  break, and only the second, deliberately-awkward injection told them apart. The first bite (the obvious one)
+  would have shipped it. Fixed, and pinned as case 13 of `validate_guard_gaps.py` so the shape is a permanent
+  assertion rather than a run I once did.
+- **I asserted a global tally inside a slice test.** `store.purgeTrashedBefore(...) == 1` over a JVM-shared H2
+  where every other class leaves trashed rows. `RecordingBlobStore`'s own KDoc states the rule — *assert on
+  containment of the keys you seeded, never on size* — three lines from the code I was editing.
+- **One unreproduced `StaleStateException` in `settle`, hardened rather than explained.** Three re-runs were
+  clean and I did not find the cause. The fix (a bulk delete by id instead of `deleteById`) is right on its own
+  merits — two instances of a self-hosted deployment run this sweep against one database — but it is a
+  hardening, not a diagnosis, and it is recorded as one in that method's KDoc.
+
+**Process — the brief did the CR's hardest job for it, which is the finding.**
+
+- The implement brief's *"die gefährlichste Stelle, und sie sieht grün aus"* named the inert-and-green failure
+  of Decision 2 precisely, and the pre-first-edit baseline instruction meant every later red was attributable.
+  Both were right, and both were the **brief** compensating for the CR: the CR states Decision 4's danger too,
+  but nothing in it makes an implementer measure before touching anything.
+- **Next time:** at refine, run the inventory's locators against `backend/src/test` as an explicit third angle
+  whenever a CR changes a signature, a return type, or the *timing* of an observable — and list per hit which
+  of the three the test depends on (the old return, the old timing, or an injection at the old failure point).
+  Those three are different repairs, and only the third can silently become a tautology instead of a red.

@@ -29,11 +29,14 @@ restore that captures the database and the store therefore starts cleanly and is
 two flows [ADR 0054](0054-password-recovery-two-factor-release.md) and [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)
 exist to protect.
 
-**2. The read path tolerates one skew and not its mirror.** Every store deletion runs best-effort *after* the
-database transaction commits, so an object with no row is an ordinary steady state — orphans accumulate
-wherever a delete fails, and nothing records that one did. (Abandoned upload *sessions* themselves are
-reclaimed, by `UploadSessionPurge`; `V11__media.sql`'s "a later slice" note is a historical artifact of that
-migration, and `UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
+**2. The read path tolerates one skew and not its mirror.** An object with no row is an ordinary steady state,
+but the reason changed with [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md): the keys go onto
+`veyq_store_reclaim` in the same transaction as the row delete and one sweep drains it, so what a reader meets
+between those two moments is a reclaim **pending**, not a delete that failed unrecorded. Orphans therefore no
+longer accumulate silently — a refused delete keeps its row and its `attempts`, and a permanently refused one
+is `abandoned_at`, which is countable in SQL. (Abandoned upload *sessions* themselves are reclaimed, by
+`UploadSessionPurge`; `V11__media.sql`'s "a later slice" note is a historical artifact of that migration, and
+`UploadSessionEntity`'s KDoc is the live statement of the rule.) The mirror case is
 handled nowhere: a media read presigns a GET without asking the store whether the object exists, so a row whose
 object is missing becomes a valid URL that 404s, with no server-side signal and a broken picture as the only
 symptom.

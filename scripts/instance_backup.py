@@ -41,8 +41,9 @@ index without needing a database at all. That check is the one thing a volume co
 whole reason the store leg is captured logically (ADR 0056 §3).
 
 **`verify` is deliberately asymmetric, and the asymmetry is the read path's.** An object with no row is an
-ordinary steady state — every store deletion is best-effort *after* the commit and nothing records one that
-failed — so orphans are reported and tolerated. (Abandoned upload sessions themselves are reclaimed;
+ordinary steady state — the row delete and its `veyq_store_reclaim` entry share one transaction and a single
+sweep drains that list, so a capture taken between them holds objects whose rows are gone (ADR 0062) — so
+orphans are reported and tolerated. (Abandoned upload sessions themselves are reclaimed;
 `V11__media.sql:9`'s "a later slice" note is a historical artifact of that migration.) A row with no object is
 fatal: it presigns a valid URL that 404s, with no server-side error and a broken picture as the only symptom
 (ADR 0056 § Context 2).
@@ -621,9 +622,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
         log(f"  release            unknown ({app.get('versionSource') or 'not recorded'}) — still a valid "
             f"backup, but it cannot tell you which image to start it under (A3)")
     log(f"  objects            {len(present)} present, {len(required)} required by {len(blobs)} blob row(s)")
-    # Tolerated and named, never silent: an object with no row is the running system's steady state (every
-    # store deletion is best-effort AFTER the commit and nothing records one that failed). Reporting it
-    # is what keeps "0 orphans" from being the only shape a reader recognises as healthy.
+    # Tolerated and named, never silent: an object with no row is the running system's steady state (a capture
+    # taken between a row delete and the next reclaim sweep holds exactly these — ADR 0062). Reporting it is
+    # what keeps "0 orphans" from being the only shape a reader recognises as healthy.
     log(f"  orphaned objects   {orphans} (tolerated — ADR 0056 § Context 2)")
     log(f"  open upload sess.  {manifest['store']['openUploadSessions']}")
     log(f"  config-secret key  {'present' if claims_key else 'ABSENT — this backup has two legs, not three'}")

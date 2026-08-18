@@ -98,9 +98,11 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
   the delete's own scope binding (or a re-delete answers 404 instead of the no-op E3 promises, while a foreign
   node must keep answering the identical non-enumerable 404 — so delete and update need two different lookups of
   the same node), and the whole-space erase, which must remove every node row including the trashed ones.
-- **Reuses the shared per-media purge body**, so the purge inherits the established FK order and the best-effort
-  store reclaim after the transaction commits, rather than growing a fourth copy of that logic
-  ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) Decision 7).
+- **Reuses the shared per-media purge body**, so the purge inherits the established FK order and writes the
+  store objects to the reclaim list inside the same transaction, rather than growing a fourth copy of that logic
+  ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) Decision 7,
+  [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)). The bytes go on the next
+  sweep tick; nothing readable references them in between.
 - **Operator-blind, unchanged.** The added state is a lifecycle timestamp plus a slug token replaced by an opaque
   id — the same class of coarse operational metadata the media trash already discloses. No name, no key, no
   content.

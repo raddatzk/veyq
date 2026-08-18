@@ -100,6 +100,13 @@ sequenceDiagram
   action is unavailable until unlock + the Memory is opened.
 - **E5 — chunk tampered / reordered:** `openFrame` fails the AAD position check → the frame is rejected (the
   server cannot forge a valid frame without `K_blob`).
+- **E6 — the store refuses the delete:** every path that removes a row carrying a `storage_key` writes the key
+  to a durable reclaim list **in the same transaction**, and one sweep drains it, so the knowledge of which
+  bytes to delete cannot die with the row that held it. A refused delete keeps its row, counts the attempt and
+  retries with backoff; past a bounded number of attempts the row is marked abandoned and kept. Nothing
+  user-facing is affected either way — the item has already left every read — and the residual loss against a
+  permanently unreachable store is not claimed to be impossible, only **countable**
+  ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)).
 
 ## Quality notes
 

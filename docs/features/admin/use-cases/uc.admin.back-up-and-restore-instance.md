@@ -98,7 +98,10 @@
   has media touches all three.
 - **The backup carries the instance's existing garbage.** Abandoned upload sessions and orphaned objects come
   along. They are the running system's steady state, not an artifact of the capture, and the restore is not
-  where they get collected.
+  where they get collected. Since [ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)
+  an orphaned object is specifically a reclaim *pending* — a capture taken between a row delete and the next
+  sweep tick — and it comes back with the reclaim row that explains it, so the restored instance finishes the
+  job the captured one had started.
 
 ## What this means for you / Was das für dich bedeutet
 
