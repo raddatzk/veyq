@@ -105,7 +105,23 @@ messaging pattern this codebase does not have.
   ADR, an orphaned object was the documented steady state, so a report of them asserted nothing. Once reclaim is
   guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning — and a report of
   it can have a Definition of done other than *"finds nothing"*. It is deliberately not built here: there is no
-  production instance for it to measure.
+  production instance for it to measure. Four things it will have to solve are already decided or measured, and
+  are recorded here so that design starts from them rather than re-deriving them:
+  - **It needs a new port operation, and the listing is unpartitionable.** Decision 1 above states why the
+    reclaim list needs no listing; the same two facts are what make a reconcile expensive rather than free.
+  - **The keys now live in three tables, not two** — `veyq_blob`, `veyq_upload_session` and
+    `veyq_store_reclaim`. An object is an anomaly only when **none** of the three explains it, and the third is
+    what turns the question from unanswerable into answerable: before it, an object whose row was legitimately
+    deleted a second ago was indistinguishable from one leaked a year ago.
+  - **A `storage_key` can legitimately appear twice**, so nothing may assume one row per key.
+    `MediaStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
+    from, and the over-budget purge records a session's objects while deliberately leaving its row standing —
+    which is why `veyq_store_reclaim` carries no unique index on that column.
+  - **It starts read-only, and the reason is the race in the rejected arm below**, not caution: an in-flight
+    upload whose session row is written after the listing is read is indistinguishable from garbage, so a sweep
+    that deletes on that evidence deletes user content. The closest thing to a prototype already exists and is
+    the same question asked of a *capture* rather than a live instance — `scripts/instance_backup.py`'s `verify`
+    counts orphaned objects and tolerates them.
 - **Rejected — leave it best-effort and add a failure log.** Nine lines, and it makes future failures visible.
   It cannot count the bytes, cannot retry, cannot see the `ScopePurge` rollback (there the delete *succeeds*),
   and is unobservable in the hermetic suite, because the `%test` store's `delete` is a no-op and the failure
