@@ -4,6 +4,11 @@ import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.tasks.JobEntity
+import com.veyq.app.features.tasks.TasksStore
+import com.veyq.app.shared.blobstore.BlobStore
+import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -18,6 +23,7 @@ import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
@@ -39,6 +45,12 @@ class ScopesSliceTest {
 
     @Inject
     lateinit var purge: ScopePurge
+
+    @Inject
+    lateinit var tasks: TasksStore
+
+    @Inject
+    lateinit var blobStore: BlobStore
 
     private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ=" // "personal-scope-grant"
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
@@ -848,6 +860,111 @@ class ScopesSliceTest {
             assertEquals(0, NodeEntity.count("scopeId", expired), "its nodes erased")
             assertEquals(0, MembershipEntity.count("scopeId", expired), "its memberships erased")
             assertNotNull(ScopeEntity.findById(fresh), "fresh group still in its grace window")
+        }
+    }
+
+    /**
+     * BITE-TEST for docs/inbox.md #132 — a **live defect** if the row is right, so it must be RED against the
+     * untouched tree before any fix is designed (changes/README.md § bite-proof a guard). The claim: a group that
+     * ever had a background job enqueued cannot be erased, because `veyq_job.scope_id` references `veyq_scope(id)`
+     * with no `ON DELETE` clause (V20__background_jobs.sql:26) and `eraseScope` never deletes job rows — so its
+     * final `ScopeEntity.deleteById` hits the FK and rolls the sweep back.
+     *
+     * `clean` is the positive control on the same predicate: without it a red is equally produced by a purge that
+     * is simply broken. It also measures the blast radius the row only guessed at — `run()` wraps the whole tick
+     * in one transaction, so if `clean` dies too, one poisoned group stops every other group from ever being
+     * reclaimed.
+     */
+    @Test
+    fun purgeErasesAGroupThatEverEnqueuedAJob() {
+        val (owner, domain) = seedMember()
+        val poisoned = createGroupAs(owner, domain)
+        val clean = createGroupAs(owner, domain)
+
+        // The real enqueue path (the member-removal rotation backstop, cr-0092) — not a hand-written row.
+        assertTrue(tasks.originateScopeRotation(poisoned, 3), "a rotation job was enqueued on the group")
+
+        listOf(poisoned, clean).forEach {
+            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+        }
+        QuarkusTransaction.requiringNew().run {
+            listOf(poisoned, clean).forEach {
+                ScopeEntity.findById(it)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+            }
+        }
+
+        try {
+            purge.run()
+
+            QuarkusTransaction.requiringNew().run {
+                assertNull(ScopeEntity.findById(poisoned), "the group that ran a job is hard-purged")
+                assertEquals(0, JobEntity.count("scopeId", poisoned), "its job rows are erased with it")
+                assertNull(ScopeEntity.findById(clean), "a co-purgeable group is not taken down with it")
+            }
+        } finally {
+            // Leave the JVM-shared H2 DB clean. While the defect is live the sweep rolls back, so `poisoned`
+            // survives as still-purgeable and every later `purge.run()` in this JVM dies on it — which took the
+            // neighbouring purgeErasesExpiredScopeAndContentButKeepsFreshOnes down with it on the first run. A
+            // bite-test must name itself, not redden its neighbours.
+            QuarkusTransaction.requiringNew().run { JobEntity.delete("scopeId", poisoned) }
+            purge.purge(poisoned)
+        }
+    }
+
+    /**
+     * BITE-TEST for uc.spaces.delete-group's *"one scope that cannot be erased must not stop the others"* — a
+     * **live defect** on the untouched tree, where `run()` is `@Transactional` over the whole sweep: the first
+     * scope whose erasure throws takes the transaction down and every other purgeable scope in that tick with
+     * it, permanently and on every later tick.
+     *
+     * **The lever is a refusing store, not the FK gap this CR closes, and that is the point.** Once the closure
+     * below `veyq_scope` is complete, no *schema* can poison a scope any more — `validate_scope_erasure_arity`
+     * exists to keep that true — so a bite levered on the FK would stop biting the moment the fix beneath it
+     * landed, and go green for a reason that has nothing to do with isolation. What can still throw mid-sweep
+     * is the store, and that is also the realistic shape of it: an S3 outage while the tick is running.
+     * `eraseScope` deletes objects first, so the refusal lands before any row of `poisoned` is touched.
+     *
+     * `clean` is the assertion and `poisoned` is its control: without the second, a purge that simply erases
+     * everything regardless would pass, and without the first the defect is invisible.
+     */
+    @Test
+    fun purgeIsolatesAScopeItCannotEraseFromTheRestOfTheTick() {
+        val (owner, domain) = seedMember()
+        val poisoned = createGroupAs(owner, domain)
+        val clean = createGroupAs(owner, domain)
+        val marker = "refuse-${UUID.randomUUID()}"
+
+        // The one object `eraseScope` will hand to the store for `poisoned` — its storage key carries the marker.
+        QuarkusTransaction.requiringNew().run {
+            BlobEntity().apply {
+                id = UUID.randomUUID().toString(); scopeId = poisoned; storageKey = marker
+                chunkCount = 1; byteSize = 1024; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+            }.persist()
+        }
+        listOf(poisoned, clean).forEach {
+            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+        }
+        QuarkusTransaction.requiringNew().run {
+            listOf(poisoned, clean).forEach {
+                ScopeEntity.findById(it)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+            }
+        }
+
+        val recorder = blobStore as RecordingBlobStore
+        recorder.failOnKeyMarker = marker
+        try {
+            purge.run() // must not throw: a failure is caught, logged and confined to its own scope
+
+            QuarkusTransaction.requiringNew().run {
+                assertNull(ScopeEntity.findById(clean), "a scope the sweep can erase is erased in the same tick")
+                assertNotNull(ScopeEntity.findById(poisoned), "the scope whose erasure threw keeps all its rows")
+            }
+        } finally {
+            // Restore the shared singleton in the same edit that mutated it, then leave the JVM-shared H2 clean:
+            // `poisoned` is still purgeable and would otherwise meet every later sweep in this JVM.
+            recorder.failOnKeyMarker = null
+            QuarkusTransaction.requiringNew().run { BlobEntity.delete("scopeId", poisoned) }
+            listOf(poisoned, clean).forEach { purge.purge(it) }
         }
     }
 

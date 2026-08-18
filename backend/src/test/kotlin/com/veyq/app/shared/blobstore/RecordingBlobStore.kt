@@ -27,6 +27,15 @@ import java.util.Collections
  * `%test` JVM is shared across test classes, so recordings accumulate; a test that asserts on a leftover from
  * its predecessor is the flake this comment exists to prevent. Assert on *containment of the keys you seeded*
  * rather than on the list's size, so the claim survives a neighbour anyway.
+ *
+ * **[failOnKeyMarker] is the second thing this seam is for: making a sweep's error path reachable.** A purge
+ * that isolates one item's failure from the rest of its tick can only be proven by an item that actually
+ * fails, and after `cr-scope-erasure-fk-closure` closed the FK closure below `veyq_scope` no *schema* can
+ * poison a scope any more — by construction, which is what the guard exists to keep true. The failure that
+ * remains is the store's, and it is the honest one to pin: an S3 outage mid-sweep is the real-world shape of
+ * "erasing this one throws". Being a singleton, it is subject to the same rule as [deletedKeys] and one
+ * stronger: a test that sets it **restores it in a `finally`**, or every later purge in the shared JVM dies
+ * on a marker nobody can see.
  */
 @Alternative
 @Priority(1)
@@ -41,6 +50,12 @@ class RecordingBlobStore(
      *  can in principle fire from a scheduler thread while a test reads this. */
     val deletedKeys: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
+    /** When set, [delete] throws for any batch holding a key that contains this marker — and records nothing
+     *  for it, because a store that refuses deleted nothing. `@Volatile`: a `@Scheduled` sweep can read it from
+     *  a scheduler thread while the test that armed it wrote from its own. */
+    @Volatile
+    var failOnKeyMarker: String? = null
+
     fun reset() = deletedKeys.clear()
 
     override val canPresign: Boolean get() = delegate.canPresign
@@ -49,6 +64,9 @@ class RecordingBlobStore(
     override fun stat(key: String): Long? = delegate.stat(key)
 
     override fun delete(keys: List<String>) {
+        failOnKeyMarker?.let { marker ->
+            if (keys.any { marker in it }) throw IllegalStateException("blob store refused a key marked `$marker`")
+        }
         deletedKeys.addAll(keys)
         delegate.delete(keys)
     }

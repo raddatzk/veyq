@@ -84,7 +84,7 @@ makes the isolation test red.** Repair the FK first and that bite has to be reco
       a second copy of a live rule and dies with this CR. · Done when: it prints exactly those four and the rest
       of the chain is green
       (`for f in scripts/validate_*.py; do python3 "$f"; done` → 26 green + this one red).
-- [ ] **2 backend — tick isolation.** Bite-test (**live defect**, red on the untouched tree): two purgeable group
+- [x] **2 backend — tick isolation.** Bite-test (**live defect**, red on the untouched tree): two purgeable group
       scopes, one carrying a job row; the *clean* one must still be erased. Fix: `run()` drops its tick-wide
       `@Transactional` and erases each scope in its own `QuarkusTransaction.requiringNew()`, catching, **logging**
       and continuing past a failure — mirroring `NodeSubtreePurge`. Rewrite the `:39-42` comment. `purge(scopeId)`

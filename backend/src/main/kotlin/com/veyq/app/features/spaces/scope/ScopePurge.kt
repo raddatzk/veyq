@@ -10,9 +10,11 @@ import com.veyq.app.features.media.UploadSessionEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.config.VeyqConfig
+import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
+import org.jboss.logging.Logger
 import java.time.Duration
 import java.time.Instant
 
@@ -34,16 +36,27 @@ class ScopePurge(
     private val blobStore: BlobStore,
     config: VeyqConfig,
 ) {
+    private val log = Logger.getLogger(ScopePurge::class.java)
     private val retention: Duration = config.scope().delete().retention()
 
-    // @Transactional on run() so the whole sweep shares one session (the Quarkus @Scheduled + Panache pattern,
-    // cr-0053) — and so the internal eraseScope() calls run transactionally (a self-invoked @Transactional would
-    // bypass the interceptor). `purge()` is the externally-callable transactional entry (tests / a future manual
-    // re-key), which the interceptor DOES wrap.
-    @Transactional
+    // One transaction PER SCOPE, not one for the tick. A tick-wide `@Transactional` here meant any single scope
+    // that could not be erased rolled back every *other* scope in the same sweep — and did so again on every
+    // later tick, so one stuck group halted all reclamation permanently and silently, on the operator's own disk
+    // (uc.spaces.delete-group § main flow 5). A failure is therefore caught, LOGGED and stepped over: swallowing
+    // it would rebuild the silent `runCatching` of docs/inbox.md #130 one level up, and isolation nobody can see
+    // is worse than none. `QuarkusTransaction` rather than `@Transactional` for the reason `NodeSubtreePurge`
+    // uses it — a self-invoked `@Transactional` method is never intercepted, so the annotation would be a lie.
+    // `purge()` stays the externally-callable transactional entry (tests / a future manual re-key).
     @Scheduled(every = "{veyq.scope.delete.purge.every}")
     fun run() {
-        store.listPurgeable(Instant.now().minus(retention)).forEach { eraseScope(it) }
+        val purgeable = QuarkusTransaction.requiringNew().call { store.listPurgeable(Instant.now().minus(retention)) }
+        purgeable.forEach { scopeId ->
+            try {
+                QuarkusTransaction.requiringNew().run { eraseScope(scopeId) }
+            } catch (e: Exception) {
+                log.error("hard-erasure of scope $scopeId failed; it stays purgeable and the sweep continues", e)
+            }
+        }
     }
 
     /** Hard-erase one scope now (external entry — transactional). */
