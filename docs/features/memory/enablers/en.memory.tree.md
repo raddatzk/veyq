@@ -90,16 +90,23 @@ A node delete is **reversible** and takes the **whole subtree** with it
 exception to it.
 
 - **Delete:** mark the node and every descendant `deletedAt = now` in one transaction. **Nothing is destroyed** —
-  the subtree's media, derivatives, buckets and blobs are untouched, which is what makes a restore complete.
+  the subtree's media, derivatives, buckets and blobs are untouched, which is what makes a restore complete. An
+  already-trashed *root* is a no-op; an already-trashed *descendant* is **re-stamped**, so the whole subtree ages
+  out on one timestamp and the purge can never reach half of it.
 - **The slug is freed at delete**, so the name is immediately reusable: the deleted node's `slugToken` is replaced
   by its own id. `UNIQUE(parentId, slugToken)` is a plain unique index and the schema is held to the H2 ∩ MariaDB
   subset, so a partial index over live rows is not available. The server **cannot** recompute a slug token (it is
   a blinded MAC under `K_SC`), so the original is not kept — **restore carries a freshly client-computed token**,
   and a collision is the ordinary disambiguation a create already handles.
-- **Hidden, not marked.** Every user- and guest-facing read carries `deletedAt is null`. Three reads deliberately
+- **Hidden, not marked.** Every user- and guest-facing read carries `deletedAt is null`. Four reads deliberately
   do **not**: slug uniqueness (it must keep seeing the row, or validation passes and the database rejects the
   insert afterwards), the delete's own subtree traversal (or re-deleting a partially deleted subtree stops early),
-  and the whole-space erase (which must remove trashed rows too).
+  the delete's own scope binding (or a re-delete 404s instead of being the promised no-op — the *update* path
+  keeps the filtering lookup, so these are two lookups of one node, not one), and the whole-space erase (which
+  must remove trashed rows too).
+- **Restore takes a trash ROOT only**, and may re-seal the name in the same write — that is the taken-name retry.
+  Clearing a trashed node under a trashed parent would leave a live node hanging under a dead one, which no
+  listing can show: the client assembles the tree by `parentId`, and the parent is filtered out.
 - **Both share reads carry the predicate** — the anonymous resolve *and* the blob authorization. With `deletedAt`
   set but these unfiltered, a share on a deleted Memory serves the full sealed subtree and presigns every blob
   under it. The row surviving is exactly what makes this dangerous.

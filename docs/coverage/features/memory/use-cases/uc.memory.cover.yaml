@@ -40,10 +40,10 @@ acceptanceCriteria:
           - src/features/memory/components/MemoryCoverDialog.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: cover-from-standalone-upload
-    text: The cover may be a brand-new uploaded image that is NOT registered as a Memory media — a standalone cover blob committed to the node (no `veyq_media` row), sealed under a K_blob wrapped by K_mem, served + garbage-collected via the blob transport; operator-blind (the server holds ciphertext + an opaque blob id for retention/authz only). (cr-0073.)
+    text: The cover may be a brand-new uploaded image that is NOT registered as a Memory media — a standalone cover blob committed to the node (no `veyq_media` row), sealed under a K_blob wrapped by K_mem, served + garbage-collected via the blob transport (a node DELETE no longer reclaims it — under the ADR 0061 soft-delete the cover has to outlive the trash window, so the reclaim moved to `NodeSubtreePurge`); operator-blind (the server holds ciphertext + an opaque blob id for retention/authz only). (cr-0073.)
     coverage:
       backend:
-        integration: [NodeCoverSliceTest.commitAttachesCoverBlobWithNoMediaRow, NodeCoverSliceTest.replaceReclaimsPriorCoverBlob, NodeCoverSliceTest.deleteCoverBlobDetachesAndReclaims, NodeCoverSliceTest.deleteNodeReclaimsCoverBlob, NodeCoverSliceTest.coverOnFolderIsIllegalTarget, NodeCoverSliceTest.crossScopeUploadIs404, NodeCoverSliceTest.nonMemberIs404]
+        integration: [NodeCoverSliceTest.commitAttachesCoverBlobWithNoMediaRow, NodeCoverSliceTest.replaceReclaimsPriorCoverBlob, NodeCoverSliceTest.deleteCoverBlobDetachesAndReclaims, NodeCoverSliceTest.deleteNodeKeepsTheCoverBlobForTheRestore, NodeCoverSliceTest.coverOnFolderIsIllegalTarget, NodeCoverSliceTest.crossScopeUploadIs404, NodeCoverSliceTest.nonMemberIs404]
       web:
         unit: [src/features/memory/media.test.ts, src/features/memory/memoryCover.test.ts, src/features/memory/components/MemoryCoverDialog.test.ts]
         # live smoke DONE (cr-0073, not scripted): re-seeded 127.0.0.1 instance + Garage --profile s3, browse origin

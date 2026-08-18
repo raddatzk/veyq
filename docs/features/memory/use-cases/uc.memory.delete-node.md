@@ -49,9 +49,10 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 5. The space's **Trash** lists soft-deleted subtree roots with the date they were deleted and the date they will
    be purged (derived from the retention window, not stored). Only the root of each deleted subtree is listed —
    its descendants went with it and come back with it.
-6. **Restore** returns the subtree to the tree in one step. The client recomputes the node's `slugToken` for its
-   parent and sends it with the restore; the server clears `deleted_at` across the subtree and writes the token
-   back. Everything inside — photos, chapters, buckets, cover — returns intact, because none of it was ever
+6. **Restore** returns the subtree to the tree in one step, and only from a trash **root** — a trashed node under
+   a trashed parent comes back with that parent, never on its own. The client recomputes the node's `slugToken`
+   for its parent and sends it with the restore; the server clears `deleted_at` across the subtree and writes the
+   token back. Everything inside — photos, chapters, buckets, cover — returns intact, because none of it was ever
    removed.
 7. After the **retention window** (operator-configurable, the same shape as the media trash), a **scheduled purge
    job** hard-erases each expired subtree: its media, derivative, bucket and blob rows in FK order and the store
@@ -61,16 +62,21 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 
 - **A1 — restore into a taken name.** A node created in the meantime already holds the slug the restore wants.
   The restore is rejected on the slug-uniqueness constraint and the client disambiguates and retries — the same
-  path a create already takes. Silently renaming, or refusing the restore outright, would both be worse.
+  path a create already takes, so the retry carries the **new name and its token together, in one request**: sent
+  apart, the node is briefly live carrying a slug its own name does not produce, and permanently so if the second
+  write fails. Silently renaming, or refusing the restore outright, would both be worse.
 - **A2 — restore after purge.** Once the scheduled job has run the subtree is **gone** (a non-enumerable 404); the
   retention window is the only recovery path. There is no post-purge undo — that is the point of erasure.
 - **E1 — the scope is itself pending deletion.** The delete is rejected as a conflict, like every other write
   during a space's grace window ([uc.spaces.delete-group](../../spaces/use-cases/uc.spaces.delete-group.md)).
 - **E2 — not a member / vault locked.** The delete and restore are scope-membership-gated; a non-member gets a
   non-enumerable **404** (operator-blind), and a locked vault cannot open the space to reach the affordance.
-- **E3 — concurrent / idempotent.** Deleting an already-deleted subtree is a no-op, and the traversal that
-  collects the subtree deliberately does **not** skip already-deleted descendants — otherwise re-deleting a
-  partially deleted subtree would stop early and strand the rest.
+- **E3 — concurrent / idempotent.** Deleting an already-deleted subtree is a no-op — the marker does not move,
+  so a double delete cannot silently extend the window. Deleting a subtree that is only *partially* deleted is
+  the opposite: it **re-stamps** every node in it, including descendants an earlier, narrower delete had already
+  trashed, and the traversal deliberately does **not** skip them. A subtree ageing out on two timestamps has its
+  inner rows purged first, and the restore then hands back an empty shell — that is what "stops early and strands
+  the rest" costs, and it is observable against the purge rather than against the marker.
 - **E4 — a share pointing at the deleted node.** The share row survives and stays listed for its owner; it simply
   resolves to nothing while the node is trashed, and starts working again on restore. Revoking is still the way to
   end a share for good — deleting the Memory is not a revoke.
@@ -81,14 +87,17 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
 
 - **Nothing is destroyed by the user's action.** The delete writes a timestamp and swaps a token. Every byte
   survives the whole window, which is what makes a restore complete rather than partial — and it is why the cover
-  blobs may **not** be reclaimed at delete time, as the current code does, but only at purge.
-- **The dangerous half is the share path, not the tree.** Today a share on a deleted node resolves to an *empty*
-  subtree only because the node row is gone. Once the row survives, the same code would serve the full sealed
+  blobs are reclaimed by the **purge** and not by the delete: reclaiming them when the user deletes hands a restore
+  back a Memory whose cover is already gone.
+- **The dangerous half is the share path, not the tree.** Before this flow, a share on a deleted node resolved to
+  an *empty* subtree only because the node row was gone. Once the row survives, the same code would serve the full sealed
   subtree and presign every blob under it — unauthenticated. The predicate on **both** share reads is what keeps
   this a fix rather than a regression.
-- **Three reads must keep seeing deleted rows.** Slug uniqueness (or validation passes and the database rejects
+- **Four reads must keep seeing deleted rows.** Slug uniqueness (or validation passes and the database rejects
   the insert afterwards — a clean rejection turned into a server error), the delete's own subtree traversal (E3),
-  and the whole-space erase, which must remove every node row including the trashed ones.
+  the delete's own scope binding (or a re-delete answers 404 instead of the no-op E3 promises, while a foreign
+  node must keep answering the identical non-enumerable 404 — so delete and update need two different lookups of
+  the same node), and the whole-space erase, which must remove every node row including the trashed ones.
 - **Reuses the shared per-media purge body**, so the purge inherits the established FK order and the best-effort
   store reclaim after the transaction commits, rather than growing a fourth copy of that logic
   ([ADR 0061](../../../decisions/0061-node-deletion-reversible-node-trash.md) Decision 7).

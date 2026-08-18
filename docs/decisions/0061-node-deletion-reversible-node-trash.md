@@ -63,7 +63,10 @@ soft-deleted node would otherwise hold its name hostage for the whole window. So
 `slug_token` to the node's own id — unique by construction, and blind, since the server may not compute a slug
 token at all (it is `HMAC(K_SC, parentId ‖ slug)`, [ADR 0012](0012-content-key-hierarchy.md)). **Restore carries a
 freshly computed `slugToken` from the client**, and a collision with a node created in the meantime is an
-ordinary disambiguation, the same one a create already handles.
+ordinary disambiguation, the same one a create already handles — which means the restore must also be able to
+carry a **re-sealed `encryptedName`**, in the *same* request. The retry is "put it back under a different name",
+and a name sent apart from the token derived from it leaves the node live, briefly, carrying a slug its own name
+does not produce; a failure in between leaves it that way for good.
 
 **6. The purge is a scheduled job, and the blobs must outlive the grace window.** A new node purge worker
 hard-erases subtrees whose `deleted_at` is older than the retention window: media, derivatives, buckets, cover
@@ -90,11 +93,15 @@ against.
 - **The cost is a read-path sweep, and it is bounded and measured:** 11 call-sites across three stores
   (`NodesStore`, `MediaStore`, `SharingStore`) gain the predicate, out of 25 that touch a node. Two bucket
   handlers (`renameBucket`, `deleteBucket`) reach a node without passing the gate and must be closed explicitly.
-- **Three reads must deliberately *not* filter, and each is a trap.** The slug-uniqueness check must keep seeing
+- **Four reads must deliberately *not* filter, and each is a trap.** The slug-uniqueness check must keep seeing
   soft-deleted rows or validation passes and the database then rejects the insert — a clean rejection turned into
-  a 500. The subtree traversal inside the delete itself must reach descendants regardless of their own state, or
-  re-deleting a partially deleted subtree stops early and loses idempotency. The scope hard-erase must keep
-  removing **all** node rows including soft-deleted ones.
+  a 500. The subtree traversal inside the delete itself must reach descendants regardless of their own state and
+  **re-stamp** them: a subtree that ages out on two timestamps has its inner rows purged first, and the folder
+  around them is still sitting restorable in the trash when it happens. The delete's own scope binding is the
+  fourth, and it was found by building rather than by reasoning — gate it on liveness and re-deleting a trashed
+  subtree answers 404 instead of the no-op the flow promises, while a foreign node must keep answering the same
+  non-enumerable 404; so the delete takes a lookup that sees trashed rows and the *update* path keeps the one
+  that does not. The scope hard-erase must keep removing **all** node rows including soft-deleted ones.
 - **The web needs no change to hide anything.** The delete handler already refetches the whole tree rather than
   splicing locally, so a filtered listing is enough. What the web does owe is the new surface: the space's trash
   and its restore affordance.
@@ -106,6 +113,10 @@ against.
 - **A restore can fail, and that is correct.** If the name was taken in the meantime the client disambiguates,
   exactly as it does when creating. A restore that silently renamed, or one that refused forever, would both be
   worse.
+- **Only the trash's own roots restore.** Clearing a trashed node whose parent is still trashed would leave a
+  live node hanging under a dead one — present in no listing at all, because the client assembles the tree by
+  `parentId` and the parent is filtered out. It is the reason the trash lists roots only, enforced on the write
+  side as well as the read side.
 - **Operator-blindness is unchanged.** The added state is a lifecycle timestamp and a slug token swapped for an
   opaque id — coarse operational metadata of the kind already disclosed for the media trash. No name, no key, no
   content.
