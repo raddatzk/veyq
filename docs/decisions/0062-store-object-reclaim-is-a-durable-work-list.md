@@ -117,11 +117,24 @@ messaging pattern this codebase does not have.
     `MediaStore.persistBlob` gives a committed blob the same `storage_key` as the upload session it was promoted
     from, and the over-budget purge records a session's objects while deliberately leaving its row standing —
     which is why `veyq_store_reclaim` carries no unique index on that column.
-  - **It starts read-only, and the reason is the race in the rejected arm below**, not caution: an in-flight
-    upload whose session row is written after the listing is read is indistinguishable from garbage, so a sweep
-    that deletes on that evidence deletes user content. The closest thing to a prototype already exists and is
-    the same question asked of a *capture* rather than a live instance — `scripts/instance_backup.py`'s `verify`
-    counts orphaned objects and tolerates them.
+  - **It starts read-only because of the stock, not because the race is unsolvable — and the window that
+    excludes the race is stateable, so no design here needs a heuristic.** The write paths leave no moment at
+    which an object exists unnamed: `presignPut` has exactly one caller in the backend and it runs *after*
+    `MediaStore.createSession` has committed (`@Transactional`, with no enclosing transaction on the resource or
+    handler), the `storage_key` and every chunk key are server-minted and signed into the URL by SigV4, and
+    `persistBlob` writes no object at all — it inherits the session's key, and both callers delete the session
+    row in the same transaction that inserts the blob row. What is left is a **read-order** artifact, and two
+    rules remove it: read the three tables in **one** snapshot, or a key promoted from `veyq_upload_session` to
+    `veyq_blob` between two SELECTs is missed by both; and **bracket** the listing with a read before and a read
+    after, reporting only what *both* fail to explain — the later read catches the upload that began during the
+    listing, the earlier one the row deleted and reclaim-drained during it (the sweep deletes objects before it
+    settles the row, which is what makes the earlier read sufficient). No age threshold covers anything those
+    two do not. What remains true is the stock: against zero, a delete arm buys nothing, which is the rejected
+    arm's surviving reason. The closest thing to a prototype already exists and is the same question asked of a
+    *capture* rather than a live instance — `scripts/instance_backup.py`'s `verify` counts orphaned objects and
+    tolerates them — but it is weaker than it sounds: it compares the capture's local mirror against
+    `manifest["store"]["blobs"]`, **one** table and never a bucket, so its orphan count includes every pending
+    reclaim and every in-flight upload by construction.
 - **Rejected — leave it best-effort and add a failure log.** Nine lines, and it makes future failures visible.
   It cannot count the bytes, cannot retry, cannot see the `ScopePurge` rollback (there the delete *succeeds*),
   and is unobservable in the hermetic suite, because the `%test` store's `delete` is a no-op and the failure
@@ -142,6 +155,8 @@ messaging pattern this codebase does not have.
   as *required* to backup `verify`, which would go red on healthy instances. A separate table costs one
   migration and clears all four.
 - **Rejected — a scheduled sweep that lists the bucket and deletes what no row claims.** It is the only shape
-  that can reclaim objects already orphaned, and it is the one no foreign key protects: an in-flight upload
-  whose session row is written after the listing is read looks exactly like garbage. Against a leak that this
-  ADR prevents at the source and an existing stock of zero, it buys nothing and risks user content.
+  that can reclaim objects already orphaned, and it is the one no foreign key protects — a listing and a
+  database read taken at two moments disagree about anything written between them. That is a read-order problem
+  with a stated answer (the reconcile bullet above carries it), **not** the reason this arm is rejected: against
+  a leak that this ADR prevents at the source and an existing stock of zero, it buys nothing, and a delete path
+  that buys nothing is one more thing that can be wrong about user content.
