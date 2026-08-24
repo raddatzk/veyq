@@ -1,0 +1,46 @@
+package com.veyq.app.shared.blobstore
+
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.enterprise.inject.Alternative
+import java.util.Collections
+
+/**
+ * Test-scope seam that makes `MediaHandler`'s `verifyBlob`/`BlobVerify.Budget` path reachable at hermetic speed
+ * (cr-media-budget-branch-coverage). `verifyBlob` short-circuits to `Ok` whenever `!blobStore.canPresign`
+ * (`MediaHandler.kt:280`), which is always true against [InMemoryBlobStore] — so the real-vs-declared `stat()`
+ * comparison that decides `Budget` (`MediaHandler.kt:283`) can never run in the default hermetic suite. This
+ * store answers `canPresign = true` and means only that: it never carries real bytes, and its
+ * `presignPut`/`presignGet` URLs are never dereferenced by anything that calls them here — the backend never
+ * sees bytes either way (ADR 0013), only `stat()` results, which is the one method a test scripts.
+ *
+ * **Not a replacement for [InMemoryBlobStore] or [RecordingBlobStore] anywhere else.** It is a plain
+ * `@Alternative` with no `@Priority`, so it never competes for the global `BlobStore` injection point —
+ * [RecordingBlobStore] keeps winning that everywhere. It only activates where a `QuarkusTestProfile` names it
+ * via `getEnabledAlternatives()`, which keeps the active config profile at `"test"` (unlike a `getConfigProfile`
+ * override, which would silently drop `application-test.properties`) and touches nothing outside that one test
+ * class.
+ *
+ * **[stat] is scripted per key, not per test run.** [statOf] sets what a key answers; an unscripted key answers
+ * `null` — "object missing", the same meaning [InMemoryBlobStore.stat] and a real absent S3 object share. A test
+ * that wants `Budget` sets one declared chunk's stat either absent or larger than the session's declared
+ * `byteSize`.
+ */
+@Alternative
+@ApplicationScoped
+class FakePresigningBlobStore : BlobStore {
+    override val canPresign = true
+
+    private val stats = Collections.synchronizedMap(HashMap<String, Long?>())
+
+    /** Script what [stat] answers for [key]. Absent from this map ⇒ `null` (object missing). */
+    fun statOf(key: String, size: Long?) {
+        stats[key] = size
+    }
+
+    override fun presignPut(key: String): String = "https://fake-presign.invalid/put/$key"
+    override fun presignGet(key: String): String = "https://fake-presign.invalid/get/$key"
+    override fun stat(key: String): Long? = stats[key]
+
+    /** Unused on the budget path (`StoreReclaimSweep` is the only real deleter, ADR 0062 Decision 3). */
+    override fun delete(keys: List<String>): List<String> = emptyList()
+}
