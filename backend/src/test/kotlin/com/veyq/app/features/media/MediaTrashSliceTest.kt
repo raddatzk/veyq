@@ -261,6 +261,12 @@ class MediaTrashSliceTest {
 
         // trash b, then a member purges it NOW (the expedited hard-delete, cr-0111)
         given().header("Authorization", token(userId)).`when`().delete("/api/scopes/$scopeId/media/$b").then().statusCode(204)
+
+        // the key the purge must not lose — read while the row that holds it still exists
+        val storageKey = QuarkusTransaction.requiringNew().call {
+            BlobEntity.findById(MediaEntity.findById(b)!!.blobId)!!.storageKey
+        }
+
         given().header("Authorization", token(userId)).`when`().post("/api/scopes/$scopeId/media/$b/purge").then().statusCode(204)
 
         // b's row is physically gone; restoring it is now a 404; a (never trashed) survives
@@ -268,6 +274,9 @@ class MediaTrashSliceTest {
         assertNull(goneB)
         assert(liveA != null) { "a live media must not be purged" }
         given().header("Authorization", token(userId)).`when`().post("/api/scopes/$scopeId/media/$b/restore").then().statusCode(404)
+        assert(QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", storageKey) } == 1L) {
+            "the purge must leave a durable reclaim row for the blob it deleted the only pointer to"
+        }
     }
 
     @Test

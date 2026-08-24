@@ -5,6 +5,7 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -83,6 +84,10 @@ class NodeCoverSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "Zmlyc3Q="))
+
+        // the key the replace must not lose — read while the row that holds it still exists
+        val firstStorageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(first)!!.storageKey }
+
         val second = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 2, 32, "c2Vjb25k"))
 
         // the superseded first blob is reclaimed (gone); the new one is authorized
@@ -91,6 +96,9 @@ class NodeCoverSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertEquals(second, NodeEntity.findById(memory)!!.coverBlobId)
         }
+        assert(QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", firstStorageKey) } == 1L) {
+            "commitCover must leave a durable reclaim row for the cover blob it superseded"
+        }
     }
 
     @Test
@@ -98,6 +106,9 @@ class NodeCoverSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "ZGVs"))
+
+        // the key the delete must not lose — read while the row that holds it still exists
+        val storageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.storageKey }
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob")
@@ -108,6 +119,9 @@ class NodeCoverSliceTest {
             val node = NodeEntity.findById(memory)!!
             assertNull(node.coverBlobId)
             assertNull(node.coverByteSize)
+        }
+        assert(QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", storageKey) } == 1L) {
+            "clearCover must leave a durable reclaim row for the cover blob it deleted"
         }
 
         // idempotent — deleting again (no cover blob) still answers 204

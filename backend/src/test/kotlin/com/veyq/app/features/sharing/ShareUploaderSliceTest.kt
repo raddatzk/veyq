@@ -7,6 +7,7 @@ import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -116,6 +117,11 @@ class ShareUploaderSliceTest {
         // and it is STILL invisible to the uploader's own resolve
         given().`when`().get("/api/shares/$shareId").then().statusCode(200).body("media.size()", equalTo(0))
 
+        // the key the delete-own must not lose — read while the rows that hold it still exist
+        val storageKey = QuarkusTransaction.requiringNew().call {
+            BlobEntity.findById(MediaEntity.findById(mediaId)!!.blobId)!!.storageKey
+        }
+
         // delete-own — the token rides the X-Contributor-Token header; the media + its blob are reclaimed
         given().header("X-Contributor-Token", contributorToken)
             .`when`().delete("/api/shares/$shareId/media/$mediaId")
@@ -123,6 +129,9 @@ class ShareUploaderSliceTest {
         QuarkusTransaction.requiringNew().run {
             assertNull(MediaEntity.findById(mediaId), "media row reclaimed")
             assertEquals(0, BlobEntity.count("scopeId", scopeId), "blob rows reclaimed")
+        }
+        assert(QuarkusTransaction.requiringNew().call { StoreReclaimEntity.count("storageKey", storageKey) } == 1L) {
+            "the contributor's own delete must leave a durable reclaim row for the blob it deleted"
         }
         // a second delete of the now-gone media is a non-enumerable 404
         given().header("X-Contributor-Token", contributorToken)
