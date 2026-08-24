@@ -12,6 +12,7 @@ import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.blobstore.RefusingStoreReclaimStore
+import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
@@ -951,6 +952,13 @@ class ScopesSliceTest {
      *
      * `clean` is the assertion and `poisoned` is its control: without the second, a purge that simply erases
      * everything regardless would pass, and without the first the defect is invisible.
+     *
+     * **`clean` also carries a second property, added by cr-scope-purge-reclaim-assertion**: that its own
+     * successful erasure records a reclaim row for the blob it deletes (ADR 0062 Decision 1 — no other test
+     * exercised the success arm). It shares this test rather than getting its own, since `clean` already runs a
+     * full `purge.run()` here; the reclaim assertion is ordered **first** in the block below because it shares
+     * the same lever as the isolation asserts (both live and die by the one `reclaim.record` call in
+     * `eraseScope`) — reading it after them would let a real regression report on their line instead of its own.
      */
     @Test
     fun purgeIsolatesAScopeItCannotEraseFromTheRestOfTheTick() {
@@ -964,6 +972,15 @@ class ScopesSliceTest {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = poisoned; storageKey = marker
                 chunkCount = 1; byteSize = 1024; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+            }.persist()
+        }
+        // `clean`'s own blob — unmarked, so the refusing store passes it straight to the real `record`. Proves
+        // the success arm this test also exercises actually writes a reclaim row, not just that it isn't blocked.
+        val cleanKey = "clean-${UUID.randomUUID()}"
+        QuarkusTransaction.requiringNew().run {
+            BlobEntity().apply {
+                id = UUID.randomUUID().toString(); scopeId = clean; storageKey = cleanKey
+                chunkCount = 1; byteSize = 1024; wrappedBlobKey = "Y2xlYW4="; createdAt = Instant.now()
             }.persist()
         }
         listOf(poisoned, clean).forEach {
@@ -981,6 +998,11 @@ class ScopesSliceTest {
             purge.run() // must not throw: a failure is caught, logged and confined to its own scope
 
             QuarkusTransaction.requiringNew().run {
+                // First, so a bite on the shared `record` call reports THIS line rather than being masked by the
+                // isolation asserts below (poisoned's isolation depends on the very same call throwing).
+                assert(StoreReclaimEntity.count("storageKey", cleanKey) == 1L) {
+                    "a scope the sweep can erase must leave a durable reclaim row for every blob it deleted"
+                }
                 assertNull(ScopeEntity.findById(clean), "a scope the sweep can erase is erased in the same tick")
                 assertNotNull(ScopeEntity.findById(poisoned), "the scope whose erasure threw keeps all its rows")
             }
