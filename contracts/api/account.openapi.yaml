@@ -48,6 +48,9 @@ tags:
   - name: account-rotation
     description: Key rotation after a compromise — the account-side half of uc.account.rotate-keys (ADR 0060).
       Separate tag → its own resource interface.
+  - name: account-password
+    description: Change the password of a signed-in, unlocked account — uc.account.change-password. Separate
+      tag → its own resource interface.
 
 paths:
   /api/account/key-material:
@@ -453,6 +456,70 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: rotation_unavailable }
+
+  /api/account/password:
+    post:
+      tags: [account-password]
+      operationId: changePassword
+      summary: Set a new password from a live, unlocked session.
+      description: >
+        Applies uc.account.change-password's one server-side mechanism for both entry points: rewrite the
+        `PASSWORD` wrap and `auth_public_key`, delete every `DEVICE`/`DEVICE_KEY` wrap, and revoke every
+        session except the one the request arrived on. Mirrors `POST /api/recovery/complete`'s floor +
+        auth-key rewrite, with one deliberate difference — this flow has a caller session to spare and must
+        not revoke it, where recovery has none.
+
+        Two entry points share this one body, distinguished only by `attestationSignature`. **Deliberate**
+        (the caller still knows the current password): `attestationSignature` is present, an Ed25519
+        signature over `authPublicKey`'s raw bytes made with the OLD auth private key, proving the caller
+        still controls the password being replaced. **Forgotten** (the caller reached this only from an
+        already-unlocked session, most often via a `DEVICE_KEY` wrap): `attestationSignature` is absent, and
+        no old-password proof is attempted — the client-side cold-credential gate (ADR 0060 Decision 2) is
+        what already restricted reaching this form, exactly as rotation's gate does; the server holds no
+        evidence of which wrap opened the vault and cannot adjudicate that itself.
+
+        This is **not** a rotation: the identity keypair is untouched and no scope is touched — see
+        `POST /api/account/rotation` for the compromise-recovery mechanism, which is mandatory-paired and
+        structurally a different shape.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangePasswordRequest" }
+      responses:
+        "204":
+          description: The password is changed. The caller's own session survives; every other session is gone.
+        "400":
+          description: The request was malformed (a missing, oversized or non-base64 field).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: >
+            An `attestationSignature` was present but did not verify against the current `auth_public_key`.
+            Distinct from `401`: the caller **is** authenticated, they failed the additional old-password
+            proof. Nothing was written.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: attestation_failed }
+        "409":
+          description: >
+            The account has no `PASSWORD` floor to rewrite. **Nothing was written** — mirrors
+            `POST /api/account/rotation`'s `rotation_unavailable` shape.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: password_change_unavailable }
 
 components:
   securitySchemes:
@@ -864,6 +931,36 @@ components:
             type: string
             maxLength: 36
           example: [1a2b3c4d-5e6f-4071-8213-9a0b1c2d3e4f]
+
+    ChangePasswordRequest:
+      type: object
+      description: >
+        Everything `POST /api/account/password` needs, for either entry point. `attestationSignature` is
+        absent on the forgotten-password path — the client-side cold-credential gate is what already decides
+        which path a caller may reach, not this field (see the operation description).
+      required: [passwordWrap, authPublicKey]
+      properties:
+        passwordWrap:
+          $ref: "#/components/schemas/RotatedWrap"
+        authPublicKey:
+          type: string
+          description: >
+            The Ed25519 auth public key derived from the new password (ADR 0003). Replaces the stored one in
+            the same transaction as the wrap, so login and unlock can never disagree.
+          contentEncoding: base64
+          maxLength: 8192
+          example: bmV3LWF1dGgtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        attestationSignature:
+          type: string
+          description: >
+            Ed25519 signature over `authPublicKey`'s raw bytes, produced with the OLD auth private key —
+            proof the caller still controls the password being replaced. Absent on the forgotten-password
+            entry point, where no such proof is attempted.
+          contentEncoding: base64
+          maxLength: 256
+          example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
