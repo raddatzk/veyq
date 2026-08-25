@@ -109,8 +109,8 @@ all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the ch
 settled by [ADR 0060](0060-key-rotation-after-compromise.md). Two things remain:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
-  ([uc.spaces.verify-identity](../features/spaces/use-cases/uc.spaces.verify-identity.md) is refined and its
-  pin-store primitives ship; the entry point does not). It needs redesigning before it is wired: an
+  ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
+  is refined and its pin-store primitives ship; the entry point does not). It needs redesigning before it is wired: an
   *account-global* toggle cannot protect shared-scope content, because any co-member may key an unverified
   identity.
 - **Accepting a changed key does not clear the declining worker's exclusion**, so Decision 2's *"the wrap then

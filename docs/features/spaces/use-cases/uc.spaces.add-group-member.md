@@ -86,7 +86,7 @@ sequenceDiagram
 - **E2 — key-substitution by a malicious operator:** the wrapping key-holder trusts the identity pubkey the
   server returns. The verification stance is settled by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md):
   **TOFU-pin on first use**, a **changed** key is a UI notice / a hard block for the grant-delivery worker, and
-  out-of-band **safety-number verification** ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)) elevates a
+  out-of-band **safety-number verification** ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)) elevates a
   contact to *verified*; an opt-in **strict mode** hard-gates on unverified. The pinning + ceremony are a pending
   slice ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)) — **until it lands
   the wrap is still Plain** (bounded, self-hosted makes it moot).

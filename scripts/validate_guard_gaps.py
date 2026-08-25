@@ -50,11 +50,14 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      the row naming the key is already gone
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
-     "planned ⇒ no coverage refs" is *false*: `uc.spaces.verify-identity` is legitimately `planned` yet carries
-     a real ref (`identityPins.test.ts`), a partially-built use-case. The narrow decidable rule ("every criterion
-     covered ⇒ planned is a contradiction") shuts only the *full* evasion, never the partial ("cover 5 of 6, mark
-     planned, skip the 6th"), so it is much mechanism for one theoretical lie. This counter-example is the whole
-     reason 4b stays open — recorded here, beside the case, so nobody re-derives the false rule from scratch.
+     "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
+     a real ref on a criterion that already shipped ahead of the rest (a partially-built use-case). The narrow
+     decidable rule ("every criterion covered ⇒ planned is a contradiction") shuts only the *full* evasion, never
+     the partial ("cover 5 of 6, mark planned, skip the 6th"), so it is much mechanism for one theoretical lie.
+     `uc.spaces.verify-identity` used to be the live instance of exactly this shape (inbox #128) — split
+     2026-08-25 into a fully-built file and a fully-`planned` one, so the repo no longer has a concrete example,
+     but the abstract gap in the rule is unchanged and a future file can reopen it. Recorded here, beside the
+     case, so nobody re-derives the false rule from scratch.
   5  a CR marked `status: done` with no implementation passes (validate_changes: enum + refs, nothing more)
   6  a link to a non-existent `#fragment` anchor in an existing file passes (validate_doc_links strips it)
   8  a *free-text* (non-base64) `maxLength` blown past what its column holds passes — `validate_maxlength_storage`

@@ -1,0 +1,27 @@
+useCase: uc.spaces.enforce-verified-identities
+feature: spaces
+title: Actively verify a member and enforce it account-wide (strict mode)
+status: planned
+# Split 2026-08-25 (inbox #128) out of uc.spaces.verify-identity, which used to carry these two criteria
+# under one file-wide `status: planned` alongside two already-built, already-tested ones — a mixture the
+# coverage model has no room for (an area may not be both covered and a gap, ADR 0040). Nothing here moved
+# forward or backward in the split; both criteria were unbuilt before it and stay unbuilt after it.
+#
+# safety-number-verify: the pin-store primitives ship and are unit-tested (identityPins.test.ts:
+# markVerified, safetyNumber — fingerprint-vector-pinned, elevates pinned->verified only if the pinned key
+# still matches else IdentityMovedError, verified-wins on a 409). What is NOT built is the ceremony UI (QR
+# scan / read-aloud compare -> mark verified) — deliberately descoped in cr-0099: a per-member "verified"
+# state is advisory noise for the normal user, and it only pays off once strict mode exists to act on it.
+#
+# strict-mode: needs a redesign before it can be built at all, not just an implementation slot. A
+# *per-account* toggle cannot protect shared-scope content, because any co-member can key an unverified
+# identity regardless of the caller's own setting (ADR 0028 §4) — the mechanism has to be scope-wide, and
+# that design is not decided.
+acceptanceCriteria:
+  - id: safety-number-verify
+    text: The caller compares a member's safety-number (fingerprint() digest, 6x5 digits) out-of-band — QR scan (compare scanned vs pinned key) or digits read aloud -> feedback matches (offer mark verified -> state verified) or differs (warn, do not trust). Verification elevates pinned -> verified and is the path to accept a legitimately rotated key.
+  - id: strict-mode
+    text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
+gaps:
+  web: "The ceremony UI (QR scan / read-aloud compare -> mark verified) is not surfaced; only the data-layer primitives exist (identityPins.test.ts: markVerified, safetyNumber — unit-tested, no user-facing path)."
+  backend: "No endpoint or gate exists for strict mode. It cannot be built as a straightforward per-account flag: a per-account toggle cannot protect shared-scope content, since any co-member can key an unverified identity (ADR 0028 §4) — the scope-wide mechanism is an open design question."

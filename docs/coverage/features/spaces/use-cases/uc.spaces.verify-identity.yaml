@@ -1,31 +1,26 @@
 useCase: uc.spaces.verify-identity
 feature: spaces
-title: Verify a member's identity
-status: planned
-# Refined (ADR 0028 + en.account.identity-pinning define the model: TOFU-pin on first use, a change is a UI notice
-# / a worker block+decline, out-of-band safety-number verification elevates pinned->verified, opt-in strict mode).
-# PARTIALLY BUILT on web. cr-0098: the sealed pin-store sync, the grant-delivery decline seam, and
-# the TOFU wrap-gates at the three foreign-wrap sites -> tofu-pin-on-first-use, change-surfaced-not-trusted,
-# operator-blind-pinning FILLED. cr-0099: changed-key-review (side-by-side expected-vs-current -> accept/refuse) is
-# FILLED, and the pin-store verify PRIMITIVES ship (safetyNumber, markVerified, trustState/trustStates — unit-tested).
-# DESCOPED in cr-0099 (deliberately, after review): the proactive verify ceremony + the verified/recognized directory
-# badges were removed — a per-member "verified" state is advisory noise for the normal user, and it only pays off
-# under a scope-wide strict mode. So safety-number-verify stays a GAP (primitives only, no UI) and strict-mode stays
-# unbuilt -> the use-case remains planned. strict-mode also needs a redesign: a *per-account* toggle can't protect
-# shared-scope content (any co-member can key an unverified identity); see docs/inbox.md (K_SC-sealed attestation
-# registry) before cr-0100.
+title: Trust-on-first-use, notice, and review a changed identity key
+# Split 2026-08-25 (inbox #128) from what this file used to also cover: the proactive verify ceremony (QR /
+# read-aloud compare -> mark verified) and scope-wide strict mode now live on their own use-case,
+# uc.spaces.enforce-verified-identities, deliberately still `status: planned`. Everything below this file
+# still claims IS built and tested, so the split also closes a second, quieter hole `status: planned` had been
+# hiding: three of these four criteria carried ZERO coverage refs before this split, riding on the file-wide
+# `planned` flag even though cr-0098/cr-0099 built and unit-tested them. Only `changed-key-review` had a ref.
 acceptanceCriteria:
   - id: tofu-pin-on-first-use
     text: The first time a client wraps to a contact's identity key it pins the full identity public bundle (kemX+kemM+sign) keyed by userId (state pinned) and proceeds — trust-on-first-use. The pin store is one blob sealed under the Master Key, synced across the account, account-global (one pin per contact across tenants). The server sees one opaque ciphertext, never a userId, key, or count.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts] }
+      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne, IdentityPinsSliceTest.storeIsPerAccountNotShared] }
   - id: change-surfaced-not-trusted
-    text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker) + a human-review flag. A change is attack-or-legitimate-rotation, resolved by a human.
-  - id: safety-number-verify
-    text: The caller compares a member's safety-number (fingerprint() digest, 6x5 digits) out-of-band — QR scan (compare scanned vs pinned key) or digits read aloud -> feedback matches (offer mark verified -> state verified) or differs (warn, do not trust). Verification elevates pinned -> verified and is the path to accept a legitimately rotated key.
-    # GAP (cr-0099 descope): the pin-store primitives exist + are unit-tested (safetyNumber is fingerprint-vector-
-    # pinned; markVerified elevates only if the pinned key still matches, else IdentityMovedError, verified-wins on a
-    # 409 — all in identityPins.test.ts), but the proactive verify CEREMONY UI (QR/read-aloud compare -> mark verified)
-    # was intentionally NOT shipped: it's advisory noise until scope-wide strict mode makes it pay off (cr-0100). So
-    # verified is reachable only via the data layer, no user-facing path -> this criterion stays a gap.
+    text: A directory key that differs from the pin is never silently trusted. In the UI it is a notice (accept -> re-pin); on the human-less grant-delivery worker it is a block (no K_SC wrap) + a job decline back to the server (do not re-offer this worker), leaving the directory's changed badge as the review surface. A change is attack-or-legitimate-rotation, resolved by a human.
+    # "a human-review flag" (the pre-split wording) named a field that was never built — the decline + the
+    # directory's `changed` badge (trustState/trustStates) IS the review surface; corrected on this split
+    # rather than left to overclaim next to its own new refs.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/tasks/grantDeliveryWorker.test.ts] }
+      backend: { unit: [TasksSliceTest.declineReleasesJobToOtherWorkersButNeverBackToTheDecliner] }
   - id: changed-key-review
     text: A changed badge opens a review showing expected (pinned) vs current (directory) safety-numbers side by side; the caller verifies out-of-band and either accepts (re-pin the new key, optionally verified) or refuses (leave blocked, the wrap/delivery stays gated).
     # web (cr-0099): the accept path is acceptKeyChange (re-pin as pinned, firstSeenAt preserved) and the badge
@@ -37,19 +32,13 @@ acceptanceCriteria:
     # again, and — the half that shares a table with it — a rotator's exclusion from their own rotation does not.
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
-  - id: strict-mode
-    text: An account-global toggle "require verification before sharing" turns the change-notice into a hard block and makes the grant-delivery worker skip unverified members (they stay awaiting access) until verified. Off by default (advisory TOFU).
   - id: operator-blind-pinning
     text: Verification is client-only (compare against the sealed pin, no server call) and the pin store is one Master-Key-sealed ciphertext, so the operator never learns who pinned or verified whom, nor the count — the trust graph stays off the server.
-# The backend endpoints this use-case leans on ARE built and ARE tested — the sealed pin-store sync, the decline
-# seam, and now POST /api/tasks/declines/clear — but their refs deliberately live on
-# `uc.account.rotate-keys`, which is the use-case that owns the clearing seam. Listing them here as well would
-# make `backend` a covered area, and a covered area may not also be a gap (ADR 0040) — while this file is still
-# `status: planned` and the model requires a planned file to declare one. That collision is worth naming rather
-# than working around: the coverage model has `planned` and implemented, and this use-case is neither. It has
-# been half-built since cr-0099 and the backend "gap" below has been carrying a build-note in a gap's clothes
-# ever since. Nothing caught it because the surface carried no ref; adding one made the guard say so
-# immediately. Left as-is here on purpose — closing it means either splitting the use-case or teaching the model
-# a third state, and both are decisions for a refine, not for an implement session.
-gaps:
-  backend: "No backend ref on this use-case: the endpoints it leans on are covered where the CR that built them owns them — the pin-store sync + decline seam under cr-0098's own slice tests, and the accept-side clearing under uc.account.rotate-keys (TasksSliceTest.acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain + .clearingDeclinesNeverFreesARotationExclusion). What is genuinely unbuilt server-side is verify/strict-mode state: the ceremony is client-only, and strict-mode needs the redesign noted in the header before it can exist at all."
+    # Real but indirect: no test asserts the negative (that a growing pin/verified set never changes the wire
+    # shape) as its own property. Coverage here is inferred — the backend refs prove the wire shape is always
+    # exactly {blob, version}, the web refs prove the compare functions make no network call — not a dedicated
+    # "operator learns nothing" test. Named honestly rather than stretched; a stronger direct test is a genuine
+    # gap, not a citation problem.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts] }
+      backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne] }

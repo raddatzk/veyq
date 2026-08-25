@@ -91,12 +91,17 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 - [Delete a group](use-cases/uc.spaces.delete-group.md) — **web done (cr-0090)** (owner soft-deletes into a
   **grace period** (clearly marked, still readable, any owner can restore); a scheduled operator-blind job then
   hard-purges the ciphertext + files; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4/§6)
-- [Verify a member's identity](use-cases/uc.spaces.verify-identity.md) — **web: TOFU foundation built (cr-0098)**
-  (a client **pins** each contact's identity key on first wrap — operator-blind, cross-device; a **changed** key
-  is never silently trusted: the grant-delivery worker **declines**, the UI surfaces a notice + accept → re-pin,
-  rotation excludes the member; [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md),
-  [en.account.identity-pinning](../account/enablers/en.account.identity-pinning.md). The out-of-band **QR
-  safety-number** ceremony, the *verified* badge, and strict-mode are the follow-up CR)
+- [Trust-on-first-use, notice, and review a changed identity key](use-cases/uc.spaces.verify-identity.md) —
+  **built (cr-0098/cr-0099)** (a client **pins** each contact's identity key on first wrap — operator-blind,
+  cross-device; a **changed** key is never silently trusted: the grant-delivery worker **declines**, the UI
+  surfaces a notice + accept → re-pin, rotation excludes the member;
+  [ADR 0028](../../decisions/0028-identity-authenticity-tofu-verification.md),
+  [en.account.identity-pinning](../account/enablers/en.account.identity-pinning.md))
+- [Actively verify a member and enforce it (strict mode)](use-cases/uc.spaces.enforce-verified-identities.md) —
+  **planned** (split out of the use-case above, 2026-08-25, inbox #128 — the out-of-band **QR safety-number**
+  ceremony that elevates a pin to *verified*, plus an account-wide **strict mode**; the pin-store primitives
+  ship and are unit-tested, but the ceremony UI was deliberately not surfaced (cr-0099) and strict mode needs a
+  scope-wide redesign before it is buildable at all — a per-account toggle can't protect shared-scope content)
 - Person / profile view — planned (`~username`, [ADR 0015](../../decisions/0015-operator-blind-readable-urls.md)):
   open a member and see the Memories **you can see** that tag them; client-side (never a server query), depends
   on a future per-Memory **participants** tag (sealed `userId`s)

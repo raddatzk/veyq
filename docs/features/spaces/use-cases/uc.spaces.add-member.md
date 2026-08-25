@@ -78,7 +78,7 @@ sequenceDiagram
   server returns, so a malicious operator could substitute its own key. The stance is
   [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md): **TOFU-pin** the key on first
   use, **surface a change** (UI notice / worker block), and elevate via out-of-band **safety-number verification**
-  ([uc.spaces.verify-identity](uc.spaces.verify-identity.md)); opt-in **strict mode** hard-gates. Until that slice
+  ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)); opt-in **strict mode** hard-gates. Until that slice
   ships the wrap is still Plain — bounded, self-hosted makes it moot; broadening *who* wraps doesn't widen it (one
   honest device would already have wrapped).
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open

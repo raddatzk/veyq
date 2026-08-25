@@ -9,7 +9,9 @@
   to *verified*. Used by every client that wraps a scope key or invite to **another** member's identity public
   key — the grant authorities, the grant-delivery worker, the invite name-key.
 - **Serves (use-cases):** [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the
-  human ceremony this sealed pin store + its TOFU change-response backs) and
+  passive half — pin on first sight, notice and review a changed key),
+  [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md) (the
+  proactive ceremony that elevates a pin to *verified*, and strict mode) and
   [uc.account.rotate-keys](../use-cases/uc.account.rotate-keys.md) (which produces the one legitimate key
   change this store exists to let a human accept).
 - **Depends on:** [en.account.key-model](en.account.key-model.md) — the Master Key that seals the pin store, so
@@ -31,7 +33,7 @@ ciphertext** and never interprets it. The plaintext is a small map:
 - **`key`** — the contact's full identity public bundle (`lp(kemX) || lp(kemM) || lp(sign)`, base64), the exact
   bytes a wrap targets. A change is detected by comparing the directory-returned key against this.
 - **`state`** — `pinned` (trust-on-first-use, unverified) or `verified` (a human compared the safety-number
-  out-of-band, [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md)).
+  out-of-band, [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)).
 - **`firstSeenAt`** — when this key was first pinned (for the review surface).
 
 **Account-global, keyed by `userId`.** Identity is one keypair per account across all tenants
@@ -50,7 +52,7 @@ you verified in one space is verified everywhere.
      `key := new`) or, on the **human-less grant-delivery worker**, **block the wrap + decline the job** back to
      the server + raise a human-review flag. A change is *attack or a legitimate identity rotation* — resolved by
      a human, never auto-trusted.
-3. **Verification** ([uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md)) elevates a
+3. **Verification** ([uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)) elevates a
    pin `pinned → verified` and is the path to accept a legitimately rotated key. The pin-store primitives exist on
    web (`markVerified`, `safetyNumber` — cr-0099, unit-tested), and `markVerified` stamps `verified` **only** if the
    pinned key still equals the compared key (else it aborts). But the **proactive verify ceremony is intentionally
@@ -121,5 +123,6 @@ trust state is shared across the account, not re-TOFU'd per device.
 - Consumers (the wrap-to-foreign-identity surfaces this gates): grant re-wraps + the grant-delivery worker
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md), [ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
   the group invite name-key ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md))
-- Use-cases: [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the human ceremony
-  that elevates *pinned* → *verified*)
+- Use-cases: [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (pin on first sight,
+  notice and review a changed key), [uc.spaces.enforce-verified-identities](../../spaces/use-cases/uc.spaces.enforce-verified-identities.md)
+  (the human ceremony that elevates *pinned* → *verified*, and strict mode)

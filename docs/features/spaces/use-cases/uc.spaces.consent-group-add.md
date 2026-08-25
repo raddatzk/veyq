@@ -97,7 +97,7 @@ sequenceDiagram
   the server returns, consistent with direct-add E2 and the shared primitive. Consent gates the *human's*
   agreement, not key authenticity; that is governed by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
   (**TOFU-pin** on first use, a **changed** key surfaced/refused, out-of-band **safety-number verification** via
-  [uc.spaces.verify-identity](uc.spaces.verify-identity.md), opt-in strict). Until that slice ships the wrap is
+  [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), opt-in strict). Until that slice ships the wrap is
   still Plain ([security-model](../../../crosscutting/security-model.md)). Note ADR 0027 closes a **different**
   attack — a *modified-owner* private name-lie — orthogonal to this operator-key seam.
 
