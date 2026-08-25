@@ -18,12 +18,15 @@ is no upgrade procedure. A production Compose file and a backup-and-restore runb
 tracked as [the V1 line](docs/inbox.md).
 
 Built and in use: accounts and unlock, key recovery from the Emergency Kit (on an instance that can send
-mail), personal / group / tenant spaces with key rotation, media upload with client-side encryption and
-derivatives, the gallery and lightbox, per-Memory trash, and seven sharing flows (public links, contributor,
-uploader drop-box, shared scopes, notes, passwords, anonymous accept).
+mail), changing your password from a live session, personal / group / tenant spaces with key rotation, device
+linking (add a second device without retyping your password), session management (list your signed-in devices,
+remote sign-out), media upload with client-side encryption and derivatives, the gallery and lightbox, per-Memory
+trash, and seven sharing flows (public links, contributor, uploader drop-box, shared scopes, notes, passwords,
+anonymous accept).
 
-Not built: session management, device linking, search, journal, and the operations story above.
-The [V1 line](docs/inbox.md) says which of those V1 waits for and which it does not.
+Not yet built: search, journal, and rotate/zoom in the lightbox. The backup-and-restore + upgrade runbook above
+is built but not yet CI-proven — no remote exists yet for that run. The [V1 line](docs/inbox.md) says which of
+these V1 waits for and which it does not.
 
 ## Why self-hosting is the security guarantee
 
