@@ -336,10 +336,13 @@ re-key — the same posture 1Password takes for shared vaults.
 
 One mechanism serves both data-loss protection and erasure: **soft-delete → trash → retention window →
 scheduled hard-purge**, propagated to backups within a documented rotation window. The two steps carry
-different authority. **Trashing is reversible** — an item moves to a per-scope trash and is restorable for the
-retention window — so it may be done by **any member of the scope** (recovery, not destruction), and it is
-**audited**: the trashed record carries **who** trashed it and **when**, so the action is accountable rather than
-anonymous. **Purging is irreversible** — the blob-level hard-purge that erases an item across all references. It
+different authority. **Trashing is reversible** — an item moves to a trash and is restorable for the retention
+window — so it may be done by **any member of the scope** (recovery, not destruction), and it is **audited**:
+the trashed record carries **who** trashed it and **when**, so the action is accountable rather than anonymous.
+The trash's grain is deliberately not uniform: a node (Memory/Chapter) moves to the **scope's** trash, reachable
+without its own container ([ADR 0061](../decisions/0061-node-deletion-reversible-node-trash.md)); a medium moves
+to a tab on **its Memory's** trash, a narrower "start light" scope with no cross-scope trash
+([uc.memory.delete-media](../features/memory/use-cases/uc.memory.delete-media.md)). **Purging is irreversible** — the blob-level hard-purge that erases an item across all references. It
 happens two ways: the **scheduled retention job** (or an explicit erasure request), and — for an item **already in
 the trash** — a member may **expedite** its purge by hand (the item was already reversibly removed, so this only
 brings the inevitable purge forward, bypassing the retention window). A member cannot purge a **live** item
