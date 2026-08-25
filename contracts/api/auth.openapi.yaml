@@ -96,7 +96,20 @@ paths:
             example: { email: kevin@example.com, signature: c2lnbmF0dXJlLW92ZXItbm9uY2U= }
       responses:
         "200":
-          description: Authenticated; a new session family with its tokens.
+          description: >
+            Authenticated; a new session family with its tokens. A web request that chose a `sessionScope`
+            (or the legacy `remember`) gets the refresh token as an httpOnly `Set-Cookie` and **omits** it
+            from the body; a native request that sends neither keeps the refresh token in the body and gets
+            no cookie.
+          headers:
+            Set-Cookie:
+              description: >
+                Present only when `sessionScope` (or legacy `remember`) chose the cookie transport. The
+                refresh token as an httpOnly + SameSite=Strict cookie scoped to `/api/token/refresh` —
+                `veyq_refresh` for `PERSISTENT`/`remember` (with `Max-Age`), `veyq_refresh_session` for
+                `SESSION` (no `Max-Age`). A clearing cookie for the other lifetime is sent alongside, so
+                exactly one refresh cookie ever exists (ADR 0004 § web refresh cookie lifetimes).
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SessionResponse" }
@@ -130,7 +143,19 @@ paths:
             example: { refreshToken: cmVmcmVzaC10b2tlbi1vcGFxdWU }
       responses:
         "200":
-          description: A rotated access + refresh pair.
+          description: >
+            A rotated access + refresh pair. A request that presented its refresh token via cookie gets the
+            successor as a fresh `Set-Cookie` and **omits** `refreshToken` from the body; a request that
+            presented it in the body gets the successor in the body and no cookie.
+          headers:
+            Set-Cookie:
+              description: >
+                Present only when the request's refresh token arrived via cookie. The rotated refresh token
+                as an httpOnly + SameSite=Strict cookie scoped to `/api/token/refresh`, re-issued under the
+                **same** name (`veyq_refresh` or `veyq_refresh_session`) the request carried it on — rotation
+                never silently changes the lifetime (ADR 0004 addendum). A clearing cookie for the other
+                lifetime is sent alongside, so exactly one refresh cookie ever exists.
+              schema: { type: string }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/TokenPair" }
@@ -218,7 +243,15 @@ paths:
         - bearerAuth: []
       responses:
         "204":
-          description: The session family is revoked (or was already gone).
+          description: >
+            The session family is revoked (or was already gone). Both web refresh cookies are cleared
+            unconditionally — a no-op for a native caller that never held one.
+          headers:
+            Set-Cookie:
+              description: >
+                Clearing cookies (`Max-Age=0`) for both `veyq_refresh` and `veyq_refresh_session`, scoped to
+                `/api/token/refresh` — sent on every call regardless of which, if either, the browser holds.
+              schema: { type: string }
 
   /api/sessions:
     get:
