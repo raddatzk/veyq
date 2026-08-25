@@ -12,6 +12,7 @@ import AppearancePanel from '../features/settings/AppearancePanel.vue'
 import DeviceTrustPanel from '../features/account/trustDevice/DeviceTrustPanel.vue'
 import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
 import KeyRotationPanel from '../features/account/rotation/KeyRotationPanel.vue'
+import ChangePasswordPanel from '../features/account/changePassword/ChangePasswordPanel.vue'
 import AddDevicePanel from '../features/account/pairing/AddDevicePanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
@@ -80,6 +81,10 @@ const categories = computed<NavCategory[]>(() => {
         // Every active session of the account + the remote sign-out (uc.account.sessions). Account-wide, not
         // scope-bound, and gated on a session rather than an unlock — so it belongs beside device trust.
         { id: 'sessions', label: t('settings.sessions'), icon: 'pi pi-mobile' },
+        // Change password (uc.account.change-password) sits beside sessions: it is the credential-adjacent
+        // action, account-wide like sessions, gated on a session rather than an unlock (like it, and unlike
+        // security below, which rewrites Master-Key-sealed material).
+        { id: 'password', label: t('settings.password'), icon: 'pi pi-key' },
         // Adding a device (uc.account.onboard-device) sits beside the sessions it produces. The route's own
         // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
         // premise — it seals the Master Key it is holding.
@@ -181,6 +186,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'device') return { component: DeviceTrustPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
+  if (id === 'password') return { component: ChangePasswordPanel, props: {} }
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }
   if (id === 'security') return { component: KeyRotationPanel, props: {} }
   return { component: AppearancePanel, props: {} }
