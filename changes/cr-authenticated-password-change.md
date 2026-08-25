@@ -48,7 +48,8 @@ still controls the *old* password. Implements [uc.account.change-password](../do
   (`backend/src/main/kotlin/com/veyq/app/features/account/login/SessionService.kt:177-180`) is the exact
   mechanism: it revokes every family except the one the request arrived on. Reuse this method, not a new one.
 - **Device-wrap re-enrolment already exists — do not build a second one.**
-  `POST /api/account/wraps` (`contracts/api/account.openapi.yaml:78-131`, `AddAccountWrapResource` →
+  `POST /api/account/wraps` (`contracts/api/account.openapi.yaml:78-131`, `AccountWrapsResource.addAccountWrap`
+  at `backend/src/main/kotlin/com/veyq/app/features/account/keymaterial/AccountWrapsResource.kt:32` →
   `KeyMaterialStore.addWrap`) already lets an authenticated caller add a `DEVICE`/`DEVICE_KEY` wrap. The web
   phase calls this endpoint after a successful change, on the same device, if the actor opts back into
   "remember me" — it is not a new field on the change-password request.
@@ -89,7 +90,11 @@ still controls the *old* password. Implements [uc.account.change-password](../do
         1. if `attestationSignature` is present, verify it against `currentAuthPublicKey` using
            `Ed25519Verifier.verify` (the same primitive `LoginHandler.verifySignature` already uses,
            `backend/src/main/kotlin/com/veyq/app/features/account/login/LoginHandler.kt:69-85`) — on failure,
-           refuse with `attestation_failed`, write nothing;
+           refuse with `attestation_failed`, write nothing. Signature, confirmed at
+           `backend/src/main/kotlin/com/veyq/app/shared/crypto/Ed25519Verifier.kt:22`:
+           `fun verify(publicKeyRaw: ByteArray, message: ByteArray, signature: ByteArray): Boolean` — call with
+           `(currentAuthPublicKey raw bytes, newAuthPublicKey raw bytes, attestationSignature raw bytes)`, since
+           the attestation signs the new key's raw bytes (not a server nonce, per the use-case's Quality notes);
         2. call `store.applyChange(...)` in one transaction; on `false`, refuse with
            `password_change_unavailable`;
         3. `sessions.revokeOtherFamilies(userId, presentedAccessToken)` — **never** an unconditional
