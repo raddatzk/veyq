@@ -58,6 +58,11 @@ allOpen {
 tasks.withType<Test>().configureEach {
     useJUnitPlatform()
     systemProperty("java.util.logging.manager", "org.jboss.logmanager.LogManager")
+    // The forked test JVM's default heap (~512m) OOMs partway through the full ~77-class Quarkus suite in one
+    // run (measured: G1 heap pinned at ~505-520MB used, 0 survivor regions — genuine thrashing, not one test's
+    // leak), taking a real assertion down with it as a knock-on flake (AuthRateLimitRefillTest's real-clock
+    // polling window blows under the GC pressure). 2g clears it with headroom (measured green at ~2m45s).
+    maxHeapSize = "2g"
 }
 
 kotlin {
