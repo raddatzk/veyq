@@ -560,6 +560,93 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_pending }
 
+  /api/tenants/{tenantId}/suspend:
+    post:
+      tags: [tenants]
+      operationId: suspendTenant
+      summary: Suspend an active tenant.
+      description: >
+        Takes an ACTIVE tenant offline: flips its status to SUSPENDED, after which **every** request resolving
+        to that tenant's domain is refused `403 tenant_suspended` at the request boundary, before authentication
+        is evaluated — a still-valid access token is refused exactly like an anonymous request (ADR 0066).
+        Availability only: no key, grant, content row or session is read, written or revoked, and the
+        transition is reversible via `reactivateTenant`. Server-Owner only — and Server-Owner status does not
+        exempt the caller's own membership from the gate while the tenant is suspended.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "204":
+          description: The tenant is now SUSPENDED.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: >
+            The tenant is not ACTIVE (suspension is only defined from ACTIVE; a PENDING tenant is withdrawn
+            with `revokeTenant` instead).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_active }
+
+  /api/tenants/{tenantId}/reactivate:
+    post:
+      tags: [tenants]
+      operationId: reactivateTenant
+      summary: Reactivate a suspended tenant.
+      description: >
+        Brings a SUSPENDED tenant back: flips its status to ACTIVE and the request-boundary gate stops firing
+        for it. Nothing was torn down by the suspension, so nothing is rebuilt here (ADR 0066) — a member whose
+        session stayed technically valid throughout simply resumes. Server-Owner only.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "204":
+          description: The tenant is ACTIVE again.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: The tenant is not SUSPENDED.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_suspended }
+
   /api/tenants/{tenantId}/terms:
     get:
       tags: [tenants]
@@ -1200,8 +1287,11 @@ components:
 
     TenantStatus:
       type: string
-      description: Lifecycle state of a tenant.
-      enum: [PENDING, ACTIVE]
+      description: >
+        Lifecycle state of a tenant. SUSPENDED is a reversible, availability-only lockout (ADR 0066): while
+        suspended, every request resolving to the tenant's domain is refused at the request boundary, before
+        authentication — its content, keys and memberships are untouched.
+      enum: [PENDING, ACTIVE, SUSPENDED]
       example: PENDING
 
     InviteStatus:
