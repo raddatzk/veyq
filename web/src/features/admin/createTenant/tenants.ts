@@ -50,6 +50,18 @@ export function revokeTenant(tenantId: string): Promise<void> {
   return tenantsApi().revokeTenant({ tenantId })
 }
 
+/** Take an ACTIVE tenant offline (ADR 0066) — reversible, and nothing but its `status` changes: no key, grant,
+ *  content row or session is touched. While suspended every request to its domain is refused at the boundary.
+ *  409 `tenant_not_active` if it isn't ACTIVE. */
+export function suspendTenant(tenantId: string): Promise<void> {
+  return tenantsApi().suspendTenant({ tenantId })
+}
+
+/** Bring a SUSPENDED tenant back to ACTIVE. 409 `tenant_not_suspended` if it isn't suspended. */
+export function reactivateTenant(tenantId: string): Promise<void> {
+  return tenantsApi().reactivateTenant({ tenantId })
+}
+
 // --- Terms of service (cr-0114, ADR 0035) ---
 
 /** The tenant's current terms + the caller's accepted version (member-readable; a non-member is 404). */

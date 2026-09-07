@@ -71,7 +71,7 @@ will react to; this CR does not build the projector.
       authenticated request against a `SUSPENDED` tenant's domain, and — the property this CR's refine corrected
       — a member of a **second, unaffected** tenant reaching that second tenant successfully on the same
       session while the first is suspended.
-- [ ] 3 web — `TenantDetailPanel.vue` suspend/reactivate action + `SUSPENDED` display ·
+- [x] 3 web — `TenantDetailPanel.vue` suspend/reactivate action + `SUSPENDED` display ·
       Done when: `npm run check` green, `TenantDetailPanel.test.ts` covers the new action + status display.
 - [ ] 4 coverage — fill `docs/coverage/features/admin/use-cases/uc.admin.suspend-tenant.yaml` with real test
       refs, drop `status: planned` and `gaps` ·

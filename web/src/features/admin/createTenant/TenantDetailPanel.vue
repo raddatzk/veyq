@@ -1,6 +1,7 @@
 <script setup lang="ts">
-// uc.admin.create-tenant (web, cr-0087) — the per-tenant detail page of the Server settings: one tenant's status
-// and, for a PENDING one, its owner-invite management (reassign email / resend / revoke). Addressed by tenantId
+// uc.admin.create-tenant + uc.admin.suspend-tenant (web) — the per-tenant detail page of the Server settings:
+// one tenant's status, its availability lever (take offline / bring back online, ADR 0066) and, for a PENDING
+// one, its owner-invite management (reassign email / resend / revoke). Addressed by tenantId
 // (the Tenants collection in the settings rail routes here); mirrors the old TenantAdminPanel row + edit, scoped
 // to a single tenant. Operator-blind: only operational metadata (name/domain/owner email/status). The backend
 // enforces Server-Owner with a 403 regardless of what the client renders.
@@ -10,7 +11,7 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import { listTenants, reassignInvite, resendInvite, revokeTenant, type TenantSummary } from './tenants'
+import { listTenants, reactivateTenant, reassignInvite, resendInvite, revokeTenant, suspendTenant, type TenantSummary } from './tenants'
 import { buildInviteLink, copyText } from '../../../shared/inviteLink'
 import { useAsyncData, loadErrorKind } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -35,6 +36,13 @@ const inviteUrl = ref('')
 const copied = ref(false)
 
 const isPending = computed(() => tenant.value?.status === 'PENDING')
+// ADR 0066 — the third status. Availability only: SUSPENDED says nothing about the tenant's content, which is
+// exactly as encrypted and exactly as untouched as it was ACTIVE; only reachability changed.
+const isSuspended = computed(() => tenant.value?.status === 'SUSPENDED')
+const statusLabel = computed(() =>
+  isPending.value ? t('tenant.statusPending') : isSuspended.value ? t('tenant.statusSuspended') : t('tenant.statusActive'),
+)
+const statusTone = computed(() => (isPending.value ? 'warning' : isSuspended.value ? 'danger' : 'success'))
 
 const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
   actionError.value = ''
@@ -74,6 +82,22 @@ function reassign() {
   return mint(() => reassignInvite(props.tenantId, email.value.trim()), 'tenant.reassigned')
 }
 
+// Suspend / reactivate (uc.admin.suspend-tenant). Unlike `revoke` this never leaves the panel — the tenant is
+// still there, and the Server Owner is expected to bring it back — so it reloads in place rather than routing away.
+// Suspend is confirm-gated (it locks every member out at once); reactivate is not (it only ever restores access).
+async function setSuspended(suspend: boolean) {
+  if (suspend && !window.confirm(t('tenant.suspendConfirm'))) return
+  actionError.value = ''
+  try {
+    await (suspend ? suspendTenant(props.tenantId) : reactivateTenant(props.tenantId))
+    toast.success(t(suspend ? 'tenant.suspended' : 'tenant.reactivated'))
+    await reload()
+  } catch (e) {
+    on401(e)
+    if (!isUnauthorized(e)) actionError.value = t('tenant.actionFailed')
+  }
+}
+
 async function revoke() {
   if (!window.confirm(t('tenant.revokeConfirm'))) return
   actionError.value = ''
@@ -104,12 +128,32 @@ async function copyInviteLink() {
           <h2>{{ tenant.name }}</h2>
           <p>{{ tenant.domain }} · {{ tenant.ownerEmail }}</p>
         </div>
-        <span class="veyq-badge" :class="isPending ? 'warning' : 'success'">
-          {{ isPending ? t('tenant.statusPending') : t('tenant.statusActive') }}
-        </span>
+        <span class="veyq-badge" :class="statusTone">{{ statusLabel }}</span>
       </div>
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <Message v-if="isSuspended" severity="warn" :closable="false">{{ t('tenant.suspendedHint') }}</Message>
+
+      <!-- The availability lever (ADR 0066), offered only on a settled tenant: a PENDING one has nothing to take
+           offline — it is withdrawn with revoke instead, which is why these two states share no controls. -->
+      <div v-if="!isPending" class="veyq-dialog-action-row">
+        <Button
+          v-if="isSuspended"
+          type="button"
+          :label="t('tenant.reactivate')"
+          icon="pi pi-play"
+          @click="setSuspended(false)"
+        />
+        <Button
+          v-else
+          type="button"
+          :label="t('tenant.suspend')"
+          icon="pi pi-pause"
+          severity="danger"
+          outlined
+          @click="setSuspended(true)"
+        />
+      </div>
 
       <!-- A PENDING tenant's owner invite can be re-pointed (reassign), resent, or revoked; ACTIVE tenants are
            settled and carry no invite controls here. -->
