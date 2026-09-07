@@ -11,7 +11,9 @@ import java.time.Instant
 /**
  * A tenant: a domain-scoped container resolved by Host. Operational metadata only — name, domain and the
  * intended owner email are cleartext; there is no content key here (the cold TENANT-scope birth that
- * activates a tenant is Slice B / cr-0010). PENDING until its owner accepts, then ACTIVE.
+ * activates a tenant is Slice B / cr-0010). PENDING until its owner accepts, then ACTIVE — and reversibly
+ * SUSPENDED while a Server Owner has it offline (ADR 0066): an availability-only state that no key, grant,
+ * content row or session takes part in, enforced by `TenantSuspensionFilter` at the request boundary.
  */
 @Entity
 @Table(name = "veyq_tenant")
@@ -48,6 +50,9 @@ class TenantEntity : PanacheEntityBase {
     companion object : PanacheCompanionBase<TenantEntity, String> {
         const val PENDING = "PENDING"
         const val ACTIVE = "ACTIVE"
+
+        /** Reversibly offline (ADR 0066). `status` is the *only* column either transition touches. */
+        const val SUSPENDED = "SUSPENDED"
     }
 }
 

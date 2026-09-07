@@ -20,6 +20,7 @@ import com.veyq.app.generated.model.SetScopeIconRequest
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
+import com.veyq.app.shared.tenant.TenantHostResolver
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Context
@@ -48,6 +49,7 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 class ScopesResource(
     private val handler: ScopesHandler,
     private val identity: SecurityIdentity,
+    private val hosts: TenantHostResolver,
     config: VeyqConfig,
 ) : ScopesApi {
     // The grace window (cr-0090) — used to derive `purgeAfter = deletedAt + retention` for a pending-deletion group.
@@ -220,8 +222,8 @@ class ScopesResource(
         hasGrant = row.hasGrant, pendingConsent = row.pendingConsent,
     )
 
-    /** The active tenant's host: the reverse-proxy `X-Forwarded-Host`, else `Host`; first value, port stripped. */
-    private fun activeHost(): String? =
-        (headers.getHeaderString("X-Forwarded-Host") ?: headers.getHeaderString("Host"))
-            ?.substringBefore(',')?.substringBefore(':')?.trim()?.lowercase()?.ifEmpty { null }
+    /** The active tenant's host — read through the one canonical resolver, which `TenantSuspensionFilter` also
+     *  uses: a gate that normalized the Host differently from the handlers it guards would guard a different
+     *  tenant than it thinks (ADR 0066). */
+    private fun activeHost(): String? = hosts.hostOf { headers.getHeaderString(it) }
 }

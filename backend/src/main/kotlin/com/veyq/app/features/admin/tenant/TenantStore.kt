@@ -214,6 +214,30 @@ class TenantStore(private val membership: MembershipStore) {
         TenantEntity.update("ownerEmail = ?1 where id = ?2", ownerEmail, tenantId)
     }
 
+    /**
+     * Take an ACTIVE tenant offline (ADR 0066) — `status` is the only column touched, so no key, grant, content
+     * row or session is in this path. Returns whether the transition happened.
+     *
+     * The `and status = ACTIVE` in the WHERE is the transition's guard, not a re-read: two concurrent suspends
+     * cannot double-apply and a suspend cannot silently overwrite a reactivate that landed between a read and a
+     * write, because there is no such window — the database decides the transition. The caller's separate
+     * existence probe only tells a 404 from a 409; it never authorizes the write.
+     */
+    @Transactional
+    fun suspend(tenantId: String): Boolean =
+        TenantEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantEntity.SUSPENDED, tenantId, TenantEntity.ACTIVE,
+        ) > 0
+
+    /** Bring a SUSPENDED tenant back to ACTIVE — the exact inverse of [suspend], same guarded-UPDATE reasoning. */
+    @Transactional
+    fun reactivate(tenantId: String): Boolean =
+        TenantEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantEntity.ACTIVE, tenantId, TenantEntity.SUSPENDED,
+        ) > 0
+
     /** Revoke a pending tenant: delete its invite history then the tenant itself. */
     @Transactional
     fun deleteTenant(tenantId: String) {

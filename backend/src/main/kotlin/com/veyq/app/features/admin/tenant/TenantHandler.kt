@@ -37,6 +37,20 @@ sealed interface RevokeOutcome {
     data object NotPending : RevokeOutcome, HttpFailure by httpFailure("tenant_not_pending", FailureStatus.CONFLICT)
 }
 
+/** Result of suspending an ACTIVE tenant (ADR 0066). Availability only — no key, grant or content row moves. */
+sealed interface SuspendOutcome {
+    data object Done : SuspendOutcome
+    data object NotFound : SuspendOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotActive : SuspendOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
+}
+
+/** Result of reactivating a SUSPENDED tenant (ADR 0066) — the exact inverse of [SuspendOutcome]. */
+sealed interface ReactivateOutcome {
+    data object Done : ReactivateOutcome
+    data object NotFound : ReactivateOutcome, HttpFailure by Failures.tenantNotFound
+    data object NotSuspended : ReactivateOutcome, HttpFailure by httpFailure("tenant_not_suspended", FailureStatus.CONFLICT)
+}
+
 /** Result of a tenant owner inviting a member by email (cr-0077). */
 sealed interface MemberInviteOutcome {
     data class Done(val invite: InviteView, val delivery: DeliveryResult) : MemberInviteOutcome
@@ -182,6 +196,33 @@ class TenantHandler(
         if (tenant.status != TenantEntity.PENDING) return RevokeOutcome.NotPending
         store.deleteTenant(tenantId)
         return RevokeOutcome.Done
+    }
+
+    /**
+     * Take an ACTIVE tenant offline (uc.admin.suspend-tenant, ADR 0066). Deliberately **not** `revoke`'s shape:
+     * that hard-deletes a tenant nothing was ever behind, this one preserves everything and changes only
+     * reachability — the lockout itself is `TenantSuspensionFilter`, which reads the very row this writes.
+     *
+     * Nothing else happens here on purpose. In particular **no session is revoked**: sessions are account-global,
+     * not tenant-scoped (ADR 0004 — `SessionFamilyEntity` carries no tenantId), so revoking a member's sessions
+     * to lock them out of *this* tenant would sign them out of every other tenant they belong to as well. The
+     * gate keys on the resolved Host, so it already refuses every request the instant the status flips; a
+     * still-valid token against a suspended tenant is not a defect to patch here.
+     *
+     * The existence probe only separates 404 from 409 — the transition itself is the store's guarded UPDATE.
+     */
+    @Transactional
+    fun suspend(tenantId: String): SuspendOutcome {
+        store.findTenant(tenantId) ?: return SuspendOutcome.NotFound
+        return if (store.suspend(tenantId)) SuspendOutcome.Done else SuspendOutcome.NotActive
+    }
+
+    /** Bring a SUSPENDED tenant back (ADR 0066): nothing was torn down, so nothing is rebuilt — the gate simply
+     *  stops firing. Same 404-vs-409 shape as [suspend]. */
+    @Transactional
+    fun reactivate(tenantId: String): ReactivateOutcome {
+        store.findTenant(tenantId) ?: return ReactivateOutcome.NotFound
+        return if (store.reactivate(tenantId)) ReactivateOutcome.Done else ReactivateOutcome.NotSuspended
     }
 
     /**

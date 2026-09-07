@@ -92,6 +92,23 @@ class TenantsResource(
             is HttpFailure -> httpError(o)
         }
 
+    // Suspend / reactivate (uc.admin.suspend-tenant, ADR 0066): Server-Owner-gated by the class-level
+    // @RolesAllowed, exactly like revokeTenant. Note these two are themselves subject to TenantSuspensionFilter:
+    // reaching them **on the suspended tenant's own domain** is refused like any other request, which is the
+    // deliberate reading of the use-case's E1 — Server-Owner status is global, it is not a per-tenant exemption.
+    // The Server Owner reactivates from the server-admin surface (ADR 0065), which is not that domain.
+    override fun suspendTenant(tenantId: UUID): Response =
+        when (val o = handler.suspend(tenantId.toString())) {
+            SuspendOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    override fun reactivateTenant(tenantId: UUID): Response =
+        when (val o = handler.reactivate(tenantId.toString())) {
+            ReactivateOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
     // Member invite (cr-0077): NOT Server-Owner — the tenant OWNER admits members. @Authenticated overrides the
     // class gate; the owner-membership check lives in the handler (403 not_tenant_owner). The anti-bombing guard is
     // the handler's per-(tenant,recipient) InviteMailRateLimiter, surfaced as MemberInviteOutcome.RateLimited →

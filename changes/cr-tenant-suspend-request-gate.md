@@ -61,7 +61,7 @@ will react to; this CR does not build the projector.
 - [x] 1 contracts — `tenants.openapi.yaml`: `TenantStatus` enum → add `SUSPENDED`; add `suspendTenant` +
       `reactivateTenant` operations per the Decisions shape above ·
       Done when: `npm run generate:api` regenerates cleanly and `npm run check` (web, contracts lint) is green.
-- [ ] 2 backend — `TenantEntity.SUSPENDED` const; `TenantStore.suspend`/`reactivate`; `TenantHandler`/
+- [x] 2 backend — `TenantEntity.SUSPENDED` const; `TenantStore.suspend`/`reactivate`; `TenantHandler`/
       `TenantsResource` wiring (Server-Owner-gated, same pattern as `revoke`); extract `TenantHostResolver`
       and refactor `ScopesResource` onto it (behavior-preserving — the existing `ScopesSliceTest`s must stay
       green unmodified); add `TenantSuspensionFilter` + `Failures.tenantSuspended` ·

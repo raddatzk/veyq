@@ -35,6 +35,18 @@ object Failures {
     val memberNotFound: HttpFailure = httpFailure("member_not_found", NOT_FOUND)
 
     /**
+     * The tenant the request resolved to is SUSPENDED → 403 (ADR 0066). Raised by `TenantSuspensionFilter` at
+     * the request boundary, before authentication, so it is the answer *every* route can give — which is why it
+     * belongs in this catalog rather than in one slice's vocabulary: it is not owned by the slice it interrupts.
+     *
+     * Deliberately **not** indistinguishable from [tenantNotFound]: unlike a membership gate it discloses
+     * nothing private. A suspended tenant's domain is public by construction (it is how the request got here),
+     * and the caller needs to be able to tell "this space is temporarily offline" from "wrong address" —
+     * telling them their own space still exists is the honest answer, not a leak.
+     */
+    val tenantSuspended: HttpFailure = httpFailure("tenant_suspended", FORBIDDEN)
+
+    /**
      * The caller **is** a member of the scope but holds no grant there — not a key-holder (ADR 0020: a grant is
      * a capability *within* the membership boundary, e.g. a member whose consent is still pending). A legitimate
      * 403: the membership guard already ran, so this caller knows the scope exists and no existence is disclosed
