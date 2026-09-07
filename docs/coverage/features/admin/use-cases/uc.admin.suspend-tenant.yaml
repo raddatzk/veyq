@@ -1,0 +1,68 @@
+useCase: uc.admin.suspend-tenant
+feature: admin
+title: Suspend & reactivate a tenant
+# ADR 0066 — an availability-only, reversible lockout. The two transitions write exactly one column; the
+# lockout itself is TenantSuspensionFilter, a pre-matching request-boundary gate keyed on the resolved Host.
+acceptanceCriteria:
+  - id: suspend-active-tenant
+    text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
+      web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
+  - id: reactivate-suspended-tenant
+    text: A Server Owner reactivates a SUSPENDED tenant back to ACTIVE.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
+      web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
+  - id: suspend-non-active-rejected
+    text: Suspending a non-ACTIVE tenant (e.g. PENDING) is rejected (409).
+    coverage:
+      # Backend-only on purpose. The web test that a PENDING tenant is offered no lever proves the 409 is
+      # unreachable from the UI — a *different* sentence from this one, and listing it here would be the guard's
+      # own named blind spot (a ref is bound to an AC by nothing but being listed under it).
+      backend: { integration: [TenantSuspendSliceTest.suspendingANonActiveTenantIs409] }
+  - id: reactivate-non-suspended-rejected
+    text: Reactivating a non-SUSPENDED tenant is rejected (409), symmetrically.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.reactivatingANonSuspendedTenantIs409] }
+  - id: suspended-blocks-every-request
+    # Two separate tests on purpose, because they prove different halves. The anonymous one proves the
+    # *ordering* (a would-be 401 becomes 403, against its own 401 control — only a gate ahead of authentication
+    # can do that); the token one proves the *immediacy* (one unrevoked session, reaching the tenant and then
+    # refused). Both assert 403 + `tenant_suspended` by body: a wholesale refusal would satisfy "not 2xx".
+    text: While SUSPENDED, every request resolving to that tenant is refused (403 tenant_suspended) at the request boundary, before authentication — including one carrying a still-valid access token.
+    coverage:
+      backend:
+        integration:
+          - TenantSuspendSliceTest.anonymousRequestToASuspendedTenantIs403NotUnauthorized
+          - TenantSuspendSliceTest.aStillValidAccessTokenIsRefusedAgainstASuspendedTenant
+  - id: suspend-server-owner-only
+    text: A signed-in non-owner is refused (403 not_server_owner) on suspend/reactivate.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.bothTransitionsAreServerOwnerOnly] }
+  - id: suspend-unknown-tenant
+    text: Either transition on an unknown tenant id is refused (404 tenant_not_found).
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.bothTransitionsOnAnUnknownTenantAre404] }
+  - id: suspend-touches-no-content
+    # Pinned on the rows that would have to move if suspension ever reached for a key — every scope and every
+    # membership grant under the tenant, compared byte for byte across a full suspend/reactivate round trip.
+    # The "no session revoked" half is the same token resuming after reactivation, in the access-token test.
+    text: Neither transition reads, writes, or rotates any scope key, grant, or content row, and no session is revoked.
+    coverage:
+      backend:
+        integration:
+          - TenantSuspendSliceTest.neitherTransitionTouchesMembershipsScopesOrGrants
+          - TenantSuspendSliceTest.aStillValidAccessTokenIsRefusedAgainstASuspendedTenant
+  - id: suspend-does-not-affect-other-tenants
+    # The property that ruled out a session-revoke (ADR 0066), kept as a permanent guard rather than as
+    # coverage of a defect: it is red the moment a future implementer adds one "for extra safety".
+    text: A member who belongs to both the suspended tenant and another, unaffected tenant can still reach the other tenant on the same session — suspension gates by resolved Host, never by revoking the account's session.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.suspendingOneTenantLeavesAnotherReachableOnTheSameSession] }
+  - id: unresolved-host-unaffected
+    # The gate only ever narrows: a Host claiming no tenant (bootstrap domain, unknown domain, a direct
+    # container port) behaves exactly as it did before the gate existed, even while some tenant is suspended.
+    text: A request whose Host resolves to no tenant is unaffected by any tenant's suspension.
+    coverage:
+      backend: { integration: [TenantSuspendSliceTest.aHostClaimingNoTenantPassesThroughUnchanged] }

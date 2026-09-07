@@ -81,12 +81,24 @@ For a browser/mobile client to reach a presigned URL the **object store endpoint
 client**, which may differ from the backend's internal endpoint. Presigned URLs are signed for
 `veyq.blob-store.public-endpoint` (empty ⇒ sign against the internal endpoint, i.e. external S3 or any
 publicly-reachable store); `S3BlobStore` keeps a second client purely for signing (local HMAC, never connects).
+**On a multi-domain server** ([ADR 0063](0063-database-driven-tenant-ingress.md)), the value actually signed
+against is the **resolved tenant's own domain**, not a single instance-wide config value —
+`veyq.blob-store.public-endpoint` remains only the bootstrap-domain default, used until a tenant row supplies
+its own.
 
 **CORS is a browser rule, and it is configured on the store** — veyq cannot inject headers into a direct
 fetch: none needed for a bundled store behind a Traefik
 **path route** (same origin); otherwise a bucket/account CORS policy allowing `PUT`+`GET` from the web origin,
 exposing `ETag`. For the bundled store behind Traefik, route the bucket path **without** stripping the prefix and with the
-Host header preserved (SigV4 signs host+path+query). Because a byte path is a **hard requirement** (§1), there is
+Host header preserved (SigV4 signs host+path+query).
+
+**Two same-origin strategies, chosen per deployment target.** The bundled-store-behind-Traefik path route
+above is the **docker-compose** answer, and depends on that specific proxy's prefix/Host-preservation
+behavior. The **Kubernetes** target ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) cannot assume an
+operator-chosen ingress controller preserves it, so it defaults to the CORS-policy branch instead — Garage
+gets its own Ingress host there, not a path route.
+
+Because a byte path is a **hard requirement** (§1), there is
 **no client-facing store-availability flag**: the earlier advisory `directTransport` on `/api/setup` is
 **removed** — an instance either has a working store (it started) or fails loud at startup, so a client never
 needs to soft-gate media upload on it. (The capability-discovery manifest, [ADR 0032](0032-capability-discovery-version-gating.md),
@@ -142,5 +154,7 @@ media path. Rationale (decided as a sparring trade-off):
 
 - [ADR 0012](0012-content-key-hierarchy.md) (`K_blob` per blob, random, under `K_mem`),
   [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` is vector-pinned).
+- [ADR 0063](0063-database-driven-tenant-ingress.md) (per-tenant-domain presigning on a multi-domain server),
+  [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes CORS branch of §4).
 - Enabler: [en.memory.media](../features/memory/enablers/en.memory.media.md) (the blob/media data layer this
   transport carries). Feature: [Memory](../features/memory/_index.md).

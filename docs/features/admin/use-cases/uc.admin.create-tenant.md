@@ -82,8 +82,8 @@ The Server Owner can **list all tenants** (active and pending) and, for a **`PEN
 owner has not yet accepted: **resend** the invite email, **reassign** the owner email (re-binding the
 invite — this is what keeps the strict email-binding above painless), or **revoke** the pending tenant.
 These are operational actions on cleartext metadata; they touch **no keys**. Acting on an **`ACTIVE`**
-tenant (blocking its owner, forcing an owner handoff) is a **separate, future** use-case — see the
-operator-boundary quality note.
+tenant is a **separate** use-case: suspending/reactivating it is [uc.admin.suspend-tenant](uc.admin.suspend-tenant.md)
+([ADR 0066](../../../decisions/0066-tenant-suspension.md)); forcing an owner handoff remains future work.
 
 ## Tenant lifecycle — state
 
@@ -128,8 +128,9 @@ stateDiagram-v2
   then it is a reserved domain mapping and an outstanding invite.
 - **One tenant = one domain (for now).** The schema leaves room for more, but multi-domain and
   tenant self-service are SaaS concerns (inbox #41), not part of this use-case.
-- **The operator controls availability, never confidentiality.** A Server Owner can deactivate a tenant or
-  block its owner (an unavoidable operator power), but never read its content.
+- **The operator controls availability, never confidentiality.** A Server Owner can
+  [suspend](uc.admin.suspend-tenant.md) a tenant or block its owner (an unavoidable operator power), but
+  never read its content.
 - **On-premise collapses the operator/owner split.** In the common self-hosted case (one server, usually one
   tenant, self-administered) the Server Owner *is* the Tenant Owner — they enter their own email and accept
   their own invite; the single flow already covers it, no special-case path.

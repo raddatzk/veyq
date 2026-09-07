@@ -15,6 +15,10 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **refined**
+- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built** ([ADR 0066](../../decisions/0066-tenant-suspension.md);
+  an immediate, request-boundary lockout and deliberately **no** session revoke — sessions are account-global, so a
+  revoke would sign a multi-tenant member out of unaffected tenants too; never a routing-only toggle, never a
+  content-key operation)
 - Invite members, grant access & assign roles — planned
 - Manage server users & roles — planned
 - ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)

@@ -247,6 +247,27 @@ decision existed to close. **So: where a phase names two exemplars, read the lin
 say which one wins.** It is one `sed -n` per site, it runs at refine, and the tell is purely syntactic — an
 "and" joining two `file:line` citations in one instruction.
 
+**An eighth tell: the CR prescribed a PROPERTY and, separately, a SHAPE copied from an exemplar — and never
+asked what makes the exemplar's shape deliver its own behaviour.** The seventh tell is two exemplars that
+disagree; this is *one* exemplar, cited correctly, whose shape is load-bearing only under a condition the CR
+never looked for. `cr-tenant-suspend-request-gate` required its gate to refuse **before authentication is
+evaluated** and, in the same Decisions section, specified it as *"same shape as `RateLimitFilters.kt`,
+`Priorities.AUTHENTICATION`"*. Both sentences are reasonable and they cannot both hold: Quarkus's eager
+security rejects an unauthenticated request from a handler that runs ahead of every post-match filter, so that
+priority answers `401` and the gate never runs. `IpRateLimitFilter` is untouched by this only because
+`key = IP` is confined to `@PermitAll` routes — a condition stated in its own KDoc, one `sed -n` away, and the
+whole reason the analogy fails. The tell is syntactic and does not need the answer: **a phase that names a
+property in one clause and an exemplar's mechanism in another has asserted that the mechanism delivers the
+property**, which is a claim, and the one command that checks it is the one that reads *why the exemplar
+works* rather than *what it looks like*.
+
+The other half of that CR is why this costs a paragraph instead of a phase: it had **pinned the property
+independently of the mechanism**, as a bite test asserting `403 tenant_suspended` by body against its own `401`
+control. So the wrong shape failed loudly in the first run, named the ordering and nothing else, and cost
+minutes. **Where a CR prescribes both, the test belongs on the property and never on the shape** — a test
+written against the mechanism ("the filter is registered at AUTHENTICATION priority") would have been green on
+code that refused nothing.
+
 #### A SETTLED decision carries the one line that settles it
 
 **A CR marks what is open. Nothing marks what is closed — so a closed decision that is wrong is the one thing

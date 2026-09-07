@@ -73,7 +73,7 @@ will react to; this CR does not build the projector.
       session while the first is suspended.
 - [x] 3 web — `TenantDetailPanel.vue` suspend/reactivate action + `SUSPENDED` display ·
       Done when: `npm run check` green, `TenantDetailPanel.test.ts` covers the new action + status display.
-- [ ] 4 coverage — fill `docs/coverage/features/admin/use-cases/uc.admin.suspend-tenant.yaml` with real test
+- [x] 4 coverage — fill `docs/coverage/features/admin/use-cases/uc.admin.suspend-tenant.yaml` with real test
       refs, drop `status: planned` and `gaps` ·
       Done when: `python3 scripts/validate_coverage.py` is green.
 
@@ -101,4 +101,40 @@ one-shot check to promote).
 
 ## Retrospective
 
-_Filled at implementation close._
+**What went wrong — the CR prescribed a mechanism that cannot deliver the property the same CR required.**
+Decisions said the gate must refuse *before authentication is evaluated*, and two bullets later specified it as
+a `@Provider ContainerRequestFilter` at `Priorities.AUTHENTICATION`, "same shape as `RateLimitFilters.kt`".
+Both cannot hold. Quarkus's eager security rejects an unauthenticated request from a handler RESTEasy Reactive
+places ahead of every post-match filter, so that priority answers `401` and the gate never sees the request.
+Pre-matching is the only placement that gets there first — and a pre-matching filter runs on the IO thread
+before any blocking dispatch decision, where the tenant lookup throws, and `@Blocking` is rejected outside
+"entrypoint" methods. The shipped filter is a `Uni`-returning `@ServerRequestFilter(preMatching = true)` that
+dispatches to a worker pool explicitly. Cost: three failed cycles, ~15 minutes.
+
+**Root cause: the analogy was cited, never interrogated.** `IpRateLimitFilter` works at that priority only
+because `key = IP` is confined to `@PermitAll` routes, where eager security has nothing to reject — a condition
+stated in its own KDoc, one `sed -n` from the line the CR cited. Refinement read the exemplar for *what it
+looks like* and not for *why it works*, which is the general shape of the miss.
+
+**What went right, and is the reason this cost minutes rather than a phase:** the CR pinned the property
+independently of the mechanism, as a bite test asserting `403 tenant_suspended` **by body** against its own
+`401` control. The wrong shape failed on the first run and the failure named the ordering and nothing else. A
+test written against the mechanism instead ("the filter is registered at AUTHENTICATION priority") would have
+been green on code that refused nothing. The `suspend-does-not-affect-other-tenants` guard behaved as designed
+too — green throughout, because no session-revoke was ever added; it stays as the permanent guard against one.
+
+**Next time (harvested, not left here):**
+- Process → `changes/README.md`, eighth tell: *a phase naming a property in one clause and an exemplar's
+  mechanism in another has asserted that the mechanism delivers the property* — check why the exemplar works,
+  and put the test on the property, never on the shape.
+- Code trap → `TenantSuspensionFilter`'s KDoc carries both constraints (eager-security ordering, IO-thread
+  dispatch) with the measured consequence of removing either, so the next boundary gate does not re-pay this.
+- Durable state → ADR 0066's Forces + Decision corrected (they asserted the `RateLimitFilters` shape), plus a
+  Consequence recording that "before authentication" costs an explicit thread hop.
+
+**A second, unrelated find worth naming: the feature index asserted the opposite of the ADR it linked to.**
+`docs/features/admin/_index.md` described this use-case as *"an immediate, request-boundary lockout **+ session
+revoke**"* — the one thing ADR 0066 explicitly rejects, in a row written by the same refine session that wrote
+the ADR. No guard covers a one-line summary contradicting the doc it points at, and none should; it is caught
+by reading the index row against the ADR when the row's status changes, which is the moment the implementer is
+already in both files.
