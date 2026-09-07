@@ -20,24 +20,25 @@
    the gate is keyed on the `Host` the request arrives on, not on who presents it, which is what makes it
    correct for a member who also belongs to another, unaffected tenant ([ADR 0066](../../../decisions/0066-tenant-suspension.md)
    — a session cannot be revoked per-tenant, only per-account).
-4. The tenant's ingress routing is withdrawn (see [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)):
-   its domain stops resolving at the network edge too. This is a second, independent layer — the guarantee in
-   step 3 does not depend on it.
+4. **Not built yet** — the tenant's ingress routing is withdrawn (see
+   [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)): its domain stops resolving at the
+   network edge too. This is a second, independent layer — the guarantee in step 3 does not depend on it, which
+   is why the gate shipped without it; it arrives with ADR 0063's (separately refined) ingress projector.
 
 ## Main flow — reactivate
 
 5. The Server Owner reactivates a `SUSPENDED` tenant.
-6. Its status flips back to `ACTIVE`; the request-boundary gate stops firing for it; its ingress routing is
-   restored. A member whose session was still technically valid throughout simply resumes — nothing needed
-   to be preserved, because nothing was torn down.
+6. Its status flips back to `ACTIVE` and the request-boundary gate stops firing for it (its ingress routing is
+   restored too, once step 4 exists). A member whose session was still technically valid throughout simply
+   resumes — nothing needed to be preserved, because nothing was torn down.
 
 ```mermaid
 ---
 title: Tenant suspend & reactivate
 ---
 stateDiagram-v2
-  Active --> Suspended : Server Owner suspends —<br>gate + routing withdrawn
-  Suspended --> Active : Server Owner reactivates —<br>gate lifted, routing restored
+  Active --> Suspended : Server Owner suspends —<br>gate on (routing withdrawal: step 4, not built)
+  Suspended --> Active : Server Owner reactivates —<br>gate off
 ```
 
 ## Alternate / exception flows

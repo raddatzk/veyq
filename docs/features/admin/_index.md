@@ -15,7 +15,10 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **refined**
-- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built** ([ADR 0066](../../decisions/0066-tenant-suspension.md);
+- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built, minus the ingress layer**
+  (the request-boundary gate + both transitions ship; main-flow step 4, withdrawing the tenant's routing, waits
+  on [ADR 0063](../../decisions/0063-database-driven-tenant-ingress.md)'s projector — a second layer the
+  guarantee deliberately does not rest on) ([ADR 0066](../../decisions/0066-tenant-suspension.md);
   an immediate, request-boundary lockout and deliberately **no** session revoke — sessions are account-global, so a
   revoke would sign a multi-tenant member out of unaffected tenants too; never a routing-only toggle, never a
   content-key operation)
