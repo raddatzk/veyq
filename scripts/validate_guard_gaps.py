@@ -48,6 +48,11 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      predicate matched only an unqualified `: BlobStore` and reported **green** over a tree carrying this exact
      bypass. What a bypass costs is the whole of ADR 0062 — a delete with no failure channel, at a point where
      the row naming the key is already gone
+  14 one of the routability-changing tenant operations stops calling the ingress projector — rejected:
+     `validate_tenant_ingress_triggers` derives the routability-changing `TenantStore` methods from the store
+     itself and requires each `TenantHandler` caller to reproject, so ADR 0063's "never an incremental patch"
+     cannot decay into "patched by whoever remembered". The defect is silent by construction: the row stays
+     right, the routing goes stale, and the first symptom is a domain that does not resolve
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -133,6 +138,8 @@ BANNER_MIGRATION = "backend/src/main/resources/db/migration/V99__guard_gap_scope
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
 # reclaims rows, so deleting the objects inline is the one-line shortcut ADR 0062 Decision 3 forbids.
 TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPurge.kt"
+TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantHandler.kt"
+TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
@@ -316,6 +323,22 @@ def forge_unmounted_config_secret(root: pathlib.Path) -> str:
     return "the app's config-secret volume removed (the KEK would not survive a container recreate)"
 
 
+def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
+    # One of the five routability-changing tenant operations stops re-projecting the reverse proxy's routing.
+    # This is the shape the defect actually takes: nothing else changes, the tenant row is still correct, and
+    # neither the compiler nor any type notices — a suspended tenant simply keeps resolving. The `suspend` arm is
+    # chosen over `create` because its damage points the wrong way (a tenant taken offline that is still
+    # reachable), and because it is the one an author is most likely to think of as "only a status flip".
+    f = root / TENANT_HANDLER
+    if not f.is_file():
+        raise ForgeError(f"{TENANT_HANDLER} is missing — tenant administration moved or was deleted")
+    src = f.read_text()
+    if TENANT_REPROJECT_CALL not in src:
+        raise ForgeError("the suspend arm's reproject() call drifted — re-anchor this forgery")
+    f.write_text(_sub(src, TENANT_REPROJECT_CALL, ""))
+    return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
+
+
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
@@ -331,6 +354,7 @@ CASES = [
     ("11", "validate_config_secret_persistence.py", forge_unmounted_config_secret, False),
     ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
     ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
+    ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
 ]
 
 

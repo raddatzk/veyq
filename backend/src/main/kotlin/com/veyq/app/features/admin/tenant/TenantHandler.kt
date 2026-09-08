@@ -11,6 +11,7 @@ import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -35,6 +36,21 @@ sealed interface RevokeOutcome {
     data object Done : RevokeOutcome
     data object NotFound : RevokeOutcome, HttpFailure by Failures.tenantNotFound
     data object NotPending : RevokeOutcome, HttpFailure by httpFailure("tenant_not_pending", FailureStatus.CONFLICT)
+}
+
+/**
+ * Result of moving a tenant to a different domain (uc.admin.create-tenant).
+ *
+ * [NotPendingOrActive] is a SUSPENDED tenant, and it deliberately does **not** reuse `Failures.tenantSuspended`:
+ * that one is the request-boundary refusal (403, pre-authentication, on the tenant's *own* domain) and a client
+ * that saw the same code here would read "this space is offline, sign out" for what is really "reactivate it
+ * first". One wire code, one status.
+ */
+sealed interface ChangeDomainOutcome {
+    data object Done : ChangeDomainOutcome
+    data object NotFound : ChangeDomainOutcome, HttpFailure by Failures.tenantNotFound
+    data object DomainTaken : ChangeDomainOutcome, HttpFailure by httpFailure("domain_taken", FailureStatus.CONFLICT)
+    data object NotPendingOrActive : ChangeDomainOutcome, HttpFailure by httpFailure("tenant_not_pending_or_active", FailureStatus.CONFLICT)
 }
 
 /** Result of suspending an ACTIVE tenant (ADR 0066). Availability only — no key, grant or content row moves. */
@@ -125,6 +141,7 @@ class TenantHandler(
     private val mailer: TenantInviteMailer,
     private val inviteRateLimiter: InviteMailRateLimiter,
     private val shares: SharingStore,
+    private val ingress: TenantIngressProjector,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -159,7 +176,7 @@ class TenantHandler(
     fun create(name: String, domain: String, ownerEmail: String): CreateTenantOutcome {
         val normalizedDomain = domain.lowercase()
         val normalizedEmail = ownerEmail.lowercase()
-        return commitThenSend {
+        val outcome = commitThenSend {
             if (store.domainExists(normalizedDomain)) return@commitThenSend MintResult.Rejected(CreateTenantOutcome.DomainTaken)
             val token = Tokens.random()
             val expiresAt = Instant.now().plus(inviteTtl)
@@ -169,6 +186,8 @@ class TenantHandler(
                 CreateTenantOutcome.Created(tenantId, expiry, token, delivery)
             }
         }
+        if (outcome is CreateTenantOutcome.Created) reproject()
+        return outcome
     }
 
     @Transactional
@@ -190,12 +209,38 @@ class TenantHandler(
         mintToSend(tenant.id, email, tenant.domain)
     }
 
-    @Transactional
     fun revoke(tenantId: String): RevokeOutcome {
-        val tenant = store.findTenant(tenantId) ?: return RevokeOutcome.NotFound
-        if (tenant.status != TenantEntity.PENDING) return RevokeOutcome.NotPending
-        store.deleteTenant(tenantId)
-        return RevokeOutcome.Done
+        val outcome = QuarkusTransaction.requiringNew().call {
+            val tenant = store.findTenant(tenantId) ?: return@call RevokeOutcome.NotFound
+            if (tenant.status != TenantEntity.PENDING) return@call RevokeOutcome.NotPending
+            store.deleteTenant(tenantId)
+            RevokeOutcome.Done
+        }
+        if (outcome is RevokeOutcome.Done) reproject()
+        return outcome
+    }
+
+    /**
+     * Move a tenant to a different domain (uc.admin.create-tenant). Unlike resend/reassign/revoke this is **not**
+     * PENDING-only: a domain is how a tenant is *reached*, not part of its invite lifecycle, so a live tenant may
+     * need to move exactly as often as a pending one. SUSPENDED is refused — reactivate first; changing the domain
+     * of a tenant whose whole point is "leave it alone" only adds a state to reason about.
+     *
+     * The free-domain check and the write share one transaction so two concurrent moves onto the same domain
+     * cannot both pass their check; the column's UNIQUE is the backstop behind that, not the primary guard.
+     * Domain-taken is decided **before** the state check on purpose: it is the answer that does not depend on
+     * which tenant you are looking at.
+     */
+    fun changeDomain(tenantId: String, domain: String): ChangeDomainOutcome {
+        val normalized = domain.lowercase()
+        val outcome = QuarkusTransaction.requiringNew().call {
+            val tenant = store.findTenant(tenantId) ?: return@call ChangeDomainOutcome.NotFound
+            if (tenant.domain == normalized) return@call ChangeDomainOutcome.Done // idempotent: nothing to move
+            if (store.domainExists(normalized)) return@call ChangeDomainOutcome.DomainTaken
+            if (store.changeDomain(tenantId, normalized)) ChangeDomainOutcome.Done else ChangeDomainOutcome.NotPendingOrActive
+        }
+        if (outcome is ChangeDomainOutcome.Done) reproject()
+        return outcome
     }
 
     /**
@@ -210,19 +255,30 @@ class TenantHandler(
      * still-valid token against a suspended tenant is not a defect to patch here.
      *
      * The existence probe only separates 404 from 409 — the transition itself is the store's guarded UPDATE.
+     *
+     * The one thing that *does* follow is [reproject]: a suspended tenant drops out of the routing projection
+     * (ADR 0063). That is a **secondary** effect and not the lockout — the request-boundary gate is, and it is
+     * what still refuses a request that reaches this instance by any other route while the file catches up.
      */
-    @Transactional
     fun suspend(tenantId: String): SuspendOutcome {
-        store.findTenant(tenantId) ?: return SuspendOutcome.NotFound
-        return if (store.suspend(tenantId)) SuspendOutcome.Done else SuspendOutcome.NotActive
+        val outcome = QuarkusTransaction.requiringNew().call {
+            store.findTenant(tenantId) ?: return@call SuspendOutcome.NotFound
+            if (store.suspend(tenantId)) SuspendOutcome.Done else SuspendOutcome.NotActive
+        }
+        if (outcome is SuspendOutcome.Done) reproject()
+        return outcome
     }
 
-    /** Bring a SUSPENDED tenant back (ADR 0066): nothing was torn down, so nothing is rebuilt — the gate simply
-     *  stops firing. Same 404-vs-409 shape as [suspend]. */
-    @Transactional
+    /** Bring a SUSPENDED tenant back (ADR 0066): no key, grant or content row was torn down, so none is rebuilt —
+     *  the gate simply stops firing. The routing projection is the exception, and only because suspension dropped
+     *  the tenant from it: [reproject] puts its routers back. Same 404-vs-409 shape as [suspend]. */
     fun reactivate(tenantId: String): ReactivateOutcome {
-        store.findTenant(tenantId) ?: return ReactivateOutcome.NotFound
-        return if (store.reactivate(tenantId)) ReactivateOutcome.Done else ReactivateOutcome.NotSuspended
+        val outcome = QuarkusTransaction.requiringNew().call {
+            store.findTenant(tenantId) ?: return@call ReactivateOutcome.NotFound
+            if (store.reactivate(tenantId)) ReactivateOutcome.Done else ReactivateOutcome.NotSuspended
+        }
+        if (outcome is ReactivateOutcome.Done) reproject()
+        return outcome
     }
 
     /**
@@ -377,6 +433,23 @@ class TenantHandler(
         shares.deactivateSharesByOwnerInScope(targetId, step.scopeId)
         if (step.rotateAfter) tasks.originateScopeRotation(step.scopeId, maxAttempts)
     }
+
+    /**
+     * Re-derive the reverse proxy's routing from the `tenant` table (ADR 0063) — the one call every routability-
+     * changing operation here ends with.
+     *
+     * **Two things are load-bearing and neither is visible at the call site.** It must run *after* the caller's
+     * transaction has committed: the projector reads in its own transaction, so called from inside one it would
+     * regenerate from the pre-change table and write a file that is stale the moment it lands. That is why the
+     * four transitions above are structured as `QuarkusTransaction.requiringNew().call { … }` **then** this,
+     * rather than as `@Transactional` methods ending in a call.
+     *
+     * And it must be called from **every** such operation — create, revoke, change-domain, suspend, reactivate.
+     * Missing one is a silent staleness bug: the row is right, the routing is wrong, and no compiler or type
+     * catches it. `scripts/validate_tenant_ingress_triggers.py` is what does, by deriving the routability-
+     * changing `TenantStore` methods from the store itself and requiring each caller here to reach this.
+     */
+    private fun reproject() = ingress.regenerate()
 
     /** Supersede + mint a bootstrap invite (resend/reassign), returning the payload to send **after** commit. */
     private fun mintToSend(tenantId: String, ownerEmail: String, domain: String): MintResult<InviteOutcome> {

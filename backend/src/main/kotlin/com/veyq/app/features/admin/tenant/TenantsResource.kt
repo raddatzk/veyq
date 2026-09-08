@@ -4,6 +4,7 @@ import com.veyq.app.generated.api.TenantsApi
 import com.veyq.app.generated.model.AcceptInviteRequest
 import com.veyq.app.generated.model.AcceptPreviewRequest
 import com.veyq.app.generated.model.AcceptTermsRequest
+import com.veyq.app.generated.model.ChangeDomainRequest
 import com.veyq.app.generated.model.CreateTenantRequest
 import com.veyq.app.generated.model.InviteRole
 import com.veyq.app.generated.model.InviteStatus
@@ -85,6 +86,14 @@ class TenantsResource(
 
     override fun reassignTenantInvite(tenantId: UUID, reassignOwnerRequest: ReassignOwnerRequest): Response =
         handler.reassignInvite(tenantId.toString(), reassignOwnerRequest.ownerEmail).toResponse()
+
+    // Change-domain (uc.admin.create-tenant): Server-Owner-gated like the rest, and the one tenant-admin write
+    // that is NOT PENDING-only — a domain is how a tenant is reached, not part of its invite lifecycle.
+    override fun changeTenantDomain(tenantId: UUID, changeDomainRequest: ChangeDomainRequest): Response =
+        when (val o = handler.changeDomain(tenantId.toString(), changeDomainRequest.domain)) {
+            ChangeDomainOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
 
     override fun revokeTenant(tenantId: UUID): Response =
         when (val o = handler.revoke(tenantId.toString())) {

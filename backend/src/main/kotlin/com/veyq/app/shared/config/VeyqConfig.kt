@@ -81,6 +81,27 @@ interface VeyqConfig {
 
     interface Tenant {
         fun invite(): Invite
+        fun ingress(): Ingress
+
+        /**
+         * The DB→reverse-proxy routing projection (ADR 0063). Both values absent is the `%dev`/`%test` default
+         * and a clean no-op: a self-hoster running the backend without Traefik must not need either.
+         */
+        interface Ingress {
+            /**
+             * Where `TenantIngressProjector` writes the Traefik file-provider config. **Absent ⇒ the projector
+             * does nothing at all** — not an error, and not a degraded mode: an instance with no proxy in front
+             * of it has nothing to project into.
+             */
+            fun dynamicConfigPath(): Optional<String>
+
+            /**
+             * The deployment-time bootstrap domain (`VEYQ_DOMAIN`), which the compose file already routes with
+             * static labels. The projector **excludes** it, so it never emits a second router for a domain that
+             * already has one — and it is the domain a request that resolves to no tenant is signed against.
+             */
+            fun bootstrapDomain(): Optional<String>
+        }
 
         interface Invite {
             /** Owner-invite validity window. */

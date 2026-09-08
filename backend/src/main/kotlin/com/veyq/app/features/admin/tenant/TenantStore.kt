@@ -238,6 +238,21 @@ class TenantStore(private val membership: MembershipStore) {
             TenantEntity.ACTIVE, tenantId, TenantEntity.SUSPENDED,
         ) > 0
 
+    /**
+     * Move a tenant to a different domain (uc.admin.create-tenant), allowed from PENDING **or** ACTIVE — the
+     * same guarded-`UPDATE` shape as [suspend]/[reactivate], and for the same reason: the `and status in (…)`
+     * is the transition's guard, so a concurrent suspend cannot be overwritten by a domain change that read the
+     * old status a moment earlier. Returns whether the move happened.
+     *
+     * Uniqueness is the caller's check plus the column's UNIQUE; this only writes.
+     */
+    @Transactional
+    fun changeDomain(tenantId: String, domain: String): Boolean =
+        TenantEntity.update(
+            "domain = ?1 where id = ?2 and status in (?3, ?4)",
+            domain, tenantId, TenantEntity.PENDING, TenantEntity.ACTIVE,
+        ) > 0
+
     /** Revoke a pending tenant: delete its invite history then the tenant itself. */
     @Transactional
     fun deleteTenant(tenantId: String) {
