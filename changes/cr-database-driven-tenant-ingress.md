@@ -1,7 +1,7 @@
 ---
 id: cr-database-driven-tenant-ingress
 title: A tenant's domain is DB-driven end-to-end — routing, and presigned blob URLs
-status: planned
+status: done
 satisfies: [uc.admin.create-tenant]
 adrs: ["0063", "0013"]
 invariants: [operator-blind everywhere, self-hostable by default]
@@ -108,26 +108,26 @@ form (`TenantDetailPanel.vue`, same component the suspend/reactivate action just
 
 ## Phases
 
-- [ ] 1 contracts — `tenants.openapi.yaml`: `changeDomain` operation (Decision B) ·
+- [x] 1 contracts — `tenants.openapi.yaml`: `changeDomain` operation (Decision B) ·
       Done when: `npm run generate:api` regenerates cleanly, `npm run check` green.
-- [ ] 2 backend — `TenantIngressProjector` + config + `TenantHandler` wiring (Decision A);
+- [x] 2 backend — `TenantIngressProjector` + config + `TenantHandler` wiring (Decision A);
       `TenantStore.changeDomain` + `TenantHandler` endpoint (Decision B) ·
       Done when: `./gradlew check` green, including a new `TenantIngressProjectorTest` (regenerate produces
       the expected router set for a PENDING+ACTIVE+SUSPENDED mix, excludes the bootstrap domain, no-ops with
       no configured path) and `TenantChangeDomainSliceTest` (happy path from both PENDING and ACTIVE,
       `409 domain_taken`, `409` from SUSPENDED, `400 invalid_domain`, Server-Owner-only, 404 unknown tenant).
-- [ ] 3 backend — per-request presigning (Decision C) ·
+- [x] 3 backend — per-request presigning (Decision C) ·
       Done when: `./gradlew check` green, including a bite test that two tenants' presigned PUT URLs for the
       same object key resolve to two different signed hosts, and a still-passing `MediaSliceTest`/
       `SharingSliceTest` suite (the refactor is behavior-preserving for the single-tenant case every existing
       test runs under).
-- [ ] 4 infra — `docker-compose.prod.yml` Traefik file-provider + shared volume + new env vars (Decision A) ·
+- [x] 4 infra — `docker-compose.prod.yml` Traefik file-provider + shared volume + new env vars (Decision A) ·
       Done when: `docker compose -f infra/docker-compose.prod.yml config -q` validates the compose file, and
       `infra/README.md` gains a short paragraph on the new volume (what it holds, that it's projector-owned,
       never hand-edited).
-- [ ] 5 web — change-domain UI (Decision D) · Done when: `npm run check` green, `TenantDetailPanel.test.ts`
+- [x] 5 web — change-domain UI (Decision D) · Done when: `npm run check` green, `TenantDetailPanel.test.ts`
       covers the new action.
-- [ ] 6 coverage — add the routing + presigning postcondition to
+- [x] 6 coverage — add the routing + presigning postcondition to
       `docs/coverage/features/admin/use-cases/uc.admin.create-tenant.yaml` (the new use-case prose section
       this refine session added) with real refs · Done when: `python3 scripts/validate_coverage.py` green.
 
@@ -164,4 +164,35 @@ suffices.
 
 ## Retrospective
 
-_Filled at implementation close._
+- **The CR named a wire code that does not exist, and the locator it handed over would have said so.**
+  Decision B specified `400 invalid_domain` "already in the `Failures` catalog"; there is no such code
+  anywhere in the tree, and the CR's own `grep -n "invalid_domain\|domain_taken\|domainExists"` returns hits
+  for the second and third terms only. Create rejects a malformed domain at the *boundary* (the DTO's
+  `@Pattern`) as `400 invalid_request` — which is what change-domain now does too, so the outcome is right,
+  but only because implementation re-derived it. Root cause: the locator was written into the CR and not run,
+  the exact failure `changes/README.md` § *run it, don't estimate* already names. **Next time:** a CR that
+  names a `code` treats it as a code-confirmable fact like any other — run the grep in the refine session and
+  paste what it printed, not what it was expected to print.
+- **A CR can prescribe a mechanism that does not survive contact, and Decision C's did.** "Each gain
+  `@Context HttpHeaders`" compiles, passes every authenticated path, and turns all 16 anonymous guest share
+  tests into `401` — the field changes how RESTEasy Reactive instantiates the resource, whose
+  constructor-injected `SecurityIdentity` is then resolved for a caller who has none. Caught only because
+  `./gradlew check` runs the whole suite; the touched class alone was green. The mechanism moved into
+  `RequestTenantDomain`, whose KDoc now carries the measurement. Root cause is not the wrong guess — it is
+  that the CR specified the *keystroke* (`@Context HttpHeaders`) where the decision was really "the resolved
+  tenant's domain reaches the presigner", which is the distinction `docs/ai/README.md` § *decisions over
+  keystrokes* draws. **Next time:** when a CR names a specific injection/annotation mechanism, read it as a
+  suggestion and re-decide it at the call site; only the *property* is binding.
+- **What the CR got exactly right, and it is worth naming because it is the part that is hard.** The bite test
+  for trigger completeness was specified as a procedure ("comment out one of the five, assert a test catches
+  it") rather than as an assertion — so it could actually be run, five times, and it caught all five. It also
+  showed the way to a *permanent* form: `validate_tenant_ingress_triggers.py` derives the routability-changing
+  store methods from `TenantStore` instead of listing them, so it reds on a new one too (bite-tested both
+  ways), and it is pinned as guard-gap case 14. A CR that says how to *falsify* a claim is worth more than one
+  that says what to assert.
+- **Process, both directions.** The session honoured the phase order, the full guard glob per phase, and small
+  per-phase commits on `main`; the one convention it strained is *each phase ends verifiable* — the contracts
+  commit necessarily leaves the backend uncompilable, which is now written down as a property of
+  contracts-first rather than left as a thing each session rediscovers. On the human side there was nothing to
+  correct: the brief pinned the three findings the refine session had paid for (full regenerate, DB-resolved
+  domain, K8s out of scope) and each of the three was a place where the obvious shortcut is wrong.

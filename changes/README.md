@@ -48,6 +48,14 @@ A small CR is single-phase. Each phase ends with the repo in a
 working, verifiable state (its own "Done when:"). The natural seam is the dependency order:
 contracts → backend → web. **Genuinely independent work = separate CRs, not phases.**
 
+**A contracts phase that ADDS an operation is the one phase that cannot end green everywhere, and that is
+correct rather than a violation of the rule above.** The generated `…Api` interface gains a method the moment
+the spec does, so the `…Resource` implementing it no longer compiles until the backend phase — there is no
+ordering that avoids this and no reason to want one. Its "Done when" is therefore the checks that *can* run
+(`npm run generate:api` + `npm run check`, the contracts guards), stated as exactly that; do not reach for a
+stub implementation in the contracts commit to make `./gradlew check` green, which buys a green tick by adding
+a second thing to remember to delete.
+
 ### The CR carries the locator, not the number — run it, don't estimate, don't freeze
 
 A CR's inventory states
@@ -420,6 +428,19 @@ check is added as a **permanent guard** (a `scripts/` validator step or CI grep)
 silently regress. The tell that this was needed: an audit finding for a rule that already existed *in prose* but
 nothing enforced (e.g. the styleguide mandated `@ConfigMapping`, yet 28 sites drifted). If a one-shot check
 genuinely suffices, the CR says why.
+
+### A guard derives its anchor set from the code; it does not list it
+
+**§ *the locator, not the number* applied to a guard's own subject.** A guard that names *what* to check —
+"these five call sites", "these three columns" — is only ever as complete as the day it was written, and the
+case it will miss is the one added after it: a sixth site is not a broken assertion, it is an assertion nobody
+made. `validate_tenant_ingress_triggers.py` was specified as *"grep `TenantHandler` for each of the five
+mutating methods"* and is instead written as *"a routability-changing store method is one whose body creates,
+deletes, or `UPDATE`s the `domain`/`status` column — find them in `TenantStore`, then require each caller to
+reproject"*. Both bite identically on a removed call; only the second bites on a **newly added** store method,
+which was verified by forging one. Where a set genuinely cannot be derived, listing it is fine — but then the
+guard says so under its **limit**, because "this list is hand-maintained" is exactly what a reader needs to know
+before adding the sixth thing.
 
 ### Run a new guard's predicate against the UNTOUCHED tree before you write it down
 
