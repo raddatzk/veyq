@@ -106,4 +106,7 @@ Account existiert, schließt sich die Setup-Seite endgültig.
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (key hierarchy, operator-blind),
   [Account & Key Model](../../account/enablers/en.account.key-model.md) (cold key birth, Emergency Kit),
   [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md) (tenant routing, scopes)
+- Decisions: [ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md) — this flow is served from
+  the separate admin surface, not the main app, by decision (the most privileged single action an instance
+  takes is also the one moved furthest from the public origin); the flow itself is unchanged by that move.
 - Related use-cases (planned): account login, create-tenant-invite-owner

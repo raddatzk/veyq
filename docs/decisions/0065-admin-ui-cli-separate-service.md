@@ -25,26 +25,71 @@ Forces:
 - **[ADR 0050](0050-operator-config-secret-encryption.md)'s config-secret KEK is a file on the app host**; a
   second component must not gain its own access path to it or to the DB, or the instance now has two places
   holding operator secrets instead of one.
+- **`web/src/features/admin/**` is not actually admin-only** (measured at refine time, `git log` +
+  cross-import grep): three core-app flows reachable by ordinary or anonymous users import from it —
+  `TenantJoinView.vue` (accepting a tenant invite), `TermsAcceptView.vue` (any member re-accepting updated
+  terms), and `activeSpace.ts` (reads `getTenantTerms`) — plus four files that are whole-instance
+  backup/restore E2E rehearsals (ADR 0056) parked there only incidentally. A literal directory move would
+  break all four. The one that reshapes this ADR's own reasoning: `setupServer.ts` (the first-run
+  Server-Owner registration, `SetupView.vue`) performs a full cold account birth — identity keypair, Master
+  Key wraps, Emergency Kit — the same `shared/crypto/v1` machinery as any member registration, which
+  contradicts this ADR's original "admin touches no client-side crypto" premise. Resolved in Decision below by
+  moving setup **with** the admin surface rather than leaving it behind, on the argument that first-run setup
+  is if anything the *most* privileged single action an instance ever takes (it mints the account with total
+  control) and is a natural fit for a restricted-reachability surface — and sharing the one crypto module
+  genuinely needed, rather than either duplicating it or excluding setup from the move.
 
 ## Decision
 
 **The admin surface becomes its own container (`admin`), and stays a pure client of the existing backend
 Admin API — no new backend surface, no direct DB or KEK access.**
 
-- **Web UI.** `web/src/features/admin/**` moves into its own frontend build, served by its own container. It
-  reverse-proxies `/api/*` back to the instance's backend from **its own origin** (whatever domain or
-  `localhost` reaches the `admin` container), so the browser session stays same-origin regardless of where
-  the container is reached from — this avoids reopening the cross-origin refresh-cookie cost the trusted-web
-  SaaS track already flagged as expensive (inbox #53: "cross-origin auth (breaks the same-origin cr-0055
-  refresh-cookie)"). Authentication is the existing Server-Owner session, unchanged.
-- **CLI.** The same container ships a CLI entry point that is **also** an HTTP client of the backend Admin
-  API (using a Server-Owner credential supplied to the container) — no duplicated business logic, no
-  independent authz decisions. A break-glass, direct-DB/file CLI mode (for when the backend itself is down)
-  is an explicit **non-goal** of this ADR: it would reopen the "second component touches secrets" problem
-  this decision exists to avoid, and nothing today needs it.
+- **Web UI — a new package, sharing only crypto with `web/` via a minimal npm workspace.** `admin-web/` gets
+  its own `package.json` + Vite build + `index.html`, its own narrow generated API client (from
+  `contracts/api/tenants.openapi.yaml` + `contracts/api/instance.openapi.yaml`, mirroring `scopes.openapi.yaml`'s
+  `ScopeKind` if the moved code still needs it), and its own router/state/UI — none of that is shared with
+  `web/`. The **one** thing that is: `shared/crypto/v1` + `accountBirth` are extracted into a small internal
+  workspace package both `web/` and `admin-web/` depend on — the only genuinely shared surface, and the one
+  place duplication would be a security defect rather than a maintenance nuisance, per this ADR's own
+  Context finding. Everything else stays independent per package on purpose (no shared UI-component library,
+  no shared router) — the point of the workspace is that one crypto module, not general code-sharing.
+  - **What moves**: the genuinely Server-Owner-only, ongoing-administration surface — tenant CRUD (create,
+    list, resend, reassign, revoke, change-domain, suspend, reactivate), per-tenant mail settings, terms
+    authoring, release info — **and** first-run setup (`setupServer.ts`/`SetupView.vue`, Context above).
+  - **What stays in `web/`**: the tenant-invite **accept** side (`previewInvite`, `acceptInvite`,
+    `registerAndAccept`, `bornTenantScope`, `tenantError` — reachable by an anonymous invitee, not a Server
+    Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), and the four
+    backup/restore E2E rehearsals (unrelated to this feature, parked under `features/admin/` only
+    incidentally). These are relocated out of `features/admin/**` into an accurate home inside `web/` — the
+    exact destination is the CR's inventory, not this ADR's.
+  - The lightweight "is this caller a Server Owner" probe (`serverRole.ts`) stays in `web/` too — it is what
+    lets the main SPA conditionally show a link *to* the admin surface, and `TermsAcceptView`'s
+    `resetServerRole` call needs it regardless. `admin-web` performs its own independent probe against the
+    same backend endpoint on load; the two are not shared state, since a separate origin does not even share
+    the session cookie once `ADMIN_DOMAIN` differs from the app's.
+  It reverse-proxies `/api/*` back to the instance's backend from **its own origin** (whatever domain or
+  `localhost` reaches the `admin` container) — **nginx**, serving the built static assets and reverse-proxying
+  `/api/*`, with the backend's address templated into its config at container start (`envsubst` over an
+  `nginx.conf.template`, reading a `BACKEND_URL` env var) — so the browser session stays same-origin
+  regardless of where the container is reached from, avoiding the cross-origin refresh-cookie cost the
+  trusted-web SaaS track already flagged as expensive (inbox #53: "cross-origin auth (breaks the same-origin
+  cr-0055 refresh-cookie)"). Authentication is the existing Server-Owner session, unchanged — first-run setup
+  simply happens to be the one Admin API call that needs no prior session at all.
+- **CLI — Node.js, in the same package, added in a follow-up CR.** The same container's build ships a CLI
+  entry point that is **also** an HTTP client of the backend Admin API (using a Server-Owner credential
+  supplied to the container) — written in Node.js specifically so it can import the **same generated API
+  client** `admin-web/`'s UI uses, rather than a second implementation in another language: "no duplicated
+  business logic" (Forces) means the same code, not merely the same wire contract. This is real code reuse,
+  not just parity — worth stating because the repo's general convention is Python for scripts/tooling, which
+  this deliberately departs from as a shipped product feature, not dev tooling. A break-glass, direct-DB/file
+  CLI mode (for when the backend itself is down) is an explicit **non-goal** of this ADR: it would reopen the
+  "second component touches secrets" problem this decision exists to avoid, and nothing today needs it.
 - **Exposure is an operator choice, not a build-time one — two modes of the same image:**
-  - **Localhost-only.** No Traefik/Ingress router at all; reached via `docker compose exec`, a port bound to
-    `127.0.0.1`, or an SSH tunnel.
+  - **Localhost-only (the default).** No Traefik/Ingress router at all; reached via `docker compose exec`, a
+    port bound to `127.0.0.1`, or an SSH tunnel. Setup moving here is a genuine sequencing improvement, not
+    just a security posture: first-run setup no longer needs `VEYQ_DOMAIN`'s DNS/TLS to be live at all
+    (`docker compose up` + `http://localhost:PORT` is enough), where today it does, because setup lives in
+    the main SPA served at that domain.
   - **Own domain.** An optional static `ADMIN_DOMAIN` + router/TLS label, the same fixed-domain pattern
     `VEYQ_DOMAIN` used before [ADR 0063](0063-database-driven-tenant-ingress.md) — the admin surface is 1:1
     with the instance, not per-tenant, so it needs none of that ADR's dynamic multi-domain machinery.
@@ -65,6 +110,10 @@ Admin API — no new backend surface, no direct DB or KEK access.**
 - **Migration cost.** `web/src/features/admin/**`, its router entries and its tests move to a new frontend
   package — scoped and grepped at CR time, not estimated here (`docs/ai/README.md`'s "decisions over
   keystrokes").
+- **Two CRs, not one — the UI move is independently shippable.** The web extraction (new package, container,
+  nginx, exposure modes) stands on its own the moment it's done: an operator can already firewall the admin
+  surface off the main origin. The CLI is additive to the same container's build and lands in a follow-up CR
+  once the extraction has landed — "genuinely independent work" per `changes/README.md`, not a phase split.
 - **Ships as part of [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s Helm chart too**, with the same
   two exposure modes expressed as chart values.
 - **Rejected — keep it embedded, gate exposure with a feature flag.** Cheaper to build, but the flag itself
