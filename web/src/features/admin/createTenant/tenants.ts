@@ -45,6 +45,14 @@ export function reassignInvite(tenantId: string, ownerEmail: string): Promise<Te
   return tenantsApi().reassignTenantInvite({ tenantId, reassignOwnerRequest: { ownerEmail } })
 }
 
+/** Move a tenant to a different domain (uc.admin.create-tenant). The one tenant-admin write that is **not**
+ *  PENDING-only — a domain is how a tenant is reached, not part of its invite lifecycle. What makes the new
+ *  address actually resolve is the server-side ingress projector (ADR 0063), not anything the client does.
+ *  409 `domain_taken` if another tenant holds it, 409 `tenant_not_pending_or_active` if this one is suspended. */
+export function changeTenantDomain(tenantId: string, domain: string): Promise<void> {
+  return tenantsApi().changeTenantDomain({ tenantId, changeDomainRequest: { domain } })
+}
+
 /** Revoke a pending tenant. */
 export function revokeTenant(tenantId: string): Promise<void> {
   return tenantsApi().revokeTenant({ tenantId })

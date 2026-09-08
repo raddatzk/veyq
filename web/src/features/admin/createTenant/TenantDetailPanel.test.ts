@@ -16,6 +16,7 @@ vi.mock('./tenants', () => ({
   resendInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
   reassignInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
   revokeTenant: vi.fn().mockResolvedValue(undefined),
+  changeTenantDomain: vi.fn().mockResolvedValue(undefined),
   suspendTenant: vi.fn().mockResolvedValue(undefined),
   reactivateTenant: vi.fn().mockResolvedValue(undefined),
   tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
@@ -26,7 +27,7 @@ vi.mock('../../../shared/inviteLink', () => ({
 }))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
-import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant } from './tenants'
+import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError } from './tenants'
 
 const i18n = createI18n({
   legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false,
@@ -40,6 +41,9 @@ const i18n = createI18n({
         statusSuspended: 'Suspended', suspend: 'Take offline', reactivate: 'Bring back online',
         suspendConfirm: 'offline?', suspended: 'offline', reactivated: 'online',
         suspendedHint: 'This tenant is offline.',
+        changeDomainTitle: 'Move address', changeDomainSubmit: 'Move', changeDomainHint: 'hint',
+        changeDomainConfirm: 'move to {domain}?', domainChanged: 'moved',
+        domainTaken: 'taken', domainNotMovable: 'offline tenants cannot move', domainInvalid: 'not an address',
       },
       members: { copyLinkIntro: 'copy', copyLink: 'link', copied: 'copied' },
       common: { done: 'Done' },
@@ -59,6 +63,9 @@ const SUSPENDED = { tenantId: 't-3', name: 'Offline', domain: 'off.example', own
 
 const mountPanel = (tenantId = 't-1') => mount(TenantDetailPanel, { props: { tenantId }, global: { plugins: [i18n], stubs } })
 const btn = (w: ReturnType<typeof mountPanel>, label: string) => w.findAll('button').find((b) => b.text() === label)!
+// The move form submits (so Enter works), and the stubbed Button emits only a click — so the test drives the
+// form's own submit rather than the button, which is the event the component actually listens for.
+const submitMove = (w: ReturnType<typeof mountPanel>) => w.find('form.change-domain').trigger('submit')
 
 describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, web)', () => {
   beforeEach(() => {
@@ -156,6 +163,66 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     await flushPromises()
     expect(revokeTenant).toHaveBeenCalledWith('t-1')
     expect(push).toHaveBeenCalledWith('/settings')
+  })
+
+  it('moves an ACTIVE tenant to a new address, confirm-gated, and reloads in place', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    // Prefilled with where the tenant is now, so the field reads as "the address" and not as an empty command.
+    expect((w.findAll('input')[0].element as HTMLInputElement).value).toBe('live.example')
+
+    await w.findAll('input')[0].setValue('moved.example')
+    window.confirm = () => false
+    await submitMove(w)
+    await flushPromises()
+    expect(changeTenantDomain).not.toHaveBeenCalled()
+
+    window.confirm = () => true
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, domain: 'moved.example' } as never])
+    await submitMove(w)
+    await flushPromises()
+    expect(changeTenantDomain).toHaveBeenCalledWith('t-2', 'moved.example')
+    expect(w.text()).toContain('moved.example')
+  })
+
+  it('offers the move on a PENDING tenant too — unlike the invite controls', async () => {
+    // The one tenant-admin write that is not PENDING-only, asserted from the side that would otherwise be
+    // assumed: a pending tenant carries BOTH the move form and its invite controls.
+    const w = mountPanel()
+    await flushPromises()
+    expect(btn(w, 'Move')).toBeTruthy()
+    expect(btn(w, 'Resend')).toBeTruthy()
+  })
+
+  it('offers no move on a SUSPENDED tenant — the backend refuses it, so the UI does not ask', async () => {
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED as never])
+    const w = mountPanel('t-3')
+    await flushPromises()
+    expect(w.findAll('button').find((b) => b.text() === 'Move')).toBeUndefined()
+    expect(btn(w, 'Bring back online')).toBeTruthy() // control: the panel rendered, it just omits this one action
+  })
+
+  it('maps the move failures apart instead of showing one generic error', async () => {
+    // Three different fixes for the operator — pick another address / bring it back online / correct the form —
+    // so a single "that failed" would be the wrong answer to two of them.
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    window.confirm = () => true
+
+    for (const [failure, expected] of [
+      [{ status: 409, code: 'domain_taken' }, 'taken'],
+      [{ status: 409, code: 'tenant_not_pending_or_active' }, 'offline tenants cannot move'],
+      [{ status: 400, code: 'invalid_request' }, 'not an address'],
+    ] as const) {
+      await w.findAll('input')[0].setValue(`x-${expected.length}.example`)
+      vi.mocked(changeTenantDomain).mockRejectedValueOnce({ response: { status: failure.status } } as never)
+      vi.mocked(tenantError).mockResolvedValueOnce(failure as never)
+      await submitMove(w)
+      await flushPromises()
+      expect(w.text()).toContain(expected)
+    }
   })
 
   it('shows a not-authorized state on a 403', async () => {

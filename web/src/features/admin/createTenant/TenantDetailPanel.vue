@@ -11,7 +11,7 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import { listTenants, reactivateTenant, reassignInvite, resendInvite, revokeTenant, suspendTenant, type TenantSummary } from './tenants'
+import { changeTenantDomain, listTenants, reactivateTenant, reassignInvite, resendInvite, revokeTenant, suspendTenant, tenantError, type TenantSummary } from './tenants'
 import { buildInviteLink, copyText } from '../../../shared/inviteLink'
 import { useAsyncData, loadErrorKind } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -31,6 +31,8 @@ const tenant = ref<TenantSummary | null>(null)
 const actionError = ref('')
 
 const email = ref('')
+// The change-address form is prefilled with the current domain, so the field shows where the tenant is now.
+const domain = ref('')
 // After a resend/reassign, show the fresh invite link to copy (cr-0080 — the owner hands it off, no mailer).
 const inviteUrl = ref('')
 const copied = ref(false)
@@ -49,7 +51,10 @@ const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
   inviteUrl.value = ''
   const found = (await listTenants()).find((x) => x.tenantId === props.tenantId) ?? null
   tenant.value = found
-  if (found) email.value = found.ownerEmail
+  if (found) {
+    email.value = found.ownerEmail
+    domain.value = found.domain
+  }
   return found
 }, { onError: on401 })
 watch(() => props.tenantId, () => reload())
@@ -95,6 +100,31 @@ async function setSuspended(suspend: boolean) {
   } catch (e) {
     on401(e)
     if (!isUnauthorized(e)) actionError.value = t('tenant.actionFailed')
+  }
+}
+
+// Change address (uc.admin.create-tenant). Offered on PENDING and ACTIVE alike — a domain is how a tenant is
+// *reached*, not part of its invite lifecycle — and confirm-gated, because the old address stops answering the
+// moment this returns. What makes the new one actually resolve is the server's ingress projector (ADR 0063);
+// there is nothing for the client to do about DNS or certificates beyond telling the operator it moved.
+async function changeDomain() {
+  const next = domain.value.trim().toLowerCase()
+  if (!tenant.value || next.length === 0 || next === tenant.value.domain) return
+  if (!window.confirm(t('tenant.changeDomainConfirm', { domain: next }))) return
+  actionError.value = ''
+  try {
+    await changeTenantDomain(props.tenantId, next)
+    toast.success(t('tenant.domainChanged'))
+    await reload()
+  } catch (e) {
+    on401(e)
+    if (isUnauthorized(e)) return
+    const { status, code } = await tenantError(e)
+    actionError.value =
+      code === 'domain_taken' ? t('tenant.domainTaken')
+        : code === 'tenant_not_pending_or_active' ? t('tenant.domainNotMovable')
+          : status === 400 ? t('tenant.domainInvalid')
+            : t('tenant.actionFailed')
   }
 }
 
@@ -154,6 +184,26 @@ async function copyInviteLink() {
           @click="setSuspended(true)"
         />
       </div>
+
+      <!-- Change address, on PENDING and ACTIVE alike (unlike the invite controls below, which are PENDING-only).
+           Hidden while SUSPENDED: the backend refuses it there, so offering it would only produce an error. -->
+      <form v-if="!isSuspended" class="veyq-form change-domain" @submit.prevent="changeDomain">
+        <label>
+          {{ t('tenant.changeDomainTitle') }}
+          <InputText v-model="domain" autocomplete="off" required />
+        </label>
+        <p class="settings-muted">{{ t('tenant.changeDomainHint') }}</p>
+        <div class="veyq-dialog-action-row">
+          <Button
+            type="submit"
+            :label="t('tenant.changeDomainSubmit')"
+            icon="pi pi-arrow-right"
+            severity="secondary"
+            outlined
+            :disabled="domain.trim().length === 0 || domain.trim().toLowerCase() === tenant.domain"
+          />
+        </div>
+      </form>
 
       <!-- A PENDING tenant's owner invite can be re-pointed (reassign), resent, or revoked; ACTIVE tenants are
            settled and carry no invite controls here. -->
