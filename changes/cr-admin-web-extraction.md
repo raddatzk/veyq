@@ -160,4 +160,58 @@ permanent guard extension, not a one-shot check.
 
 ## Retrospective
 
-_Filled at implementation close._
+**Closed 2026-09-08.** All five phases green, in order; three package checks (`packages/crypto` 46,
+`web` 984, `admin-web` 58) plus all 29 `validate_*.py`. The four bite tests all ran; two of them found the CR
+wrong about itself.
+
+**What the CR got wrong, and what that teaches.**
+
+1. **The three-way split was a four-way split.** Decision 1 put `TenantTermsPanel` and
+   `TenantMailSettingsPanel` on the "moves to admin-web" side. Measured: both read `activeSpace.tenantId`,
+   both hang off the settings hub's `ScopeKind.Tenant` category — *not* behind `serverRole.canManage` — and
+   the backend gates both with `403 not_tenant_owner`. A tenant owner is by construction an ordinary user who
+   accepted an invite, so moving them would have removed a tenant's own email and terms configuration from
+   everyone who is not also the Server Owner: a product change, not a refactor. The refine's method was
+   right and its net one audience too small — a cross-import grep finds who reaches *into* a directory and is
+   structurally blind to a file that is owner-scoped by the state it *reads*. → rule in `changes/README.md`
+   (§ *cross-imports find who reaches IN*); ADR 0065 amended with the replacement heuristic (**ask which gate
+   the backend applies**).
+2. **The generated-client scope could not authenticate.** Decision 3 listed tenants + instance (+ scopes);
+   with no auth spec every admin call is 401. `admin-web` also generates from `auth.openapi.yaml` and carries
+   a minimal Model B sign-in. ADR 0065 amended.
+3. **The crypto bite's own lever moved nothing.** `t: 3 → t: 4` in `v1.ARGON` left the entire tree green —
+   nothing asserted the production Argon2id cost, and Stryker has no numeric-literal mutator, so it was
+   outside the mutant set that scores `v1.ts` 100 %. A silent cost *downgrade* was invisible to every gate.
+   Closed by pinning `v1.ARGON` against the contract's `kdf_params` vector; the CR's injection then reddens as
+   written. → rule in `changes/README.md` (§ *a named lever that moves nothing*).
+4. **Phases 1–3 could not leave the trust chain green while coverage waited for phase 5**, because phase 3
+   deletes the files phase 5's refs point at. Coverage refs therefore moved *with* their files, in the same
+   commits; phase 5 kept the surface addition's bite-proofs and the completeness sweep. `changes/README.md`
+   already says coverage is part of the work rather than a follow-up — this is that rule meeting a CR that
+   scheduled it as one.
+
+**What the CR got right and would have been missed otherwise.** Doing phase 1 in place first was the whole
+reason (1) was caught cheaply: the split was scrutinised while the tree was still verifiable end-to-end. And
+"re-run the locators, don't trust the counts" is what surfaced it — the file/line tally was accurate; the
+*classification* was not.
+
+**Three defects only the container and the live run could find**, none visible to any check that runs in the
+repo:
+- `jsqr` was an **undeclared dependency** of `admin-web`, satisfied locally by npm-workspace hoisting from
+  `web/`. Green `npm run check`, red `docker build`. → `admin-web/CLAUDE.md`.
+- nginx **crash-looped** when the backend was not up: a literal `proxy_pass` resolves its upstream at
+  config-parse time. Wrong failure mode for the surface an operator reaches to *diagnose* an instance.
+- `add_header` **does not merge across levels**, so the `= /index.html` location — where `try_files` sends
+  every SPA route — inherited none of the four security headers. → comment at that line.
+- Two i18n groups were never lifted, so the Emergency-Kit screen rendered `kit.download` as a button label,
+  on the one screen where the owner gets a single chance to save their Secret Key. → a catalog test with
+  three cases, all bite-proven.
+
+**Found and deliberately not fixed here** (each its own work item): a first-ever `up` of the production stack
+cannot start the app at all — it runs as uid 10001 and its two named volumes come up root-owned, so the tenant
+ingress projector dies with `AccessDeniedException`; and `web/`'s password floor plus breach warning had
+exactly one caller, `SetupView`, which moved out, leaving three password-set points enforcing nothing.
+
+**The setup-reachability claim is now run rather than named.** Whole prod stack up with
+`VEYQ_DOMAIN=veyq-no-dns.example` (NXDOMAIN) and `ADMIN_DOMAIN` unset; setup → Emergency Kit → sign-in →
+console → create tenant (invite copy-link intact) → release panel, all over `http://localhost:18081`.

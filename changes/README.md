@@ -195,6 +195,22 @@ exception flow, one locator line must find that surface's gate** — the route g
 the capability check — beside the line that finds the insertion point. It is one `grep`, it runs at refine, and
 it is the difference between a feature that is implemented and a feature that is reachable.
 
+**And its mirror, when the CR MOVES code rather than adds it: cross-imports find who reaches IN, never who a
+file is scoped FOR.** The fourth tell asks whether the person in the exception flow can reach a new surface;
+this one asks who a file already belongs to before you move it somewhere they cannot go.
+`cr-admin-web-extraction`'s refine classified `web/src/features/admin/**` by directory plus a cross-import
+grep, and correctly found the anonymous and ordinary-member callers reaching into it. It put
+`TenantTermsPanel` and `TenantMailSettingsPanel` on the "Server-Owner only, moves out" side — because nothing
+imports them from outside. Nothing does: they read `activeSpace.tenantId` and are mounted by the settings hub
+under its tenant category, so they are **owner-scoped by the state they read**, and an import graph is
+structurally blind to that. The backend gates both with `403 not_tenant_owner`, not with the Server-Owner
+gate, and a tenant owner is by construction an ordinary user who accepted an invite — so the move would have
+taken a tenant's own email and terms configuration away from everyone who is not also the Server Owner. A
+product change, discovered at implement time, in a CR whose whole premise was that a literal directory move
+breaks things. **So: classify by the gate the BACKEND applies, not by the directory and not by the import
+graph** — `grep -rn '403\|not_tenant_owner\|ServerOwner' <the endpoint's handler>` answers it in one line, and
+it answers for the file that nobody imports.
+
 **A fifth tell: the cleanup was specified against the state that prompted the thought, not against the
 predicate.** A CR that says *"a row reaching `EXPIRED` unspent revokes what it minted"* has written the case it
 was thinking about, and every other terminal state reaches the same hazard unasked. The device-pairing CR did
@@ -680,6 +696,31 @@ restore hands back an empty shell. The test did not get stronger; the semantics 
 attempt to bite it surfaced which semantics the use-case had meant all along. So: **an unbiteable test is a
 design question, asked in the cheapest possible place**, and it is worth one round of "what *would* this cost, in
 what the user sees?" before deciding the lever is at fault.
+
+### A named lever that moves nothing is EITHER a design question or an unasserted property — decide which
+
+The section above sends an unbiteable test back to the design. That is one of two answers, and reaching for it
+first is a mistake when the other one applies: the lever moved nothing because **nothing in the tree asserts
+the property at all**, in which case the bite has just found a coverage hole and closing it is the CR's work.
+The two are told apart by one question — *would a correct implementation and a broken one produce different
+observable output?* If no, it is the design (above). If yes, and everything is still green, the assertion is
+missing.
+
+`cr-admin-web-extraction` named its lever precisely: *"inject a one-character change into the workspace
+package's Argon2id parameters and assert both suites go red"*. `t: 3 → t: 4` in `v1.ARGON` left the **entire
+tree** green — the crypto package's 44 tests and web's 1018 — because the conformance battery passes the
+params the *vectors* carry and `accountBirth`'s KAT mocks the KEKs, so no test anywhere pinned the production
+cost. Stryker did not cover it either: it has no numeric-literal mutator, so `t: 3` was never in the mutant set
+that scores that file 100 %. A silent Argon2id **downgrade** (t=3 → t=1, m=32 MiB → 64 KiB) was invisible to
+every gate the repo owns. The fix was neither a different lever nor a different design: pin `v1.ARGON` against
+the contract's own `kdf_params` vector — an agreement check rather than the literal restating itself — after
+which the CR's original one-character injection reddens exactly as written. (`dkLen` was the one field that
+already bit, and only structurally: a 31-byte AES key throws downstream.)
+
+**The general shape: a lever aimed at a CONSTANT is the one most likely to move nothing**, because a constant
+has no behaviour of its own — it is asserted only where some test compares it to an independent source. Before
+writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
+before touching either the lever or the design.
 
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
