@@ -7,8 +7,8 @@ info:
     (uc.admin.create-tenant, Slice A / cr-0009). A Server Owner creates a tenant by entering a name, a
     domain and the owner's email; the server validates the domain is free, creates the tenant in PENDING,
     and mints a single-use, time-limited invite token bound to the owner email (delivered out-of-band by
-    email). The Server Owner can list all tenants and, for PENDING ones, resend the invite, reassign the
-    owner email, or revoke the tenant.
+    email). The Server Owner can list all tenants, move any non-suspended one to a different domain, and, for
+    PENDING ones, resend the invite, reassign the owner email, or revoke the tenant.
 
     Operator-blind is not at stake here: name, domain and owner-email are low-sensitivity operational
     metadata (host routing needs the domain anyway), and the invite is a **bootstrap secret, not a key**
@@ -22,7 +22,7 @@ info:
     are soft (never hard-deleted inline), so a replayed superseded/consumed token is recognised and
     rejected. A scheduled purge removes terminal-state invites later.
 
-    The **admin** operations (create / list / resend / reassign / revoke) require the global **Server
+    The **admin** operations (create / list / change-domain / resend / reassign / revoke) require the global **Server
     Owner** role; the **accept** family does not — `accept/preview` and `accept/register` are public (gated
     only by possession of the bootstrap secret), and `accept` needs any authenticated caller (being the
     invited owner is a domain check → 403 `not_invited_owner`, not a role). Authorization is enforced by
@@ -32,7 +32,7 @@ info:
 tags:
   - name: tenants
     description: >
-      Server-Owner tenant administration (create / list / invite resend·reassign / revoke). One tag = one
+      Server-Owner tenant administration (create / list / change-domain / invite resend·reassign / revoke). One tag = one
       resource interface owning the whole `/api/tenants` subtree (avoids the greedy class-level @Path that
       a second tag rooted at the same prefix would cause).
 
@@ -237,6 +237,67 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_pending }
+
+  /api/tenants/{tenantId}/change-domain:
+    post:
+      tags: [tenants]
+      operationId: changeTenantDomain
+      summary: Move a tenant to a different domain.
+      description: >
+        Re-points the tenant's domain↔tenant mapping, and — via the ingress projector
+        ([ADR 0063](../../docs/decisions/0063-database-driven-tenant-ingress.md)) — makes the new domain
+        actually routable while the old one stops resolving. Available on a **PENDING or ACTIVE** tenant,
+        unlike resend/reassign/revoke: a domain is how a tenant is *reached*, not part of its invite
+        lifecycle, so a live tenant may need to move exactly as often as a pending one. A **SUSPENDED**
+        tenant is refused (`409 tenant_not_pending_or_active`) — reactivate first; moving a tenant whose
+        whole point is "leave it alone" is needless complexity. The new domain is validated by the same
+        rules as at creation (well-formed, and free across the instance). Server-Owner only. Operational
+        metadata only: no key, grant or content row is read or written.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ChangeDomainRequest" }
+            example: { domain: moved.example.com }
+      responses:
+        "204":
+          description: The tenant now answers on the new domain.
+        "400":
+          description: The request was malformed (missing/invalid domain).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+        "404":
+          description: No tenant with that id.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "409":
+          description: >
+            The domain is already mapped to a tenant (`domain_taken`), or the tenant is SUSPENDED and its
+            domain may not be moved (`tenant_not_pending_or_active`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: domain_taken }
 
   /api/tenants/{tenantId}/member-invites:
     post:
@@ -1180,6 +1241,20 @@ components:
           maxLength: 254
           example: kevin@example.com
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+
+    ChangeDomainRequest:
+      type: object
+      required: [domain]
+      properties:
+        domain:
+          x-veyq-visibility: public
+          type: string
+          description: >
+            The tenant's new domain (its Host) — same rules as at creation: operational cleartext, unique
+            across the instance, lowercase hostname, trimmed on input.
+          maxLength: 253
+          example: moved.example.com
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 253) @field:jakarta.validation.constraints.Pattern(regexp = "^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")'
 
     ReassignOwnerRequest:
       type: object
