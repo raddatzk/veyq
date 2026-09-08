@@ -85,6 +85,23 @@ These are operational actions on cleartext metadata; they touch **no keys**. Act
 tenant is a **separate** use-case: suspending/reactivating it is [uc.admin.suspend-tenant](uc.admin.suspend-tenant.md)
 ([ADR 0066](../../../decisions/0066-tenant-suspension.md)); forcing an owner handoff remains future work.
 
+**Change domain** is available on a tenant regardless of status (`PENDING` or `ACTIVE`) — unlike resend/
+reassign/revoke, which apply only while `PENDING`. A domain is how the tenant is *reached*, not part of its
+invite lifecycle, so a live tenant may need to move to a new domain exactly as often as a pending one does.
+Changing it is only meaningful end-to-end together with [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)'s
+ingress projector, which is what actually makes the new domain routable and the old one stop resolving.
+
+## A created tenant's domain must actually route — not just exist in the database
+
+Every postcondition above states a domain↔tenant **mapping** exists; on a server with more than one
+tenant, a mapping alone does not make a domain reachable — something has to tell the reverse proxy. This is
+[ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)'s ingress projector: on create, domain
+change, suspend and reactivate, the backend regenerates the routing description from the `tenant` table
+itself, so **"the tenant exists"** and **"the tenant's domain resolves"** cannot drift apart. The same
+per-tenant-domain correctness extends to presigned blob URLs ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)) —
+signed against whichever tenant domain the request actually arrived on, not a single instance-wide default,
+so a second tenant's media upload does not silently receive a URL for the *first* tenant's origin.
+
 ## Tenant lifecycle — state
 
 ```mermaid
