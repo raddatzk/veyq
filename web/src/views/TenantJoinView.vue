@@ -12,6 +12,8 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
+import { usePwnedWarning } from '../features/account/passwordWarning'
+import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
 import { sealName } from '../features/account/profile/profile'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
@@ -56,6 +58,7 @@ const username = ref('')
 const firstName = ref('')
 const lastName = ref('')
 const password = ref('')
+const { breachCount } = usePwnedWarning(password)
 const secretKeyDisplay = ref('')
 const kitReady = ref(false)
 // sign-in form
@@ -95,7 +98,12 @@ onMounted(async () => {
 
 /** Register step 1: build the account on-device and show its Emergency Kit before activating. */
 async function prepareRegistration() {
-  if (!username.value.trim() || password.value.length === 0) return
+  // The length floor belongs to THIS branch only. `password` is one ref serving three different acts in this
+  // view — register (here), sign in as an existing user, and re-authenticate after a lapsed session — and
+  // only the first one SETS a password. Gating the other two would lock out an account whose password
+  // predates the policy, on a screen whose whole job is letting them in. Client-side by construction, too:
+  // under Model B (ADR 0003) the password never leaves the device, so there is no server rule to mirror.
+  if (!username.value.trim() || password.value.length < MIN_PASSWORD_LENGTH) return
   error.value = ''
   busy.value = true
   try {
@@ -266,9 +274,13 @@ async function mapError(e: unknown): Promise<string> {
             <small class="field-hint">{{ t('tenant.join.nameHint') }}</small>
           </template>
           <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" /></label>
+          <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
+          <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
+            t('password.pwnedWarning', { count: breachCount })
+          }}</Message>
           <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
           <Button type="submit" :label="t('tenant.join.continue')" icon="pi pi-arrow-right" :loading="busy"
-                  :disabled="!username.trim() || password.length === 0" />
+                  :disabled="!username.trim() || password.length < MIN_PASSWORD_LENGTH" />
         </form>
       </template>
 

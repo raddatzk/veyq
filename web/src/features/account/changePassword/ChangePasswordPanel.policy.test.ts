@@ -1,0 +1,114 @@
+// @vitest-environment happy-dom
+// The password floor on the change-password screen. Its own screen-level file rather than a case bolted onto
+// `changePassword.test.ts`, which tests the data layer: what is asserted here is what the FORM refuses, and
+// the data layer never sees a password the form declined to send.
+//
+// The floor is client-side by construction, not by omission. Under Model B (ADR 0003) the password never
+// leaves this device — the server receives an Ed25519 public key derived from it and stores no credential at
+// all — so there is no server rule to mirror and none that would catch a bypass. That makes this check the
+// whole control rather than a convenience over a server-side one, which is why it is pinned at the boundary.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+
+vi.mock('./changePassword', () => ({
+  changePassword: vi.fn().mockResolvedValue(undefined),
+  ChangePasswordRefused: class extends Error {},
+}))
+vi.mock('../rememberMe/deviceKeyWrap', () => ({
+  isRememberSupported: () => false,
+  rememberThisDevice: vi.fn(),
+}))
+vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => false }) }))
+vi.mock('../passwordWarning', () => ({ usePwnedWarning: () => ({ breachCount: { value: 0 } }) }))
+
+import ChangePasswordPanel from './ChangePasswordPanel.vue'
+import { changePassword } from './changePassword'
+
+const stubs = {
+  Button: { props: ['label', 'loading', 'disabled'], template: '<button :disabled="disabled">{{ label }}</button>' },
+  Message: { template: '<div class="msg"><slot /></div>' },
+  InputText: {
+    props: ['modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
+  Password: {
+    props: ['modelValue'],
+    template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
+}
+
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: {
+    en: {
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.' },
+      unlock: { secretKey: 'Secret Key' },
+      changePassword: {
+        title: 'Change password', sub: 's', currentLabel: 'Current', newPasswordLabel: 'New', confirmLabel: 'Repeat',
+        submit: 'Change', submitting: 'Changing', done: 'Done', mismatch: 'Passwords differ',
+        forgotten: 'I forgot it', forgottenNote: 'note', errorLocked: 'locked', errorAttestation: 'refused',
+        errorNoFloor: 'no floor', errorFailed: 'failed', secretKeyHint: 'hint', rememberOffer: 'remember',
+      },
+    },
+  },
+})
+
+/** `[current, new, confirm]` — the three password fields, in template order. */
+const passwords = (w: ReturnType<typeof mount>) => w.findAll('input[type="password"]')
+const submitDisabled = (w: ReturnType<typeof mount>) =>
+  w.find('button[type="submit"]').attributes('disabled') !== undefined
+
+beforeEach(() => vi.clearAllMocks())
+
+describe('ChangePasswordPanel — the password floor', () => {
+  it('refuses a new password under the floor and names it; accepts exactly at the floor', async () => {
+    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    await flushPromises()
+
+    const pw = passwords(w)
+    await pw[0].setValue('the-current-one')
+    await pw[1].setValue('short')  // 5 < 10
+    await pw[2].setValue('short')
+    await w.find('input:not([type="password"])').setValue('the-secret-key')
+    await flushPromises()
+
+    expect(w.text()).toContain('Use at least 10 characters.')
+    expect(submitDisabled(w)).toBe(true)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).not.toHaveBeenCalled()
+
+    // The boundary, not merely "long enough": `<` vs `<=` here silently makes the floor 11.
+    await pw[1].setValue('0123456789')
+    await pw[2].setValue('0123456789')
+    await flushPromises()
+
+    expect(submitDisabled(w)).toBe(false)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).toHaveBeenCalledOnce()
+  })
+
+  it('does not apply the floor to the CURRENT password — it is proof of knowledge, not a new choice', async () => {
+    // An account whose password predates the policy must still be able to change it. Gating the field that
+    // proves you know the old one is the same mistake as gating a sign-in, one screen over.
+    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    await flushPromises()
+
+    const pw = passwords(w)
+    await pw[0].setValue('old')    // 3 < 10, and correctly irrelevant
+    await pw[1].setValue('a long enough new password')
+    await pw[2].setValue('a long enough new password')
+    await w.find('input:not([type="password"])').setValue('the-secret-key')
+    await flushPromises()
+
+    expect(submitDisabled(w)).toBe(false)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).toHaveBeenCalledWith('a long enough new password', 'the-secret-key', 'old')
+  })
+})

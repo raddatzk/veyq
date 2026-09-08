@@ -43,6 +43,7 @@ const i18n = createI18n({
         mailUnavailable: 'This server cannot send email yet', requestFailed: 'The request did not go through',
       },
       unlock: { secretKey: 'Secret Key', secretKeyHint: 'hint' },
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count} breaches.' },
     },
   },
 })
@@ -237,6 +238,39 @@ describe('RecoverView', () => {
 
     expect(w.text()).toContain('Passwords differ')
     expect(completeRecovery).not.toHaveBeenCalled()
+  })
+
+  it('refuses a password under the floor, and says which floor — the server cannot enforce one', async () => {
+    // Model B (ADR 0003): the password never leaves this device and the server stores no credential, so a
+    // length rule can only ever live here. That makes the client check the whole control rather than a
+    // convenience over a server-side one — which is why it is pinned, and pinned at the boundary.
+    withToken()
+    vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    const w = mountView()
+    await flushPromises()
+
+    await w.find('input').setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    const pw = w.findAll('input[type="password"]')
+    await pw[0].setValue('short')     // 5 < 10
+    await pw[1].setValue('short')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(w.text()).toContain('Use at least 10 characters.')
+    expect(completeRecovery).not.toHaveBeenCalled()
+
+    // Exactly at the floor is ACCEPTED — the boundary, not just "long enough". `<` vs `<=` here is the
+    // difference between a policy and an off-by-one nobody would notice.
+    await pw[0].setValue('0123456789')
+    await pw[1].setValue('0123456789')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(completeRecovery).toHaveBeenCalledOnce()
   })
 
   it('completes with the released material, never with a re-typed address', async () => {

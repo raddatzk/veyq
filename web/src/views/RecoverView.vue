@@ -14,6 +14,8 @@ import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
+import { usePwnedWarning } from '../features/account/passwordWarning'
+import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import Message from 'primevue/message'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
@@ -29,6 +31,7 @@ const email = ref('')
 const secretKey = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
+const { breachCount } = usePwnedWarning(newPassword)
 
 const busy = ref(false)
 const error = ref('')
@@ -127,6 +130,10 @@ async function openAccount() {
 }
 
 async function setNewPassword() {
+  // The floor is client-side by construction — under Model B (ADR 0003) the password never leaves this
+  // device, so there is no server rule to mirror. Checked here as well as disabling the button: this form is
+  // submitted by Enter as readily as by a click.
+  if (newPassword.value.length < MIN_PASSWORD_LENGTH) return
   if (newPassword.value !== confirmPassword.value) {
     error.value = t('recovery.mismatch')
     return
@@ -191,12 +198,17 @@ async function setNewPassword() {
           {{ t('recovery.confirmPassword') }}
           <Password v-model="confirmPassword" toggle-mask :feedback="false" input-id="recovery-confirm" required />
         </label>
+        <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
+        <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
+          t('password.pwnedWarning', { count: breachCount })
+        }}</Message>
         <p class="field-hint">{{ t('recovery.deviceNote') }}</p>
         <Button
           type="submit"
           :label="busy ? t('recovery.submitting') : t('recovery.submit')"
           icon="pi pi-check"
           :loading="busy"
+          :disabled="newPassword.length < MIN_PASSWORD_LENGTH"
         />
       </form>
 

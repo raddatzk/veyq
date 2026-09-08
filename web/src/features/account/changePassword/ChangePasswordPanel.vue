@@ -17,6 +17,8 @@ import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap
 import { masterKey } from '../../../app/vault'
 import { account } from '../../../app/account'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import { usePwnedWarning } from '../passwordWarning'
+import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../../../shared/passwordPolicy'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
@@ -32,11 +34,18 @@ const secretKey = ref('')
 const error = ref('')
 const done = ref(false)
 
+const { breachCount } = usePwnedWarning(newPassword)
+
 const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
+// The length floor is a CLIENT-side floor and cannot be anything else: under Model B (ADR 0003) the password
+// never leaves this device — the server receives an Ed25519 public key derived from it and stores no
+// credential at all — so there is no server-side rule this could mirror and none that would catch a bypass.
+// It is a courtesy to the person choosing, not a control on the account, and this comment exists so nobody
+// later "hardens" it by adding a check the operator-blind boundary forbids.
 const canSubmit = computed(
   () =>
     (forgotten.value || currentPassword.value.length > 0) &&
-    newPassword.value.length > 0 &&
+    newPassword.value.length >= MIN_PASSWORD_LENGTH &&
     secretKey.value.trim().length > 0,
 )
 
@@ -64,6 +73,11 @@ const { run, pending: busy } = useAsyncAction(
 
 async function submit() {
   error.value = ''
+  // Checked here as well as on the button. A disabled submit button is a hint, not a gate: the form is
+  // submitted by Enter as readily as by a click, and this handler is the only place both paths pass through.
+  // Caught by the test below, which submits the form directly and found `changePassword` called with a
+  // five-character password while the button sat correctly disabled.
+  if (newPassword.value.length < MIN_PASSWORD_LENGTH) return
   if (newPassword.value !== confirmPassword.value) {
     error.value = t('changePassword.mismatch')
     return
@@ -120,6 +134,10 @@ function startOver() {
           <label class="settings-field">
             {{ t('changePassword.newPasswordLabel') }}
             <Password v-model="newPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-new" />
+            <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
+            <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
+              t('password.pwnedWarning', { count: breachCount })
+            }}</Message>
           </label>
           <label class="settings-field">
             {{ t('changePassword.confirmPasswordLabel') }}
