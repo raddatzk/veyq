@@ -92,6 +92,21 @@ WORKDIR /work/
 # infra/docker-compose.prod.yml does exactly that, and scripts/validate_config_secret_persistence.py holds
 # the three files to it.
 #
+# /etc/traefik/dynamic is the SECOND such path and was missing until 2026-09-08 — the tenant-ingress
+# projection (ADR 0063) mounts a named volume there and the app writes the whole router set into it at
+# startup. Without the directory in the image there is nothing for Docker to seed the volume from, so it came
+# up root:root 0755 and the app — uid 10001 — died on its first write:
+#   java.nio.file.AccessDeniedException: /etc/traefik/dynamic/.tenants.yml<random>.tmp
+#       at TenantIngressProjector.writeAtomically(TenantIngressProjector.kt:134)
+# Quarkus fails the startup event, the container restart-loops, and a FIRST-EVER `docker compose up` of the
+# production stack therefore never had a running app. Measured, not reasoned: a fresh volume on this path
+# probes NOT writable from uid 10001 while the sibling on /var/lib/veyq probes writable, which is the whole
+# difference between a path this stage creates and one it does not. 0755, not 0700 like its sibling: this is
+# routing config the traefik container reads (read-only mount), not a secret.
+#
+# scripts/validate_app_volume_ownership.py now derives this set from the compose file rather than trusting
+# this comment, so the NEXT volume added to the app service cannot repeat it.
+#
 # NOT /work, and not a `VOLUME` declaration — two deliberate omissions:
 #   - /work already holds quarkus-app/. A named volume mounted there is seeded from the image ONCE and then
 #     never refreshed, so `up -d` with a newer tag would keep running the FIRST image's jar. An upgrade that
@@ -105,9 +120,10 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd -r -g 10001 veyq \
     && useradd -r -u 10001 -g veyq -s /usr/sbin/nologin veyq \
-    && mkdir -p /var/lib/veyq \
+    && mkdir -p /var/lib/veyq /etc/traefik/dynamic \
     && chmod 0700 /var/lib/veyq \
-    && chown -R 10001:10001 /work /var/lib/veyq
+    && chmod 0755 /etc/traefik/dynamic \
+    && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
 COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-app /work/quarkus-app
 # The deployment recipe travels INSIDE the image (ADR 0057 §3): a tool about to run a given image reads the
 # compose file and the env template out of that image instead of fetching them from a URL, so the recipe cannot
@@ -134,14 +150,16 @@ ENV VEYQ_VERSION="${VEYQ_VERSION}"
 ENV VEYQ_REVISION="${VEYQ_REVISION}"
 WORKDIR /work/
 # curl: healthcheck only; no ffmpeg (see runtime-jvm — no server-side transcode in an operator-blind core).
-# /var/lib/veyq: the config-secret mount point, for the same reasons spelled out on runtime-jvm above. Both
-# targets carry it because a guard anchored on one of them passes a Dockerfile whose other target drifted.
+# /var/lib/veyq (config secret) and /etc/traefik/dynamic (the ADR 0063 ingress projection): the two mount
+# points, for the reasons spelled out on runtime-jvm above. Both targets carry both because a guard anchored
+# on one of them passes a Dockerfile whose other target drifted.
 RUN microdnf install -y curl && microdnf clean all
 COPY --from=backend-build-native --chown=10001:10001 /code/backend/build/*-runner /work/application
 RUN chmod 0755 /work/application \
-    && mkdir -p /var/lib/veyq \
+    && mkdir -p /var/lib/veyq /etc/traefik/dynamic \
     && chmod 0700 /var/lib/veyq \
-    && chown -R 10001:10001 /work /var/lib/veyq
+    && chmod 0755 /etc/traefik/dynamic \
+    && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
 # The deployment recipe, at the same path as runtime-jvm and for the same reasons (ADR 0057 §3). Both targets
 # carry it — a tool extracting it from a published image cannot say which target that image was built from.
 COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml

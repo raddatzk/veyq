@@ -67,6 +67,15 @@ normally).
 
 - **New coupling, deliberately narrow.** `app` and `traefik` now share a volume for routing config only —
   never secrets, never content.
+  - **The shared volume's mount point must exist in the app image, owned by the runtime user** — added
+    2026-09-08 after this cost a stack that could not start. Docker seeds a fresh named volume from the image
+    directory it covers, ownership included; with no such directory the volume comes up `root:root`, the app
+    (uid 10001) cannot write it, and `TenantIngressProjector.onStartup` fails the Quarkus startup event —
+    so a **first-ever** `docker compose up` of the production stack restart-loops with the projector's
+    `AccessDeniedException` and never serves a request. It went unnoticed because this repository has no
+    remote and that stack had never actually been deployed. Held now by
+    `scripts/validate_app_volume_ownership.py`, which derives the paths from the compose file rather than
+    from this sentence.
 - **ACME rate limits become an operator-visible concern** once domains can be added faster than by hand;
   `infra/.env.example`'s existing `VEYQ_ACME_CASERVER` staging-server advice is the same mitigation, now
   worth surfacing at tenant-creation time too.
