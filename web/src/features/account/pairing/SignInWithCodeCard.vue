@@ -34,7 +34,7 @@ import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
-import type * as v1 from '../../../shared/crypto/v1'
+import type * as v1 from '@veyq/crypto/v1'
 
 // `gone`, `occupied` and `failed` are terminal and none offers a way back into this ceremony. `gone` is also
 // where a REFUSED proof lands: the trusted device seals nothing, the row expires, and the poll's 404 is the only

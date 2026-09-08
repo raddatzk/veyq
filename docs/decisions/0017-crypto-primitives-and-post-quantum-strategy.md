@@ -30,7 +30,7 @@ strategy; they do not choose it.
    re-encryption migration.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
    `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire.
-   `web/src/shared/crypto/v1.ts` is pinned to it by `web/src/shared/crypto/v1.conformance.test.ts`. Since the
+   `packages/crypto/src/v1.ts` is pinned to it by `packages/crypto/src/v1.conformance.test.ts`. Since the
    native surfaces were dropped (commit `7a1c4e9f`), that web test is the **only** stack asserting against the
    file, so it is now a single-implementation **regression pin** — it stops a refactor from silently moving a
    suite's bytes, not a cross-stack parity proof. The backend is *not* a second asserting stack: it performs no

@@ -1,0 +1,13 @@
+{
+  "name": "veyq",
+  "private": true,
+  "//": "Repo-root manifest for ONE reason: npm workspaces, so `web/` and `admin-web/` resolve the same `@veyq/crypto` on disk instead of each carrying a copy (ADR 0065 — duplicating the crypto suite would be a security defect, not a maintenance nuisance). It is deliberately not a build orchestrator: each surface keeps its own `npm run check` and is proven on its own, and nothing here aggregates them. Adding a workspace is the whole feature set.",
+  "workspaces": [
+    "packages/crypto",
+    "web"
+  ],
+  "//overrides": "MOVED here from web/package.json when the workspace was introduced (cr-admin-web-extraction): npm honours `overrides` only from the workspace ROOT, so leaving it in web/ would have silently stopped applying — a knowingly-vulnerable transitive dep back in the tree with no signal. qs: @stryker-mutator/core -> typed-rest-client@2.3.1 pins qs at EXACTLY 6.15.1, which carries GHSA-q8mj-m7cp-5q26 (qs.stringify DoS). That exact pin — not a range — is why `npm audit fix` cannot resolve it without --force. The vulnerable path is unreachable here (typed-rest-client only serves Stryker's dashboard reporter, which stryker.config.mjs does not enable), but a knowingly-vulnerable dependency is not something we keep. Drop this override once typed-rest-client ships qs >= 6.15.2.",
+  "overrides": {
+    "qs": "^6.15.2"
+  }
+}

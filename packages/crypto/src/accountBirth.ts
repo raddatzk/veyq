@@ -3,9 +3,9 @@
 // keypair (ADR 0003, derived from password + the account's auth salt). Shared by first-run setup (the Server
 // Owner) and invite-gated registration (a tenant owner, cr-0010). The raw password is NEVER sent — only the
 // derived public key + ciphertext leave the device.
-import * as v1 from '../../../shared/crypto/v1'
-import type { Identity } from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
+import * as v1 from './v1'
+import type { Identity } from './v1'
+import { b64std } from './base64'
 
 const ARGON = v1.ARGON
 

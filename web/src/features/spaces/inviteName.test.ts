@@ -9,8 +9,8 @@ vi.mock('../../app/vault', () => ({ identityPrivate: () => vaultPriv() }))
 import { deriveGroupNameKey, wrapNameKeyToInvitee, openInviteeName, GROUP_NAME_KEY } from './inviteName'
 import { sealName, openName } from '../memory/tree'
 import { SCOPE_GRANT } from './grant'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const hex = (u: Uint8Array) => Buffer.from(u).toString('hex')
 

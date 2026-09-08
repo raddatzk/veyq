@@ -8,9 +8,9 @@
 // Nothing here re-encrypts content: the Master Key is unwrapped and re-wrapped under a new KEK, so every scope
 // key, every sealed blob and the identity keypair are untouched. That is also why the Emergency Kit stays valid
 // afterwards — the Secret Key does not change.
-import * as v1 from '../../../shared/crypto/v1'
-import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '../../../shared/crypto/argonWorker'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { loginApi, recoveryApi } from '../../../api/client'
 import type { RecoveryMaterial } from '../../../api/generated/auth'
 

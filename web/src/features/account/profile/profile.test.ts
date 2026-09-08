@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import * as v1 from '../../../shared/crypto/v1'
+import * as v1 from '@veyq/crypto/v1'
 import { sealName, unsealName } from './profile'
 
 // The name-sealing crypto (cr-0083, ADR 0023): first+last sealed under K_tenant, decrypted only on-device.

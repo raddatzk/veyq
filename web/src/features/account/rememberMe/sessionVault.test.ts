@@ -5,7 +5,7 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { cacheSessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported } from './sessionVault'
-import { b64std } from '../../../shared/base64'
+import { b64std } from '@veyq/crypto/base64'
 
 const masterKey = () => new Uint8Array(Array.from({ length: 32 }, (_, i) => i + 1))
 

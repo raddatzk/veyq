@@ -10,8 +10,8 @@
 // A harness then loads it via scripts/devSeed.mts → loadDevSeed()/vaultFromSeed() (login+unlock OR vault inject).
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import * as v1 from '../src/shared/crypto/v1'
-import { fromB64std, b64std } from '../src/shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { readSeed, writeTenant, removeTenant, seedFilePath, type SeedEntry } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'

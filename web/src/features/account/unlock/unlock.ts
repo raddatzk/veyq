@@ -2,9 +2,9 @@
 // Secret Key (2SKD); a trusted device (uc.account.trust-device) opens the DEVICE wrap with only the password.
 // Operator-blind: the client fetches only ciphertext, derives the Unlock KEK locally, and never sends the
 // password, the Secret Key, the KEK, or any unwrapped key. Auth ≠ unlock — the fetch carries the bearer token.
-import * as v1 from '../../../shared/crypto/v1'
-import { unlockKekAsync, deviceKekAsync } from '../../../shared/crypto/argonWorker'
-import { fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { unlockKekAsync, deviceKekAsync } from '@veyq/crypto/argonWorker'
+import { fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../../api/client'
 import { withRefresh } from '../login/login'
 import { setUnlocked, type UnlockOrigin } from '../../../app/vault'

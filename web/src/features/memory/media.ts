@@ -11,8 +11,8 @@
 // The pixel stage (decode → downscale → JPEG re-encode) is hidden behind an injectable MediaDeriver so the
 // wiring is unit-testable; the real Canvas/<video> decode is exercised by a live browser round-trip.
 import exifr from 'exifr'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'

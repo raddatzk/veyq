@@ -22,6 +22,8 @@ real checks. Runnable locally:
 
     python3 scripts/mutation_meta_check_selftest.py
 """
+from __future__ import annotations  # `dict | None` below — the repo's guards run on Python 3.9
+
 import json
 import pathlib
 import shutil
@@ -86,16 +88,29 @@ def _git(tree: pathlib.Path, *args: str) -> None:
                    cwd=tree, check=True, capture_output=True, text=True)
 
 
-def web_case(mutate: list[str], diff_file: str, total_mutants: int) -> int:
-    """`mutate`: web-relative scope entries. `diff_file`: repo-relative file changed+committed (so
-    `base...HEAD` carries it). `total_mutants`: mutants placed on the first scoped file in the report."""
+def web_case(mutate: list[str], diff_file: str, total_mutants: int,
+             project: str = "web", other: dict | None = None) -> int:
+    """`mutate`: project-relative scope entries. `diff_file`: repo-relative file changed+committed (so
+    `base...HEAD` carries it). `total_mutants`: mutants placed on the first scoped file in the report.
+
+    `project` picks which of the two real projects the fixture stands in for (`web` or `packages/crypto`) —
+    the check is per project, so the crypto arm must be exercised on its own and not inferred from web's.
+    `other` optionally fabricates the SIBLING project too, as {"project", "mutate", "total_mutants"} — that
+    is how the union-vs-per-project distinction is pinned: a healthy sibling must not excuse an empty one."""
     with tempfile.TemporaryDirectory() as d:
         tree = pathlib.Path(d)
         _copy_check(tree, "mutation_meta_check.py")
-        (tree / "web").mkdir()
-        (tree / "web" / "stryker.mutate.json").write_text(json.dumps({"mutate": mutate}))
+        projects = [{"project": project, "mutate": mutate, "total_mutants": total_mutants}]
+        if other:
+            projects.append(other)
+        scoped_files: set[str] = set()
+        for spec in projects:
+            proj = tree / spec["project"]
+            proj.mkdir(parents=True)
+            (proj / "stryker.mutate.json").write_text(json.dumps({"mutate": spec["mutate"]}))
+            scoped_files |= {f"{spec['project']}/{m}" for m in spec["mutate"]}
         # Base tree: every scoped file + the diff target, so a diff can hit either in- or out-of-scope.
-        for rel in {f"web/{m}" for m in mutate} | {diff_file}:
+        for rel in scoped_files | {diff_file}:
             p = tree / rel
             p.parent.mkdir(parents=True, exist_ok=True)
             p.write_text("// base\n")
@@ -110,10 +125,12 @@ def web_case(mutate: list[str], diff_file: str, total_mutants: int) -> int:
         (tree / diff_file).write_text("// changed\n")
         _git(tree, "add", "-A")
         _git(tree, "commit", "-qm", "change")
-        rep = tree / "web" / "reports" / "mutation"
-        rep.mkdir(parents=True)
-        files = {f"web/{mutate[0]}": {"mutants": [{}] * total_mutants}} if total_mutants else {}
-        (rep / "mutation.json").write_text(json.dumps({"files": files}))
+        for spec in projects:
+            rep = tree / spec["project"] / "reports" / "mutation"
+            rep.mkdir(parents=True)
+            n = spec["total_mutants"]
+            files = {f"{spec['project']}/{spec['mutate'][0]}": {"mutants": [{}] * n}} if n else {}
+            (rep / "mutation.json").write_text(json.dumps({"files": files}))
         return _run_check(tree, "mutation_meta_check.py", "--base", base)
 
 
@@ -151,6 +168,25 @@ def main() -> int:
     expect("web: diff in scope + total 0 mutants FAILS (total-count)", web_case([V1], "web/" + V1, 0), 1)
     expect("web: diff in scope + total > 0 PASSES", web_case([V1], "web/" + V1, 3), 0)
     expect("web: diff NOT in scope PASSES regardless of report", web_case([V1], "web/other.ts", 0), 0)
+
+    # The crypto project is a SECOND, independently-checked scope (cr-admin-web-extraction, ADR 0065) — the
+    # gate had to split when the code did, because Stryker's runner is the project's own vitest. Its arm must
+    # be exercised on its own: a check that only ever read web/'s manifest would pass every case above while
+    # silently never looking at the crypto scope at all.
+    CV1 = "src/v1.ts"
+    expect("crypto: diff in the crypto scope + total 0 mutants FAILS",
+           web_case([CV1], "packages/crypto/" + CV1, 0, project="packages/crypto"), 1)
+    expect("crypto: diff in the crypto scope + total > 0 PASSES",
+           web_case([CV1], "packages/crypto/" + CV1, 3, project="packages/crypto"), 0)
+    # Per-project, NOT a union: web's report is full, but the diff hit crypto's scope and crypto measured
+    # nothing. A union over both reports would call this green.
+    expect("cross-project: a full web report does NOT excuse an empty crypto run",
+           web_case([CV1], "packages/crypto/" + CV1, 0, project="packages/crypto",
+                    other={"project": "web", "mutate": [V1], "total_mutants": 9}), 1)
+    # ...and the mirror, so the rule is symmetric rather than an accident of ordering.
+    expect("cross-project: a full crypto report does NOT excuse an empty web run",
+           web_case([V1], "web/" + V1, 0, project="web",
+                    other={"project": "packages/crypto", "mutate": [CV1], "total_mutants": 9}), 1)
 
     # The asymmetry itself, on the SAME 'one member empty, a sibling full' shape:
     expect("asymmetry — backend REJECTS one-empty-sibling", backend_case(beta=(0, 0)), 1)

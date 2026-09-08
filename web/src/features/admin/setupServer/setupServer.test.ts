@@ -6,8 +6,8 @@ vi.mock('../../../api/client', () => ({ setupApi: vi.fn() }))
 
 import { buildCreateServerOwnerRequest, registerServerOwner } from './setupServer'
 import { setupApi } from '../../../api/client'
-import * as v1 from '../../../shared/crypto/v1'
-import { TEST_ARGON, PRODUCTION_ARGON_TIMEOUT_MS } from '../../../test/argon'
+import * as v1 from '@veyq/crypto/v1'
+import { TEST_ARGON, PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 // Standard base64 (padded or not) — the encoding the operator-blind setup contract pins for its wire fields
 // (`[A-Za-z0-9+/]*={0,2}`). A base64url value (with `-`/`_`) would be rejected by the backend at the boundary.
@@ -58,7 +58,7 @@ describe('setupServer — Model B request (uc.admin.setup-server)', () => {
 
 // Every derivation here is the test's own (nothing under test mints a wrap), so it runs at TEST_ARGON — the
 // properties asserted are determinism and separation, which hold at any cost params, and the production params
-// are pinned against the vectors by v1.conformance.test.ts. See src/test/argon.ts.
+// are pinned against the vectors by v1.conformance.test.ts. See packages/crypto/src/testArgon.ts.
 describe('Model B auth derivation (ADR 0003)', () => {
   it('derives a deterministic salt + keypair from email+password', () => {
     const salt = v1.deriveAuthSalt(INSTANCE_SALT, 'user@example.com')
@@ -88,6 +88,6 @@ describe('registerServerOwner — API error propagation', () => {
       registerServerOwner('owner@example.com', 'correct horse battery'),
     ).rejects.toThrow('setup_already_complete')
     // registerServerOwner mints the whole account, so it pays three production-params Argon2id derivations
-    // before it ever reaches the rejecting call — inherent cost, not a hang. See src/test/argon.ts.
+    // before it ever reaches the rejecting call — inherent cost, not a hang. See packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 })

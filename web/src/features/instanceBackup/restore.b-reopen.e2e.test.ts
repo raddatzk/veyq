@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fromB64std } from '../../shared/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { session } from '../../app/session'
 import { setupApi } from '../../api/client'
 import { BASE } from '../../test/e2eBootstrap'

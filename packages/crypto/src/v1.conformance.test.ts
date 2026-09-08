@@ -3,21 +3,21 @@ import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as v1 from './v1'
-import { PRODUCTION_ARGON_TIMEOUT_MS } from '../../test/argon'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from './testArgon'
 
 const unhex = (s: string) => Uint8Array.from(Buffer.from(s, 'hex'))
 const hex = (u: Uint8Array) => Buffer.from(u).toString('hex')
 
 const here = dirname(fileURLToPath(import.meta.url))
-// repo contracts/crypto/vectors/v1.json (4 levels up from web/src/shared/crypto/)
+// repo contracts/crypto/vectors/v1.json (3 levels up from packages/crypto/src/)
 const vectors = JSON.parse(
-  readFileSync(resolve(here, '../../../../contracts/crypto/vectors/v1.json'), 'utf8'),
+  readFileSync(resolve(here, '../../../contracts/crypto/vectors/v1.json'), 'utf8'),
 )
 
 // Every Argon2id case here runs at the params the VECTORS carry (`k.params`), including an explicit
 // production-params one — that is this file's whole job, and the reason the cheap TEST_ARGON used elsewhere in
 // the suite costs no coverage. So this is the one block that can never be made faster, only given room.
-// See src/test/argon.ts.
+// See ./testArgon.ts.
 describe('v1 crypto conformance (web TS vs shared vectors)', () => {
   it('targets suite v1', () => {
     expect(vectors.suite).toBe('v1')
@@ -65,6 +65,20 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const kp = v1.deriveAuthKeypair(a.password_utf8, unhex(a.auth_salt), a.params)
     expect(hex(kp.privateKey)).toBe(a.private_key)
     expect(hex(kp.publicKey)).toBe(a.public_key)
+  })
+
+  // The PRODUCTION cost parameters, pinned against the contract's own `kdf_params` vector — the params every
+  // KEK derivation and the Model B auth keypair fall back to when a caller passes none. Added
+  // 2026-09-08 (cr-admin-web-extraction) on a MEASURED gap, not a hunch: the CR's bite test injected
+  // `t: 3 -> 4` into this constant and the entire tree — this package's 43 tests and web's 1018 — stayed
+  // green, so a silent Argon2id cost DOWNGRADE (t=3 -> t=1, or m=32 MiB -> 64 KiB) was invisible to every
+  // assertion we own. Stryker does not close it either: it has no numeric-literal mutator, so `t: 3` is not
+  // in the mutant set that scores this file 100 %. Only `dkLen` bit at all, and only structurally (a 31-byte
+  // AES key throws downstream). `toEqual` on the whole object, not field-by-field: a REMOVED field must fail
+  // too, and the vector is the contract mobile decodes against, so this is an agreement check rather than the
+  // literal restating itself.
+  it('the default ARGON params are the contract\'s production kdf_params (cost is not silently downgradable)', () => {
+    expect(v1.ARGON).toEqual(vectors.kdf_params.params)
   })
 
   it('kdfParams wire format (encode + decode round-trip)', () => {

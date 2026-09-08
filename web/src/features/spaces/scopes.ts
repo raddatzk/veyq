@@ -1,8 +1,8 @@
 // uc.spaces.personal-scope (web) — birth + open a member's per-tenant PERSONAL scope. Operator-blind: the
 // scope key is generated on-device and sealed to the member's own identity (asymWrap, the hybrid KEM); only
 // the ciphertext grant reaches the server. The active tenant is resolved server-side from the Host.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { scopesApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 import { isCodedError, HttpStatus } from '../../shared/httpError'

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fromB64std } from '../../shared/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { deriveSpaceIconKey, sealIcon, openIcon, pad, unpad, ICON_PADDED_LEN } from './spaceIcon'
 
 describe('space icon primitives (uc.spaces.set-space-icon)', () => {

@@ -2,8 +2,8 @@
 // carries, what the answering device puts on the wire, the number both screens compare, and the one envelope the
 // grant travels in. Operator-blind throughout: the server relays a routing handle it can only recognise by hash,
 // one public bundle it cannot attribute, and one ciphertext it cannot open.
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 /** The scanned code's marker. It exists ONLY so one scanner can dispatch between this and the Emergency Kit's
  *  `veyqkit:` — it is deliberately not a URL scheme, and ADR 0059 §4 is the reason: a code that could name an

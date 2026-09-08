@@ -10,8 +10,8 @@ import { runGrantDeliveryWorker, wrapScopeKeyToMember } from './grantDeliveryWor
 import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { checkAndPin } from '../account/identityPins'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 // A real *foreign* identity: the pending member the worker delivers to. Its public bundle is what the server
 // hands the worker in the claim; only the member holds the matching private, so the wrap must open with it.

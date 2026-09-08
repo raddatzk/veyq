@@ -12,8 +12,8 @@
 // Every negative here carries the positive control on the same predicate, because "it returned null" and "it
 // threw" are produced just as well by a module that does nothing at all.
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import {
   mintHandle,
   pairingPayload,

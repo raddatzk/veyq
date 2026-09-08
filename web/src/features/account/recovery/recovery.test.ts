@@ -1,8 +1,8 @@
 import { beforeAll, describe, expect, it, vi, beforeEach } from 'vitest'
-import { PRODUCTION_ARGON_TIMEOUT_MS, TEST_ARGON } from '../../../test/argon'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
-import { buildAccount } from '../register/accountBirth'
+import { PRODUCTION_ARGON_TIMEOUT_MS, TEST_ARGON } from '@veyq/crypto/testArgon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { buildAccount } from '@veyq/crypto/accountBirth'
 import { openWithSecretKey, completeRecovery, requestRecovery } from './recovery'
 import type { RecoveryMaterial } from '../../../api/generated/auth'
 

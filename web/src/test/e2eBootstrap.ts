@@ -14,12 +14,12 @@
 // Host with no `/etc/hosts` entry). It has to be a real host in the URL, not a spoofed header: tenant resolution
 // is server-side from the request `Host`, and fetch/undici strips a manually set one.
 import { expect } from 'vitest'
-import * as v1 from '../shared/crypto/v1'
-import { fromB64std } from '../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { fromB64std } from '@veyq/crypto/base64'
 import { session } from '../app/session'
 import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
-import { buildAccount, type BuiltAccount } from '../features/account/register/accountBirth'
+import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { setupApi } from '../api/client'
 import { createTenant, updateTenantMailSettings } from '../features/admin/createTenant/tenants'
 import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'

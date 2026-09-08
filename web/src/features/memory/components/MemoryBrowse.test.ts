@@ -15,8 +15,8 @@ import { sealNodeMeta } from '../nodeMeta'
 import type { MemoryLocation } from '../memoryLocation'
 import type { TreeNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 const i18n = createI18n({
   legacy: false,

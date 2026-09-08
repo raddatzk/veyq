@@ -17,8 +17,8 @@ import { restoreVaultFromCache } from './unlock'
 import { accountApi } from '../../../api/client'
 import { cacheSessionVault, loadSessionVault } from '../rememberMe/sessionVault'
 import { isUnlocked, clearVault } from '../../../app/vault'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 // Minimal sessionStorage for the node test env (indexedDB from fake-indexeddb, crypto.subtle from node).
 const mem = new Map<string, string>()

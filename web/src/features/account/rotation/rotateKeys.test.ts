@@ -31,8 +31,8 @@ vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 // refused" pass against a gate that never looked. Their real-byte correctness at production cost is
 // v1.conformance's job (v1 is stryker.mutate.json's mutate[0]); what this file pins is the wiring: which
 // secret reaches which wrap. Real ARGON here would be 32 MiB × 3 per test, which the suite should not pay.
-vi.mock('../../../shared/crypto/argonWorker', async () => {
-  const real = await vi.importActual<typeof import('../../../shared/crypto/v1')>('../../../shared/crypto/v1')
+vi.mock('@veyq/crypto/argonWorker', async () => {
+  const real = await vi.importActual<typeof import('@veyq/crypto/v1')>('@veyq/crypto/v1')
   const LIGHT = { t: 1, m: 64, p: 1, dkLen: 32 }
   return {
     unlockKekAsync: async (secretKey: Uint8Array, password: string, salt: Uint8Array) =>
@@ -48,8 +48,8 @@ import { masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { openScopeById } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const PASSWORD = 'correct horse battery staple'
 const SECRET_KEY = v1.randomBytes(32)

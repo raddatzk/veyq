@@ -26,7 +26,7 @@ import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaItem } fr
 import exifr from 'exifr'
 import { mediaApi } from '../../../api/client'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
-import * as v1 from '../../../shared/crypto/v1'
+import * as v1 from '@veyq/crypto/v1'
 import { galleryFakeStore } from './galleryFakeStore'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'

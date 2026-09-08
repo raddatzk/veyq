@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
-import * as base64 from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
+import * as base64 from '@veyq/crypto/base64'
 import { sealNodeMeta, unsealNodeMeta, NODE_META_CTX } from './nodeMeta'
 
 // Assertion-strength KAT for the wrappedMeta envelope (cr-0177, ADR 0045). nodeMeta was untested: the AAD

@@ -1,8 +1,8 @@
 // uc.account.trust-device (web) — enrol / remove a device-local DEVICE wrap so this device unlocks with only
 // the password next time. Operator-blind: only the ciphertext wrap + opaque KDF params reach the server; the
 // password, the device key, the KEK and the Master Key never leave the device.
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum } from '../../../api/generated/account'
 import { withRefresh } from '../login/login'

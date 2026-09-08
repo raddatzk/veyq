@@ -19,8 +19,8 @@
 // client could ever derive this mapping — the register is the only place it can be shared, and it is shared
 // sealed. Note the direction of the dependency: the enrolment modules know nothing about this file. They RETURN
 // the new id and their caller records it, which is what keeps the register off every unlock path.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountDeviceRegisterApi } from '../../api/client'
 import { withRefresh } from './login/login'
 import { isCodedError, HttpStatus } from '../../shared/httpError'

@@ -2,8 +2,8 @@
 // AEAD-sealed under the scope content key `K_SC` (ctx `favorites`) and stored server-side as one opaque blob —
 // the server never sees which Memories are pinned, only ciphertext + its size. Last-write-wins (the whole set
 // is re-sealed and PUT on every toggle; the set is tiny). Mirrors the sealing in tree.ts.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { favoritesApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 

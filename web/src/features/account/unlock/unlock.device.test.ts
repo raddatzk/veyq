@@ -20,9 +20,9 @@ import { unlockWithDevice } from './unlock'
 import { accountApi } from '../../../api/client'
 import * as device from '../trustDevice/deviceKey'
 import { isUnlocked, masterKey, clearVault } from '../../../app/vault'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
-import { TEST_ARGON } from '../../../test/argon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { TEST_ARGON } from '@veyq/crypto/testArgon'
 
 const PASSWORD = 'correct horse battery'
 const DEVICE_FACTOR = new Uint8Array(32).fill(0x44)
@@ -32,7 +32,7 @@ const WRAP_ID = 'device-wrap-id-1'
 /** Build server material with a DEVICE wrap (id = WRAP_ID) whose KEK = kekDevicePassword(factor, pw, salt).
  *
  *  Cost params: TEST_ARGON, carried in the wrap's own `kdfParams` — see the note on unlock.test.ts's
- *  buildMaterial and src/test/argon.ts. Real Argon2id over the real device-unlock path, ~1000× cheaper. */
+ *  buildMaterial and packages/crypto/src/testArgon.ts. Real Argon2id over the real device-unlock path, ~1000× cheaper. */
 function buildDeviceMaterial(password: string, deviceFactor: Uint8Array) {
   const id = v1.generateIdentity()
   const mk = v1.randomBytes(32)

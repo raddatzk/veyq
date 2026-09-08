@@ -8,8 +8,8 @@
 // firstSeenAt } } }`; `version` is the cleartext wire counter (the server's authority for concurrency — the
 // enabler's `{ version, pins }` shows both halves conceptually). Account-global: identity is one keypair per
 // account across tenants (ADR 0023), so there is one pin per contact everywhere.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { withRefresh } from './login/login'
 import { isCodedError, HttpStatus } from '../../shared/httpError'

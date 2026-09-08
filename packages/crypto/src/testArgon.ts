@@ -26,7 +26,7 @@
 // production-params case — that is its whole job. And `shared/crypto/v1.ts` grows no test affordance at all: it
 // is conformance-pinned and sits in the Stryker mutation scope, the same argument `src/test/canaries.ts` makes
 // for staying out of the crypto primitive.
-import type { ArgonParams } from '../shared/crypto/v1'
+import type { ArgonParams } from './v1'
 
 /**
  * Real Argon2id at deliberately cheap cost — for tests that control BOTH the fixture and the expected value.

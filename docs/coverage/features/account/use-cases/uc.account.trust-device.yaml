@@ -14,7 +14,7 @@ acceptanceCriteria:
   - id: device-kek-conformance
     text: The DEVICE-wrap KEK derivation (Argon2id(deviceFactor + password)) matches the pinned crypto vector.
     coverage:
-      web: { unit: [src/shared/crypto/v1.conformance.test.ts] }
+      crypto: { unit: [src/v1.conformance.test.ts] }
   - id: wrong-password-generic-failure
     text: A wrong password on a trusted device fails generically (AEAD tag mismatch) and holds no key material.
     coverage:

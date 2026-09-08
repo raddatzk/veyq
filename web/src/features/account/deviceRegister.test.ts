@@ -18,8 +18,8 @@ import {
 } from './deviceRegister'
 import { accountDeviceRegisterApi } from '../../api/client'
 import { masterKey } from '../../app/vault'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 // One fixed Master Key for the suite; the mocked vault hands out a FRESH copy each call because the data layer
 // zeroes the copy it receives (returning the same buffer would zero our master after the first use).

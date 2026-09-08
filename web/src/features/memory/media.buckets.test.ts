@@ -10,8 +10,8 @@ vi.mock('../../api/client', () => ({
 
 import { listBuckets, createBucket, moveBucketMedia, openBucketName } from './media'
 import { bucketsApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 const SCOPE = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'

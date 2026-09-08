@@ -2,9 +2,9 @@
 // (Model B) data layer. ALL key material is born here; the server only ever receives ciphertext + public
 // keys + low-sensitivity metadata. Unlike the legacy Model-A flow, the raw password is NEVER sent: the
 // client derives an Ed25519 auth keypair (ADR 0003) and registers only `authPublicKey`.
-import { fromB64std } from '../../../shared/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { setupApi } from '../../../api/client'
-import { buildAccount } from '../../account/register/accountBirth'
+import { buildAccount } from '@veyq/crypto/accountBirth'
 import {
   type CreateServerOwnerRequest,
   CreateServerOwnerRequestSuiteIdEnum,

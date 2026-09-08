@@ -8,8 +8,8 @@
 // current blob, merge only its own sub-object, re-seal — or it would clobber a sibling (writing a `location`
 // must not wipe the `date`, and vice-versa). This module owns that envelope; the domain modules (`memoryDate`,
 // `memoryLocation`) own how each sub-object is validated + materialized.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 /** AAD context binding the sealed node-metadata blob (`wrappedMeta`) to its purpose (cr-0067). */
 export const NODE_META_CTX = 'node-meta'

@@ -19,9 +19,9 @@
 // backend's mailer hostname guard), VEYQ_TENANT_OWNER_EMAIL/PASSWORD/NAME (the new tenant owner),
 // VEYQ_INVITE_FILE (the mailer's dev-invite file; default ../backend/build/dev-invites.jsonl).
 import { fileURLToPath } from 'node:url'
-import { fromB64std, b64std } from '../src/shared/base64'
-import { buildAccount } from '../src/features/account/register/accountBirth'
-import * as v1 from '../src/shared/crypto/v1'
+import { fromB64std, b64std } from '@veyq/crypto/base64'
+import { buildAccount } from '@veyq/crypto/accountBirth'
+import * as v1 from '@veyq/crypto/v1'
 import { writeTenant, materializeKeys, awaitInvite } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'

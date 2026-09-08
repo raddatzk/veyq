@@ -9,7 +9,7 @@
 // ever lands there). Browser close clears `sessionStorage` → the ciphertext is gone and the orphaned K (useless
 // without it, and un-exfiltratable) is dropped on the next boot. Operator-blind is untouched (nothing here is
 // server-side).
-import { b64std, fromB64std } from '../../../shared/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { idbRun } from '../../../shared/idb'
 
 const DB_NAME = 'veyq-session'

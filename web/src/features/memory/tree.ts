@@ -10,8 +10,8 @@
 // current epoch; a read opens each node's name (and a top-level Memory's `K_mem`) under **its own** epoch key,
 // so a tree spanning several epochs decrypts fully. A chapter's `K_mem` wraps under its parent Memory's `K_mem`
 // (epoch-independent) — only the top-level wrap keys off the epoch.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 import { NodeKind, type NodeSummary, type TrashedNodeSummary } from '../../api/generated/content'

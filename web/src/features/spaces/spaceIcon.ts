@@ -4,8 +4,8 @@
 // byte-identical in size, so the operator cannot tell a logo from a photo — and the tenant overview handing one
 // length per tenant discloses nothing. Mirrors `inviteName.deriveGroupNameKey` (derive) + `tree.sealName` (seal),
 // with a DISTINCT context/info string so an icon wrap can never be reinterpreted as a name-key or a scope-grant.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 /** The AAD/KDF context binding the icon seal + key derivation (ADR 0017/0027). Distinct from `group-name-key` / `scope-grant`. */
 export const SPACE_ICON_CTX = 'space-icon'

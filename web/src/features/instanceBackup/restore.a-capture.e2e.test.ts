@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { b64std } from '../../shared/base64'
+import { b64std } from '@veyq/crypto/base64'
 import { birthInstance } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
 import { testBytes, writeHandoff } from '../../test/restoreHandoff'

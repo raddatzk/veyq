@@ -12,16 +12,16 @@ import { accountApi, tokenApi } from '../../../api/client'
 import { ResponseError } from '../../../api/generated/account'
 import { isUnlocked, masterKey, identityPrivate, clearVault } from '../../../app/vault'
 import { session } from '../../../app/session'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
-import { TEST_ARGON } from '../../../test/argon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import { TEST_ARGON } from '@veyq/crypto/testArgon'
 
 const PASSWORD = 'correct horse battery'
 
 /** Build the exact server-stored material setup writes: a PASSWORD wrap (KEK = Argon2id(secretKey+password))
  *  over the Master Key, plus the identity private key wrapped under that Master Key. Mirrors setupServer.ts.
  *
- *  The wrap carries TEST_ARGON in its `kdfParams` and the KEK is built with the same (see src/test/argon.ts).
+ *  The wrap carries TEST_ARGON in its `kdfParams` and the KEK is built with the same (see packages/crypto/src/testArgon.ts).
  *  Unlock re-derives from the params it finds ON THE WRAP (AD-25 crypto agility), so this is the real wire path
  *  at a cheap cost — and a sharper assertion than production params: an unlock that ignored `kdfParams` and
  *  hardcoded `v1.ARGON` would pass the production-params fixture and fail this one. */

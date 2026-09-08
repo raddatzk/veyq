@@ -24,7 +24,7 @@ import { isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
-import type * as v1 from '../../../shared/crypto/v1'
+import type * as v1 from '@veyq/crypto/v1'
 
 // `gone`, `occupied` and `failed` are all terminal, and none of them offers a way back into the ceremony. Two
 // of them cannot be retried at all — after the envelope arrives the grant token is spent, and re-presenting it

@@ -6,7 +6,7 @@
 ## Context
 
 A `RECOVERY` `MasterKeyWrap` has been written at every account birth since V1
-(`web/src/features/account/register/accountBirth.ts`), and the server has withheld it from the only endpoint
+(`packages/crypto/src/accountBirth.ts`), and the server has withheld it from the only endpoint
 that serves wraps ever since (`KeyMaterialHandler.forUser` filters it out). It has never been read by any
 client. The account key model calls a forgotten password "must not mean lost memories"
 ([en.account.key-model](../features/account/enablers/en.account.key-model.md)) and the published wiki promises

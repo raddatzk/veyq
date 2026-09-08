@@ -12,8 +12,14 @@ Not a `validate_*.py`: the trust-chain job runs those on every push with no buil
 the Stryker report, which only the mutation CI job produces — so it is invoked from that job, not the
 glob. It is a permanent guard all the same, standing alongside the config's break threshold.
 
-The mutate scope is read from web/stryker.mutate.json — the SAME manifest stryker.config.mjs consumes,
-so the mutator and this check never drift. Runnable locally too:
+The mutate scope is read from each project's own stryker.mutate.json — the SAME manifests the matching
+stryker.config.mjs files consume, so a mutator and its check never drift. There are TWO since
+cr-admin-web-extraction (ADR 0065) split the suite: `packages/crypto` (v1.ts + accountBirth.ts) and `web`
+(the six crypto-logic files that stayed). They are checked **per project, not as a union**: Stryker's test
+runner is the project's own vitest, so each project produces its own report, and a diff touching only one
+project's scope must be answered by THAT project's report — a union would let a healthy web report excuse a
+crypto run that measured nothing. A project whose manifest is absent is skipped, so this stays runnable
+against a tree that has only one of them (which is what the selftest fabricates). Runnable locally too:
 
     python3 scripts/mutation_meta_check.py --base origin/main
 """
@@ -25,9 +31,10 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-WEB = ROOT / "web"
-MANIFEST = WEB / "stryker.mutate.json"
-REPORT = WEB / "reports" / "mutation" / "mutation.json"
+
+# (repo-relative project dir) — the manifest is <dir>/stryker.mutate.json and the report
+# <dir>/reports/mutation/mutation.json, mirroring each project's own stryker.config.mjs.
+PROJECTS = ("web", "packages/crypto")
 
 
 def changed_files(base: str) -> list[str]:
@@ -39,10 +46,11 @@ def changed_files(base: str) -> list[str]:
     return [line.strip() for line in out.splitlines() if line.strip()]
 
 
-def mutate_scope() -> list[str]:
-    """The mutate patterns, made repo-relative (Stryker's cwd is web/, so the manifest is web-relative)."""
-    manifest = json.loads(MANIFEST.read_text())
-    return [f"web/{p}" for p in manifest["mutate"]]
+def mutate_scope(project: str) -> list[str]:
+    """The project's mutate patterns, made repo-relative (Stryker's cwd is the project dir, so the manifest is
+    project-relative)."""
+    manifest = json.loads((ROOT / project / "stryker.mutate.json").read_text())
+    return [f"{project}/{p}" for p in manifest["mutate"]]
 
 
 def in_scope(path: str, patterns: list[str]) -> bool:
@@ -50,8 +58,8 @@ def in_scope(path: str, patterns: list[str]) -> bool:
     return any(path == pat or fnmatch.fnmatch(path, pat) for pat in patterns)
 
 
-def report_mutant_count() -> int:
-    report = json.loads(REPORT.read_text())
+def report_mutant_count(report_path: pathlib.Path) -> int:
+    report = json.loads(report_path.read_text())
     return sum(len(f.get("mutants", [])) for f in report.get("files", {}).values())
 
 
@@ -60,26 +68,43 @@ def main() -> int:
     ap.add_argument("--base", default="origin/main", help="PR base ref the run was scoped against")
     args = ap.parse_args()
 
-    scope = mutate_scope()
-    touched = sorted(f for f in changed_files(args.base) if in_scope(f, scope))
+    changed = changed_files(args.base)
+    failed = False
+    checked = 0
 
-    if not touched:
-        print(f"meta-check: PR touches no file in the mutate scope {scope} — nothing to assert. OK.")
-        return 0
+    for project in PROJECTS:
+        if not (ROOT / project / "stryker.mutate.json").exists():
+            continue  # this tree does not carry that project (the selftest fabricates one at a time)
+        checked += 1
+        scope = mutate_scope(project)
+        touched = sorted(f for f in changed if in_scope(f, scope))
 
-    if not REPORT.exists():
-        print(f"::error::meta-check: {touched} changed but no Stryker report at {REPORT} "
-              f"— the gate ran nothing.")
+        if not touched:
+            print(f"meta-check[{project}]: PR touches no file in the mutate scope {scope} — "
+                  f"nothing to assert. OK.")
+            continue
+
+        report = ROOT / project / "reports" / "mutation" / "mutation.json"
+        if not report.exists():
+            print(f"::error::meta-check[{project}]: {touched} changed but no Stryker report at {report} "
+                  f"— the gate ran nothing.")
+            failed = True
+            continue
+
+        total = report_mutant_count(report)
+        if total == 0:
+            print(f"::error::meta-check[{project}]: PR changed {touched} but Stryker reported 0 mutants — a "
+                  f"green run that measured nothing (ADR 0045 §4). Check the mutate scope and the manifest glob.")
+            failed = True
+            continue
+
+        print(f"meta-check[{project}]: PR changed {touched}; Stryker reported {total} mutants (> 0). OK.")
+
+    if checked == 0:
+        print("::error::meta-check: no stryker.mutate.json found for any known project "
+              f"{PROJECTS} — the scope this check reads has moved or been deleted.")
         return 1
-
-    total = report_mutant_count()
-    if total == 0:
-        print(f"::error::meta-check: PR changed {touched} but Stryker reported 0 mutants — a green run that "
-              f"measured nothing (ADR 0045 §4). Check the mutate scope and the manifest glob.")
-        return 1
-
-    print(f"meta-check: PR changed {touched}; Stryker reported {total} mutants (> 0). OK.")
-    return 0
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

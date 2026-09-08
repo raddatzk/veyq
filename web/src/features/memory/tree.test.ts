@@ -10,8 +10,8 @@ vi.mock('../../api/client', () => ({
 import { listTree, listTrash, restoreNode, createFolder, createMemory, createChapter, openMemory, openContentKey, nodeContentKey, type TreeNode } from './tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
 import { contentApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const scopeKey = v1.randomBytes(32)

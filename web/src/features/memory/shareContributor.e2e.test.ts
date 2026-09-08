@@ -31,7 +31,7 @@
 // for the plaintext recorded below. A hand run (`VEYQ_E2E=1 npx vitest run shareContributor.e2e` against a FRESH
 // instance) works too, minus the sweep.
 import { describe, it, expect } from 'vitest'
-import { b64url } from '../../shared/base64'
+import { b64url } from '@veyq/crypto/base64'
 import { HttpStatus, isHttpStatus } from '../../shared/httpError'
 import { birthInstance } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'

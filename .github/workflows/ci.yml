@@ -59,11 +59,18 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # One install for the whole workspace (`npm ci` from the root links `@veyq/crypto` into web/), then each
+      # package proves ITSELF. The shared crypto package is checked first and separately on purpose: it is the
+      # one place a defect would be a defect in BOTH surfaces, so its own suite failing must not read as a
+      # web failure.
       - name: Install dependencies
-        working-directory: web
         run: npm ci
+
+      - name: Run shared crypto checks
+        working-directory: packages/crypto
+        run: npm run check
 
       - name: Run frontend checks
         working-directory: web
@@ -96,7 +103,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Build the runnable fast-jar ONCE; the orchestrator boots it again per e2e file, because every suite
       # cold-births its own Server Owner and asserts setupRequired===true, and an instance has one.
@@ -111,7 +118,6 @@ jobs:
         run: ./gradlew --no-daemon quarkusBuild
 
       - name: Install frontend dependencies
-        working-directory: web
         run: npm ci
 
       - name: Run web E2E suites against a live backend

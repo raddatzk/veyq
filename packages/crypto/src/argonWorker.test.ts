@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 
 import { deriveAuthKeypairAsync, unlockKekAsync } from './argonWorker'
 import * as v1 from './v1'
-import { TEST_ARGON } from '../../test/argon'
+import { TEST_ARGON } from './testArgon'
 
 // In the test env there is no Worker global, so the async wrappers take the synchronous fallback. These
 // assert the fallback is byte-identical to the conformance-pinned suite (the worker runs the SAME v1 code).

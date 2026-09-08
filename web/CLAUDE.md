@@ -75,13 +75,21 @@ here; the server is blind.
   [web UI styleguide](../docs/crosscutting/ui-web-styleguide.md) (raw colours → `--app-*`, dark-mode-aware
   values), so a ported component should *look* like the original but is not a byte-for-byte copy. If a ported
   view lacks a field the contract requires, add it **in-style** rather than hardcode a default.
-- **Crypto:** `src/shared/crypto/v1.ts` is the **conformance-pinned** suite — keep it byte-identical to
-  the vectors (`../contracts/crypto/vectors/v1.json`); the conformance test must stay green. The Model B
-  auth derivation (`deriveAuthSalt` / `deriveAuthKeypair`, Ed25519 from Argon2id — ADR 0003) lives here.
+- **Crypto lives in `../packages/crypto` (`@veyq/crypto`), not here** — one copy, shared with `admin-web/`
+  through the workspace ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)). `v1` is the
+  **conformance-pinned** suite (keep it byte-identical to `../contracts/crypto/vectors/v1.json`; the
+  conformance test must stay green), the Model B auth derivation (`deriveAuthSalt` / `deriveAuthKeypair`,
+  Ed25519 from Argon2id — ADR 0003) and the cold `accountBirth` live there too, and so does `base64` —
+  transport encoding, but `accountBirth` needs it, and a second copy of the encoder is exactly the drift its
+  own header warns about. Import via the package (`@veyq/crypto/v1`, `/accountBirth`, `/base64`,
+  `/argonWorker`, `/testArgon`) — never by a relative path back into it. Its check is its own:
+  `cd ../packages/crypto && npm run check`, and `npm ci` runs from the **repo root**, not from `web/`.
   **`npm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
   — a heavier PR-only crypto job, **not** part of `npm run check`; scope (the single source of truth, an explicit
   per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
-  [`mutation.yml`](../.github/workflows/mutation.yml). **Footgun: it mutates the real source files _in place_**
+  [`mutation.yml`](../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
+  — `web/`'s (the six crypto-logic files that stayed) and `packages/crypto/`'s (`v1.ts` + `accountBirth.ts`);
+  run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.

@@ -3,8 +3,8 @@
 // their grant) and peels the chain down to E_0. New content seals under the **write key** (the highest epoch they
 // hold); a node sealed under epoch k is read with E_k. Operator-blind: the peel is on-device; the server stores
 // only the opaque chain-links.
-import * as v1 from '../../shared/crypto/v1'
-import { fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { fromB64std } from '@veyq/crypto/base64'
 
 /** AAD binding an epoch-chain link: `symWrap(E_n, E_{n-1}, EPOCH_LINK)`. */
 export const EPOCH_LINK = 'scope-epoch'

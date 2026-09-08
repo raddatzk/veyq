@@ -1,9 +1,9 @@
 // uc.account.login (web) — operator-blind challenge-response login on the Model B data layer. The password
 // never leaves the device: the client derives the Ed25519 auth keypair (ADR 0003), signs the server nonce,
 // and stores only the opaque session tokens it gets back. Auth ≠ unlock — this gates a session, not content.
-import * as v1 from '../../../shared/crypto/v1'
-import { deriveAuthKeypairAsync } from '../../../shared/crypto/argonWorker'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { deriveAuthKeypairAsync } from '@veyq/crypto/argonWorker'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { loginApi, sessionApi, tokenApi } from '../../../api/client'
 import { clearTokens, session, setTokens } from '../../../app/session'
 import { clearVault } from '../../../app/vault'

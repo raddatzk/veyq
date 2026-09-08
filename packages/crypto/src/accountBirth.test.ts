@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from './v1'
+import { b64std, fromB64std } from './base64'
 import { buildAccount } from './accountBirth'
 
 // A byte-exact KAT over the cold master-key birth (cr-0177, ADR 0045). buildAccount's assertion strength was

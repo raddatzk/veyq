@@ -20,8 +20,8 @@ import {
 } from './identityPins'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { masterKey, identityPrivate } from '../../app/vault'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 

@@ -3,8 +3,8 @@
 // **foreign** identity — the grant-delivery worker (delivering K_SC to a pending member, cr-0076) and epoch
 // rotation (re-granting the fresh epoch key to every remaining member, cr-0089) — so the helper + its AAD/KDF
 // context live here, dependency-free of the scope data layer (breaks the scopes ⇄ worker import cycle).
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 /** The AAD/KDF context binding a scope-key wrap (ADR 0017/0020). A grant opened by the holder uses the same context. */
 export const SCOPE_GRANT = 'scope-grant'

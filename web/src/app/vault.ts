@@ -6,7 +6,7 @@
 // The raw key bytes are kept in a plain (non-reactive) holder so Vue's deep proxy never wraps a Uint8Array
 // the crypto layer will use; the UI observes only the reactive `unlocked` flag.
 import { reactive } from 'vue'
-import type { Identity } from '../shared/crypto/v1'
+import type { Identity } from '@veyq/crypto/v1'
 
 /**
  * What opened this vault — the input ADR 0060's cold-credential gate reads (uc.account.rotate-keys §2).

@@ -17,8 +17,14 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
 
 ## Repository shape
 - `contracts/` — OpenAPI + crypto vectors: the source of truth code is generated from.
-- `backend/` + `web/` — the two surfaces, and the whole set. A CR's phase order is
+- `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**.
+- `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
+  suite + the cold account birth + the wire base64, shared by `web/` and (soon) `admin-web/`
+  ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
+  package** — duplicating key-material logic would be a security defect, not a maintenance nuisance. Nothing
+  else is shared: no UI, no router, no state. `npm ci` runs from the repo root; each package still proves
+  itself with its own `npm run check`.
 - `docs/` — internal engineering state (English) + working flow (`ai/`, `inbox.md`).
 - `wiki/` — **published** end-user GitHub Wiki: plain language, **EN+DE**, focused on what you can do
   and "your data is safe, here's why".

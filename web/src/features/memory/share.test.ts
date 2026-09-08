@@ -12,9 +12,9 @@ import { createShare, resolveShare, createContributorIdentity, deleteSharePhoto,
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta } from './media'
 import { sharesApi, publicSharesApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, b64url, fromB64std } from '../../shared/base64'
-import { PRODUCTION_ARGON_TIMEOUT_MS } from '../../test/argon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
 const CHAPTER_ID = '2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e'
@@ -281,7 +281,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
 // The share-password gate runs Argon2id at production params inside the code under test — `createShare(…,
 // password)` and `derivePasswordToken` take no params argument, and giving them one for a test's benefit is
 // exactly the affordance we don't add. So the cost is inherent and the ceiling is stated here, on this block
-// only. See src/test/argon.ts.
+// only. See packages/crypto/src/testArgon.ts.
 describe('password protection (cr-0118)', () => {
   it('createShare with a password sends the gate fields; the verifier = SHA-256(Argon2id(pw, salt))', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-p1' })

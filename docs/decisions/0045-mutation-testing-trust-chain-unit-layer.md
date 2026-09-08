@@ -133,7 +133,7 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
     (crypto primitives vs. authz decisions) must keep the primitive score from masquerading as authz coverage;
     reporting them merged would be the same misleading-green it exists to prevent.
 - **Cost, split honestly by surface:**
-  - **Web is small** — a tool at an already-strong surface. tier1 `shared/crypto/**` ≈ 350–650 mutants, full run
+  - **Web is small** — a tool at an already-strong surface. tier1 `packages/crypto/src/**` ≈ 350–650 mutants, full run
     minutes (Argon2id KDF mutants dominate), PR diff ~1–3 min.
   - **Backend is the real work** — a **scoped security-core refactor** (disentangle the fusion points, write the
     pure-policy unit tests), *not* "wire up PIT". The mutatable logic is tiny once boot-free, so PIT itself is

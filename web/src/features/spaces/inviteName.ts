@@ -6,8 +6,8 @@
 // divergent name. A distinct `group-name-key` AAD context (not `scope-grant`) gives domain separation — a
 // name-key wrap can never be reinterpreted as a scope-key grant. Mirrors {@link ./grant#wrapScopeKeyToMember},
 // but wraps the derived name-key, not the scope key.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { identityPrivate } from '../../app/vault'
 import { openName } from '../memory/tree'
 

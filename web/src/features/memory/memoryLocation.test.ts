@@ -21,8 +21,8 @@ import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 import { sealNodeMeta } from './nodeMeta'
 import type { MediaItem, MediaMeta } from './media'
 import { contentApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)

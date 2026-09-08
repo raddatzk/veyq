@@ -28,7 +28,7 @@ import { setMapsConsent, setGeocoderUrl } from '../../../shared/state/useMapConf
 import { reverseGeocode } from '../geocode'
 import { epochMsToIsoDate } from '../../../shared/isoDate'
 import { mediaApi, contentApi } from '../../../api/client'
-import * as v1 from '../../../shared/crypto/v1'
+import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
 import { galleryFakeStore } from './galleryFakeStore'

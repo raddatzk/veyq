@@ -46,7 +46,7 @@ server's own responses**, not an instrumented crypto primitive. Whatever the cli
 unseal; so the canary set is every string leaf recovered by opening the sealed fields the server returned, using
 the keys the suite already holds. Nothing is registered, so nothing can be forgotten.
 
-A hook in the AEAD primitive was the obvious alternative and is rejected twice over. `web/src/shared/crypto/v1.ts`
+A hook in the AEAD primitive was the obvious alternative and is rejected twice over. `packages/crypto/src/v1.ts`
 is **conformance-pinned** to `contracts/crypto/vectors/v1.json` and sits in the Stryker mutation scope — it is
 the last file in the repo that should grow a test affordance. And it is the wrong altitude regardless: `aeadSeal`
 is reached by `symWrap`/`asymWrap` as well, so it would record **key material** as canaries, and searching a

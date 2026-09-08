@@ -1,6 +1,9 @@
 // base64url (RFC 4648 §5, unpadded) — the encoding used everywhere on the wire (sealed bytes, blobs, tokens).
-// This is plain transport encoding, not crypto, so it lives here rather than in the crypto suite. Previously
-// ~30 modules each carried their own byte-identical copy (the decode had subtly drifted into three variants).
+// This is plain transport encoding, not crypto. It nevertheless sits INSIDE the crypto package (moved here
+// 2026-09-08, cr-admin-web-extraction / ADR 0065) for one reason: `accountBirth.ts` needs `b64std`, and a
+// package cannot reach back into a consumer — so the alternative was a second copy in each surface, which is
+// precisely the drift the paragraph below records. One copy beats a tidy filing. Previously ~30 modules each
+// carried their own byte-identical copy (the decode had subtly drifted into three variants).
 
 /** Bytes → unpadded base64url string. */
 export function b64url(b: Uint8Array): string {

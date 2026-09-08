@@ -8,6 +8,7 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
                must exist, declare method, AND that method must have a non-empty body — an empty `{}`
                block is rejected; a Kotlin expression body `= expr` counts, it delegates to real code)
     web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
+    crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
 
 `http` is NOT a coverage surface (ADR 0040): the `.http` files remain IntelliJ dev tooling but run in
 no CI job, so they make no coverage claim — the same behaviour is proven by the backend slice tests.
@@ -53,11 +54,16 @@ FEATURES = ROOT / "docs" / "features"
 COVERAGE = ROOT / "docs" / "coverage" / "features"
 BACKEND_TESTS = ROOT / "backend" / "src" / "test"
 WEB = ROOT / "web"
+CRYPTO = ROOT / "packages" / "crypto"
 
 # The surface set, and the whole of it: a surface counts when a CI job actually runs its tests — the ADR 0040
 # principle, applied by rule rather than by name (the claim follows the build). Every use-case owes every
 # surface here; adding one only ever *permits* refs, so a new surface is one line plus its resolution rule.
-SURFACES = {"backend", "web"}
+SURFACES = {"backend", "web", "crypto"}
+
+# Surfaces resolved as "a test-file path relative to this root". `web` and `crypto` differ only in the root
+# they hang off, so the rule is a table rather than a branch per surface.
+FILE_ROOTS = {"web": WEB, "crypto": CRYPTO}
 KNOWN_LEVELS = {"unit", "integration", "e2e"}
 
 errors: list[str] = []
@@ -166,12 +172,14 @@ def _check_class_method(area: str, ref: str, stem_map: dict[str, dict[str, bool]
 def check_ref(area: str, ref: str, where: str) -> None:
     if area == "backend":
         _check_class_method(area, ref, backend_methods, where)
-    elif area == "web":
-        # web refs are file paths relative to web/, and must be test files (not any real file)
-        if not (WEB / ref).exists():
-            errors.append(f"{where}: web test file not found: {ref}")
+    elif area in FILE_ROOTS:
+        # these refs are file paths relative to the surface's own root, and must be test files (not any real file)
+        root = FILE_ROOTS[area]
+        if not (root / ref).exists():
+            errors.append(f"{where}: {area} test file not found: {ref}")
         elif not WEB_TEST_RE.search(ref):
-            errors.append(f"{where}: web ref is not a test file (expected *.test|*.spec .ts/.tsx/.js/.jsx): {ref}")
+            errors.append(f"{where}: {area} ref is not a test file "
+                          f"(expected *.test|*.spec .ts/.tsx/.js/.jsx): {ref}")
 
 
 backend_methods = backend_test_methods()

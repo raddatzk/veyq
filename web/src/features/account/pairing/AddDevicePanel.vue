@@ -52,7 +52,7 @@ import { startPairingAnswerPolling, stopPairingAnswerPolling } from './pairingAn
 import { account } from '../../../app/account'
 import { masterKey } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
-import type * as v1 from '../../../shared/crypto/v1'
+import type * as v1 from '@veyq/crypto/v1'
 
 // `sealed` is terminal on this device and says so: the collect that hands the grant over spends the channel
 // whoever calls it, so this side cannot look again to see whether the other device arrived (see the poll

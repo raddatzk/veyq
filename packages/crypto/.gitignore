@@ -1,0 +1,5 @@
+# Stryker mutation testing: the HTML/JSON reports + the in-place backup/temp dir are build artifacts. The
+# incremental report (reports/stryker-incremental.json) is the CI *cache* (ADR 0045 §4), restored via
+# actions/cache — never committed.
+reports/
+.stryker-tmp/

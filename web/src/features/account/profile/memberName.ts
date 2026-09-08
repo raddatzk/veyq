@@ -2,8 +2,8 @@
 // Operator-blind: AEAD-sealed on-device (same `symWrap` as favorites/node-meta); only the ciphertext blob
 // crosses the API. Kept in its own crypto-only module (no api/client or Vue deps) so the dev bootstrap script
 // (Node/tsx) can seal identically without pulling in the app graph.
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 /** AAD/context binding for the sealed real-name blob (like `favorites` for the favorites blob). */
 const NAME_CTX = 'member-name'

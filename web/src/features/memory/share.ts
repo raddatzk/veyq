@@ -8,8 +8,8 @@
 //  - **curator** (authed): mint / list / revoke a share.
 //  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
 //    chapter's `K_mem` down the subtree, and open blobs via the gated share-scoped presign endpoint.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std, fromB64url } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'

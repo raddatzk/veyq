@@ -19,11 +19,13 @@ on:
     # Source AND tests: a change to either can move the score (a weakened assertion lives in a *.test.ts), so
     # either must re-run the gate.
     paths:
-      - "web/src/shared/crypto/**"
+      - "packages/crypto/**"
+      - "web/src/**"
       - "web/stryker.config.mjs"
       - "web/stryker.mutate.json"
       - "web/package.json"
-      - "web/package-lock.json"
+      - "package.json"
+      - "package-lock.json"
       - "scripts/mutation_meta_check.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation.yml"
@@ -34,11 +36,13 @@ on:
   push:
     branches: [main]
     paths:
-      - "web/src/shared/crypto/**"
+      - "packages/crypto/**"
+      - "web/src/**"
       - "web/stryker.config.mjs"
       - "web/stryker.mutate.json"
       - "web/package.json"
-      - "web/package-lock.json"
+      - "package.json"
+      - "package-lock.json"
       - "scripts/mutation_meta_check.py"
       - "scripts/mutation_meta_check_selftest.py"
       - ".github/workflows/mutation.yml"
@@ -68,7 +72,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # The incremental report is the CI cache (ADR 0045 §4): Stryker re-tests only mutants whose code or
       # covering tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved
@@ -76,21 +80,31 @@ jobs:
       - name: Restore Stryker incremental cache
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
-          path: web/reports/stryker-incremental.json
+          path: |
+            web/reports/stryker-incremental.json
+            packages/crypto/reports/stryker-incremental.json
           key: stryker-incremental-${{ github.sha }}
           restore-keys: |
             stryker-incremental-
 
       - name: Install dependencies
-        working-directory: web
-        # `npm ci` runs `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports
-        # exists (mirrors ci.yml's frontend job). openapi-generator needs Java, pre-installed on ubuntu-latest.
+        # From the workspace root: one `npm ci` links `@veyq/crypto` into web/ and runs each workspace's
+        # `prepare` -> `generate:api`, so the generated API client the full dry-run suite imports exists
+        # (mirrors ci.yml's frontend job). openapi-generator needs Java, pre-installed on ubuntu-latest.
         run: npm ci
 
-      - name: Run crypto mutation gate
+      # TWO gates, not one, since the suite was split across packages (cr-admin-web-extraction, ADR 0065).
+      # Stryker's test runner is the project's own vitest and neither project collects the other's suites, so
+      # each manifest must be mutated where its killing tests live — a single run across the boundary would
+      # report a green score over uncovered files, the exact failure the meta-check below exists to catch.
+      - name: Run shared-crypto mutation gate (v1.ts + accountBirth.ts)
+        working-directory: packages/crypto
+        # Full scope, incremental-accelerated. stryker.config.mjs breaks the build below the calibrated break
+        # threshold — that is the gate.
+        run: npm run mutation
+
+      - name: Run web crypto-logic mutation gate (the six files that stayed in web/)
         working-directory: web
-        # Full scope (one small file), incremental-accelerated. stryker.config.mjs breaks the build below the
-        # calibrated break threshold — that is the gate.
         run: npm run mutation
 
       - name: Meta-check selftest (the total-vs-per-glob asymmetry is as documented)

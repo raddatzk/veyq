@@ -16,14 +16,14 @@ import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenant
 import { sealName } from '../features/account/profile/profile'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import { InviteRole } from '../api/generated/tenants'
-import { buildAccount, type BuiltAccount } from '../features/account/register/accountBirth'
+import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { login, withRefresh } from '../features/account/login/login'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { identityPrivate, vaultState } from '../app/vault'
 import { account } from '../app/account'
 import { setupApi } from '../api/client'
-import { fromB64std } from '../shared/base64'
-import { hybridPublic } from '../shared/crypto/v1'
+import { fromB64std } from '@veyq/crypto/base64'
+import { hybridPublic } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
 
 const { t } = useI18n()

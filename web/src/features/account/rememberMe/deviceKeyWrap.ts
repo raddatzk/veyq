@@ -8,7 +8,7 @@
 // This is the platform + server-wrap half; the wrap KEK is the device key alone (no KDF), so the conformance-
 // pinned v1 suite isn't involved — WebCrypto seals directly with a key whose bytes never enter JS. The 12-byte
 // AEAD iv rides the wrap's kdfParams (opaque to the server); the ciphertext rides wrappedKey.
-import { b64std, fromB64std } from '../../../shared/base64'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { idbRun } from '../../../shared/idb'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum, MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/generated/account'

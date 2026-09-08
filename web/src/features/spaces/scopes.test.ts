@@ -27,8 +27,8 @@ import { identityPrivate } from '../../app/vault'
 import { openName, sealName } from '../memory/tree'
 import { deriveGroupNameKey } from './inviteName'
 import { deriveSpaceIconKey, sealIcon } from './spaceIcon'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 // A real identity for the test; the mocked vault hands out a FRESH copy each call (the data layer zeroes
 // the copy it receives), while we keep this master to verify the grants it produces.

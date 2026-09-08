@@ -5,10 +5,10 @@
 // surface, never on the generator runtime.
 import { tenantsApi } from '../../api/client'
 import type { InvitePreview, TenantActivated, TenantActivatedWithUser } from '../../api/generated/tenants'
-import * as v1 from '../../shared/crypto/v1'
-import type { HybridPublic } from '../../shared/crypto/v1'
-import { b64std } from '../../shared/base64'
-import type { AccountMaterial } from '../account/register/accountBirth'
+import * as v1 from '@veyq/crypto/v1'
+import type { HybridPublic } from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
+import type { AccountMaterial } from '@veyq/crypto/accountBirth'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'

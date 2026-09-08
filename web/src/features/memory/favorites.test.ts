@@ -5,8 +5,8 @@ vi.mock('../account/login/login', () => ({ withRefresh: (fn: () => unknown) => f
 
 import { loadFavorites, saveFavorites } from './favorites'
 import { favoritesApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
-import { fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { fromB64std } from '@veyq/crypto/base64'
 
 const K = v1.randomBytes(32)
 

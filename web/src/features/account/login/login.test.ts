@@ -6,9 +6,9 @@ import { login, refreshSession, logout } from './login'
 import { loginApi, tokenApi, sessionApi } from '../../../api/client'
 import { session } from '../../../app/session'
 import { setUnlocked, isUnlocked } from '../../../app/vault'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
-import { PRODUCTION_ARGON_TIMEOUT_MS } from '../../../test/argon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 const INSTANCE_SALT = new Uint8Array(16).fill(3)
 const NONCE = new Uint8Array(32).fill(9)
@@ -49,7 +49,7 @@ describe('login (uc.account.login)', () => {
     expect(v1.authVerify(wrongPub, NONCE, fromB64std(captured))).toBe(false)
     // Three production-params Argon2id derivations: `login` picks the params itself, so the two expected
     // keypairs must match it — the cost is inherent here, unlike the wraps whose params ride on the wire.
-    // Only this test gets the raised ceiling; the three below stay on the 5s default. See src/test/argon.ts.
+    // Only this test gets the raised ceiling; the three below stay on the 5s default. See packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('re-locks the vault on logout (every sign-out path drops the unlocked keys)', async () => {

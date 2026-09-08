@@ -6,8 +6,8 @@
 //   cd web && npx tsx scripts/seed-owner.mts        # against http://localhost:8080 by default
 //
 // Override via env: VEYQ_BASE / VEYQ_EMAIL / VEYQ_NAME / VEYQ_PASSWORD. Requires a not-yet-set-up instance.
-import { fromB64std } from '../src/shared/base64'
-import { buildAccount } from '../src/features/account/register/accountBirth'
+import { fromB64std } from '@veyq/crypto/base64'
+import { buildAccount } from '@veyq/crypto/accountBirth'
 import { writeOwner, materializeKeys } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'

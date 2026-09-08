@@ -10,9 +10,9 @@
 // job per shared scope for a *different* key-holder, and re-admission runs through that human's changed-key
 // review (ADR 0060 Decision 4). A rotator who could drive their own re-grant would let an attacker holding the
 // old identity re-admit only themselves, which turns the exclusion into the takeover's final step.
-import * as v1 from '../../../shared/crypto/v1'
-import { unlockKekAsync, recoveryKekAsync } from '../../../shared/crypto/argonWorker'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
 import { withRefresh } from '../login/login'
 import { masterKey, setUnlocked } from '../../../app/vault'

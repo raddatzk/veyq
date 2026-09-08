@@ -8,7 +8,7 @@ import { createMemory, listTree, openContentKey } from './tree'
 import { setMemoryDate, unsealMemoryDate } from './memoryDate'
 import { setMemoryLocation, unsealMemoryLocation, computeMedoid } from './memoryLocation'
 import { reverseGeocode, defaultLevel, type GeoLevel } from './geocode'
-import { fromB64std } from '../../shared/base64'
+import { fromB64std } from '@veyq/crypto/base64'
 import { ScopeKind } from '../../api/generated/scopes'
 
 /**

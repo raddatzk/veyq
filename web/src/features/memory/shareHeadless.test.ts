@@ -28,7 +28,7 @@ vi.mock('../../api/client', () => ({
 
 import { createShare } from './share'
 import { sharesApi } from '../../api/client'
-import * as v1 from '../../shared/crypto/v1'
+import * as v1 from '@veyq/crypto/v1'
 
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
 

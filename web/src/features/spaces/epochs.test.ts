@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 import { deriveEpochKeys, keyAt, writeKey, EPOCH_LINK, type EpochLink } from './epochs'
 
 // Forge a chain-link exactly as the rotating owner would (ADR 0024): wrappedPrev(e) = symWrap(E_e, E_{e-1}).

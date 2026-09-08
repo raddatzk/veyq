@@ -30,7 +30,7 @@ Two shapes were on the table:
 **Tokens (all client-side, the server never sees the raw password).**
 - `pw_salt` — random 16 B, per share.
 - `pwToken = Argon2id(password, pw_salt)` — 32 B, derived on the client (reuses the conformance-pinned Argon2id
-  in `web/src/shared/crypto/v1.ts`). This is the **bearer credential** the guest presents.
+  in `packages/crypto/src/v1.ts`). This is the **bearer credential** the guest presents.
 - `pw_verifier = SHA-256(pwToken)` — what the **server stores** and checks (`SHA-256(presented) == stored`). The
   server does **no** Argon2id (the KDF stays client-side); a DB leak yields only the verifier, so recovering a
   usable token still costs an Argon2id-per-guess brute-force of the password.

@@ -8,9 +8,9 @@
 // itself and must not try, so there is nothing to prove client-side beyond producing the attestation when a
 // current password is offered. A wrong current password simply produces a signature the server rejects
 // (403 attestation_failed) — nothing here needs to anticipate that.
-import * as v1 from '../../../shared/crypto/v1'
-import { deriveAuthKeypairAsync, unlockKekAsync } from '../../../shared/crypto/argonWorker'
-import { b64std, fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { deriveAuthKeypairAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { loginApi, accountPasswordApi } from '../../../api/client'
 import { withRefresh } from '../login/login'
 import { masterKey } from '../../../app/vault'

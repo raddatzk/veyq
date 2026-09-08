@@ -2,8 +2,8 @@
 // (#96): buckets are uploader *metadata* (opaque owner_key + a K_mem-sealed folder name), not part of the
 // encrypted media-blob data layer — they touch no blob, no K_blob, and none of media.ts's crypto/transport
 // core, so this is a clean one-way seam. Re-exported from ./media so existing importers keep their path.
-import * as v1 from '../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { bucketsApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 import { type BucketSummary } from '../../api/generated/media'

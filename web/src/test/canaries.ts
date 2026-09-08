@@ -16,7 +16,7 @@
 // fail in — but it is still a mistake, so: the argument is what an `unseal*`/`open*` returned, or a projection
 // of it (`tree.map((n) => n.name)`), never the sealed carrier.
 //
-// **Why not a hook in the crypto primitive.** `shared/crypto/v1.ts` is conformance-pinned to
+// **Why not a hook in the crypto primitive.** `@veyq/crypto`'s v1.ts is conformance-pinned to
 // `contracts/crypto/vectors/v1.json` and sits in the Stryker mutation scope — the last file in the repo that
 // should grow a test affordance. And `aeadSeal` is reached by `symWrap`/`asymWrap` too, so a hook there would
 // record **key material**: searching a database for random bytes proves nothing while burying the strings that

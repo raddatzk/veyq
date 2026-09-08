@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { PRODUCTION_ARGON_TIMEOUT_MS } from '../../../test/argon'
-import * as v1 from '../../../shared/crypto/v1'
-import { b64std, fromB64std } from '../../../shared/base64'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 // The API, vault and account state are stubbed; the crypto is real (changePassword.ts hardcodes production
 // ARGON, so a cheap-params trick would derive a DIFFERENT keypair than the code under test — there is no
-// params argument to share a lighter cost through, unlike rotateKeys). See src/test/argon.ts § "production
+// params argument to share a lighter cost through, unlike rotateKeys). See packages/crypto/src/testArgon.ts § "production
 // owns the derivation".
 const requestLoginChallenge = vi.fn()
 const changePasswordCall = vi.fn().mockResolvedValue(undefined)

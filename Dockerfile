@@ -6,18 +6,27 @@
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `web/` since the greenfield reset.
 FROM node:22-bookworm-slim AS frontend-build
-WORKDIR /web
+# The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
+# root and `web/` resolves `@veyq/crypto` through it, so the stage builds from /src with web/ as a workspace
+# rather than treating web/ as a standalone project. `/src/contracts` keeps generate:api's `../contracts/api`
+# resolving from /src/web exactly as it does in the checkout.
+WORKDIR /src/web
 # The OpenAPI TypeScript client is GENERATED and deliberately never tracked (web/.gitignore:1-4, mirroring the
 # backend), so a clean checkout has no src/api/generated. @openapitools/openapi-generator-cli is a Java tool,
 # which is why this stage needs a JRE — the recovered original never did, because back then it did not generate.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
-# The specs must land BEFORE `npm ci`: web/package.json:13 has `"prepare": "npm run generate:api"`, which npm
+# The specs must land BEFORE `npm ci`: web/package.json has `"prepare": "npm run generate:api"`, which npm
 # runs as part of the install, and generate:api reads `../contracts/api/*.openapi.yaml` relative to web/.
 # (Measured the hard way — with this COPY below the install, `npm ci` fails with "spec file is not found".)
-COPY contracts/api /contracts/api
-COPY web/package.json web/package-lock.json* ./
+COPY contracts/api /src/contracts/api
+# Every manifest the workspace resolution reads, and nothing else, so a source edit does not bust the install
+# layer. packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
+# build step), and npm links it into node_modules at install time, so the sources have to be there already.
+COPY package.json package-lock.json /src/
+COPY packages/crypto /src/packages/crypto
+COPY web/package.json ./
 RUN npm ci
 COPY web/ ./
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
@@ -40,7 +49,7 @@ FROM backend-build-base AS backend-build-jvm
 # backend/gradle/openapi.gradle.kts:22 reads `fileTree("../contracts/api")`.
 COPY contracts/api ../contracts/api
 COPY backend/src ./src
-COPY --from=frontend-build /web/dist ./src/main/resources/META-INF/resources
+COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 # Dropped `-Dquarkus.package.type=fast-jar`: removed in Quarkus 3.x (this is 3.36.0, backend/build.gradle.kts:26)
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
@@ -56,7 +65,7 @@ RUN ./gradlew --no-daemon help
 FROM backend-build-native-base AS backend-build-native
 COPY --chown=quarkus:quarkus contracts/api ../contracts/api
 COPY --chown=quarkus:quarkus backend/src ./src
-COPY --chown=quarkus:quarkus --from=frontend-build /web/dist ./src/main/resources/META-INF/resources
+COPY --chown=quarkus:quarkus --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 RUN ./gradlew --no-daemon quarkusBuild -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false -x test
 
 # --- runtime (JVM) — the target container.yml builds --------------------------------------------------------

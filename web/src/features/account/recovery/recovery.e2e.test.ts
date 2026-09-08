@@ -12,8 +12,8 @@
 // Runs under `VEYQ_E2E=1` via `scripts/run_web_e2e.py`, which gives this file its own database and brings the
 // mailbox up with the rest of the stack. Where that mailbox is, and how it is read, lives in `test/mailpit.ts`.
 import { beforeAll, describe, expect, it } from 'vitest'
-import * as v1 from '../../../shared/crypto/v1'
-import { fromB64std } from '../../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { fromB64std } from '@veyq/crypto/base64'
 import { session } from '../../../app/session'
 import { login } from '../login/login'
 import { accountApi } from '../../../api/client'
@@ -25,7 +25,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { createMemory, listTree } from '../../memory/tree'
 import { ScopeKind } from '../../../api/generated/scopes'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from './recovery'
-import { PRODUCTION_ARGON_TIMEOUT_MS } from '../../../test/argon'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 const live = process.env.VEYQ_E2E === '1'
 

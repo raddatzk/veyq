@@ -16,7 +16,7 @@
 // ever needs to move back, that is the signal a presentation concern is leaking into the data path again.
 // (The terms-acceptance helpers in `share.ts` are the deliberate exception — a `localStorage` flag genuinely is
 // browser state, not a layering fault, and `uc.sharing.share-accept` is browser-only by design.)
-import { b64url } from '../../shared/base64'
+import { b64url } from '@veyq/crypto/base64'
 import { recoverShareKey } from './share'
 
 /** Build the copyable link `/s/{shareId}#k=<base64url(K_share)>` — the fragment carries `K_share`, never sent. */

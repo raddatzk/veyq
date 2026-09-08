@@ -15,8 +15,8 @@ import type { MemoryLocation } from './memoryLocation'
 import { NodeKind } from '../../api/generated/content'
 import type { TreeNode } from './tree'
 import { epochsOf } from '../spaces/epochsTestUtil'
-import * as v1 from '../../shared/crypto/v1'
-import { b64std } from '../../shared/base64'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 
 // The K_mem wrap context, kept byte-identical to tree.ts's KMEM_CTX so nodeContentKey can re-open what we seal here.
 const KMEM_CTX = 'content-key'
