@@ -195,6 +195,10 @@ A refined CR nails **decisions, not keystrokes**:
   `shared/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't
   guess an abstraction into the CR.
+- **`satisfies:` decides where the acceptance criteria land — so decide it, don't inherit it.** A criterion
+  that describes a *property with several triggers* belongs to a use-case of its own, not under whichever
+  operation's use-case the CR happened to name; the tell that it went wrong is the same refs appearing under
+  two use-cases. Rule + the worked example: [`changes/README.md`](../../changes/README.md) § coverage.
 - **Carry the enforcement guard into the Definition of done.** If the CR rests on a structural invariant ("no
   duplication of X", "Y lives only in `shared/`"), its one-shot proof grep becomes a **permanent** guard — see
   [`changes/README.md`](../../changes/README.md).

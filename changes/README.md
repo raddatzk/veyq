@@ -315,6 +315,20 @@ entry with a reason) — and leaves `python3 scripts/validate_coverage.py` **gre
 while the trust chain is red. (A use-case refined ahead of any implementation ships a `status: planned`
 coverage file that gaps every target surface.)
 
+**A criterion belongs to the use-case that OWNS the property, not to the one that triggers it — and
+`satisfies:` will quietly answer the wrong question.** The refine session names one or two use-cases, the
+coverage file is then written under them by default, and nobody asks whether that is where a reader would
+look. `cr-database-driven-tenant-ingress` `satisfies:`-ed *create-tenant*, so *"the tenant's domain actually
+resolves"* landed there — a property caused by five different operations (create, change-domain, revoke,
+suspend, reactivate) and owned by none of them, which showed up immediately as a **second, duplicate** copy of
+the same refs under *suspend-tenant*. Two use-cases restating one claim is the tell; the fix was a use-case
+for the property itself, with the neighbours keeping their operations and pointing at it. So ask it once,
+during refinement, where it is a sentence: **does the criterion describe what this operation *does*, or a
+property the system *has*?** A property with more than one trigger wants its own use-case — including its own
+failure modes, which is the half that has nowhere else to live: *"no reverse proxy at all"*, *"a `Host` no
+tenant claims"*, *"DNS that never pointed here"* fit under no single operation and would simply have gone
+unwritten.
+
 ### A phase that supersedes prose names the SHAPE of the correction, not only the sentence
 
 Edited, narrowed, or deleted — say which. A phase that names one false sentence *reads* as precise while
