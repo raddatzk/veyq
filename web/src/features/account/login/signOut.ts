@@ -9,7 +9,7 @@
 // `handle401` is deliberately NOT this: it is redirect-only, for a request that came back unauthorized.
 import type { Router } from 'vue-router'
 import { logout } from './login'
-import { resetServerRole } from '../../admin/serverRole'
+import { resetServerRole } from '../../../app/serverRole'
 import { clearActiveSpace } from '../../../app/activeSpace'
 
 /** Revoke the current session, drop every local trace of it, and return to the sign-in screen. Idempotent. */

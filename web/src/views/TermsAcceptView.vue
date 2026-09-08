@@ -9,16 +9,12 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Card from 'primevue/card'
 import Message from 'primevue/message'
-import {
-  getTenantTerms,
-  acceptTenantTerms,
-  tenantError,
-  type TenantTerms,
-} from '../features/admin/createTenant/tenants'
+import { getTenantTerms, acceptTenantTerms, type TenantTerms } from '../features/tenant/tenantTerms'
+import { tenantError } from '../features/tenant/tenantError'
 import { activeSpace, markTermsAccepted, clearActiveSpace } from '../app/activeSpace'
 import { takeRoute } from '../app/pendingRoute'
 import { logout } from '../features/account/login/login'
-import { resetServerRole } from '../features/admin/serverRole'
+import { resetServerRole } from '../app/serverRole'
 import { renderMarkdown } from '../shared/markdown'
 import { handle401 } from '../shared/handle401'
 import { isUnauthorized } from '../shared/httpError'

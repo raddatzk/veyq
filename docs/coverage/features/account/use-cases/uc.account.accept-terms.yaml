@@ -16,12 +16,12 @@ acceptanceCriteria:
     text: A member with a session whose accepted_terms_version is below the tenant's terms_version is blocked from the shell and routed to /terms (after the session/unlock check — the gate needs a session, not an unlocked vault). A tenant with no terms (version 0) never gates.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
-      web: { unit: [src/features/admin/createTenant/terms.test.ts] }
+      web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: accept-recorded-server-side
     text: Accepting records the member's accepted_terms_version = the current terms_version (+ accepted_at) server-side, keyed by (user_id, tenant_id). The gate then clears and the shell renders.
     coverage:
       backend: { integration: [TenantTermsSliceTest.memberAcceptsThenABumpReStalesAndAStaleAcceptIs409] }
-      web: { unit: [src/features/admin/createTenant/terms.test.ts] }
+      web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: re-accept-on-version-bump
     text: When the operator bumps terms_version, the member's stored acceptance is now stale, so the gate re-appears; accepting the now-stale version is refused (409 terms_version_changed) until they re-read and re-accept the current one.
     coverage:

@@ -21,13 +21,8 @@ import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
 import { buildAccount, type BuiltAccount } from '../features/account/register/accountBirth'
 import { setupApi } from '../api/client'
-import {
-  createTenant,
-  acceptInvite,
-  registerAndAccept,
-  scopeGrant,
-  updateTenantMailSettings,
-} from '../features/admin/createTenant/tenants'
+import { createTenant, updateTenantMailSettings } from '../features/admin/createTenant/tenants'
+import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
 import { inviteMember } from '../features/spaces/members'
 import { clearMailbox, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
 

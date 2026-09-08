@@ -1,14 +1,11 @@
 // uc.admin.create-tenant (web, Slice A / cr-0009) — Server-Owner tenant administration on the
 // operator-blind data layer. Everything here is operational metadata + a hashed invite; there is NO content
-// key (the cold TENANT-scope birth that activates a tenant is Slice B). Thin facade over the generated
-// tenants client: views depend on this typed surface, never on the generator runtime.
+// key (the cold TENANT-scope birth that activates a tenant is Slice B, and lives with the **accept** side in
+// `features/tenant/tenantInvite.ts` — see ADR 0065). Thin facade over the generated tenants client: views
+// depend on this typed surface, never on the generator runtime.
 import { tenantsApi } from '../../../api/client'
-import { decodeHttpError } from '../../../shared/httpError'
 import type {
-  InvitePreview,
   LocalizedMarkdown,
-  TenantActivated,
-  TenantActivatedWithUser,
   TenantCreated,
   TenantInviteState,
   TenantMailSettings,
@@ -16,14 +13,11 @@ import type {
   TenantSummary,
   TenantTerms,
 } from '../../../api/generated/tenants'
-import * as v1 from '../../../shared/crypto/v1'
-import type { HybridPublic } from '../../../shared/crypto/v1'
-import { b64std } from '../../../shared/base64'
-import type { AccountMaterial } from '../../account/register/accountBirth'
 
-export type { TenantSummary, TenantInviteState, TenantCreated, InvitePreview } from '../../../api/generated/tenants'
+export type { TenantSummary, TenantInviteState, TenantCreated } from '../../../api/generated/tenants'
 export type { TenantTerms, LocalizedMarkdown } from '../../../api/generated/tenants'
 export type { TenantMailSettings, TenantMailSettingsUpdate } from '../../../api/generated/tenants'
+export { tenantError } from '../../tenant/tenantError'
 
 /** Create a PENDING tenant and mint an owner invite. */
 export function createTenant(tenantName: string, domain: string, ownerEmail: string): Promise<TenantCreated> {
@@ -70,7 +64,9 @@ export function reactivateTenant(tenantId: string): Promise<void> {
   return tenantsApi().reactivateTenant({ tenantId })
 }
 
-// --- Terms of service (cr-0114, ADR 0035) ---
+// --- Terms of service, AUTHORING side (cr-0114, ADR 0035). The member read/accept half is
+//     `features/tenant/tenantTerms.ts` — `getTenantTerms` appears on both because the author reads what
+//     they are about to replace. ---
 
 /** The tenant's current terms + the caller's accepted version (member-readable; a non-member is 404). */
 export function getTenantTerms(tenantId: string): Promise<TenantTerms> {
@@ -80,11 +76,6 @@ export function getTenantTerms(tenantId: string): Promise<TenantTerms> {
 /** Owner-only: set/replace the tenant's per-locale terms — a normalized change bumps the version (else 403). */
 export function updateTenantTerms(tenantId: string, terms: LocalizedMarkdown): Promise<TenantTerms> {
   return tenantsApi().updateTenantTerms({ tenantId, tenantTermsUpdate: { terms } })
-}
-
-/** Member: accept the tenant's current terms at [version] — must equal the current version, else 409. */
-export function acceptTenantTerms(tenantId: string, version: number): Promise<TenantTerms> {
-  return tenantsApi().acceptTenantTerms({ tenantId, acceptTermsRequest: { version } })
 }
 
 // --- Mail settings (cr-email-tenant-mail-settings-web, ADR 0048/0049/0050) ---
@@ -104,76 +95,4 @@ export function updateTenantMailSettings(
   update: TenantMailSettingsUpdate,
 ): Promise<TenantMailSettings> {
   return tenantsApi().updateTenantMailSettings({ tenantId, tenantMailSettingsUpdate: update })
-}
-
-// --- Slice B (cr-0010): invite acceptance / activation ---
-
-/** Preview an invite from its bootstrap secret (public — no session). */
-export function previewInvite(bootstrapSecret: string): Promise<InvitePreview> {
-  return tenantsApi().previewTenantInvite({ acceptPreviewRequest: { bootstrapSecret } })
-}
-
-/** Accept as an existing (signed-in) user, choosing a `username` for this tenant (ADR 0023). An OWNER invite
- *  carries the cold-born grant; a MEMBER invite omits it (grant-less; a key-holder delivers the key, cr-0076). */
-export function acceptInvite(
-  bootstrapSecret: string,
-  username: string,
-  grant?: string,
-  sealedName?: string,
-): Promise<TenantActivated> {
-  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, grant, sealedName } })
-}
-
-/** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
- *  the caller's per-tenant handle; `sealedName` is the OPTIONAL real name sealed under `K_tenant` at join
- *  (owner cold-birth only — a grant-less member seals it later via the profile op, ADR 0023). `grant` is set for
- *  an OWNER invite (cold-births the TENANT scope) and omitted for a MEMBER invite (grant-less join). */
-export function registerAndAccept(
-  bootstrapSecret: string,
-  username: string,
-  material: AccountMaterial,
-  grant?: string,
-  sealedName?: string,
-): Promise<TenantActivatedWithUser> {
-  return tenantsApi().registerAndAcceptTenantInvite({
-    registerAndAcceptRequest: {
-      bootstrapSecret,
-      username,
-      account: {
-        suiteId: material.suiteId,
-        identityPublicKey: material.identityPublicKey,
-        wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey,
-        authPublicKey: material.authPublicKey,
-        masterKeyWraps: material.masterKeyWraps,
-        recoveryMasterKeyTag: material.recoveryMasterKeyTag,
-      },
-      grant,
-      sealedName,
-    },
-  })
-}
-
-/**
- * Cold-birth the TENANT scope: mint a fresh scope root key (`K_tenant`), and return **both** the first grant
- * (the key `asymWrap`'d to the owner's own identity public key — opaque ciphertext to the server) **and the key
- * itself**, so the owner can immediately seal their real name under it at join (cr-0106). The key never leaves
- * the device; only the sealed grant + (optional) sealed name cross the API.
- */
-export function bornTenantScope(identityPublic: HybridPublic): { grant: string; scopeRootKey: Uint8Array } {
-  const scopeRootKey = v1.randomBytes(32)
-  const grant = b64std(v1.asymWrap(identityPublic, scopeRootKey, 'scope-grant', { nonce: v1.randomBytes(12) }))
-  return { grant, scopeRootKey }
-}
-
-/** Just the grant from a fresh tenant-scope birth (for callers that don't seal a name). */
-export function scopeGrant(identityPublic: HybridPublic): string {
-  return bornTenantScope(identityPublic).grant
-}
-
-/**
- * Decode a failed tenant call into `{ status, code }` for UI mapping (401 → re-login, 403 → not owner,
- * 409 → domain_taken / tenant_not_pending). Thin domain-named alias over the shared {@link decodeHttpError}.
- */
-export function tenantError(e: unknown): Promise<{ status: number; code: string | null }> {
-  return decodeHttpError(e)
 }

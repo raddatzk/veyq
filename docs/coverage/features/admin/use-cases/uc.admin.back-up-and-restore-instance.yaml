@@ -59,7 +59,7 @@ gaps:
     restore, which is a live-instance property and therefore web's.
   web: >-
     The suites exist and pass locally; the only thing missing is a CI run to execute them (ADR 0040). Two
-    grouped e2e suites under `web/src/features/admin/` run through `scripts/run_web_e2e.py`: `restore.*`
+    grouped e2e suites under `web/src/features/instanceBackup/` run through `scripts/run_web_e2e.py`: `restore.*`
     births an instance with media, has the orchestrator capture it, DESTROY the source, and restore onto a
     fresh database, bucket and key path, then signs in for real (`login` + `unlockMasterKey` — Argon2 over the
     password and the Emergency Kit's Secret Key, no injected vault) and compares the fetched plaintext byte for

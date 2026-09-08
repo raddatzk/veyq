@@ -8,7 +8,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { createI18n } from 'vue-i18n'
 
-vi.mock('../features/admin/serverRole', () => ({
+vi.mock('../app/serverRole', () => ({
   serverRole: reactive({ canManage: false, probed: true }),
   probeServerRole: vi.fn(),
 }))
@@ -24,7 +24,7 @@ vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template
 vi.mock('../features/admin/createTenant/CreateTenantDialog.vue', () => ({ default: { template: '<div class="stub-create-tenant" />' } }))
 
 import SettingsHubView from './SettingsHubView.vue'
-import { serverRole } from '../features/admin/serverRole'
+import { serverRole } from '../app/serverRole'
 import { listMyGroups } from '../features/spaces/scopes'
 import { listTenants } from '../features/admin/createTenant/tenants'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'

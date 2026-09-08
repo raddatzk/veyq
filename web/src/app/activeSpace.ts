@@ -5,7 +5,7 @@
 // (operator-blind: `K_SC` is derived on-device) and resets the per-scope tree + favorites.
 import { reactive } from 'vue'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken, type OpenedScope } from '../features/spaces/scopes'
-import { getTenantTerms } from '../features/admin/createTenant/tenants'
+import { getTenantTerms } from '../features/tenant/tenantTerms'
 import { zeroEpochKeys, type EpochKeys } from '../features/spaces/epochs'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../features/memory/location'

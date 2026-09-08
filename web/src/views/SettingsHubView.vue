@@ -27,7 +27,7 @@ import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, type GroupSpace } from '../features/spaces/scopes'
 import { listTenants, type TenantSummary } from '../features/admin/createTenant/tenants'
-import { serverRole, probeServerRole } from '../features/admin/serverRole'
+import { serverRole, probeServerRole } from '../app/serverRole'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { SPACES_GROUPS } from '../features/platform/capabilities'
 

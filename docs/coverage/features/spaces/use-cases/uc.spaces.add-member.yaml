@@ -93,7 +93,7 @@ acceptanceCriteria:
       backend:
         integration: [MemberIdentitySliceTest.twoMembersCannotShareAUsernameInOneTenant, MemberIdentitySliceTest.theSameUsernameIsFreeInAnotherTenant, MemberIdentitySliceTest.directoryShowsUsernameAndOwnerOnlyEmail, MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName, MemberIdentitySliceTest.changingToATakenUsernameIs409, MemberIdentitySliceTest.registerAndAcceptSealsTheOptionalNameAtJoin, TenantAcceptSliceTest.existingOwnerAcceptSealsTheOptionalNameAtJoin]
       web:
-        unit: [src/features/account/profile/profile.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/admin/createTenant/tenants.test.ts]
+        unit: [src/features/account/profile/profile.test.ts, src/features/spaces/TenantMembersPanel.test.ts, src/features/tenant/tenantInvite.test.ts]
   - id: wrap-to-foreign-grant
     text: Any online key-holder's device (not necessarily the inviter — every member holds K_SC) wraps the tenant scope key to a pending member's identity public key (asymWrap(hybridPublic(member), K_SC, "scope-grant") — the first wrap to a foreign identity), eagerly and automatically (no second human action), and posts it as that member's grant; first-online-wins, the rest no-op. The member opens it with their own identity private on next entry and reaches the shared space. The server stores opaque ciphertext, never the key.
     # Delivery built as a grant-delivery job on the background-task mechanism (cr-0076). The onboarding that

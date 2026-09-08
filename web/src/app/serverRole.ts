@@ -4,7 +4,7 @@
 // the ProfileMenu "Server settings" entry. The settings page re-checks via its own load (403 → not authorized),
 // so a stale probe can never expose data — this only decides whether to *offer* the entry.
 import { reactive } from 'vue'
-import { listTenants } from './createTenant/tenants'
+import { listTenants } from '../features/admin/createTenant/tenants'
 
 export const serverRole = reactive({ canManage: false, probed: false })
 
