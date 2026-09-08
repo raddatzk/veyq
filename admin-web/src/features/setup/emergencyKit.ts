@@ -3,7 +3,19 @@
 // machine-readable (an embedded payload), so it can be re-entered, scanned, or imported as a file later.
 // The Secret Key is sensitive — this is the user's recovery secret, so the kit must be stored safely.
 // jspdf + qrcode are heavy and only needed when actually downloading a kit — they're imported lazily
-// inside downloadKitPdf so the parse/import path (the common one) stays cheap.
+// inside downloadKitPdf so the parse path stays cheap.
+//
+// `admin-web`'s copy is the WRITE half only. `web/`'s version also imports a kit — from the PDF's text or by
+// decoding a QR image with `jsqr` — because a returning member arrives with a kit in hand. This surface never
+// does: the only kit it ever meets is the one first-run setup just minted, one screen ago, for an account that
+// did not exist a moment before. Dropping the read half drops `jsqr` with it, which is worth naming rather
+// than trimming quietly: the root CLAUDE.md forbids unmaintained dependencies and `web/CLAUDE.md` grants jsQR
+// a single, argued exception (HEAD from 2021). An exception earned once is not a licence to spread it to a
+// second package for a code path that has no caller.
+//
+// Measured, not assumed: the local `npm run build` was GREEN with `jsqr` undeclared, because npm workspaces
+// hoisted `web/`'s copy into the root `node_modules`. Only the container build — which never sees `web/` —
+// failed to resolve it. A workspace hides an undeclared dependency from every check that runs in the repo.
 
 export type KitData = { email: string; secretKey: string }
 
@@ -40,45 +52,6 @@ export function parseKit(text: string): KitData | null {
   }
 }
 
-/** Decode the QR from an image file (a screenshot/photo of the kit) — draw it to a canvas and run jsQR. */
-async function decodeQrImage(file: File): Promise<string | null> {
-  const jsQR = (await import('jsqr')).default
-  const bitmap = await createImageBitmap(file)
-  try {
-    const canvas = document.createElement('canvas')
-    canvas.width = bitmap.width
-    canvas.height = bitmap.height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return null
-    ctx.drawImage(bitmap, 0, 0)
-    const { data, width, height } = ctx.getImageData(0, 0, canvas.width, canvas.height)
-    return jsQR(data, width, height)?.data ?? null
-  } finally {
-    bitmap.close()
-  }
-}
-
-/**
- * Recover the kit from an uploaded file — the kit **PDF** (or any text carrying the `veyqkit:` token), or a
- * QR **image** (screenshot/photo). Entirely client-side; returns the parsed kit or null if no kit is found.
- */
-export async function importKitFromFile(file: File): Promise<KitData | null> {
-  try {
-    const fromText = parseKit(await file.text())
-    if (fromText) return fromText
-  } catch {
-    /* not text / unreadable — try the image path */
-  }
-  if (file.type.startsWith('image/')) {
-    try {
-      const token = await decodeQrImage(file)
-      if (token) return parseKit(token)
-    } catch {
-      /* unreadable image */
-    }
-  }
-  return null
-}
 
 /** Build + download the Emergency Kit PDF: human text + QR + an embedded payload (in the PDF metadata). */
 export async function downloadKitPdf(data: KitData): Promise<void> {

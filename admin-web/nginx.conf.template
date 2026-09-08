@@ -1,0 +1,81 @@
+# The admin container's whole server config (ADR 0065). Two things and no more: serve the built SPA, and
+# reverse-proxy /api/* to the backend from THIS origin.
+#
+# Why the proxy at all — it is not convenience. The Server-Owner session's refresh token rides an httpOnly,
+# same-origin cookie (cr-0055). If this app called the instance's public domain directly, every deployment
+# where ADMIN_DOMAIN differs from VEYQ_DOMAIN would be cross-origin, and the refresh cookie would be set on a
+# domain this page cannot send it back from. Proxying makes the browser see ONE origin — whatever address the
+# operator reaches this container at, including plain `http://localhost:<port>` with no DNS at all, which is
+# what lets first-run setup happen before VEYQ_DOMAIN resolves anywhere.
+#
+# ${BACKEND_URL} and ${VEYQ_RESOLVERS} are the only substituted values; see
+# /docker-entrypoint.d/30-veyq-backend-url.sh, which passes exactly those two names to envsubst so nginx's own
+# `$host`/`$uri` variables survive.
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Drops the VERSION from the `Server:` header (the name itself stays — nginx has no directive to remove
+    # it). This surface is the highest-privilege thing the instance serves, and a version banner is free
+    # reconnaissance for anyone who reached it at all.
+    server_tokens off;
+
+    # Belt-and-braces against this page ever being framed or indexed. The SPA also ships a CSP <meta> with
+    # frame-ancestors 'none' and a robots noindex, but a header cannot be stripped by a broken build.
+    #
+    # TRAP, measured here: `add_header` does NOT merge across levels. A location that declares even one
+    # `add_header` of its own inherits NONE of the server-level ones. So these four have to be repeated in the
+    # `= /index.html` location below, which sets `Cache-Control` — and that location is not an edge case, it is
+    # where `try_files` sends every SPA route via an internal redirect. Without the repeat the headers were
+    # measurably absent from the one response that matters most.
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy no-referrer always;
+    add_header X-Robots-Tag "noindex, nofollow" always;
+
+    location /api/ {
+        # Resolve the upstream at REQUEST time, not at config-parse time. A literal `proxy_pass http://app:8080`
+        # makes nginx resolve `app` while reading the config, so the container refuses to start at all when the
+        # backend is not up or not resolvable yet — measured: `nginx: [emerg] host not found in upstream`, exit
+        # before serving a byte. That is the wrong failure for this surface in particular: the admin container
+        # is the one an operator reaches to bootstrap or to diagnose an instance, so it must come up and say
+        # what is wrong rather than crash-loop alongside whatever it was meant to help fix. With the upstream
+        # in a variable, an unreachable backend is a 502 on /api/* and the console still loads.
+        resolver ${VEYQ_RESOLVERS} valid=10s;
+        set $veyq_backend ${BACKEND_URL};
+        proxy_pass $veyq_backend$request_uri;
+
+        # The backend resolves the tenant from the Host, and the Server-Owner endpoints are tenant-independent,
+        # so the Host is forwarded unchanged rather than rewritten to the upstream's name.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_http_version 1.1;
+        # Argon2id at production params runs in the BROWSER, but the setup POST that follows it carries the
+        # whole cold account birth; a short upstream timeout would turn a slow instance into a failed bootstrap.
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+
+    # SPA history fallback. Everything that is not a real file is the app's own routing (/setup, /login, /).
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # index.html must never be cached: it is the only file whose name is stable, so a cached copy pins the
+    # operator to a previous build's hashed assets after an upgrade. The hashed assets themselves are immutable.
+    # The four security headers are REPEATED, not forgotten — see the add_header trap noted above.
+    location = /index.html {
+        add_header Cache-Control "no-store" always;
+        add_header X-Frame-Options DENY always;
+        add_header X-Content-Type-Options nosniff always;
+        add_header Referrer-Policy no-referrer always;
+        add_header X-Robots-Tag "noindex, nofollow" always;
+    }
+}

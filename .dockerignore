@@ -12,6 +12,7 @@
 # Generated from contracts/ by the build's own `prepare` hook — never ship the host's copy into the image,
 # or the client would mirror whatever was last generated on a laptop instead of the specs in this tree.
 web/src/api/generated
+admin-web/src/api/generated
 **/.cache
 **/.vite
 

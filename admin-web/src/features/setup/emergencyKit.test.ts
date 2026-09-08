@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { kitPayload, parseKit, importKitFromFile } from './emergencyKit'
+// The write half only — this package's copy has no `importKitFromFile`; see emergencyKit.ts for why.
+import { kitPayload, parseKit } from './emergencyKit'
 
 describe('emergencyKit', () => {
   const data = { email: 'a@veyq.app', secretKey: 'KEY-abc_123' }
@@ -22,15 +23,4 @@ describe('emergencyKit', () => {
     expect(parseKit('veyqkit:not-valid-base64-json')).toBeNull()
   })
 
-  it('imports the kit from a file carrying the token (PDF/text path)', async () => {
-    const file = new File([`%PDF-1.7 …/Keywords (${kitPayload(data)})… stream`], 'kit.pdf', {
-      type: 'application/pdf',
-    })
-    expect(await importKitFromFile(file)).toEqual(data)
-  })
-
-  it('returns null for a file with no kit token', async () => {
-    const file = new File(['just a normal note, no kit here'], 'note.txt', { type: 'text/plain' })
-    expect(await importKitFromFile(file)).toBeNull()
-  })
 })

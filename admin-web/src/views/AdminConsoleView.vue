@@ -51,7 +51,11 @@ onMounted(async () => {
 })
 
 async function onCreated() {
-  createOpen.value = false
+  // The dialog deliberately stays OPEN. On success it switches to the copy-link view, and for a PENDING
+  // tenant that link is the ONLY way the invite reaches its owner: a tenant has no mail settings until its
+  // owner configures them, so no other channel exists yet (ADR 0055 §3). Closing here would refresh the list
+  // and silently throw away the one artifact the Server Owner came for. Caught by driving the real container:
+  // the tenant appeared in the list and the link did not.
   await loadTenants().catch(() => {})
 }
 

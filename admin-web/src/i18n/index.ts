@@ -188,7 +188,15 @@ const en = {
     "copyLink": "Copy link",
     "copyLinkIntro": "A tenant has no email set up until its owner configures it, so this first invitation is yours to pass on. Copy the link and send it to them."
   },
+  "kit": {
+    "download": "Download Emergency Kit (PDF)",
+    "downloaded": "Emergency Kit downloaded.",
+    "downloadFailed": "Could not create the Emergency Kit. Please try again.",
+    "backupDownloadConfirm": "I have saved my Emergency Kit somewhere safe."
+  },
   "password": {
+    "minLength": "Use at least 10 characters.",
+    "strong": "Nice and long — that is a strong password.",
     "pwnedWarning": "This password appeared in {count} known data breaches. Consider a different one."
   },
   "admin": {
@@ -390,7 +398,15 @@ const de: typeof en = {
     "copyLink": "Link kopieren",
     "copyLinkIntro": "Ein Bereich hat noch keine E-Mail eingerichtet, solange seine Besitzerin oder sein Besitzer das nicht getan hat — diese erste Einladung gibst du deshalb selbst weiter. Kopiere den Link und schick ihn."
   },
+  "kit": {
+    "download": "Notfall-Kit herunterladen (PDF)",
+    "downloaded": "Notfall-Kit heruntergeladen.",
+    "downloadFailed": "Notfall-Kit konnte nicht erstellt werden. Bitte erneut versuchen.",
+    "backupDownloadConfirm": "Ich habe mein Notfall-Kit sicher gespeichert."
+  },
   "password": {
+    "minLength": "Mindestens 10 Zeichen verwenden.",
+    "strong": "Schön lang — ein starkes Passwort.",
     "pwnedWarning": "Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle besser ein anderes."
   },
   "admin": {

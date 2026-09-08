@@ -97,9 +97,9 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
 
 ## Running in production
 
-`infra/docker-compose.prod.yml` is the deployment artifact: the app, MariaDB, Garage, and a Traefik that
-terminates TLS in front of both. It is **standalone**, not an override of the dev file — that file has no app
-service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
+`infra/docker-compose.prod.yml` is the deployment artifact: the app, its administration surface, MariaDB,
+Garage, and a Traefik that terminates TLS in front of them. It is **standalone**, not an override of the dev
+file — that file has no app service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
 
 ```sh
 cp infra/.env.example infra/.env          # then fill in every value (it is gitignored)
@@ -108,6 +108,42 @@ docker compose -f infra/docker-compose.prod.yml up -d
 
 **Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
 rather than starting an instance on a password that is printed in this repository.
+
+### Setting up a brand-new instance
+
+**You create the first account on the administration surface, not on the app's domain.** That is the whole
+point of it being a separate container ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)):
+the `admin` service reverse-proxies the backend from **its own** origin, so first-run setup works over plain
+`http://localhost` with no DNS record, no certificate, and `VEYQ_DOMAIN` pointing at a name that does not
+resolve yet. Before this, setup lived in the app SPA served at `VEYQ_DOMAIN` — which quietly made a working
+public hostname a precondition for creating the first account.
+
+So the order is: bring the stack up, create the owner over the tunnel, and *then* worry about DNS and TLS.
+
+```sh
+docker compose -f infra/docker-compose.prod.yml up -d
+ssh -L 8081:127.0.0.1:8081 you@the-host        # from your laptop; 8081 = ADMIN_PORT
+# then open http://localhost:8081 and create the Server Owner account
+```
+
+**Save the Emergency Kit on that screen.** It carries the Secret Key, it is shown once, and there is no
+operator-side recovery — the server holds no key material by construction.
+
+**Two exposure modes, one image, chosen by one variable.**
+
+- **`ADMIN_DOMAIN` unset — the default, and the one to keep.** No Traefik router exists for the admin
+  container at all; it is published on `127.0.0.1:${ADMIN_PORT}` of the host only, so nothing on the internet
+  can reach the highest-privilege surface this instance serves. Reach it with the SSH tunnel above, or
+  `docker compose exec`.
+- **`ADMIN_DOMAIN` set** — it gets its own hostname, router and certificate, the same fixed-domain pattern
+  `VEYQ_DOMAIN` used before [ADR 0063](../docs/decisions/0063-database-driven-tenant-ingress.md) (the admin
+  surface is 1:1 with the instance, so none of that ADR's per-tenant machinery applies). Point the name's DNS
+  at this host **first**, or the ACME order fails against the rate limit. Choose a name you publish nowhere:
+  the app never links to this surface, and an unlisted name is one more layer between a stranger and it.
+
+The app itself never links to the admin surface and is never told where it is — an operator's deployment
+choice is not something the user-facing app can know, and a guessed URL that 404s is worse than the settings
+page simply saying that administration lives elsewhere.
 
 **TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
 plain HTTP the refresh cookie is set and never sent back and "remember me" breaks silently; and every invitation
@@ -143,6 +179,10 @@ Two things worth knowing rather than discovering:
   makes Traefik drop the router for both.
 - **Upgrading is a procedure, not a flag change.** It has its own section — § *An upgrade, step by step* — and
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
+- **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are
+  built, versioned and cosign-signed by the same publish ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)),
+  so pin the same `<major>.<minor>` on both. A mismatched pair is two versions of one instance, and only one of
+  them migrated the schema.
 - **The compose file and the env template ride inside the image.** Every published image carries the recipe it
   was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
   describes, and it inherits the image's cosign signature instead of needing a second trust decision. Read one

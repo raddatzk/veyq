@@ -45,7 +45,13 @@ The line that actually holds:
 ## Conventions
 - Styles, `httpError`, `inviteLink`, the async-state helpers and the Emergency-Kit module are **copies** of
   `web/`'s, on purpose: ADR 0065 keeps everything but the crypto independent per package, so a redesign of
-  one surface is never a regression in the other. Do not build a shared UI package.
+  one surface is never a regression in the other. Do not build a shared UI package. The kit module is the
+  **write half only** — no `importKitFromFile`, and therefore no `jsqr`, which `web/CLAUDE.md` carries as a
+  single argued exception to the no-unmaintained-dependency rule. An exception earned once does not travel.
+- **A green `npm run check` here does NOT prove this package's dependencies are declared.** npm workspaces
+  hoist, so an import satisfied by `web/`'s copy in the root `node_modules` resolves locally and fails only
+  in `docker build -f admin-web/Dockerfile .`, which never sees `web/`. Measured: `jsqr` built green here and
+  red in the container. Run the container build before believing an added import.
 - i18n is this package's own catalog (EN + DE) in `src/i18n/index.ts`, lifted from `web/`'s for the strings
   that moved with their views.
 

@@ -146,6 +146,59 @@ services:
       - "traefik.http.routers.veyq-app.tls.certresolver=letsencrypt"
       - "traefik.http.services.veyq-app.loadbalancer.server.port=8080"
 
+  # The Server-Owner administration surface (ADR 0065) — its own image, its own origin, and by default not
+  # reachable from the internet at all.
+  #
+  # TWO EXPOSURE MODES, one image, chosen by whether ADMIN_DOMAIN is set:
+  #
+  #   * unset (the DEFAULT) — no Traefik router at all. The port below binds to 127.0.0.1, so the surface is
+  #     reachable only from the host itself: `ssh -L 8443:127.0.0.1:${ADMIN_PORT} the-host` and browse
+  #     localhost. This is also what makes first-run setup independent of DNS and TLS: `docker compose up -d`
+  #     and `http://localhost:${ADMIN_PORT}` is enough to bootstrap an instance whose VEYQ_DOMAIN does not
+  #     resolve yet. Before this ADR, setup lived in the app SPA served at VEYQ_DOMAIN, so a public hostname
+  #     was a precondition for creating the first account.
+  #   * set — an own-domain router with its own certificate, the same fixed-domain pattern VEYQ_DOMAIN used
+  #     before ADR 0063. The admin surface is 1:1 with the instance, not per-tenant, so it needs none of that
+  #     ADR's dynamic multi-domain machinery.
+  #
+  # The mode switch is `${ADMIN_DOMAIN:+...}`: with ADMIN_DOMAIN unset each router label expands to the empty
+  # string, so no router rule exists and Traefik (which filters on `veyq.stack=prod`) discovers a container it
+  # has no rule for and routes nothing to it. `traefik.enable` is conditional too, so the default mode does not
+  # even advertise itself.
+  #
+  # Measured, so nobody files it as a bug: Compose does NOT drop the empty entries — it collapses them into a
+  # single `"": ""` label, which `docker inspect` shows and which Docker accepts (verified by actually running
+  # a container shaped like this). Traefik only ever reads labels prefixed `traefik.`, so it is inert. The
+  # alternative — a second compose file the operator has to remember to add for own-domain mode — trades a
+  # cosmetic artifact for a way to deploy the wrong exposure by forgetting a `-f`.
+  #
+  # The `veyq.stack=prod` label is UNCONDITIONAL on purpose, in both modes: it is the constraint the proxy
+  # filters on, and a container that carries no stack label at all is one an operator can no longer tell apart
+  # from a stranger's container on the same host.
+  #
+  # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.
+  # A bare "${ADMIN_PORT}:80" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
+  # surface this instance serves, which is the exact opposite of what extracting it was for.
+  admin:
+    image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq-admin:1.0}
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_started
+    environment:
+      # Where nginx proxies /api/* — the app on the compose network, never the public domain. Resolved at
+      # REQUEST time, so this container starts and stays useful even while the app is still migrating.
+      BACKEND_URL: http://app:8080
+    ports:
+      - "127.0.0.1:${ADMIN_PORT:-8081}:80"
+    labels:
+      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
+      - "${ADMIN_DOMAIN:+traefik.enable=true}"
+      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.rule=Host(`${ADMIN_DOMAIN}`)}"
+      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.entrypoints=websecure}"
+      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.tls.certresolver=letsencrypt}"
+      - "${ADMIN_DOMAIN:+traefik.http.services.veyq-admin.loadbalancer.server.port=80}"
+
   # TLS is a PRECONDITION here, not a deployment preference. `veyq.session.cookie.secure=true` is the shipped
   # default, so over plain HTTP the refresh cookie is set and never sent back — "remember me" breaks silently.
   # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails

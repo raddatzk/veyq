@@ -113,13 +113,24 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: package-lock.json
+      # One workspace install, then each package proves itself. `admin-web` is gated here for the same reason
+      # the app is: the image build compiles but runs no tests, so without this a broken admin surface could
+      # still publish :latest alongside a green app image (ADR 0065 — one release, two images).
+      - name: Install workspace dependencies
+        run: npm ci
+      - name: Shared crypto checks
+        working-directory: packages/crypto
+        run: npm run check
       - name: Frontend checks
         working-directory: web
-        run: npm ci && npm run check
+        run: npm run check
+      - name: Admin surface checks
+        working-directory: admin-web
+        run: npm run check
 
   build:
-    name: Build veyq image (${{ matrix.arch }})
+    name: Build ${{ matrix.image }} (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     # Gate the image on a green test suite: the Docker build compiles but runs no tests (-x test), so without
     # this a test-failing commit could still publish :latest/:<major> that auto-updaters pull.
@@ -129,9 +140,14 @@ jobs:
     permissions:
       contents: read
       packages: write
+    # Two images, two architectures, one step. The admin surface ships as part of the SAME release as the app
+    # (ADR 0065) — same version, same signature, one `v<major>.<minor>` ref — so it is a dimension of this
+    # matrix rather than a second job pair that could drift out of step with it.
     strategy:
       fail-fast: false
       matrix:
+        image: [veyq, veyq-admin]
+        arch: [amd64, arm64]
         include:
           - arch: amd64
             platform: linux/amd64
@@ -139,6 +155,12 @@ jobs:
           - arch: arm64
             platform: linux/arm64
             runner: ubuntu-24.04-arm
+          - image: veyq
+            dockerfile: Dockerfile
+            target: runtime-jvm
+          - image: veyq-admin
+            dockerfile: admin-web/Dockerfile
+            target: runtime-nginx
     steps:
       - name: Check out repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
@@ -158,25 +180,25 @@ jobs:
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/veyq
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
 
       - name: Build image
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
-          file: Dockerfile
-          target: runtime-jvm
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
           platforms: ${{ matrix.platform }}
           push: ${{ github.event_name != 'pull_request' }}
-          tags: ghcr.io/${{ github.repository_owner }}/veyq:build-${{ github.sha }}-${{ matrix.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}:build-${{ github.sha }}-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             VEYQ_VERSION=${{ needs.version.outputs.version }}
             VEYQ_REVISION=sha-${{ github.sha }}
           provenance: true
           sbom: true
-          cache-from: type=gha,scope=veyq-${{ matrix.arch }}
-          cache-to: type=gha,mode=max,scope=veyq-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.arch }}
 
   publish:
     name: Publish multi-arch image
@@ -213,22 +235,30 @@ jobs:
         id: assert-release-unpublished
         if: needs.version.outputs.publish_branch_tags == 'true'
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
+          # Both images of the release. EITHER already being published means this release has shipped — a
+          # partial republish is worse than a whole one, because the pair would then disagree about which
+          # version the instance runs (ADR 0065: one release, two images).
+          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           set -euo pipefail
 
-          if docker buildx imagetools inspect "${IMAGE}:${VERSION}" > /dev/null 2>&1; then
-            echo "${IMAGE}:${VERSION} is already published. A release names itself from the tree — bump VERSION." >&2
-            exit 1
-          fi
+          for image in $IMAGES; do
+            if docker buildx imagetools inspect "${image}:${VERSION}" > /dev/null 2>&1; then
+              echo "${image}:${VERSION} is already published. A release names itself from the tree — bump VERSION." >&2
+              exit 1
+            fi
+          done
 
           if git ls-remote --exit-code --tags origin "refs/tags/v${VERSION}" > /dev/null 2>&1; then
             echo "refs/tags/v${VERSION} already exists. One release, one name, one tree — bump VERSION." >&2
             exit 1
           fi
 
-      - name: Extract image metadata
+      # One metadata step per image: the two carry the SAME tag set (the release names both), and
+      # metadata-action takes one image list but emits fully-qualified tags, so deriving the second image's
+      # tags by string-editing the first's would put a substitution between the release and its own names.
+      - name: Extract image metadata (app)
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
@@ -239,7 +269,18 @@ jobs:
             type=sha,prefix=sha-,format=long
             type=raw,value=latest,enable=${{ needs.version.outputs.publish_latest == 'true' }}
 
-      - name: Create multi-arch manifest
+      - name: Extract image metadata (admin)
+        id: meta-admin
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          tags: |
+            type=raw,value=${{ needs.version.outputs.version }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
+            type=raw,value=${{ needs.version.outputs.major }},enable=${{ needs.version.outputs.publish_branch_tags == 'true' }}
+            type=sha,prefix=sha-,format=long
+            type=raw,value=latest,enable=${{ needs.version.outputs.publish_latest == 'true' }}
+
+      - name: Create multi-arch manifest (app)
         env:
           IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
           TAGS: ${{ steps.meta.outputs.tags }}
@@ -255,21 +296,42 @@ jobs:
             "$IMAGE:build-${GITHUB_SHA}-amd64" \
             "$IMAGE:build-${GITHUB_SHA}-arm64"
 
+      - name: Create multi-arch manifest (admin)
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq-admin
+          TAGS: ${{ steps.meta-admin.outputs.tags }}
+        run: |
+          mapfile -t tags <<< "$TAGS"
+          tag_args=()
+          for tag in "${tags[@]}"; do
+            tag_args+=("-t" "$tag")
+          done
+
+          docker buildx imagetools create \
+            "${tag_args[@]}" \
+            "$IMAGE:build-${GITHUB_SHA}-amd64" \
+            "$IMAGE:build-${GITHUB_SHA}-arm64"
+
       - name: Install cosign
         uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
 
-      - name: Sign the published image (keyless)
+      - name: Sign the published images (keyless)
         env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/veyq
+          # Both images of the release. An unsigned admin image would be the weaker half of a pair an operator
+          # is told to pin together — and it is the higher-privilege half (ADR 0065).
+          IMAGES: ghcr.io/${{ github.repository_owner }}/veyq ghcr.io/${{ github.repository_owner }}/veyq-admin
         run: |
-          # Resolve the manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
+          set -euo pipefail
+          # Resolve each manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
           # tag pointing at it (latest/<major>/<version>) is covered. Verify with:
           #   cosign verify $IMAGE@<digest> \
           #     --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \
           #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
-          digest="sha256:$(docker buildx imagetools inspect --raw "$IMAGE:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
-          echo "Signing $IMAGE@${digest}"
-          cosign sign --yes "$IMAGE@${digest}"
+          for image in $IMAGES; do
+            digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
+            echo "Signing $image@${digest}"
+            cosign sign --yes "$image@${digest}"
+          done
 
       # One release, one name, one tree (ADR 0057 §2). The ref is created LAST, by the publish itself, so it
       # exists only for a release that actually shipped — and it is the ref at which the deployment files

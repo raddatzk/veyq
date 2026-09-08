@@ -20,7 +20,16 @@ import { createI18n } from 'vue-i18n'
 
 vi.mock('../features/tenants/tenants', () => ({ listTenants: vi.fn() }))
 vi.mock('../features/auth/login', () => ({ logout: vi.fn().mockResolvedValue(undefined) }))
-vi.mock('../features/tenants/CreateTenantDialog.vue', () => ({ default: { template: '<div class="stub-create" />' } }))
+// Stubbed with the real component's PROPS/EMITS surface, not a bare div: the case below asserts what the
+// parent does to `visible`, which a prop-less stub cannot carry.
+vi.mock('../features/tenants/CreateTenantDialog.vue', () => ({
+  default: {
+    name: 'CreateTenantDialog',
+    props: { visible: { type: Boolean, required: true } },
+    emits: ['created', 'update:visible'],
+    template: '<div class="stub-create" />',
+  },
+}))
 vi.mock('../features/tenants/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-detail" />' } }))
 vi.mock('../features/instance/ReleaseVersionPanel.vue', () => ({ default: { template: '<div class="stub-release" />' } }))
 
@@ -117,5 +126,28 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     await item.trigger('click')
     await flushPromises()
     expect(w.find('.stub-detail').exists()).toBe(true)
+  })
+})
+
+describe('AdminConsoleView — creating a tenant', () => {
+  it('refreshes the list WITHOUT closing the dialog, so the invite link survives', async () => {
+    // Regression, found by driving the real container: a PENDING tenant has no mail settings by construction,
+    // so the copy-link the dialog switches to on success is the ONLY way its invite reaches the owner
+    // (ADR 0055 §3). An `@created` handler that closes the dialog refreshes the list and throws that away.
+    vi.mocked(listTenants).mockResolvedValue([])
+    const { w } = await mountConsole()
+
+    const create = w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Create'))!
+    await create.trigger('click')
+    expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)
+
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING' } as never,
+    ])
+    w.findComponent({ name: 'CreateTenantDialog' }).vm.$emit('created')
+    await flushPromises()
+
+    expect(w.text()).toContain('Fresh')                                                   // the list refreshed
+    expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)   // and stayed open
   })
 })
