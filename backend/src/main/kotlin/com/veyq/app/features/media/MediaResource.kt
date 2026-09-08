@@ -24,6 +24,7 @@ import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
+import com.veyq.app.shared.tenant.RequestTenantDomain
 import jakarta.ws.rs.core.Response
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -48,13 +49,21 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 class MediaResource(
     private val handler: MediaHandler,
     private val identity: SecurityIdentity,
+    private val tenantDomain: RequestTenantDomain,
 ) : MediaApi {
+
+    /**
+     * The tenant domain this request arrived on, for signing its presigned URLs (ADR 0063). Resolved through the
+     * `tenant` table, **never** the raw `Host`/`X-Forwarded-Host` value — see [RequestTenantDomain]; null (an
+     * unresolvable or spoofed host, or the bootstrap domain) signs against the configured default.
+     */
+    private fun signingDomain(): String? = tenantDomain.resolve()
 
     override fun startBlobUploads(scopeId: UUID, blobUploadsBatchRequest: BlobUploadsBatchRequest): Response {
         val declares = blobUploadsBatchRequest.items.map {
             UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey)
         }
-        return when (val o = handler.start(identity.principal.name, scopeId.toString(), declares)) {
+        return when (val o = handler.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
             is StartOutcome.Results -> Response.ok(
                 BlobUploadsBatchResponse(
                     results = o.items.map {
@@ -189,7 +198,7 @@ class MediaResource(
 
     override fun presignBlobDownloads(scopeId: UUID, blobDownloadsBatchRequest: BlobDownloadsBatchRequest): Response {
         val blobIds = blobDownloadsBatchRequest.items.map { it.blobId.toString() }
-        return when (val o = handler.download(identity.principal.name, scopeId.toString(), blobIds)) {
+        return when (val o = handler.download(identity.principal.name, scopeId.toString(), blobIds, signingDomain())) {
             is DownloadOutcome.Results -> Response.ok(
                 BlobDownloadsBatchResponse(
                     results = o.items.map {

@@ -19,6 +19,7 @@ import software.amazon.awssdk.services.s3.presigner.model.PutObjectPresignReques
 import java.net.URI
 import java.time.Duration
 import java.util.Optional
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * The blob-transport port (ADR 0013): the backend's control plane signs short-TTL presigned URLs and stats
@@ -34,11 +35,21 @@ interface BlobStore {
     /** True when the store can produce presigned URLs (and therefore carry bytes); false for the dev store. */
     val canPresign: Boolean
 
-    /** A short-TTL presigned PUT URL for one chunk object, or null when the store cannot presign. */
-    fun presignPut(key: String): String?
+    /**
+     * A short-TTL presigned PUT URL for one chunk object, or null when the store cannot presign.
+     *
+     * [domain] is the **resolved tenant's own registered domain** — the one the request arrived on, looked up in
+     * the `tenant` table, never a `Host` header echoed back (ADR 0063; the resolution itself lives in
+     * `TenantHostResolver`). It is what makes the URL same-origin *for that tenant*, which is the whole of ADR
+     * 0013 §4's no-CORS property on a server with more than one domain. `null` means the request resolved to no
+     * tenant — the bootstrap domain, or a request that legitimately has none — and signs against the configured
+     * default.
+     */
+    fun presignPut(key: String, domain: String? = null): String?
 
-    /** A short-TTL presigned GET URL for one chunk object, or null when the store cannot presign. */
-    fun presignGet(key: String): String?
+    /** A short-TTL presigned GET URL for one chunk object, or null when the store cannot presign. [domain] as in
+     *  [presignPut]: the resolved tenant's own domain, or null for the bootstrap default. */
+    fun presignGet(key: String, domain: String? = null): String?
 
     /** Stored object size in bytes, or null if the object is absent (or the store has no transport). */
     fun stat(key: String): Long?
@@ -71,8 +82,9 @@ interface BlobStore {
  */
 class InMemoryBlobStore : BlobStore {
     override val canPresign = false
-    override fun presignPut(key: String): String? = null
-    override fun presignGet(key: String): String? = null
+    // The domain is ignored, and can be: this store has no endpoint to sign against in the first place.
+    override fun presignPut(key: String, domain: String?): String? = null
+    override fun presignGet(key: String, domain: String?): String? = null
     override fun stat(key: String): Long? = null
 
     /**
@@ -91,22 +103,39 @@ class InMemoryBlobStore : BlobStore {
 
 /**
  * Production store over **any S3-compatible endpoint** (Garage, AWS S3, Cloudflare R2, Backblaze B2, …, ADR
- * 0013 §1) via the **vendor-neutral AWS SDK for Java v2** — not tied to any single vendor's client. Two
- * objects: an [S3Client] connects to the internal endpoint for `stat`/`delete`; a **sign-only** [S3Presigner]
- * (built on the client-reachable public endpoint, §4) computes presigned URLs by local HMAC and never
- * connects. Path-style addressing is forced so custom endpoints resolve. Credentials come from operator env,
- * are never persisted, logged, or returned by any endpoint.
+ * 0013 §1) via the **vendor-neutral AWS SDK for Java v2** — not tied to any single vendor's client. An
+ * [S3Client] connects to the internal endpoint for `stat`/`delete`; the **sign-only** [S3Presigner]s compute
+ * presigned URLs by local HMAC and never connect. Path-style addressing is forced so custom endpoints resolve.
+ * Credentials come from operator env, are never persisted, logged, or returned by any endpoint.
+ *
+ * **Signing is per-request, not per-instance** (ADR 0063, amending ADR 0013 §4). A presigned URL is only
+ * same-origin — the whole reason there is no CORS policy to configure — if it is signed for the origin the
+ * browser is actually on, so a server with a second tenant domain must sign for *that* domain. Hence one cached
+ * presigner per resolved sign endpoint rather than one for the instance. Building a presigner is pure local
+ * HMAC setup with no network I/O, so the cache is a convenience, not a pool; it is bounded by the number of
+ * tenant domains and never invalidated, because a domain that stops being a tenant's simply stops being asked
+ * for.
+ *
+ * **A per-domain endpoint only exists where the store is same-origin behind our own proxy** — i.e. where
+ * `public-endpoint` is configured. With it blank (ADR 0013 §4's other branch: external S3, or any store already
+ * publicly reachable at its own hostname) the endpoint has nothing to do with a tenant's domain, so [domainFor]
+ * ignores the domain entirely rather than inventing a bucket host that does not exist.
  */
 class S3BlobStore(
     private val s3: S3Client,
-    private val presigner: S3Presigner,
     private val bucket: String,
     private val presignTtlSeconds: Int,
+    private val internalEndpoint: String,
+    private val publicEndpoint: String,
+    private val credentials: StaticCredentialsProvider,
+    private val region: String,
 ) : BlobStore {
     override val canPresign = true
 
-    override fun presignPut(key: String): String {
-        val presigned = presigner.presignPutObject(
+    private val presigners = ConcurrentHashMap<String, S3Presigner>()
+
+    override fun presignPut(key: String, domain: String?): String {
+        val presigned = presignerFor(domain).presignPutObject(
             PutObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(presignTtlSeconds.toLong()))
                 .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).build())
@@ -115,14 +144,46 @@ class S3BlobStore(
         return presigned.url().toString()
     }
 
-    override fun presignGet(key: String): String {
-        val presigned = presigner.presignGetObject(
+    override fun presignGet(key: String, domain: String?): String {
+        val presigned = presignerFor(domain).presignGetObject(
             GetObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(presignTtlSeconds.toLong()))
                 .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
                 .build(),
         )
         return presigned.url().toString()
+    }
+
+    /** Keyed by the resolved endpoint, not by the domain: every domain that signs against the bootstrap default
+     *  — the common case — then shares one presigner instead of one per caller. */
+    private fun presignerFor(domain: String?): S3Presigner =
+        presigners.computeIfAbsent(endpointFor(domain)) { endpoint ->
+            S3Presigner.builder()
+                .endpointOverride(URI.create(endpoint))
+                .region(Region.of(region))
+                .credentialsProvider(credentials)
+                .serviceConfiguration(S3Configuration.builder().pathStyleAccessEnabled(true).build())
+                .build()
+        }
+
+    /**
+     * The bootstrap default, or that same URL with its **host** swapped for the tenant's domain — scheme, port
+     * and path are kept, because they are properties of how this deployment exposes the store (`:443`, a path
+     * prefix behind Traefik) and not of which tenant is asking.
+     *
+     * A domain that cannot be substituted (a malformed configured endpoint) falls back to the default rather
+     * than throwing: signing for the wrong origin costs the client a CORS-blocked fetch, while throwing costs
+     * them the upload. The domain reaching here is a *registered* one from the `tenant` table, never a header
+     * value, so this is a robustness fallback and not a validation boundary — the validation already happened
+     * when the row was written, and `TenantHostResolver` is what makes a spoofed `Host` resolve to nothing.
+     */
+    private fun endpointFor(domain: String?): String {
+        val default = publicEndpoint.ifBlank { internalEndpoint }
+        if (domain == null || publicEndpoint.isBlank()) return default
+        return runCatching {
+            val base = URI.create(publicEndpoint)
+            URI(base.scheme, base.userInfo, domain, base.port, base.path, base.query, base.fragment).toString()
+        }.getOrDefault(default)
     }
 
     override fun stat(key: String): Long? =
@@ -182,13 +243,17 @@ class BlobStoreProducer(
             .credentialsProvider(creds)
             .serviceConfiguration(pathStyle)
             .build()
-        val signEndpoint = publicEndpoint.orElse("").ifBlank { endpointUrl }
-        val presigner = S3Presigner.builder()
-            .endpointOverride(URI.create(signEndpoint))
-            .region(Region.of(region))
-            .credentialsProvider(creds)
-            .serviceConfiguration(pathStyle)
-            .build()
-        return S3BlobStore(s3, presigner, bucket, presignTtlSeconds)
+        // The presigners are built lazily, one per resolved sign endpoint, because *which* endpoint a URL is
+        // signed for is now a per-request answer (ADR 0063) — so this hands over the ingredients rather than a
+        // finished presigner.
+        return S3BlobStore(
+            s3 = s3,
+            bucket = bucket,
+            presignTtlSeconds = presignTtlSeconds,
+            internalEndpoint = endpointUrl,
+            publicEndpoint = publicEndpoint.orElse(""),
+            credentials = creds,
+            region = region,
+        )
     }
 }

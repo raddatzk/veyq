@@ -37,8 +37,10 @@ class FakePresigningBlobStore : BlobStore {
         stats[key] = size
     }
 
-    override fun presignPut(key: String): String = "https://fake-presign.invalid/put/$key"
-    override fun presignGet(key: String): String = "https://fake-presign.invalid/get/$key"
+    // The domain is echoed into the host so a test can assert *which* origin a URL was signed for without a
+    // real S3 presigner; a null (the request resolved to no tenant) keeps the fixed bootstrap host.
+    override fun presignPut(key: String, domain: String?): String = "https://${domain ?: "fake-presign.invalid"}/put/$key"
+    override fun presignGet(key: String, domain: String?): String = "https://${domain ?: "fake-presign.invalid"}/get/$key"
     override fun stat(key: String): Long? = stats[key]
 
     /** Unused on the budget path (`StoreReclaimSweep` is the only real deleter, ADR 0062 Decision 3). */

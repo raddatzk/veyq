@@ -185,9 +185,9 @@ class MediaHandler(
     private val maxBytes: Long = config.blob().maxBytes()
     private val maxChunks: Int = config.blob().maxChunks()
 
-    fun start(userId: String, scopeId: String, declares: List<UploadDeclare>): StartOutcome {
+    fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         if (!store.isMember(userId, scopeId)) return StartOutcome.NoScope
-        return StartOutcome.Results(startForScope(scopeId, declares))
+        return StartOutcome.Results(startForScope(scopeId, declares, domain))
     }
 
     /**
@@ -195,10 +195,10 @@ class MediaHandler(
      * `scopeId`. The caller does its own authorization — the member gate ([start]) or the share + contributor
      * token gate (the CONTRIBUTOR share upload path, cr-0101). Bytes never flow through here.
      */
-    fun startForScope(scopeId: String, declares: List<UploadDeclare>): List<UploadItemResult> =
-        declares.map { startOne(scopeId, it) }
+    fun startForScope(scopeId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
+        declares.map { startOne(scopeId, it, domain) }
 
-    private fun startOne(scopeId: String, d: UploadDeclare): UploadItemResult {
+    private fun startOne(scopeId: String, d: UploadDeclare, domain: String?): UploadItemResult {
         if (d.chunkCount < 1 || d.chunkCount > maxChunks || d.byteSize < 0 || d.byteSize > maxBytes) {
             return UploadItemResult(uploadId = null, presignedPuts = null, error = "budget_exceeded")
         }
@@ -207,7 +207,7 @@ class MediaHandler(
         // The session is metadata; presigned PUTs require a transport-capable store. Only the %test in-memory stub
         // cannot presign (puts = null) — %dev/%prod always have a real store (BlobStoreStartupCheck, ADR 0013).
         val puts = if (blobStore.canPresign) {
-            (0 until d.chunkCount).map { i -> PresignedRef(i, blobStore.presignPut(chunkKey(storageKey, i))!!) }
+            (0 until d.chunkCount).map { i -> PresignedRef(i, blobStore.presignPut(chunkKey(storageKey, i), domain)!!) }
         } else {
             null
         }
@@ -402,16 +402,16 @@ class MediaHandler(
         return CoverDeleteOutcome.Done
     }
 
-    fun download(userId: String, scopeId: String, blobIds: List<String>): DownloadOutcome {
+    fun download(userId: String, scopeId: String, blobIds: List<String>, domain: String?): DownloadOutcome {
         if (!store.isMember(userId, scopeId)) return DownloadOutcome.NoScope
-        return DownloadOutcome.Results(blobIds.map { downloadOne(scopeId, it) })
+        return DownloadOutcome.Results(blobIds.map { downloadOne(scopeId, it, domain) })
     }
 
-    private fun downloadOne(scopeId: String, blobId: String): DownloadItemResult {
+    private fun downloadOne(scopeId: String, blobId: String, domain: String?): DownloadItemResult {
         val blob = store.findBlob(scopeId, blobId)
             ?: return DownloadItemResult(presignedGets = null, error = "upload_not_found")
         if (!blobStore.canPresign) return DownloadItemResult(presignedGets = null, error = "store_unavailable")
-        val gets = (0 until blob.chunkCount).map { i -> PresignedRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i))!!) }
+        val gets = (0 until blob.chunkCount).map { i -> PresignedRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i), domain)!!) }
         return DownloadItemResult(presignedGets = gets, error = null)
     }
 

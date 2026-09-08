@@ -23,6 +23,18 @@ class TenantHostResolver {
         (header(FORWARDED_HOST) ?: header(HOST))
             ?.substringBefore(',')?.substringBefore(':')?.trim()?.lowercase()?.ifEmpty { null }
 
+    /**
+     * The **registered domain** of the tenant this request resolved to, or null — the value a presigned blob URL
+     * is signed against (ADR 0063 / ADR 0013 §4).
+     *
+     * It goes through the table rather than handing back the header it just read, and the difference is the
+     * point: a spoofed or simply unknown `Host` resolves to no tenant and signs against the bootstrap default,
+     * where echoing the header would let a caller name any origin they liked and have the server sign for it.
+     * The two spellings look identical on the happy path — which is exactly why the safe one lives here instead
+     * of at each call site.
+     */
+    fun domainFor(header: (String) -> String?): String? = tenantFor(hostOf(header))?.domain
+
     /** The tenant claiming [host], or null — an unknown or absent host claims no tenant. */
     fun tenantFor(host: String?): TenantEntity? =
         host?.let { TenantEntity.find("domain", it).firstResult() }

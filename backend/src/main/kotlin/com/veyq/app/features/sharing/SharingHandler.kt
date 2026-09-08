@@ -284,7 +284,7 @@ class SharingHandler(
     }
 
     /** Start a contributor upload — gated on the share (contributable + enabled) + a valid token, then presign. */
-    fun startUploads(shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>): ShareUploadOutcome {
+    fun startUploads(shareId: String, pwToken: String?, contributorToken: String, declares: List<UploadDeclare>, domain: String?): ShareUploadOutcome {
         val share = activeShare(shareId) ?: return ShareUploadOutcome.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0164: password gate before the role/token check
             PwCheck.MISSING -> return ShareUploadOutcome.NotFound
@@ -295,7 +295,7 @@ class SharingHandler(
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareUploadOutcome.NotContributable
         if (store.findIdentity(shareId, contributorToken) == null) return ShareUploadOutcome.NotContributable
         if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
-        return ShareUploadOutcome.Results(mediaHandler.startForScope(share.scopeId, declares))
+        return ShareUploadOutcome.Results(mediaHandler.startForScope(share.scopeId, declares, domain))
     }
 
     /** Complete a contributor upload — attach to the share's own Memory node, stamped with the identity. */
@@ -344,7 +344,7 @@ class SharingHandler(
         return ShareDeleteOutcome.Done
     }
 
-    fun resolveBlob(shareId: String, blobId: String, pwToken: String?): ShareBlobOutcome {
+    fun resolveBlob(shareId: String, blobId: String, pwToken: String?, domain: String?): ShareBlobOutcome {
         val share = activeShare(shareId) ?: return ShareBlobOutcome.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0118: no bytes without the password (missing → 404, wrong → 403)
             PwCheck.MISSING -> return ShareBlobOutcome.NotFound
@@ -357,7 +357,7 @@ class SharingHandler(
         if (!ShareAccessPolicy.canView(share.role)) return ShareBlobOutcome.NotFound
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
         if (!blobStore.canPresign) return ShareBlobOutcome.StoreUnavailable
-        val gets = (0 until blob.chunkCount).map { i -> PresignRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i))!!) }
+        val gets = (0 until blob.chunkCount).map { i -> PresignRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i), domain)!!) }
         return ShareBlobOutcome.Found(gets)
     }
 

@@ -69,8 +69,8 @@ class RecordingBlobStore(
     fun reset() = deletedKeys.clear()
 
     override val canPresign: Boolean get() = delegate.canPresign
-    override fun presignPut(key: String): String? = delegate.presignPut(key)
-    override fun presignGet(key: String): String? = delegate.presignGet(key)
+    override fun presignPut(key: String, domain: String?): String? = delegate.presignPut(key, domain)
+    override fun presignGet(key: String, domain: String?): String? = delegate.presignGet(key, domain)
     override fun stat(key: String): Long? = delegate.stat(key)
 
     /**

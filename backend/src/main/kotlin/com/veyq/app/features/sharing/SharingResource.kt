@@ -31,6 +31,7 @@ import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
+import com.veyq.app.shared.tenant.RequestTenantDomain
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
@@ -54,7 +55,13 @@ import com.veyq.app.shared.ratelimit.RateLimitKey
 class SharingResource(
     private val handler: SharingHandler,
     private val identity: SecurityIdentity,
+    private val tenantDomain: RequestTenantDomain,
 ) : SharingApi {
+
+    /** As in `MediaResource`: the resolved tenant's own domain (ADR 0063), never the raw `Host` header. A share
+     *  is opened by an accountless guest on the tenant's domain, so its bytes must be signed for that origin too
+     *  — the same-origin blob route (ADR 0013 §4) is what a public share depends on for having no CORS policy. */
+    private fun signingDomain(): String? = tenantDomain.resolve()
 
     override fun createShare(createShareRequest: CreateShareRequest): Response =
         when (val o = handler.create(
@@ -168,7 +175,7 @@ class SharingResource(
             "(§ Unbounded by decision) names it as the open item rather than waving it away.",
     )
     override fun resolveShareBlob(shareId: String, blobId: UUID, xSharePassword: String?): Response =
-        when (val o = handler.resolveBlob(shareId, blobId.toString(), xSharePassword)) {
+        when (val o = handler.resolveBlob(shareId, blobId.toString(), xSharePassword, signingDomain())) {
             is ShareBlobOutcome.Found -> Response.ok(
                 ShareBlobDownload(presignedGets = o.gets.map { PresignedUrl(index = it.index, url = it.url) }),
             ).build()
@@ -248,7 +255,7 @@ class SharingResource(
     @RateLimit(key = RateLimitKey.SHARE)
     override fun startShareBlobUploads(shareId: String, shareBlobUploadsRequest: ShareBlobUploadsRequest, xSharePassword: String?): Response {
         val declares = shareBlobUploadsRequest.items.map { UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey) }
-        return when (val o = handler.startUploads(shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares)) {
+        return when (val o = handler.startUploads(shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares, signingDomain())) {
             is ShareUploadOutcome.Results -> Response.ok(
                 ShareBlobUploadsResponse(
                     results = o.items.map {
