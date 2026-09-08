@@ -3,7 +3,8 @@
 
 **What it asserts.** In `TenantHandler.kt`, every function whose body calls a `TenantStore` method that changes
 *whether a tenant's domain routes* — creating a tenant, deleting one, moving its domain, suspending or
-reactivating it — also calls the ingress projector (`reproject()`, or `ingress.regenerate()` directly). And the
+reactivating it — also calls the ingress projector (`reproject()`, or `ingress.regenerate()` directly) — the property being
+protected is `uc.admin.tenant-reachability`'s, and this is its structural half. And the
 set of routability-changing store methods is **derived from `TenantStore.kt` itself**, not listed here: a method
 qualifies when its body creates a `TenantEntity`, deletes one, or `UPDATE`s the `domain` or `status` column. So a
 sixth such store method added tomorrow is in scope the moment it lands, with nothing to register — a list

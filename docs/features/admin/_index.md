@@ -15,13 +15,20 @@ handling of reported shares.
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **refined**
-- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built, minus the ingress layer**
-  (the request-boundary gate + both transitions ship; main-flow step 4, withdrawing the tenant's routing, waits
-  on [ADR 0063](../../decisions/0063-database-driven-tenant-ingress.md)'s projector — a second layer the
-  guarantee deliberately does not rest on) ([ADR 0066](../../decisions/0066-tenant-suspension.md);
+- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**, both layers: the
+  request-boundary gate and both transitions, plus step 4's routing withdrawal, which
+  [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers
+  ([ADR 0066](../../decisions/0066-tenant-suspension.md);
   an immediate, request-boundary lockout and deliberately **no** session revoke — sessions are account-global, so a
   revoke would sign a multi-tenant member out of unaffected tenants too; never a routing-only toggle, never a
   content-key operation)
+- ★ [Reach a tenant at its own domain](use-cases/uc.admin.tenant-reachability.md) — **built**
+  ([ADR 0063](../../decisions/0063-database-driven-tenant-ingress.md); the reverse proxy's routing is
+  regenerated **in full** from the `tenant` table on every change that decides whether a domain routes — never
+  patched, so a wiped volume or a hand-edited file repairs itself — and a presigned blob URL is signed for the
+  domain the request arrived on, resolved through that same table and never from the `Host` header. The
+  Kubernetes sink ([ADR 0064](../../decisions/0064-kubernetes-helm-deployment-target.md)) is a second sink for
+  the same projection and is **not built**)
 - Invite members, grant access & assign roles — planned
 - Manage server users & roles — planned
 - ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)

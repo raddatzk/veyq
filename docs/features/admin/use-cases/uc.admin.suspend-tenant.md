@@ -20,17 +20,17 @@
    the gate is keyed on the `Host` the request arrives on, not on who presents it, which is what makes it
    correct for a member who also belongs to another, unaffected tenant ([ADR 0066](../../../decisions/0066-tenant-suspension.md)
    — a session cannot be revoked per-tenant, only per-account).
-4. The tenant's ingress routing is withdrawn: the backend regenerates the reverse proxy's whole router set
-   from the `tenant` table without it ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)),
-   so its domain stops resolving at the network edge too. This is a second, **independent** layer — the
-   guarantee in step 3 does not depend on it, which is why the gate shipped a slice ahead of it and why an
-   operator whose topology exposes the app by some other path is still fully covered.
+4. The tenant's ingress routing is withdrawn — its domain stops resolving at the network edge too. That
+   projection is [tenant-reachability](uc.admin.tenant-reachability.md)'s, which this transition is a trigger
+   of; it is a second, **independent** layer, and the guarantee in step 3 does not depend on it. Which is why
+   the gate shipped a slice ahead of it, and why an operator whose topology exposes the app by some other path
+   is still fully covered.
 
 ## Main flow — reactivate
 
 5. The Server Owner reactivates a `SUSPENDED` tenant.
-6. Its status flips back to `ACTIVE`, the request-boundary gate stops firing for it, and the same full
-   regenerate puts its routers back. A member whose session was still technically valid throughout simply
+6. Its status flips back to `ACTIVE`, the request-boundary gate stops firing for it, and the same projection
+   puts its routers back. A member whose session was still technically valid throughout simply
    resumes — nothing needed to be preserved, because nothing was torn down.
 
 ```mermaid
@@ -89,4 +89,6 @@ macht genau das rückgängig, und nichts sonst. Die Daten selbst werden davon ni
 - Decisions: [ADR 0066](../../../decisions/0066-tenant-suspension.md) (the request-level gate mechanism, and
   why a session-revoke was considered and rejected), [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)
   (the ingress-projector consumer of this transition).
-- Related use-cases: [create-tenant](uc.admin.create-tenant.md) (named this as future work).
+- Related use-cases: [create-tenant](uc.admin.create-tenant.md) (named this as future work),
+  [tenant-reachability](uc.admin.tenant-reachability.md) (step 4's routing withdrawal, and where it is
+  verified).

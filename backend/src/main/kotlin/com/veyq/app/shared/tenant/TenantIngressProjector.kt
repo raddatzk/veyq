@@ -15,7 +15,8 @@ import java.nio.file.StandardCopyOption
  * Projects the `tenant` table into the reverse proxy's routing description (ADR 0063), so that **"the tenant
  * exists"** and **"the tenant's domain resolves"** cannot drift apart. Without it a second tenant is created
  * successfully and is then unreachable until an operator hand-edits `infra/docker-compose.prod.yml` — a
- * deployment-time action gating what the API documents as a runtime one (uc.admin.create-tenant).
+ * deployment-time action gating what the API documents as a runtime one (uc.admin.tenant-reachability,
+ * whose triggers are uc.admin.create-tenant's and uc.admin.suspend-tenant's operations).
  *
  * **Full regenerate, never an incremental patch.** [regenerate] rewrites the whole file from the table every
  * time, which is what makes the projection self-healing: a wiped volume, a fresh Traefik container or a file

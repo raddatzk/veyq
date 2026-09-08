@@ -1,0 +1,34 @@
+useCase: uc.admin.tenant-reachability
+feature: admin
+title: Reach a tenant at its own domain
+# ADR 0063 — the reverse proxy's routing is generated from the `tenant` table, in full, on every change that
+# decides whether a domain routes; ADR 0013 §4 as amended — a presigned blob URL is signed for the domain the
+# request arrived on. The criteria below were split out of uc.admin.create-tenant and uc.admin.suspend-tenant,
+# which each *cause* a routing change but do not own the property.
+acceptanceCriteria:
+  - id: domain-actually-routes
+    # The whole trigger set in one criterion, because one test walks it: a suspend-specific row would carry the
+    # same two refs and be the same claim written twice. What is NOT here on purpose is "a suspended tenant is
+    # unreachable" — that is uc.admin.suspend-tenant's request-boundary gate, which holds whatever the proxy
+    # does; this criterion is only the second, independent layer.
+    # A missed trigger site is a silent staleness bug — right row, stale routing, no crash — so the test drives
+    # all five through HTTP, and scripts/validate_tenant_ingress_triggers.py keeps the set complete structurally.
+    text: Creating, moving, revoking, suspending or reactivating a tenant regenerates the reverse proxy's whole router set from the tenant table — the new domain resolves, a withdrawn one stops, a reactivated one comes back — and the statically-routed bootstrap domain is never projected twice.
+    coverage:
+      backend:
+        integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsNeverProjected, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate]
+      # No web surface: routing is a server-side projection with no client half to get wrong.
+  - id: presign-for-the-arriving-domain
+    # ADR 0013 §4 as amended by ADR 0063. The negative is the load-bearing one: the domain is resolved through
+    # the tenant table, so a spoofed Host signs against the default instead of an attacker-named origin.
+    text: A presigned blob URL is signed for the domain the request arrived on — resolved through the tenant table, never the Host header echoed back — so a second tenant's media is not signed for the first tenant's origin, and an unresolvable or spoofed Host falls back to the bootstrap default.
+    coverage:
+      backend:
+        unit: [S3BlobStorePresigningTest.twoTenantsSigningTheSameKeyGetTwoDifferentHosts, S3BlobStorePresigningTest.anUnresolvedRequestSignsAgainstTheBootstrapDefault, S3BlobStorePresigningTest.withNoPublicEndpointTheDomainIsIgnored]
+        integration: [MediaPresignDomainSliceTest.twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins, MediaPresignDomainSliceTest.aHostNoTenantClaimsFallsBackToTheDefault, SharePresignDomainSliceTest.aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn, SharePresignDomainSliceTest.aGuestOnAHostNoTenantClaimsGetsTheDefaultNotTheirOwnHeader]
+  - id: projector-no-ops-without-a-proxy
+    # A1 — self-hostable by default: an instance with no reverse proxy in front of it must not need one. This
+    # is also why the StartupEvent observer can never be a boot requirement.
+    text: With no dynamic-config path configured the projection is a clean no-op — not a degraded mode and not a startup requirement — so the backend runs with no reverse proxy at all.
+    coverage:
+      backend: { integration: [TenantIngressNoConfigTest.regenerateIsANoOpWithNoConfiguredPath] }

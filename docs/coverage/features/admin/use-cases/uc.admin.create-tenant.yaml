@@ -62,7 +62,9 @@ acceptanceCriteria:
     text: Overdue ACTIVE invites are expired and terminal-state invites are purged on a schedule.
     coverage:
       backend: { integration: [TenantsSliceTest.purgeExpiresActiveAndDeletesTerminalInvites] }
-  # --- cr-database-driven-tenant-ingress (ADR 0063): the domain is DB-driven end-to-end ---
+  # --- cr-database-driven-tenant-ingress (ADR 0063) ---
+  # Only the operation lives here. Whether the domain then *resolves* is its own use-case,
+  # uc.admin.tenant-reachability, which owns those criteria rather than this file restating them.
   - id: change-domain
     # The one tenant-admin write that is NOT PENDING-only: a domain is how a tenant is *reached*, not part of
     # its invite lifecycle. SUSPENDED is refused with its own code (tenant_not_pending_or_active) rather than
@@ -72,24 +74,6 @@ acceptanceCriteria:
       backend:
         integration: [TenantChangeDomainSliceTest.aPendingTenantMoves, TenantChangeDomainSliceTest.anActiveTenantMovesToo, TenantChangeDomainSliceTest.aDomainAlreadyMappedIsRefused, TenantChangeDomainSliceTest.aSuspendedTenantIsRefusedAndKeepsItsDomain, TenantChangeDomainSliceTest.aMalformedDomainIsRejectedAtTheBoundary]
       web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
-  - id: domain-actually-routes
-    # The postcondition the use-case's own "must actually route" section states: a mapping in the table is not
-    # reachability. The projection is a FULL regenerate on every routability change, which is what makes it
-    # self-healing — and what makes a missed trigger site a silent staleness bug rather than a crash.
-    text: Creating, moving, suspending or reactivating a tenant regenerates the reverse proxy's whole router set from the tenant table, so the new domain resolves and a withdrawn one stops; the statically-routed bootstrap domain is never projected twice.
-    coverage:
-      backend:
-        integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsNeverProjected, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate]
-      # No web surface: routing is a server-side projection with no client half to get wrong.
-  - id: presign-for-the-arriving-domain
-    # ADR 0013 §4 as amended by ADR 0063. The negative is the load-bearing one: the domain is resolved through
-    # the tenant table, so a spoofed Host signs against the default instead of an attacker-named origin.
-    text: A presigned blob URL is signed for the domain the request arrived on — resolved through the tenant table, never the Host header echoed back — so a second tenant's media is not signed for the first tenant's origin, and an unresolvable or spoofed Host falls back to the bootstrap default.
-    coverage:
-      backend:
-        unit: [S3BlobStorePresigningTest.twoTenantsSigningTheSameKeyGetTwoDifferentHosts, S3BlobStorePresigningTest.anUnresolvedRequestSignsAgainstTheBootstrapDefault, S3BlobStorePresigningTest.withNoPublicEndpointTheDomainIsIgnored]
-        integration: [MediaPresignDomainSliceTest.twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins, MediaPresignDomainSliceTest.aHostNoTenantClaimsFallsBackToTheDefault, SharePresignDomainSliceTest.aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn, SharePresignDomainSliceTest.aGuestOnAHostNoTenantClaimsGetsTheDefaultNotTheirOwnHeader]
-
   # --- Slice B (cr-0010): invite acceptance / activation ---
   - id: activate-by-register
     text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.

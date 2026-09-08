@@ -84,6 +84,11 @@ normally).
 
 ## Related
 
+- [uc.admin.tenant-reachability](../features/admin/use-cases/uc.admin.tenant-reachability.md) (the use-case
+  this decision serves — it owns the flow, the failure modes and the acceptance criteria; the triggers live
+  with the operations that cause them, in
+  [create-tenant](../features/admin/use-cases/uc.admin.create-tenant.md) and
+  [suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
 - [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) (blob transport, same-origin routing — amended
   by this decision).
 - [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes sink).
