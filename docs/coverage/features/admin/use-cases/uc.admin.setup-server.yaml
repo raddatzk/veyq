@@ -27,4 +27,10 @@ acceptanceCriteria:
     coverage:
       backend: { unit: [SetupRequestSanitizationTest.trimsNameFields] }
 gaps:
-  web: implemented (cr-0002); web-surface acceptance tests not yet linked
+  admin-web: >-
+    Implemented (cr-0002) and, since cr-admin-web-extraction (ADR 0065), implemented HERE rather than in `web`:
+    first-run setup moved to the admin surface with the rest of Server-Owner administration, which is what lets
+    an operator bootstrap over `http://localhost:<admin-port>` before `VEYQ_DOMAIN` resolves anywhere. The
+    surface tests exist (`admin-web/src/features/setup/setupServer.test.ts`) and are not linked yet, for the
+    same reason the sibling admin use-cases are not: no CI run has ever executed in this repository, so ADR
+    0040 leaves the claim unmade regardless of how green the suite is locally.

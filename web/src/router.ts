@@ -5,7 +5,7 @@ import { session } from './app/session'
 import { vaultState } from './app/vault'
 import { rememberRoute } from './app/pendingRoute'
 import { termsStale } from './app/activeSpace'
-import SetupView from './views/SetupView.vue'
+import NotSetUpView from './views/NotSetUpView.vue'
 import LoginView from './views/LoginView.vue'
 import SettingsHubView from './views/SettingsHubView.vue'
 import TenantJoinView from './views/TenantJoinView.vue'
@@ -15,18 +15,18 @@ import GroupInvitationsView from './views/GroupInvitationsView.vue'
 import ShareView from './views/ShareView.vue'
 import RecoverView from './views/RecoverView.vue'
 
-// Setup slice routing: a fresh instance lands on /setup; an already-set-up instance on /login. /server/settings
-// is the Server-Owner instance-administration page (cr-0050; tenant administration lives there, cr-0009) — it
-// renders inside the app shell and needs a session (no unlocked vault — it's operational metadata only); the
-// backend enforces the Server-Owner role with a 403. The legacy /tenants route redirects to it. The Memory
-// shell is a single authenticated route (`/`, `meta.layout: 'app'`, needs an unlocked vault) — the current tree
-// position lives in the URL **#fragment** (`#~me/reisen-2026/rom`, cr-0031), resolved client-side, so the
-// operator never sees it.
+// A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
+// any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
+// an operator bootstrap over `http://localhost:<admin-port>` before `VEYQ_DOMAIN` resolves anywhere. Tenant
+// administration left with it; what remains of the Server Owner in this app is a signpost in the settings hub.
+// The Memory shell is a single authenticated route (`/`, `meta.layout: 'app'`, needs an unlocked vault) — the
+// current tree position lives in the URL **#fragment** (`#~me/reisen-2026/rom`, cr-0031), resolved
+// client-side, so the operator never sees it.
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', name: 'home', component: MemoryHomeView, meta: { layout: 'app', requiresUnlock: true } },
-    { path: '/setup', name: 'setup', component: SetupView },
+    { path: '/not-set-up', name: 'not-set-up', component: NotSetUpView },
     { path: '/login', name: 'login', component: LoginView },
     // The settings hub (cr-0078, ADR 0022): one scope-contextual page. `:section?` selects a section (wide shows
     // the sidebar + that section; narrow drills in). Needs an unlocked vault — sections read the active space,
@@ -59,8 +59,8 @@ router.beforeEach((to) => {
   const { serverState } = useServerState()
   // Boot hasn't answered yet (null) — let navigation through; boot resolves before mount.
   if (serverState.setupCompleted === null) return true
-  if (!serverState.setupCompleted && to.name !== 'setup') return { name: 'setup' }
-  if (serverState.setupCompleted && to.name === 'setup') return { name: 'login' }
+  if (!serverState.setupCompleted && to.name !== 'not-set-up') return { name: 'not-set-up' }
+  if (serverState.setupCompleted && to.name === 'not-set-up') return { name: 'login' }
   // The Memory shell needs a session AND an unlocked vault (it derives K_SC from the vaulted identity).
   if (to.meta.requiresUnlock) {
     if (session.accessToken === null || !vaultState.unlocked) {

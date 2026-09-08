@@ -1,0 +1,502 @@
+.veyq-page {
+  display: grid;
+  gap: 1.25rem;
+  width: min(100%, 1280px);
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.veyq-page-narrow {
+  max-width: 1180px;
+}
+
+.veyq-section {
+  display: grid;
+  min-width: 0;
+  gap: 0.85rem;
+}
+
+.veyq-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 1rem;
+}
+
+.veyq-section-header h1,
+.veyq-section-header h2,
+.veyq-section-header h3 {
+  margin: 0;
+}
+
+.veyq-section-header h2 {
+  color: var(--app-text);
+  font-size: 1.12rem;
+}
+
+.veyq-section-header span,
+.veyq-section-count {
+  color: var(--app-muted);
+  font-size: 0.9rem;
+}
+
+.veyq-surface,
+.veyq-card {
+  min-width: 0;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.veyq-surface {
+  padding: 1.15rem;
+}
+
+.veyq-card {
+  overflow: hidden;
+}
+
+.veyq-card-interactive {
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
+}
+
+.veyq-card-interactive:hover {
+  border-color: color-mix(in srgb, var(--app-line) 72%, var(--app-text));
+  box-shadow: var(--app-shadow-md);
+  transform: translateY(-1px);
+}
+
+.veyq-empty,
+.veyq-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 96px;
+  margin: 0;
+  padding: 1rem;
+  border: 1px dashed var(--app-line);
+  border-radius: var(--app-radius);
+  background: var(--app-surface);
+  color: var(--app-muted);
+}
+
+.veyq-empty-inline {
+  min-height: 82px;
+  align-self: stretch;
+}
+
+.veyq-empty-action {
+  flex-wrap: wrap;
+}
+
+.veyq-action-row,
+.veyq-button-row,
+.veyq-dialog-action-row,
+.veyq-action-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.veyq-action-row {
+  justify-content: space-between;
+}
+
+.veyq-dialog-action-row {
+  justify-content: space-between;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.veyq-action-group {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.veyq-button-row .p-button,
+.veyq-button-row button,
+.veyq-dialog-action-row .p-button,
+.veyq-dialog-action-row button {
+  max-width: 100%;
+}
+
+.veyq-icon-button.p-button,
+.veyq-icon-button {
+  flex: 0 0 auto;
+  width: 2.55rem;
+  min-width: 2.55rem;
+  height: 2.55rem;
+  padding-inline: 0;
+}
+
+.veyq-prime-icon-button.p-button {
+  flex: 0 0 auto;
+  width: 2.55rem;
+  min-width: 2.55rem;
+  height: 2.55rem;
+  padding-inline: 0;
+}
+
+.veyq-icon-button:not(.p-button) {
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: var(--app-shadow-sm);
+}
+
+.veyq-icon-button:not(.p-button):hover {
+  background: var(--app-hover);
+}
+
+.veyq-icon-button:not(.p-button):focus-visible {
+  outline: 2px solid var(--app-focus);
+  outline-offset: 2px;
+}
+
+.veyq-form,
+.veyq-form-grid {
+  display: grid;
+  min-width: 0;
+  gap: 1rem;
+}
+
+.veyq-form-copy {
+  margin: 0;
+  color: var(--app-muted);
+  line-height: 1.5;
+}
+
+/* A labeled field block inside a .veyq-form: label text + control + optional hint (cr-0154). */
+.veyq-form-field {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+/* Two related fields side by side (e.g. first name + last name) so a single hint below reads as covering the
+   pair, not just the last field. Each half fills its track; the controls stretch via the global `label` grid. */
+.name-row {
+  display: flex;
+  gap: 1rem;
+}
+.name-row > label {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Inline validation error inside a .veyq-form, shown under the failing field (cr-0154). */
+.veyq-form-error {
+  margin: 0;
+  color: var(--app-danger);
+  font-size: 0.85rem;
+}
+
+.veyq-form .p-inputtext,
+.veyq-form .p-password,
+.veyq-form .p-select,
+.veyq-form .p-datepicker,
+.veyq-form input,
+.veyq-form select,
+.veyq-form textarea {
+  width: 100%;
+  min-width: 0;
+}
+
+.veyq-form .p-inputtext,
+.veyq-form .p-password-input,
+.veyq-form input,
+.veyq-form select,
+.veyq-form textarea {
+  border-radius: var(--app-radius-sm);
+}
+
+.veyq-date-field .p-datepicker-input {
+  min-height: 2.75rem;
+  padding-inline-end: 2.75rem;
+  border-radius: var(--app-radius-sm);
+}
+
+.veyq-date-field .p-datepicker-input-icon-container {
+  color: var(--app-muted);
+}
+
+.veyq-date-panel {
+  min-width: min(100%, 20rem);
+  margin-top: 0.4rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+  color: var(--app-text);
+  box-shadow: var(--app-shadow-md);
+}
+
+.veyq-date-panel .p-datepicker-header {
+  border-color: var(--app-line);
+  color: var(--app-text);
+}
+
+.veyq-date-panel .p-datepicker-weekday,
+.veyq-date-panel .p-datepicker-other-month .p-datepicker-day {
+  color: var(--app-muted);
+}
+
+.veyq-date-panel .p-datepicker-day,
+.veyq-date-panel .p-datepicker-month,
+.veyq-date-panel .p-datepicker-year {
+  border-radius: 8px;
+}
+
+.veyq-date-panel .p-datepicker-day:not(.p-disabled):hover,
+.veyq-date-panel .p-datepicker-month:not(.p-disabled):hover,
+.veyq-date-panel .p-datepicker-year:not(.p-disabled):hover {
+  background: var(--app-hover);
+  color: var(--app-text);
+}
+
+.veyq-date-panel .p-datepicker-day-selected,
+.veyq-date-panel .p-datepicker-month-selected,
+.veyq-date-panel .p-datepicker-year-selected {
+  background: var(--app-success);
+  color: var(--app-on-strong);
+}
+
+.veyq-date-panel .p-datepicker-today .p-datepicker-day:not(.p-datepicker-day-selected) {
+  color: var(--app-success-text);
+  background: var(--app-success-soft);
+}
+
+.veyq-list {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.veyq-list-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 4.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--app-line);
+  border-radius: var(--app-radius-sm);
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
+.veyq-row-main {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.veyq-row-title {
+  overflow: hidden;
+  color: var(--app-text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-row-subtitle {
+  overflow: hidden;
+  color: var(--app-muted);
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.veyq-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.veyq-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.55rem;
+  padding: 0.18rem 0.5rem;
+  border: 1px solid var(--app-line);
+  border-radius: 999px;
+  background: var(--app-surface-muted);
+  color: var(--app-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.veyq-badge.success {
+  border-color: var(--app-success-line);
+  background: var(--app-success-soft);
+  color: var(--app-success-text);
+}
+
+.veyq-badge.warning {
+  border-color: var(--app-warning-line);
+  background: var(--app-warning-soft);
+  color: var(--app-warning-text);
+}
+
+.veyq-badge.muted {
+  color: var(--app-muted);
+}
+
+/* Changed-identity warning badge (cr-0099): the directory key differs from the pin (a rotation or a substitution)
+   and needs review. The only trust surface shown by default — verified/recognized states are not surfaced. */
+.veyq-badge.changed {
+  border-color: var(--app-warning-line);
+  background: var(--app-warning-soft);
+  color: var(--app-warning-text);
+}
+
+.veyq-badge .pi {
+  margin-right: 0.3rem;
+  font-size: 0.85em;
+}
+
+.veyq-text-button,
+.veyq-dialog-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--app-line);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-text);
+  font-family: inherit;
+  font-size: var(--p-button-font-size, 1rem);
+  line-height: normal;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.veyq-text-button {
+  font-weight: 700;
+}
+
+.veyq-dialog-button {
+  font-weight: var(--p-button-label-font-weight, 500);
+}
+
+.veyq-dialog-button.veyq-dialog-button span {
+  color: currentColor;
+  overflow-wrap: normal;
+}
+
+.veyq-text-button:hover:not(:disabled),
+.veyq-dialog-button:hover:not(:disabled) {
+  background: var(--app-hover);
+}
+
+.veyq-dialog-button-primary {
+  border-color: var(--p-button-primary-border-color, var(--app-success));
+  background: var(--p-button-primary-background, var(--app-success));
+  color: var(--p-button-primary-color, var(--app-backdrop-strong));
+}
+
+.veyq-dialog-button-primary:hover:not(:disabled) {
+  border-color: var(--p-button-primary-hover-border-color, var(--app-success));
+  background: var(--p-button-primary-hover-background, var(--app-success));
+  color: var(--p-button-primary-hover-color, var(--app-backdrop-strong));
+}
+
+.veyq-dialog-button-danger {
+  border-color: var(--app-danger);
+  background: var(--app-danger);
+  color: var(--app-on-strong);
+}
+
+.veyq-dialog-button-danger:hover:not(:disabled) {
+  background: var(--app-danger-strong);
+}
+
+.veyq-dialog-button-secondary {
+  background: var(--app-surface-muted);
+}
+
+.veyq-support-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  min-height: 2.35rem;
+  padding: 0 0.8rem;
+  border: 1px solid var(--app-success-line);
+  border-radius: 8px;
+  background: var(--app-surface);
+  color: var(--app-success-text);
+  font-family: inherit;
+  font-size: var(--p-button-font-size, 1rem);
+  font-weight: var(--p-button-label-font-weight, 500);
+  line-height: normal;
+  text-decoration: none;
+}
+
+.veyq-support-button:hover {
+  border-color: var(--app-success);
+  background: var(--app-success-soft);
+  color: var(--app-success-text);
+}
+
+.veyq-support-button.veyq-support-button span {
+  color: currentColor;
+  overflow-wrap: normal;
+}
+
+.veyq-text-button:disabled,
+.veyq-dialog-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (max-width: 820px) {
+  .veyq-list-row {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 720px) {
+  .veyq-action-row,
+  .veyq-action-group {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .veyq-action-group {
+    margin-left: 0;
+  }
+
+}
+
+@media (max-width: 420px) {
+  .veyq-button-row,
+  .veyq-dialog-action-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .veyq-button-row .p-button,
+  .veyq-button-row button,
+  .veyq-dialog-action-row .p-button,
+  .veyq-dialog-action-row button {
+    width: 100%;
+  }
+}

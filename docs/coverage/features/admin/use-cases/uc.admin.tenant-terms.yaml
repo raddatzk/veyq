@@ -13,7 +13,7 @@ acceptanceCriteria:
     text: The tenant owner sets terms_markdown_by_locale (DE+EN markdown) on veyq_tenant, from the clause template or edited freely; served as public operational content. Editing is owner-gated (isOwner); a non-owner is refused (403 not_tenant_owner), a member sees it read-only.
     coverage:
       backend: { integration: [TenantTermsSliceTest.ownerSetsTermsBumpsVersionAndIdempotentReSaveDoesNot, TenantTermsSliceTest.nonOwnerCannotUpdateTerms, TenantOwnerGateTest.ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint, TenantOwnerGateTest.realRootScopeOwnerStillPasses] }
-      web: { unit: [src/features/admin/createTenant/terms.test.ts] }
+      web: { unit: [src/features/tenant/tenantTerms.test.ts] }
   - id: version-bumped-on-change
     text: Saving normalizes the markdown and bumps terms_version only when it actually changed (an idempotent re-save does not bump — the pre-E2EE logic). The higher version re-gates every member.
     coverage:

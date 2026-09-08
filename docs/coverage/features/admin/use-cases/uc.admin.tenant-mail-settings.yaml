@@ -18,14 +18,14 @@ acceptanceCriteria:
       backend:
         integration: [TenantMailSettingsSliceTest.ownerConfiguresSmtpAndThePasswordIsWriteOnly, TenantMailSettingsSliceTest.nonOwnerMemberIsForbidden, TenantMailSettingsSliceTest.aNonMemberIs404]
       web:
-        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: password-sealed-at-rest
     text: The SMTP password is sealed at rest under the operator env KEK (AES-256-GCM, ADR 0050) — the stored columns hold only ciphertext + nonce, never the plaintext input; omitting the password on a later update keeps the stored one rather than clearing it. The web form drives that "omit to keep" contract (an empty field sends no password; a typed one is sent and then cleared from state).
     coverage:
       backend:
         integration: [TenantMailSettingsSliceTest.theSmtpPasswordIsSealedAtRestNotPlaintext, TenantMailSettingsSliceTest.omittingThePasswordOnUpdateKeepsTheStoredOne]
       web:
-        unit: [src/features/admin/createTenant/mailSettings.test.ts, src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/mailSettings.test.ts, src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: invite-template-closed-variable-set
     text: The owner-authored subject/body template is rendered over a closed, non-secret variable set ({{link}}/{{domain}}/{{expiry}} only); veyq's machinery interpolates nothing sealed, and a template referencing any other {{tag}} is rejected at write time (400 invalid_mail_template) and never stored (ADR 0048 §6, ADR 0049). The web editor shows the allowed variables and surfaces that rejection as a specific, understandable message rather than a generic failure.
     coverage:
@@ -33,7 +33,7 @@ acceptanceCriteria:
         unit: [InviteMailRendererTest.theRenderContextIsClosedToExactlyThreeNonSecretFields, InviteMailRendererTest.rejectsTagsOutsideTheClosedSet, InviteMailRendererTest.theShippedDefaultsAreContentFreeAndValid]
         integration: [TenantMailSettingsSliceTest.aTemplateOutsideTheClosedVariableSetIsRejectedAndNotStored, SmtpInviteMailSendTest.aConfiguredTenantSendsARenderedInviteCarryingOnlyTheClosedSet]
       web:
-        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: unconfigured-blocks-member-invites
     # Was `unconfigured-falls-back-to-copy-link`, justified as self-hostability. ADR 0055 reversed it and priced
     # the cost: a mailer becomes a precondition for admitting members. The copy-link + dev-file path itself
@@ -52,12 +52,12 @@ acceptanceCriteria:
     text: When the server has no config-secret KEK, sealing a supplied password is refused (503 mail_secret_unavailable, ADR 0050). The web form surfaces that as an understandable "the server can't encrypt secrets — an admin must configure the KEK" message, so a self-hoster without a KEK learns why saving fails rather than hitting a generic error.
     coverage:
       web:
-        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: send-readiness-visible-in-ui
     text: The send-gate is enabled ∧ host ∧ stored-password ∧ KEK, so ticking `enabled` alone still leaves the tenant unable to send (and therefore unable to invite members). The web form makes real send-readiness visible — a "ready to send" state when the config is complete, or an explicit list of what's still missing (sending off / no host / no password) — computed honestly from the read (a stored password already implies the KEK was present at seal time).
     coverage:
       web:
-        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: config-secret-kek-managed-as-a-file
     text: The config-secret KEK (ADR 0050 amendment) is a server-managed key file — generated (32 random bytes, 0600) on first construction when absent, and read rather than regenerated when present. The env value channel is gone; an operator supplies their own key via a file path override.
     coverage:
@@ -79,4 +79,4 @@ acceptanceCriteria:
     text: The owner sees the config-secret key state proactively on the mail-settings read — a MISMATCH (the stored password can't be decrypted; re-enter it) or an ABSENT server (can't seal at all) is shown as its own message and blocks the "send-ready" state, rather than the panel falsely reporting a usable config.
     coverage:
       web:
-        unit: [src/features/admin/createTenant/TenantMailSettingsPanel.test.ts]
+        unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]

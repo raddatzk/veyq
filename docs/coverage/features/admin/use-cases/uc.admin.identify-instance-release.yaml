@@ -65,8 +65,10 @@ gaps:
     wrote `{"version": null, "versionSource": "no-app-service"}`, a measured absence rather than the structural
     null it replaces. That probe also earned its keep: the first version of the function reported "no app
     service" as "docker unavailable", which the run caught.
-  web: >-
-    Same condition, same one event. `web/src/features/admin/instance/ReleaseVersionPanel.test.ts` covers the
+  admin-web: >-
+    Same condition, same one event — and a new surface: the release panel moved to `admin-web` with the rest of
+    the Server-Owner administration (ADR 0065), so when this flips it flips on that surface, not on `web`.
+    `admin-web/src/features/instance/ReleaseVersionPanel.test.ts` covers the
     first three criteria on this surface: the stamped render (the version verbatim), the unstamped render (the
     absence stated, and the value element absent entirely so there is no empty box that reads as a failed
     load), and the 403 render (the owner-only notice, no version). It also pins the trap those two share — a

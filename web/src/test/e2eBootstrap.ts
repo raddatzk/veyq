@@ -20,11 +20,21 @@ import { session } from '../app/session'
 import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
-import { setupApi } from '../api/client'
-import { createTenant, updateTenantMailSettings } from '../features/admin/createTenant/tenants'
+import { setupApi, tenantsApi } from '../api/client'
+import { updateTenantMailSettings } from '../features/tenant/tenantMailSettings'
 import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
 import { inviteMember } from '../features/spaces/members'
 import { clearMailbox, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
+
+/**
+ * Create a PENDING tenant + owner invite — the ONE Server-Owner call this harness makes. It is spelled against
+ * the generated client rather than a facade because `web/` no longer has one: tenant CRUD moved to `admin-web`
+ * with the rest of the Server-Owner surface (ADR 0065). A test harness birthing a whole instance legitimately
+ * needs it; product code in `web/` does not, and reintroducing a facade here would give it one to reach for.
+ */
+function createTenant(tenantName: string, domain: string, ownerEmail: string) {
+  return tenantsApi().createTenant({ createTenantRequest: { tenantName, domain, ownerEmail } })
+}
 
 /** Tenant domain and API base — see the module header for why this exact host. */
 export const HOST = process.env.VEYQ_HOST ?? 'veyq.localhost'

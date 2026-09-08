@@ -13,7 +13,7 @@ acceptanceCriteria:
     text: A Server Owner creates a PENDING tenant (201) with an owner invite; the response reports the delivery result, which for a bootstrap invite is always FALLBACK_COPYLINK (no SMTP for a PENDING tenant).
     coverage:
       backend: { integration: [TenantsSliceTest.createReturns201Pending] }
-      web: { unit: [src/features/admin/createTenant/CreateTenantDialog.test.ts] }
+      admin-web: { unit: [src/features/tenants/CreateTenantDialog.test.ts] }
   - id: reject-duplicate-domain
     text: A domain already mapped to a tenant is rejected (409 domain_taken).
     coverage:
@@ -21,15 +21,17 @@ acceptanceCriteria:
   - id: invite-link-handoff
     text: The owner invite is delivered out-of-band by the Server Owner copying the invite link (the bootstrap secret in the URL fragment) — create/resend/reassign responses return the raw secret to the Server-Owner-gated caller, so tenant onboarding works without any email/SMTP infrastructure (self-hostable by default). (cr-0080.)
     coverage:
-      web:
-        unit: [src/features/admin/createTenant/CreateTenantDialog.test.ts, src/features/admin/createTenant/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts]
+      admin-web:
+        unit: [src/features/tenants/CreateTenantDialog.test.ts, src/features/tenants/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts]
   - id: list-tenants
     text: A Server Owner lists all tenants with each one's current invite status.
     coverage:
       backend: { integration: [TenantsSliceTest.listIncludesCreatedTenantWithActiveInvite] }
-      # cr-0050/cr-0087: the Server → Tenants collection in the settings hub lists all tenants; Server-Owner-gated
-      # by the backend 403 + the client serverRole probe.
-      web: { unit: [src/views/SettingsHubView.test.ts] }
+      # cr-0050/cr-0087 put the Server → Tenants collection in web/'s settings hub; cr-admin-web-extraction
+      # (ADR 0065) moved it to `admin-web`'s console, whose root gate is the same Server-Owner probe over the
+      # same backend 403. The ref follows the list — `SettingsHubView.test.ts` no longer exercises tenants at
+      # all, so leaving it here would have been a green ref proving nothing.
+      admin-web: { unit: [src/views/AdminConsoleView.test.ts] }
   - id: resend-supersedes-invite
     text: Resend soft-supersedes the current ACTIVE invite and mints a fresh ACTIVE one (one ACTIVE kept).
     coverage:
@@ -73,7 +75,7 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [TenantChangeDomainSliceTest.aPendingTenantMoves, TenantChangeDomainSliceTest.anActiveTenantMovesToo, TenantChangeDomainSliceTest.aDomainAlreadyMappedIsRefused, TenantChangeDomainSliceTest.aSuspendedTenantIsRefusedAndKeepsItsDomain, TenantChangeDomainSliceTest.aMalformedDomainIsRejectedAtTheBoundary]
-      web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
   # --- Slice B (cr-0010): invite acceptance / activation ---
   - id: activate-by-register
     text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.

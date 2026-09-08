@@ -54,14 +54,29 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   Context finding. Everything else stays independent per package on purpose (no shared UI-component library,
   no shared router) — the point of the workspace is that one crypto module, not general code-sharing.
   - **What moves**: the genuinely Server-Owner-only, ongoing-administration surface — tenant CRUD (create,
-    list, resend, reassign, revoke, change-domain, suspend, reactivate), per-tenant mail settings, terms
-    authoring, release info — **and** first-run setup (`setupServer.ts`/`SetupView.vue`, Context above).
+    list, resend, reassign, revoke, change-domain, suspend, reactivate), ~~per-tenant mail settings, terms
+    authoring~~ (struck 2026-09-08 — see the amendment below), release info — **and** first-run setup
+    (`setupServer.ts`/`SetupView.vue`, Context above).
   - **What stays in `web/`**: the tenant-invite **accept** side (`previewInvite`, `acceptInvite`,
     `registerAndAccept`, `bornTenantScope`, `tenantError` — reachable by an anonymous invitee, not a Server
     Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), and the four
     backup/restore E2E rehearsals (unrelated to this feature, parked under `features/admin/` only
     incidentally). These are relocated out of `features/admin/**` into an accurate home inside `web/` — the
     exact destination is the CR's inventory, not this ADR's.
+
+    **Amended 2026-09-08, at implementation, measured against the code: per-tenant mail settings and terms
+    authoring stay in `web/` too.** The "what moves" list above named them, and that was wrong. Both panels
+    read `activeSpace.tenantId` and hang off the settings hub's `ScopeKind.Tenant` category — **not** behind
+    `serverRole.canManage`; the backend gates both with `403 not_tenant_owner`, not with the Server-Owner
+    gate; and a tenant owner is by construction an ordinary user who accepted an invite (uc.admin.create-tenant
+    is two-party). So there is a **fourth** audience the Context finding above missed — the tenant owner — and
+    moving those two panels would have taken a tenant's own email and terms configuration away from every
+    owner who is not also the Server Owner. That is a product change, not a refactor, and nothing here asked
+    for it. **The rule the split actually follows, and the one to apply to anything moved later: ask which
+    gate the BACKEND applies — the Server-Owner gate, or `not_tenant_owner` — never which directory the file
+    happens to sit in.** The Context finding's method was right and its net was one audience too small: it
+    grepped for cross-imports *into* `features/admin/**`, which finds the anonymous and ordinary-member
+    callers but not a file that is itself owner-scoped by the state it reads.
   - The lightweight "is this caller a Server Owner" probe (`serverRole.ts`) stays in `web/` too — it is what
     lets the main SPA conditionally show a link *to* the admin surface, and `TermsAcceptView`'s
     `resetServerRole` call needs it regardless. `admin-web` performs its own independent probe against the
@@ -75,6 +90,14 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   trusted-web SaaS track already flagged as expensive (inbox #53: "cross-origin auth (breaks the same-origin
   cr-0055 refresh-cookie)"). Authentication is the existing Server-Owner session, unchanged — first-run setup
   simply happens to be the one Admin API call that needs no prior session at all.
+
+  **Amended 2026-09-08, at implementation: "unchanged" still costs this package a client.** The generated-client
+  list above (tenants + instance) named no auth spec, and without one nothing here can obtain a bearer token —
+  every tenant call would be 401. So `admin-web` also generates from `auth.openapi.yaml` and carries its own
+  **minimal** Model B sign-in: the same challenge/verify endpoints and the same `deriveAuthKeypair` from the
+  shared crypto package, and deliberately none of `web/`'s passkeys, "remember me" device-key wrap, session
+  vault or password recovery — this surface holds no vault to unlock, and each of those would be another place
+  touching key material.
 - **CLI — Node.js, in the same package, added in a follow-up CR.** The same container's build ships a CLI
   entry point that is **also** an HTTP client of the backend Admin API (using a Server-Owner credential
   supplied to the container) — written in Node.js specifically so it can import the **same generated API

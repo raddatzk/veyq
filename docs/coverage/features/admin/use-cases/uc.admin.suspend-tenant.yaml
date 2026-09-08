@@ -8,12 +8,12 @@ acceptanceCriteria:
     text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
   - id: reactivate-suspended-tenant
     text: A Server Owner reactivates a SUSPENDED tenant back to ACTIVE.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      web: { unit: [src/features/admin/createTenant/TenantDetailPanel.test.ts] }
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
   - id: suspend-non-active-rejected
     text: Suspending a non-ACTIVE tenant (e.g. PENDING) is rejected (409).
     coverage:

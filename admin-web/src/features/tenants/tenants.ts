@@ -1,0 +1,67 @@
+// uc.admin.create-tenant (admin-web, Slice A / cr-0009) — Server-Owner tenant administration on the
+// operator-blind data layer. Everything here is operational metadata + a hashed invite; there is NO content
+// key. The cold TENANT-scope birth that ACTIVATES a tenant is Slice B and stays in `web/`
+// (`features/tenant/tenantInvite.ts`): an invitee accepting an invite is an anonymous or ordinary user and
+// has no business loading the admin app (ADR 0065). Thin facade over the generated tenants client: views
+// depend on this typed surface, never on the generator runtime.
+import { tenantsApi } from '../../api/client'
+import { decodeHttpError } from '../../shared/httpError'
+import type { TenantCreated, TenantInviteState, TenantSummary } from '../../api/generated/tenants'
+
+export type { TenantSummary, TenantInviteState, TenantCreated } from '../../api/generated/tenants'
+
+/** Create a PENDING tenant and mint an owner invite. */
+export function createTenant(tenantName: string, domain: string, ownerEmail: string): Promise<TenantCreated> {
+  return tenantsApi().createTenant({ createTenantRequest: { tenantName, domain, ownerEmail } })
+}
+
+/** List all tenants (Server-Owner only). */
+export function listTenants(): Promise<TenantSummary[]> {
+  return tenantsApi().listTenants()
+}
+
+/** Re-mint and resend a pending tenant's invite to the same owner email. */
+export function resendInvite(tenantId: string): Promise<TenantInviteState> {
+  return tenantsApi().resendTenantInvite({ tenantId })
+}
+
+/** Re-bind a pending tenant's invite to a different owner email. */
+export function reassignInvite(tenantId: string, ownerEmail: string): Promise<TenantInviteState> {
+  return tenantsApi().reassignTenantInvite({ tenantId, reassignOwnerRequest: { ownerEmail } })
+}
+
+/** Move a tenant to a different domain (uc.admin.create-tenant). The one tenant-admin write that is **not**
+ *  PENDING-only — a domain is how a tenant is reached, not part of its invite lifecycle. What makes the new
+ *  address actually resolve is the server-side ingress projector (ADR 0063), not anything the client does.
+ *  409 `domain_taken` if another tenant holds it, 409 `tenant_not_pending_or_active` if this one is suspended. */
+export function changeTenantDomain(tenantId: string, domain: string): Promise<void> {
+  return tenantsApi().changeTenantDomain({ tenantId, changeDomainRequest: { domain } })
+}
+
+/** Revoke a pending tenant. */
+export function revokeTenant(tenantId: string): Promise<void> {
+  return tenantsApi().revokeTenant({ tenantId })
+}
+
+/** Take an ACTIVE tenant offline (ADR 0066) — reversible, and nothing but its `status` changes: no key, grant,
+ *  content row or session is touched. While suspended every request to its domain is refused at the boundary.
+ *  409 `tenant_not_active` if it isn't ACTIVE. */
+export function suspendTenant(tenantId: string): Promise<void> {
+  return tenantsApi().suspendTenant({ tenantId })
+}
+
+/** Bring a SUSPENDED tenant back to ACTIVE. 409 `tenant_not_suspended` if it isn't suspended. */
+export function reactivateTenant(tenantId: string): Promise<void> {
+  return tenantsApi().reactivateTenant({ tenantId })
+}
+
+
+/**
+ * Decode a failed tenant call into `{ status, code }` for UI mapping (401 → re-login, 403 → not owner,
+ * 409 → domain_taken / tenant_not_pending). Thin domain-named alias over the shared {@link decodeHttpError}.
+ * `web/` carries its own equivalent: the `ResponseError` a client throws is that client's own type, so this
+ * is a structural duplicate, not a shareable one.
+ */
+export function tenantError(e: unknown): Promise<{ status: number; code: string | null }> {
+  return decodeHttpError(e)
+}

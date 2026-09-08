@@ -16,17 +16,14 @@ import ChangePasswordPanel from '../features/account/changePassword/ChangePasswo
 import AddDevicePanel from '../features/account/pairing/AddDevicePanel.vue'
 import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
-import TenantTermsPanel from '../features/admin/createTenant/TenantTermsPanel.vue'
-import TenantMailSettingsPanel from '../features/admin/createTenant/TenantMailSettingsPanel.vue'
+import TenantTermsPanel from '../features/tenant/TenantTermsPanel.vue'
+import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
-import TenantDetailPanel from '../features/admin/createTenant/TenantDetailPanel.vue'
-import ReleaseVersionPanel from '../features/admin/instance/ReleaseVersionPanel.vue'
+import ServerAdminPanel from '../features/settings/ServerAdminPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
-import CreateTenantDialog from '../features/admin/createTenant/CreateTenantDialog.vue'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, type GroupSpace } from '../features/spaces/scopes'
-import { listTenants, type TenantSummary } from '../features/admin/createTenant/tenants'
 import { serverRole, probeServerRole } from '../app/serverRole'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { SPACES_GROUPS } from '../features/platform/capabilities'
@@ -42,13 +39,11 @@ const router = useRouter()
 // The groups the caller OWNs — the Gruppen collection (ADR 0022 §3). Names decrypted on-device; a member-only
 // group isn't listed (nothing to manage), though its detail page stays reachable via a direct/gear link.
 const ownedGroups = ref<GroupSpace[]>([])
-const tenants = ref<TenantSummary[]>([])
 const createGroupOpen = ref(false)
-const createTenantOpen = ref(false)
 
 onMounted(async () => {
   await probeServerRole()
-  await Promise.all([loadGroups(), loadTenants()])
+  await loadGroups()
 })
 
 async function loadGroups() {
@@ -59,14 +54,6 @@ async function loadGroups() {
   }
 }
 
-async function loadTenants() {
-  if (!serverRole.canManage) return
-  try {
-    tenants.value = await listTenants()
-  } catch {
-    /* the rail tolerates an empty tenants collection */
-  }
-}
 
 const categories = computed<NavCategory[]>(() => {
   const cats: NavCategory[] = [
@@ -127,23 +114,16 @@ const categories = computed<NavCategory[]>(() => {
       items: ownedGroups.value.map((g) => ({ id: `group-${g.scopeId}`, label: g.name, icon: g.deletedAt ? 'pi pi-trash' : 'pi pi-users' })),
     })
   }
-  // Server → the instance itself. Its own non-collapsible category rather than an entry in the Tenants
-  // collection below: that one is a fan-out over entities, this is a fixed page about the server (ADR 0022 §3).
+  // Server → a single signpost. Tenant administration, the release panel and first-run setup are no longer
+  // pages of this app: they are `admin-web`, a separate deployable an operator can firewall off the public
+  // origin entirely (ADR 0065). This app cannot link to it — the operator chooses where it is reachable
+  // (localhost-only by default, or an optional ADMIN_DOMAIN), and a wrong guess is worse than no link — so the
+  // entry explains rather than navigates. It stays gated on the Server-Owner probe: telling every member that
+  // an admin surface exists would be noise, and to a stranger, a hint.
   if (serverRole.canManage) {
     cats.push({ key: 'instance', label: t('settings.server'), collapsible: false, items: [
-      { id: 'server-release', label: t('release.navTitle'), icon: 'pi pi-tag' },
+      { id: 'server-admin', label: t('serverAdmin.navTitle'), icon: 'pi pi-server' },
     ] })
-  }
-  // Server → Tenants collection — every tenant a Server Owner administers + a create affordance.
-  if (serverRole.canManage) {
-    cats.push({
-      key: 'server',
-      label: t('settings.serverTenants'),
-      collapsible: true,
-      empty: t('settings.serverTenantsEmpty'),
-      create: { label: t('tenant.create'), run: () => { createTenantOpen.value = true } },
-      items: tenants.value.map((tn) => ({ id: `tenant-${tn.tenantId}`, label: tn.name, icon: 'pi pi-server' })),
-    })
   }
   return cats
 })
@@ -177,12 +157,11 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'tenant-members') return { component: TenantMembersPanel, props: {} }
   if (id === 'terms') return { component: TenantTermsPanel, props: {} }
   if (id === 'mail') return { component: TenantMailSettingsPanel, props: {} }
-  if (id === 'server-release') return { component: ReleaseVersionPanel, props: {} }
   if (id.startsWith('group-')) {
     const scopeId = id.slice('group-'.length)
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }
   }
-  if (id.startsWith('tenant-')) return { component: TenantDetailPanel, props: { tenantId: id.slice('tenant-'.length) } }
+  if (id === 'server-admin') return { component: ServerAdminPanel, props: {} }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'device') return { component: DeviceTrustPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
@@ -206,14 +185,7 @@ async function onGroupCreated(scopeId: string) {
   await router.push(`/settings/group-${scopeId}`)
 }
 
-async function onTenantCreated() {
-  await loadTenants()
-  manualExpanded.server = true
-}
 
-// Reload the tenants collection when the section changes — so a revoke (which routes back here) drops the stale
-// entry from the rail. Cheap + Server-Owner-only; groups reload on create (no delete path until G3).
-watch(() => route.params.section, () => void loadTenants())
 </script>
 
 <template>
@@ -273,7 +245,6 @@ watch(() => route.params.section, () => void loadTenants())
     </div>
 
     <CreateGroupDialog v-if="createGroupOpen" @done="onGroupCreated" @close="createGroupOpen = false" />
-    <CreateTenantDialog v-model:visible="createTenantOpen" @created="onTenantCreated" />
   </div>
 </template>
 

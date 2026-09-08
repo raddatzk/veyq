@@ -19,6 +19,11 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
 - `contracts/` — OpenAPI + crypto vectors: the source of truth code is generated from.
 - `backend/` + `web/` — the two user-facing surfaces. A CR's phase order is
   **contracts → backend → web**.
+- `admin-web/` — the **Server-Owner administration** surface: its own package, its own container, reachable
+  localhost-only by default ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). A pure client
+  of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
+  release info and **first-run setup**; what looks admin-ish but is reachable by an ordinary member — accepting
+  a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `web/`.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the wire base64, shared by `web/` and (soon) `admin-web/`
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one

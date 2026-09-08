@@ -13,20 +13,17 @@ vi.mock('../app/serverRole', () => ({
   probeServerRole: vi.fn(),
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn().mockResolvedValue([]) }))
-vi.mock('../features/admin/createTenant/tenants', () => ({ listTenants: vi.fn().mockResolvedValue([]) }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
 vi.mock('../features/account/trustDevice/DeviceTrustPanel.vue', () => ({ default: { template: '<div class="stub-device" />' } }))
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
-vi.mock('../features/admin/createTenant/TenantDetailPanel.vue', () => ({ default: { template: '<div class="stub-tenant-detail" />' } }))
+vi.mock('../features/settings/ServerAdminPanel.vue', () => ({ default: { template: '<div class="stub-server-admin" />' } }))
 vi.mock('../features/spaces/CreateGroupDialog.vue', () => ({ default: { template: '<div class="stub-create-group" />' } }))
-vi.mock('../features/admin/createTenant/CreateTenantDialog.vue', () => ({ default: { template: '<div class="stub-create-tenant" />' } }))
 
 import SettingsHubView from './SettingsHubView.vue'
 import { serverRole } from '../app/serverRole'
 import { listMyGroups } from '../features/spaces/scopes'
-import { listTenants } from '../features/admin/createTenant/tenants'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 
@@ -41,10 +38,10 @@ const i18n = createI18n({
       groups: { members: 'Members', noneOwned: 'No groups yet' },
       profile: { title: 'Profile' },
       shell: { groups: 'Groups', groupCreate: 'New group' },
+      serverAdmin: { navTitle: 'Server administration', title: 'Server administration', sub: 's', where: 'w', whyMoved: 'y' },
       settings: {
         title: 'Settings', back: 'Back', personal: 'Personal', tenant: 'Shared space', group: 'Group', server: 'Server',
         appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', device: 'This device', sessions: 'Sessions',
-        serverTenants: 'Tenants',
       },
     },
   },
@@ -78,7 +75,6 @@ beforeEach(() => {
   clearActiveSpace()
   serverRole.canManage = false
   vi.mocked(listMyGroups).mockResolvedValue([]) // clearAllMocks keeps impls; reset the defaults per test
-  vi.mocked(listTenants).mockResolvedValue([])
   stubMatchMedia(false) // narrow by default → /settings stays the list; the wide-redirect case opts in
 })
 afterEach(() => vi.unstubAllGlobals())
@@ -91,7 +87,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     const nav = navText(await mountHub())
     expect(nav).toContain('Personal')
     expect(nav).toContain('Members')
-    expect(nav).toContain('Tenants')
+    expect(nav).toContain('Server administration')
   })
 
   it('a plain member in the Tenant scope sees Personal + Shared space, no Server', async () => {
@@ -101,7 +97,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     const nav = navText(await mountHub())
     expect(nav).toContain('Personal')
     expect(nav).toContain('Members')
-    expect(nav).not.toContain('Tenants')
+    expect(nav).not.toContain('Server administration')
   })
 
   it('a Group scope: the gear opens that group’s detail page, and the Gruppen collection lists owned groups by name', async () => {
@@ -141,7 +137,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     const nav = navText(await mountHub())
     expect(nav).toContain('Personal')
     expect(nav).not.toContain('Members')
-    expect(nav).not.toContain('Tenants')
+    expect(nav).not.toContain('Server administration')
   })
 })
 
@@ -185,21 +181,18 @@ describe('SettingsHubView — split view index vs detail', () => {
     expect(w.find('.stub-appearance').exists()).toBe(false)
   })
 
-  it('the Server Tenants collection lists tenants; clicking one opens its detail page', async () => {
-    vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' } as never,
-    ])
+  it('the Server signpost opens the panel that says administration moved to its own surface', async () => {
+    // The tenant fan-out this case used to drive is not a section of this app any more (ADR 0065): it is
+    // `admin-web`. What replaced it is one entry, and what matters is that a Server Owner can still REACH an
+    // explanation from here — a gated nav entry that resolves to nothing would be worse than no entry.
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Tenant
     serverRole.canManage = true
     const w = await mountHub('/settings')
-    // expand the collapsible Tenants category, then open the tenant's detail
-    const toggle = w.findAll('.settings-nav-cat-toggle').find((b) => b.text().includes('Tenants'))!
-    await toggle.trigger('click')
-    const item = w.findAll('.settings-nav-item').find((b) => b.text().includes('Acme'))!
+    const item = w.findAll('.settings-nav-item').find((b) => b.text().includes('Server administration'))!
     await item.trigger('click')
     await flushPromises()
-    expect(w.vm.$route.params.section).toBe('tenant-tn-7')
-    expect(w.find('.stub-tenant-detail').exists()).toBe(true)
+    expect(w.vm.$route.params.section).toBe('server-admin')
+    expect(w.find('.stub-server-admin').exists()).toBe(true)
   })
 })

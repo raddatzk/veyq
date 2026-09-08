@@ -9,6 +9,7 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
                block is rejected; a Kotlin expression body `= expr` counts, it delegates to real code)
     web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
     crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
+    admin-web -> the same rule, rooted at admin-web/ (the Server-Owner administration surface, ADR 0065)
 
 `http` is NOT a coverage surface (ADR 0040): the `.http` files remain IntelliJ dev tooling but run in
 no CI job, so they make no coverage claim — the same behaviour is proven by the backend slice tests.
@@ -55,15 +56,16 @@ COVERAGE = ROOT / "docs" / "coverage" / "features"
 BACKEND_TESTS = ROOT / "backend" / "src" / "test"
 WEB = ROOT / "web"
 CRYPTO = ROOT / "packages" / "crypto"
+ADMIN_WEB = ROOT / "admin-web"
 
 # The surface set, and the whole of it: a surface counts when a CI job actually runs its tests — the ADR 0040
 # principle, applied by rule rather than by name (the claim follows the build). Every use-case owes every
 # surface here; adding one only ever *permits* refs, so a new surface is one line plus its resolution rule.
-SURFACES = {"backend", "web", "crypto"}
+SURFACES = {"backend", "web", "crypto", "admin-web"}
 
-# Surfaces resolved as "a test-file path relative to this root". `web` and `crypto` differ only in the root
-# they hang off, so the rule is a table rather than a branch per surface.
-FILE_ROOTS = {"web": WEB, "crypto": CRYPTO}
+# Surfaces resolved as "a test-file path relative to this root". They differ only in the root they hang off,
+# so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.
+FILE_ROOTS = {"web": WEB, "crypto": CRYPTO, "admin-web": ADMIN_WEB}
 KNOWN_LEVELS = {"unit", "integration", "e2e"}
 
 errors: list[str] = []
