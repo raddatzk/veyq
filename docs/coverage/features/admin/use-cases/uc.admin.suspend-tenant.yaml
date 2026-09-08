@@ -60,6 +60,16 @@ acceptanceCriteria:
     text: A member who belongs to both the suspended tenant and another, unaffected tenant can still reach the other tenant on the same session — suspension gates by resolved Host, never by revoking the account's session.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendingOneTenantLeavesAnotherReachableOnTheSameSession] }
+  - id: suspension-withdraws-routing
+    # Step 4 — the second, independent layer (ADR 0063), shipped a slice after the gate. Deliberately NOT
+    # merged into `suspended-blocks-every-request`: that one is the guarantee and holds whatever the network
+    # topology is, this one is the edge stopping to answer at all, and a regression in either must name itself.
+    text: Suspending a tenant regenerates the reverse proxy's routing without it, so its domain stops resolving at the network edge; reactivating puts its routers back.
+    coverage:
+      backend:
+        integration:
+          - TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects
+          - TenantIngressProjectorTest.suspendedTenantsAreExcluded
   - id: unresolved-host-unaffected
     # The gate only ever narrows: a Host claiming no tenant (bootstrap domain, unknown domain, a direct
     # container port) behaves exactly as it did before the gate existed, even while some tenant is suspended.
