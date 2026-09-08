@@ -124,6 +124,17 @@ KEK, the instance reports `configSecretState: MISMATCH`, and member invites and 
 `scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
 (`Dockerfile`, `VeyqConfig.kt`, this compose file) to each other on every push.
 
+**A tenant's domain routes because the app writes the routing, not because you edit this file.**
+`veyq-traefik-dynamic` is mounted at `/etc/traefik/dynamic` — read-write on `app`, read-only on `traefik`, which
+file-watches it — and holds exactly one generated file: a Traefik router pair per non-suspended tenant whose
+domain is not `VEYQ_DOMAIN`. **Never hand-edit it.** It is not configuration you maintain, it is a projection of
+the `tenant` table ([ADR 0063](../docs/decisions/0063-database-driven-tenant-ingress.md)): the app rewrites the
+whole file on every tenant create, domain change, suspend, reactivate and at startup, so an edit survives until
+the next one of those and no longer. Nothing else is in there — no secret, no content — and it is deliberately
+**not** part of a backup: wiping the volume costs nothing, because the next start regenerates it. Adding a
+tenant does mean a new Let's Encrypt certificate order per domain, which is the one place where the ACME
+rate-limit advice above stops being about your own testing.
+
 Two things worth knowing rather than discovering:
 
 - **The proxy is scoped to this stack** (`--providers.docker.constraints=Label(veyq.stack,prod)`). Traefik's

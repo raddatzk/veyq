@@ -111,11 +111,20 @@ services:
       # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
       # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.
       VEYQ_SECURITY_CONFIG_SECRET_FILE: /var/lib/veyq/config-secret.key
+      # Tenant ingress projection (ADR 0063). The app regenerates the WHOLE router set for every non-suspended
+      # tenant into this file, and Traefik file-watches the directory — so creating a tenant here makes its
+      # domain route with no compose edit and no restart. The bootstrap domain is EXCLUDED from the projection
+      # because its routers are the static labels below; two routers on one Host makes Traefik drop both.
+      VEYQ_TENANT_INGRESS_DYNAMIC_CONFIG_PATH: /etc/traefik/dynamic/tenants.yml
+      VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN: ${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
     volumes:
       # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
       # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
       # and password resets with 503 mail_unavailable (ADR 0050 amendment, ADR 0055, ADR 0056 § Consequences).
       - veyq-config-secret:/var/lib/veyq
+      # Routing config only — never a secret, never content (ADR 0063 § Consequences). Read-write here because
+      # the app is the only writer; read-only on traefik, which only ever reads it.
+      - veyq-traefik-dynamic:/etc/traefik/dynamic
     # MaxRAMPercentage in the image's ENTRYPOINT is a percentage of the CONTAINER limit; without one the JVM
     # sizes its heap off host RAM.
     mem_limit: ${VEYQ_MEM_LIMIT:-1g}
@@ -156,6 +165,12 @@ services:
       # and two veyq stacks on one host collide outright ("Router defined multiple times with different
       # configurations", after which Traefik drops the router and serves 404 for both). Measured here.
       - "--providers.docker.constraints=Label(`veyq.stack`,`prod`)"
+      # The second provider: the app's DB→routing projection (ADR 0063). The docker provider above cannot serve
+      # it — a tenant created at runtime has no container and therefore no label. `watch` is what makes a new
+      # tenant's domain live without restarting anything; the file itself is written by an atomic rename, so a
+      # reload can never read half of it.
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       # :80 exists only for the ACME HTTP-01 challenge and to redirect everything else to :443.
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
@@ -174,6 +189,9 @@ services:
     volumes:
       - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - veyq-acme:/acme
+      # Read-only: the projector owns this file, and a proxy that could write it would be a second author of the
+      # routing whose edits the next full regenerate silently discards.
+      - veyq-traefik-dynamic:/etc/traefik/dynamic:ro
 
 volumes:
   veyq-mariadb-data:
@@ -183,3 +201,6 @@ volumes:
   veyq-acme:
   # Leg (c). Small, and the difference between a restorable instance and one that boots into MISMATCH.
   veyq-config-secret:
+  # The ingress projection (ADR 0063) — derived state, not durable: it is NOT part of a backup, because the
+  # `tenant` table it is generated from is, and the app rewrites it in full at startup.
+  veyq-traefik-dynamic:
