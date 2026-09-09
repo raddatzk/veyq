@@ -39,6 +39,19 @@ read-ahead cache), assembles the window and answers `206`. **No key, no auth tok
 enters the SW; the URL carries only an opaque handle, never a credential.** `K_blob`/`K_mem` stay exactly where
 they live today — in the page.
 
+**The handle is opaque because a `blobId` could not carry the auth context.** A route keyed on `blobId` would
+require the SW to presign a chunk GET itself, and it cannot: presigning is bearer-authed for the internal app
+(`presignBlobDownloads`, token in page memory + `withRefresh`) and share-token-authed for the anonymous **share
+viewer** (`resolveShareBlob`, `shareId` + guest `pwToken`), and both are whole-blob only. A SW holds neither
+credential and cannot tell the two routes apart — it would break first, and most visibly, at the share viewer.
+Keeping the handle opaque puts the auth context behind the registered `MessagePort`, in the page, where both
+credentials already live.
+
+**The SW's plaintext cache is in-memory and size-bounded — never Cache Storage, never IndexedDB.** At most a
+small read-ahead window of decrypted chunks, evicted by size and dropped when playback ends. Persisting
+decrypted media to disk would be a real regression against today, where no plaintext is stored at all, and it
+is named here because it is the shortcut a later change is most tempted to take.
+
 ### Why not the rejected options
 
 - **(A) Full blob, then play** — fetch + decrypt the entire original into memory, `<video src="blob:…">`. Correct
@@ -52,6 +65,13 @@ they live today — in the page.
   buys nothing here.
 - **(C, chosen)** needs no transcode and no MSE: it plays whatever the browser can already demux, streamed, by
   putting the decrypt in the fetch path the demuxer already speaks (HTTP ranges).
+- **(C′) the same shim, but with the key in the SW** — hand the SW a per-blob `K_blob` so it can decrypt what it
+  fetches, instead of asking the page for plaintext. Rejected. Presign and auth have to stay in the page
+  regardless (see the handle, above), so moving the key buys no round trip; what it costs is a **second
+  key-bearing context** whose lifetime must be managed and whose key must be purged on vault-lock. The safest
+  way to clean up a key in a Service Worker is to never put one there. `K_mem` in the SW is strictly worse — it
+  opens every blob of the Memory — and was never an option. This is what makes the trust-tier note below
+  *stronger* rather than weaker: the SW is operator-served code that holds no confidential key at all.
 
 ```mermaid
 sequenceDiagram
@@ -126,28 +146,3 @@ a blob is" reasoning holds a fortiori — a random handle reveals even less than
 - **Native surfaces.** A Service Worker is a web-only mechanism; a future native client feeds its own player the
   same decrypted ranges through the platform equivalent. This ADR governs the **web** playback path (the current
   V1 priority); it does not bind native to a SW.
-
-## Revision — 2026-07-22 (before build)
-
-Refining Slice 2 (the SW slice) against the code showed the original mechanism is not buildable as written and
-that a strictly better design exists. The **decision** (SW range shim; option C over A/B) is unchanged; the
-**mechanism** is corrected as above.
-
-- **Why it changed — `blobId` alone cannot carry the auth context.** `/__media/<blobId>` assumed the SW could
-  presign a chunk GET from `blobId`. It cannot: presigning is bearer-authed for the internal app
-  (`presignBlobDownloads`, token in page memory + `withRefresh`) and share-token-authed for the anonymous
-  **share viewer** (`resolveShareBlob`, `shareId` + guest `pwToken`), and both are whole-blob only. A SW keyed on
-  `blobId` has neither credential and cannot tell the routes apart — it breaks first, and most visibly, at the
-  share viewer. The corrected route carries an **opaque per-playback handle**; the auth context lives behind the
-  registered `MessagePort`, in the page.
-- **Keys never leave the page — the key-in-SW variant is deliberately rejected.** Because presign+auth must stay
-  in the page anyway, the page also keeps the keys and does the decrypt; the SW receives **plaintext**, never key
-  material. Handing a key to the SW — even a per-blob `K_blob` — was considered and rejected: it adds a second
-  key-bearing context whose lifetime must be managed and whose key must be purged on vault-lock, for no benefit.
-  **The safest way to clean up a key in the SW is to never put one there.** `K_mem` in the SW is strictly worse
-  (it opens every blob of the Memory) and was never an option. This makes the trust-tier note above *stronger*,
-  not weaker: the SW is operator-served code that now holds no confidential key.
-- **The plaintext cache is in-memory and size-bounded only — never Cache Storage, never IndexedDB.** The SW
-  keeps at most a small read-ahead window of decrypted chunks in memory, evicted by size and dropped when
-  playback ends. Persisting decrypted media to disk would be a real regression against today (no plaintext is
-  ever stored) and is forbidden here explicitly — it is the shortcut a later change is most tempted to take.
