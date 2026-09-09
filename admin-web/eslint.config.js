@@ -15,6 +15,9 @@ export default defineConfigWithVueTs(
     name: 'veyq-admin/ignores',
     ignores: [
       'dist/**',
+      // The CLI bundle (`npm run build:cli`) — generated, never hand-edited, and a lint run over a bundled
+      // copy of every dependency reports on code this repo does not own.
+      'dist-cli/**',
       'node_modules/**',
       'src/api/generated/**', // generated client — mirrors the contracts, never hand-edited
     ],

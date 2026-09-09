@@ -2,17 +2,18 @@
   "name": "veyq-admin-web",
   "private": true,
   "type": "module",
-  "//": "The Server-Owner administration surface as its own deployable (ADR 0065). A pure client of the existing backend Admin API — no DB, no KEK, no new backend surface. It shares exactly ONE thing with `web/`: @veyq/crypto, because first-run setup performs a real cold account birth and a second copy of that would be a security defect. Everything else (router, state, UI, generated client) is this package's own, on purpose.",
+  "//": "The Server-Owner administration surface as its own deployable (ADR 0065). A pure client of the existing backend Admin API \u2014 no DB, no KEK, no new backend surface. It shares exactly ONE thing with `web/`: @veyq/crypto, because first-run setup performs a real cold account birth and a second copy of that would be a security defect. Everything else (router, state, UI, generated client) is this package's own, on purpose.",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
+    "build:cli": "esbuild src/cli/main.ts --bundle --platform=node --format=esm --target=node22 --define:process.env.NODE_ENV=\\\"production\\\" --outfile=dist-cli/cli.js",
     "typecheck": "vue-tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
     "prepare": "npm run generate:api",
     "generate:api": "openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/setup.openapi.yaml -o src/api/generated --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/auth.openapi.yaml -o src/api/generated/auth --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/tenants.openapi.yaml -o src/api/generated/tenants --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false && openapi-generator-cli generate -g typescript-fetch -i ../contracts/api/instance.openapi.yaml -o src/api/generated/instance --additional-properties=supportsES6=true,withInterfaces=true,useSingleRequestParameter=true,typescriptThreePlus=true --global-property=apiDocs=false,apiTests=false,modelDocs=false,modelTests=false",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build:cli"
   },
   "dependencies": {
     "@primeuix/themes": "^2.0.3",
@@ -32,6 +33,7 @@
     "@vitejs/plugin-vue": "^6.0.7",
     "@vue/eslint-config-typescript": "^14.9.0",
     "@vue/test-utils": "^2.4.10",
+    "esbuild": "^0.28.2",
     "eslint": "^10.7.0",
     "eslint-plugin-vue": "^10.9.2",
     "happy-dom": "^20.9.0",
