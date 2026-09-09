@@ -33,8 +33,24 @@ The line that actually holds:
 **Before moving anything else across this line, check which gate the BACKEND applies** — Server-Owner or
 `not_tenant_owner` — not which directory the file happens to sit in.
 
+## Two artifacts, one package
+The Vite build is not the only output any more: `npm run build:cli` bundles `src/cli/` into
+`dist-cli/cli.js`, the `veyq-admin` CLI the image installs on `PATH` (ADR 0065). It is the same generated
+client and the same feature facades the views call — its own code is argument parsing and output formatting,
+nothing else. **A command that needs a rule of its own means the rule belongs in the facade**, where the UI
+gets it too. Setup is not a command and is not an oversight: it mints key material and force-confirms an
+Emergency Kit, which a script cannot meaningfully do.
+
+Two things the bundle taught, both measured, both live in comments at the lines that need them:
+`@veyq/crypto` is consumed as TypeScript **source** with extensionless imports, so plain `node` cannot import
+it at all (only a bundler resolves it — `src/cli/main.ts`); and the bundle carries Vue, unrendered, because
+the CLI signs in through the app's own `login()` and that reaches `app/session.ts`'s `reactive()`. That is
+1.5 MB of dead weight traded for there being exactly one sign-in path, which is the trade ADR 0065 wants.
+
 ## Prove your work
-- `npm run check` (lint + typecheck + test + build). `npm ci` runs from the **repo root** (npm workspaces).
+- `npm run check` (lint + typecheck + test + build + build:cli). `npm ci` runs from the **repo root** (npm
+  workspaces). The CLI bundle is in `check` on purpose — an import that only the CLI reaches is otherwise
+  proven by nothing until the image build.
 - API client is **generated** and **not tracked** — `npm run generate:api` from `../contracts/api/*.openapi.yaml`
   (and automatically on install via `prepare`). Never hand-write it. As in `web/`, **`npm run check` does not
   regenerate**: change a contract and a green check is a green run against stale code.
@@ -51,7 +67,8 @@ The line that actually holds:
 - **A green `npm run check` here does NOT prove this package's dependencies are declared.** npm workspaces
   hoist, so an import satisfied by `web/`'s copy in the root `node_modules` resolves locally and fails only
   in `docker build -f admin-web/Dockerfile .`, which never sees `web/`. Measured: `jsqr` built green here and
-  red in the container. Run the container build before believing an added import.
+  red in the container. Run the container build before believing an added import — and that now covers the
+  CLI bundle too, which the image builds from its own install, one that has never seen `web/`.
 - i18n is this package's own catalog (EN + DE) in `src/i18n/index.ts`, lifted from `web/`'s for the strings
   that moved with their views.
 

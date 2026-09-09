@@ -778,6 +778,28 @@ of the *insert*-side seed-uniqueness rule (distinct domains/emails/**secrets** s
 cr-email-invite-send-hardening's `token_hash` collision): the same JVM-shared-state trap. Run the **full**
 `./gradlew check`, never just the touched class, before calling backend done.
 
+### A build step that emits an executable artifact is not done until the artifact RUNS
+
+**A green build proves the builder was happy, not that the thing it produced works.** cr-admin-cli's esbuild
+invocation lives in a `package.json` script, so the shell ate a layer of quoting and
+`--define:process.env.NODE_ENV=\"production\"` reached esbuild as a bare identifier. esbuild accepted it —
+defining a symbol to another symbol is legal — bundled cleanly, printed its size, exited 0. The artifact then
+died on its first line with `ReferenceError: production is not defined`. Nothing in `npm run check` would ever
+have caught it; only `node dist-cli/cli.js` did. So the "Done when" for any phase that emits a runnable
+artifact (a bundle, a binary, a container) names **running it**, never just building it — and shell quoting
+inside a JSON string is a specific place to look first, because it fails silently in exactly this way.
+
+### An ADR's cost premise expires separately from its decision — re-measure it at implement time
+
+**The decision can still be right while the reason it was cheap has gone stale.** ADR 0065 chose esbuild "already
+a transitive Vite dependency, not a new tool". True when written; false at implement, because Vite 8 bundles
+with rolldown and `npm ls esbuild` returns empty across the whole tree. The decision survived on its own merits
+and the ADR carries a measured amendment — but the *cost* it was accepted under had changed, and only running
+the locator revealed it. This is the same instinct as "run the locator, don't trust the tally" one section up,
+pointed at the justification instead of the inventory: **a parenthetical that makes a decision look free is a
+claim, and claims get re-measured.** A CR that already knows to re-run its own grep should also re-run the
+"this costs nothing" check.
+
 ### `git status` before the first edit of a contracts-phase CR
 
 **A dirty shared spec is stop-and-confirm, not proceed.** Two CRs touching one `*.openapi.yaml` mix unrelated deltas into a single commit: #103's mechanical

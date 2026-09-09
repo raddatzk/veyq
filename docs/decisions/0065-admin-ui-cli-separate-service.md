@@ -107,6 +107,42 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   this deliberately departs from as a shipped product feature, not dev tooling. A break-glass, direct-DB/file
   CLI mode (for when the backend itself is down) is an explicit **non-goal** of this ADR: it would reopen the
   "second component touches secrets" problem this decision exists to avoid, and nothing today needs it.
+  - **The Argon2id login (`@veyq/crypto/argonWorker`) already degrades to its synchronous path when no
+    `Worker` global exists** (`argonWorker.ts`'s own comment names "vitest/node" as exactly this case) — a
+    plain Node.js process needs no CLI-specific crypto path at all, just the same import
+    `admin-web`'s `login.ts` uses.
+  - **Auth model: a fresh login per invocation, credentials from the environment, no token ever written to
+    disk.** `ARGON = { t: 3, m: 32768, p: 1 }` over the pure-JS `@noble/hashes` implementation costs roughly
+    1–3s per derivation — a real, named cost, accepted deliberately for an occasional ops tool rather than
+    building a token cache (a new "credential material at rest" case this ADR's whole point is to avoid
+    multiplying) to save it. Revisit only if real usage shows this cost actually blocking a workflow.
+  - **Bundled with esbuild** into a single Node-executable file at image-build time — not run via
+    `tsx`/`ts-node` at container runtime, which would make TS transpilation a runtime dependency of a shipped
+    feature rather than a build-time step.
+
+    **Amended 2026-09-09, at implementation, measured: ~~already a transitive Vite dependency, not a new
+    tool~~ is false.** `npm ls esbuild --workspace=admin-web` returns empty and no `esbuild` directory exists
+    anywhere in the installed tree: Vite 8 bundles with **rolldown**, so the premise that made esbuild free
+    was true of Vite 6 and is not true here. esbuild is therefore a genuine new direct devDependency of
+    `admin-web` — build-time only, never in the runtime image, actively maintained and vendor-neutral, so it
+    passes the dependency rule on its own merits rather than on being already present. The decision stands;
+    its justification was one version out of date. The alternative actually available — reusing rolldown,
+    which *is* installed — was not taken: it is Vite's bundler by way of Vite, not a tool this repo has chosen,
+    and pinning a CLI's build to whatever bundler Vite ships next is the same mistake in a new place.
+  - **The runtime image gains a real, named cost: Node.js alongside nginx.** The final stage was
+    `nginx:<pinned>-alpine` (serving static assets + reverse-proxying, Decision above); the CLI needs a Node
+    runtime to execute in, so that stage installs `nodejs` (Alpine's package, actively maintained,
+    already the distro's own vendor-neutral build) — a heavier image than "just nginx," accepted because ADR
+    0065 already decided the CLI ships in this container, not a second one.
+  - **Argument parsing: `node:util.parseArgs`, not a third-party CLI framework.** Node-core, zero
+    dependencies, actively maintained by definition — the command surface (tenant CRUD, ~~mail settings,
+    terms,~~ release info; mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for,
+    located at CR time) is small enough that a framework like commander/yargs buys nothing here. Nine
+    operations, as built: eight tenant verbs plus `release`. The struck two are the same correction the
+    "what moves" amendment above already made — mail settings and terms authoring are **tenant-owner** actions
+    (`403 not_tenant_owner`) that never left `web/`, so they were never `admin-web`'s to wrap. **Setup is
+    excluded too**, and that one is a decision rather than a correction: it is an interactive ceremony that
+    mints key material and force-confirms a saved Emergency Kit, which a script cannot meaningfully do.
 - **Exposure is an operator choice, not a build-time one — two modes of the same image:**
   - **Localhost-only (the default).** No Traefik/Ingress router at all; reached via `docker compose exec`, a
     port bound to `127.0.0.1`, or an SSH tunnel. Setup moving here is a genuine sequencing improvement, not
