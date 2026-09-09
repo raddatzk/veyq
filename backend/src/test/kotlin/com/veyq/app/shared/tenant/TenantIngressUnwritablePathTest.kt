@@ -31,10 +31,19 @@ import java.nio.file.attribute.PosixFilePermissions
  *
  * **Two independent halves, and the first is why this is its own class.** The unwritable directory is
  * configured before the application boots, so `onStartup` runs against it: if the projector still propagates,
- * this `@QuarkusTest` cannot start at all and every test in the class errors — the production symptom,
- * reproduced. [regenerateDoesNotPropagate] then covers the runtime path a tenant mutation takes, which
- * degrades for the same reason but through a different caller. Neither half implies the other: a fix that
- * caught only around the write would pass the second and fail the first.
+ * this `@QuarkusTest` cannot start at all — the production symptom, reproduced.
+ * [regenerateDoesNotPropagate] then covers the runtime path a tenant mutation takes, which degrades for the
+ * same reason but through a different caller. Neither half implies the other: a fix that caught only around
+ * the write would pass the second and fail the first.
+ *
+ * **Reading the result of that first half: do NOT trust the word PASS.** When the boot fails, Gradle attributes
+ * the `Failed to start quarkus` error to whichever method the extension was constructing, and writes the
+ * methods that never ran into the same XML as ordinary `<testcase>` elements with **no failure child** — so a
+ * report of "3 tests, 1 failure" is really "3 tests, none of them executed". Measured against the pre-fix
+ * projector, where two of these three read as passing. The signals that do distinguish are the task's exit code
+ * and the per-method **durations**: a method that ran has one (0.024 / 0.169 / 0.007 s here), one that did not
+ * shows `0.0` with an empty body. Anyone re-biting this class by reverting `writeAtomically` should check those,
+ * not the status column.
  *
  * The ownership defect itself is fixed in the `Dockerfile` and held by
  * `scripts/validate_app_volume_ownership.py` — but only for the compose deployment that guard can read. ADR
