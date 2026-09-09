@@ -67,8 +67,8 @@ normally).
 
 - **New coupling, deliberately narrow.** `app` and `traefik` now share a volume for routing config only —
   never secrets, never content.
-  - **The shared volume's mount point must exist in the app image, owned by the runtime user** — added
-    2026-09-08 after this cost a stack that could not start. Docker seeds a fresh named volume from the image
+  - **The shared volume's mount point must exist in the app image, owned by the runtime user.** This cost a
+    stack that could not start, which is why it is stated here at all. Docker seeds a fresh named volume from the image
     directory it covers, ownership included; with no such directory the volume came up `root:root`, the app
     (uid 10001) could not write it, and `TenantIngressProjector.onStartup` failed the Quarkus startup event —
     so a **first-ever** `docker compose up` of the production stack restart-looped with the projector's
@@ -76,19 +76,19 @@ normally).
     remote and that stack had never actually been deployed. Held now by
     `scripts/validate_app_volume_ownership.py`, which derives the paths from the compose file rather than
     from this sentence.
-  - **The projection is not a startup requirement, and that is now true of its failures too** — 2026-09-09.
-    Fixing the ownership above removed the *cause*; this removes the *coupling*, because the guard that holds
-    it reads compose files and can say nothing about a Kubernetes sink, whose volume semantics are the chart's
-    (ADR 0064). `writeAtomically` had a catch that already promised this, but it opened one line too late:
-    `createDirectories` and `createTempFile` sat above it, and an unwritable directory throws on exactly those
-    two — so the one failure that had ever been observed was the one the catch did not cover. Every filesystem
-    call is inside it now, and an instance that cannot project its routing logs loudly and still serves
+  - **The projection is not a startup requirement, and that holds for its failures too.** Owning the mount
+    point above removes the *cause*; putting **every** filesystem call inside `writeAtomically`'s catch
+    removes the *coupling* — which matters independently, because the guard that holds the mount point reads
+    compose files and can say nothing about a Kubernetes sink, whose volume semantics are the chart's
+    (ADR 0064). The catch is easy to get one line wrong: with `createDirectories` and `createTempFile` above
+    it, an unwritable directory throws on exactly those two, so the only failure ever observed in practice was
+    the one the catch did not cover. An instance that cannot project its routing logs loudly and still serves
     `/api/setup`. `TenantIngressUnwritablePathTest` holds both callers: the startup one by configuring the
     unwritable path *before* the application boots, so a regression cannot start the test class at all.
-  - **An empty projection carries no `http:` section** — 2026-09-09, found by the live run that proved the two
-    fixes above. Traefik rejects a section that is present but empty, so the `routers: {}` this ADR's first
-    implementation emitted was the one spelling it cannot parse: `"routers cannot be a standalone element"`,
-    logged by the file provider on every reload. Measured against the pinned v3.6 by writing each shape into a
+  - **An empty projection carries no `http:` section** — found by the live run that proved the two properties
+    above. Traefik rejects a section that is present but empty, so `http:` with `routers: {}` is the one
+    spelling it cannot parse: `"routers cannot be a standalone element"`, logged by the file provider on every
+    reload. Measured against the pinned v3.6 by writing each shape into a
     running stack's volume — `http:` + `routers: {}`, `http: {}`, and `http:` with empty
     routers/services/middlewares are all rejected; a comments-only file and an empty file are accepted, and the
     provider loads a real router again immediately afterwards. It costs no routing (there are no dynamic

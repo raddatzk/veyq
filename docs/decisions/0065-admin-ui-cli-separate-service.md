@@ -46,7 +46,8 @@ Admin API — no new backend surface, no direct DB or KEK access.**
 
 - **Web UI — a new package, sharing only crypto with `web/` via a minimal npm workspace.** `admin-web/` gets
   its own `package.json` + Vite build + `index.html`, its own narrow generated API client (from
-  `contracts/api/tenants.openapi.yaml` + `contracts/api/instance.openapi.yaml`, mirroring `scopes.openapi.yaml`'s
+  `contracts/api/tenants.openapi.yaml` + `contracts/api/instance.openapi.yaml` + `contracts/api/auth.openapi.yaml`,
+  mirroring `scopes.openapi.yaml`'s
   `ScopeKind` if the moved code still needs it), and its own router/state/UI — none of that is shared with
   `web/`. The **one** thing that is: `shared/crypto/v1` + `accountBirth` are extracted into a small internal
   workspace package both `web/` and `admin-web/` depend on — the only genuinely shared surface, and the one
@@ -54,29 +55,27 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   Context finding. Everything else stays independent per package on purpose (no shared UI-component library,
   no shared router) — the point of the workspace is that one crypto module, not general code-sharing.
   - **What moves**: the genuinely Server-Owner-only, ongoing-administration surface — tenant CRUD (create,
-    list, resend, reassign, revoke, change-domain, suspend, reactivate), ~~per-tenant mail settings, terms
-    authoring~~ (struck 2026-09-08 — see the amendment below), release info — **and** first-run setup
-    (`setupServer.ts`/`SetupView.vue`, Context above).
+    list, resend, reassign, revoke, change-domain, suspend, reactivate) and release info — **and** first-run
+    setup (`setupServer.ts`/`SetupView.vue`, Context above).
   - **What stays in `web/`**: the tenant-invite **accept** side (`previewInvite`, `acceptInvite`,
     `registerAndAccept`, `bornTenantScope`, `tenantError` — reachable by an anonymous invitee, not a Server
-    Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), and the four
+    Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), the four
     backup/restore E2E rehearsals (unrelated to this feature, parked under `features/admin/` only
-    incidentally). These are relocated out of `features/admin/**` into an accurate home inside `web/` — the
-    exact destination is the CR's inventory, not this ADR's.
+    incidentally), and — least obviously — **per-tenant mail settings and terms authoring**. Those two read
+    `activeSpace.tenantId` and hang off the settings hub's `ScopeKind.Tenant` category rather than sitting
+    behind `serverRole.canManage`; the backend gates both with `403 not_tenant_owner`, not with the
+    Server-Owner gate; and a tenant owner is by construction an ordinary user who accepted an invite
+    (uc.admin.create-tenant is two-party). Moving them would take a tenant's own email and terms
+    configuration away from every owner who is not also the Server Owner — a product change, which this
+    decision is not. Everything in this list is relocated out of `features/admin/**` into an accurate home
+    inside `web/`; the exact destination is the CR's inventory, not this ADR's.
 
-    **Amended 2026-09-08, at implementation, measured against the code: per-tenant mail settings and terms
-    authoring stay in `web/` too.** The "what moves" list above named them, and that was wrong. Both panels
-    read `activeSpace.tenantId` and hang off the settings hub's `ScopeKind.Tenant` category — **not** behind
-    `serverRole.canManage`; the backend gates both with `403 not_tenant_owner`, not with the Server-Owner
-    gate; and a tenant owner is by construction an ordinary user who accepted an invite (uc.admin.create-tenant
-    is two-party). So there is a **fourth** audience the Context finding above missed — the tenant owner — and
-    moving those two panels would have taken a tenant's own email and terms configuration away from every
-    owner who is not also the Server Owner. That is a product change, not a refactor, and nothing here asked
-    for it. **The rule the split actually follows, and the one to apply to anything moved later: ask which
-    gate the BACKEND applies — the Server-Owner gate, or `not_tenant_owner` — never which directory the file
-    happens to sit in.** The Context finding's method was right and its net was one audience too small: it
-    grepped for cross-imports *into* `features/admin/**`, which finds the anonymous and ordinary-member
-    callers but not a file that is itself owner-scoped by the state it reads.
+    **The rule the split follows, and the one to apply to anything moved later: ask which gate the BACKEND
+    applies — the Server-Owner gate, or `not_tenant_owner` — never which directory the file happens to sit
+    in.** The Context finding's cross-import method is right as far as it reaches: grepping for imports *into*
+    `features/admin/**` finds the anonymous and ordinary-member callers. It is structurally blind to a file
+    that is **owner-scoped by the state it reads** and that nothing imports from outside, which is exactly
+    what those two panels are — a **fourth** audience, the tenant owner, that an import graph cannot show.
   - The lightweight "is this caller a Server Owner" probe (`serverRole.ts`) stays in `web/` too — it is what
     lets the main SPA conditionally show a link *to* the admin surface, and `TermsAcceptView`'s
     `resetServerRole` call needs it regardless. `admin-web` performs its own independent probe against the
@@ -91,13 +90,12 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   cr-0055 refresh-cookie)"). Authentication is the existing Server-Owner session, unchanged — first-run setup
   simply happens to be the one Admin API call that needs no prior session at all.
 
-  **Amended 2026-09-08, at implementation: "unchanged" still costs this package a client.** The generated-client
-  list above (tenants + instance) named no auth spec, and without one nothing here can obtain a bearer token —
-  every tenant call would be 401. So `admin-web` also generates from `auth.openapi.yaml` and carries its own
-  **minimal** Model B sign-in: the same challenge/verify endpoints and the same `deriveAuthKeypair` from the
-  shared crypto package, and deliberately none of `web/`'s passkeys, "remember me" device-key wrap, session
-  vault or password recovery — this surface holds no vault to unlock, and each of those would be another place
-  touching key material.
+  **An "unchanged" auth model still costs this package a client of its own**, which is the easy thing to miss
+  when listing what it generates: without `auth.openapi.yaml` nothing here can obtain a bearer token and every
+  tenant call is a 401. So `admin-web` carries its own **minimal** Model B sign-in — the same
+  challenge/verify endpoints and the same `deriveAuthKeypair` from the shared crypto package, and
+  deliberately none of `web/`'s passkeys, "remember me" device-key wrap, session vault or password recovery.
+  This surface holds no vault to unlock, and each of those would be another place touching key material.
 - **CLI — Node.js, in the same package, added in a follow-up CR.** The same container's build ships a CLI
   entry point that is **also** an HTTP client of the backend Admin API (using a Server-Owner credential
   supplied to the container) — written in Node.js specifically so it can import the **same generated API
@@ -120,29 +118,27 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     `tsx`/`ts-node` at container runtime, which would make TS transpilation a runtime dependency of a shipped
     feature rather than a build-time step.
 
-    **Amended 2026-09-09, at implementation, measured: ~~already a transitive Vite dependency, not a new
-    tool~~ is false.** `npm ls esbuild --workspace=admin-web` returns empty and no `esbuild` directory exists
-    anywhere in the installed tree: Vite 8 bundles with **rolldown**, so the premise that made esbuild free
-    was true of Vite 6 and is not true here. esbuild is therefore a genuine new direct devDependency of
-    `admin-web` — build-time only, never in the runtime image, actively maintained and vendor-neutral, so it
-    passes the dependency rule on its own merits rather than on being already present. The decision stands;
-    its justification was one version out of date. The alternative actually available — reusing rolldown,
-    which *is* installed — was not taken: it is Vite's bundler by way of Vite, not a tool this repo has chosen,
-    and pinning a CLI's build to whatever bundler Vite ships next is the same mistake in a new place.
+    **esbuild is a genuine new direct devDependency, not a free one** — a tempting thing to assume and
+    measurably false here: `npm ls esbuild --workspace=admin-web` returns empty and no `esbuild` directory
+    exists anywhere in the installed tree, because Vite 8 bundles with **rolldown**. It earns its place on its
+    own merits instead — build-time only, never in the runtime image, actively maintained and vendor-neutral.
+    The alternative actually installed, rolldown, is deliberately not used: it is Vite's bundler by way of
+    Vite, not a tool this repo has chosen, and pinning a CLI's build to whatever bundler Vite ships next is
+    the same mistake in a new place.
   - **The runtime image gains a real, named cost: Node.js alongside nginx.** The final stage was
     `nginx:<pinned>-alpine` (serving static assets + reverse-proxying, Decision above); the CLI needs a Node
     runtime to execute in, so that stage installs `nodejs` (Alpine's package, actively maintained,
     already the distro's own vendor-neutral build) — a heavier image than "just nginx," accepted because ADR
     0065 already decided the CLI ships in this container, not a second one.
   - **Argument parsing: `node:util.parseArgs`, not a third-party CLI framework.** Node-core, zero
-    dependencies, actively maintained by definition — the command surface (tenant CRUD, ~~mail settings,
-    terms,~~ release info; mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for,
-    located at CR time) is small enough that a framework like commander/yargs buys nothing here. Nine
-    operations, as built: eight tenant verbs plus `release`. The struck two are the same correction the
-    "what moves" amendment above already made — mail settings and terms authoring are **tenant-owner** actions
-    (`403 not_tenant_owner`) that never left `web/`, so they were never `admin-web`'s to wrap. **Setup is
-    excluded too**, and that one is a decision rather than a correction: it is an interactive ceremony that
-    mints key material and force-confirms a saved Emergency Kit, which a script cannot meaningfully do.
+    dependencies, actively maintained by definition — the command surface (tenant CRUD and release info;
+    mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for, located at CR time) is
+    small enough that a framework like commander/yargs buys nothing here. Nine operations, as built: eight
+    tenant verbs plus `release`. **Mail settings and terms authoring are not among them** for the same reason
+    they never left `web/`: they are **tenant-owner** actions (`403 not_tenant_owner`), so they were never
+    `admin-web`'s to wrap. **Setup is excluded too**, and that one is a decision rather than a consequence: it
+    is an interactive ceremony that mints key material and force-confirms a saved Emergency Kit, which a
+    script cannot meaningfully do.
 - **Exposure is an operator choice, not a build-time one — two modes of the same image:**
   - **Localhost-only (the default).** No Traefik/Ingress router at all; reached via `docker compose exec`, a
     port bound to `127.0.0.1`, or an SSH tunnel. Setup moving here is a genuine sequencing improvement, not
