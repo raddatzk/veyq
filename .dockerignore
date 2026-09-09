@@ -7,6 +7,7 @@
 **/.gradle
 **/build
 **/dist
+**/dist-cli
 **/node_modules
 **/coverage
 # Generated from contracts/ by the build's own `prepare` hook — never ship the host's copy into the image,

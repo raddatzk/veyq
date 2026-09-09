@@ -29,12 +29,23 @@ COPY admin-web/package.json ./
 # image has no business carrying the app's dependencies.
 RUN npm ci
 COPY admin-web/ ./
-RUN npm run build
+# Two artifacts out of one install: the static site nginx serves, and the `veyq-admin` CLI bundle — the
+# same generated client, reached from a Node entry point instead of a browser one (ADR 0065). Bundled
+# HERE, at image build time, and never transpiled at container runtime: a shipped feature must not make
+# TypeScript tooling part of what the image runs.
+RUN npm run build && npm run build:cli
 
 # --- runtime ----------------------------------------------------------------------------------------------
-# nginx, pinned by minor: serving static files and proxying one path is the entirety of the job, and a Node
-# runtime here would put a second application server on the highest-privilege origin an instance serves.
+# nginx, pinned by minor: serving static files and proxying one path is the entirety of what this ORIGIN
+# does. It is not the entirety of the image any more — `apk add nodejs` below is a real, named cost taken
+# on knowingly (ADR 0065 decided the CLI ships in this container rather than a second one).
+#
+# This comment used to say a Node runtime here would put "a second application server on the highest-
+# privilege origin". That worry was about a SERVER, and it still stands: Node gets no port, no listener, no
+# entrypoint hook and no place in CMD. It runs only when an operator invokes the CLI by hand. The origin
+# this container exposes is served by nginx alone, exactly as before.
 FROM nginx:1.29-alpine AS runtime-nginx
+RUN apk add --no-cache nodejs
 
 # The stock default site would otherwise also listen on 80 and win by being first.
 RUN rm -f /etc/nginx/conf.d/default.conf
@@ -45,6 +56,16 @@ COPY --from=build /src/admin-web/dist /usr/share/nginx/html
 COPY admin-web/nginx.conf.template /etc/nginx/veyq.conf.template
 COPY admin-web/docker-entrypoint.d/30-veyq-backend-url.sh /docker-entrypoint.d/30-veyq-backend-url.sh
 RUN chmod +x /docker-entrypoint.d/30-veyq-backend-url.sh
+
+# The CLI: one self-contained ESM bundle plus the two lines that make it a command. `type: module` is
+# stated rather than inferred — modern Node would sniff the ESM syntax and be right, but a shipped
+# artifact should not depend on a heuristic that a future runtime may narrow. The wrapper is what makes
+# `docker compose exec admin veyq-admin tenant list` work, which is how ADR 0065 expects this to be
+# reached (localhost-only by default: no router, no port, an operator at the host).
+COPY --from=build /src/admin-web/dist-cli/cli.js /usr/local/lib/veyq-admin/cli.js
+RUN printf '{"type":"module"}\n' > /usr/local/lib/veyq-admin/package.json \
+    && printf '#!/bin/sh\nexec node /usr/local/lib/veyq-admin/cli.js "$@"\n' > /usr/local/bin/veyq-admin \
+    && chmod +x /usr/local/bin/veyq-admin
 
 # Same build-args the app image takes (ADR 0057), so `docker inspect` names the release this container came
 # from — the two images ship as one release and must be identifiable as such.

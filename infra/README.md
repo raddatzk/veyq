@@ -145,6 +145,24 @@ The app itself never links to the admin surface and is never told where it is �
 choice is not something the user-facing app can know, and a guessed URL that 404s is worse than the settings
 page simply saying that administration lives elsewhere.
 
+**The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
+0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
+change-domain/revoke/suspend/reactivate, plus `release`. It is an HTTP client of the same Admin API the UI
+calls, so it needs no route and no exposed port at all:
+
+```sh
+docker compose exec \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD" \
+  admin veyq-admin tenant list
+```
+
+Pass the credential **on the invocation**, as above, rather than putting it in `infra/.env`: it is the Server
+Owner's own password, and the CLI signs in fresh on every call and writes nothing to disk, so there is no
+reason for it to sit in a file between calls. Each call therefore pays one Argon2id derivation (~1–3s,
+measured) before it does anything — the accepted price of never holding a session that outlives the process.
+First-run **setup** is deliberately not a command: it mints key material and shows the Emergency Kit once, so
+it stays on the screen above, where a person can actually save the kit.
+
 **TLS is a precondition, not a preference.** `veyq.session.cookie.secure=true` is the shipped default, so over
 plain HTTP the refresh cookie is set and never sent back and "remember me" breaks silently; and every invitation
 link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
