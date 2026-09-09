@@ -98,6 +98,30 @@ behavior. The **Kubernetes** target ([ADR 0064](0064-kubernetes-helm-deployment-
 operator-chosen ingress controller preserves it, so it defaults to the CORS-policy branch instead — Garage
 gets its own Ingress host there, not a path route.
 
+**What "a bucket CORS policy" can actually express on the bundled store — measured 2026-09-09 against the
+pinned Garage v2.0.0, not inferred from the S3 API it implements.** `PutBucketCors` and `GetBucketCors` work,
+and a real `OPTIONS` preflight is answered from the stored rule. Three results constrain every design above
+this line:
+
+| policy written | `PutBucketCors` | what a preflight does |
+|---|---|---|
+| one exact origin | 200 | correct — `access-control-allow-origin: <that origin>` |
+| `https://*.example.com` | **200** | **403 for every origin** — accepted and then matched by nothing |
+| `*` | 200 | correct — `access-control-allow-origin: *` |
+| two or more exact origins | 200 | 200, and `access-control-allow-origin: <origin-a>, <origin-b>` |
+
+The last row is the one that decides things: a comma-joined value is not a legal
+`Access-Control-Allow-Origin` (it is one origin or `*`), so the preflight succeeds and the **browser blocks
+the fetch anyway** — a failure that reads as a working configuration from the server side. Garage echoes the
+configured list rather than the matched origin. The subdomain-wildcard row fails the same way one step
+earlier. **Therefore, on the bundled store, an instance with more than one tenant domain has exactly one
+working policy: `*`.** Enumerating the real origin set — which is what a naïve reading of "allowing `PUT`+`GET`
+from the web origin" invites, and what [ADR 0063](0063-database-driven-tenant-ingress.md)'s projector would
+make easy — produces the broken row, silently. `*` is the accepted answer there ([ADR
+0064](0064-kubernetes-helm-deployment-target.md) carries why it is tolerable: the presigned URL is the
+capability, short-TTL, and the fetch carries no credential), and this table is here so the next reader does
+not "improve" it back into the multi-origin form.
+
 Because a byte path is a **hard requirement** (§1), there is
 **no client-facing store-availability flag**: the earlier advisory `directTransport` on `/api/setup` is
 **removed** — an instance either has a working store (it started) or fails loud at startup, so a client never
