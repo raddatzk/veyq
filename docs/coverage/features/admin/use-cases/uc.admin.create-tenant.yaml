@@ -13,7 +13,11 @@ acceptanceCriteria:
     text: A Server Owner creates a PENDING tenant (201) with an owner invite; the response reports the delivery result, which for a bootstrap invite is always FALLBACK_COPYLINK (no SMTP for a PENDING tenant).
     coverage:
       backend: { integration: [TenantsSliceTest.createReturns201Pending] }
-      admin-web: { unit: [src/features/tenants/CreateTenantDialog.test.ts] }
+      # Two callers on this surface, not two tests of one caller: the dialog is the Server Owner doing it by
+      # hand, `cli.test.ts` is the same operation reached from a script (ADR 0065's CLI, cr-admin-cli). Both
+      # are mocked-client unit tests and neither claims the 201 — that is the backend ref's sentence; what
+      # they claim is that this surface issues the create with the tenant name, domain and owner email.
+      admin-web: { unit: [src/features/tenants/CreateTenantDialog.test.ts, src/cli/cli.test.ts] }
   - id: reject-duplicate-domain
     text: A domain already mapped to a tenant is rejected (409 domain_taken).
     coverage:
@@ -22,7 +26,10 @@ acceptanceCriteria:
     text: The owner invite is delivered out-of-band by the Server Owner copying the invite link (the bootstrap secret in the URL fragment) — create/resend/reassign responses return the raw secret to the Server-Owner-gated caller, so tenant onboarding works without any email/SMTP infrastructure (self-hostable by default). (cr-0080.)
     coverage:
       admin-web:
-        unit: [src/features/tenants/CreateTenantDialog.test.ts, src/features/tenants/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts]
+        # `cli.test.ts` is the out-of-band handoff without a browser at all: create/resend/reassign each print
+        # the API result — the response carrying the raw bootstrap secret — as JSON on stdout, which is how a
+        # scripted onboarding gets the invite link on an instance with no SMTP.
+        unit: [src/features/tenants/CreateTenantDialog.test.ts, src/features/tenants/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts, src/cli/cli.test.ts]
   - id: list-tenants
     text: A Server Owner lists all tenants with each one's current invite status.
     coverage:
@@ -31,7 +38,7 @@ acceptanceCriteria:
       # (ADR 0065) moved it to `admin-web`'s console, whose root gate is the same Server-Owner probe over the
       # same backend 403. The ref follows the list — `SettingsHubView.test.ts` no longer exercises tenants at
       # all, so leaving it here would have been a green ref proving nothing.
-      admin-web: { unit: [src/views/AdminConsoleView.test.ts] }
+      admin-web: { unit: [src/views/AdminConsoleView.test.ts, src/cli/cli.test.ts] }
   - id: resend-supersedes-invite
     text: Resend soft-supersedes the current ACTIVE invite and mints a fresh ACTIVE one (one ACTIVE kept).
     coverage:
@@ -75,7 +82,9 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [TenantChangeDomainSliceTest.aPendingTenantMoves, TenantChangeDomainSliceTest.anActiveTenantMovesToo, TenantChangeDomainSliceTest.aDomainAlreadyMappedIsRefused, TenantChangeDomainSliceTest.aSuspendedTenantIsRefusedAndKeepsItsDomain, TenantChangeDomainSliceTest.aMalformedDomainIsRejectedAtTheBoundary]
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
+      # The CLI reaches the same move from a script; like the panel test it pins the call and its arguments,
+      # not the 204/409/400 outcomes, which are the backend refs' sentences.
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   # --- Slice B (cr-0010): invite acceptance / activation ---
   - id: activate-by-register
     text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.

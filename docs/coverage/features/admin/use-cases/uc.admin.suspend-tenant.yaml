@@ -8,12 +8,15 @@ acceptanceCriteria:
     text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
+      # The status flip itself is the backend ref's claim. The two admin-web refs are the two callers that can
+      # ask for it — the detail panel and, since cr-admin-cli, `veyq-admin tenant suspend|reactivate`
+      # (ADR 0065) — each pinned to the operation and tenant id it sends, and neither to the flip.
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   - id: reactivate-suspended-tenant
     text: A Server Owner reactivates a SUSPENDED tenant back to ACTIVE.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts] }
+      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   - id: suspend-non-active-rejected
     text: Suspending a non-ACTIVE tenant (e.g. PENDING) is rejected (409).
     coverage:

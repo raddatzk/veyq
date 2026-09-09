@@ -74,3 +74,9 @@ gaps:
     load), and the 403 render (the owner-only notice, no version). It also pins the trap those two share — a
     load ERROR and an unstamped build must not render the same, because one means "there is no version" and the
     other means "we do not know", and an operator choosing an image needs them apart.
+    Since cr-admin-cli there is a **second caller** on this surface: `veyq-admin release`, covered by
+    `admin-web/src/cli/cli.test.ts`, which pins that the command reaches `getInstanceRelease()` and prints its
+    result as JSON on stdout. It is named here rather than under a criterion for the reason the whole file is
+    named here: no CI run has executed it either, so it makes no coverage claim yet — and a ref would
+    additionally contradict `admin-web` being declared a gap. When the one remaining event happens, this
+    surface flips with both refs at once; the CLI is not a third condition to wait for.
