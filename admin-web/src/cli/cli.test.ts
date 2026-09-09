@@ -1,0 +1,158 @@
+// @vitest-environment node
+// Deliberately the `node` environment, not happy-dom: the CLI's whole claim is that it runs where there is no
+// browser, so a test that quietly hands it a DOM would prove the wrong thing.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// The facades stand in for the network, exactly as the view tests mock them — the assertion is that the CLI
+// reaches the SAME operation with the SAME arguments the UI does, which is the entire point of the CLI being
+// a Node program (ADR 0065: the same generated client, not a second implementation).
+vi.mock('../features/tenants/tenants', () => ({
+  createTenant: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'PENDING' }),
+  listTenants: vi.fn().mockResolvedValue([{ tenantId: 't1' }]),
+  resendInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
+  reassignInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
+  changeTenantDomain: vi.fn().mockResolvedValue(undefined),
+  revokeTenant: vi.fn().mockResolvedValue(undefined),
+  suspendTenant: vi.fn().mockResolvedValue(undefined),
+  reactivateTenant: vi.fn().mockResolvedValue(undefined),
+}))
+vi.mock('../features/instance/release', () => ({
+  getInstanceRelease: vi.fn().mockResolvedValue({ release: '1.4.0' }),
+}))
+vi.mock('./adminSession', () => ({ signIn: vi.fn().mockResolvedValue(undefined) }))
+
+import { run } from './cli'
+import { signIn } from './adminSession'
+import * as tenants from '../features/tenants/tenants'
+import { getInstanceRelease } from '../features/instance/release'
+
+const ENV = { VEYQ_ADMIN_EMAIL: 'owner@example.com', VEYQ_ADMIN_PASSWORD: 'pw' }
+
+function capture() {
+  const out: string[] = []
+  const err: string[] = []
+  return { out, err, sinks: [(s: string) => out.push(s), (s: string) => err.push(s)] as const }
+}
+
+/** Run one invocation and hand back its exit code plus everything it printed. */
+async function invoke(argv: string[], env: Record<string, string | undefined> = ENV) {
+  const c = capture()
+  const code = await run(argv, env, c.sinks[0], c.sinks[1])
+  return { code, out: c.out.join('\n'), err: c.err.join('\n') }
+}
+
+beforeEach(() => vi.clearAllMocks())
+
+describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.suspend-tenant)', () => {
+  it('tenant create passes name, domain and owner email through to the facade', async () => {
+    const r = await invoke(['tenant', 'create', '--name', 'Fam', '--domain', 'f.example.com', '--owner-email', 'k@example.com'])
+    expect(tenants.createTenant).toHaveBeenCalledWith('Fam', 'f.example.com', 'k@example.com')
+    expect(r.code).toBe(0)
+    expect(JSON.parse(r.out)).toEqual({ tenantId: 't1', status: 'PENDING' })
+  })
+
+  it('tenant list prints the tenants as JSON a script can read', async () => {
+    const r = await invoke(['tenant', 'list'])
+    expect(tenants.listTenants).toHaveBeenCalledOnce()
+    expect(JSON.parse(r.out)).toEqual([{ tenantId: 't1' }])
+    expect(r.code).toBe(0)
+  })
+
+  it('tenant resend and reassign carry the invite arguments (the copy-link handoff, from a script)', async () => {
+    expect((await invoke(['tenant', 'resend', '--tenant-id', 't1'])).code).toBe(0)
+    expect(tenants.resendInvite).toHaveBeenCalledWith('t1')
+    const r = await invoke(['tenant', 'reassign', '--tenant-id', 't1', '--owner-email', 'new@example.com'])
+    expect(tenants.reassignInvite).toHaveBeenCalledWith('t1', 'new@example.com')
+    expect(JSON.parse(r.out)).toEqual({ state: 'ACTIVE' })
+  })
+
+  it('tenant change-domain moves the tenant and reports the bodiless 204 as an explicit success', async () => {
+    const r = await invoke(['tenant', 'change-domain', '--tenant-id', 't1', '--domain', 'new.example.com'])
+    expect(tenants.changeTenantDomain).toHaveBeenCalledWith('t1', 'new.example.com')
+    // A 204 resolves to `undefined`; printing nothing would be indistinguishable from a silent failure.
+    expect(JSON.parse(r.out)).toEqual({ ok: true })
+    expect(r.code).toBe(0)
+  })
+
+  it('tenant revoke, suspend and reactivate each reach their own operation', async () => {
+    await invoke(['tenant', 'revoke', '--tenant-id', 't1'])
+    await invoke(['tenant', 'suspend', '--tenant-id', 't2'])
+    await invoke(['tenant', 'reactivate', '--tenant-id', 't2'])
+    expect(tenants.revokeTenant).toHaveBeenCalledWith('t1')
+    expect(tenants.suspendTenant).toHaveBeenCalledWith('t2')
+    expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
+  })
+
+  it('release prints the running instance release (uc.admin.identify-instance-release)', async () => {
+    const r = await invoke(['release'])
+    expect(getInstanceRelease).toHaveBeenCalledOnce()
+    expect(JSON.parse(r.out)).toEqual({ release: '1.4.0' })
+    expect(r.code).toBe(0)
+  })
+})
+
+describe('veyq-admin — usage and refusals', () => {
+  it('--help lists every command and exits 0 without signing in', async () => {
+    const r = await invoke(['--help'])
+    expect(r.code).toBe(0)
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'release']) {
+      expect(r.out).toContain(c)
+    }
+    // Help must not cost an Argon2id derivation, nor require a credential to be present at all.
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('no arguments prints usage and exits non-zero — nothing was asked, so nothing succeeded', async () => {
+    const r = await invoke([])
+    expect(r.code).toBe(1)
+    expect(r.out).toContain('tenant list')
+  })
+
+  it('an unknown command names what it did not understand and exits 1', async () => {
+    const r = await invoke(['tenant', 'delete'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain("unknown command 'tenant delete'")
+    expect(signIn).not.toHaveBeenCalled()
+  })
+
+  it('a missing required flag is refused BEFORE signing in, so a typo costs no credential use', async () => {
+    const r = await invoke(['tenant', 'create', '--name', 'Fam', '--domain', 'f.example.com'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--owner-email is required')
+    expect(signIn).not.toHaveBeenCalled()
+    expect(tenants.createTenant).not.toHaveBeenCalled()
+  })
+
+  it('a flag the command does not take is rejected, not silently ignored', async () => {
+    const r = await invoke(['release', '--tenant-id', 't1'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--tenant-id')
+    expect(getInstanceRelease).not.toHaveBeenCalled()
+  })
+
+  it('a rejected sign-in fails loudly and non-enumerably — the status and code, never a stack trace', async () => {
+    vi.mocked(signIn).mockRejectedValueOnce({
+      response: new Response(JSON.stringify({ code: 'authentication_failed' }), { status: 401 }),
+    })
+    const r = await invoke(['tenant', 'list'], { ...ENV, VEYQ_ADMIN_PASSWORD: 'wrong' })
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 401 authentication_failed')
+    expect(tenants.listTenants).not.toHaveBeenCalled()
+  })
+
+  it('an unreachable backend says so rather than reporting a bare HTTP 0', async () => {
+    vi.mocked(signIn).mockRejectedValueOnce(new TypeError('fetch failed'))
+    const r = await invoke(['tenant', 'list'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('could not be reached')
+  })
+
+  it('a failing operation exits 1 with the server code, after a successful sign-in', async () => {
+    vi.mocked(tenants.suspendTenant).mockRejectedValueOnce({
+      response: new Response(JSON.stringify({ code: 'tenant_not_active' }), { status: 409 }),
+    })
+    const r = await invoke(['tenant', 'suspend', '--tenant-id', 't1'])
+    expect(r.code).toBe(1)
+    expect(r.err).toBe('veyq-admin: request failed: HTTP 409 tenant_not_active')
+  })
+})
