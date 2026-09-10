@@ -20,8 +20,8 @@ info:
 tags:
   - name: instance
     description: >
-      Server-Owner reads about the running instance (release identity). One tag = one resource interface
-      owning the whole `/api/instance` subtree.
+      Server-Owner reads about the running instance (release identity, store provisioning). One tag = one
+      resource interface owning the whole `/api/instance` subtree.
 
 paths:
   /api/instance/release:
@@ -68,6 +68,56 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: not_server_owner }
 
+  /api/instance/store-provisioning:
+    get:
+      tags: [instance]
+      operationId: getInstanceStoreProvisioning
+      summary: Report whether the object store has been brought from running to usable.
+      description: >
+        Returns how far veyq has got with provisioning the configured object store
+        ([ADR 0067](../../docs/decisions/0067-store-provisioning-from-a-declared-type.md)). Server-Owner only.
+
+        This exists because provisioning deliberately **does not gate the boot**: it reaches another container
+        over the network, and a startup observer that can fail on an unreachable dependency is how
+        [ADR 0063](../../docs/decisions/0063-database-driven-tenant-ingress.md) restart-looped a production
+        stack into serving nothing. So an instance whose store is not yet usable starts anyway, answers
+        `GET /api/setup`, and looks healthy — and without this read the failure would first reach the operator
+        as a photo that will not upload.
+
+        The value is server self-description and holds no user content. It says what the operator can **do**,
+        never what the code did; the reason a bring-up failed stays in the log, because the four answers below
+        already separate the four different things an operator does next.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: How far provisioning has got on this instance.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/InstanceStoreProvisioning" }
+              examples:
+                provisioned:
+                  summary: The bundled store was brought up and is usable
+                  value: { state: PROVISIONED }
+                notAttempted:
+                  summary: An `s3` store — the operator owns its bring-up, and veyq never pokes it
+                  value: { state: NOT_ATTEMPTED }
+                failed:
+                  summary: The bounded retries ran out; media will not work until the store is fixed
+                  value: { state: FAILED }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is authenticated but is not the Server Owner.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_server_owner }
+
 components:
   schemas:
     InstanceRelease:
@@ -91,6 +141,32 @@ components:
             That is reported as the absence it is, never as a placeholder.
           maxLength: 32
           example: "1.0"
+
+    InstanceStoreProvisioning:
+      type: object
+      description: >
+        How far veyq has got with bringing the configured object store from *running* to *usable*
+        (ADR 0067). Server self-description, not user data: it describes the operator's own infrastructure,
+        never anything in it.
+      required: [state]
+      properties:
+        state:
+          x-veyq-visibility: enum
+          type: string
+          description: >
+            The provisioning outcome, in the terms of what the operator does next. Every state the background
+            runner can be in has a value here, including the two that are not outcomes at all.
+
+            `NOT_ATTEMPTED` = the store connection declares `type: s3`, so veyq never attempts vendor bring-up
+            (ADR 0067 Decision 1 — an unknown store is never poked). This is a **correct, permanent** answer
+            and not a failure: the operator prepared the bucket themselves, and nothing here will ever change.
+            `IN_PROGRESS` = a bring-up is running or waiting to retry. Uploads may fail until it finishes;
+            wait, and read again. `PROVISIONED` = the store is usable — layout, bucket, key, grant and CORS
+            policy are all in place. `FAILED` = the bounded retries are exhausted and veyq has given up
+            (ADR 0067 Decision 3). Media stays broken until the store is repaired and the app restarted; the
+            log carries which call failed.
+          enum: [NOT_ATTEMPTED, IN_PROGRESS, PROVISIONED, FAILED]
+          example: PROVISIONED
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
