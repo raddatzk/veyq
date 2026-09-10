@@ -248,6 +248,22 @@ interface VeyqConfig {
     }
 
     interface BlobStore {
+        /**
+         * Which **kind** of store this connection points at, and therefore how far veyq may go in bringing it
+         * up (ADR 0067 Decision 1). The default is [StoreType.S3] deliberately: an unknown store is **never
+         * poked**, so pointing veyq at somebody else's bucket changes nothing about it.
+         *
+         * The member is named `type` and not `storeType` on purpose — property names are derived from the
+         * method path (see this interface's KDoc), there is no `@WithName` anywhere in this codebase to
+         * override that, and `storeType()` would silently bind `veyq.blob-store.store-type` instead of
+         * `veyq.blob-store.type`.
+         *
+         * It belongs to the **connection**, not to the environment: there is one connection in V1, and a SaaS
+         * instance with several (`docs/inbox.md` #41) gets a type per connection without reshaping anything.
+         */
+        @WithDefault("s3")
+        fun type(): StoreType
+
         /** Internal S3 endpoint (blank/absent fails startup — media is not gracefully degraded). */
         fun endpoint(): Optional<String>
 
@@ -266,6 +282,62 @@ interface VeyqConfig {
 
         @WithDefault("600")
         fun presignTtlSeconds(): Int
+
+        /** `veyq.blob-store.garage.*` — reached only when [type] is [StoreType.GARAGE]. */
+        fun garage(): Garage
+
+        /**
+         * The bundled store's own admin plane, nested so these members are structurally scoped to the type
+         * that uses them rather than free-floating on `veyq.blob-store.*` (the shape of [Tasks.Lease] and
+         * [RateLimit.Recovery]). Both absent is the correct state of every non-Garage instance.
+         */
+        interface Garage {
+            /**
+             * Garage's Admin API base URL (`http://garage:3903`), which is a **different port from the S3
+             * endpoint** and is deliberately not published outside the compose network. Absent ⇒ provisioning
+             * cannot run; it reports that rather than failing the boot.
+             */
+            fun adminEndpoint(): Optional<String>
+
+            /** The bearer token that admin plane requires (`GARAGE_ADMIN_TOKEN`). Operator env, never persisted. */
+            fun adminToken(): Optional<String>
+
+            /** Storage capacity advertised for the single bundled node when veyq assigns it a layout role. */
+            @WithDefault("1G")
+            fun nodeCapacity(): String
+
+            /** The zone name the single bundled node is assigned to. One node, so its value is arbitrary and fixed. */
+            @WithDefault("local")
+            fun nodeZone(): String
+        }
+    }
+
+    /**
+     * The kinds of object store veyq knows how to talk to, which is the same thing as *how far it may go in
+     * setting one up* (ADR 0067). It is the codebase's first enum-typed config member; SmallRye maps the
+     * property text onto the constant name case-insensitively, so `veyq.blob-store.type=garage` selects
+     * [GARAGE].
+     */
+    enum class StoreType {
+        /**
+         * Any S3-compatible store veyq did not bring up. **No provisioning runs at all** — not a bucket
+         * create, not a CORS policy: the operator owns that store and veyq changes nothing about it. This
+         * bounds the type's cost (ADR 0067 § Consequences) and is why it is the default.
+         *
+         * ADR 0067 Decision 1 reserves the S3-generic steps for this type — that is a *ceiling* on what it
+         * may ever grow into, so a future generic step has a home; it is not a claim that one runs today. Two
+         * things settle the empty set for V1: *"`s3` is the default, so an unknown store is never poked"* in
+         * that same decision, and ADR 0013 §4's measured CORS verdict, whose `*` policy is justified **for
+         * the bundled store** and for nothing else.
+         */
+        S3,
+
+        /**
+         * The bundled Garage (ADR 0013 §1). veyq owns both sides here, so it takes the store from *running* to
+         * *usable* end to end over Garage's Admin API — layout, bucket, key, grant — plus the one genuinely-S3
+         * step, the bucket CORS policy.
+         */
+        GARAGE,
     }
 
     interface Tasks {

@@ -31,6 +31,23 @@ data class StoreObjectRef(val storageKey: String, val chunkCount: Int)
  * [abandonedAt] is the point of the whole table. A permanently unreachable store still loses bytes; what changes
  * is that the loss is `SELECT count(*) FROM veyq_store_reclaim WHERE abandoned_at IS NOT NULL` instead of
  * nothing at all. Abandoned rows are therefore **kept**, not deleted.
+ *
+ * **Trap for whoever adds a second store — and it is not where you would look for it.** ADR 0067 puts a `type`
+ * on the store connection so a SaaS instance can one day have several (`docs/inbox.md` #41). The moment there
+ * is more than one, [StoreReclaimSweep] cannot know *which* store to delete a row's objects from, and the bytes
+ * leak silently. The reason this row cannot tell it is structural: [StoreReclaimStore.record] is
+ * `@Transactional(MANDATORY)`, so the tombstone is written **in the same transaction that deletes the row it
+ * came from** — precisely so objects outlive their metadata — and `ScopePurge` is one of its callers, erasing
+ * the scope along with it. A live blob still reaches its tenant in one join (`veyq_blob.scope_id` →
+ * `veyq_scope.tenant_id`); a reclaim row reaches nothing, **by design**.
+ *
+ * **And the obvious remedy is not free, which is the half that gets missed.** "One store-id column, filled at
+ * insert while the store is still known" is a five-minute change and ADR 0062 Decision 6 forbids exactly that
+ * shape on exactly this row: *"No `scope_id`, no `media_id`, no node. Group erasure must
+ * leave nothing behind that describes the erased group."* A store id that is one-to-one with a tenant **is**
+ * such a residue, so the column would trade a byte leak for an erasure leak. Whoever takes #41 owes a design
+ * that satisfies both constraints, not a column — and ADR 0067 § Consequences states the collision so that it
+ * is a known cost rather than a discovery.
  */
 @Entity
 @Table(name = "veyq_store_reclaim")
