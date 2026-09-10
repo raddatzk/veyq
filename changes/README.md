@@ -395,6 +395,16 @@ guard must stay *"unedited"* where its own inventory row gave the intent, *"a ph
 wire shape"*. A comment changes no shape. **State the intent, not the letter** — an absolute reading collides
 with the very correction the CR mandates.)
 
+**And the locator finds other FILES; the owning file is read whole.** A fragment grep is built from the words
+of the sentence you already know is wrong, so it is blind to the same claim said differently — and the place a
+claim is most likely to be restated in different words is the document that owns it.
+`cr-store-own-address-signing-mode`'s locator (`swaps`, `same-origin`, `plays no part in signing`) found both
+sites it named, in two ADRs and the use-case's A5, and missed two more in that same use-case: a success
+postcondition asserting the URL is *"signed **for that domain**"* and a plain-language paragraph promising
+media *"come from that same address"* — the identical claim, sharing not one word with the locator. So a phase
+that supersedes a claim reads its owning use-case or ADR **end to end**, including the bilingual reader-facing
+section, and uses the sweep for everything outside it.
+
 **A listed invariant with no phase behind it reads as covered.** The same CR's front-matter named
 *"`web/CLAUDE.md`'s jsQR exception holds only while our own codes stay low-version"* and no phase touched that
 file. The stated invariant held — the new payload is QR version 4 — but the exception's prose **enumerates the
@@ -736,6 +746,24 @@ already bit, and only structurally: a 31-byte AES key throws downstream.)
 has no behaviour of its own — it is asserted only where some test compares it to an independent source. Before
 writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
 before touching either the lever or the design.
+
+### A "nothing moved" bite names the test that goes RED when it moves
+
+**The default's tests and the default's *detector* are usually not the same tests**, and a bite that lists the
+first reads as thorough while proving nothing. `cr-store-own-address-signing-mode` added a config member
+defaulting to today's behaviour and bit it as *"set the new member to its default explicitly and assert the
+three existing `S3BlobStorePresigningTest` cases and the four `*PresignDomainSliceTest` cases are all green"*.
+Measured, with the default moved to the other constant: **all eleven stayed green**. The unit cases construct
+the store directly, so they see a *constructor* default, not the config one; the slice cases run against a fake
+store that ignores the mode by construction, so no value of it changes their output. Eleven tests about signing,
+zero detectors of the setting.
+
+The tell is the direction the bite is written in: *"assert these stay green"* is satisfied by every test that
+cannot see the change, including all of them. Invert it — **name the test whose failure message would print
+the moved value, then run it with the value moved.** Here that was a case reading the default through the real
+config mapping and driving it into a real store; it reddens, and the eleven still do not. A default is a
+*configuration* fact, so its detector lives at the tier that reads configuration, not at the tier that
+exercises the behaviour the default selects.
 
 ### A bite test must tell "the guard held" apart from "nothing ran"
 

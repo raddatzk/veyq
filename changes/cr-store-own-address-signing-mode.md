@@ -199,6 +199,34 @@ replacement — the property is permanent, the lever was only ever the most conv
 
 ## Retrospective
 
-<!-- Filled at implement time. What didn't go well — planning, execution, AND process/collaboration (did we
-honor the conventions we already agreed?). Root cause, concrete fix. Both directions. End with one
-forward-looking "next time". -->
+**Bite test 4 was a vacuous oracle, and only running it showed that.** Its lever — *"set the new member to its
+default explicitly and assert the three existing `S3BlobStorePresigningTest` cases and the four
+`*PresignDomainSliceTest` cases are all green"* — was run as an injection (`@WithDefault` moved to
+`store-origin`) and **all eleven cases stayed green**. Root cause: the two tiers it names both substitute their
+own value for the config default. The unit cases construct `S3BlobStore` directly and see a *constructor*
+default; the slice cases run against `FakePresigningBlobStore`, which has no endpoint for a mode to resolve
+against and therefore echoes the same host under every setting. Eleven tests about signing, zero detectors of
+the setting. Concrete fix, built here: `S3BlobStoreSigningModeConfigTest` reads the default through the real
+config mapping and drives it into a real store — three of its five cases redden under that injection, naming
+the moved value. Harvested as a rule (*a "nothing moved" bite names the test that goes RED when it moves*) and
+as a comment on the fake, which is where the next person meets the hole.
+
+**The prose locator found other files and missed two sites in the file it was aimed at.** `swaps` /
+`same-origin` / `plays no part in signing` found A5 and the two ADRs, and could not find the success
+postcondition (*"signed **for that domain**"*) or the bilingual reader-facing paragraph (*"come from that same
+address"*) — the same claim, sharing no word with the locator, in the same document. A fragment grep is built
+from the sentence already known to be wrong, so it is structurally blind to paraphrase. Harvested: the owning
+use-case or ADR is read end to end, the sweep is for everything outside it.
+
+**Planning was right where it cost the most.** Phase 1's *"name the mode, do not infer it"* and *"three
+behaviours, not two"* were the whole design, and the boolean was genuinely the tempting shape — it would have
+left the third mode implicit in a blank string, i.e. exactly the state A5 was in. The one small slip is a
+count: *"the three `S3BlobStorePresigningTest` cases"* names five cases; the three are the coverage file's refs.
+Cite the list, not a number.
+
+**Process was honoured.** Commit path probed before phase 1, injections snapshot-and-restored with the hashes
+checked, both `check` runs read out of the JUnit XML as a real test count (644 tests, 0 failures) rather than
+from an exit code — the sibling CR's lesson, applied.
+
+**Next time:** when a CR's bite is written as *"assert these stay green"*, invert it at refine time and ask
+which named test would print the changed value — a bite that cannot name one is measuring the wrong tier.

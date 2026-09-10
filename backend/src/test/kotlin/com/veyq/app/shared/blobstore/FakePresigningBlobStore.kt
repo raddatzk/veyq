@@ -20,6 +20,16 @@ import java.util.Collections
  * override, which would silently drop `application-test.properties`) and touches nothing outside that one test
  * class.
  *
+ * **It is mode-blind, and that is an oracle hole for anything about `veyq.blob-store.signing-mode`.** The
+ * echo below reproduces exactly what [S3BlobStore.presignPut] does in
+ * [com.veyq.app.shared.config.VeyqConfig.SigningMode.TENANT_DOMAIN] and *nothing* it does in the other two —
+ * there is no endpoint here for a mode to resolve against. So a slice test driven through this store cannot
+ * observe a signing mode at all: it answers the same host whatever the setting says, which means an assertion
+ * about a mode would pass against an unimplemented one, and moving the config **default** changes nothing it
+ * prints. Reach for a `@TestProfile` with real `veyq.blob-store.*` config instead — `RecordingBlobStore`'s
+ * delegate is then the real [S3BlobStore] — which is what
+ * [com.veyq.app.features.media.StoreOriginPresignSliceTest] does.
+ *
  * **[stat] is scripted per key, not per test run.** [statOf] sets what a key answers; an unscripted key answers
  * `null` — "object missing", the same meaning [InMemoryBlobStore.stat] and a real absent S3 object share. A test
  * that wants `Budget` sets one declared chunk's stat either absent or larger than the session's declared
