@@ -34,7 +34,19 @@ acceptanceCriteria:
       After the documented procedure restores onto an empty instance, a person signs in with the password they
       already had and opens a Memory containing media, decrypted with the key material they already hold. No
       content was re-encrypted, no key was handed to the operator by the restore, and the Emergency Kit that
-      worked before still works. This is architecture §10's durability bar stated as a test.
+      worked before still works. This is architecture §10's durability bar stated as a test. *Empty* means the
+      instance holds no DATA: a freshly installed one — started once, so its schema is migrated and its store
+      provisioned — is the shape a restore targets, and is accepted (A5, ADR 0067). It is now the only shape an
+      operator can produce, since the app is the only thing that makes the store usable and the same start
+      migrates the schema.
+  - id: a-populated-target-is-refused-rather-than-reconciled
+    text: >-
+      A restore aimed at an instance that already holds data is refused before anything is written, naming the
+      rows it found — including the rows a half-finished restore itself just wrote. This is the other half of
+      the criterion above and it is stated separately on purpose: relaxing *empty* from "no tables" to "no data"
+      widened what the gate accepts, and a gate whose entire job is refusal is not demonstrated by the case it
+      accepts. Nothing reconciles two populated instances (A5), and the refusal is asserted by its own message
+      rather than by a non-zero exit, which a connection failure produces equally well.
   - id: the-store-leg-is-verifiable-before-the-restore
     text: >-
       Because the store leg is the S3 object namespace rather than the store's on-disk form, the captured object
@@ -45,7 +57,10 @@ acceptanceCriteria:
     text: >-
       The captured objects restore into a bucket that is not the source's — different endpoint, credentials,
       bucket name, and store implementation — with only configuration changing. The bucket, access key and
-      layout are recreated rather than restored, because they were never durable state.
+      layout are recreated rather than restored, because they were never durable state. What recreates them
+      changed with ADR 0067 and the claim did not: it is the target application's own first start, from the
+      declared store type, rather than a compose sidecar — which is also why the target must be *installed*
+      before a restore rather than merely created.
 gaps:
   backend: >-
     No backend test, and none is planned. The two criteria that stay uncovered on every surface are
@@ -61,10 +76,16 @@ gaps:
     The suites exist and pass locally; the only thing missing is a CI run to execute them (ADR 0040). Two
     grouped e2e suites under `web/src/features/instanceBackup/` run through `scripts/run_web_e2e.py`: `restore.*`
     births an instance with media, has the orchestrator capture it, DESTROY the source, and restore onto a
-    fresh database, bucket and key path, then signs in for real (`login` + `unlockMasterKey` — Argon2 over the
-    password and the Emergency Kit's Secret Key, no injected vault) and compares the fetched plaintext byte for
-    byte; `legthree.*` does the same restore minus the key file and asserts MISMATCH plus a 503
-    mail_unavailable invite, with a pre-capture `OK` as its positive control. Note what this corrects: the
-    fixture is NOT `web/scripts/devSeed.mts` — no e2e suite reads it, every suite bootstraps through
-    `birthInstance()`, and a `vaultFromSeed()` inject would have bypassed the password-derived unlock that
-    "with the keys their owners already hold" is actually about.
+    freshly INSTALLED target — a fresh database, bucket and key path plus one app boot, which is what migrates
+    the schema and provisions the store (ADR 0067) and is therefore the operator's own step 1 — then signs in
+    for real (`login` + `unlockMasterKey` — Argon2 over the password and the Emergency Kit's Secret Key, no
+    injected vault) and compares the fetched plaintext byte for byte; `legthree.*` does the same restore minus
+    the key file and asserts MISMATCH plus a 503 mail_unavailable invite, with a pre-capture `OK` as its
+    positive control. `a-populated-target-is-refused-rather-than-reconciled` rides in the same hook rather than
+    in a suite, because its observable is the operator tool's exit and message rather than anything a browser
+    sees: `assert_populated_target_is_refused` re-runs the identical restore against the instance the previous
+    line just populated and requires it to fail naming the data it found — so the accepted case and the refused
+    case are established against one instance, one artifact apart. Note what this corrects: the fixture is NOT
+    `web/scripts/devSeed.mts` — no e2e suite reads it, every suite bootstraps through `birthInstance()`, and a
+    `vaultFromSeed()` inject would have bypassed the password-derived unlock that "with the keys their owners
+    already hold" is actually about.
