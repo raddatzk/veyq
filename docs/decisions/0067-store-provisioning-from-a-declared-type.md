@@ -26,9 +26,9 @@ Forces:
   each spell differently. There is no protocol to be neutral about. A sixth step joins them here, and it is
   **new work rather than moved work**: [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)'s
   `PutBucketCors`, which nothing in this repository writes today — measured, it appears in no code and in no
-  `infra/` file. Being generic S3, it is also the one step `type: s3` reaches; being unprecedented here, it is
-  the only step with no working example to copy, and §4's measured table is what bounds the policy it may
-  write.
+  `infra/` file. It is the one step that *would* generalise to any S3 store — and Decision 1 nonetheless does
+  not run it for `type: s3`, for a reason §4 itself supplies. Being unprecedented here, it is also the only
+  step with no working example to copy, and §4's measured table is what bounds the policy it may write.
 - **The `garage` binary is not required.** Measured against the pinned v2.0.0: its Admin API (`:3903`, bearer
   token, plain JSON) covers every step — a bucket was created through `POST /v2/CreateBucket` and removed
   through `POST /v2/DeleteBucket?id=…`, both `200`. So the custom image serves only the shell, and the shell
@@ -46,9 +46,26 @@ Forces:
 **The store connection declares its type, and veyq provisions what that type allows it to.**
 
 1. **A `type` on the store connection.** Two values to begin with: `garage`, which veyq can bring from
-   *running* to *usable* end to end, and `s3`, which covers every other S3-compatible store and limits veyq to
-   the steps that are genuinely S3. `s3` is the **default**, so an unknown store is never poked; the bundled
-   deployments set `garage` themselves, which is exactly the case where veyq owns both sides.
+   *running* to *usable* end to end, and `s3`, which covers every other S3-compatible store. `s3` is the
+   **default**, and under it veyq provisions **nothing at all**; the bundled deployments set `garage`
+   themselves, which is exactly the case where veyq owns both sides.
+
+   **Nothing at all, and not "only the generic steps" — the distinction is the whole safety of the default.**
+   Two of the six steps do generalise (`bucket create`, and `PutBucketCors`), so "run just those under `s3`" is
+   the reading this decision is most likely to be misread as, and it is wrong on both counts.
+   [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md) measured the CORS policy veyq would write and
+   found `*` to be the only one that works — **on the bundled store**, and §4 says so in as many words: *"It is
+   a property of the bundled store, not of the branch: AWS S3 and other implementations return the matched
+   origin correctly, which is why a tenant on their own bucket is unaffected."* Unaffected, and therefore not
+   in need of the policy: it is justified for a store veyq created and for no other. Writing it to
+   somebody's own bucket would silently widen who may use a URL they hold, on infrastructure this project has
+   measured nothing about, by default, on first boot. And `bucket create` is no better: an operator who pointed
+   veyq at a bucket has one, so the step is at best a no-op and at worst a bucket created in their account
+   under a name they did not choose. **An unknown store is never poked** is therefore the operative half, and
+   what `s3` limits veyq to is the empty set.
+
+   The clause that remains useful is the *ceiling*: should a genuinely safe generic step ever appear, `s3` is
+   where it goes, and that is the reason a type exists rather than a boolean. It is a place, not a promise.
 
    The type belongs to **the connection, not to the environment as such**. There is one connection today and
    the distinction costs nothing — but a SaaS instance where one tenant buys storage through veyq and another
@@ -121,8 +138,10 @@ customer's infrastructure, never their data.
 - **`.github/workflows/container.yml` keeps its two images.** The alternative was a third, published, signed
   and versioned forever to serve a one-shot.
 - **The backend gains Garage-specific code, deliberately and behind the type.** That is the honest cost of
-  Decision 1, and it is bounded: `type: s3` reaches none of it, and a second bundled store would add a third
-  value rather than change the shape. What it does **not** do is make the *data* path vendor-specific —
+  Decision 1, and it is bounded **structurally rather than by care**: under `type: s3` no provisioner is
+  constructed at all, so there is no branch for a `type: s3` instance to fall down and nothing to keep
+  correct — a shared path that "mostly" branches is the version of this that stops being bounded. A second
+  bundled store would add a third value rather than change the shape. What it does **not** do is make the *data* path vendor-specific —
   `S3BlobStore` stays the vendor-neutral AWS SDK client CLAUDE.md's dependency rule requires.
 - **The app holds one more operator secret**, the Garage admin token, alongside the store credentials it
   already holds. It stays in the environment; nothing here puts a credential in the database, so
@@ -177,7 +196,10 @@ customer's infrastructure, never their data.
   ([ADR 0065](0065-admin-ui-cli-separate-service.md)) is being a thin client of a vendor-neutral backend.
 - **Rejected — no type, and provision generically.** The only two steps that generalise are `bucket create`
   and the CORS policy; stopping there leaves Garage unusable out of the box, which is the defect this ADR
-  exists to remove.
+  exists to remove. Note this is rejected for a *different* reason than the one that makes Decision 1's `s3`
+  provision nothing: here the generic pair is too little to reach the goal, there it is too much to do to a
+  store veyq does not own. Both readings end at "a type is required"; only the second says what the default
+  may do.
 
 ## Related
 

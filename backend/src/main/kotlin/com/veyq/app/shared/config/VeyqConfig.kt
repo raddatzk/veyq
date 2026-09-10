@@ -321,14 +321,13 @@ interface VeyqConfig {
     enum class StoreType {
         /**
          * Any S3-compatible store veyq did not bring up. **No provisioning runs at all** — not a bucket
-         * create, not a CORS policy: the operator owns that store and veyq changes nothing about it. This
-         * bounds the type's cost (ADR 0067 § Consequences) and is why it is the default.
+         * create, not a CORS policy: the operator owns that store and veyq changes nothing about it
+         * (ADR 0067 Decision 1, which spells out why the two steps that *would* generalise still do not run
+         * here). Being the default is what makes that the safe answer for every store nobody measured.
          *
-         * ADR 0067 Decision 1 reserves the S3-generic steps for this type — that is a *ceiling* on what it
-         * may ever grow into, so a future generic step has a home; it is not a claim that one runs today. Two
-         * things settle the empty set for V1: *"`s3` is the default, so an unknown store is never poked"* in
-         * that same decision, and ADR 0013 §4's measured CORS verdict, whose `*` policy is justified **for
-         * the bundled store** and for nothing else.
+         * The change this invites is "surely it could at least create the bucket / write the CORS policy" —
+         * ADR 0013 §4 is the reason it may not: the `*` policy veyq would write is measured and justified for
+         * the **bundled** store and for nothing else. Read that decision before widening this.
          */
         S3,
 
