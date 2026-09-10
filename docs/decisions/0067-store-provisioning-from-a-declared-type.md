@@ -20,11 +20,15 @@ Forces:
 - **Self-hostable by default is a bar on the *result*, not on the command.** `docker compose up` and
   `helm install` must yield an instance that serves media, not one that starts and then fails at the first
   photo. A store bootstrap the operator has to remember is the same defect as a missing one.
-- **A store bootstrap is inherently per-vendor, and no design makes it generic.** Of the four steps
-  `garage-init.sh` performs, `bucket create` is S3 for anybody and a CORS policy is
-  [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)'s `PutBucketCors`; `layout assign` /
-  `layout apply` are Garage cluster mechanics with no S3 analogue at all; and `key import` / `bucket allow` are
-  **IAM**, which AWS, Garage and Ceph each spell differently. There is no protocol to be neutral about.
+- **A store bootstrap is inherently per-vendor, and no design makes it generic.** `garage-init.sh` performs
+  five calls: `layout assign` / `layout apply` are Garage cluster mechanics with no S3 analogue at all;
+  `bucket create` is S3 for anybody; and `key import` / `bucket allow` are **IAM**, which AWS, Garage and Ceph
+  each spell differently. There is no protocol to be neutral about. A sixth step joins them here, and it is
+  **new work rather than moved work**: [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)'s
+  `PutBucketCors`, which nothing in this repository writes today — measured, it appears in no code and in no
+  `infra/` file. Being generic S3, it is also the one step `type: s3` reaches; being unprecedented here, it is
+  the only step with no working example to copy, and §4's measured table is what bounds the policy it may
+  write.
 - **The `garage` binary is not required.** Measured against the pinned v2.0.0: its Admin API (`:3903`, bearer
   token, plain JSON) covers every step — a bucket was created through `POST /v2/CreateBucket` and removed
   through `POST /v2/DeleteBucket?id=…`, both `200`. So the custom image serves only the shell, and the shell
@@ -63,14 +67,37 @@ Forces:
    makes a byte path a hard requirement. Provisioning is the opposite kind of act: it reaches another
    container over the network, and a `StartupEvent` observer that can fail on an unreachable dependency is how
    [ADR 0063](0063-database-driven-tenant-ingress.md) restart-looped a production stack into serving nothing at
-   all. So provisioning **runs in the background, is idempotent, retries with a bound, and logs loudly** — it
-   never gates the boot, and an instance whose store is not yet provisioned still answers `/api/setup`.
+   all. So provisioning **runs in the background, retries with a bound, and never gates the boot** — an
+   instance whose store is not yet provisioned still answers `/api/setup` — and its outcome is **readable on
+   the Server-Owner instance surface**, not only in a log. A log line reaches whoever is already looking at
+   logs; the failure it describes reaches the operator as a photo that will not upload, which is the
+   experience this decision exists to remove. The nearest precedent for such a field is `configSecretState`,
+   and it is the right one: server self-description, no user data.
+
+   **Idempotent per step, not per bootstrap.** `garage-init.sh` returns early the moment `bucket info`
+   succeeds, which is correct for a script whose steps always shipped together and wrong for a provisioner
+   whose step set grows — a store provisioned before CORS existed would never receive a policy. Each step
+   checks and acts on its own. The same reasoning removes a second shortcut: `garage-init.sh` hardcodes
+   `layout apply --version 1`, so it only ever initialises a **fresh** node. That limit is a property of the
+   script, not of the act; the provisioner must succeed against a node whose layout is already applied at any
+   version.
 
 4. **`infra/garage-init.sh`, `infra/garage-init.Dockerfile` and the `garage-init` compose service are
-   deleted.** Their work moves into the backend, which already holds the store credentials and, for `garage`,
-   additionally receives the admin endpoint and token. The unpublished image disappears rather than becoming a
-   third signed release artifact, and [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart is
-   unblocked because there is nothing left for it to pull.
+   deleted — from every stack, not only the release recipe.** Their work moves into the backend, which already
+   holds the store credentials and, for `garage`, additionally receives the admin endpoint and token. The
+   unpublished image disappears rather than becoming a third signed release artifact, and
+   [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart is unblocked because there is nothing left for
+   it to pull.
+
+   **Development runs the production shape, and that is the point rather than a side effect.** A dev-only
+   sidecar would have been defensible — compose can build on a developer's host, which is the one thing Helm
+   cannot do — and it was rejected for what it hides: with the sidecar present the store is always already
+   provisioned by the time the backend starts, so the *fresh* provisioning path would never run outside a unit
+   test, on the one target where it is cheapest to run it. Deleting it everywhere means every `docker compose
+   --profile s3 up` followed by a backend start exercises the real bring-up against a real Garage. The cost is
+   that a store is no longer usable **without a backend**, which two callers depended on: `scripts/run_web_e2e.py`
+   needs a bucket before its first suite boots, and a restore target needs an initialised empty bucket. The
+   first is the orchestrator's own problem to solve; the second is a decision, and it is the Consequence below.
 
 5. **"The store has its own address" becomes named signing behaviour, not a deployment's special case.**
    `S3BlobStore.endpointFor` swaps `public-endpoint`'s host for the resolved tenant's domain, which is right
@@ -107,9 +134,30 @@ customer's infrastructure, never their data.
   that objects outlive their metadata. `ScopePurge` is one of its callers and erases the scope with it. A live
   blob reaches its tenant in one join (`veyq_blob.scope_id` → `veyq_scope.tenant_id`); a reclaim row reaches
   nothing, **by design**. With more than one store the sweep would not know which one to delete from, and the
-  bytes would leak silently. The remedy is one column filled at insert, while the tenant is still known — and
-  because this is invisible from everywhere except that line, it is recorded as a comment there rather than
-  only here.
+  bytes would leak silently. The obvious remedy — one column filled at insert, while the store is still known —
+  is **not free, and the reason is one decision away**:
+  [ADR 0062 §6](0062-store-object-reclaim-is-a-durable-work-list.md) forbids exactly that shape on exactly that
+  row (*"No `scope_id`, no `media_id`, no node. Group erasure must leave nothing behind that describes the
+  erased group."*), and a store id that is one-to-one with a tenant is such a residue. Whoever takes #41 owes
+  a design that satisfies both, not a column. Because this is invisible from everywhere except that line, the
+  trap **and** the tension are recorded as a comment there rather than only here.
+- **A restore target can no longer be prepared without the app, so the gate that defines one moves from
+  "no tables" to "no data".** [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
+  A5 defines a restore onto an *empty* instance, and `scripts/instance_backup.py` implements *empty* as **zero
+  tables in the target database**. That worked because the store's bucket came from a sidecar while the
+  database stayed untouched. With the backend as the only provisioner the two preconditions become mutually
+  unreachable: the bucket exists only after the app has started, and the same start migrates the schema — the
+  app has no mode that does one without the other, `quarkus.flyway.migrate-at-start=true` carries no profile
+  gate. So *empty* is redefined as **holding no data**: a freshly installed, freshly migrated instance is
+  precisely the shape a restore targets, and refusing it was always the wrong reading of A5. A5's purpose is
+  untouched — nothing reconciles two *populated* instances.
+
+  **This is not a cost this ADR introduces; it is one it stops hiding.** On Kubernetes there has never been a
+  sidecar — [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s chart deploys `garage` and the app and
+  nothing beside them — so a cluster restore has always faced exactly this wall, which ADR 0064 deferred
+  wholesale (*"a Kubernetes-native backup story … is deferred to its own future decision"*). Compose merely had
+  a sidecar in front of it. Redefining the gate fixes both targets with one change, where a compose-shaped
+  remedy would have fixed neither.
 - **Runtime-editable store settings stay out of reach for a specific reason.** `S3BlobStore` caches presigners
   in a `ConcurrentHashMap` keyed by resolved endpoint and never invalidates it — correct while the connection
   is fixed at boot, and the first thing that must change if it ever is not.
@@ -118,7 +166,7 @@ customer's infrastructure, never their data.
   it; every operator would pull it once and never think about it again.
 - **Rejected — bundle the `garage` binary, or speak Garage's RPC, from the backend.** A vendor-locked client
   in the data path is what CLAUDE.md's dependency rule forbids, and the Admin API measurement makes it
-  unnecessary: the same four steps are plain HTTP.
+  unnecessary: every one of those steps is plain HTTP.
 - **Rejected — rewrite the script in Python and run it from a stock image.** It removes the custom image but
   keeps a second component that needs the store credentials, and it cannot be idempotent about state the
   backend is already the authority on.
@@ -137,6 +185,9 @@ customer's infrastructure, never their data.
   and §4's CORS branch — whose policy this provisioning writes).
 - [ADR 0048](0048-provider-neutral-smtp-mail-transport.md) (the provider-neutral precedent this reads rather
   than reverses).
+- [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md) and
+  [uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
+  (the restore whose target-preparation this changes, and whose A5 gate moves with it).
 - [ADR 0062](0062-store-object-reclaim-is-a-durable-work-list.md) (the reclaim tombstone whose shape the
   per-tenant trap above is about).
 - [ADR 0063](0063-database-driven-tenant-ingress.md) (per-request signing, and the startup-observer lesson
