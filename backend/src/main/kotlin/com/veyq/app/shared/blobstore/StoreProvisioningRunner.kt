@@ -142,7 +142,10 @@ class StoreProvisioningRunner(
                         )
                         return StoreProvisioningState.FAILED
                     }
-                    log.warnf("Store provisioning attempt %d failed (%s); retrying in %s", attempt, e.message, delay)
+                    // `toString()`, not `message`: the commonest failure here is a ConnectException, whose
+                    // message is NULL — measured on a live stack, where every retry line read "failed (null)"
+                    // and named nothing an operator could act on.
+                    log.warnf("Store provisioning attempt %d failed (%s); retrying in %s", attempt, e.toString(), delay)
                     try {
                         TimeUnit.MILLISECONDS.sleep(delay.toMillis())
                     } catch (interrupted: InterruptedException) {

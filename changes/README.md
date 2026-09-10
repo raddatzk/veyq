@@ -238,6 +238,21 @@ letter** ("rotation and reuse detection stay semantically unchanged", not "no ch
 an absolute reading collides with the additive detail the decision itself requires, and the implementer then
 cannot tell a real invariant from a phrase that was never meant that strictly.
 
+**A fourth corollary, and the one that bit hardest: the demanded value sits behind a GATE.** The sixth tell is
+about a value whose *producer* nobody located; this is about one whose *reader* cannot reach it.
+`cr-store-provisioning-from-a-declared-type` specified that its e2e orchestrator wait on a new Server-Owner read
+*"reporting the succeeded state"* — an endpoint the same CR's contracts phase had, two pages earlier, given
+`@RolesAllowed(SERVER_OWNER)` and a `403 not_server_owner`. The instance doing the reading is a **throwaway,
+pre-setup** one that by construction has no Server Owner at all, so the wait could never have been written as
+specified, and that surfaced at implement time as a redesign. Both halves were in the CR, four phases apart, and
+nothing brought them together — the gate reads as infrastructure while the value reads as the decision. **So:
+whenever a phase says "wait on X", "poll X", or "assert X", write the line that reads X *including its auth*
+into the CR beside it.** `grep -n 'RolesAllowed\|@PermitAll' <the handler>` is one second, and it is the
+difference between a phase that is implementable and one redesigned at its most expensive moment. Note the
+family resemblance to the *fourth tell* (the CR located the code and not the gate that decides who arrives):
+that one is about a human in a degraded-access flow, this one about the harness — same missing locator, two
+different arrivals.
+
 **A third corollary, one altitude down: a decision that branches on a STATUS CODE is a locator too.** A CR can
 demand a behaviour the client has no vocabulary for. `cr-pairing-add-a-device-web` required adoption's `400`
 (this browser already holds a session) to reach a *different* message than its `401` (the grant is gone) —
@@ -757,6 +772,25 @@ AND the file's bytes differ from the snapshot** — and the snapshot is already 
 it. Its sibling holds too: when a bite asserts that an injection reddens **one** case and not another, compare
 against the *named* other case, never against "nothing else went red" — the injection legitimately reddens
 every test that depends on the same branch, and rejecting those turns a correct bite into a false alarm.
+
+### An exit code from a chain is not the command's exit code
+
+**§ *prove the injection LANDED* generalises past injections, and the ordinary commands are where it is
+skipped.** That rule guards a deliberate patch; nothing guards the build, pull or long-running step whose
+success the next phase simply assumes. `cr-store-provisioning-from-a-declared-type` reported two images "built"
+that did not exist: the `docker build`s had died on a broken `DOCKER_CONFIG`, and the shell's exit code came
+from a trailing `echo`. The repair for that then produced the mirror failure — a wait-loop whose bail-out
+predicate was `grep -qi 'error'` matched Gradle's `checkKotlinGradlePluginConfigurationErrors SKIPPED` and
+printed `BUILD DONE` over a build still running. Two shapes, one rule:
+
+- **Assert the ARTIFACT, never the chain.** `docker image inspect <tag>`, `test -f`, the row, the container
+  status — the thing the next step needs, asked for directly. An `&&`/`;` chain's status belongs to whatever
+  ran last, and that is usually the `echo` reporting success.
+- **A substring oracle over build output is a substring oracle.** Tool logs legitimately contain the word
+  `error` in task names, deprecation notices and URLs. Where a loop must detect failure, detect it as
+  *"the producing process is gone AND the artifact is absent"*, which is decidable and cannot be spelled wrong.
+
+The tell is a step whose success is reported by the same command that was supposed to do it.
 
 ### A new universal check meets every existing local one
 

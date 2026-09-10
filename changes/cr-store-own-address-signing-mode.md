@@ -24,9 +24,9 @@ rather than inside either of them. The default is unchanged, so no existing depl
 
 ## Context & constraints
 
-**This is genuinely separate work from
-[`cr-store-provisioning-from-a-declared-type`](cr-store-provisioning-from-a-declared-type.md), not a phase of
-it.** Neither depends on the other: the provisioner does not read the signing mode, and the signing mode does
+**This is genuinely separate work from `cr-store-provisioning-from-a-declared-type`, not a phase of it.**
+(That CR has since landed and been deleted — a CR is scaffolding, so this names it rather than linking to it;
+what it built is ADR 0067 Decisions 1-4, in the tree.) Neither depends on the other: the provisioner does not read the signing mode, and the signing mode does
 not need a provisioned store. They touch different files, and this one has a second caller (ADR 0064's chart)
 that the provisioning CR does not. `changes/README.md`: *genuinely independent work = separate CRs, not
 phases.* They may be built in either order.
