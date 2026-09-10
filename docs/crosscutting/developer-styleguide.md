@@ -129,6 +129,19 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   [Security Model → Cryptographic stance](security-model.md).)
 - **Migrations are portable + Flyway-owned.** Use only column types valid on **both H2 and MariaDB** (the
   common subset); Flyway is the single schema authority.
+- **An applied migration is immutable — including its comments.** Fix a mistake with a *new* migration; never
+  edit a file that has run anywhere. Flyway checksums the file's whole content, so a one-word comment edit is
+  indistinguishable from a schema change: the next `migrate` fails validation and the instance does not start.
+  This bites hardest where it looks safest — a docs sweep, a rename, a citation cleanup — because those are
+  exactly the passes that treat a comment as free. It is written here rather than at any one migration because
+  the temptation arrives from *outside* `db/migration/`, from a tool or a person editing every file that
+  matches a pattern.
+  What makes it true here rests on two framework **defaults** nothing in this tree restates, so they are named
+  once: `application.properties` sets `quarkus.flyway.migrate-at-start=true`, and validation is left at its
+  default on both layers — `quarkus.flyway.validate-on-migrate` (Quarkus 3.36.0: `true`) and Flyway's own
+  `validateOnMigrate` (12.0.0 `FlywayModel.defaults()`: `true`). Only `%dev` escapes, via
+  `quarkus.flyway.repair-at-start=true` — which is exactly why a broken checksum passes a developer's machine
+  unnoticed and stops a production start.
 
 ## 10. Testing
 
