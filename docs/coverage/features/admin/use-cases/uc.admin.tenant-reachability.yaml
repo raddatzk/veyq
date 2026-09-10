@@ -18,14 +18,22 @@ acceptanceCriteria:
       backend:
         integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsNeverProjected, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate]
       # No web surface: routing is a server-side projection with no client half to get wrong.
-  - id: presign-for-the-arriving-domain
-    # ADR 0013 §4 as amended by ADR 0063. The negative is the load-bearing one: the domain is resolved through
-    # the tenant table, so a spoofed Host signs against the default instead of an attacker-named origin.
-    text: A presigned blob URL is signed for the domain the request arrived on — resolved through the tenant table, never the Host header echoed back — so a second tenant's media is not signed for the first tenant's origin, and an unresolvable or spoofed Host falls back to the bootstrap default.
+  - id: presign-for-a-reachable-origin
+    # ADR 0013 §4 as amended by ADR 0063, and ADR 0067 Decision 5. The negative is the load-bearing one: the
+    # domain is resolved through the tenant table, so a spoofed Host signs against the default instead of an
+    # attacker-named origin — and in store-origin mode it cannot reach the URL at all.
+    #
+    # ONE criterion for all three signing modes, and not one per mode: they are the same property — a presigned
+    # URL is signed for an origin the client can actually reach — under different deployment shapes, and a
+    # per-mode row would carry these same refs split three ways, which is the tell that a criterion was written
+    # per *operation* instead of per *property* (changes/README.md § coverage). Renamed from
+    # `presign-for-the-arriving-domain` when the second and third modes landed: the arriving domain is what the
+    # DEFAULT mode signs for, and an id that states the default as the property is the same half-truth A5 had.
+    text: A presigned blob URL is signed for an origin the client can actually reach, decided by a named signing mode and never inferred — the arriving tenant's own domain by default (resolved through the tenant table, never the Host header echoed back, so a second tenant's media is not signed for the first tenant's origin and a spoofed Host falls back to the bootstrap default), the store's own configured origin where the store has one, and the backend's own endpoint where that is the only public address.
     coverage:
       backend:
-        unit: [S3BlobStorePresigningTest.twoTenantsSigningTheSameKeyGetTwoDifferentHosts, S3BlobStorePresigningTest.anUnresolvedRequestSignsAgainstTheBootstrapDefault, S3BlobStorePresigningTest.withNoPublicEndpointTheDomainIsIgnored]
-        integration: [MediaPresignDomainSliceTest.twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins, MediaPresignDomainSliceTest.aHostNoTenantClaimsFallsBackToTheDefault, SharePresignDomainSliceTest.aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn, SharePresignDomainSliceTest.aGuestOnAHostNoTenantClaimsGetsTheDefaultNotTheirOwnHeader]
+        unit: [S3BlobStorePresigningTest.twoTenantsSigningTheSameKeyGetTwoDifferentHosts, S3BlobStorePresigningTest.anUnresolvedRequestSignsAgainstTheBootstrapDefault, S3BlobStorePresigningTest.withNoPublicEndpointTheDomainIsIgnored, S3BlobStorePresigningTest.inStoreOriginModeTwoTenantsSignAgainstTheSameStoreHost, S3BlobStorePresigningTest.inStoreOriginModeNoDomainAtAllCanMoveTheSignedHost, S3BlobStorePresigningTest.theInternalEndpointModeIsSelectableByNameNotOnlyByBlankingThePublicOne, S3BlobStorePresigningTest.aBlankPublicEndpointIsTheInternalModeWhateverTheConfiguredModeSays, S3BlobStoreSigningModeConfigTest.eachModeBindsFromItsHyphenatedPropertyValue, S3BlobStoreSigningModeConfigTest.theConfiguredDefaultIsTodaysHostSwappingBehaviour, S3BlobStoreSigningModeConfigTest.settingTheModeToItsDefaultExplicitlyIsIndistinguishableFromNotSettingIt, S3BlobStoreSigningModeConfigTest.theProducerHandsTheConfiguredModeToTheStoreItBuilds]
+        integration: [MediaPresignDomainSliceTest.twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins, MediaPresignDomainSliceTest.aHostNoTenantClaimsFallsBackToTheDefault, SharePresignDomainSliceTest.aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn, SharePresignDomainSliceTest.aGuestOnAHostNoTenantClaimsGetsTheDefaultNotTheirOwnHeader, StoreOriginPresignSliceTest.aHostNoTenantClaimsCannotChooseTheOriginInStoreOriginMode, StoreOriginPresignSliceTest.twoTenantDomainsSignTheSameScopesUploadsForOneOrigin]
   - id: projector-no-ops-without-a-proxy
     # A1 — self-hostable by default: an instance with no reverse proxy in front of it must not need one. This
     # is also why the StartupEvent observer can never be a boot requirement.

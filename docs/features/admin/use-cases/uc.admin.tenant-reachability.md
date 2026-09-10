@@ -12,7 +12,9 @@
   the domain's DNS points at this host.
 - **Postconditions (success):** Every non-`SUSPENDED` tenant's domain routes to the app **and** to the blob
   path on that same origin; a suspended or revoked tenant's does not; and a presigned blob URL handed to a
-  client on that domain is signed **for that domain**, so the browser's fetch is same-origin.
+  client on that domain is signed for an origin **that client can actually reach**. Where the store is behind
+  this deployment's own proxy — the shape the main flow describes — that origin is the tenant's own domain and
+  the fetch is same-origin; A5 is where it is not.
 
 ## Main flow
 
@@ -32,6 +34,12 @@
 5. When that client asks for media, the server signs the presigned URL for **the resolved tenant's own
    registered domain**, read from the `tenant` table rather than echoed back from the request's header. The
    client fetches the bytes from the origin it is already on, so no CORS policy has to exist for it to work.
+   This is the signing mode's **default** and one of three (`veyq.blob-store.signing-mode`,
+   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5): it is the right
+   one exactly while the store is served on the tenant's own domain by this deployment's proxy, which is what
+   step 3 arranges. A5 carries the two shapes where it is not, and which mode is in force is **deployment
+   configuration, never inferred** — a tenant being created can change which domains exist, never how a
+   running instance signs.
 6. The same regenerate runs once at startup, before the instance serves traffic — so a wiped volume, a fresh
    proxy container or a file somebody edited is repaired without anyone noticing it was broken.
 
@@ -57,13 +65,30 @@ flowchart LR
   presigned URLs are signed against the configured default.
 - **A3 — the `Host`/`X-Forwarded-Host` is spoofed:** identical to A2 by construction, and that is the point.
   The signing domain is looked up in the `tenant` table, so a name no tenant claims can only fall back to the
-  default — it can never make the server sign a URL for an origin the caller chose.
+  default — it can never make the server sign a URL for an origin the caller chose. This holds in **every**
+  signing mode and gets stronger in A5's second shape, where the resolved domain does not reach the signed URL
+  at all: there is no value a header could carry that would move the origin.
 - **A4 — the projection is wiped, corrupted, or hand-edited:** nothing detects it. The next regenerate — any
   tenant change, or the next start — overwrites it in full, which is the whole reason it is not a patch.
-- **A5 — the object store is not behind this deployment's proxy** (external S3, or any store already reachable
-  at its own hostname): the tenant's domain plays no part in signing, because the store's origin has nothing to
-  do with it. Same-origin is the docker-compose branch of
-  [ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md), not a universal one.
+- **A5 — the object store is not behind this deployment's proxy:** the tenant's domain plays no part in
+  signing, because the store's origin has nothing to do with it. Same-origin is the docker-compose branch of
+  [ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md), not a universal one. This
+  splits in two, and the split is the whole of it — they differ in **which** origin is signed, not in whether
+  the domain is used:
+  - **The store is reachable at exactly the endpoint the backend uses** (an external S3): that endpoint is
+    signed. `signing-mode=internal-endpoint`, which is also where a blank `public-endpoint` lands, since
+    nothing else is left to sign against.
+  - **The store is reachable at an address of its own that the backend does *not* use** — Garage on its own
+    Ingress host ([ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)), where the backend
+    reaches it in-cluster; a tenant on their own bucket. The client-reachable address is signed **verbatim**,
+    the same one for every tenant. `signing-mode=store-origin`.
+
+  **This second shape needs a bucket CORS policy and the server cannot tell whether it has one.** It is
+  [ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)'s non-same-origin branch, so
+  the fetch is cross-origin by construction; a missing policy is a correctly signed URL, a healthy server, and
+  a browser that refuses. The policy is written by store provisioning
+  ([ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md)) for a store veyq brought up,
+  and by the operator for one it did not.
 - **E1 — the domain's DNS does not point at this host:** the routing description is correct and the domain
   still does not resolve. Outside the server's reach entirely, and the one failure that looks identical from
   the browser to a projection that never ran.
@@ -94,14 +119,16 @@ flowchart LR
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** Each space has its own web address, and it simply works: as soon as it is created — or moved to a
-different address — that address opens it, without anyone having to reconfigure the server. Photos and videos
-come from that same address too, which is what keeps them loading quickly and without browser warnings. If the
+different address — that address opens it, without anyone having to reconfigure the server. On the standard
+setup photos and videos come from that same address too, which is what keeps them loading quickly and without
+browser warnings; where the operator keeps storage on a separate address, they come from that one instead. If the
 operator takes a space offline, its address stops answering as well. None of this involves your content: the
 server routes traffic by address, and what is inside stays encrypted for it either way.
 
 **DE —** Jeder Bereich hat seine eigene Web-Adresse, und die funktioniert einfach: sobald er angelegt — oder auf
 eine andere Adresse umgezogen — ist, öffnet diese Adresse ihn, ohne dass jemand den Server umkonfigurieren muss.
-Fotos und Videos kommen von derselben Adresse, was sie schnell und ohne Browser-Warnungen laden lässt. Nimmt der
+Im Standard-Setup kommen Fotos und Videos von derselben Adresse, was sie schnell und ohne Browser-Warnungen
+laden lässt; liegt der Speicher beim Betreiber auf einer eigenen Adresse, kommen sie von dieser. Nimmt der
 Betreiber einen Bereich offline, antwortet auch seine Adresse nicht mehr. Mit deinen Inhalten hat das nichts zu
 tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für ihn so oder so verschlüsselt.
 
@@ -111,8 +138,11 @@ tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für
 - Decisions: [ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md) (the routing is generated
   from the database, never hand-edited — and why the wildcard shortcut was rejected),
   [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) §4 (same-origin blob transport,
-  amended by 0063 to per-request signing),
-  [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink, not built).
+  amended by 0063 to per-request signing, and the measured limits of the CORS policy A5's second shape needs),
+  [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5 (the signing mode
+  itself — one named mechanism, so a store on its own address is not a deployment's special case),
+  [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink, not built — and
+  one of that mode's two callers).
 - Related use-cases: [create-tenant](uc.admin.create-tenant.md) (where a domain comes from, and where it is
   moved), [suspend-tenant](uc.admin.suspend-tenant.md) (the transition whose routing withdrawal this carries).
 - Operations: [`infra/README.md`](../../../../infra/README.md) (the shared volume the projection is written to,
