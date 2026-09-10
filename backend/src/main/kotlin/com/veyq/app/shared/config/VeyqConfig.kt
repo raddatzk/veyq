@@ -270,6 +270,23 @@ interface VeyqConfig {
         /** Client-reachable URL used purely to SIGN presigned URLs (blank ⇒ endpoint). */
         fun publicEndpoint(): Optional<String>
 
+        /**
+         * **Which origin a presigned URL is signed for** (ADR 0067 Decision 5) — a named mode, not a shape
+         * inferred from the other members. The default is [SigningMode.TENANT_DOMAIN], which is bit-for-bit
+         * what every deployment did before this member existed: no instance moves, and the compose recipe
+         * needs no new line.
+         *
+         * **Never inferred**, and the tempting inference is a specific one: *"the public endpoint's host
+         * matches no tenant domain, so the store must be on its own origin"*. That reads the `tenant` table,
+         * which is runtime state — creating a tenant would silently change how a running instance signs.
+         *
+         * Read once at boot like everything else under `veyq.blob-store.*`: [com.veyq.app.shared.blobstore.S3BlobStore]
+         * caches one presigner per resolved endpoint and never invalidates it, so a runtime-settable mode
+         * would leave stale presigners behind with no code path that notices.
+         */
+        @WithDefault("tenant-domain")
+        fun signingMode(): SigningMode
+
         fun accessKey(): Optional<String>
 
         fun secretKey(): Optional<String>
@@ -337,6 +354,52 @@ interface VeyqConfig {
          * step, the bucket CORS policy.
          */
         GARAGE,
+    }
+
+    /**
+     * Which origin [com.veyq.app.shared.blobstore.S3BlobStore] signs a presigned URL for (ADR 0067 Decision 5),
+     * one constant per deployment shape ADR 0013 §4 already distinguishes. The three are **mutually exclusive and total** — `endpointFor` is a single `when`
+     * over them with no fallthrough and no second predicate — which is the whole reason this is an enum and not
+     * the boolean the change looks like. A boolean can name two of these; the third then hides in a blank
+     * `public-endpoint`, which is the shape that let `uc.admin.tenant-reachability` A5 be only half serveable.
+     *
+     * Property text is hyphenated (`veyq.blob-store.signing-mode=store-origin`), the same mapping [StoreType]
+     * uses; `S3BlobStoreSigningModeConfigTest` pins that binding rather than trusting it.
+     */
+    enum class SigningMode {
+        /**
+         * **The store is same-origin behind this deployment's own proxy** — the docker-compose path route
+         * (ADR 0063). `public-endpoint`'s **host** is swapped for the resolved tenant's own registered domain,
+         * so each tenant's browser fetches from the origin it is already on and no CORS policy has to exist.
+         * A request that resolved to no tenant signs against `public-endpoint` unchanged.
+         *
+         * The default, because it is what every deployment did before this member existed.
+         */
+        TENANT_DOMAIN,
+
+        /**
+         * **The store is reachable at an origin of its own, which is not the endpoint the backend uses.**
+         * `public-endpoint` is signed against **verbatim**: every tenant gets the same store host, because the
+         * store's origin has nothing to do with which tenant is asking. Two callers, neither a special case of
+         * the other (ADR 0067 Decision 5): ADR 0064's Kubernetes branch, where the backend reaches Garage at an
+         * in-cluster Service name while the browser reaches it at an Ingress host, and a SaaS tenant on their
+         * own bucket.
+         *
+         * **This mode needs a bucket CORS policy to work end to end** — it is ADR 0013 §4's non-same-origin
+         * branch. Signing is server-side and cannot tell whether that policy exists: a missing one is a green
+         * server and a browser-blocked fetch.
+         */
+        STORE_ORIGIN,
+
+        /**
+         * **The store is already publicly reachable at exactly the endpoint the backend uses** (an external S3,
+         * ADR 0013 §4's original other branch). The internal endpoint is signed against and a tenant domain
+         * plays no part — substituting one would sign for a bucket host that does not exist.
+         *
+         * A blank `public-endpoint` resolves here whatever this member says, because it is then the only
+         * answer left: there is no public endpoint either to swap into or to use verbatim.
+         */
+        INTERNAL_ENDPOINT,
     }
 
     interface Tasks {

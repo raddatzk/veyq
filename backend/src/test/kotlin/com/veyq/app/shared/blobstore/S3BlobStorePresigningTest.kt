@@ -1,5 +1,6 @@
 package com.veyq.app.shared.blobstore
 
+import com.veyq.app.shared.config.VeyqConfig.SigningMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
@@ -15,6 +16,12 @@ import java.net.URI
  * No Quarkus and no network: presigning is local HMAC over an endpoint, which is exactly the part under test
  * here. The complementary half — that the domain reaching this class is the **resolved tenant's own**, never a
  * `Host` header echoed back — is a request-path property and lives in [MediaPresignDomainSliceTest].
+ *
+ * **Three signing modes, and every case below names the one it is about** (ADR 0067 Decision 5). The
+ * [SigningMode.TENANT_DOMAIN] cases construct no mode at all, deliberately: they are the pre-existing ones,
+ * untouched, and their staying green *is* the claim that no deployment moved. Which mode the config default
+ * actually binds to is a different question and lives in [S3BlobStoreSigningModeConfigTest] — a constructor
+ * default cannot prove that one.
  */
 class S3BlobStorePresigningTest {
 
@@ -83,6 +90,93 @@ class S3BlobStorePresigningTest {
         assertEquals("a.example.com", URI.create(store.presignGet("$KEY/1", "a.example.com")).host)
         assertEquals("b.example.com", URI.create(store.presignPut("$KEY/1", "b.example.com")).host)
     }
+
+    @Test
+    fun inStoreOriginModeTwoTenantsSignAgainstTheSameStoreHost() {
+        // The mirror of [twoTenantsSigningTheSameKeyGetTwoDifferentHosts], and the defect this CR closes: a
+        // store on an origin of its own (ADR 0064's Ingress host, a tenant's own bucket) has one host for
+        // everybody, so a per-tenant swap signs for an origin that does not serve the bucket. Asserted on the
+        // host of each URL, not on "the two are equal" — two URLs signed for the same *wrong* host are equal too.
+        val store = storeOriginStore()
+
+        val a = URI.create(store.presignPut(KEY, "a.example.com"))
+        val b = URI.create(store.presignPut(KEY, "b.example.com"))
+
+        assertEquals("store.example.net", a.host)
+        assertEquals("store.example.net", b.host)
+    }
+
+    @Test
+    fun inStoreOriginModeNoDomainAtAllCanMoveTheSignedHost() {
+        // A3's security property one step stronger than [SigningMode.TENANT_DOMAIN] can state it. There, an
+        // unclaimed `Host` is stopped by resolving to null; here *no* value — a registered domain, a null, or
+        // something shaped like an attacker's guess that reached this method anyway — moves the origin, because
+        // the mode does not read the argument at all. Anchored on the signed host, never on "it did not throw":
+        // a signer that silently produced the internal endpoint would also not throw.
+        val store = storeOriginStore()
+        for (domain in listOf(null, "a.example.com", "attacker.evil.example", "store.example.net")) {
+            assertEquals("store.example.net", URI.create(store.presignPut(KEY, domain)).host, "domain=$domain")
+            assertEquals("store.example.net", URI.create(store.presignGet(KEY, domain)).host, "domain=$domain")
+        }
+    }
+
+    @Test
+    fun inStoreOriginModeTheSchemeAndPortOfTheStoreOriginAreKept() {
+        // `public-endpoint` verbatim means verbatim: a store Ingress on a non-default port is signed for that
+        // port. The sibling of [theSchemeAndPortOfTheConfiguredEndpointSurviveTheDomainSwap], which pins the
+        // same property for the mode that *does* rewrite the URL.
+        val store = S3BlobStore(
+            s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
+            internalEndpoint = "http://garage.veyq.svc.cluster.local:3900",
+            publicEndpoint = "https://store.example.net:8443", signingMode = SigningMode.STORE_ORIGIN,
+            credentials = CREDENTIALS, region = "us-east-1",
+        )
+        val url = URI.create(store.presignPut(KEY, "tenant.example.com"))
+        assertEquals("https", url.scheme)
+        assertEquals("store.example.net", url.host)
+        assertEquals(8443, url.port)
+    }
+
+    @Test
+    fun theInternalEndpointModeIsSelectableByNameNotOnlyByBlankingThePublicOne() {
+        // The third branch, said out loud. Before this CR it existed only as the *absence* of a public
+        // endpoint, which is why A5 could describe a case the code could not serve: an operator who wants the
+        // backend's own endpoint signed had exactly one way to ask for it, and it was to delete a different
+        // setting. Here a public endpoint IS configured and is deliberately not what gets signed — an
+        // assertion that is impossible to satisfy by accident from the blank branch.
+        val store = S3BlobStore(
+            s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
+            internalEndpoint = "https://s3.eu-central-1.amazonaws.com",
+            publicEndpoint = "https://ignored.example.net", signingMode = SigningMode.INTERNAL_ENDPOINT,
+            credentials = CREDENTIALS, region = "eu-central-1",
+        )
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignGet(KEY, null)).host)
+    }
+
+    @Test
+    fun aBlankPublicEndpointIsTheInternalModeWhateverTheConfiguredModeSays() {
+        // The one combination that cannot mean what it says: [SigningMode.STORE_ORIGIN] over a blank
+        // `public-endpoint` has no origin to sign verbatim. It resolves to the internal endpoint rather than to
+        // the empty string — which would be a `URI.create("")` deep inside the presigner builder, i.e. a boot
+        // that survives and an upload that dies. [withNoPublicEndpointTheDomainIsIgnored] pins the same
+        // normalisation from the default mode's side; this one pins that the mode cannot escape it.
+        val store = S3BlobStore(
+            s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
+            internalEndpoint = "https://s3.eu-central-1.amazonaws.com", publicEndpoint = "",
+            signingMode = SigningMode.STORE_ORIGIN, credentials = CREDENTIALS, region = "eu-central-1",
+        )
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
+    }
+
+    /** A store reached at an origin of its own, which is **not** the endpoint the backend uses — ADR 0064's
+     *  Kubernetes shape, where the browser gets an Ingress host and the backend a cluster-internal Service. */
+    private fun storeOriginStore() = S3BlobStore(
+        s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
+        internalEndpoint = "http://garage.veyq.svc.cluster.local:3900",
+        publicEndpoint = "https://store.example.net", signingMode = SigningMode.STORE_ORIGIN,
+        credentials = CREDENTIALS, region = "us-east-1",
+    )
 
     private fun sameOriginStore() = S3BlobStore(
         s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,

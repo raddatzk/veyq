@@ -1,6 +1,7 @@
 package com.veyq.app.shared.blobstore
 
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.config.VeyqConfig.SigningMode
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Produces
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
@@ -116,10 +117,20 @@ class InMemoryBlobStore : BlobStore {
  * tenant domains and never invalidated, because a domain that stops being a tenant's simply stops being asked
  * for.
  *
- * **A per-domain endpoint only exists where the store is same-origin behind our own proxy** — i.e. where
- * `public-endpoint` is configured. With it blank (ADR 0013 §4's other branch: external S3, or any store already
- * publicly reachable at its own hostname) the endpoint has nothing to do with a tenant's domain, so [domainFor]
- * ignores the domain entirely rather than inventing a bucket host that does not exist.
+ * **Which origin a URL is signed for is a named mode, not a shape read off the other settings**
+ * ([SigningMode], ADR 0067 Decision 5) — and there are three of them, because ADR 0013 §4 distinguishes three
+ * deployment shapes. [SigningMode.TENANT_DOMAIN] is the per-domain swap above, and the only one where a
+ * tenant's domain reaches the signed URL at all: it is same-origin *because* our own proxy serves the store on
+ * that domain. [SigningMode.STORE_ORIGIN] signs `public-endpoint` verbatim, for a store on an origin of its own
+ * that the backend does **not** reach at that address (ADR 0064's Kubernetes Ingress host; a tenant's own
+ * bucket) — every tenant then shares one signed host, and that branch needs a bucket CORS policy which signing
+ * cannot see the absence of. [SigningMode.INTERNAL_ENDPOINT] signs the endpoint the backend itself uses, for a
+ * store already publicly reachable there (external S3); a blank `public-endpoint` lands here whatever the mode
+ * says, since nothing else is left to sign against.
+ *
+ * In the latter two the domain is ignored **entirely** rather than substituted, which would invent a bucket host
+ * that does not exist. That is [endpointFor]'s doing and nobody else's — `TenantHostResolver.domainFor`, which
+ * this once named, is a different method in a different package that ignores nothing.
  */
 class S3BlobStore(
     private val s3: S3Client,
@@ -127,10 +138,26 @@ class S3BlobStore(
     private val presignTtlSeconds: Int,
     private val internalEndpoint: String,
     private val publicEndpoint: String,
+    // Mirrors `@WithDefault("tenant-domain")` on the config member, and is a second copy of it on purpose: it
+    // keeps every pre-existing construction site byte-identical, so "no existing deployment moves" is shown by
+    // untouched tests rather than by edited ones. Drift is caught from both sides — change the config default
+    // and `S3BlobStoreSigningModeConfigTest` reddens, change this one and the swap cases below do.
+    signingMode: SigningMode = SigningMode.TENANT_DOMAIN,
     private val credentials: StaticCredentialsProvider,
     private val region: String,
 ) : BlobStore {
     override val canPresign = true
+
+    /**
+     * The configured mode, with the one combination that cannot mean what it says folded in **once, here**,
+     * rather than as a second predicate inside [endpointFor]: a blank `public-endpoint` leaves nothing to swap
+     * a host into and nothing to sign verbatim, so it is [SigningMode.INTERNAL_ENDPOINT] and no other mode is
+     * expressible. Folding it in at construction is what keeps [endpointFor] a total `when` over three
+     * constants — and it reads config, never the `tenant` table, so it is fixed at boot like the connection it
+     * describes.
+     */
+    private val mode: SigningMode =
+        if (publicEndpoint.isBlank()) SigningMode.INTERNAL_ENDPOINT else signingMode
 
     private val presigners = ConcurrentHashMap<String, S3Presigner>()
 
@@ -167,23 +194,31 @@ class S3BlobStore(
         }
 
     /**
-     * The bootstrap default, or that same URL with its **host** swapped for the tenant's domain — scheme, port
-     * and path are kept, because they are properties of how this deployment exposes the store (`:443`, a path
-     * prefix behind Traefik) and not of which tenant is asking.
+     * The three signing behaviours, written out in one place and total over [SigningMode] — the `when` is
+     * exhaustive with no `else`, so a fourth mode cannot be added without deciding this.
      *
-     * A domain that cannot be substituted (a malformed configured endpoint) falls back to the default rather
-     * than throwing: signing for the wrong origin costs the client a CORS-blocked fetch, while throwing costs
-     * them the upload. The domain reaching here is a *registered* one from the `tenant` table, never a header
-     * value, so this is a robustness fallback and not a validation boundary — the validation already happened
-     * when the row was written, and `TenantHostResolver` is what makes a spoofed `Host` resolve to nothing.
+     * Only [SigningMode.TENANT_DOMAIN] lets [domain] reach the answer at all: `public-endpoint` with its
+     * **host** swapped, keeping scheme, port and path, because those are properties of how this deployment
+     * exposes the store (`:443`, a path prefix behind Traefik) and not of which tenant is asking. The other two
+     * ignore [domain] by construction — in [SigningMode.STORE_ORIGIN] the store's origin has nothing to do with
+     * which tenant is asking, so this is where "every tenant signs against the same host" is *implemented*
+     * rather than merely configured, and it is what makes a `Host` nobody claims unable to move the origin even
+     * one step further than [SigningMode.TENANT_DOMAIN] does.
+     *
+     * A domain that cannot be substituted (a malformed configured endpoint) falls back to `public-endpoint`
+     * rather than throwing: signing for the wrong origin costs the client a CORS-blocked fetch, while throwing
+     * costs them the upload. The domain reaching here is a *registered* one from the `tenant` table, never a
+     * header value, so this is a robustness fallback and not a validation boundary — the validation already
+     * happened when the row was written, and `TenantHostResolver` is what makes a spoofed `Host` resolve to
+     * nothing.
      */
-    private fun endpointFor(domain: String?): String {
-        val default = publicEndpoint.ifBlank { internalEndpoint }
-        if (domain == null || publicEndpoint.isBlank()) return default
-        return runCatching {
+    private fun endpointFor(domain: String?): String = when (mode) {
+        SigningMode.INTERNAL_ENDPOINT -> internalEndpoint
+        SigningMode.STORE_ORIGIN -> publicEndpoint
+        SigningMode.TENANT_DOMAIN -> if (domain == null) publicEndpoint else runCatching {
             val base = URI.create(publicEndpoint)
             URI(base.scheme, base.userInfo, domain, base.port, base.path, base.query, base.fragment).toString()
-        }.getOrDefault(default)
+        }.getOrDefault(publicEndpoint)
     }
 
     override fun stat(key: String): Long? =
@@ -211,8 +246,9 @@ class S3BlobStore(
 
 /**
  * Picks the store from config: a non-blank `veyq.blob-store.endpoint` ⇒ [S3BlobStore], otherwise the
- * [InMemoryBlobStore] (the default for dev/test). The public endpoint (client-reachable) is used for signing;
- * empty ⇒ sign against the internal endpoint (external S3 / any publicly reachable store, ADR 0013 §4).
+ * [InMemoryBlobStore] (the default for dev/test). The public endpoint (client-reachable) is what signing
+ * resolves against, and `veyq.blob-store.signing-mode` says how — empty public endpoint ⇒ sign against the
+ * internal endpoint (external S3 / any publicly reachable store, ADR 0013 §4).
  */
 @ApplicationScoped
 class BlobStoreProducer(
@@ -220,6 +256,7 @@ class BlobStoreProducer(
 ) {
     private val endpoint: Optional<String> = config.blobStore().endpoint()
     private val publicEndpoint: Optional<String> = config.blobStore().publicEndpoint()
+    private val signingMode: SigningMode = config.blobStore().signingMode()
     private val accessKey: Optional<String> = config.blobStore().accessKey()
     private val secretKey: Optional<String> = config.blobStore().secretKey()
     private val bucket: String = config.blobStore().bucket()
@@ -252,6 +289,7 @@ class BlobStoreProducer(
             presignTtlSeconds = presignTtlSeconds,
             internalEndpoint = endpointUrl,
             publicEndpoint = publicEndpoint.orElse(""),
+            signingMode = signingMode,
             credentials = creds,
             region = region,
         )
