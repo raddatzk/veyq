@@ -147,6 +147,18 @@ const en = {
     "unstamped": "This build carries no release stamp. It was never published — a local build, or a development run — so there is no version to name, and none is invented here.",
     "rollbackHint": "Pin this version in your deployment rather than a tag that moves: it is the one you can go back to, and going back means restoring the backup you took before the update."
   },
+  "store": {
+    "navTitle": "Object store",
+    "sub": "Whether this server has brought its object store from running to usable — media cannot be uploaded or shown until it has.",
+    "loading": "Reading the object store's state…",
+    "loadFailed": "Couldn’t read the object store's state.",
+    "notOwner": "Only the server owner can see the state of this instance's object store.",
+    "stateLabel": "Reported state",
+    "notAttempted": "This server does not set its object store up, and is not meant to. The store is configured as one you brought yourself, so its bucket, key and CORS rule are yours to manage — nothing is missing here.",
+    "inProgress": "Setting the object store up. This normally takes a few seconds after a start; uploads may fail until it finishes. Reload to see where it got to.",
+    "provisioned": "The object store is ready. Its bucket, access key and browser rule are in place, so media can be uploaded and shown.",
+    "failed": "The object store could not be set up, and this server has stopped trying. Media will not work until the store is reachable again and this server is restarted. The server log names the step that failed."
+  },
   "setup": {
     "title": "Set up this instance",
     "sub": "Create the first owner account. All keys are generated on this device — the server only ever sees ciphertext.",
@@ -356,6 +368,18 @@ const de: typeof en = {
     "running": "Laufendes Release",
     "unstamped": "Dieser Stand trägt keine Release-Kennung. Er wurde nie veröffentlicht — ein lokaler Build oder ein Entwicklungslauf —, es gibt also keine Version zu benennen, und hier wird keine erfunden.",
     "rollbackHint": "Trage diese Version fest in dein Deployment ein statt eines Tags, der sich bewegt: Sie ist die, zu der du zurückkehren kannst — und Zurückkehren heißt, das Backup einzuspielen, das du vor dem Update gemacht hast."
+  },
+  "store": {
+    "navTitle": "Objektspeicher",
+    "sub": "Ob dieser Server seinen Objektspeicher von laufend auf nutzbar gebracht hat — ohne das lassen sich keine Medien hochladen oder anzeigen.",
+    "loading": "Zustand des Objektspeichers wird gelesen…",
+    "loadFailed": "Der Zustand des Objektspeichers konnte nicht gelesen werden.",
+    "notOwner": "Nur der Server-Eigentümer sieht den Zustand des Objektspeichers dieser Instanz.",
+    "stateLabel": "Gemeldeter Zustand",
+    "notAttempted": "Dieser Server richtet seinen Objektspeicher nicht ein und soll das auch nicht. Der Speicher ist als einer konfiguriert, den du selbst mitbringst — Bucket, Zugriffsschlüssel und Browser-Regel liegen bei dir. Hier fehlt nichts.",
+    "inProgress": "Der Objektspeicher wird eingerichtet. Das dauert nach einem Start normalerweise ein paar Sekunden; bis dahin können Uploads fehlschlagen. Lade neu, um den Stand zu sehen.",
+    "provisioned": "Der Objektspeicher ist bereit. Bucket, Zugriffsschlüssel und Browser-Regel sind vorhanden, Medien lassen sich hochladen und anzeigen.",
+    "failed": "Der Objektspeicher konnte nicht eingerichtet werden, und dieser Server hat es aufgegeben. Medien funktionieren erst wieder, wenn der Speicher erreichbar ist und dieser Server neu gestartet wurde. Das Server-Log nennt den fehlgeschlagenen Schritt."
   },
   "setup": {
     "title": "Diese Instanz einrichten",

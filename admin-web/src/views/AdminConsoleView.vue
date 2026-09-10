@@ -20,6 +20,7 @@ import Message from 'primevue/message'
 import CreateTenantDialog from '../features/tenants/CreateTenantDialog.vue'
 import TenantDetailPanel from '../features/tenants/TenantDetailPanel.vue'
 import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
+import StoreProvisioningPanel from '../features/instance/StoreProvisioningPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
 import { probeServerRole, serverRole } from '../app/serverRole'
 import { logout } from '../features/auth/login'
@@ -30,7 +31,8 @@ const { t } = useI18n()
 const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
 const selected = ref<string | null>(null)
-const showRelease = ref(false)
+// One rubric at a time under `Server`, so a second boolean cannot leave two panels open at once.
+const serverPanel = ref<'release' | 'store' | null>(null)
 const loading = ref(true)
 
 const isOwner = computed(() => serverRole.verdict === 'owner')
@@ -112,8 +114,8 @@ async function signOut() {
           <li v-for="tn in tenants" :key="tn.tenantId">
             <button
               type="button"
-              :class="{ 'is-active': selected === tn.tenantId && !showRelease }"
-              @click="selected = tn.tenantId; showRelease = false"
+              :class="{ 'is-active': selected === tn.tenantId && !serverPanel }"
+              @click="selected = tn.tenantId; serverPanel = null"
             >
               <span class="pi pi-server" aria-hidden="true" /> {{ tn.name }}
             </button>
@@ -129,15 +131,21 @@ async function signOut() {
         <h2>{{ t('admin.server') }}</h2>
         <ul>
           <li>
-            <button type="button" :class="{ 'is-active': showRelease }" @click="showRelease = true">
+            <button type="button" :class="{ 'is-active': serverPanel === 'release' }" @click="serverPanel = 'release'">
               <span class="pi pi-tag" aria-hidden="true" /> {{ t('release.navTitle') }}
+            </button>
+          </li>
+          <li>
+            <button type="button" :class="{ 'is-active': serverPanel === 'store' }" @click="serverPanel = 'store'">
+              <span class="pi pi-database" aria-hidden="true" /> {{ t('store.navTitle') }}
             </button>
           </li>
         </ul>
       </nav>
 
       <section class="admin-shell__detail">
-        <ReleaseVersionPanel v-if="showRelease" />
+        <ReleaseVersionPanel v-if="serverPanel === 'release'" />
+        <StoreProvisioningPanel v-else-if="serverPanel === 'store'" />
         <TenantDetailPanel v-else-if="selected" :key="selected" :tenant-id="selected" />
       </section>
     </div>
