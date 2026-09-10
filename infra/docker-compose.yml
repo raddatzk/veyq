@@ -25,8 +25,10 @@ services:
       retries: 10
 
   # --- Bundled object store for media blobs (cr-0028/cr-0029, ADR 0013) — opt-in: `docker compose --profile s3
-  # up -d` (the garage-init sidecar below assigns the layout + creates the bucket/key automatically). The
-  # backend never streams bytes; it presigns short-TTL URLs the
+  # up -d`. That `up` leaves the store RUNNING BUT NOT USABLE: since ADR 0067 there is no init sidecar, and the
+  # first backend start assigns the layout and creates the bucket/key/grant/CORS itself. Deliberately the same
+  # shape as production, so the FRESH provisioning path runs on every clean dev cycle rather than only in a unit
+  # test. The backend never streams bytes; it presigns short-TTL URLs the
   # client PUT/GETs directly. **Garage** (S3-compatible, AGPL, built for self-hosting — replaces the archived
   # MinIO). Exposed on :19000 for the backend e2e (`VEYQ_S3_E2E=1`, BlobBatchE2ETest); Traefik path-routes the
   # bucket so the web app reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4). Throwaway creds only.
@@ -58,32 +60,6 @@ services:
       - "traefik.http.routers.veyq-blobs.entrypoints=web"
       - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
       - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
-
-  # One-shot init: assigns the single-node layout and creates the `veyq` bucket + deterministic dev key, so a
-  # fresh `--profile s3 up` (or a `down -v` wipe) is usable without a manual step. Idempotent — a no-op once the
-  # bucket exists. Its own scratch-image parent has no shell, so this runs a tiny Alpine+garage-CLI image
-  # (garage-init.Dockerfile) that drives the node over RPC; exits 0 when done (restart: "no").
-  garage-init:
-    build:
-      context: .
-      dockerfile: garage-init.Dockerfile
-    image: veyq-garage-init:v2.0.0
-    container_name: veyq-garage-init
-    profiles: ["s3"]
-    restart: "no"
-    depends_on:
-      - garage
-    environment:
-      # The CLI authenticates its RPC connection with the same secret the node uses — it is no longer in the
-      # config file, so the sidecar needs it here too.
-      GARAGE_RPC_SECRET: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-    volumes:
-      - "./garage.toml:/etc/garage.toml:ro"
-      - "./garage-init.sh:/garage-init.sh:ro"
-      # Read-only: the CLI needs the node's `node_key` from the metadata dir to authenticate its RPC
-      # connection. All actual writes happen on the garage node over RPC, so ro here is enough.
-      - "veyq-garage-meta:/var/lib/garage/meta:ro"
-    entrypoint: ["/bin/sh", "/garage-init.sh"]
 
   # Reverse proxy so the bundled store is reachable same-origin by the web app (ADR 0013 §4). Routes only the
   # bucket path (see the garage labels); the backend + web are added behind it in a fuller deployment.

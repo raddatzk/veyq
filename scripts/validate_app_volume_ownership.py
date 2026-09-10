@@ -60,10 +60,13 @@ INFRA = ROOT / "infra"
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 USER = re.compile(r"^\s*USER\s+(\S+)\s*$", re.IGNORECASE)
 
-# Same two independent exclusions the sibling guard uses: the store bootstrapper's image is
-# `veyq-garage-init:v2.0.0`, which a naive `*veyq*` match would enrol as the application, and the admin
-# surface's is `veyq-admin:<tag>` — a different deployable that mounts nothing.
-NOT_THE_APP = {"garage-init", "admin"}
+# The same exclusion the sibling guard uses, and it is still live: the admin surface's image is
+# `veyq-admin:<tag>`, a DIFFERENT deployable that mounts nothing, which a naive `*veyq*` match would enrol as
+# the application. Excluded by NAME as well as by the image regex below, because two independent exclusions
+# cost nothing and a rename of one should not silently enrol a second deployable as the app.
+# (The store bootstrapper used to need a member here too. ADR 0067 moved its work into the backend and deleted
+# the service from both compose files, so the member became genuinely dead and went with it.)
+NOT_THE_APP = {"admin"}
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 
 errors: list[str] = []

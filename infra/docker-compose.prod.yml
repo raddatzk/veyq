@@ -65,27 +65,6 @@ services:
       - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
       - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
 
-  # One-shot, idempotent: layout + bucket + key. The store's CONFIGURATION is not durable state (ADR 0056 §4 of
-  # Context), which is exactly why a restore target needs no surviving store identity — this recreates it.
-  # NOTE its one limit: garage-init.sh hardcodes `layout apply --version 1`, so it initialises a FRESH node.
-  garage-init:
-    build:
-      context: .
-      dockerfile: garage-init.Dockerfile
-    image: veyq-garage-init:v2.0.0
-    restart: "no"
-    depends_on:
-      - garage
-    environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/.env (64 hex chars)}
-      VEYQ_S3_ACCESS_KEY: ${VEYQ_S3_ACCESS_KEY:?set VEYQ_S3_ACCESS_KEY in infra/.env}
-      VEYQ_S3_SECRET_KEY: ${VEYQ_S3_SECRET_KEY:?set VEYQ_S3_SECRET_KEY in infra/.env}
-    volumes:
-      - "./garage.toml:/etc/garage.toml:ro"
-      - "./garage-init.sh:/garage-init.sh:ro"
-      - "veyq-garage-meta:/var/lib/garage/meta:ro"
-    entrypoint: ["/bin/sh", "/garage-init.sh"]
-
   app:
     image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq:1.0}
     restart: unless-stopped
@@ -107,6 +86,13 @@ services:
       VEYQ_BLOB_STORE_PUBLIC_ENDPOINT: https://${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
       VEYQ_BLOB_STORE_ACCESS_KEY: ${VEYQ_S3_ACCESS_KEY:?set VEYQ_S3_ACCESS_KEY in infra/.env}
       VEYQ_BLOB_STORE_SECRET_KEY: ${VEYQ_S3_SECRET_KEY:?set VEYQ_S3_SECRET_KEY in infra/.env}
+      # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) — layout, bucket, key, grant
+      # and CORS policy — which is why this recipe has no init sidecar and builds nothing. It runs in the
+      # background and can never fail the boot; `GET /api/instance/store-provisioning` reports how it went.
+      # The admin plane is a DIFFERENT port from the S3 one above, and is deliberately not published.
+      VEYQ_BLOB_STORE_TYPE: garage
+      VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT: http://garage:3903
+      VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:?set GARAGE_ADMIN_TOKEN in infra/.env}
       # Leg (c) of the backup, on the volume below. An ABSOLUTE path outside /work on purpose: /work holds
       # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
       # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.

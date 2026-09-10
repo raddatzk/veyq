@@ -22,7 +22,14 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      to the same destination, and that destination is neither `/work` (it holds `quarkus-app/`; a mount there
      freezes an upgrade — see the Dockerfile's own comment) nor under `/var/lib/veyq` (the config-secret
      volume). Plus: every veyq image tag written down under `infra/` matches a tag the pipeline emits.
-  5. **The production project name is a property of the compose file, not a rule stated in prose.**
+  5. **Every service in the release recipe runs an image the operator can PULL.** No service in
+     `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
+     `.github/workflows/container.yml` actually publishes — the set is read out of that workflow's build
+     matrix, never listed here (§ *a guard derives its anchor set from the code*). A recipe that builds is a
+     recipe only `docker compose` can deploy: Compose hides it by building on the operator's host, and
+     [ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)'s Helm chart cannot, because a
+     chart has nothing to build with.
+  6. **The production project name is a property of the compose file, not a rule stated in prose.**
      `infra/docker-compose.prod.yml` declares a top-level `name:`, and no file of durable state instructs
      `-p <that name>` / `--project-name <that name>`. Compose derives a project from the compose file's
      *directory* when the file names none, and both compose files sit in `infra/` — so a production procedure
@@ -38,7 +45,15 @@ the operator to pin `VEYQ_IMAGE=ghcr.io/<owner>/veyq:1.0.0`, a three-part shape 
 file had been deleted by a "cleanup" commit that also took `Dockerfile` and `scripts/run_web_e2e.py`; those two
 were recovered and this one was not, and nothing noticed for the two months in which no container run happened.
 
-Assertion 5 was bought separately and just as concretely (2026-08-17). `scripts/instance_backup.py` builds
+Assertion 5 was bought by a live defect too, and by the cheapest kind — its first run on the untouched tree
+named the offender (2026-09-10). The release recipe carried a one-shot init sidecar built from a local
+`Dockerfile` into an image no workflow publishes, which existed only because the official Garage image is
+`scratch`-based and has no shell for its init script to run in. That was invisible under Compose and fatal
+under Helm, and it is what [ADR 0067](../docs/decisions/0067-store-provisioning-from-a-declared-type.md)
+removed by moving the bring-up into the backend. It was, measured at that moment, the only `build:` stanza in
+either compose file.
+
+Assertion 6 was bought separately and just as concretely (2026-08-17). `scripts/instance_backup.py` builds
 `docker compose -f <file> exec` with **no `-p`**, and no compose file declared a `name:`, so the documented
 production capture resolved project `infra`. Measured on a host running the dev stack, that does not fail:
 `docker compose -f infra/docker-compose.prod.yml ps` listed all four *dev* containers as its own and the
@@ -62,7 +77,14 @@ manifest's `app.version` (its observable is a capture run against a live instanc
 for written-down image tags covers `infra/` only: `docs/` quotes the *old, wrong* shapes on purpose, as the
 defect being described.
 
-Assertion 5 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
+**Assertion 5's own limit, and it is deliberate: it is scoped to the RELEASE RECIPE and says nothing about
+`infra/docker-compose.yml`.** A chart deploys the recipe, not the dev stack, and a dev-only `build:` is a
+legitimate thing to want — so forbidding one from a guard whose subject is *releases* would be this guard
+overreaching into a file it has no argument about. It also reads the compose file rather than a registry, so
+"the workflow publishes this name" means the matrix says so, never that a push ever succeeded (see the
+no-remote limit above).
+
+Assertion 6 adds two limits of its own, and the first is the one that matters. **It reads the file, so it says
 nothing about the project the operator actually brought their stack up under.** `docker compose -p something-else
 -f infra/docker-compose.prod.yml up -d` overrides the declared name, and so does `COMPOSE_PROJECT_NAME` — a
 green here means the *procedure* can no longer be wrong by default, never that a given host is right. Only a
@@ -122,8 +144,9 @@ FORBIDDEN_DESTS = {
 }
 
 # A veyq image reference with a literal tag: `…/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq`
-# must be `:` so `veyq-garage-init:v2.0.0` is not claimed as the app image (the same discrimination
-# validate_config_secret_persistence.py's APP_IMAGE makes, and for the same reason).
+# must be `:`, so a `veyq-<something>:<tag>` sibling is not claimed as the app image — live today for
+# `veyq-admin:<tag>`, which the release recipe names beside the app and which is a DIFFERENT published image
+# (the same discrimination validate_config_secret_persistence.py's APP_IMAGE makes, and for the same reason).
 IMAGE_TAG = re.compile(r"(?:^|[\s/=\"'`])veyq:([^\s\"'`,;)}\]]+)")
 
 # Anything that would make the version a function of the network rather than of the tree.
@@ -413,9 +436,71 @@ for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
                 f"operator pins and rolls back to (ADR 0056 §6)."
             )
 
-# ---- 5. the production project is declared by the file, and no state instructs the flag it replaced ---------
+# ---- 5. the release recipe runs only images an operator can PULL ---------------------------------------------
 
 PROD_COMPOSE = INFRA / "docker-compose.prod.yml"
+
+# A veyq-namespaced image name where an image reference would carry one: at the start of the value, or after a
+# registry/owner `/`, and ending at the tag separator or the value's end. Deliberately NOT anchored on the whole
+# value — the recipe's veyq images arrive as `${VEYQ_IMAGE:?…, e.g. ghcr.io/<owner>/veyq:1.0}`, so the only
+# place the NAME appears is inside that error message, and a whole-value match would see none of them.
+VEYQ_IMAGE_NAME = re.compile(r"(?:^|[\s/])(veyq(?:-[a-z0-9]+)*)(?=[:@\s}]|$)")
+
+
+def published_images(workflow_text: str) -> set[str]:
+    """The image names a publish actually emits, read out of the build matrix rather than listed here.
+
+    Listing them would make this assertion only as complete as the day it was written: a third published image
+    would be a name nobody asserted rather than a broken assertion (§ *a guard derives its anchor set from the
+    code*, changes/README.md).
+    """
+    doc = yaml.safe_load(workflow_text) or {}
+    matrix = ((doc.get("jobs") or {}).get(BUILD_JOB) or {}).get("strategy", {}).get("matrix", {})
+    return {str(i) for i in (matrix.get("image") or [])}
+
+
+if not PROD_COMPOSE.is_file():
+    fail(f"`{PROD_COMPOSE.relative_to(ROOT)}` is missing — there is no release recipe to check")
+elif not WORKFLOW.is_file():
+    fail(f"`{WORKFLOW.relative_to(ROOT)}` is missing — there is nothing to derive the published image set from")
+else:
+    publishable = published_images(WORKFLOW.read_text())
+    if not publishable:
+        fail(
+            f"{WORKFLOW.relative_to(ROOT)}'s `{BUILD_JOB}` job declares no `strategy.matrix.image` — this "
+            f"assertion would then accept every image name and report green while checking NOTHING"
+        )
+    try:
+        recipe_doc = yaml.safe_load(PROD_COMPOSE.read_text()) or {}
+    except yaml.YAMLError as e:  # pragma: no cover - reported by assertion 6 too
+        recipe_doc = {}
+        fail(f"{PROD_COMPOSE.relative_to(ROOT)} is not readable YAML: {e}")
+
+    checked_services = 0
+    for name, service in sorted((recipe_doc.get("services") or {}).items()):
+        if not isinstance(service, dict):
+            continue
+        checked_services += 1
+        if "build" in service:
+            fail(
+                f"{PROD_COMPOSE.relative_to(ROOT)}: service `{name}` carries a `build:` stanza. The release "
+                f"recipe must BUILD NOTHING — Compose hides this by building on the operator's host, and a "
+                f"Helm chart (ADR 0064) cannot build at all, so the service simply has nothing to pull. "
+                f"Publish the image, or move the work into something that is already published."
+            )
+        for veyq_name in VEYQ_IMAGE_NAME.findall(str(service.get("image", ""))):
+            if publishable and veyq_name not in publishable:
+                fail(
+                    f"{PROD_COMPOSE.relative_to(ROOT)}: service `{name}` names veyq image `{veyq_name}`, which "
+                    f"{WORKFLOW.relative_to(ROOT)} does not publish (it publishes "
+                    f"{', '.join(sorted(publishable))}). An operator cannot pull it and a chart cannot build it."
+                )
+    if checked_services == 0:
+        # A recipe with no services and a recipe whose services are all fine report the same green.
+        fail(f"{PROD_COMPOSE.relative_to(ROOT)} declares no services — this assertion checked NOTHING")
+
+
+# ---- 6. the production project is declared by the file, and no state instructs the flag it replaced ---------
 # The flow surfaces. They record what was decided and retired, so a retired rule's name necessarily survives
 # there — excluding them is the repository's own state/flow line, not a list of files that happened to be red.
 FLOW_PREFIXES = ("changes/", "docs/inbox.md")

@@ -20,6 +20,11 @@
            there is no client-facing directTransport flag left to soft-gate on.
            Endpoint + creds point at the bundled compose Garage; these are the documented
            throwaway dev creds (infra/README.md, garage.toml) — not secrets.
+           TYPE + GARAGE_ADMIN_* are what let this backend bring that store from RUNNING to USABLE itself
+           (ADR 0067): a `--profile s3 up` no longer seeds the bucket, so the first start after a fresh
+           `down -v` assigns the layout and creates the bucket, key, grant and CORS policy. The admin API is a
+           different port from the S3 one and is published as 19003:3903 in infra/docker-compose.yml. It runs in
+           the background and can never fail the boot; GET /api/instance/store-provisioning reports how it went.
            PUBLIC_ENDPOINT is the browser origin the presigned PUT/GET URLs are signed for: it MUST equal the host
            in the address bar (SigV4 signs host+path; the Vite dev server proxies /veyq same-origin to the store).
            It is developer-specific — set it to whatever origin you browse. Here: veyq.localhost:8081 (the *.localhost
@@ -30,6 +35,9 @@
           <entry key="VEYQ_BLOB_STORE_ACCESS_KEY" value="GK0123456789abcdef01234567" />
           <entry key="VEYQ_BLOB_STORE_SECRET_KEY" value="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" />
           <entry key="VEYQ_BLOB_STORE_PUBLIC_ENDPOINT" value="http://veyq.localhost:8081" />
+          <entry key="VEYQ_BLOB_STORE_TYPE" value="garage" />
+          <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT" value="http://localhost:19003" />
+          <entry key="VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN" value="veyq-dev-admin-token" />
           <entry key="VEYQ_TENANT_INVITE_DEV_FILE" value="$PROJECT_DIR$/backend/build/dev-invites.jsonl" />
         </map>
       </option>

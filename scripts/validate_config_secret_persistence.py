@@ -63,12 +63,15 @@ WORKDIR = re.compile(r"^\s*WORKDIR\s+(\S+)\s*$", re.IGNORECASE)
 # @WithDefault in the file" — there are dozens, and matching the marker is not the same as matching a paraphrase.
 KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFile\s*\(\s*\)')
 
-# The init sidecar's image is `veyq-garage-init:v2.0.0`, which a naive `image: *veyq*` would claim as the app.
-# Excluded by NAME as well as by the image regex below, because two independent exclusions cost nothing and a
-# rename of one of them should not silently enrol a store bootstrapper as the application.
-NOT_THE_APP = {"garage-init"}
-# `ghcr.io/<owner>/veyq:<tag>` or a bare `veyq:<tag>` — and deliberately NOT `veyq-garage-init:…`, which is why
-# the character after `veyq` has to be `:` or the end of the string.
+# Nothing needs excluding by name here any more. The one member this set ever held was the store bootstrapper,
+# whose image a naive `image: *veyq*` would have claimed as the app; ADR 0067 moved that work into the backend
+# and deleted the service from both compose files, so the member became genuinely dead. The set stays as the
+# seam: a future veyq-namespaced deployable that is not the app belongs in it, and the empty set is a statement
+# rather than an oversight.
+NOT_THE_APP: set[str] = set()
+# `ghcr.io/<owner>/veyq:<tag>` or a bare `veyq:<tag>`. The character after `veyq` has to be `:` or the end of
+# the string, so a `veyq-<something>:<tag>` sibling is NOT claimed as the app — live today for the admin
+# surface's `veyq-admin:<tag>`, which the release recipe names beside the app.
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 
 errors: list[str] = []

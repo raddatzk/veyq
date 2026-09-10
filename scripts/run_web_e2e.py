@@ -2,7 +2,9 @@
 """Run web's `VEYQ_E2E=1` suites against a live backend + a real object store, one file at a time.
 
 **What it does.** Brings up the bundled stack from `infra/docker-compose.yml` (`--profile s3 --profile mail`:
-MariaDB, Garage, the init sidecar, Traefik, Mailpit), then per e2e file: gives it its OWN database, boots a fresh
+MariaDB, Garage, Traefik, Mailpit) and — because ADR 0067 made the backend the only thing that can turn a
+running store into a usable one — boots one throwaway backend whose sole job is to provision it. Then per e2e
+file: gives it its OWN database, boots a fresh
 fast-jar under `-Dquarkus.profile=e2e` against that database, waits for the readiness probe (`GET /api/setup` —
 see the comment above `READY_URL`, and note this summary once said `/q/health/ready`, an endpoint this backend has
 never served), runs exactly that one file, sweeps that file's database for leaked plaintext, and tears the boot
@@ -35,9 +37,11 @@ URL. One MariaDB with a fresh `veyq_e2e_<n>` database per file is a fresh instan
 care about — at one container, and with `ci.yml`'s "build the jar once" intact.
 
 **Why the store cannot be a GH Actions service container.** Garage bind-mounts `/etc/garage.toml` from the repo
-(service containers start before checkout), its official image is shell-less `scratch`, its bootstrap is a
-mandatory multi-step sequence, and the init sidecar is built locally from the repo. So the stack comes up through
-compose, which every self-hoster already has — nothing here depends on anything the bundled stack does not ship.
+(service containers start before checkout) and its bootstrap is a mandatory multi-step sequence a service
+container has nowhere to run. So the stack comes up through compose, which every self-hoster already has —
+nothing here depends on anything the bundled stack does not ship. (That bootstrap used to need a locally built
+init image too, which was a third reason and the strongest; ADR 0067 removed it, and the remaining two still
+hold on their own.)
 
 **Not a `validate_*` guard.** It needs Docker and a built jar, so it cannot join the buildless trust-chain glob;
 CI calls it directly. The one part of its contract that IS decidable without either — that it cannot report green
@@ -130,7 +134,15 @@ TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
 DB_ROOT_PASSWORD = os.environ.get("VEYQ_DB_ROOT_PASSWORD", "change-me-root")
 DB_APP_USER = "veyq"
 
-GARAGE_INIT_CONTAINER = "veyq-garage-init"
+# The bundled store's ADMIN plane (a different port from the S3 one), published local-only by
+# infra/docker-compose.yml. This script READS it to confirm the backend provisioned the store; it never writes
+# through it. Documented throwaway dev token, not a secret.
+GARAGE_ADMIN = os.environ.get("VEYQ_GARAGE_ADMIN", "http://127.0.0.1:19003")
+GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-token")
+# The bucket `%e2e` boots with, and the key alias the backend imports it under (GarageStoreProvisioner.KEY_ALIAS).
+# `fresh_bucket` grants against that exact alias, so the name is a contract between this file and that class.
+STORE_BUCKET = "veyq"
+STORE_KEY_ALIAS = "veyq-app"
 
 # The throwaway mailbox, published by `infra/docker-compose.yml`'s `mail` profile. It is EXPORTED to each suite as
 # `VEYQ_MAILPIT` rather than left to the suite's own default: mail is no longer one feature's substrate — a member
@@ -189,15 +201,18 @@ def run(cmd: list[str], **kw: object) -> subprocess.CompletedProcess:
     return subprocess.run(cmd, check=True, **kw)  # type: ignore[arg-type]
 
 
-def compose_up() -> None:
-    """Bring up the bundled stack, then wait on EVERY half it provides.
+def compose_up(workdir: Path) -> None:
+    """Bring up the bundled stack, then make every half it provides actually USABLE.
 
-    The wait is per-service on purpose: a single `up --wait` on the whole project exits 1, because `garage-init`
-    is a one-shot sidecar that exits even on success and `--wait` scores any exit as failure. So step one starts
-    everything, then each long-lived dependency is waited on by name — mariadb's healthcheck (Flyway needs it
-    accepting connections), mailpit's (`/mailpit readyz`, declared by the image rather than by our compose file),
-    and the init sidecar's exit 0, which is what makes the BUCKET ready rather than just the store process.
-    Skipping the last one is how `media.e2e` fails in the PUT on a cold start.
+    The wait is per-service rather than one `up --wait` on the whole project: `--wait` scores any container exit
+    as a failure, so a project holding a one-shot would fail on its clean exit. There is no one-shot left here —
+    ADR 0067 deleted the init sidecar — but the habit is worth keeping, because each dependency is then waited on
+    for its own reason: mariadb's healthcheck (Flyway needs it accepting connections) and mailpit's
+    (`/mailpit readyz`, declared by the image rather than by our compose file).
+
+    **Then the store, which is the half that changed.** A `--profile s3 up` now leaves Garage *running but not
+    usable*: no layout, no bucket, no key, no grant. Nothing but a backend can close that gap any more, so this
+    ends by booting one whose only job is to do it ([provision_store]).
 
     Mailpit is unconditional, not a flag: every suite's tenant is now pointed at it (`e2eBootstrap.birthInstance`)
     because a member invite travels by mail only (ADR 0055 §2). Gating that behind an argument would mean gating
@@ -212,8 +227,8 @@ def compose_up() -> None:
     run(COMPOSE + ["up", "-d", "--wait", "mariadb"])
     log("waiting for mailpit to report healthy")
     run(COMPOSE + ["up", "-d", "--wait", "mailpit"])
-    wait_garage_init()
     wait_mailbox()
+    provision_store(workdir)
 
 
 def wait_mailbox(timeout: int = 30) -> None:
@@ -246,27 +261,85 @@ def wait_mailbox(timeout: int = 30) -> None:
     )
 
 
-def wait_garage_init(timeout: int = 120) -> None:
-    """Wait for the one-shot init sidecar to have exited, and insist it exited 0."""
-    log(f"waiting for {GARAGE_INIT_CONTAINER} to finish bucket init")
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        probe = subprocess.run(
-            ["docker", "inspect", "-f", "{{.State.Status}}|{{.State.ExitCode}}", GARAGE_INIT_CONTAINER],
-            capture_output=True, text=True,
-        )
-        if probe.returncode == 0:
-            status, _, code = probe.stdout.strip().partition("|")
-            if status == "exited":
-                if code != "0":
-                    raise SystemExit(
-                        f"[e2e] STORE INIT FAILED: {GARAGE_INIT_CONTAINER} exited {code}. "
-                        f"Inspect it with: docker logs {GARAGE_INIT_CONTAINER}"
-                    )
-                log("store bucket is initialized")
+def store_is_provisioned() -> bool:
+    """Is the store usable — the bucket present, with the key alias [fresh_bucket] grants against on it?
+
+    This is an OBSERVATION of the provisioner's output, never a second copy of it. That distinction is the whole
+    design: re-implementing layout/bucket/key/grant here through the `garage()` helper is cheaper to write and
+    puts a drifting second bring-up in the harness, after which a green e2e run would stop meaning the
+    provisioner works (ADR 0067 § the orchestrator's own problem). So the harness asserts the outcome and
+    produces none of it.
+
+    It also proves more than the Server-Owner read could. That read is `@RolesAllowed(SERVER_OWNER)` and the
+    throwaway instance below has no owner at all — it exists precisely to be pre-setup — so the read is not
+    reachable from here. Reading the store directly is the better oracle anyway: a state field saying
+    PROVISIONED while the bucket was not actually usable is exactly the failure this needs to catch.
+    """
+    request = urllib.request.Request(
+        f"{GARAGE_ADMIN}/v2/GetBucketInfo?globalAlias={STORE_BUCKET}",
+        headers={"Authorization": f"Bearer {GARAGE_ADMIN_TOKEN}"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=5) as r:
+            info = json.loads(r.read().decode())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return False  # the ordinary state of a cold store — not an error
+        raise SystemExit(f"[e2e] STORE ADMIN API REFUSED: {GARAGE_ADMIN} answered {e.code} for {STORE_BUCKET}")
+    except (urllib.error.URLError, OSError) as e:
+        raise SystemExit(f"[e2e] STORE ADMIN API UNREACHABLE at {GARAGE_ADMIN}: {e}") from e
+    return any(k.get("name") == STORE_KEY_ALIAS and (k.get("permissions") or {}).get("owner")
+               for k in info.get("keys") or [])
+
+
+def provision_store(workdir: Path, timeout: int = 120) -> None:
+    """One throwaway backend boot whose ONLY job is to make the store usable.
+
+    ADR 0067 moved the bring-up into the backend and deleted the init sidecar from every stack, which costs this
+    script the one thing it depended on: `run_group` calls [fresh_bucket] BEFORE its first `boot(...)`, and that
+    grants against the `veyq-app` alias only a provisioner now mints. So a backend has to run first.
+
+    It costs seconds and a scratch database — this script already creates one per suite — and it buys the thing
+    the sidecar never gave: **every e2e run exercises the real provisioner**, on a real Garage, from cold. The
+    fresh path stops being something only a unit test sees.
+
+    The instance is genuinely throwaway: its own database, its own KEK file, killed as soon as the store is up.
+    Nothing downstream shares its state, and no suite's `setupRequired === true` is affected, because each suite
+    still births its own instance on its own database.
+    """
+    # Deliberately NOT gated on `store_is_provisioned()` being false. Skipping the boot on a warm store is the
+    # obvious saving and it costs the whole point: the reason this is a backend boot rather than four `garage`
+    # commands is that **every** run then exercises the real provisioner. A short-circuit would mean the only
+    # runs that prove anything are the ones nobody does twice — and it would also stop proving per-step
+    # idempotence, which is what a second run against a provisioned store IS.
+    log("booting a throwaway backend to provision the store")
+    database = "veyq_e2e_store_init"
+    secret_file = workdir / "config-secret-store-init.key"
+    boot_log = workdir / "backend-store-init.log"
+    fresh_database(database)
+    proc = boot(database, secret_file, boot_log)
+    try:
+        not_ready = wait_ready(time.time() + BOOT_SECS, proc)
+        if not_ready:
+            tail(boot_log)
+            raise SystemExit(f"[e2e] STORE BRING-UP BOOT FAILED: {not_ready} (boot log above)")
+        # Provisioning is deliberately asynchronous and never gates the boot (ADR 0067 Decision 3), so a ready
+        # backend is not yet a usable store. Poll the store itself.
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            if store_is_provisioned():
+                log(f"store provisioned by the backend: bucket `{STORE_BUCKET}` owned by `{STORE_KEY_ALIAS}`")
                 return
-        time.sleep(1)
-    raise SystemExit(f"[e2e] STORE INIT TIMEOUT: {GARAGE_INIT_CONTAINER} did not exit within {timeout}s")
+            time.sleep(1)
+        tail(boot_log)
+        raise SystemExit(
+            f"[e2e] STORE NOT PROVISIONED: bucket `{STORE_BUCKET}` still has no `{STORE_KEY_ALIAS}` owner grant "
+            f"{timeout}s after the backend became ready. The backend is the only thing that provisions the store "
+            f"now (ADR 0067) — the boot log above names the step that failed."
+        )
+    finally:
+        kill(proc)
+        secret_file.unlink(missing_ok=True)
 
 
 def mysql(sql: str) -> None:
@@ -899,7 +972,6 @@ def main(argv: list[str]) -> int:
             f"Stop it, or set VEYQ_PORT to a free port."
         )
 
-    compose_up()
     # One stamp for the whole run: it varies emails/usernames so a re-run against a warm limiter sees a new
     # invite recipient, and the per-file database makes cross-file collisions impossible anyway. Digits only —
     # the username pattern is [A-Za-z0-9_.-] with a 32-char cap.
@@ -907,10 +979,13 @@ def main(argv: list[str]) -> int:
     log(f"running {len(files)} e2e file(s) in {len(groups)} group(s), stamp={stamp}")
 
     # Retained, not a tempdir: the boot log is itself a sweep surface (ADR 0053 § Decision 4), and a canary file
-    # discarded on exit cannot be re-read when a sweep hit needs explaining.
+    # discarded on exit cannot be re-read when a sweep hit needs explaining. It is created BEFORE the stack comes
+    # up because `compose_up` now ends in a backend boot of its own, whose log belongs here with the rest.
     workdir = RUN_ROOT / stamp
     workdir.mkdir(parents=True, exist_ok=True)
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
+
+    compose_up(workdir)
 
     # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
     # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
