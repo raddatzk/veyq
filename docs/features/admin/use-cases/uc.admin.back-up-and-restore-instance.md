@@ -69,9 +69,18 @@
 - **A4 — Objects are missing relative to the rows that reference them.** Detectable before the restore, because
   the capture is logical: the object keys can be compared against the blob rows that name them. This is the one
   check a volume copy cannot offer, and it is the reason the store leg is captured this way.
-- **A5 — The target is not empty.** The restore is defined onto an empty instance and nothing reconciles two
-  populated ones. A database load onto an existing schema, or a mirror into a bucket that already holds objects,
-  produces a state no test covers and no decision describes. Empty it first.
+- **A5 — The target already holds data.** The restore is defined onto an empty instance and nothing reconciles
+  two populated ones. A load over live rows, or a mirror into a bucket that already holds objects, produces a
+  state no test covers and no decision describes. Start from a fresh instance instead.
+
+  **Empty means *holding no data*, not *holding nothing*.** A **freshly installed** instance — started once, so
+  its schema is migrated and its store provisioned — is exactly what a restore targets, and is accepted. That
+  start is not optional and never was optional here: since
+  [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) the app is the only thing that
+  brings the object store from *running* to *usable*, and the same start migrates the schema, so an operator
+  has no way to produce a target that is initialised in one respect and untouched in the other. What is refused
+  is an instance that has been **used**: any row of real data, including the rows a half-finished restore just
+  wrote.
 - **A6 — The target store is not the one the source used.** Supported by construction: the capture is the S3
   namespace, so any S3-compatible store accepts it, and the backend signs vendor-neutrally. Only the endpoint,
   credentials, bucket and region change, and all four are configuration.

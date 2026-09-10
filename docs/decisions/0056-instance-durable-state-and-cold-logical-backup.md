@@ -47,7 +47,8 @@ directly under a presigned URL, and such a URL stays valid for its TTL after the
 however, is only ever written by the app.
 
 **4. The store's configuration is not state.** Bucket, access key and single-node layout are recreated
-idempotently by `infra/garage-init.sh`. Only the objects are durable.
+idempotently by the **backend itself**, on every start, from the declared store type
+([ADR 0067](0067-store-provisioning-from-a-declared-type.md)). Only the objects are durable.
 
 ## Decision
 
@@ -88,8 +89,13 @@ copy of the store's data directories. Three reasons, in order of weight:
   The backend signs through a vendor-neutral SDK precisely so the store is replaceable; a volume backup would
   reintroduce at the backup layer the binding the code goes out of its way to avoid, and would additionally tie
   the restorability of old backups to the store's on-disk format.
-- **The restore target is cheap.** `infra/garage-init.sh` already recreates layout, bucket and key
-  idempotently (Context 4), so a logical restore needs no surviving store identity.
+- **The restore target is cheap** — cheaper, in fact, than when this was written. Layout, bucket and key are
+  recreated idempotently (Context 4), so a logical restore needs no surviving store identity; and since
+  [ADR 0067](0067-store-provisioning-from-a-declared-type.md) the thing that recreates them is the app's own
+  first start, so the target is just a normally installed instance rather than a stack with an extra step run
+  against it. That same start also migrates the schema, which is why *empty* in
+  [A5](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md) means **holding no data** rather
+  than **holding no tables**.
 
 **The tool is invoked, not vendored:** the procedure shells out to `rclone`. `scripts/` carries no third-party
 Python dependency today and this decision does not add one, in the same shape as the e2e orchestrator shelling

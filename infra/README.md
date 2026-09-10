@@ -18,8 +18,8 @@ docker compose -f infra/docker-compose.yml up -d
 docker compose -f infra/docker-compose.yml down        # stop, keep data
 docker compose -f infra/docker-compose.yml down -v      # stop AND wipe (fresh instance)
 
-# + the bundled object store (media transport) — the garage-init sidecar sets up
-# layout + bucket + dev key automatically (idempotent; also after a `down -v` wipe)
+# + the bundled object store (media transport). This leaves it RUNNING BUT NOT USABLE —
+# the first backend start sets up layout + bucket + dev key + CORS itself (ADR 0067)
 docker compose -f infra/docker-compose.yml --profile s3 up -d
 
 # + the test mailbox (per-tenant SMTP smoke) — SMTP on :11025, web UI/API on :18025
@@ -31,16 +31,34 @@ docker compose -f infra/docker-compose.yml --profile mail up -d
 The backend is **operator-blind**: it never streams media bytes, it only **presigns** short-TTL URLs the
 client PUT/GETs directly against the store ([ADR 0013](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)),
 via the **vendor-neutral AWS S3 SDK** (works against any S3-compatible store). The bundled store is **Garage**
-(S3-compatible, AGPL, built for self-hosting — it replaced the archived MinIO, cr-0029). On `--profile s3 up`
-the **`garage-init`** sidecar assigns a single-node layout, creates the `veyq` bucket, and imports
-**deterministic dev credentials** (so the e2e + a dev backend use fixed keys) — automatically, and idempotent
-(a no-op once the bucket exists, so it self-heals after a `down -v`). Garage's own image is shell-less, so the
-sidecar is a tiny Alpine + Garage-CLI image (`garage-init.Dockerfile`) that drives the node over RPC. The same
-script still runs by hand from the host (`./infra/garage-init.sh`, via `docker exec`) if you ever need it.
+(S3-compatible, AGPL, built for self-hosting — it replaced the archived MinIO, cr-0029).
+
+**`--profile s3 up` starts the store; it does not make it usable.** A fresh Garage has no layout, no bucket, no
+access key and no grant, and since [ADR 0067](../docs/decisions/0067-store-provisioning-from-a-declared-type.md)
+the **backend** closes that gap on its first start, from the declared store type
+(`veyq.blob-store.type=garage` plus the admin endpoint and token). It assigns a single-node layout, creates the
+`veyq` bucket, imports the **deterministic dev credentials** (so the e2e and a dev backend use fixed keys),
+grants them, and writes the bucket CORS policy. Every step is idempotent on its own, so a later start repairs a
+missing piece rather than skipping the lot, and a `down -v` wipe self-heals on the next start.
+
+There is no init sidecar any more, in dev or in production, and that is deliberate rather than a simplification:
+its image was built locally and published nowhere, so a Helm chart had nothing to pull
+([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)) — and keeping a *dev-only* one would
+have meant the store was always already provisioned by the time a dev backend started, so the **fresh** path
+would never run outside a unit test.
+
+*"I brought the store up and media still fails"* has one answer: read `GET /api/instance/store-provisioning` as
+the Server Owner (the admin console's **Object store** rubric), which reports `PROVISIONED`, `IN_PROGRESS`,
+`FAILED`, or `NOT_ATTEMPTED` for a store you brought yourself. Provisioning never gates the boot, so the app
+starts and looks healthy either way.
 
 - **S3 API** → `http://localhost:19000`. Dev key `GK0123456789abcdef01234567` / secret
-  `0123…` (64 hex, see `garage-init.sh`), bucket `veyq`, region `us-east-1` — local throwaway only.
-- **Backend e2e** (`BlobBatchE2ETest`): bring the profile up (the sidecar inits it), then
+  `0123…` (64 hex, see `application-dev.properties`), bucket `veyq`, region `us-east-1` — local throwaway only.
+- **Admin API** → `http://localhost:19003`, token `veyq-dev-admin-token` — how the backend provisions the
+  store, published local-only in dev and **not published at all** in production (the app reaches it on the
+  compose network as `http://garage:3903`).
+- **Backend e2e** (`BlobBatchE2ETest`): bring the profile up **and start a backend once** so the bucket exists,
+  then
   `VEYQ_S3_E2E=1 ./gradlew :backend:test --tests '*BlobBatchE2ETest'` (defaults match the compose; override via
   `VEYQ_S3_ENDPOINT`/`VEYQ_S3_ACCESS_KEY`/`VEYQ_S3_SECRET_KEY`/`VEYQ_S3_BUCKET`/`VEYQ_S3_REGION`).
 - **Backend against the store** (`quarkusDev`): point it at the store via env —
@@ -210,8 +228,8 @@ Two things worth knowing rather than discovering:
   docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/docker-compose.prod.yml
   ```
 
-  (Note the current limit: the recipe is those two files, so the store's `garage.toml` / `garage-init.sh` still
-  come from this repository.)
+  (Note the current limit: the recipe is those two files, so the store's `garage.toml` still comes from this
+  repository. It used to be two files — ADR 0067 deleted `garage-init.sh` along with the image that ran it.)
 
 ## Backup & restore
 
@@ -279,17 +297,22 @@ restores as a Memory whose picture yields a valid presigned URL and a `404`, wit
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
 backup is structurally intact but carries no leg (c).
 
-### Restore — onto an instance that holds nothing
+### Restore — onto a freshly installed instance
 
 A restore targets the **same domain** (ADR 0056 §4); `--domain` is required and the tool refuses anything the
-backup did not hold. It also refuses a target database that already has tables, or a bucket that already has
+backup did not hold. It also refuses a target that already holds **data**, or a bucket that already holds
 objects — the restore is defined onto an empty instance and nothing reconciles two populated ones (A5).
 
+*Empty* means **holding no data**, not holding nothing. The target is a **normally installed instance**: bring
+the stack up and let the app start once, which migrates the schema and provisions the store. There is no
+shorter path and there is no manual `CREATE DATABASE` step — since ADR 0067 the app is the only thing that can
+make the store usable, and the same start migrates the schema, so the two go together by construction.
+
 ```sh
-# 1. An EMPTY instance: an empty database, an initialised-but-empty bucket, no application running.
-docker compose -f infra/docker-compose.yml --profile s3 up -d      # garage-init recreates layout+bucket+key
-docker compose -f infra/docker-compose.yml exec -T mariadb \
-    mariadb -uroot -pchange-me-root -e "CREATE DATABASE veyq;"
+# 1. A freshly installed instance: start the stack and let the app run once, then STOP the app.
+#    That one start migrates the schema AND provisions the store (layout, bucket, key, grant, CORS).
+docker compose -f infra/docker-compose.yml --profile s3 up -d
+#    …start the application, wait for GET /api/instance/store-provisioning to report PROVISIONED, stop it.
 
 # 2. Load all three legs.
 python3 scripts/instance_backup.py restore infra/backups/<stamp> \
@@ -301,9 +324,9 @@ python3 scripts/instance_backup.py restore infra/backups/<stamp> \
 ```
 
 The store's **configuration** is not restored because it was never state: bucket, access key and single-node
-layout are recreated idempotently by `garage-init.sh`. One limit worth knowing rather than discovering: that
-script hardcodes `layout apply --version 1`, so it initialises a **fresh** node — which is exactly a restore
-target's shape, and not a partly-configured one.
+layout are recreated idempotently by the app itself, on every start. This has no "fresh node only" limit — the
+layout step is satisfied by a node already carrying a role at any version, and applies `current + 1` where it
+has work to do.
 
 The final step is not "it started". Read the instance's **config-secret state** (`GET
 /api/tenants/{id}/mail-settings` → `configSecretState: OK`), then have a person sign in and **open a Memory that

@@ -691,11 +691,19 @@ def _store_for(bucket: str):
 
 
 def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) -> Instance:
-    """Capture the (already stopped) source, destroy it, and restore onto a structurally empty instance.
+    """Capture the (already stopped) source, destroy it, and restore onto a **freshly installed** instance.
 
     The app is stopped before this runs, which is the entire consistency argument (ADR 0056 §2) — with it down
     the database cannot gain a row, so a row whose object was never captured is impossible and there is no
     ordering to get right.
+
+    **The target is installed, not merely created, and that is the half ADR 0067 changed.** This used to point
+    the restore at a database that had never been migrated — a shape an operator could produce while a compose
+    sidecar made the store usable. With the backend as the only provisioner, the two preconditions became
+    mutually unreachable: the bucket exists only after the app has started, and the same start migrates the
+    schema. So the procedure this rehearses is now *install, then restore*, and rehearsing anything else would
+    rehearse a procedure nobody can follow. A5's gate moved with it, from **no tables** to **no data**, and
+    [assert_populated_target_is_refused] is what keeps that relaxation honest in the same run.
 
     `with_key=False` is the leg-3 rehearsal: legs (a) and (b) arrive, leg (c) does not, and the instance that
     comes up boots, serves content, and reports `configSecretState: MISMATCH` while refusing member invites
@@ -718,9 +726,58 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
                       f"veyq-e2e-dst-{index}")
     fresh_database(target.database)
     fresh_bucket(target.bucket)
+    install(target, group_dir / f"backend-install-{index}.log")
     backup_tool("restore", str(backup), "--domain", HOST, "--db-name", target.database,
                 "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file))
+    assert_populated_target_is_refused(backup, target)
     return target
+
+
+def install(target: Instance, boot_log: Path) -> None:
+    """Start the app once against [target] and stop it — which is what "a freshly installed instance" IS.
+
+    One boot migrates the schema (`quarkus.flyway.migrate-at-start=true`, no profile gate) and runs the store
+    provisioning. That is the operator's step 1 of a restore now, so it is this rehearsal's step 1 too.
+    """
+    log(f"installing the restore target ({target.describe()}): one boot to migrate and provision")
+    proc = boot(target.database, target.secret_file, boot_log, target.bucket)
+    try:
+        not_ready = wait_ready(time.time() + BOOT_SECS, proc)
+        if not_ready:
+            tail(boot_log)
+            raise SystemExit(f"[e2e] RESTORE TARGET INSTALL FAILED: {not_ready} (boot log above)")
+    finally:
+        kill(proc)
+    # The key file the install generated is NOT the one the backup carries; leaving it in place would let a
+    # restore that never wrote leg (c) look like one that did.
+    target.secret_file.unlink(missing_ok=True)
+
+
+def assert_populated_target_is_refused(backup: Path, target: Instance) -> None:
+    """The other half of A5's gate, on the instance the restore just populated.
+
+    A relaxation is only honest if the refusal it relaxed still happens. `restore_hook` above proves the gate
+    now ACCEPTS a freshly installed instance; this proves the same gate still REFUSES a populated one — the
+    instance one line up, holding real restored rows. Asserted on the specific message, never on "it threw": a
+    bare non-zero exit is equally produced by a connection failure, which would turn this into a check that
+    passes hardest when the tool is most broken.
+    """
+    log("A5 control: the same restore, again, onto the instance it just populated — must be refused")
+    result = backup_tool_result("restore", str(backup), "--domain", HOST, "--db-name", target.database,
+                                "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file))
+    body = result.stdout + result.stderr
+    if result.returncode == 0:
+        raise SystemExit(
+            "[e2e] A5 GATE OPEN: a restore onto a POPULATED instance succeeded. Nothing reconciles two "
+            "populated instances, and the emptiness gate is the only thing that says so."
+        )
+    if "already holds data" not in body:
+        raise SystemExit(
+            f"[e2e] A5 GATE REFUSED FOR THE WRONG REASON: the restore failed without naming the data it found. "
+            f"A connection failure produces the same exit code, so this run proves nothing about the gate. "
+            f"Output was: {body.strip()[-500:]}"
+        )
+    log("A5 control: refused, by the emptiness gate, naming the rows it found")
 
 
 # Group stem → the hook that runs between its members. A multi-member group with no entry here is a hard error:

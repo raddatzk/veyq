@@ -132,6 +132,14 @@ def utc_now() -> str:
 # --------------------------------------------------------------------------------------------------------
 
 
+# The two tables a freshly installed instance legitimately holds rows in, and therefore the two the emptiness
+# gate must not read as data. Each is excluded for its own reason — see [Database.populated_tables] — and the
+# list is short and named rather than pattern-matched, because "which tables are not data" is a judgement about
+# this schema and not something a regex can decide.
+NOT_DATA = ("flyway_schema_history", "veyq_instance")
+NOT_DATA_SQL = ", ".join(f"'{t}'" for t in NOT_DATA)
+
+
 class Database:
     """The database leg's two connection modes — the runbook has exactly two audiences and no more.
 
@@ -222,11 +230,57 @@ class Database:
             raise BackupError(f"loading the dump into {self.describe()} failed: {proc.stderr.decode(errors='replace').strip()[-500:]}")
 
     def table_count(self) -> int:
-        """How many tables the target database holds. A restore target must hold zero (A5)."""
+        """How many tables the target database holds."""
         rows = self.query(
             f"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '{self.name}';"
         )
         return int(rows[0][0])
+
+    def populated_tables(self) -> list[tuple[str, int]]:
+        """Every table in the target that holds DATA, and how much — `[]` means the instance is empty (A5).
+
+        **Empty means "holds no data", not "holds no tables", and that changed for a reason.** Until ADR 0067 a
+        restore target was prepared by a compose sidecar that made the store usable while the database stayed
+        untouched, so *zero tables* was a shape an operator could actually produce. With the backend as the only
+        thing that can provision a store, the two preconditions became mutually unreachable: the bucket exists
+        only after the app has started, and the same start migrates the schema —
+        `quarkus.flyway.migrate-at-start=true` carries no profile gate, so the app has no mode that does one
+        without the other. A freshly installed, freshly migrated instance IS the shape a restore targets now,
+        and refusing it was always the wrong reading of A5.
+
+        **A5's purpose is untouched: nothing here accepts a POPULATED instance.** The predicate is every table
+        holding zero rows, with exactly two exclusions, each for a stated reason:
+
+          - `flyway_schema_history` is the SCHEMA's own record, not data. A migrated instance necessarily has
+            rows here and an unmigrated one cannot be a target at all.
+          - `veyq_instance` is the `id = 1` singleton that "exists from first boot" (its entity KDoc), holding
+            the public instance salt and the config-secret fingerprint. A fresh install always has exactly this
+            one row, and the dump replaces it wholesale — see below.
+
+        The table set is read out of `information_schema` rather than listed here, so a table a future migration
+        adds is covered without anyone remembering to add it (changes/README.md § a guard derives its anchor set
+        from the code).
+
+        **And the load onto an already-migrated schema is safe, measured rather than assumed.** [dump] runs
+        `mariadb-dump` with no `--skip-opt`, and `--add-drop-table` is ON by default there (`mariadb-dump --help`
+        on the pinned mariadb:11.4: *"Defaults to on; use --skip-add-drop-table to disable"*), so every table the
+        dump names is dropped and recreated. The dump is a full dump of the source, so it names every table the
+        source had — including `flyway_schema_history` and `veyq_instance`, which is why the target's own copies
+        of those two are replaced rather than merged.
+        """
+        rows = self.query(
+            f"SELECT table_name FROM information_schema.tables WHERE table_schema = '{self.name}' "
+            f"AND table_type = 'BASE TABLE' AND table_name NOT IN ({NOT_DATA_SQL}) ORDER BY table_name;"
+        )
+        names = [r[0] for r in rows if r and r[0]]
+        if not names:
+            return []
+        # COUNT(*), never information_schema.table_rows: that column is an ESTIMATE for InnoDB and can read 0
+        # for a table holding rows, which would turn this gate into one that lets a populated instance through.
+        counts = self.query(
+            " UNION ALL ".join(f"SELECT '{n}', COUNT(*) FROM `{n}`" for n in names) + ";"
+        )
+        return [(r[0], int(r[1])) for r in counts if len(r) > 1 and int(r[1]) > 0]
 
     def domains(self) -> list[str]:
         return sorted(row[0] for row in self.query("SELECT domain FROM veyq_tenant;"))
@@ -656,13 +710,18 @@ def cmd_restore(args: argparse.Namespace) -> int:
     db = Database(args, require_db_password())
     store = Store(args)
 
-    # A5 — the restore is defined onto an EMPTY instance and nothing reconciles two populated ones.
-    tables = db.table_count()
-    if tables:
+    # A5 — the restore is defined onto an EMPTY instance and nothing reconciles two populated ones. *Empty*
+    # means holding no DATA: since ADR 0067 the target's store is provisioned by the app, and the same start
+    # migrates the schema, so a freshly installed instance is the only shape a target can have.
+    populated = db.populated_tables()
+    if populated:
+        held = ", ".join(f"{name} ({count} row(s))" for name, count in populated)
         raise BackupError(
-            f"{db.describe()} already holds {tables} table(s). A restore is defined onto an empty instance "
-            f"(A5); loading a dump onto an existing schema produces a state no decision describes. Empty it "
-            f"first, then restore."
+            f"{db.describe()} already holds data: {held}. A restore is defined onto an empty instance and "
+            f"nothing reconciles two populated ones (A5) — loading a dump over live rows produces a state no "
+            f"decision describes. A freshly installed instance IS an acceptable target; one that has been used "
+            f"is not. Drop and recreate the database, start the app once so it migrates and provisions the "
+            f"store, then restore."
         )
     count, _ = store.size()
     if count:
@@ -682,8 +741,10 @@ def cmd_restore(args: argparse.Namespace) -> int:
         # for a reason that reads like a different problem ("already holds N tables") if nobody said why.
         raise BackupError(
             f"{e}\n[backup] The database leg IS already loaded, so the target is half-restored and this tool "
-            f"will refuse to run against it again (A5). Empty the target database and bucket, then restore "
-            f"from the start — a partial restore is not repaired in place."
+            f"will refuse to run against it again (A5) — the rows it just wrote are exactly the data the "
+            f"emptiness gate looks for. Start over from a fresh instance: drop and recreate the target "
+            f"database, empty the bucket, start the app once so it migrates and provisions the store, then "
+            f"restore. A partial restore is not repaired in place."
         ) from e
 
     key_file = backup / KEY_NAME
