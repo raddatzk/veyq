@@ -765,6 +765,39 @@ config mapping and driving it into a real store; it reddens, and the eleven stil
 *configuration* fact, so its detector lives at the tier that reads configuration, not at the tier that
 exercises the behaviour the default selects.
 
+### A before/after snapshot taken inside the test is blind to what STARTUP already did
+
+**The sibling of the rule above, and it survives the inversion.** `cr-tenant-ingress-kubernetes-sink` named
+`TenantIngressNoConfigTest` as one of four that had to still observe the code an extraction moved, and wrote the
+detector the way the rule says to — an injection that makes an *unconfigured* instance produce a real file sink,
+with the test that claims *"the projection is a clean no-op"* as the case that must redden. It did not. The
+projection **was** written, on disk, and the test stayed green: its oracle is
+`exists(path)` before a `regenerate()` compared to `exists(path)` after, and the `@Observes StartupEvent`
+regenerate had already written the file before the test method took its `before` reading. Both readings were
+`true`, and the comparison held for the wrong reason.
+
+The tell is an oracle that is a **difference over a window the test opens**, applied to a subject the application
+also drives outside that window — a startup observer, a scheduler, another test class in the same JVM. Anything
+that happened before the window is invisible by construction, and "before the window" includes the entire boot.
+The repair is not a bigger window: it is to assert the **decision** rather than its side effect (here: the
+injected sink's own `enabled`), which no ordering can pre-satisfy. Keep the side-effect assertion — it is the
+statement of the behaviour — but do not let it be the only thing that can fail.
+
+### A new external object's OPTIONAL knobs are not its MANDATORY fields
+
+**A refine that inventories config for a resource it has not built lists what it was thinking about, which is
+the tunable half.** `cr-tenant-ingress-kubernetes-sink` specified the Kubernetes sink's config as *"namespace
+override, optional `ingressClassName`"* — both real, both optional. An `Ingress` cannot exist without a backend
+`Service` name and port, which are deployment-time names the backend cannot derive, so implement time had to
+invent config the CR never mentioned. Nothing was lost here because the gap was small and obvious; it is worth a
+rule because the failure is silent at refine time — an inventory reads complete when every line in it is
+correct.
+
+The check is one question, asked against the external system's own schema and not against the CR: **could the
+object be constructed from exactly the values listed?** Where the answer is no, the missing values are
+mandatory, and mandatory values are where the defaults have to be argued (here: the chart's own Service names,
+so that an operator who renames it has somewhere to say so).
+
 ### A bite test must tell "the guard held" apart from "nothing ran"
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
