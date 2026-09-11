@@ -89,9 +89,9 @@ interface VeyqConfig {
          */
         interface Ingress {
             /**
-             * Where `TenantIngressProjector` writes the Traefik file-provider config. **Absent ⇒ the projector
+             * Where `TraefikFileIngressSink` writes the Traefik file-provider config. **Absent ⇒ the projector
              * does nothing at all** — not an error, and not a degraded mode: an instance with no proxy in front
-             * of it has nothing to project into.
+             * of it has nothing to project into, so `TenantIngressSinkProducer` hands it `DisabledIngressSink`.
              */
             fun dynamicConfigPath(): Optional<String>
 

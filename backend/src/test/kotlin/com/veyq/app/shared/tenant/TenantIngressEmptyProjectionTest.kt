@@ -1,10 +1,8 @@
 package com.veyq.app.shared.tenant
 
-import io.quarkus.test.junit.QuarkusTest
-import jakarta.inject.Inject
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.nio.file.Path
 
 /**
  * **A projection with no tenants must not contain an empty `http:` section.** Traefik rejects a section that is
@@ -24,7 +22,7 @@ import org.junit.jupiter.api.Test
  * loads the file again as soon as a real router appears (also measured, in the same run). What it costs is the
  * operator's first hour — a proxy insisting the routing configuration is broken, on a stack that is fine.
  *
- * **Why this calls [TenantIngressProjector.render] instead of `regenerate()`.** The property is about an EMPTY
+ * **Why this calls [TraefikFileIngressSink.render] instead of `regenerate()`.** The property is about an EMPTY
  * tenant table, and that is a state no test here can reach: the `%test` H2 instance is shared across test
  * profiles and already carries a tenant row referenced by `veyq_membership`, so a `deleteAll` dies on the
  * foreign key — measured, after this class first tried exactly that and went red in the full suite while
@@ -35,11 +33,14 @@ import org.junit.jupiter.api.Test
  * What no test here can prove is Traefik's half — that lives in the table above, measured once against the real
  * proxy. Asserting the shape is the part that can regress silently, so that is the part held here.
  */
-@QuarkusTest
 class TenantIngressEmptyProjectionTest {
 
-    @Inject
-    lateinit var projector: TenantIngressProjector
+    /**
+     * Constructed, not injected: `render` is a pure function of its argument and the sink the container would
+     * produce under the default `%test` config is [DisabledIngressSink] — the one that projects nothing. The
+     * path is never touched by the method under test, and neither is the filesystem.
+     */
+    private val projector = TraefikFileIngressSink(Path.of("build/test-tenant-ingress-render-only/tenants.yml"))
 
     @Test
     fun anEmptyProjectionCarriesNoHttpSection() {
