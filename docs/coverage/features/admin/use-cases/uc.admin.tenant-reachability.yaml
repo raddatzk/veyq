@@ -40,6 +40,22 @@ acceptanceCriteria:
       backend:
         unit: [S3BlobStorePresigningTest.twoTenantsSigningTheSameKeyGetTwoDifferentHosts, S3BlobStorePresigningTest.anUnresolvedRequestSignsAgainstTheBootstrapDefault, S3BlobStorePresigningTest.withNoPublicEndpointTheDomainIsIgnored, S3BlobStorePresigningTest.inStoreOriginModeTwoTenantsSignAgainstTheSameStoreHost, S3BlobStorePresigningTest.inStoreOriginModeNoDomainAtAllCanMoveTheSignedHost, S3BlobStorePresigningTest.theInternalEndpointModeIsSelectableByNameNotOnlyByBlankingThePublicOne, S3BlobStorePresigningTest.aBlankPublicEndpointIsTheInternalModeWhateverTheConfiguredModeSays, S3BlobStoreSigningModeConfigTest.eachModeBindsFromItsHyphenatedPropertyValue, S3BlobStoreSigningModeConfigTest.theConfiguredDefaultIsTodaysHostSwappingBehaviour, S3BlobStoreSigningModeConfigTest.settingTheModeToItsDefaultExplicitlyIsIndistinguishableFromNotSettingIt, S3BlobStoreSigningModeConfigTest.theProducerHandsTheConfiguredModeToTheStoreItBuilds]
         integration: [MediaPresignDomainSliceTest.twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins, MediaPresignDomainSliceTest.aHostNoTenantClaimsFallsBackToTheDefault, SharePresignDomainSliceTest.aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn, SharePresignDomainSliceTest.aGuestOnAHostNoTenantClaimsGetsTheDefaultNotTheirOwnHeader, StoreOriginPresignSliceTest.aHostNoTenantClaimsCannotChooseTheOriginInStoreOriginMode, StoreOriginPresignSliceTest.twoTenantDomainsSignTheSameScopesUploadsForOneOrigin]
+  - id: a-row-that-skipped-validation-never-becomes-proxy-configuration
+    # Stated here because the projection is the one place a stored string crosses from DATA into CONFIGURATION,
+    # on both sinks. `CreateTenantRequest`/`ChangeDomainRequest` already reject the shape at the boundary, so
+    # this is strictly about the row that predates that validation or arrives by a path that skips it — which
+    # is why the test writes one straight through Panache rather than through the API.
+    #
+    # The criterion is new, the code is not: the predicate has existed since ADR 0063 and had NO test until
+    # 2026-09-11 — the KDoc claim "a backtick in a domain closes the `Host(` matcher" had never once been run
+    # against a backtick. A property nothing executes is a property nothing holds.
+    text: A tenant domain that does not have the shape the API boundary enforces is dropped from the projection rather than interpolated into it, so a row written past that boundary cannot close a Traefik `Host(` matcher or make an Ingress object the API server rejects.
+    coverage:
+      backend:
+        unit: [TenantIngressHostnameTest.aWellFormedDomainRoutes, TenantIngressHostnameTest.aBacktickNeverReachesATraefikRule, TenantIngressHostnameTest.theShapesThatLookLikeHostnamesAndAreNot, TenantIngressHostnameTest.aNewlineCannotSmuggleASecondLine]
+        integration: [TenantIngressProjectorTest.aRowThatSkippedTheBoundaryIsNeverProjected]
+      # No web surface: the column is validated on the way in by the contract, and this is the server-side
+      # second layer for rows that did not come that way.
   - id: projector-no-ops-without-a-proxy
     # A1 — self-hostable by default: an instance with no reverse proxy in front of it must not need one. This
     # is also why the StartupEvent observer can never be a boot requirement.

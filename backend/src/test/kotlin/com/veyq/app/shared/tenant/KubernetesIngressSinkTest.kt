@@ -122,6 +122,9 @@ class KubernetesIngressSinkTest {
         assertEquals(emptyList<String>(), projectedHosts())
     }
 
+    // A malformed domain is NOT this class's subject: TenantIngressProjector filters the column's shape once,
+    // for every sink, and TenantIngressHostnameTest + TenantIngressProjectorTest hold it there.
+
     // --- what it must never touch ---
 
     @Test
@@ -155,17 +158,6 @@ class KubernetesIngressSinkTest {
             // fail for a reason that has nothing to do with the code under test.
             client.network().v1().ingresses().inNamespace(namespace).withName("operator-own-status-page").delete()
         }
-    }
-
-    @Test
-    fun aDomainThatIsNotARoutableHostnameIsDropped() {
-        // The boundary already rejects these, so this is about the row that predates that validation or arrives
-        // by a path that skips it. Here the string would become both a rule host and an object name, and an
-        // illegal one makes the API server reject the object — which on this sink's failure boundary would
-        // strand every OTHER tenant's routing too. The good domain beside it is what shows that happening.
-        sink.apply(listOf("not_a_hostname.example.com", "ok.example.com"))
-
-        assertEquals(listOf("ok.example.com"), projectedHosts(), "the malformed domain is dropped, the sound one still routes")
     }
 
     // --- helpers ---

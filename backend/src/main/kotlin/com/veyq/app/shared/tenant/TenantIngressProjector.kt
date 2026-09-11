@@ -6,6 +6,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.runtime.StartupEvent
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.event.Observes
+import org.jboss.logging.Logger
 
 /**
  * Projects the `tenant` table into the reverse proxy's routing description (ADR 0063), so that **"the tenant
@@ -65,8 +66,39 @@ class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngress
         val routable = domains
             .map { it.lowercase() }
             .filter { it != bootstrapDomain } // already a static router in the compose file — never emitted twice
+            .filter { isRoutableHostname(it) }
             .distinct()
             .sorted()
         sink.apply(routable)
+    }
+
+    companion object {
+        private val log: Logger = Logger.getLogger(TenantIngressProjector::class.java)
+
+        /** The same shape `CreateTenantRequest.domain` enforces at the boundary: a lowercase dotted hostname. */
+        private val HOSTNAME = Regex("^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")
+
+        /**
+         * Re-validated here even though `CreateTenantRequest`/`ChangeDomainRequest` already reject anything else
+         * at the boundary. This is the point where a stored string becomes **proxy configuration**: a row that
+         * predates that validation, or arrives by any path that skips it, is otherwise handed to a sink that
+         * will interpolate it — into a Traefik `Host(` matcher, where a backtick closes the rule, or into an
+         * `Ingress` rule host and object name, where an illegal character makes the API server reject the
+         * object and, on a reconcile whose failure boundary is the whole call, strands every *other* tenant's
+         * routing too. Cheaper to drop the row than to trust every past and future writer of the column.
+         *
+         * **Here and not in each sink, even though the damage is per-sink.** The predicate is not a property of
+         * any proxy — it is `tenant.domain`'s own shape, mirroring the API boundary, and both sinks matched it
+         * identically. Put in the sinks it is one copy per implementation and, worse, an obligation on every
+         * future one that nothing but a KDoc sentence enforces — a sink that forgot it would emit the backtick
+         * silently. This class is the single funnel from the table to any proxy, so it is the one place where
+         * applying it cannot be skipped. `internal` so `TenantIngressHostnameTest` can pin the character
+         * classes without a container; `TenantIngressProjectorTest.aRowThatSkippedTheBoundaryIsNeverProjected`
+         * drives the real threat through the table.
+         */
+        internal fun isRoutableHostname(domain: String): Boolean =
+            HOSTNAME.matches(domain).also {
+                if (!it) log.warnf("Skipping tenant domain %s in the ingress projection: not a routable hostname", domain)
+            }
     }
 }

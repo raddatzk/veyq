@@ -30,25 +30,16 @@ interface TenantIngressSink {
     val enabled: Boolean
 
     /**
-     * Make the proxy route exactly [domains] and nothing else this sink owns. Sorted, lowercased, distinct, and
-     * already stripped of the bootstrap domain by the projector; **not** yet re-validated as a hostname, which
-     * is each sink's own job at the point where the string becomes proxy configuration (see
-     * [TenantIngressSink.HOSTNAME]).
+     * Make the proxy route exactly [domains] and nothing else this sink owns.
+     *
+     * **Every element is already a routable hostname** — lowercased, distinct, sorted, stripped of the
+     * bootstrap domain, and re-validated against the shape `tenant.domain` is supposed to have
+     * ([TenantIngressProjector.isRoutableHostname]). An implementation may interpolate these strings into
+     * proxy configuration without quoting them, and does not repeat the check: the predicate is the column's
+     * own shape rather than any proxy's grammar, so a copy per sink would be one obligation per future
+     * implementation that nothing enforces.
      */
     fun apply(domains: List<String>)
-
-    companion object {
-        /**
-         * The same shape `CreateTenantRequest.domain` enforces at the boundary: a lowercase dotted hostname.
-         *
-         * **Declared once, applied by each sink separately, and that is deliberate.** The *shape* is one fact
-         * and lives here; the *reason to re-check it* is per-sink, because what a bad string does differs:
-         * a backtick closes a Traefik `Host(` matcher, while an illegal character in an Ingress rule makes the
-         * API server reject the object. Neither sink may assume the column was validated on the way in — a row
-         * that predates the boundary's validation, or arrives by a path that skips it, reaches both.
-         */
-        val HOSTNAME = Regex("^([a-z0-9](-?[a-z0-9])*\\.)+[a-z]{2,}$")
-    }
 }
 
 /**

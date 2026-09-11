@@ -27,6 +27,13 @@ import java.security.MessageDigest
  * being wrong about which lines are its content); a reconcile-by-list sink can, which is why
  * `KubernetesIngressSinkTest` decides it rather than this comment.
  *
+ * **The domains arrive already validated** ([TenantIngressSink.apply]). That matters more here than it reads:
+ * each becomes both a `spec.rules[].host` and, through [nameFor], an object name, and an illegal character in
+ * either makes the API server reject the object — which on this sink's failure boundary strands every *other*
+ * tenant's routing too, not just the bad one's. The check is [TenantIngressProjector]'s because it is the
+ * column's shape rather than this API's grammar; what is this sink's own is [nameFor]'s length bound below,
+ * which a valid hostname can still violate.
+ *
  * **No TLS block, deliberately.** Certificates are the chart's concern (cert-manager, or an operator's own
  * issuer); this sink writes routing. It is the same cut its Traefik counterpart makes by referencing the
  * `letsencrypt` resolver by name and never selecting or configuring one.
@@ -54,7 +61,6 @@ class KubernetesIngressSink(
             // Desired state first, ownership included — see the class KDoc. `nameFor` is deterministic, so the
             // same domain always addresses the same object and a regenerate updates rather than duplicates.
             val desired: Map<String, Ingress> = domains
-                .filter { isRoutableHostname(it) }
                 .associateBy { nameFor(it) }
                 .mapValues { (name, domain) -> ingressFor(name, domain) }
 
@@ -81,19 +87,6 @@ class KubernetesIngressSink(
             )
         }
     }
-
-    /**
-     * Re-validated here for a different reason than [TraefikFileIngressSink]'s, and the difference is the point
-     * of not sharing the code: nothing is being interpolated into a matcher expression, so there is no quoting
-     * to get wrong — instead the string becomes both a `spec.rules[].host` and (via [nameFor]) an object name,
-     * and an illegal character in either makes the **API server reject the object**. On a reconcile whose
-     * failure boundary is the whole call, one rejected object strands every tenant's routing, not just this
-     * one's. Dropping the row is cheaper than trusting every past and future writer of the column.
-     */
-    private fun isRoutableHostname(domain: String): Boolean =
-        TenantIngressSink.HOSTNAME.matches(domain).also {
-            if (!it) log.warnf("Skipping tenant domain %s in the ingress projection: not a routable hostname", domain)
-        }
 
     /**
      * The `Ingress` object name for a domain. Deterministic — a name derived from the domain rather than from

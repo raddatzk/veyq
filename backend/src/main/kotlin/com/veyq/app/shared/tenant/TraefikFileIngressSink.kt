@@ -19,7 +19,7 @@ class TraefikFileIngressSink(private val target: Path) : TenantIngressSink {
     override val enabled = true
 
     override fun apply(domains: List<String>) {
-        writeAtomically(target, render(domains.filter { isRoutableHostname(it) }))
+        writeAtomically(target, render(domains))
     }
 
     /**
@@ -67,7 +67,7 @@ class TraefikFileIngressSink(private val target: Path) : TenantIngressSink {
         domains.forEach { domain ->
             // Named after the domain, not its position: a router name that shifted when some *other* tenant was
             // added would churn every router in Traefik's dashboard and logs on each regenerate. The hostname
-            // shape validated above is exactly the character set a Traefik router name allows.
+            // shape TenantIngressProjector validated is exactly the character set a Traefik router name allows.
             val slug = "veyq-tenant-${domain.replace('.', '-')}"
             append("    $slug-app:\n")
             append("      rule: \"Host(`$domain`)\"\n")
@@ -85,18 +85,6 @@ class TraefikFileIngressSink(private val target: Path) : TenantIngressSink {
             append("        certResolver: letsencrypt\n")
         }
     }
-
-    /**
-     * Re-validated here even though `CreateTenantRequest`/`ChangeDomainRequest` already reject anything else at
-     * the boundary. This is the point where a stored string becomes **proxy configuration**: a row that predates
-     * that validation, or arrives by any path that skips it, would otherwise be interpolated into a Traefik rule
-     * — and a backtick in a domain closes the `Host(` matcher. Cheaper to drop the row than to trust every past
-     * and future writer of the column. [KubernetesIngressSink] re-validates for its own, different reason.
-     */
-    private fun isRoutableHostname(domain: String): Boolean =
-        TenantIngressSink.HOSTNAME.matches(domain).also {
-            if (!it) log.warnf("Skipping tenant domain %s in the ingress projection: not a routable hostname", domain)
-        }
 
     /**
      * **Every filesystem call is inside the `try`, and that boundary is the point of this function.** It used

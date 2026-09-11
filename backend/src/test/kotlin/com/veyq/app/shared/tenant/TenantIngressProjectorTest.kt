@@ -145,6 +145,28 @@ class TenantIngressProjectorTest {
         assertFalse(Files.readString(Path.of(CONFIG_PATH)).contains("not the configuration"))
     }
 
+    @Test
+    fun aRowThatSkippedTheBoundaryIsNeverProjected() {
+        // `CreateTenantRequest`/`ChangeDomainRequest` reject this shape, so the only way such a row exists is
+        // the way this test makes one: written straight through Panache, past the boundary — a row that
+        // predates the validation, or arrives by a path that skips it. That is exactly the case the projector's
+        // re-validation exists for, and until this test it had never been executed: the projection is rendered
+        // as `rule: "Host(`$domain`)"`, so a backtick closes the matcher and everything after it becomes
+        // Traefik configuration nobody wrote.
+        //
+        // The well-formed tenant beside it is the control: the file IS being written, and the malformed row is
+        // the one thing missing from it — without that, a projector that emitted nothing at all would pass.
+        val sound = seedTenant(TenantEntity.ACTIVE)
+        val injected = seedTenant(TenantEntity.PENDING, domain = "evil`) || Host(`stolen.example.com")
+
+        projector.regenerate()
+
+        val file = Files.readString(Path.of(CONFIG_PATH))
+        assertTrue(projectedHosts().contains(sound), "control: an ordinary tenant is projected")
+        assertFalse(projectedHosts().contains(injected), "a row that skipped the boundary must not become a router")
+        assertFalse(file.contains("stolen.example.com"), "…and no fragment of it may reach the file at all")
+    }
+
     // --- the triggers: when the file is rewritten ---
 
     @Test
