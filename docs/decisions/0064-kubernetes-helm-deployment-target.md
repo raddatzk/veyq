@@ -58,6 +58,22 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   Role** the chart creates — never a cluster-wide `ClusterRole`; the backend manages ingress only in its own
   namespace. No separate operator/sidecar container: the same single backend process that already owns this
   projection for compose owns it here, so there is exactly one code path to keep correct, not two.
+
+  **What the sink already does, which the chart must match rather than re-decide.** It reconciles: one
+  `Ingress` per routable domain, named `veyq-tenant-<domain>`, labelled
+  `app.kubernetes.io/managed-by: veyq-tenant-ingress`, and it **lists by that label** — so the Role needs
+  `list`, `create`, `update` **and `delete`** on `networking.k8s.io/ingresses` in the one namespace, and an
+  operator's own `Ingress` beside it is untouched. The namespace is read from the pod's mounted ServiceAccount
+  token, never from a chart value: a required namespace setting would mean one image per install, which is the
+  property the compose/admin-web work already paid for. `veyq.tenant.ingress.kubernetes.service-name`/`-port`
+  name the `Service` the rules point at, so renaming the app `Service` in the chart means setting them.
+
+  **The sink emits no TLS block, and that leaves one thing genuinely open for the chart.** Certificates are
+  not routing. But cert-manager is driven by an **annotation on the `Ingress` object**, and these objects are
+  written at runtime by the backend — a chart cannot annotate what it does not template. So TLS on Kubernetes
+  needs either a passthrough (an annotation/TLS-secret template the sink stamps onto every object it builds)
+  or a wildcard/`Certificate` resource the chart owns outright. Neither is decided here; what is decided is
+  that the *chart alone* cannot close it.
 - **Garage gets its own Ingress host by default on Kubernetes**, not the compose same-origin path route.
   Because the ingress controller is operator-chosen and its exact prefix/Host-preservation behavior is not
   guaranteed, the chart defaults to the CORS-policy branch [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)

@@ -46,6 +46,13 @@ always fully re-derivable and self-healing (a wiped file, a fresh Traefik contai
 repair themselves from the next regenerate, which also runs once at backend startup before serving traffic
 normally).
 
+**Which domains route and how a proxy is told are two halves, split at `TenantIngressSink`.** The first is
+`TenantIngressProjector` and is identical on every deployment target; the second is one implementation per
+proxy, chosen by `veyq.tenant.ingress.sink` — named, never inferred from which settings happen to be
+populated ([ADR 0067](0067-store-provisioning-from-a-declared-type.md) Decision 1 settled that shape once).
+A sink **never throws**: a failed projection must not fail the tenant operation that triggered it, nor the
+startup regenerate.
+
 - **docker-compose sink.** The backend writes a Traefik **file-provider** dynamic config to a volume shared
   with `traefik` (`--providers.file.directory=... --providers.file.watch=true`); Traefik hot-reloads it, no
   restart. For every tenant domain **other than** `VEYQ_DOMAIN`, it emits the same router pair the static
@@ -60,8 +67,16 @@ normally).
 - **Presigning becomes per-request, not per-instance.** `S3BlobStore` signs against the **resolved tenant's
   own domain** (the request's `Host`), not a single `veyq.blob-store.public-endpoint` value — the config
   value remains the bootstrap-domain default, used only until a tenant row supplies its own.
-- **Kubernetes sink** (detailed in [ADR 0064](0064-kubernetes-helm-deployment-target.md)) implements the
-  same projector interface against the K8s Ingress API instead of a file.
+- **Kubernetes sink** (detailed in [ADR 0064](0064-kubernetes-helm-deployment-target.md)) implements the same
+  `TenantIngressSink` against the K8s Ingress API instead of a file, and full-regenerate costs it two things a
+  file sink gets for free. **It must delete.** Overwriting a file makes *"the proxy matches the table"* true in
+  one call; a reconciling sink has to diff and remove, or the argument above ("permanently wrong, with nothing
+  that ever notices") lands as a route to a suspended tenant that outlives the tenant. **And it must know what
+  is its.** A file sink cannot destroy a stranger's file by being wrong about which lines are its content; a
+  reconcile-by-list sink can destroy a stranger's `Ingress` by being wrong about which objects are its — so
+  every projected object carries `app.kubernetes.io/managed-by: veyq-tenant-ingress`, and that label is the
+  **selector the diff is taken over**, not a check applied afterwards. An unlabelled object is never a
+  candidate.
 
 ## Consequences
 

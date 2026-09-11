@@ -38,8 +38,13 @@ dependencies {
     implementation("org.flywaydb:flyway-mysql") // Flyway 12 keeps MariaDB/MySQL support out of flyway-core
     implementation("software.amazon.awssdk:s3:2.31.78") // S3 blob store: vendor-neutral S3 client + presigner (ADR 0013)
     implementation("io.quarkus:quarkus-mailer") // generic SMTP transport (transitive Vert.x MailClient), no vendor SDK (ADR 0048)
+    // ADR 0064's Kubernetes ingress sink. Chosen over a bare fabric8 client for `@WithKubernetesTestServer`
+    // below as much as for the client itself: this repository has no cluster and no CI that could get one, so a
+    // fake control plane inside the test JVM is the only proof KubernetesIngressSink can ever offer.
+    implementation("io.quarkus:quarkus-kubernetes-client")
 
     testImplementation("io.quarkus:quarkus-junit5")
+    testImplementation("io.quarkus:quarkus-test-kubernetes-client") // @WithKubernetesTestServer: a fabric8 mock API server in-JVM
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))
     testImplementation("com.icegreen:greenmail:2.1.2") // hermetic in-JVM SMTP server: assert the real sent mail (ADR 0048/0049)

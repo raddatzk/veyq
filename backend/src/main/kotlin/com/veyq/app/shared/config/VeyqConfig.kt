@@ -84,10 +84,26 @@ interface VeyqConfig {
         fun ingress(): Ingress
 
         /**
-         * The DB→reverse-proxy routing projection (ADR 0063). Both values absent is the `%dev`/`%test` default
-         * and a clean no-op: a self-hoster running the backend without Traefik must not need either.
+         * The DB→reverse-proxy routing projection (ADR 0063). The `%dev`/`%test` default is a clean no-op: a
+         * self-hoster running the backend without any reverse proxy must not need a value here.
          */
         interface Ingress {
+            /**
+             * **Which** proxy the projection is written to (ADR 0064 gave it a second one). Named, never
+             * inferred from which of the blocks below happens to be populated — ADR 0067 Decision 1 made the
+             * identical call for the object store after rejecting inference, and this is the same shape of
+             * ambiguity.
+             *
+             * [IngressSinkType.TRAEFIK_FILE] is the default because it is what every deployment did before this
+             * member existed, and it is inert without [dynamicConfigPath] — the same reasoning that keeps
+             * `veyq.blob-store.signing-mode`'s default where it is, so "no existing deployment moves" is shown
+             * by untouched tests rather than by edited ones.
+             */
+            @WithDefault("traefik-file")
+            fun sink(): IngressSinkType
+
+            fun kubernetes(): Kubernetes
+
             /**
              * Where `TraefikFileIngressSink` writes the Traefik file-provider config. **Absent ⇒ the projector
              * does nothing at all** — not an error, and not a degraded mode: an instance with no proxy in front
@@ -101,6 +117,37 @@ interface VeyqConfig {
              * already has one — and it is the domain a request that resolves to no tenant is signed against.
              */
             fun bootstrapDomain(): Optional<String>
+
+            /** `veyq.tenant.ingress.kubernetes.*` — read only when [sink] is [IngressSinkType.KUBERNETES]. */
+            interface Kubernetes {
+                /**
+                 * **An override, never a requirement.** In a cluster the namespace comes from the pod's own
+                 * mounted ServiceAccount token, which is what lets one image serve every install with no
+                 * per-install rebuild — the property the compose/admin-web work already established. This
+                 * exists for a local or test run against a cluster the process is not inside of.
+                 */
+                fun namespace(): Optional<String>
+
+                /**
+                 * The `spec.ingressClassName` to stamp on every projected `Ingress`. Absent leaves the field
+                 * unset, which hands the object to the cluster's default IngressClass — the right answer when
+                 * there is exactly one controller, and the reason this is not required. ADR 0064's controller is
+                 * operator-chosen, so this is passed through and never interpreted.
+                 */
+                fun ingressClassName(): Optional<String>
+
+                /**
+                 * The `Service` every projected `Ingress` routes to, and its port. An `Ingress` cannot omit a
+                 * backend, and the backend is a deployment-time name the chart owns — so unlike the compose sink,
+                 * which references the compose file's own `veyq-app@docker`, this one has to be told. The
+                 * defaults are the chart's own names; an operator who renames the Service sets these.
+                 */
+                @WithDefault("veyq-app")
+                fun serviceName(): String
+
+                @WithDefault("8080")
+                fun servicePort(): Int
+            }
         }
 
         interface Invite {
@@ -400,6 +447,29 @@ interface VeyqConfig {
          * answer left: there is no public endpoint either to swap into or to use verbatim.
          */
         INTERNAL_ENDPOINT,
+    }
+
+    /**
+     * Which [com.veyq.app.shared.tenant.TenantIngressSink] the tenant→routing projection is written to
+     * (ADR 0063's principle, ADR 0064's second target). Property text is hyphenated
+     * (`veyq.tenant.ingress.sink=kubernetes`), the same SmallRye mapping [StoreType] and [SigningMode] use;
+     * `KubernetesIngressSinkUnreachableTest` pins that binding by selecting this sink from config rather than
+     * trusting the mapping.
+     */
+    enum class IngressSinkType {
+        /**
+         * A Traefik file-provider config on a volume the proxy watches — the docker-compose deployment
+         * (ADR 0063). Inert without `veyq.tenant.ingress.dynamic-config-path`, which is the `%dev`/`%test`
+         * default and what lets a self-hoster run the backend with no proxy at all.
+         */
+        TRAEFIK_FILE,
+
+        /**
+         * `Ingress` objects managed directly through the Kubernetes API, in the backend's **own** namespace
+         * (ADR 0064). Needs no connection settings: the in-cluster ServiceAccount supplies both the API server
+         * and the namespace.
+         */
+        KUBERNETES,
     }
 
     interface Tasks {
