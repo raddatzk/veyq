@@ -163,8 +163,9 @@ services:
   # from a stranger's container on the same host.
   #
   # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.
-  # A bare "${ADMIN_PORT}:80" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
-  # surface this instance serves, which is the exact opposite of what extracting it was for.
+  # A bare "${ADMIN_PORT}:8080" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
+  # surface this instance serves, which is the exact opposite of what extracting it was for. The container
+  # side is 8080, not 80: the admin image runs unprivileged (uid 101, admin-web/Dockerfile) and cannot bind 80.
   admin:
     image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq-admin:1.0}
     restart: unless-stopped
@@ -176,14 +177,14 @@ services:
       # REQUEST time, so this container starts and stays useful even while the app is still migrating.
       BACKEND_URL: http://app:8080
     ports:
-      - "127.0.0.1:${ADMIN_PORT:-8081}:80"
+      - "127.0.0.1:${ADMIN_PORT:-8081}:8080"
     labels:
       - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
       - "${ADMIN_DOMAIN:+traefik.enable=true}"
       - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.rule=Host(`${ADMIN_DOMAIN}`)}"
       - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.entrypoints=websecure}"
       - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.tls.certresolver=letsencrypt}"
-      - "${ADMIN_DOMAIN:+traefik.http.services.veyq-admin.loadbalancer.server.port=80}"
+      - "${ADMIN_DOMAIN:+traefik.http.services.veyq-admin.loadbalancer.server.port=8080}"
 
   # TLS is a PRECONDITION here, not a deployment preference. `veyq.session.cookie.secure=true` is the shipped
   # default, so over plain HTTP the refresh cookie is set and never sent back — "remember me" breaks silently.

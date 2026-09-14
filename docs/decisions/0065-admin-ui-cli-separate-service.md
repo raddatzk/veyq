@@ -125,11 +125,15 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     The alternative actually installed, rolldown, is deliberately not used: it is Vite's bundler by way of
     Vite, not a tool this repo has chosen, and pinning a CLI's build to whatever bundler Vite ships next is
     the same mistake in a new place.
-  - **The runtime image gains a real, named cost: Node.js alongside nginx.** The final stage was
-    `nginx:<pinned>-alpine` (serving static assets + reverse-proxying, Decision above); the CLI needs a Node
-    runtime to execute in, so that stage installs `nodejs` (Alpine's package, actively maintained,
-    already the distro's own vendor-neutral build) — a heavier image than "just nginx," accepted because ADR
-    0065 already decided the CLI ships in this container, not a second one.
+  - **The runtime image gains a real, named cost: Node.js alongside nginx.** The final stage is
+    `nginxinc/nginx-unprivileged:<pinned>-alpine` (serving static assets + reverse-proxying, Decision above —
+    the *unprivileged* variant, uid 101 on port 8080, because a stock nginx runs as root and binds 80, which a
+    `restricted` PodSecurity namespace refuses and which would leave [ADR 0064](0064-kubernetes-helm-deployment-target.md)'s
+    chart unable to schedule the one surface first-run setup lives on; `scripts/validate_images_run_unprivileged.py`
+    holds every runtime stage to it); the CLI needs a Node runtime to execute in, so that stage installs
+    `nodejs` (Alpine's package, actively maintained, already the distro's own vendor-neutral build) — a heavier
+    image than "just nginx," accepted because ADR 0065 already decided the CLI ships in this container, not a
+    second one.
   - **Argument parsing: `node:util.parseArgs`, not a third-party CLI framework.** Node-core, zero
     dependencies, actively maintained by definition — the command surface (tenant CRUD and release info;
     mirrors whatever `admin-web/src/api/client.ts`'s factories are actually called for, located at CR time) is

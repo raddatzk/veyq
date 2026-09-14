@@ -44,10 +44,23 @@ RUN npm run build && npm run build:cli
 # privilege origin". That worry was about a SERVER, and it still stands: Node gets no port, no listener, no
 # entrypoint hook and no place in CMD. It runs only when an operator invokes the CLI by hand. The origin
 # this container exposes is served by nginx alone, exactly as before.
-FROM nginx:1.29-alpine AS runtime-nginx
+#
+# The UNPRIVILEGED variant, not the stock `nginx:<minor>-alpine` it replaced: the stock image runs its master
+# as root and binds port 80, which a `restricted` PodSecurity namespace refuses outright (`runAsNonRoot` is
+# mandatory there) — and this is the surface where first-run setup happens, so ADR 0064's chart would have
+# installed an instance nobody can set up. `nginxinc/nginx-unprivileged` is upstream nginx's own image
+# (actively maintained, vendor-neutral, same minor pin): uid 101, listens on 8080, pid file under /tmp, and
+# /etc/nginx/conf.d writable by 101 — which is all the entrypoint hook below needs, measured before switching.
+# Under compose nothing changes except the container-side port; scripts/validate_images_run_unprivileged.py
+# holds every runtime stage in this repository to this.
+FROM nginxinc/nginx-unprivileged:1.29-alpine AS runtime-nginx
+# The base ends on `USER 101`, and `apk add` as 101 fails (measured) — so root for the build steps, and back
+# to 101 at the very end of this stage. BOTH switches are load-bearing: without the first the build dies on
+# its first RUN, without the second the image silently runs as root again, with a green build on top.
+USER root
 RUN apk add --no-cache nodejs
 
-# The stock default site would otherwise also listen on 80 and win by being first.
+# The base image's default site would otherwise also listen on 8080 and win by being first.
 RUN rm -f /etc/nginx/conf.d/default.conf
 
 COPY --from=build /src/admin-web/dist /usr/share/nginx/html
@@ -77,6 +90,10 @@ LABEL org.opencontainers.image.title="veyq-admin" \
       org.opencontainers.image.revision="${VEYQ_REVISION}"
 ENV VEYQ_VERSION=${VEYQ_VERSION}
 
-EXPOSE 80
+# Back to the base image's unprivileged user — the LAST instruction that changes who runs, on purpose (see the
+# `USER root` above). 8080 is what the unprivileged base listens on and what admin-web/nginx.conf.template
+# binds; the compose file maps it to the host's 127.0.0.1:${ADMIN_PORT}.
+USER 101
+EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=5s --retries=10 --start-period=10s \
-  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1

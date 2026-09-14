@@ -13,7 +13,10 @@
 # `$host`/`$uri` variables survive.
 
 server {
-    listen 80;
+    # 8080, not 80: the image runs as uid 101 (nginx-unprivileged, see admin-web/Dockerfile), and a non-root
+    # process cannot bind a port below 1024. Deployments map it — compose to 127.0.0.1:${ADMIN_PORT}, the chart
+    # to a ClusterIP Service.
+    listen 8080;
     server_name _;
 
     root /usr/share/nginx/html;
