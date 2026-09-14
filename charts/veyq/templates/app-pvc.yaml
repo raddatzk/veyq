@@ -1,0 +1,19 @@
+# The config-secret KEK's home (ADR 0050/0056) — see app.persistence in values.yaml for why the claim is kept
+# on uninstall and why the pod sets fsGroup for it. A standalone claim rather than a StatefulSet template
+# because the app is a Deployment with Recreate: exactly one pod ever mounts it, and ReadWriteOnce is enough.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: veyq-config-secret
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [{{ .Values.app.persistence.accessMode }}]
+  {{- with .Values.app.persistence.storageClass }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.app.persistence.size }}

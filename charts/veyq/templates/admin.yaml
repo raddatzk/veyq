@@ -1,0 +1,94 @@
+# The Server-Owner administration surface (ADR 0065): its own image, its own origin, and by default reachable
+# from nowhere but a port-forward — see admin in values.yaml for the exposure modes.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: veyq-admin
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "admin") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "veyq.labels" . | nindent 8 }}
+        app.kubernetes.io/component: admin
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # nginx-unprivileged's user (admin-web/Dockerfile: `USER 101`, port 8080) — the reason that image is
+        # the unprivileged variant is precisely so this pod passes `restricted`.
+        runAsUser: 101
+        runAsGroup: 101
+      containers:
+        - name: admin
+          image: {{ include "veyq.adminImage" . | quote }}
+          imagePullPolicy: {{ .Values.admin.image.pullPolicy }}
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Where nginx proxies /api/* — the app Service, never the public domain. The image's entrypoint hook
+            # defaults this to the compose service name (`app:8080`), which does not exist here.
+            - name: BACKEND_URL
+              value: http://veyq-app:8080
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.admin.resources | nindent 12 }}
+---
+# ClusterIP and nothing more by default: `kubectl -n <ns> port-forward svc/veyq-admin 8081:8080` is this
+# target's `127.0.0.1:${ADMIN_PORT}`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: veyq-admin
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "veyq.selector" (dict "Release" .Release "component" "admin") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+{{- if .Values.admin.domain }}
+---
+# Own-domain exposure — opted into by setting admin.domain. The admin surface is 1:1 with the instance, not
+# per-tenant, so it is a fixed host like the bootstrap domain and needs none of the projection machinery.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veyq-admin
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+  {{- include "veyq.ingressMetadata" . }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- include "veyq.ingressTls" (dict "root" . "host" .Values.admin.domain "name" "veyq-admin") }}
+  rules:
+    - host: {{ .Values.admin.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: veyq-admin
+                port:
+                  number: 8080
+{{- end }}

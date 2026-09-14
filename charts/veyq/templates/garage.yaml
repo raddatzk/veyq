@@ -1,0 +1,169 @@
+# S3 on 3900 for the app AND, through the Ingress below, for browsers; RPC on 3901 so the advertised
+# rpc_public_addr resolves to a real listener; the admin API on 3903 for the app's provisioning — on the
+# Service, and deliberately on no Ingress.
+apiVersion: v1
+kind: Service
+metadata:
+  name: veyq-garage
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: garage
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 4 }}
+  ports:
+    - name: s3
+      port: 3900
+      targetPort: s3
+    - name: rpc
+      port: 3901
+      targetPort: rpc
+    - name: admin
+      port: 3903
+      targetPort: admin
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: veyq-garage
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: garage
+spec:
+  serviceName: veyq-garage
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "veyq.labels" . | nindent 8 }}
+        app.kubernetes.io/component: garage
+      annotations:
+        checksum/config: {{ include (print .Template.BasePath "/garage-configmap.yaml") . | sha256sum }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        # The image is scratch-based with no USER of its own; measured on dxflrs/garage:v2.0.0 that it runs
+        # as an arbitrary uid with writable data directories, so the chart picks one and fsGroup makes the
+        # claims writable — which is what lets it pass `restricted`.
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: garage
+          image: {{ .Values.garage.image | quote }}
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: s3
+              containerPort: 3900
+            - name: rpc
+              containerPort: 3901
+            - name: admin
+              containerPort: 3903
+          env:
+            - name: GARAGE_RPC_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageRpcSecret
+            - name: GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageAdminToken
+          # The compose recipe gives Garage no healthcheck, so these are the chart's own decision. The admin
+          # API's /health answers WITHOUT a token (measured on v2.0.0: 200 on a fresh node with no layout yet,
+          # which is the state the app's provisioning has to reach it in) — so readiness cannot deadlock on
+          # a store that is waiting to be provisioned.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: admin
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: admin
+            periodSeconds: 10
+            timeoutSeconds: 3
+          volumeMounts:
+            - name: config
+              mountPath: /etc/garage.toml
+              subPath: garage.toml
+              readOnly: true
+            - name: meta
+              mountPath: /var/lib/garage/meta
+            - name: data
+              mountPath: /var/lib/garage/data
+            - name: snapshots
+              mountPath: /var/lib/garage/snapshots
+          resources:
+            {{- toYaml .Values.garage.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap:
+            name: veyq-garage
+  volumeClaimTemplates:
+    - metadata:
+        name: meta
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.garage.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.garage.persistence.meta.size }}
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.garage.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.garage.persistence.data.size }}
+    - metadata:
+        name: snapshots
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.garage.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.garage.persistence.snapshots.size }}
+---
+# The store's own host (ADR 0064): the browser fetches presigned URLs cross-origin from here, under the `*`
+# CORS policy the app writes. The admin port is not on it, and no path under `domain` routes here either.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veyq-garage
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: garage
+  {{- include "veyq.ingressMetadata" . }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- include "veyq.ingressTls" (dict "root" . "host" .Values.storeDomain "name" "veyq-garage") }}
+  rules:
+    - host: {{ required "storeDomain is required" .Values.storeDomain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: veyq-garage
+                port:
+                  number: 3900

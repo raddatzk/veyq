@@ -1,0 +1,29 @@
+# The bootstrap domain's route — the compose recipe's static `traefik.http.routers.veyq-app` label. Chart-owned
+# and Helm-labelled, which is what keeps it apart from the tenant Ingress objects the backend projects: the
+# backend lists by ITS ownership value and would delete a chart object wearing it on the first regenerate. The
+# bootstrap domain is excluded from that projection (VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN), so this is its one
+# and only route.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+  {{- include "veyq.ingressMetadata" . }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- include "veyq.ingressTls" (dict "root" . "host" .Values.domain "name" "veyq-app") }}
+  rules:
+    - host: {{ required "domain is required" .Values.domain | quote }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: veyq-app
+                port:
+                  number: 8080

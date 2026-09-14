@@ -1,0 +1,25 @@
+veyq is installing into namespace {{ .Release.Namespace }}.
+
+Create the Server Owner account on the administration surface — over a port-forward, before {{ .Values.domain }}
+resolves anywhere (first-run setup needs no DNS and no certificate):
+
+    kubectl -n {{ .Release.Namespace }} port-forward svc/veyq-admin 8081:8080
+    open http://localhost:8081
+
+Save the Emergency Kit on that screen: it is shown once, and the server holds no key material by construction.
+
+Then point DNS at your ingress controller for:
+    {{ .Values.domain }}          the instance
+    {{ .Values.storeDomain }}     the object store (its own origin on this target)
+{{- if .Values.admin.domain }}
+    {{ .Values.admin.domain }}    the administration surface (you chose to expose it)
+{{- end }}
+{{- if eq .Values.ingress.tls.mode "none" }}
+
+TLS: ingress.tls.mode is `none`. Nothing in this release obtains a certificate. Unless something upstream
+terminates TLS for every host above, the refresh cookie (Secure) is never sent back and every mailed link
+points at https — an instance that boots and then silently breaks. See ingress.tls in values.yaml.
+{{- end }}
+
+Store provisioning runs in the background on the app's first start; read how it went as the Server Owner:
+    GET https://{{ .Values.domain }}/api/instance/store-provisioning

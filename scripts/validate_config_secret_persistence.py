@@ -26,8 +26,10 @@ comment rots silently, a resolution rule does not.
 **Its limit — what a green run does NOT prove.** It sees **compose files in this tree**, and only what they
 say. It cannot prove the host actually persists the named volume (a `down -v`, a wiped disk, a volume driver
 that lies), it cannot prove the *image* the service pulls is the one this `Dockerfile` builds, and it says
-nothing at all about a deployment that is not compose — Kubernetes, a bare `docker run`, a systemd unit. For
-those the `veyq_instance` fingerprint tripwire remains the only detection, by design.
+nothing at all about a deployment that is not compose — a bare `docker run`, a systemd unit. The Helm chart
+(ADR 0064) has its own guard for the same path: `scripts/chart_meta_check.py` resolves it by this file's rule
+and requires it on a PersistentVolumeClaim, outside the `validate_*` glob because it renders the chart with
+`helm`. For everything else the `veyq_instance` fingerprint tripwire remains the only detection, by design.
 
 Two accepted shapes are deliberately *not* violations, because rejecting them would punish correct
 configuration and the repair it invited would break the deployment: a **host bind mount** persists exactly as

@@ -1,0 +1,21 @@
+# Values that satisfy values.schema.json for a render that installs nothing — `helm lint`, `helm template`,
+# and scripts/chart_meta_check.py all use this file. NOT a template for an installation: every secret here is
+# a throwaway shaped to pass the schema, and the image repositories name an owner that publishes nothing.
+#
+# The chart's bare defaults deliberately do NOT render: the operator supplies every secret (values.yaml, top),
+# so a render with no values fails on the first unset one, by path. This file is how a render without an
+# operator is still possible.
+domain: veyq.example.org
+storeDomain: store.veyq.example.org
+image:
+  repository: ghcr.io/example/veyq
+admin:
+  image:
+    repository: ghcr.io/example/veyq-admin
+secrets:
+  mariadbPassword: ci-only-not-a-password
+  mariadbRootPassword: ci-only-not-a-password
+  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  garageAdminToken: ci-only-not-a-token
+  s3AccessKey: GK0123456789abcdef01234567
+  s3SecretKey: ci-only-not-a-secret

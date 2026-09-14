@@ -1,0 +1,23 @@
+apiVersion: v2
+name: veyq
+description: >-
+  Self-hostable, end-to-end-encrypted memory sharing. The operator-blind server, its administration surface,
+  MariaDB and the bundled Garage object store on an operator's own Kubernetes cluster (ADR 0064) — the same
+  five services infra/docker-compose.prod.yml runs, with tenant domains projected as Ingress objects by the
+  backend itself and certificates obtained for them through the operator's ingress controller.
+type: application
+# The chart's own version and the release it deploys. `appVersion` is the image tag the values default to and
+# has the release shape ADR 0057 defines (`<major>.<minor>`, the repository's VERSION file). Deriving both from
+# that file at publish time is the chart's OCI-release sub-slice (inbox #26), not decided here; until then they
+# are set by hand and must move together.
+version: 1.0.0
+appVersion: "1.0"
+# `restricted` PodSecurity admission is GA from 1.25, and every pod here is written to pass it.
+kubeVersion: ">=1.25.0-0"
+keywords:
+  - veyq
+  - e2ee
+  - self-hosted
+home: https://github.com/raddatzk/veyq
+sources:
+  - https://github.com/raddatzk/veyq

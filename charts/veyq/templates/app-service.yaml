@@ -1,0 +1,17 @@
+# `veyq-app`, literally: the backend's projected tenant Ingress objects route to this name and port by default
+# (veyq.tenant.ingress.kubernetes.service-name / -port). Renaming it here means setting those too.
+apiVersion: v1
+kind: Service
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 4 }}
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

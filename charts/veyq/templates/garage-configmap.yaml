@@ -1,0 +1,34 @@
+# The bundled object store (ADR 0013, ADR 0067). Deployed RUNNING; the app brings it to USABLE itself on first
+# start over the admin API — layout, bucket, key, grant and the CORS policy — so there is no init container.
+#
+# garage.toml as a ConfigMap (the compose recipe bind-mounts the repository's copy, which a chart cannot).
+# Same file, two differences: `rpc_public_addr` names this chart's Service, and the comments live here. It
+# carries NO secret — the RPC secret and the admin token come from the environment, as under compose.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: veyq-garage
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: garage
+data:
+  garage.toml: |
+    metadata_dir = "/var/lib/garage/meta"
+    data_dir = "/var/lib/garage/data"
+    # Its own claim, apart from meta: `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the
+    # very volume a rollback would copy (ADR 0056 §3).
+    metadata_snapshots_dir = "/var/lib/garage/snapshots"
+    db_engine = "lmdb"
+
+    replication_factor = 1
+
+    rpc_bind_addr = "[::]:3901"
+    rpc_public_addr = "veyq-garage:3901"
+
+    [s3_api]
+    # Must match veyq.blob-store.region (default us-east-1) — SigV4 signs the region.
+    s3_region = "us-east-1"
+    api_bind_addr = "[::]:3900"
+
+    [admin]
+    api_bind_addr = "[::]:3903"

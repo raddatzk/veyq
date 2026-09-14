@@ -1,0 +1,28 @@
+# The settings that exist only on this target, as a Quarkus properties file rather than as environment: the
+# annotation map's keys carry dots and slashes (`cert-manager.io/cluster-issuer`), which the properties grammar
+# quotes and an environment-variable name cannot spell. Everything that has a compose counterpart stays an
+# environment variable on the Deployment, so the two recipes read side by side.
+#
+# Two things are deliberately ABSENT. `veyq.tenant.ingress.kubernetes.namespace` — in-cluster the namespace
+# comes from the pod's mounted ServiceAccount token, and setting it here would re-introduce the per-install
+# rebuild that token exists to avoid. And `veyq.tenant.ingress.dynamic-config-path` — with it set the backend
+# would build the compose file sink instead.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+data:
+  application.properties: |
+    veyq.tenant.ingress.sink=kubernetes
+    {{- with .Values.ingress.className }}
+    veyq.tenant.ingress.kubernetes.ingress-class-name={{ . }}
+    {{- end }}
+    veyq.tenant.ingress.kubernetes.tls.mode={{ .Values.ingress.tls.mode }}
+    {{- with .Values.ingress.tls.secretName }}
+    veyq.tenant.ingress.kubernetes.tls.secret-name={{ . }}
+    {{- end }}
+    {{- range $key, $value := .Values.ingress.annotations }}
+    veyq.tenant.ingress.kubernetes.annotations."{{ $key }}"={{ $value }}
+    {{- end }}

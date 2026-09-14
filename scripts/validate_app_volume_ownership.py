@@ -31,8 +31,11 @@ adding a third volume enrols it automatically.
 
 **Its limits — what a green run does NOT prove.** It reads compose files *in this tree* and the `Dockerfile`
 *in this tree*; it cannot prove the image a service pulls was built from that `Dockerfile`, and it says
-nothing about a non-compose deployment (Kubernetes, a bare `docker run`) — for those, ADR 0064's chart owns
-its own volume semantics. It checks ownership and existence, never the MODE: a directory the app can write is
+nothing about a non-compose deployment (a bare `docker run`, a systemd unit). The Kubernetes half is a
+different mechanism with a different guard: a PersistentVolumeClaim inherits NOTHING from the image directory
+it covers, so seeding is not the question there — `fsGroup` is, and `scripts/chart_meta_check.py` holds the
+chart's app pod to the same runtime user this guard reads (outside the `validate_*` glob, because it renders
+the chart with `helm`). It checks ownership and existence, never the MODE: a directory the app can write is
 what the failure was about, and a mode narrow enough to break a *reader* (traefik reads this one) would be a
 different guard over a different fact. And it deliberately ignores read-only mounts and host bind mounts:
 a `:ro` mount is not written by definition, and a bind mount takes the host's ownership, which no image can

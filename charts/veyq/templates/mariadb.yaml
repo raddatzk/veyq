@@ -1,0 +1,97 @@
+{{- if .Values.mariadb.enabled }}
+# The bundled database. A StatefulSet for its stable claim, one replica, no published port: the app reaches it
+# on the Service, a backup capture reaches it through `kubectl exec`. Runs as the image's own `mysql` user
+# (uid 999) rather than root-then-gosu — measured on mariadb:11.4: started as `--user 999` with a datadir it
+# can write, it reports ready in seconds — which is what lets the pod pass `restricted`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: veyq-mariadb
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "veyq.selector" (dict "Release" .Release "component" "mariadb") | nindent 4 }}
+  ports:
+    - name: mysql
+      port: 3306
+      targetPort: mysql
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: veyq-mariadb
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  serviceName: veyq-mariadb
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "mariadb") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "veyq.labels" . | nindent 8 }}
+        app.kubernetes.io/component: mariadb
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: mariadb
+          image: {{ .Values.mariadb.image | quote }}
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: mysql
+              containerPort: 3306
+          env:
+            - name: MARIADB_DATABASE
+              value: veyq
+            - name: MARIADB_USER
+              value: veyq
+            - name: MARIADB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbPassword
+            - name: MARIADB_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbRootPassword
+          # The image's own healthcheck script, the same test the compose recipe runs.
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 10
+            timeoutSeconds: 5
+          startupProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 5
+            failureThreshold: 36
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+          resources:
+            {{- toYaml .Values.mariadb.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: [ReadWriteOnce]
+        {{- with .Values.mariadb.persistence.storageClass }}
+        storageClassName: {{ . }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.mariadb.persistence.size }}
+{{- end }}

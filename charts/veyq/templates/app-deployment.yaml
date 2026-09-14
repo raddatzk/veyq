@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  # One pod, and never two — not even during an upgrade. See app in values.yaml: the schema migrates at boot
+  # with no gate (inbox #121), and Recreate is what makes "one migrator at a time" true.
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "veyq.labels" . | nindent 8 }}
+        app.kubernetes.io/component: app
+      annotations:
+        # A changed ConfigMap restarts the pod: Quarkus reads the properties file once, at boot.
+        checksum/config: {{ include (print .Template.BasePath "/app-configmap.yaml") . | sha256sum }}
+    spec:
+      serviceAccountName: veyq-app
+      # The token IS the cluster identity: the backend reads its namespace and reaches the API server through it.
+      automountServiceAccountToken: true
+      securityContext:
+        # The image's runtime user (Dockerfile: `USER 10001`). fsGroup is what makes the PVC below writable —
+        # a claim comes up root-owned and, unlike a Docker named volume, inherits nothing from the image. A
+        # first-ever install without it reproduces the AccessDeniedException restart-loop the compose recipe
+        # already paid for once (scripts/validate_app_volume_ownership.py's docstring). Declarative, so no
+        # chown init container, and what `restricted` expects.
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: app
+          image: {{ include "veyq.appImage" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- include "veyq.containerSecurityContext" . | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            # Mirrors infra/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
+            # against each other. What differs is said where it differs.
+            - name: QUARKUS_DATASOURCE_JDBC_URL
+              {{- if .Values.mariadb.enabled }}
+              value: jdbc:mariadb://veyq-mariadb:3306/veyq
+              {{- else }}
+              value: {{ required "externalDatabase.jdbcUrl is required when mariadb.enabled=false" .Values.externalDatabase.jdbcUrl | quote }}
+              {{- end }}
+            - name: QUARKUS_DATASOURCE_USERNAME
+              value: {{ if .Values.mariadb.enabled }}veyq{{ else }}{{ .Values.externalDatabase.username | quote }}{{ end }}
+            - name: QUARKUS_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: mariadbPassword
+            # Behind an ingress controller the per-IP rate limiter must key on the real client.
+            - name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
+              value: "true"
+            # The store is reached INTERNALLY; presigned URLs are signed for the store's OWN public host,
+            # verbatim — the departure from compose's same-origin path route (ADR 0064, ADR 0067 Decision 5).
+            - name: VEYQ_BLOB_STORE_ENDPOINT
+              value: http://veyq-garage:3900
+            - name: VEYQ_BLOB_STORE_PUBLIC_ENDPOINT
+              value: https://{{ required "storeDomain is required" .Values.storeDomain }}
+            - name: VEYQ_BLOB_STORE_SIGNING_MODE
+              value: store-origin
+            - name: VEYQ_BLOB_STORE_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: s3AccessKey
+            - name: VEYQ_BLOB_STORE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: s3SecretKey
+            # The app brings the bundled store from RUNNING to USABLE itself (ADR 0067) over its admin API — a
+            # different port from the S3 one, reachable on the Service and deliberately on no Ingress.
+            - name: VEYQ_BLOB_STORE_TYPE
+              value: garage
+            - name: VEYQ_BLOB_STORE_GARAGE_ADMIN_ENDPOINT
+              value: http://veyq-garage:3903
+            - name: VEYQ_BLOB_STORE_GARAGE_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "veyq.secretName" . }}
+                  key: garageAdminToken
+            # The KEK, on the claim below — an ABSOLUTE path outside /work, which holds the application itself.
+            - name: VEYQ_SECURITY_CONFIG_SECRET_FILE
+              value: /var/lib/veyq/config-secret.key
+            # The bootstrap domain is routed by the chart's own Ingress and EXCLUDED from the projection; the
+            # Kubernetes-only half of the ingress settings is the properties file below.
+            - name: VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN
+              value: {{ required "domain is required" .Values.domain | quote }}
+            - name: QUARKUS_CONFIG_LOCATIONS
+              value: /etc/veyq/application.properties
+          volumeMounts:
+            - name: config-secret
+              mountPath: /var/lib/veyq
+            - name: config
+              mountPath: /etc/veyq
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /api/setup
+              port: http
+            periodSeconds: {{ .Values.app.startupProbe.periodSeconds }}
+            failureThreshold: {{ .Values.app.startupProbe.failureThreshold }}
+          readinessProbe:
+            httpGet:
+              path: /api/setup
+              port: http
+            periodSeconds: {{ .Values.app.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.app.readinessProbe.timeoutSeconds }}
+          {{- if .Values.app.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /api/setup
+              port: http
+            periodSeconds: {{ .Values.app.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.app.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.app.livenessProbe.failureThreshold }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+      volumes:
+        - name: config-secret
+          persistentVolumeClaim:
+            claimName: veyq-config-secret
+        - name: config
+          configMap:
+            name: veyq-app

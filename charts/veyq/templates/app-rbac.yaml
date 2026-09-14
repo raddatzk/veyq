@@ -1,0 +1,37 @@
+# The backend's cluster identity, and the whole of it: a namespace-local ServiceAccount + Role, never a
+# ClusterRole (ADR 0064). The backend projects tenant domains as Ingress objects into ITS OWN namespace and
+# lists them by its ownership label; these are the verbs that reconcile needs — `delete` included, because a
+# withdrawn domain's Ingress must go, not stay. Nothing here reaches Secrets or CRDs: TLS is a passthrough
+# (annotations + spec.tls the controller acts on), so no certificate object is ever the backend's to write.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: veyq-app
+subjects:
+  - kind: ServiceAccount
+    name: veyq-app
+    namespace: {{ .Release.Namespace }}

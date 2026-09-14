@@ -1,0 +1,193 @@
+# veyq on Kubernetes (ADR 0064). The chart deploys published images only — it builds nothing, and it GENERATES
+# nothing: every secret below is the operator's to supply, because a value Helm generated would be re-rolled on
+# any render where `lookup` is blind (`helm template`, `--dry-run`), and rotating GARAGE_RPC_SECRET breaks the
+# store while losing the config-secret KEK is the quiet loss ADR 0056 is about. values.schema.json refuses an
+# install that leaves one unset, naming the path and the shape. ONE release per namespace: the backend projects
+# tenant Ingress objects into its own namespace and lists them by label, so two releases there would reconcile
+# each other's routing away.
+#
+# What is required and has no default:  domain · storeDomain · image.repository · admin.image.repository ·
+# every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
+# ingress.tls.secretName when ingress.tls.mode=shared.
+
+# The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Written into every invitation and
+# recovery link the instance mails, routed statically by the chart's own Ingress (the backend never projects
+# it a second time), and the domain a restore targets. Changing it later is not supported.
+domain: ""
+
+# The bundled store's OWN host — a second Ingress, not a path under `domain`. An operator-chosen ingress
+# controller is not guaranteed to preserve the prefix and Host header a SigV4 signature needs, so on this
+# target the store gets its own origin and every presigned URL is signed against it verbatim
+# (`veyq.blob-store.signing-mode=store-origin`, ADR 0067 Decision 5; ADR 0013 §4's CORS branch). The bucket's
+# CORS policy is written by the backend at runtime and is `*` — the only policy the bundled store can express
+# for a multi-tenant instance — so the chart templates no origin list.
+storeDomain: ""
+
+image:
+  # e.g. ghcr.io/<owner>/veyq. The app image, cosign-signed by the same publish as the admin image below.
+  repository: ""
+  # Defaults to the chart's appVersion, which has the release shape `<major>.<minor>`. Pin one; `latest` moves,
+  # the schema migrates at boot with no gate, and there is no downgrade path (ADR 0057).
+  tag: ""
+  pullPolicy: IfNotPresent
+
+app:
+  # `Recreate`, and NOT Kubernetes' default RollingUpdate — the second half of "one app pod" is the one that
+  # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate, which is
+  # today's undecided update mechanism (inbox #121); RollingUpdate with its default maxSurge starts the new pod
+  # BEFORE the old one stops, so a `helm upgrade` would briefly run two migrators against one database.
+  # `replicas: 1` alone does not prevent that; Recreate is what makes "one migrator at a time" true. Deliberately
+  # not a value: raising replicas is a decision about the migration mechanism, not a tuning knob.
+  resources:
+    limits:
+      # One decision written in two files: the image's ENTRYPOINT sets -XX:MaxRAMPercentage=60.0, which is a
+      # percentage OF THIS LIMIT (without one the JVM sizes its heap off the node's RAM). 1Gi agrees with the
+      # compose recipe's `mem_limit: ${VEYQ_MEM_LIMIT:-1g}`; change both or neither.
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  # Probes are the chart's because compose supplies them and the image does not. `GET /api/setup` is
+  # unauthenticated, served only once Flyway has migrated, and the first call every client makes — the same
+  # probe scripts/run_web_e2e.py and the compose healthcheck use. This backend has NO smallrye-health extension,
+  # so there is no /q/health/ready to poll (cr-e2e-orchestrator paid for assuming otherwise).
+  startupProbe:
+    # periodSeconds × failureThreshold must cover the compose recipe's start_period of 60s with room: a JVM on
+    # a cold node migrating a schema is exactly what a too-short startup window turns into a restart loop.
+    periodSeconds: 5
+    failureThreshold: 36
+  readinessProbe:
+    periodSeconds: 15
+    timeoutSeconds: 5
+  # No liveness probe by default, and that is a decision: a liveness probe on a JVM in a long GC pause converts
+  # a slow instance into a restart loop, and the image already exits on OutOfMemoryError so the kubelet
+  # restarts a genuinely wedged JVM without one. Enable it knowingly.
+  livenessProbe:
+    enabled: false
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 6
+  persistence:
+    # The config-secret KEK (ADR 0050/0056): the server GENERATES it into /var/lib/veyq on first start, and it
+    # is the one piece of durable state that is neither in the database nor in the store. A PVC comes up
+    # root-owned — unlike a Docker named volume, it is NOT seeded from the image directory it covers — so the
+    # pod sets fsGroup to the image's runtime uid; scripts/chart_meta_check.py holds this to the Dockerfile.
+    # The claim is annotated helm.sh/resource-policy: keep, so `helm uninstall` leaves the key behind rather
+    # than turning a reinstall into an instance that boots and then refuses invites and resets.
+    size: 100Mi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+
+admin:
+  image:
+    # e.g. ghcr.io/<owner>/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
+    # of a mismatched pair migrated the schema.
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  # The Server-Owner administration surface's exposure (ADR 0065), translated as a PROPERTY and not as compose's
+  # mechanism. Compose binds 127.0.0.1:<port>; here the default is NO Ingress and a ClusterIP Service, reached
+  # with `kubectl -n <ns> port-forward svc/veyq-admin 8081:8080` — which is what keeps first-run setup
+  # independent of DNS and TLS: the admin container proxies /api/* from its own origin, so
+  # http://localhost:8081 bootstraps an instance whose `domain` does not resolve yet. Set a domain to expose it
+  # on its own hostname and certificate; choose one you publish nowhere.
+  domain: ""
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 32Mi
+
+ingress:
+  # Passed through to every Ingress this chart templates AND, via the backend, to every tenant Ingress it
+  # projects; absent leaves the cluster's default IngressClass to decide. Never interpreted.
+  className: ""
+  # Stamped VERBATIM on every Ingress — the chart's own and the projected ones alike. This is how the
+  # operator's certificate issuer reaches objects the backend writes at runtime: e.g.
+  #   cert-manager.io/cluster-issuer: letsencrypt
+  # The chart configures no issuer and creates no Certificate — TLS is a passthrough (ADR 0064): the reference
+  # is stamped here, the configuration is the ingress controller's and the operator's, and no RBAC beyond the
+  # Ingress verbs is needed because cert-manager watches Ingress objects the backend already writes.
+  annotations: {}
+  tls:
+    # none       — no spec.tls on any Ingress. For TLS terminated upstream (a cloud load balancer, a mesh).
+    #              The default, so no existing deployment moves — but read on before keeping it: TLS is a
+    #              PRECONDITION for this app, not a preference. The refresh cookie is `Secure` by default and
+    #              every mailed link is https, so an instance nothing terminates TLS for boots, serves every
+    #              page, silently breaks "remember me" and mails links to a scheme it does not answer.
+    # per-domain — one spec.tls entry per Ingress whose secretName is the object's OWN name (cert-manager's
+    #              ingress-shim shape). Every tenant domain — a custom domain included — gets its own
+    #              certificate through the annotations above. Residue worth knowing: when a tenant is suspended
+    #              and its Ingress withdrawn, cert-manager does NOT delete the Secret it issued unless it runs
+    #              with --enable-certificate-owner-ref, so a withdrawn domain leaves an orphaned TLS Secret in
+    #              the namespace. Operator-visible, not a routing leak (the Ingress is gone) and not an access
+    #              leak (suspension's guarantee is the request-boundary gate); not swept by the chart, because
+    #              sweeping Secrets would need RBAC this design exists to avoid.
+    # shared     — every Ingress points at ONE pre-provisioned TLS Secret (secretName below): a wildcard
+    #              certificate, kept as an operator's choice rather than as everyone's ceiling. An operator who
+    #              bought one *.example.com certificate and runs no ACME gets a working instance — and gives up
+    #              per-tenant custom domains knowingly, because a custom domain routes and the browser refuses.
+    mode: none
+    # Required by `shared`; ignored by the other modes. The backend refuses `shared` without it — loud and
+    # disabled, never a failed boot — so an install that forgets it routes nothing rather than half.
+    secretName: ""
+
+secrets:
+  # Name an existing Secret carrying the keys below (mariadbPassword, mariadbRootPassword, garageRpcSecret,
+  # garageAdminToken, s3AccessKey, s3SecretKey) and the chart renders none of its own — for sealed-secrets,
+  # external-secrets or any operator who keeps key material out of values files. Leave empty to have the chart
+  # render a Secret from the values below.
+  existingSecret: ""
+  # Database. The app user's password, and root — root is read by nothing in the chart and exists for a backup
+  # capture (ADR 0056) and the image's own bootstrap.
+  mariadbPassword: ""
+  mariadbRootPassword: ""
+  # Object store. The RPC secret must be exactly 64 hex characters (`openssl rand -hex 32`); the admin token
+  # is read by TWO components — the store, and the app, which brings the store from running to usable on
+  # first start (ADR 0067: layout, bucket, key, grant, CORS). The S3 key pair is what the app signs presigned
+  # URLs with and what it imports INTO the store; the access key must be a Garage key id, `GK` + 24 hex.
+  garageRpcSecret: ""
+  garageAdminToken: ""
+  s3AccessKey: ""
+  s3SecretKey: ""
+
+mariadb:
+  # false = an operator-managed database (ADR 0064's escape hatch); then set externalDatabase below.
+  enabled: true
+  image: mariadb:11.4
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+externalDatabase:
+  # Read only when mariadb.enabled=false. The password is secrets.mariadbPassword (or that key of
+  # secrets.existingSecret) either way, so the app's own wiring does not change with the database's home.
+  jdbcUrl: ""
+  username: veyq
+
+garage:
+  image: dxflrs/garage:v2.0.0
+  # Three claims, mirroring the compose recipe's three volumes. Snapshots are separate from meta on purpose:
+  # `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the very volume a rollback would
+  # copy (ADR 0056 §3).
+  persistence:
+    storageClass: ""
+    meta:
+      size: 1Gi
+    data:
+      size: 50Gi
+    snapshots:
+      size: 1Gi
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
