@@ -68,12 +68,30 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   property the compose/admin-web work already paid for. `veyq.tenant.ingress.kubernetes.service-name`/`-port`
   name the `Service` the rules point at, so renaming the app `Service` in the chart means setting them.
 
-  **The sink emits no TLS block, and that leaves one thing genuinely open for the chart.** Certificates are
-  not routing. But cert-manager is driven by an **annotation on the `Ingress` object**, and these objects are
-  written at runtime by the backend — a chart cannot annotate what it does not template. So TLS on Kubernetes
-  needs either a passthrough (an annotation/TLS-secret template the sink stamps onto every object it builds)
-  or a wildcard/`Certificate` resource the chart owns outright. Neither is decided here; what is decided is
-  that the *chart alone* cannot close it.
+  **TLS is a passthrough: the sink stamps a reference the chart tells it to, and configures nothing.** The
+  compose sink is not TLS-free — it emits `tls.certResolver: letsencrypt` on every router, a *reference* to a
+  resolver the compose file configures. The cut is between referencing and configuring, not between emitting
+  and not emitting, and the faithful translation is `spec.tls` plus an operator-supplied annotation map on
+  every projected `Ingress` — never an `Issuer`, a `Certificate` or a `Secret`, which are the ingress
+  controller's and the operator's and would need RBAC this design exists to avoid (cert-manager watches the
+  `Ingress` objects the sink is already permitted to write). Three named modes under
+  `veyq.tenant.ingress.kubernetes.tls.*`, never inferred: `none` (the default — TLS terminates upstream, and no
+  existing deployment moves), `per-domain` (one `spec.tls` per domain whose `secretName` is the object's **own**
+  name, cert-manager's ingress-shim shape — the one that keeps per-tenant custom domains working), and `shared`
+  (every object references one pre-provisioned `Secret`: the wildcard certificate, kept as an operator's
+  choice rather than as everyone's ceiling, because a wildcard *certificate* takes away at the TLS layer
+  exactly the custom-domain capability [ADR 0063](0063-database-driven-tenant-ingress.md) refused to give up at
+  the routing layer). The chart's own `Ingress` objects follow the same mode, so the operator decides once.
+  Why `secretName` reuses the object name rather than deriving a second one: a `Secret` name has the same
+  253-character cap an object name has, `contracts/api/tenants.openapi.yaml` allows a 253-character domain,
+  and the object name is the one string already kept legal at that cap — a `-tls` suffix on it is an object the
+  API server rejects, which on this sink's failure boundary strands *every* tenant's routing. Stated residue:
+  a withdrawn domain's issued `Secret` is not deleted by cert-manager unless it runs with
+  `--enable-certificate-owner-ref` — operator-visible, not a routing or access leak, and not swept, because
+  sweeping `Secret`s would need the RBAC this shape avoids. **TLS on this target is a precondition, not a
+  preference:** the refresh cookie is `Secure` by default and every mailed link is `https`, so a chart that
+  cannot obtain a certificate for a tenant domain ships an instance that boots and then silently breaks
+  sessions — which is why `none` is the default for continuity and the chart's notes say so loudly.
 - **Garage gets its own Ingress host by default on Kubernetes**, not the compose same-origin path route.
   Because the ingress controller is operator-chosen and its exact prefix/Host-preservation behavior is not
   guaranteed, the chart defaults to the CORS-policy branch [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)
@@ -100,7 +118,20 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   and **cosign-signed** the same way — extending [ADR 0057](0057-release-identity-and-deployment-recipe.md)'s
   release-identity story to a second artifact type rather than inventing a separate distribution channel
   (Helm's native OCI support makes this a config addition to the existing `container.yml` workflow, not a new
-  tool).
+  tool). **This is the one part of the decision not yet built**, and deliberately so: its only proof is a
+  workflow run, and no CI run has ever executed in this repository (no remote). V1 is unaffected — it gates on
+  the instance being *deployable* onto a cluster, and `helm install ./charts/veyq` is that. It stays the
+  remaining sub-slice on [inbox #26](../inbox.md); until it lands, `Chart.yaml`'s `version`/`appVersion` are
+  set by hand and must move with the `VERSION` file.
+- **The chart generates nothing and every pod passes `restricted`.** Every secret is the operator's to supply
+  (or to name in an existing `Secret`), enforced by `values.schema.json` — a value Helm generated would be
+  re-rolled on any render where `lookup` is blind, and a chart that generates values cannot be asserted
+  because no two renders agree. The config-secret KEK is the one exception and stays one: the app generates
+  it onto its own PersistentVolumeClaim, which the pod makes writable with `fsGroup` = the image's runtime
+  user, because a claim inherits nothing from the image directory it covers (a Docker named volume does).
+  The app runs one pod with `strategy: Recreate` — the schema migrates at boot with no gate, and RollingUpdate
+  would start the new migrator before the old one stops. `scripts/chart_meta_check.py` holds all of this on
+  the rendered manifests, outside the buildless `validate_*` glob because it needs `helm`.
 - **Backup/restore stays explicitly out of this ADR's scope.** [ADR 0056](0056-instance-durable-state-and-cold-logical-backup.md)'s
   gap statement is accurate and stays accurate; a Kubernetes-native backup story (a `CronJob` running
   `scripts/instance_backup.py`, or a StatefulSet snapshot strategy) is deferred to its own future decision,
@@ -114,9 +145,9 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   keeps between the compose file's two homes (repo + inside the image).
 - **`docs/inbox.md` #26 is corrected in place** to record the reversal and point here — the 2026-08-06
   reasoning is superseded, not silently contradicted.
-- **The upgrade runbook** (`infra/README.md` § An upgrade, step by step) needs a Kubernetes equivalent
-  (`helm upgrade`, the same migrate-at-start caveat inbox #26 already names as undecided) — scoped to the CR
-  that actually builds the chart, not decided here.
+- **The upgrade runbook has its Kubernetes equivalent** — `infra/README.md` § Running on Kubernetes carries
+  `helm upgrade` with the same migrate-at-start caveat (one pod, `Recreate`, the backup as the only way back)
+  and the orphaned-TLS-`Secret` residue.
 - **Deferred, explicitly**: Kubernetes-native backup/restore; a `mariadb`-operator integration beyond the
   bundled StatefulSet; multi-cluster/multi-region topologies. None of these are self-hosting concerns — out
   of scope on the same grounds `docs/inbox.md` already uses for SaaS-era items.

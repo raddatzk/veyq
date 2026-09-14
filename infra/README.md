@@ -229,7 +229,113 @@ Two things worth knowing rather than discovering:
   ```
 
   (Note the current limit: the recipe is those two files, so the store's `garage.toml` still comes from this
-  repository. It used to be two files — ADR 0067 deleted `garage-init.sh` along with the image that ran it.)
+  repository — the Helm chart carries its own copy as a `ConfigMap`, so the file has a second, self-sufficient
+  home there, but the compose recipe still reads it from here. It used to be two files — ADR 0067 deleted
+  `garage-init.sh` along with the image that ran it.)
+
+## Running on Kubernetes
+
+`charts/veyq` is the second deployment target ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)):
+the same five services as the production compose file — the app, its administration surface, MariaDB, Garage
+— on an operator's own cluster, with the ingress controller as the operator's choice. It deploys published
+images and builds nothing; it **generates nothing** either, so every secret is yours to supply and an install
+that leaves one unset is refused by name (`values.schema.json`). One release per namespace: the app projects
+tenant domains as `Ingress` objects into its own namespace and lists them by label, so two releases there
+would reconcile each other's routing away.
+
+```sh
+cp charts/veyq/values.yaml my-values.yaml         # fill in: domain, storeDomain, both image repositories,
+                                                  # every key under secrets, and the ingress.tls block
+helm install veyq ./charts/veyq -n veyq --create-namespace -f my-values.yaml
+```
+
+Generate the store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret`
+(exactly 64 hex characters), and an access key of the shape `GK` + 24 hex for `s3AccessKey`. An operator who
+keeps key material out of values files names an existing `Secret` in `secrets.existingSecret` instead.
+
+**Setting up a brand-new instance works the same way it does under compose — before DNS and TLS exist.** The
+administration surface gets a `ClusterIP` `Service` and **no** `Ingress` by default; `kubectl port-forward` is
+this target's `127.0.0.1:${ADMIN_PORT}`:
+
+```sh
+kubectl -n veyq port-forward svc/veyq-admin 8081:8080
+# then open http://localhost:8081 and create the Server Owner account
+```
+
+Save the Emergency Kit on that screen. Set `admin.domain` to expose the surface on a hostname of its own
+afterwards, or never. Every pod passes the `restricted` PodSecurity standard — the admin image runs
+unprivileged for exactly this — so the namespace can carry that label from the start.
+
+**Three hosts, two of them mandatory.** `domain` is the instance (the compose file's `VEYQ_DOMAIN`);
+`storeDomain` is the object store on **its own host** — not a path under `domain`, because an operator-chosen
+ingress controller is not guaranteed to preserve the prefix and `Host` header a SigV4 signature needs, so
+presigned URLs are signed against the store's own origin (`store-origin` signing,
+[ADR 0067](../docs/decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5) under the `*` CORS
+policy the app writes on first start ([ADR 0013 §4](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md)
+measures why `*` is the only policy the bundled store can express for many tenants). `admin.domain` is the
+optional third.
+
+**TLS is a passthrough, and it is a precondition here as much as under compose.** The chart configures no
+certificate issuer: it stamps `ingress.annotations` verbatim on every `Ingress` — its own three, and every
+tenant `Ingress` the app writes at runtime — and emits `spec.tls` by a named mode, `ingress.tls.mode`:
+
+- `none` (the default, so that nothing moves): no `spec.tls` anywhere. Right where TLS terminates upstream of
+  the ingress controller. Wrong everywhere else — the refresh cookie is `Secure` and every mailed link is
+  `https`, so an instance nothing terminates TLS for boots, serves every page, and silently breaks sessions.
+- `per-domain`: one `spec.tls` per `Ingress` whose `secretName` is the object's own name, which is
+  cert-manager's ingress-shim shape. With `cert-manager.io/cluster-issuer: <issuer>` in the annotations, every
+  tenant domain — a custom domain included — gets its own certificate with no chart edit and no restart. Point
+  the annotation at a **staging** issuer while you test a deployment: each new tenant is a certificate order,
+  and the production rate limit is a week. Residue worth knowing: when a tenant is suspended and its `Ingress`
+  withdrawn, cert-manager does **not** delete the `Secret` it issued unless it runs with
+  `--enable-certificate-owner-ref`. A withdrawn domain therefore leaves an orphaned TLS `Secret` in the
+  namespace — visible to you, not a routing leak (the `Ingress` is gone) and not an access leak (a suspended
+  tenant is locked out at the request boundary, not by routing). The chart does not sweep them, because
+  sweeping `Secret`s would need the RBAC this design exists to avoid.
+- `shared`: every `Ingress` points at the one `Secret` you name in `ingress.tls.secretName` — a wildcard
+  certificate you obtained yourself. A working instance with no ACME at all, at the price of per-tenant custom
+  domains: a custom domain routes and the browser refuses it. The app refuses `shared` without a secret name
+  — loud, and with tenant routing disabled — rather than projecting routes without TLS.
+
+**What the app's cluster identity can and cannot do.** A namespace-local `ServiceAccount` + `Role` with the
+`Ingress` verbs, never a `ClusterRole`: the app manages routing in its own namespace and nowhere else. The
+namespace is read from the mounted token, so the same image serves every install; do not set
+`veyq.tenant.ingress.kubernetes.namespace` in values, it is the outside-a-cluster override.
+
+**The config-secret key lives on a `PersistentVolumeClaim`, and the claim is kept.** Same loss, same place as
+under compose: without the key the instance boots and then refuses invites and resets. The claim
+(`veyq-config-secret`) is annotated `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it behind, and
+the pod sets `fsGroup` to the image's runtime user because a claim comes up root-owned and — unlike a Docker
+named volume — inherits nothing from the image. `scripts/chart_meta_check.py` holds that to the `Dockerfile`
+(and the rest of the chart's structure), outside the buildless guard glob because it renders the chart with
+`helm`.
+
+### Upgrading with `helm upgrade`
+
+The same procedure as § *An upgrade, step by step*, with the same reason it is a procedure: the schema
+migrates at boot with no gate and no downgrade path, so the backup is the way back. Two things are specific
+to this target.
+
+- **One app pod, `strategy: Recreate`, and that is not a tuning knob.** Kubernetes' default `RollingUpdate`
+  starts the new pod before the old one stops, which would run two migrators against one schema during every
+  upgrade; `Recreate` is what makes "one migrator at a time" true, at the cost of a short outage per upgrade.
+  The day the update mechanism is decided (inbox #121) this is the constraint to revisit.
+- **Kubernetes-native backup is not built** ([ADR 0064](../docs/decisions/0064-kubernetes-helm-deployment-target.md)
+  defers it, [ADR 0056](../docs/decisions/0056-instance-durable-state-and-cold-logical-backup.md)'s gap
+  statement stays accurate). Until it is, § *Backup & restore*'s capture runs against this cluster through
+  `kubectl port-forward` to MariaDB and Garage and `kubectl cp` of the key file, with the app **scaled to
+  zero** for the duration (`kubectl -n veyq scale deploy/veyq-app --replicas=0`) — *cold* means the writer is
+  stopped, and that is the precondition you own.
+
+```sh
+kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application, and only it
+# 2. capture and verify — § Backup & restore, through port-forwards
+helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml --set image.tag=<new> --set admin.image.tag=<new>
+# 3. the schema migrates during this boot; then verify as the compose runbook says — not by "it started"
+```
+
+Pin the same tag on both images: they ship as one release, and only one of a mismatched pair migrated the
+schema. Rollback is the backup plus the previous tag, exactly as under compose.
 
 ## Backup & restore
 

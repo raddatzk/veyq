@@ -81,6 +81,15 @@ stateDiagram-v2
   instance, and any human label belongs to a **tenant** (keyed to its domain) or an E2EE space name, never
   to server setup (cr-0006).
 - **Tenant creation is separate** — it is its own use-case, not part of bootstrap.
+- **Reachable before DNS and TLS exist, on both deployment targets.** Setup is served from the administration
+  surface, which proxies the API from its own origin
+  ([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)), so `http://localhost:<port>` is
+  enough to create the first account while the instance's domain resolves nowhere. The property is the same on
+  both targets and the mechanism differs: compose binds the surface to `127.0.0.1:<port>` of the host; the Helm
+  chart ([ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)) gives it a `ClusterIP`
+  `Service` and **no** `Ingress` by default, reached with `kubectl port-forward` — in a namespace under the
+  `restricted` PodSecurity standard, because every image the instance runs, this surface's included, runs
+  unprivileged. Exposing it on a hostname of its own is the operator's opt-in on either target.
 - **No personal scope at first-run.** Personal scopes are **per-tenant**, created when a user joins a
   tenant (see [ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md)); at first-run no tenant
   exists, so the owner has no personal scope until they create or join one.

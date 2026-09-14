@@ -8,8 +8,9 @@
   origin — as a **consequence of the `tenant` table**, with no deployment-time edit between creating a tenant
   and being able to reach it.
 - **Preconditions:** The instance is set up and reached through a reverse proxy the backend can project into
-  (the docker-compose stack wires this; an instance without one has no routing to project and is covered by A1);
-  the domain's DNS points at this host.
+  (the docker-compose stack wires Traefik's file provider, the Helm chart wires the Kubernetes `Ingress` API;
+  an instance with neither has no routing to project and is covered by A1); the domain's DNS points at this
+  host.
 - **Postconditions (success):** Every non-`SUSPENDED` tenant's domain routes to the app **and** to the blob
   path on that same origin; a suspended or revoked tenant's does not; and a presigned blob URL handed to a
   client on that domain is signed for an origin **that client can actually reach**. Where the store is behind
@@ -26,9 +27,14 @@
    deployment already routes statically. It is never a patch of the previous one
    ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)).
 3. The reverse proxy picks the new description up without restarting and, for each domain that appears,
-   obtains a certificate for it. Each domain gets the **same pair** of routes the bootstrap domain has: the
-   app, and the blob path on that same origin with its prefix and `Host` preserved
-   ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)).
+   obtains a certificate for it — on compose through Traefik's ACME resolver, on Kubernetes through the
+   operator's issuer, which acts on the annotation and TLS reference every projected `Ingress` carries **by a
+   named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
+   A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
+   choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
+   pair** of routes the bootstrap domain has: the app, and the blob path on that same origin with its prefix
+   and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)); on
+   Kubernetes the store has a host of its own and each domain gets the app route alone (A5).
 4. A member or guest opens that domain. The request resolves to its tenant by the `Host` it arrived on —
    the one canonical resolution every gate and handler shares.
 5. When that client asks for media, the server signs the presigned URL for **the resolved tenant's own
@@ -57,9 +63,11 @@ flowchart LR
 
 ## Alternate / exception flows
 
-- **A1 — no proxy to project into:** with no dynamic-config path configured the projection is a clean no-op,
-  not a degraded mode. This is the `%dev`/`%test` default and what lets a self-hoster run the backend directly;
-  the deployment's own static route for the bootstrap domain is unaffected either way.
+- **A1 — no proxy to project into:** with no dynamic-config path configured (and the sink left at its
+  default) the projection is a clean no-op, not a degraded mode. This is the `%dev`/`%test` default and what
+  lets a self-hoster run the backend directly; the deployment's own static route for the bootstrap domain is
+  unaffected either way. A Kubernetes sink whose TLS mode names a shared `Secret` that is not configured is
+  refused the same way — loud, disabled, and never a failed boot — rather than projecting routes without TLS.
 - **A2 — the request's `Host` names no tenant** (the bootstrap domain, an unknown name, a direct container
   port): it resolves to no tenant and nothing narrows — the request proceeds as it always did, and its
   presigned URLs are signed against the configured default.
@@ -94,7 +102,8 @@ flowchart LR
   the browser to a projection that never ran.
 - **E2 — certificates are rate-limited:** domains can now be added as fast as tenants are created, and each
   new one is a certificate order. Point the ACME client at a staging directory while testing a deployment —
-  [`infra/README.md`](../../../../infra/README.md) carries the setting.
+  [`infra/README.md`](../../../../infra/README.md) carries the setting for compose, and on Kubernetes the
+  staging issuer is the operator's, named through the same annotation the production one is.
 
 ## Quality notes
 
@@ -111,10 +120,12 @@ flowchart LR
 - **The bootstrap domain stays statically routed.** It is how an operator reaches `/api/setup` and creates the
   *first* tenant, before any row exists to project — and it is excluded from the projection, because two
   routers claiming one `Host` makes the proxy drop both.
-- **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's Ingress objects are
-  a second sink for the identical table-derived description — **not built**; the wildcard-subdomain shortcut
-  that would have avoided all of this was rejected precisely because it could not be extended to it
-  ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md) § Consequences).
+- **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's `Ingress` objects
+  are a second sink for the identical table-derived description, and the chart that deploys it lives in
+  `charts/veyq`; the wildcard-subdomain shortcut that would have avoided all of this was rejected precisely
+  because it could not be extended to it ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)
+  § Consequences), and the wildcard *certificate* is offered on that target only as the operator's own choice,
+  never as the default, for the same reason.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -141,8 +152,8 @@ tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für
   amended by 0063 to per-request signing, and the measured limits of the CORS policy A5's second shape needs),
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5 (the signing mode
   itself — one named mechanism, so a store on its own address is not a deployment's special case),
-  [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink, not built — and
-  one of that mode's two callers).
+  [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink and the chart that
+  deploys it, TLS as a passthrough to the operator's issuer — and one of that mode's two callers).
 - Related use-cases: [create-tenant](uc.admin.create-tenant.md) (where a domain comes from, and where it is
   moved), [suspend-tenant](uc.admin.suspend-tenant.md) (the transition whose routing withdrawal this carries).
 - Operations: [`infra/README.md`](../../../../infra/README.md) (the shared volume the projection is written to,

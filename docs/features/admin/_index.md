@@ -28,7 +28,8 @@ handling of reported shares.
   patched, so a wiped volume or a hand-edited file repairs itself — and a presigned blob URL is signed for the
   domain the request arrived on, resolved through that same table and never from the `Host` header. The
   Kubernetes sink ([ADR 0064](../../decisions/0064-kubernetes-helm-deployment-target.md)) is a second sink for
-  the same projection and is **not built**)
+  the same projection — **built**, deployed by `charts/veyq`, with a certificate per tenant domain obtained
+  through the operator's issuer by a named TLS mode)
 - Invite members, grant access & assign roles — planned
 - Manage server users & roles — planned
 - ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)

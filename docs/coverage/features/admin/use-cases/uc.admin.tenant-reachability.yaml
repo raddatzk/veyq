@@ -56,6 +56,19 @@ acceptanceCriteria:
         integration: [TenantIngressProjectorTest.aRowThatSkippedTheBoundaryIsNeverProjected]
       # No web surface: the column is validated on the way in by the contract, and this is the server-side
       # second layer for rows that did not come that way.
+  - id: a-tenant-domain-gets-a-certificate-by-a-named-mode
+    # Main-flow step 3's promise ("for each domain that appears, obtains a certificate for it") finally having a
+    # Kubernetes half (ADR 0064, the TLS passthrough). The sink stamps a REFERENCE — spec.tls per named mode plus
+    # the operator's annotations, verbatim — and configures nothing; the certificate itself is the operator's
+    # issuer's, which no test in this repository can run, so the refs prove what the backend emits and that a
+    # custom domain is not excluded from it. The mode-none and shared-without-secret refs are the negatives with
+    # their controls: none emits neither, and a shared mode that names no Secret is refused loudly rather than
+    # routing without TLS.
+    text: On Kubernetes every projected tenant Ingress carries the TLS reference and the operator's annotations the configured mode names — per-domain with the object's own name as the Secret (a custom domain included, and legal at the contract's domain cap), shared with the one pre-provisioned Secret, none with neither — and a shared mode with no Secret disables the sink loudly instead of projecting routes without TLS.
+    coverage:
+      backend:
+        integration: [KubernetesIngressTlsPerDomainTest.perDomainEmitsOneTlsEntryPerDomainNamedAfterTheObject, KubernetesIngressTlsPerDomainTest.aDomainAtTheContractsLengthCapYieldsALegalSecretName, KubernetesIngressTlsPerDomainTest.theAnnotationMapIsStampedVerbatimAndUninterpreted, KubernetesIngressTlsSharedTest.everyProjectedIngressReferencesTheOneSharedSecret, KubernetesIngressSinkTest.inModeNoneNeitherATlsBlockNorAnnotationsAreEmitted, KubernetesIngressTlsSharedWithoutSecretTest.theSinkIsDisabledRatherThanHalfConfigured, KubernetesIngressTlsSharedWithoutSecretTest.theRefusalIsLoggedLoudlyNamingTheMissingKey]
+      # No web surface: a certificate reference on a server-written object has no client half.
   - id: projector-no-ops-without-a-proxy
     # A1 — self-hostable by default: an instance with no reverse proxy in front of it must not need one. This
     # is also why the StartupEvent observer can never be a boot requirement.
