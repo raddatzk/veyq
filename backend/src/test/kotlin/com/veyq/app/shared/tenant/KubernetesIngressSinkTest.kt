@@ -45,6 +45,10 @@ class KubernetesIngressSinkTest {
         override fun getConfigOverrides() = mapOf(
             "veyq.tenant.ingress.sink" to "kubernetes",
             "veyq.tenant.ingress.kubernetes.ingress-class-name" to "nginx",
+            // Explicit, although it is the default: [inModeNoneNeitherATlsBlockNorAnnotationsAreEmitted] is
+            // the case that must go red BY NAME if the sink's emit branch ever becomes unconditional, and a
+            // profile that merely inherits the default would leave that lever aimed at nothing.
+            "veyq.tenant.ingress.kubernetes.tls.mode" to "none",
         )
     }
 
@@ -67,8 +71,9 @@ class KubernetesIngressSinkTest {
     fun theProjectedIngressCarriesTheRuleTheChartWillServe() {
         // Asserted on the rule, not merely on the object existing: an Ingress with the right name and the wrong
         // backend is the failure a "two objects exist" assertion cannot see. The class name is passed through
-        // untouched (ADR 0064's controller is operator-chosen), and there is no TLS block at all — certificates
-        // are the chart's concern, this sink writes routing.
+        // untouched (ADR 0064's controller is operator-chosen). What the object carries for TLS is a separate
+        // decision with its own cases — the one below for `none`, KubernetesIngressTlsPerDomainTest and
+        // KubernetesIngressTlsSharedTest for the two modes that emit.
         sink.apply(listOf("a.example.com"))
 
         val ingress = owned().single()
@@ -80,7 +85,19 @@ class KubernetesIngressSinkTest {
         assertEquals("Prefix", path.pathType)
         assertEquals("veyq-app", path.backend.service.name, "the Service the chart deploys the app as")
         assertEquals(8080, path.backend.service.port.number)
-        assertTrue(ingress.spec.tls.isNullOrEmpty(), "no TLS block: cert-manager wiring is the chart's, not this sink's")
+    }
+
+    @Test
+    fun inModeNoneNeitherATlsBlockNorAnnotationsAreEmitted() {
+        // `none` is the default and the mode for a deployment that terminates TLS upstream (a cloud load
+        // balancer, a mesh) — an unconditional `spec.tls` there would name a Secret nothing provisions, and the
+        // controller would serve the host its default certificate or refuse it. Absence, not emptiness: an
+        // operator reading the object back must see no TLS section and no annotations section at all.
+        sink.apply(listOf("a.example.com"))
+
+        val ingress = owned().single()
+        assertTrue(ingress.spec.tls.isNullOrEmpty(), "tls.mode=none must emit no spec.tls: ${ingress.spec.tls}")
+        assertTrue(ingress.metadata.annotations.isNullOrEmpty(), "no annotations configured, none stamped: ${ingress.metadata.annotations}")
     }
 
     @Test

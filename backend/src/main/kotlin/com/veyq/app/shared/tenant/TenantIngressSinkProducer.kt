@@ -2,6 +2,7 @@ package com.veyq.app.shared.tenant
 
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.config.VeyqConfig.IngressSinkType
+import com.veyq.app.shared.config.VeyqConfig.IngressTlsMode
 import io.fabric8.kubernetes.client.KubernetesClient
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.enterprise.inject.Instance
@@ -51,6 +52,21 @@ class TenantIngressSinkProducer(
     }
 
     private fun kubernetesSink(k8s: VeyqConfig.Tenant.Ingress.Kubernetes): TenantIngressSink {
+        // Config shape first, before a client is even built: `shared` names ONE Secret every projected Ingress
+        // points at, and without it the mode has nothing to reference. Loud and disabled rather than a failed
+        // boot (the same contract as the namespace below), and rather than silently falling back to `none` —
+        // an instance whose routing works and whose TLS quietly does not is the failure TLS-as-precondition
+        // exists to name. `KubernetesIngressTlsSharedWithoutSecretTest` decides this.
+        val tls = k8s.tls()
+        val sharedTlsSecretName = tls.secretName().orElse(null)?.takeIf { it.isNotBlank() }
+        if (tls.mode() == IngressTlsMode.SHARED && sharedTlsSecretName == null) {
+            log.error(
+                "veyq.tenant.ingress.kubernetes.tls.mode=shared but veyq.tenant.ingress.kubernetes.tls.secret-name " +
+                    "is not set — there is no TLS Secret for the projected Ingress objects to reference. " +
+                    "Tenant domains will not be routed.",
+            )
+            return DisabledIngressSink
+        }
         // The override is second, never first: in a cluster the namespace comes from the pod's own mounted
         // ServiceAccount token, which the fabric8 client has already read by the time this runs. Requiring the
         // value in config instead would make one image un-deployable without a per-install rebuild.
@@ -66,13 +82,19 @@ class TenantIngressSinkProducer(
             )
             return DisabledIngressSink
         }
-        log.infof("Tenant ingress projection: Kubernetes Ingress objects in namespace %s", namespace)
+        log.infof(
+            "Tenant ingress projection: Kubernetes Ingress objects in namespace %s (tls.mode=%s, %d annotation(s))",
+            namespace, tls.mode(), k8s.annotations().size,
+        )
         return KubernetesIngressSink(
             client = client,
             namespace = namespace,
             ingressClassName = k8s.ingressClassName().orElse(null),
             serviceName = k8s.serviceName(),
             servicePort = k8s.servicePort(),
+            tlsMode = tls.mode(),
+            sharedTlsSecretName = sharedTlsSecretName,
+            annotations = k8s.annotations(),
         )
     }
 

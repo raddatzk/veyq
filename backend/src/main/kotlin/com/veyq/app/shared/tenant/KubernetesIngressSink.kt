@@ -1,7 +1,9 @@
 package com.veyq.app.shared.tenant
 
+import com.veyq.app.shared.config.VeyqConfig.IngressTlsMode
 import io.fabric8.kubernetes.api.model.networking.v1.Ingress
 import io.fabric8.kubernetes.api.model.networking.v1.IngressBuilder
+import io.fabric8.kubernetes.api.model.networking.v1.IngressTLSBuilder
 import io.fabric8.kubernetes.client.KubernetesClient
 import org.jboss.logging.Logger
 import java.security.MessageDigest
@@ -34,9 +36,16 @@ import java.security.MessageDigest
  * column's shape rather than this API's grammar; what is this sink's own is [nameFor]'s length bound below,
  * which a valid hostname can still violate.
  *
- * **No TLS block, deliberately.** Certificates are the chart's concern (cert-manager, or an operator's own
- * issuer); this sink writes routing. It is the same cut its Traefik counterpart makes by referencing the
- * `letsencrypt` resolver by name and never selecting or configuring one.
+ * **TLS is a passthrough: the sink stamps a reference, never a configuration.** Its Traefik counterpart emits
+ * `tls.certResolver: letsencrypt` on every router — a *reference* to a resolver it never selects or configures
+ * (that is the compose file's). The faithful translation here is `spec.tls` plus the operator's annotations
+ * ([annotations], stamped verbatim and uninterpreted), per [tlsMode] — and never an `Issuer`, a `Certificate`
+ * or a `Secret`, which are the ingress controller's and the operator's, and would need RBAC this design
+ * exists to avoid. An earlier version of this comment said the sink emitted *nothing* and called that the
+ * same cut; it was a strictly weaker one, and on a target where TLS is a precondition (the refresh cookie is
+ * `Secure`, every mailed link is `https`) it shipped an instance that boots and then silently breaks sessions.
+ * Under [IngressTlsMode.PER_DOMAIN] the `secretName` is the object's **own** [nameFor] — see that method for
+ * why a second derived name would not be legal at the contract's domain cap.
  *
  * **The failure boundary is the whole reconcile, and that is a decision, not an oversight.** Every call that
  * can reach the API server is inside the one `try` — ADR 0063's incident was a `try` that started one line too
@@ -52,6 +61,10 @@ class KubernetesIngressSink(
     private val ingressClassName: String?,
     private val serviceName: String,
     private val servicePort: Int,
+    private val tlsMode: IngressTlsMode,
+    /** The one `Secret` every object references under [IngressTlsMode.SHARED]; the producer guarantees it is set for that mode. */
+    private val sharedTlsSecretName: String?,
+    private val annotations: Map<String, String>,
 ) : TenantIngressSink {
 
     override val enabled = true
@@ -113,31 +126,47 @@ class KubernetesIngressSink(
      * `SigningMode.STORE_ORIGIN`) instead of ADR 0013 §4's same-origin path route. A `/veyq` path rule here
      * would be the compose assumption smuggled onto a target that does not make it.
      */
-    private fun ingressFor(name: String, domain: String): Ingress = IngressBuilder()
-        .withNewMetadata()
-        .withName(name)
-        .withNamespace(namespace)
-        .withLabels<String, String>(mapOf(OWNER_LABEL to OWNER_VALUE))
-        .endMetadata()
-        .withNewSpec()
-        .withIngressClassName(ingressClassName)
-        .addNewRule()
-        .withHost(domain)
-        .withNewHttp()
-        .addNewPath()
-        .withPath("/")
-        .withPathType("Prefix")
-        .withNewBackend()
-        .withNewService()
-        .withName(serviceName)
-        .withNewPort().withNumber(servicePort).endPort()
-        .endService()
-        .endBackend()
-        .endPath()
-        .endHttp()
-        .endRule()
-        .endSpec()
-        .build()
+    private fun ingressFor(name: String, domain: String): Ingress {
+        val metadata = IngressBuilder()
+            .withNewMetadata()
+            .withName(name)
+            .withNamespace(namespace)
+            .withLabels<String, String>(mapOf(OWNER_LABEL to OWNER_VALUE))
+        // Only when there is something to stamp: an empty `annotations: {}` is not what "no annotations" looks
+        // like on an object an operator reads back, and the mode-none test asserts absence, not emptiness.
+        if (annotations.isNotEmpty()) metadata.withAnnotations<String, String>(annotations)
+        val spec = metadata
+            .endMetadata()
+            .withNewSpec()
+            .withIngressClassName(ingressClassName)
+            .addNewRule()
+            .withHost(domain)
+            .withNewHttp()
+            .addNewPath()
+            .withPath("/")
+            .withPathType("Prefix")
+            .withNewBackend()
+            .withNewService()
+            .withName(serviceName)
+            .withNewPort().withNumber(servicePort).endPort()
+            .endService()
+            .endBackend()
+            .endPath()
+            .endHttp()
+            .endRule()
+        // The `when` is total over the mode with no `else`, so a fourth mode cannot be added without deciding
+        // what it references. `name` is the object's own name — the one string already proven legal at the
+        // contract's domain cap (see nameFor).
+        val secretName = when (tlsMode) {
+            IngressTlsMode.NONE -> null
+            IngressTlsMode.PER_DOMAIN -> name
+            IngressTlsMode.SHARED -> sharedTlsSecretName
+        }
+        // `addToTls` with a built object rather than the nested `addNewTl()`: fabric8 singularises the field
+        // name for its nested builders, and a reader grepping for `tls` should find the reference here.
+        if (secretName != null) spec.addToTls(IngressTLSBuilder().withHosts(domain).withSecretName(secretName).build())
+        return spec.endSpec().build()
+    }
 
     companion object {
         /**

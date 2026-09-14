@@ -147,6 +147,39 @@ interface VeyqConfig {
 
                 @WithDefault("8080")
                 fun servicePort(): Int
+
+                /** `veyq.tenant.ingress.kubernetes.tls.*` — whether and how every projected `Ingress` carries `spec.tls`. */
+                fun tls(): Tls
+
+                /**
+                 * Stamped **verbatim** as `metadata.annotations` on every projected `Ingress`, and never
+                 * interpreted — this is how the chart hands the operator's certificate issuer to objects the
+                 * backend writes at runtime (cert-manager's `cert-manager.io/cluster-issuer`, Traefik's CRD
+                 * annotations, whatever the operator's controller reads). The same cut the compose sink makes by
+                 * *referencing* the `letsencrypt` resolver by name and never configuring one: the reference is
+                 * ours to stamp, the configuration is the chart's and the operator's. Property text quotes the
+                 * key, because annotation keys carry dots and slashes:
+                 * `veyq.tenant.ingress.kubernetes.annotations."cert-manager.io/cluster-issuer"=letsencrypt`.
+                 */
+                fun annotations(): Map<String, String>
+
+                interface Tls {
+                    /**
+                     * [IngressTlsMode.NONE] is the default for the same reason `traefik-file` is the sink
+                     * default: no existing deployment moves, and it is the right answer where TLS terminates
+                     * upstream of the cluster's ingress (a cloud load balancer, a service mesh).
+                     */
+                    @WithDefault("none")
+                    fun mode(): IngressTlsMode
+
+                    /**
+                     * The one pre-provisioned TLS `Secret` every projected `Ingress` points at — **required by
+                     * [IngressTlsMode.SHARED]** and ignored by the other modes. `TenantIngressSinkProducer`
+                     * refuses `shared` without it the way it refuses an unresolvable namespace: loud and
+                     * disabled, never a failed boot.
+                     */
+                    fun secretName(): Optional<String>
+                }
             }
         }
 
@@ -470,6 +503,36 @@ interface VeyqConfig {
          * and the namespace.
          */
         KUBERNETES,
+    }
+
+    /**
+     * Whether and how `KubernetesIngressSink` emits `spec.tls` on every projected `Ingress` (ADR 0064, the
+     * TLS passthrough). Named, never inferred — the same shape as [IngressSinkType]. What the sink emits is a
+     * **reference** (a `secretName`, plus the operator's annotations); what it never does is create an
+     * `Issuer`, a `Certificate` or a `Secret` — that is the ingress controller's and the operator's, and it
+     * needs no RBAC beyond the `Ingress` verbs the sink already has. Property text is hyphenated
+     * (`veyq.tenant.ingress.kubernetes.tls.mode=per-domain`).
+     */
+    enum class IngressTlsMode {
+        /** No `spec.tls` at all — TLS terminates upstream, or the operator wires it some other way. The default. */
+        NONE,
+
+        /**
+         * One `spec.tls` entry per domain, `secretName` = the `Ingress` object's **own name**. cert-manager's
+         * ingress-shim shape, and the one that keeps per-tenant custom domains working. Reusing the object name
+         * rather than deriving a second one is load-bearing: a `Secret` name has the same 253-character cap an
+         * object name has, and `KubernetesIngressSink.nameFor` already keeps the name legal for a domain at the
+         * contract's own cap — a `-tls` suffix on it would not be.
+         */
+        PER_DOMAIN,
+
+        /**
+         * Every projected `Ingress` points at the one pre-provisioned `Secret` named by
+         * `veyq.tenant.ingress.kubernetes.tls.secret-name` — a wildcard certificate, kept as an **operator's
+         * choice** rather than as everyone's ceiling: an operator who bought one `*.example.com` certificate
+         * and runs no ACME gets a working instance, and gives up custom domains knowingly.
+         */
+        SHARED,
     }
 
     interface Tasks {
