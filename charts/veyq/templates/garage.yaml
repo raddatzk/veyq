@@ -42,6 +42,8 @@ spec:
         {{- include "veyq.labels" . | nindent 8 }}
         app.kubernetes.io/component: garage
       annotations:
+        # The ConfigMap is its own file for this line's sake: a checksum over a file that contains the
+        # checksum recurses until Helm gives up (measured, on the first render of a combined file).
         checksum/config: {{ include (print .Template.BasePath "/garage-configmap.yaml") . | sha256sum }}
     spec:
       automountServiceAccountToken: false

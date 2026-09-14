@@ -1,7 +1,9 @@
 # The settings that exist only on this target, as a Quarkus properties file rather than as environment: the
 # annotation map's keys carry dots and slashes (`cert-manager.io/cluster-issuer`), which the properties grammar
 # quotes and an environment-variable name cannot spell. Everything that has a compose counterpart stays an
-# environment variable on the Deployment, so the two recipes read side by side.
+# environment variable on the Deployment, so the two recipes read side by side. Measured on the built
+# fast-jar, not assumed: with this block supplied ONLY through QUARKUS_CONFIG_LOCATIONS the producer logged
+# `tls.mode=PER_DOMAIN, 1 annotation(s)`, the sink reached for the API server, and /api/setup answered 200.
 #
 # Two things are deliberately ABSENT. `veyq.tenant.ingress.kubernetes.namespace` — in-cluster the namespace
 # comes from the pod's mounted ServiceAccount token, and setting it here would re-introduce the per-install

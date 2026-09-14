@@ -24,6 +24,10 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
   of the existing backend Admin API — no DB, no KEK, no backend surface of its own. It holds tenant CRUD,
   release info and **first-run setup**; what looks admin-ish but is reachable by an ordinary member — accepting
   a tenant invite, accepting terms, and a tenant owner's own terms/mail settings — deliberately stays in `web/`.
+- `infra/` + `charts/veyq/` — the two deployment targets: the production compose file (travels inside the
+  signed image, [ADR 0057](docs/decisions/0057-release-identity-and-deployment-recipe.md)) and the Helm chart
+  ([ADR 0064](docs/decisions/0064-kubernetes-helm-deployment-target.md)). Every infra-level decision has an
+  answer on both, and a change to one checks the other; `infra/README.md` owns the commands for both.
 - `packages/crypto/` — the one internal npm-workspace package (`@veyq/crypto`): the conformance-pinned crypto
   suite + the cold account birth + the wire base64, shared by `web/` and (soon) `admin-web/`
   ([ADR 0065](docs/decisions/0065-admin-ui-cli-separate-service.md)). The workspace exists **for that one
