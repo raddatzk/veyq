@@ -82,7 +82,7 @@ Every settled decision carries the line or command that settles it; check the on
    (`infra/docker-compose.prod.yml`, the `caserver=` line); a URL rather than a `staging: bool` keeps any ACME
    CA usable (self-hostable by default: an internal `step-ca` is one URL). Staging is documented beside it in
    `values.yaml`, NOTES and the README. Both directories answer today [M: `curl` of both, 2026-09-15, each a
-   directory with `newOrder` + `renewalInfo`]. **See Open 1** — the brief leaned the other way.
+   directory with `newOrder` + `renewalInfo`]. Confirmed by the owner (Decision 16).
 6. **HTTP-01 only.** Works for any tenant domain without DNS-provider credentials (which would be a `Secret`
    the chart references — the one thing it must not need); wildcards are already `mode: shared`; compose is
    HTTP-01 only (`httpchallenge=true`). The solver's `ingressClassName` mirrors `ingress.className` when set
@@ -146,17 +146,15 @@ Every settled decision carries the line or command that settles it; check the on
     `master` `types_issuer.go`. Re-run the GitHub call at implement (`gh api
     repos/cert-manager/cert-manager/releases?per_page=3`): a cost premise expires separately from its decision.
 
-### Open — the user decides before the go
+### Settled by the owner at refine (2026-09-15)
 
-1. **Production or staging as the `server` default?** Refined as **production** (Decision 5) against the
-   brief's lean to staging, on two measured grounds: compose defaults to production, and a chart that defaults
-   the other way is exactly the two-target drift ADR 0064 § Consequences forbids; and a staging default makes
-   the happy path an instance every browser refuses — the "boots and then silently breaks" failure NOTES.txt
-   exists to prevent. The rate-limit argument for staging is weaker than the compose comment claims (Decision
-   12: failures cost an hour, not a week). Flipping it is one default value and one sentence in three docs.
-2. **A CI gate for the chart is out of scope here.** `chart_meta_check.py` runs in no workflow; extending a
-   hand-run guard is what this CR does. Wiring `helm` into CI belongs to the chart's OCI-release sub-slice
-   (`docs/inbox.md` #26), where a workflow run is the proof anyway. Confirm, or pull it in.
+16. **`server` defaults to Let's Encrypt production** (Decision 5 stands). The brief leaned to staging; the
+    owner chose parity with compose and a happy path that browsers trust. Staging is the documented one-line
+    switch on both targets, and the corrected rate-limit prose (Decision 12) says what it actually costs to
+    test against production.
+17. **No CI gate for the chart in this CR.** `chart_meta_check.py` stays hand-run; wiring `helm` into a
+    workflow is the chart's OCI-release sub-slice (`docs/inbox.md` #26), where a workflow run is the proof
+    anyway. The Definition of done names the hand-run.
 
 ## Inventory — locators, run them
 
