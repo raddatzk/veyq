@@ -68,30 +68,55 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   property the compose/admin-web work already paid for. `veyq.tenant.ingress.kubernetes.service-name`/`-port`
   name the `Service` the rules point at, so renaming the app `Service` in the chart means setting them.
 
-  **TLS is a passthrough: the sink stamps a reference the chart tells it to, and configures nothing.** The
-  compose sink is not TLS-free — it emits `tls.certResolver: letsencrypt` on every router, a *reference* to a
-  resolver the compose file configures. The cut is between referencing and configuring, not between emitting
-  and not emitting, and the faithful translation is `spec.tls` plus an operator-supplied annotation map on
-  every projected `Ingress` — never an `Issuer`, a `Certificate` or a `Secret`, which are the ingress
-  controller's and the operator's and would need RBAC this design exists to avoid (cert-manager watches the
-  `Ingress` objects the sink is already permitted to write). Three named modes under
-  `veyq.tenant.ingress.kubernetes.tls.*`, never inferred: `none` (the default — TLS terminates upstream, and no
-  existing deployment moves), `per-domain` (one `spec.tls` per domain whose `secretName` is the object's **own**
-  name, cert-manager's ingress-shim shape — the one that keeps per-tenant custom domains working), and `shared`
-  (every object references one pre-provisioned `Secret`: the wildcard certificate, kept as an operator's
-  choice rather than as everyone's ceiling, because a wildcard *certificate* takes away at the TLS layer
-  exactly the custom-domain capability [ADR 0063](0063-database-driven-tenant-ingress.md) refused to give up at
-  the routing layer). The chart's own `Ingress` objects follow the same mode, so the operator decides once.
-  Why `secretName` reuses the object name rather than deriving a second one: a `Secret` name has the same
-  253-character cap an object name has, `contracts/api/tenants.openapi.yaml` allows a 253-character domain,
-  and the object name is the one string already kept legal at that cap — a `-tls` suffix on it is an object the
-  API server rejects, which on this sink's failure boundary strands *every* tenant's routing. Stated residue:
-  a withdrawn domain's issued `Secret` is not deleted by cert-manager unless it runs with
-  `--enable-certificate-owner-ref` — operator-visible, not a routing or access leak, and not swept, because
-  sweeping `Secret`s would need the RBAC this shape avoids. **TLS on this target is a precondition, not a
-  preference:** the refresh cookie is `Secure` by default and every mailed link is `https`, so a chart that
-  cannot obtain a certificate for a tenant domain ships an instance that boots and then silently breaks
-  sessions — which is why `none` is the default for continuity and the chart's notes say so loudly.
+  **TLS is a passthrough on the sink: it stamps a reference the chart tells it to, and configures nothing.**
+  The compose sink is not TLS-free — it emits `tls.certResolver: letsencrypt` on every router, a *reference* to
+  a resolver the compose **recipe** configures (`VEYQ_ACME_EMAIL`, the CA directory, HTTP-01). The cut is
+  between referencing and configuring, not between emitting and not emitting — and it falls between the *sink*
+  and the *recipe*, not between the backend and the whole deployment. So the faithful translation has two
+  halves. The sink's: `spec.tls` plus an operator-supplied annotation map on every projected `Ingress` — never
+  an `Issuer`, a `Certificate` or a `Secret`, which would need RBAC this design exists to avoid (cert-manager
+  watches the `Ingress` objects the sink is already permitted to write). The chart's, as the recipe's
+  counterpart: it **may template the one thing the recipe configures — an ACME issuer — as an opt-in**,
+  `ingress.tls.acme.*`: one **namespaced** cert-manager `Issuer` (`veyq-acme`; ACME HTTP-01; the operator's
+  e-mail, required as `VEYQ_ACME_EMAIL` is; a CA directory URL defaulting to Let's Encrypt production exactly as
+  `VEYQ_ACME_CASERVER` does), and `cert-manager.io/issuer: veyq-acme` stamped through the same annotation map
+  every `Ingress` already receives — the chart's own and the projected ones alike, so a tenant created at
+  runtime is a certificate order with no chart edit and no restart. It needs no backend RBAC at all: Helm
+  applies the `Issuer` with the operator's credentials, and the backend's `Role` keeps its `Ingress` verbs and
+  nothing else. It requires `mode: per-domain` and refuses any other mode in `values.schema.json` rather than
+  overriding an explicit `shared` silently — ACME is a way of *obtaining* the per-domain certificates, not a
+  fourth mode, and the sink's `when` over the three modes stays total. What the chart does **not** do, each for
+  the same reason: install cert-manager (a subchart is cluster-scoped CRDs plus a `ClusterRole` — the
+  no-cluster-wide-RBAC bar the self-hostability story states), template a `ClusterIssuer` (cluster-scoped), or
+  let the backend speak ACME itself (`create` on `Secret`s cannot be narrowed by `resourceNames`, in the
+  namespace that holds the database and store credentials; it would also have to route HTTP-01, and it would
+  reimplement cert-manager). cert-manager is therefore a **precondition the operator meets**, like the ingress
+  controller — a CNCF-graduated project with two supported releases at any time. Its absence is left to the API
+  server: `helm install` builds every object before it creates any, and an unknown kind fails the whole release
+  with *"ensure CRDs are installed first"*; a `.Capabilities.APIVersions.Has` check would buy a friendlier
+  sentence at the price of breaking every offline render (`helm template` knows no cluster, `helm lint` has no
+  `--api-versions`), so there is none. The ACME account key is cert-manager's `Secret`, generated by it — the
+  chart still generates nothing (below).
+
+  Three named modes under `veyq.tenant.ingress.kubernetes.tls.*`, never inferred: `none` (the default — TLS
+  terminates upstream, and no existing deployment moves), `per-domain` (one `spec.tls` per domain whose
+  `secretName` is the object's **own** name, cert-manager's ingress-shim shape — the one that keeps per-tenant
+  custom domains working), and `shared` (every object references one pre-provisioned `Secret`: the wildcard
+  certificate, kept as an operator's choice rather than as everyone's ceiling, because a wildcard *certificate*
+  takes away at the TLS layer exactly the custom-domain capability
+  [ADR 0063](0063-database-driven-tenant-ingress.md) refused to give up at the routing layer). The chart's own
+  `Ingress` objects follow the same mode, so the operator decides once. Why `secretName` reuses the object name
+  rather than deriving a second one: a `Secret` name has the same 253-character cap an object name has,
+  `contracts/api/tenants.openapi.yaml` allows a 253-character domain, and the object name is the one string
+  already kept legal at that cap — a `-tls` suffix on it is an object the API server rejects, which on this
+  sink's failure boundary strands *every* tenant's routing. Stated residue: the `Certificate` ingress-shim
+  creates is owned by its `Ingress` and goes with it, but a withdrawn domain's issued `Secret` is not deleted
+  by cert-manager unless it runs with `--enable-certificate-owner-ref` — operator-visible, not a routing or
+  access leak, and not swept, because sweeping `Secret`s would need the RBAC this shape avoids. **TLS on this
+  target is a precondition, not a preference:** the refresh cookie is `Secure` by default and every mailed link
+  is `https`, so a chart that cannot obtain a certificate for a tenant domain ships an instance that boots and
+  then silently breaks sessions — which is why `none` is the default for continuity and the chart's notes say
+  so loudly.
 - **Garage gets its own Ingress host by default on Kubernetes**, not the compose same-origin path route.
   Because the ingress controller is operator-chosen and its exact prefix/Host-preservation behavior is not
   guaranteed, the chart defaults to the CORS-policy branch [ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)
