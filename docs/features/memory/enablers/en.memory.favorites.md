@@ -109,6 +109,11 @@ blob for that Memory; the `PUT` writes only the caller's.
 - **Two seals, two contexts.** `symWrap` / `symUnwrap` as everywhere else
   ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)), with **distinct** context strings `favorites`
   and `item-favorites` — so a blob authenticated for one can never be opened as the other.
+- **The pin rides the master-key rotation re-seal.** The master key rotates
+  ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)), so the pin blob must be re-sealed from
+  the old key to the new one alongside the identity-pin store and the device register — best-effort, like they
+  are: a re-seal that never lands costs the pins, not the account. Item marks are unaffected; they seal under
+  `K_SC`, not the master key.
 - **The base epoch survives only on the shared side.** Item marks seal under `K_SC` at the **base epoch `E_0`**,
   so a scope-key rotation cannot strand a set. Pins no longer need that: the master key does not rotate with
   scope epochs.

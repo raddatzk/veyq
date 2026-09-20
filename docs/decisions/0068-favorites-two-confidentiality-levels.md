@@ -128,6 +128,13 @@ alive — the precise path §1 closes, and the one a regression would fall back 
 - **The base-epoch special case survives only on the shared side.** Item favorites keep `K_SC@E_0`, so a
   rotation cannot strand a set. Memory favorites no longer need it at all — the master key does not rotate
   with scope epochs, so that whole class of concern leaves with the seal.
+- **The pin blob acquires a rotation obligation it did not have before.** The master key **rotates**
+  ([ADR 0060](0060-key-rotation-after-compromise.md)), and `rotateKeys` already carries a best-effort re-seal
+  for the two objects sealed under it (the identity-pin store and the device register). A master-key-sealed pin
+  set is the **third** rider on that path, and omitting it means a rotation silently empties every user's
+  Favorites — a degradation, not a lockout, since an unreadable blob decodes to the empty set, but a silent one.
+  This is the cost of choosing the master key over `K_SC@E_0`, and it is stated here because no doc↔code delta
+  could find it: nothing is drifting, the rule simply would not have been written.
 - **Cross-feature lifecycle is now owed on a second table.** Scope purge must reclaim the item-favorite rows,
   node deletion must drop the rows under it, and a member whose grant is revoked leaves a blob that would keep
   counting into the aggregate. These are named here because the doc↔code delta cannot find them: nothing is

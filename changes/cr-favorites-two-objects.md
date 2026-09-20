@@ -85,6 +85,11 @@ ls backend/src/main/resources/db/migration | sed 's/__.*//;s/V//' | sort -n | ta
       the open node, `symUnwrap` each under `K_SC@E_0`, expose *union* / *mine* / *per-item count*. Gallery:
       the header filter (hidden in a personal scope), the per-tile count on the existing heart, the
       filter-empty state. i18n **EN + DE** for every new string, honouring the copy rule above.
+      **Join the master-key rotation re-seal**: `resealBestEffort` in
+      `web/src/features/account/rotation/rotateKeys.ts:143` already re-seals the identity-pin store and the
+      device register from the old key to the new one; the pin blob becomes the **third** rider, best-effort in
+      the same shape (a re-seal that never lands costs the pins, not the account). Without it a rotation
+      silently empties every user's Favorites.
       · **Done when:** `cd web && npm run check` green.
 
 - [ ] **4 coverage** — `docs/coverage/features/memory/use-cases/uc.memory.gallery.yaml` gains rows for flow 7,
@@ -108,6 +113,7 @@ Each names its **kind** and its **lever** (§ *the CR says PER bite-test how it 
 | 8 | 3 | in a personal scope the filter is **absent**, not disabled | injection | render it with `:disabled` |
 | 9 | 3 | no `memberId` reaches the rendered grid | injection | bind `memberId` into a tile attribute |
 | 10 | 3 | the tile count aggregates **all** members | live defect | count only the caller's set |
+| 11 | 3 | a master-key rotation carries the pins across | **live defect** | drop the pin call from `resealBestEffort` |
 
 **Bite 1 is the one this CR exists for, and it has a trap that makes the obvious version unbiteable.**
 `loadFavorites` **swallows** a failed unwrap and returns the empty set — and `favorites.test.ts` asserts that as
@@ -123,6 +129,13 @@ green*). It reddens on the `symUnwrap` assertion, not on any setup line.
 table with its scope FK makes `validate_scope_erasure_arity.py` red (a new table in the closure that
 `eraseScope` does not name). Run each guard **before** writing its fix — the same run is the discovery, the
 bite and the fix-list.
+
+**Bite 11 exists because this CR is what creates the obligation, and it has the same unbiteable trap as bite
+1.** `loadFavorites` swallows a failed unwrap, so *"after a rotation the pins are gone"* looks identical to
+*"after a rotation the pins are empty"* — assert the **round trip**: pin a Memory, rotate, and assert the set
+comes back **equal**, with the rotation driven through `rotateKeys` rather than by calling the re-seal directly.
+`rotateKeys.test.ts` already mocks `resealPinsUnderNewMasterKey` and drives a rejection case, so the mount point
+and its failure lever are both live — extend that file rather than starting one.
 
 **What bite 3 does *not* prove, so nobody quotes it for more than it says.** `column_is_mediumtext` matches a
 column **name across all migrations**, not per table — and `ciphertext` is already MEDIUMTEXT from V41 (the
