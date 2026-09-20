@@ -29,9 +29,10 @@ import java.util.UUID
  *    guard held" apart from "nothing ran"*;
  *  - a **wrong** attestation (one flipped byte of an otherwise-valid signature) is refused with nothing
  *    written — the floor and auth key stay byte-identical to before;
- *  - the **forgotten-password** path (no `attestationSignature` at all) applies the identical rewrite without
- *    attempting any verification — the client-side cold-credential gate is what already restricted reaching
- *    this form, not a server-side check;
+ *  - a change carrying **no** `attestationSignature` is refused with nothing written — the field is required
+ *    by the contract, so this one is bitten at the boundary rather than in the handler, and it is the live
+ *    defect this flow shipped with: it used to be a second entry point that applied the identical rewrite
+ *    while proving nothing (ADR 0060 Decision 2's bypass);
  *  - an account with no `PASSWORD` floor refuses with nothing written.
  *
  * Seeds use UUID-unique ids: the H2 mem DB lives for the whole JVM and is shared across test classes.
@@ -79,14 +80,14 @@ class PasswordChangeSliceTest {
     }
 
     @Test
-    fun forgottenPasswordChangeWithNoAttestationAppliesTheSameRewriteWithoutVerifying() {
+    fun aChangeWithoutAnAttestationWritesNothing() {
         val user = seedAccount()
 
         change(user, sessions.issue(user).accessToken, attestation = null)
-            .then().statusCode(204)
+            .then().statusCode(400)
 
-        assertEquals(NEW_PW_WRAP, wrapOf(user, "PASSWORD"), "the same rewrite as the deliberate path")
-        assertEquals(NEW_AUTH_PUB, field(user) { it.authPublicKey })
+        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "a change proving neither factor must not touch the floor")
+        assertEquals(OLD_AUTH_PUB, field(user) { it.authPublicKey }, "nor the directory value login reads")
     }
 
     @Test
