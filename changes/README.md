@@ -638,7 +638,7 @@ kinds are covered by the two sections below; the CR's job is to say which one ea
   new call site or mount point. That is the cheapest of the three and the only one that can be **false**: it is a
   claim about a file the author did not open. So it names the test **case**, or the grep for its lever
   (`rg 'mockRejected' <file>`) — never the file. cr-devices-and-sessions-one-rubric said a catch-path fallback
-  was "live today in `DeviceTrustPanel.test.ts`"; the file had five cases and not one of them made the read
+  was "live today in" the device panel's test file; that file had five cases and not one of them made the read
   fail, so the bite the CR had budgeted zero effort for was the one that had to be written from scratch. A
   file-level citation is a *remembered* claim wearing a measured one's clothes.
 

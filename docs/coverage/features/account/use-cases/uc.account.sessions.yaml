@@ -249,8 +249,9 @@ gaps:
     `/settings/:section?`, red on a NEW shell route with no gate (so it is not merely pinned to the routes that
     happen to exist), and GREEN on a comment carrying the phrase, which is the false positive the line-based
     first probe produced.
-    cr-devices-and-sessions-one-rubric folds the device-trust half into `SessionsPanel.test.ts` and DELETES
-    `DeviceTrustPanel.test.ts`: the component is still its own, but every assertion about it is now made from
+    cr-devices-and-sessions-one-rubric folds the device-trust half into `SessionsPanel.test.ts` and DELETES the
+    device panel's own suite: the component is still its own (`DeviceTrustControl.vue`, a control rather than a
+    settings-hub panel), but every assertion about it is now made from
     the mount point, because a row that lost its action to the parent's data would lose it silently. Seven cases
     — the tier stated on the current row only (with a second row as the control that says it is a fact about THIS
     device), the password-less tier winning when both are present, a plain device offering nothing, forgetting

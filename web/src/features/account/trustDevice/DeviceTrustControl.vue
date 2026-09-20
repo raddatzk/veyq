@@ -3,6 +3,12 @@
 // panel's own row for the current device, not by the settings hub. There is one rubric about a device now
 // ("Devices and sessions"), and the fact "this device holds a saved key" is stated there once.
 //
+// **A `Control`, not a `Panel`, and the suffix is load-bearing.** The twelve `*Panel`s of this app are each a
+// settings-hub section: `veyq-surface settings-panel` + their own `settings-section-header`, mounted by the hub
+// against a route id. This one carries none of that — it is a status line and its action, laid out by whatever
+// row mounts it — so calling it a Panel would send the next reader looking for a section that does not exist
+// and would invite them to give it a header again.
+//
 // Still a component of its own, and deliberately so: everything below is device-LOCAL (IndexedDB trust record,
 // IndexedDB device key, the DEVICE-wrap endpoints) and knows nothing about session families. Keeping it out of
 // the sessions code is what lets the row mount it **beside** its data rather than inside its loader — the

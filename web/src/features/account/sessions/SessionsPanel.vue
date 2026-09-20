@@ -4,7 +4,7 @@
 // logout only ends the family it is presented from, so a laptop left behind stays signed in until this screen
 // exists.
 //
-// It is also the ONE place that says what this device is. The current device's row mounts `DeviceTrustPanel`
+// It is also the ONE place that says what this device is. The current device's row mounts `DeviceTrustControl`
 // (uc.account.trust-device § Untrust), which states this device's unlock tier and offers the forget action —
 // there is no separate "This device" rubric to disagree with. **The trap that merge introduced, and the reason
 // the mount is a child and not a prop: the device-local status read is unbounded IndexedDB work, so it must be
@@ -67,7 +67,7 @@ import {
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { listSavedKeyWraps, removeSavedKey, type SavedKeyWrap } from '../savedKeys'
 import { localWrapId } from '../localWrap'
-import DeviceTrustPanel from '../trustDevice/DeviceTrustPanel.vue'
+import DeviceTrustControl from '../trustDevice/DeviceTrustControl.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -363,7 +363,7 @@ async function removeOtherKeys() {
               <!-- The one row that can say how THIS device unlocks, so it is the one place that says it. The
                    component reads its own status on mount and is never awaited here: a hanging or throwing
                    device-local read costs this line, never the list or its revokes. -->
-              <DeviceTrustPanel v-if="family.current && renamingFamily !== family.id" />
+              <DeviceTrustControl v-if="family.current && renamingFamily !== family.id" />
             </div>
             <div class="management-actions">
               <template v-if="renamingFamily === family.id">

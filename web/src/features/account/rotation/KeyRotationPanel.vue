@@ -15,9 +15,11 @@
 //  - **Pre-tick or default the action.** Every other device is signed out and loses its saved key; the person
 //    who lands on the consequence is the one holding another device, and they will need their Emergency Kit.
 //
-// Markup + classes mirror DeviceTrustPanel (veyq-surface + settings-form + settings-section-header, a confirm
+// Markup + classes mirror ProfilePanel (veyq-surface + settings-form + settings-section-header, a confirm
 // Dialog with veyq-dialog-action-row) and the result list mirrors the veyq-list-row rows of SessionsPanel — the
-// built panels are the design source.
+// built panels are the design source. (It used to name DeviceTrustPanel, which stopped being a panel at all
+// when the device rubric was folded into the sessions row — a design-source pointer goes stale silently, since
+// nothing compiles it.)
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'

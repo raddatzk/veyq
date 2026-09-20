@@ -41,7 +41,7 @@ vi.mock('../deviceIdentity', () => ({
 }))
 vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
-// The device-local half the current row now mounts (DeviceTrustPanel). Mocked to the NO-TIER default so every
+// The device-local half the current row now mounts (DeviceTrustControl). Mocked to the NO-TIER default so every
 // behaviour above keeps asserting exactly what it always did; the cases that care opt in explicitly.
 vi.mock('../trustDevice/trustDevice', () => ({
   isTrusted: vi.fn(),
