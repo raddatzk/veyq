@@ -12,7 +12,9 @@
 //
 // A cover is **never auto-derived** — it is a deliberate per-Memory "set cover" choice; unset ⇒ the placeholder.
 // The `crop` is normalized `0..1` so **one stored crop renders identically at any size** — the browse card, the
-// detail header, and the map pin — via the pure `coverImageStyle` display formula. This module owns the model +
+// detail header, the map pin and the sidebar's Favorites tile — via the pure `coverImageStyle` display formula.
+// A comment that lists three of four surfaces is the next reader's wrong map, which is why this one counts.
+// This module owns the model +
 // seal + display math + the on-device cover-thumbnail load (`loadNodeCover`); the media picker and the 16:9
 // pan/zoom crop editor live in the UI layer (cr-0072 phase 3).
 import { contentApi } from '../../api/client'
@@ -176,7 +178,9 @@ export type LoadedCover = { url: string; crop: CoverCrop }
 export type DecryptedCover = { blob: Blob; crop: CoverCrop }
 
 /**
- * Resolve a node's chosen cover for the browse card + detail header + map pin: unseal `cover` under `nodeKey`
+ * Resolve a node's chosen cover for every surface that shows one — the browse card, the detail header, the map
+ * pin, the sidebar's Favorites tile. Callers go through `coverStore`, which is the ONLY caller of this: unseal
+ * `cover` under `nodeKey`
  * (`K_mem`), then decrypt its image on device — a **media** source opens the chosen media's THUMBNAIL tier
  * (`listMedia` → `openGrid`), an **upload** source opens the standalone cover blob directly (`openBlob`, cr-0073)
  * — the same operator-blind path (ciphertext + K_blob wraps, no plaintext crosses). Returns the decrypted image
@@ -224,7 +228,8 @@ export type CoverImageStyle = {
  * image is scaled to `1/width × 1/height` of the box and offset so the crop's top-left aligns with the box.
  * `objectFit: 'fill'` preserves the exact crop (the box is a matching 16:9). No crop — or a **full-frame** crop
  * (`{0,0,1,1}`, e.g. a cover set from a photo with one click, no manual framing) ⇒ a plain `object-fit: cover`
- * center-crop, so a non-16:9 image is **never distorted**. The same helper drives the card, the detail header,
+ * center-crop, so a non-16:9 image is **never distorted**. The same helper drives the card, the rail tile, the
+ * detail header,
  * and the map pin, so a crop looks identical everywhere.
  */
 export function coverImageStyle(crop: CoverCrop | null | undefined): CoverImageStyle {

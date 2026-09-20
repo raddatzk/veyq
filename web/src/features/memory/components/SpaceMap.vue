@@ -71,7 +71,7 @@ function cardEl(pin: LocatedPin): HTMLElement {
   thumb.className = 'veyq-space-card-thumb'
   const cover = props.covers?.get(pin.node.id)
   if (cover) {
-    // The chosen cover, cropped by the SAME formula as the card + detail header — an `<img>` expanded + offset
+    // The chosen cover, cropped by the SAME formula every other surface uses — an `<img>` expanded + offset
     // inside the overflow-hidden thumb box (no markup from user data: only a URL + numeric styles are set).
     const img = document.createElement('img')
     img.src = cover.url
