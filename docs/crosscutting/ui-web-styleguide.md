@@ -31,7 +31,18 @@ styles elsewhere. Wrap a shared primitive in a feature component rather than cop
 
 **This gets stronger as web grows, and that is the design.** A rule that enumerates values goes stale the moment
 the code moves; a rule that says *"match your neighbour"* cannot. It is also the one rule here that is
-demonstrably obeyed — `.veyq-dialog-action-row`: 15 uses, zero per-component copies.
+demonstrably obeyed — `.veyq-dialog-action-row`: **23 uses across 18 components** in `web/`, plus 6 across 3 in
+`admin-web/`, and **zero** per-component copies [M: 2026-09-20]. Uses are markup uses, not occurrences, so the
+number is re-measurable rather than remembered:
+
+```
+grep -rn 'class="[^"]*veyq-dialog-action-row' web/src | wc -l   # uses
+grep -rln 'class="[^"]*veyq-dialog-action-row' web/src | wc -l  # components
+```
+
+This sentence said *15* until 2026-09-20, having been written when that was true — which is the paragraph's own
+argument landing on the paragraph. **The load-bearing half is "zero copies", and only that half is a rule**; the
+counts are colour, and colour is what goes stale. Re-measure before quoting them, or quote neither.
 
 ## Color — semantic role tokens
 
