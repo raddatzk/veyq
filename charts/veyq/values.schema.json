@@ -53,10 +53,39 @@
           "required": ["mode"],
           "properties": {
             "mode": { "type": "string", "enum": ["none", "per-domain", "shared"] },
-            "secretName": { "type": "string", "maxLength": 253 }
+            "secretName": { "type": "string", "maxLength": 253 },
+            "acme": {
+              "type": "object",
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "email": { "type": "string" },
+                "server": { "type": "string", "pattern": "^https://[^\\s]+$" }
+              }
+            }
           },
           "if": { "properties": { "mode": { "const": "shared" } } },
           "then": { "properties": { "secretName": { "$ref": "#/$defs/nonEmpty" } }, "required": ["secretName"] }
+        }
+      },
+      "$comment": "The ACME opt-in's contradictions are refused here, never resolved in a template: an acme issuer obtains per-domain certificates, so any other mode is an operator's explicit choice the chart must not override; the e-mail is required as compose requires VEYQ_ACME_EMAIL; and an operator's own issuer annotation beside the chart's would leave cert-manager to pick one. The annotation keys are forbidden as `false` schemas so the refusal names the key.",
+      "if": {
+        "required": ["tls"],
+        "properties": { "tls": { "required": ["acme"], "properties": { "acme": { "required": ["enabled"], "properties": { "enabled": { "const": true } } } } } }
+      },
+      "then": {
+        "properties": {
+          "tls": {
+            "properties": {
+              "mode": { "const": "per-domain" },
+              "acme": { "required": ["email", "server"], "properties": { "email": { "$ref": "#/$defs/nonEmpty" }, "server": { "$ref": "#/$defs/nonEmpty" } } }
+            }
+          },
+          "annotations": {
+            "properties": {
+              "cert-manager.io/issuer": false,
+              "cert-manager.io/cluster-issuer": false
+            }
+          }
         }
       }
     },

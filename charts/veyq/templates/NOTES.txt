@@ -14,7 +14,25 @@ Then point DNS at your ingress controller for:
 {{- if .Values.admin.domain }}
     {{ .Values.admin.domain }}    the administration surface (you chose to expose it)
 {{- end }}
-{{- if eq .Values.ingress.tls.mode "none" }}
+{{- if (.Values.ingress.tls.acme | default dict).enabled }}
+
+TLS: this release templates the cert-manager Issuer `veyq-acme` (ACME HTTP-01, account {{ .Values.ingress.tls.acme.email }})
+against {{ .Values.ingress.tls.acme.server }}
+and stamps it on every Ingress — a tenant created later is a certificate order of its own. It works only if:
+    cert-manager runs in this cluster (without its CRDs this release could not have been created at all)
+    port 80 of every host above, and of every tenant domain, reaches your ingress controller
+    a tenant's DNS points here BEFORE the tenant is created — cert-manager self-checks reachability, then orders
+{{- if contains "staging" .Values.ingress.tls.acme.server }}
+This is a STAGING directory: its certificates are not browser-trusted. Switch ingress.tls.acme.server to the
+production directory once a test order succeeds — until then every browser refuses the instance.
+{{- else }}
+Production limits worth knowing before you test here (letsencrypt.org/docs/rate-limits): 5 failed validations per
+hostname per hour, 50 new certificates per registered domain per week. The staging directory is the one-line switch.
+{{- end }}
+Watch the orders:
+    kubectl -n {{ .Release.Namespace }} get issuer veyq-acme
+    kubectl -n {{ .Release.Namespace }} get certificate
+{{- else if eq .Values.ingress.tls.mode "none" }}
 
 TLS: ingress.tls.mode is `none`. Nothing in this release obtains a certificate. Unless something upstream
 terminates TLS for every host above, the refresh cookie (Secure) is never sent back and every mailed link

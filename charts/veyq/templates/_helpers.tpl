@@ -57,8 +57,25 @@ Usage: {{ include "veyq.ingressTls" (dict "root" . "host" <host> "name" <object 
 {{- end }}
 {{- end }}
 
+{{/*
+The annotation map every Ingress receives — the operator's `ingress.annotations`, plus the ACME opt-in's
+`cert-manager.io/issuer` when it is on. It has TWO consumers and both must read it from here: the chart's own
+Ingress metadata below, and app-configmap.yaml, which hands the same map to the backend for every tenant
+Ingress it projects at runtime. A merge done at only one of them is a chart whose own hosts get certificates
+while every tenant domain silently gets none (scripts/chart_meta_check.py (ix) and (x) assert the two apart).
+Returned as YAML because `include` can only return a string; `{}` when empty, so a consumer's `with`/`range`
+over `fromYaml` sees an empty map. The merge copies — `set` on .Values itself would leak into every later read.
+*/}}
+{{- define "veyq.ingressAnnotations" -}}
+{{- $annotations := deepCopy (.Values.ingress.annotations | default dict) -}}
+{{- if (.Values.ingress.tls.acme | default dict).enabled -}}
+{{- $_ := set $annotations "cert-manager.io/issuer" "veyq-acme" -}}
+{{- end -}}
+{{- toYaml $annotations -}}
+{{- end }}
+
 {{- define "veyq.ingressMetadata" -}}
-{{- with .Values.ingress.annotations }}
+{{- with (include "veyq.ingressAnnotations" . | fromYaml) }}
   annotations:
     {{- toYaml . | nindent 4 }}
 {{- end }}

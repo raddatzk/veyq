@@ -1,0 +1,30 @@
+# The ACME opt-in's render — `lint-values.yaml` plus `ingress.tls.acme`. scripts/chart_meta_check.py renders
+# EVERY file in this directory and runs all of its assertions over each, so this second file exists for one
+# reason: the opt-in changes what the chart emits (an Issuer, an annotation on every Ingress and in the app's
+# properties file), and a shape no values file selects is a shape nothing renders. A value path a file here leaves
+# at its default is still unchecked; add a file rather than widen this one.
+#
+# NOT a template for an installation — same throwaways as lint-values.yaml. The base is repeated rather than
+# layered (`-f lint-values.yaml -f acme-values.yaml`) because the guard renders each file ON ITS OWN: a file that
+# is whole by itself enrols by existing, with no layering order for the guard to know.
+domain: veyq.example.org
+storeDomain: store.veyq.example.org
+image:
+  repository: ghcr.io/example/veyq
+admin:
+  image:
+    repository: ghcr.io/example/veyq-admin
+secrets:
+  mariadbPassword: ci-only-not-a-password
+  mariadbRootPassword: ci-only-not-a-password
+  garageRpcSecret: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  garageAdminToken: ci-only-not-a-token
+  s3AccessKey: GK0123456789abcdef01234567
+  s3SecretKey: ci-only-not-a-secret
+ingress:
+  className: nginx
+  tls:
+    mode: per-domain
+    acme:
+      enabled: true
+      email: ops@example.org
