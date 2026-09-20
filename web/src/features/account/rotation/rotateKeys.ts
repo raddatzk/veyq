@@ -13,10 +13,10 @@
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
+import { accountRotationApi, scopesApi } from '../../../api/client'
 import { withRefresh } from '../login/login'
-import { masterKey, setUnlocked } from '../../../app/vault'
-import { MasterKeyWrapMethodEnum } from '../../../api/generated/account'
+import { setUnlocked } from '../../../app/vault'
+import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
 import { openScopeById } from '../../spaces/scopes'
@@ -56,60 +56,6 @@ export type ScopeOutcome = {
 export type RotationResult = { scopes: ScopeOutcome[] }
 
 /**
- * The cold-credential gate (ADR 0060 Decision 2, uc.account.rotate-keys §2) — **a live proof, not a memory.**
- *
- * Derive the floor KEK from the password and Secret Key offered right now, open the stored `PASSWORD` wrap
- * with it, and require the result to equal the Master Key this vault is already holding. That is the binding
- * refusal, and it is unavoidable work rather than an extra check: rewriting the two cold wraps needs those very
- * secrets as material, and the vault keeps no KEK from unlock — so **every** path through this screen supplies
- * them, a cold one included.
- *
- * **How this vault was opened does not gate it, and that is E1 as written, not a softening.** A session opened
- * by a device wrap upgrades *in place* by supplying the cold credential, which is the same proof a cold session
- * gives; turning it away would add nothing over the proof and would send somebody already holding their
- * Emergency Kit back to the sign-in screen for no reason. `unlockOrigin()` is what the *screen* reads — to say
- * why the Secret Key is being asked for here — and the rotation marks the session cold afterwards, because it
- * has just proven exactly that.
- *
- * The attacker this defends against holds a `DEVICE_KEY` wrap and nothing colder. They fail here, on the
- * proof, whichever screen they reach it from.
- *
- * Neither refusal writes anything. Returns the current Master Key (a fresh copy the caller owns) once it passes.
- */
-async function proveColdCredential(password: string, secretKeyB64: string): Promise<Uint8Array> {
-  const held = masterKey()
-  if (!held) throw new RotationRefused('vaultLocked')
-
-  const material = await withRefresh(() => accountApi().getAccountKeyMaterial())
-  const floor = material.wraps.find((w) => w.method === MasterKeyWrapMethodEnum.Password)
-  if (!floor?.kdfParams) {
-    held.fill(0)
-    throw new RotationRefused('noFloorWrap')
-  }
-
-  const secretKey = fromB64std(secretKeyB64.trim())
-  const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
-  const kek = await unlockKekAsync(secretKey, password, salt, params)
-  let opened: Uint8Array
-  try {
-    opened = v1.symUnwrap(kek, fromB64std(floor.wrappedKey), 'master-key')
-  } catch {
-    held.fill(0)
-    throw new RotationRefused('credentialRejected')
-  }
-  // A wrong Secret Key with a right password (or the reverse) fails the AEAD above; this compares what the
-  // wrap yielded against what this session is holding, so a *stale* proof — a floor rewritten under us — is
-  // refused too rather than silently rotating from a Master Key that is no longer the account's.
-  const matches = opened.length === held.length && opened.every((b, i) => b === held[i])
-  opened.fill(0)
-  if (!matches) {
-    held.fill(0)
-    throw new RotationRefused('credentialRejected')
-  }
-  return held
-}
-
-/**
  * Rotate. Mints `MK'` and a fresh identity on-device, publishes the account half in one server transaction,
  * re-seals what the old Master Key sealed, re-keys every scope the caller is alone in, and finally swaps the
  * vault over.
@@ -127,7 +73,14 @@ async function proveColdCredential(password: string, secretKeyB64: string): Prom
  * the right one anyway: re-using a salt leaks the rewrite to anyone diffing two dumps.
  */
 export async function rotateKeys(password: string, secretKeyB64: string): Promise<RotationResult> {
-  const oldMasterKey = await proveColdCredential(password, secretKeyB64)
+  // The gate is shared with change-password (`../coldCredential`) — one implementation, because two screens
+  // minting a cold credential behind two copies of the same proof is how one of them ends up without it. Its
+  // three refusals are this file's three by construction; they are re-thrown in this flow's vocabulary so the
+  // panel keeps reading one error type.
+  const oldMasterKey = await proveColdCredential(password, secretKeyB64).catch((e: unknown) => {
+    if (e instanceof ColdCredentialRefused) throw new RotationRefused(e.reason)
+    throw e
+  })
   const secretKey = fromB64std(secretKeyB64.trim())
 
   const identity = v1.generateIdentity()

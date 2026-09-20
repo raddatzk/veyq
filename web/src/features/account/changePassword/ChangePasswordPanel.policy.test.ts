@@ -26,6 +26,9 @@ import ChangePasswordPanel from './ChangePasswordPanel.vue'
 import { changePassword } from './changePassword'
 
 const stubs = {
+  // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
+  // mint a credential without one.
+  RouterLink: { props: ['to'], template: '<a :href="to"><slot /></a>' },
   Button: { props: ['label', 'loading', 'disabled'], template: '<button :disabled="disabled">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
   InputText: {
@@ -50,8 +53,9 @@ const i18n = createI18n({
       changePassword: {
         title: 'Change password', sub: 's', currentLabel: 'Current', newPasswordLabel: 'New', confirmLabel: 'Repeat',
         submit: 'Change', submitting: 'Changing', done: 'Done', mismatch: 'Passwords differ',
-        forgotten: 'I forgot it', forgottenNote: 'note', errorLocked: 'locked', errorAttestation: 'refused',
-        errorNoFloor: 'no floor', errorFailed: 'failed', secretKeyHint: 'hint', rememberOffer: 'remember',
+        forgotLink: 'Reset by email', errorLocked: 'locked', errorAttestation: 'refused',
+        errorCredential: 'wrong credential', errorNoFloor: 'no floor', errorFailed: 'failed',
+        secretKeyHint: 'hint', rememberOffer: 'remember',
       },
     },
   },

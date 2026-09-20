@@ -1,8 +1,9 @@
 <script setup lang="ts">
-// The "Change password" section of the settings hub — uc.account.change-password. One screen, two entry
-// points: deliberate (the caller still knows the current password, default) and forgotten (reached only from
-// an already-unlocked session — most often a DEVICE_KEY "remember me" wrap). The client decides which form is
-// offered; the server cannot and does not try (ADR 0060 Decision 2's precedent, mirrored from rotation).
+// The "Change password" section of the settings hub — uc.account.change-password. One screen, ONE entry
+// point: the current password and the Secret Key, both required, both proven against the stored floor before
+// anything is sent (ADR 0060 Decision 2 — this screen mints a cold credential). The "I don't remember my
+// current password" option that used to stand here was the bypass of exactly that gate; what replaces it is a
+// link to recovery, which proves address control instead of waiving the proof.
 //
 // Markup + classes mirror KeyRotationPanel (veyq-surface + settings-form + settings-section-header) — the
 // built panel is the design source.
@@ -26,7 +27,6 @@ import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
 const { t } = useI18n()
 const { hasCapability } = useCapabilities()
 
-const forgotten = ref(false)
 const currentPassword = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
@@ -44,14 +44,14 @@ const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_
 // later "hardens" it by adding a check the operator-blind boundary forbids.
 const canSubmit = computed(
   () =>
-    (forgotten.value || currentPassword.value.length > 0) &&
+    currentPassword.value.length > 0 &&
     newPassword.value.length >= MIN_PASSWORD_LENGTH &&
     secretKey.value.trim().length > 0,
 )
 
 const { run, pending: busy } = useAsyncAction(
   async () => {
-    await changePassword(newPassword.value, secretKey.value.trim(), forgotten.value ? undefined : currentPassword.value)
+    await changePassword(newPassword.value, secretKey.value.trim(), currentPassword.value)
     currentPassword.value = ''
     secretKey.value = ''
     confirmPassword.value = ''
@@ -59,9 +59,15 @@ const { run, pending: busy } = useAsyncAction(
   },
   {
     onError: (e) => {
+      // The refusals this screen can produce WITHOUT a request are the shared proof's three. `errorNoFloor`
+      // serves both it and the server's 409: one account state, one sentence.
       error.value =
         e instanceof ChangePasswordRefused
-          ? t('changePassword.errorLocked')
+          ? e.reason === 'vaultLocked'
+            ? t('changePassword.errorLocked')
+            : e.reason === 'noFloorWrap'
+              ? t('changePassword.errorNoFloor')
+              : t('changePassword.errorCredential')
           : isHttpStatus(e, HttpStatus.forbidden)
             ? t('changePassword.errorAttestation')
             : isHttpStatus(e, HttpStatus.conflict)
@@ -99,7 +105,6 @@ const { run: runRemember, pending: rememberBusy } = useAsyncAction(async () => {
 
 function startOver() {
   done.value = false
-  forgotten.value = false
   newPassword.value = ''
 }
 </script>
@@ -116,20 +121,11 @@ function startOver() {
 
       <template v-if="!done">
         <form class="veyq-form" @submit.prevent="submit">
-          <label v-if="!forgotten" class="settings-field">
+          <label class="settings-field">
             {{ t('changePassword.currentPasswordLabel') }}
             <Password v-model="currentPassword" :feedback="false" toggle-mask autocomplete="current-password" :disabled="busy" />
           </label>
-          <button
-            v-if="!forgotten"
-            type="button"
-            class="settings-link-action"
-            :disabled="busy"
-            @click="forgotten = true; currentPassword = ''"
-          >
-            {{ t('changePassword.forgotAction') }}
-          </button>
-          <Message v-else severity="info" :closable="false">{{ t('changePassword.forgottenNote') }}</Message>
+          <RouterLink class="settings-link-action" to="/recover">{{ t('changePassword.forgotLink') }}</RouterLink>
 
           <label class="settings-field">
             {{ t('changePassword.newPasswordLabel') }}
@@ -159,9 +155,6 @@ function startOver() {
               :disabled="!canSubmit || busy"
               :loading="busy"
             />
-            <button v-if="forgotten" type="button" class="settings-link-action" :disabled="busy" @click="forgotten = false">
-              {{ t('changePassword.rememberAfterAll') }}
-            </button>
           </div>
         </form>
       </template>
