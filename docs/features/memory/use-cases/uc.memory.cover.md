@@ -3,8 +3,9 @@
 - **ID:** uc.memory.cover
 - **Primary actor:** A member with an **unlocked vault** who has a Memory open and wants to give it a **cover**.
 - **Goal:** Curate a Memory's **cover** — pick **one image** and **crop** it — **sealed under the Memory's `K_mem`**
-  and shown identically wherever the Memory appears: its **browse card**, its **detail header**, and its **map pin**
-  ([uc.memory.place](uc.memory.place.md)). **Operator-blind** — the server never sees which image, or the crop.
+  and shown identically wherever the Memory appears: its **browse card**, its **detail header**, its **map pin**
+  ([uc.memory.place](uc.memory.place.md)) and, when it is pinned, its **entry in the sidebar's Favorites**
+  ([en.memory.favorites](../enablers/en.memory.favorites.md)). **Operator-blind** — the server never sees which image, or the crop.
 - **Preconditions:** The vault is unlocked and the Memory is open (its **`K_mem`** is held). The node already carries
   the sealed `wrappedMeta` blob ([en.memory.node-meta](../enablers/en.memory.node-meta.md)); this adds a `cover`
   sub-object beside the `date`/`location`.
@@ -22,8 +23,8 @@ nothing; unset ⇒ a placeholder shows, like a location is never auto-created). 
   `K_mem` and served over the existing presigned transport (cr-0073).
 
 The **crop is normalized `{ x, y, width, height }` in 0..1** against the source image (the pre-E2EE design source's
-`CoverCrop`), so **one stored crop renders identically at any size** — a small card, a larger detail header, or a
-map pin — with no per-surface crop and no cropped-image upload. The whole `cover { source, crop }` is sealed in the
+`CoverCrop`), so **one stored crop renders identically at any size** — a rail tile, a small card, a larger detail
+header, or a map pin — with no per-surface crop and no cropped-image upload. The whole `cover { source, crop }` is sealed in the
 node's `wrappedMeta` under `K_mem`; the display just expands the decrypted thumbnail inside an `overflow:hidden` box
 and offsets it.
 
@@ -46,15 +47,18 @@ and offsets it.
    PATCHes it via `updateNode`. Switching away from an uploaded cover reclaims its standalone blob. The detail
    header re-renders; the browse card and the map pin pick it up.
 4. **Everywhere the Memory shows**, its cover is rendered from the same sealed crop over the chosen media's
-   decrypted thumbnail: the **browse card**, the **detail header**, the **map pin**. **Remove** clears the cover →
-   the placeholder returns in all three.
+   decrypted thumbnail: the **browse card**, the **detail header**, the **map pin**, and the **sidebar Favorites
+   entry** when it is pinned. **Remove** clears the cover → the placeholder returns on every one of them. The
+   thumbnail itself is decrypted **once per Memory per scope** and shared by all four; a cover changed on one
+   surface is re-resolved for the rest because the cache is keyed on the node's sealed meta, not on its id.
 
 ## Alternate / exception flows
 
-- **E1 — no cover set:** all three places show the **placeholder** (the soft-accent images tile). Deliberate —
-  no auto-pick.
+- **E1 — no cover set:** every one of those places shows the **placeholder** (the soft-accent images tile).
+  Deliberate — no auto-pick. No surface branches on it: they all render the same component, whose own
+  placeholder is what appears.
 - **E2 — the chosen media was deleted:** the `cover.mediaId` dangles → best-effort fall back to the placeholder
-  (never a broken card/pin); the user can pick a new cover.
+  (never a broken card, pin or rail tile); the user can pick a new cover.
 - **E3 — vault locked / Memory not open:** without the node's `K_mem` the `wrappedMeta` can't be unsealed → the
   cover is unavailable until unlock + open.
 - **E4 — malformed / wrong-key `wrappedMeta` or crop:** best-effort — a bad crop normalizes to the full frame; an
@@ -65,9 +69,11 @@ and offsets it.
 - **Operator-blind.** The server holds the node shape + the **opaque `wrappedMeta`**; never the chosen image id or
   the crop. The cover is sealed under `K_mem` and unsealed only on device. (Envelope + node-level blindness:
   [en.memory.node-meta](../enablers/en.memory.node-meta.md).)
-- **One normalized crop, one image, everywhere.** A single `0..1` crop drives the card, the detail header, and the
-  map pin through one shared display formula — a Memory reads as itself wherever it appears, with no re-cropping
-  and no extra blob for the existing-media case.
+- **One normalized crop, one image, everywhere.** A single `0..1` crop drives the card, the detail header, the
+  map pin and the sidebar's Favorites tile through one shared display formula — a Memory reads as itself wherever
+  it appears, with no re-cropping and no extra blob for the existing-media case. **One decrypt, too:** a single
+  store resolves a Memory's cover for every surface, so adding a fifth surface costs a read, not a decrypt — and
+  the surface that shows it needs no access to the key chain that opened it.
 - **No auto-cover (deliberate).** A cover is a curation choice, mirroring the location: it is set on purpose, and
   its absence is an honest placeholder rather than a guessed photo. (This retires the cr-0071 stopgap where the map
   pin auto-picked the media nearest the place.)
@@ -78,11 +84,12 @@ and offsets it.
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** Give a memory a **face**. Pick one of its photos, crop it how you like, and that cover shows up everywhere
-the memory appears — its card, its page, and its pin on the map. Which photo you chose and how you framed it are
+the memory appears — its card, its page, its pin on the map, and its entry in the favorites list down the side. Which photo you chose and how you framed it are
 locked with the memory's own key on your device; the server only ever stores scrambled data.
 
 **DE —** Gib einer Erinnerung ein **Gesicht**. Wähle eines ihrer Fotos, schneide es zu, wie du magst — und dieses
-Cover erscheint überall, wo die Erinnerung auftaucht: auf ihrer Karte, ihrer Seite und ihrem Pin auf der Landkarte.
+Cover erscheint überall, wo die Erinnerung auftaucht: auf ihrer Karte, ihrer Seite, ihrem Pin auf der Landkarte
+und in der Favoritenliste an der Seite.
 Welches Foto du gewählt und wie du es zugeschnitten hast, wird mit dem eigenen Schlüssel der Erinnerung auf deinem
 Gerät verschlüsselt; der Server speichert nur verschlüsselte Daten.
 

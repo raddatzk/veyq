@@ -2,7 +2,8 @@
 // en.memory.cover (web) — the pure display of a Memory's chosen cover (uc.memory.cover, cr-0072). Given a
 // decrypted source URL + a normalized crop, it renders that ONE crop at ANY container size: the `<img>` sits in an
 // `overflow:hidden` box and is expanded + offset by `coverImageStyle`, so a single stored `0..1` crop reads
-// identically on the browse card, the detail header, and the map pin. No `src` ⇒ the placeholder — the soft-accent
+// identically on the browse card, the detail header, the map pin and the sidebar's Favorites tile. No `src` ⇒
+// the placeholder — the soft-accent
 // `pi pi-images` tile, or a `placeholder` slot the host supplies. Ported component-for-component from the design
 // source's `MemoryCoverImage`; only the `src` (a decrypted object URL under K_mem) and the crop model are ours.
 import { computed } from 'vue'
