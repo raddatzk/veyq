@@ -18,6 +18,7 @@ import {
   unsealMeta,
   setMediaMeta,
   backfillMediaType,
+  backfillPlaceName,
   isVideoMediaType,
   effectiveCapturedAt,
   plaintextSize,
@@ -27,6 +28,8 @@ import {
   type ChunkProvider,
 } from '../media'
 import { derivedDownloadName, saveBytes, sniffMediaType } from '../download'
+import { resolvePlaceName } from '../placeName'
+import { useMapConfig } from '../../../shared/state/useMapConfig'
 import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 
@@ -152,6 +155,7 @@ async function loadDetails() {
   } finally {
     if (item.value === target) detailsLoading.value = false
   }
+  void resolvePlaceForCurrent() // fire-and-forget: the panel is already rendered with the coordinate
 }
 watch(() => item.value?.mediaId, loadDetails, { immediate: true })
 
@@ -263,6 +267,30 @@ const hasGps = computed(() => {
 const gpsLabel = computed(() =>
   hasGps.value ? `${captured.value!.gpsLat!.toFixed(6)}, ${captured.value!.gpsLng!.toFixed(6)}` : '',
 )
+const placeLabel = computed(() => captured.value?.placeName ?? '')
+
+// --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
+// Resolved once per photo, then read from the sealed tier forever. Four gates, and each one is a bite:
+// consent (`geocodingAvailable` — with it off NO coordinate leaves the device), a coordinate to resolve,
+// a writable surface (the public share viewer is `readonly` and must never write), and no name sealed yet.
+const { geocoderUrl, geocodingAvailable } = useMapConfig()
+
+async function resolvePlaceForCurrent() {
+  const target = item.value
+  const meta = captured.value
+  if (!target || !meta || props.readonly) return
+  if (!hasGps.value || meta.placeName !== undefined) return
+  if (!geocodingAvailable.value) return // consent off → resolvePlaceName is never even asked
+  const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
+  if (!resolved) return
+  try {
+    const updated = await backfillPlaceName(props.scopeId, target.mediaId, props.memoryKey, meta, resolved.name, resolved.level)
+    if (item.value === target) captured.value = updated.tier
+    emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta })
+  } catch {
+    /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again */
+  }
+}
 // What the photo itself knows, in the order someone reads it: when, what it is, what took it, how it was
 // exposed, who made it, and where. Every row is filtered out when its value is absent, so a phone snapshot
 // shows three rows and a raw file from a camera shows twenty — without either shape being a special case.
@@ -598,6 +626,10 @@ onBeforeUnmount(() => {
             <template v-if="isCapturedAtCorrected">
               <dt>{{ t('media.status') }}</dt>
               <dd>{{ t('media.capturedAtCorrected') }}</dd>
+            </template>
+            <template v-if="placeLabel">
+              <dt>{{ t('media.place') }}</dt>
+              <dd>{{ placeLabel }}</dd>
             </template>
             <template v-if="hasGps">
               <dt>{{ t('media.location') }}</dt>

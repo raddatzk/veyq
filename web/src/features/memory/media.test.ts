@@ -31,6 +31,8 @@ import {
   isVideoMediaType,
   effectiveCapturedAt,
   readCaptureTime,
+  backfillPlaceName,
+  PLACE_NAME_MAX_BYTES,
   CHUNK_SIZE,
   COVER_SPEC,
   TIER_SPECS,
@@ -472,6 +474,48 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // claim about the server's view, and this is what keeps it true now that the name exists at all.
     expect(JSON.stringify(store.captured)).not.toContain('IMG_0042')
     expect(JSON.stringify(store.captured)).not.toContain('holiday')
+  })
+
+  // B2.3 / B2.4 / B2.7 — the three ways sealing a place name can go wrong, each with its own lever.
+  it('seals a place name read-modify-write, keeps a name-only tier, and stays inside the 512 cap', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    deriver.sourceDims = { w: 4032, h: 3024 }
+    vi.mocked(exifr.parse).mockResolvedValue({
+      DateTimeOriginal: new Date(CAPTURED_AT), latitude: 48.137, longitude: 11.575, Make: 'Canon',
+    } as never)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    const meta = unsealMeta(memoryKey, item)!
+    const withOverride = { ...meta, capturedAtOverride: Date.UTC(2019, 7, 15) }
+
+    // B2.3 — the spread is what keeps the date and the GPS. Lever: seal `{ v: 1, placeName }` instead.
+    const saved = await backfillPlaceName(SCOPE_ID, 'media-0', memoryKey, withOverride, 'München', 'city')
+    expect(saved.tier).toMatchObject({
+      placeName: 'München', placeLevel: 'city',
+      capturedAtOverride: Date.UTC(2019, 7, 15), gpsLat: 48.137, gpsLng: 11.575, w: 4032,
+    })
+
+    // B2.4 — a tier whose ONLY content is a name must not seal to null, or the name is resolved again on every
+    // open. Lever: remove the `placeName` clause from `metaHasContent`.
+    const nameOnly = await backfillPlaceName(SCOPE_ID, 'media-0', memoryKey, { v: 1 }, 'Formentera', 'island')
+    expect(nameOnly.wrappedMeta).not.toBeNull()
+    expect(nameOnly.tier).toMatchObject({ placeName: 'Formentera' })
+
+    // B2.7 — the cap. The listed tier is 512 base64 and `persistMeta` is SHARED with the capture-time PUT, so
+    // an overflowing name breaks that write too. Worst case: every field populated plus a maximal name.
+    // Lever: remove the clamp in `backfillPlaceName`.
+    const maximal = await backfillPlaceName(
+      SCOPE_ID, 'media-0', memoryKey,
+      { ...withOverride, mediaType: 'image/jpeg', capturedAtSource: 'exif' },
+      'Sant Francesc de Formentera i les Illes Balears de la Mediterrània Occidental'.repeat(4),
+      'country',
+    )
+    expect(maximal.wrappedMeta!.length).toBeLessThanOrEqual(512)
+    expect(new TextEncoder().encode(maximal.tier!.placeName!).length).toBeLessThanOrEqual(PLACE_NAME_MAX_BYTES)
   })
 
   it('falls back to the file creation date when the source carries no EXIF date', async () => {

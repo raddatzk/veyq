@@ -11,6 +11,23 @@ vi.mock('../../../api/client', () => ({
 // exifr does the real parse in the browser; here we drive it so the sealed EXIF tier is deterministic.
 vi.mock('exifr', () => ({ default: { parse: vi.fn(async () => undefined) } }))
 
+// The map/geocoding consent gate (uc.memory.place, ADR 0016). Default: consented WITH a geocoder, so the
+// place-name path is exercised; the consent bite flips `geocodingAvailable` off and asserts silence.
+const mapConfig = vi.hoisted(() => ({ maps: true, geocoder: 'https://geo.example' as string | null }))
+vi.mock('../../../shared/state/useMapConfig', async () => {
+  const { computed } = await import('vue')
+  return {
+    useMapConfig: () => ({
+      mapsAvailable: computed(() => mapConfig.maps),
+      tileUrl: computed(() => 'https://tiles.example/{z}/{x}/{y}.png'),
+      tileAttribution: computed(() => '© OSM'),
+      tileMaxZoom: computed(() => 19),
+      geocoderUrl: computed(() => mapConfig.geocoder),
+      geocodingAvailable: computed(() => mapConfig.maps && Boolean(mapConfig.geocoder)),
+    }),
+  }
+})
+
 // The Slice-2 SW registrar (there is no real Service Worker in the test env). Default: no usable SW → every play
 // takes the Slice-1 fallback; individual tests override registerPlayback to simulate a controlling SW.
 vi.mock('../../../sw/register', () => ({
@@ -28,6 +45,7 @@ import { mediaApi } from '../../../api/client'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import * as v1 from '@veyq/crypto/v1'
 import { galleryFakeStore } from './galleryFakeStore'
+import { resetPlaceNameCache } from '../placeName'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
@@ -100,9 +118,15 @@ async function seedTwo(memoryKey: Uint8Array) {
   return { store, items }
 }
 
-function mountLightbox(memoryKey: Uint8Array, items: MediaItem[], startIndex = 0, coverMediaId: string | null = null) {
+function mountLightbox(
+  memoryKey: Uint8Array,
+  items: MediaItem[],
+  startIndex = 0,
+  coverMediaId: string | null = null,
+  extraProps: Record<string, unknown> = {},
+) {
   return mount(MediaLightbox, {
-    props: { scopeId: SCOPE_ID, memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId },
+    props: { scopeId: SCOPE_ID, memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId, ...extraProps },
     global: { plugins: [i18n] },
   })
 }
@@ -520,6 +544,80 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(dds).not.toContain('★★★★☆')
     expect(dds.some((v) => v.includes('EV'))).toBe(false)
     expect(dds.some((v) => v.includes('north'))).toBe(false)
+  })
+
+  // --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
+  /** One geotagged photo, listed and ready to open. */
+  async function seedGeotagged(memoryKey: Uint8Array) {
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 } as never)
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    const geo = vi.fn(async (url: string, init?: RequestInit) =>
+      String(url).includes('geo.example')
+        ? ({ ok: true, status: 200, json: async () => ({ address: { city: 'München', country: 'Deutschland' } }) } as unknown as Response)
+        : store.fetchStub(url, init),
+    )
+    vi.stubGlobal('fetch', geo)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(7), mediaType: 'image/jpeg' }, stubDeriver())
+    return { store, geo, items: await listMedia(SCOPE_ID, NODE_ID) }
+  }
+  const geocoderCalls = (geo: ReturnType<typeof vi.fn>) =>
+    geo.mock.calls.filter((c) => String(c[0]).includes('geo.example'))
+
+  // B2.6 — the name is shown, and the coordinate stays visible beneath it rather than being replaced by it.
+  it('resolves the place name once, seals it, and shows it above the coordinate', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = true
+    mapConfig.geocoder = 'https://geo.example'
+    const memoryKey = v1.randomBytes(32)
+    const { store, geo, items } = await seedGeotagged(memoryKey)
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await flushPromises()
+
+    expect(geocoderCalls(geo)).toHaveLength(1)
+    const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
+    expect(dds).toContain('München')
+    expect(dds).toContain('48.137000, 11.575000') // the coordinate is not replaced by the name
+    // …and it was sealed, so the next open reads it from the tier instead of asking again
+    const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
+    expect(typeof sent).toBe('string')
+    expect(sent).not.toContain('München') // opaque — the operator learns no place
+  })
+
+  // B2.1 — the consent gate. With maps off, a geotagged photo must put NO coordinate on the wire.
+  // Lever: pass `geocoderUrl` to the resolver regardless of `geocodingAvailable`.
+  it('makes no geocoder request when consent is off, however many coordinates the photo carries', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = false
+    mapConfig.geocoder = 'https://geo.example'
+    const memoryKey = v1.randomBytes(32)
+    const { geo, items } = await seedGeotagged(memoryKey)
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await flushPromises()
+
+    expect(geocoderCalls(geo)).toHaveLength(0)
+    expect(wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())).toContain('48.137000, 11.575000')
+  })
+
+  // B2.5 — a public-share viewer is `readonly` and must never write, consent or not.
+  // Lever: remove the `props.readonly` check in `resolvePlaceForCurrent`.
+  it('never writes from a read-only viewer, even with consent on and a coordinate present', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = true
+    mapConfig.geocoder = 'https://geo.example'
+    const memoryKey = v1.randomBytes(32)
+    const { store, geo, items } = await seedGeotagged(memoryKey)
+
+    mountLightbox(memoryKey, items, 0, null, { readonly: true })
+    await flushPromises()
+    await flushPromises()
+
+    expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
+    expect(geocoderCalls(geo)).toHaveLength(0) // and it does not even ask, since it could not use the answer
   })
 
   it('shows the no-detail message when the item carries no sealed EXIF', async () => {

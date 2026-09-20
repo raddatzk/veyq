@@ -83,6 +83,16 @@ export type MediaMeta = {
   gpsLat?: number
   gpsLng?: number
   mediaType?: string
+  /**
+   * The resolved place name for this photo's own coordinate, and the hierarchy level it was taken from
+   * (`city`, `country`, …). Sealed once, then read from the tier forever — the provider is asked once per
+   * place, never once per open ([ADR 0016](../../../../docs/decisions/0016-geocoding-provider-neutrality.md)
+   * § Request discipline). **The only field this CR may add to the listed tier**, because that tier is capped
+   * at 512 base64 and is shared with the capture-time PUT: overflow would break that write too, which is why
+   * the name is clamped to [PLACE_NAME_MAX_BYTES] before it is sealed.
+   */
+  placeName?: string
+  placeLevel?: string
 }
 
 /**
@@ -763,6 +773,44 @@ export async function setMediaMeta(
 }
 
 /**
+ * The clamp on a resolved place name, in **UTF-8 bytes** rather than characters, because the budget being
+ * protected is the listed tier's 512-base64 cap and a CJK name costs three bytes per character. Long enough for
+ * "Bezirk Friedrichshain-Kreuzberg", short enough that a maximal name on a tier already carrying every other
+ * field still seals inside the cap — which is asserted, not reasoned about.
+ */
+export const PLACE_NAME_MAX_BYTES = 96
+
+/** Clamp to [PLACE_NAME_MAX_BYTES] without splitting a multi-byte character in half. */
+export function clampPlaceName(name: string): string {
+  const enc = new TextEncoder()
+  if (enc.encode(name).length <= PLACE_NAME_MAX_BYTES) return name
+  let out = name
+  while (out.length > 0 && enc.encode(out).length > PLACE_NAME_MAX_BYTES) out = out.slice(0, -1)
+  return out
+}
+
+/**
+ * Seal a media's resolved **place name** into the listed tier (read-modify-write, exactly as the capture-time
+ * override and the mediaType back-fill do — the spread is what keeps the date and the GPS from being clobbered).
+ * Operator-blind: the name is resolved client-direct from a bare coordinate and the server only ever sees the
+ * re-sealed ciphertext.
+ */
+export async function backfillPlaceName(
+  scopeId: string,
+  mediaId: string,
+  memoryKey: Uint8Array,
+  meta: MediaMeta | null,
+  placeName: string,
+  placeLevel?: string,
+): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
+  return persistMeta(scopeId, mediaId, memoryKey, {
+    ...(meta ?? { v: 1 }),
+    placeName: clampPlaceName(placeName),
+    placeLevel,
+  })
+}
+
+/**
  * Lazily back-fill a pre-field media's sealed **`mediaType`** (cr-inline-video-playback, #104/#105). Called on the
  * first original-fetch (download or play) of an item that carries no sealed type: re-seal the listed tier with the
  * sniffed MIME merged in — every other field untouched — and PUT it, so the **next** listing carries the video
@@ -785,7 +833,10 @@ export async function backfillMediaType(
 function metaHasContent(m: MediaMeta): boolean {
   return (
     m.w !== undefined || m.capturedAt !== undefined || m.capturedAtOverride !== undefined ||
-    m.gpsLat !== undefined || m.gpsLng !== undefined || m.mediaType !== undefined
+    m.gpsLat !== undefined || m.gpsLng !== undefined || m.mediaType !== undefined ||
+    // A tier whose only content is a resolved name is still content. Forgetting this clause is not a cosmetic
+    // miss: `persistMeta` would seal `null` and the name would be resolved again on every single open.
+    m.placeName !== undefined
   )
 }
 

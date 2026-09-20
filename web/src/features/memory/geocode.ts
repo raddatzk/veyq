@@ -64,6 +64,13 @@ export async function reverseGeocode(
     url.searchParams.set('lon', String(lng))
     url.searchParams.set('accept-language', lang)
     // Identity-free: no veyq token, no cookies, no Memory context — just the bare coordinate.
+    //
+    // **Trap: the provider's identifying-header requirement is met by accident here.** Nominatim's usage policy
+    // wants "a valid HTTP Referer or User-Agent identifying the application"; we set neither, and the browser
+    // default supplies our origin as `Referer`. Measured 2026-09-20: the repository sets no `Referrer-Policy`
+    // anywhere. Adding `Referrer-Policy: no-referrer` — an ordinary hardening — would silently put every
+    // instance outside that policy, so whoever adds one owes this call an explicit identifying header instead
+    // (ADR 0016 § Request discipline).
     const res = await fetchImpl(url.toString(), { headers: { Accept: 'application/json' } })
     if (!res.ok) return null
     const levels = nominatimLevels(await res.json())

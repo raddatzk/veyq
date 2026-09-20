@@ -80,6 +80,37 @@ Considered and rejected:
   vendor-neutral). With no provider configured or no consent, the reverse feature is **absent** (manual names on
   the map still work). Manual name entry never makes an external call.
 
+### Request discipline — the provider's policy is part of the decision, not an optimisation
+
+**Added 2026-09-20, when the first caller that can generate volume was built** (a per-photo resolved name in the
+lightbox). Everything above is about *who* may see a coordinate; nothing said *how often* we may ask. The
+reference provider's own policy does, and it is not silent — public Nominatim (measured 2026-09-20 against
+<https://operations.osmfoundation.org/policies/nominatim/>) sets an **absolute maximum of 1 request per second**,
+says bulk geocoding **is not encouraged**, requires that results **must be cached** on our side, and warns that a
+client "sending repeatedly the same query may be classified as faulty and blocked". So:
+
+- **Cache, then seal.** A resolved name is sealed into the tier and read from there forever. A surface may ask
+  the provider **once per place**, never once per open and never once per photo — the client cache is keyed on
+  the coordinate **rounded to ~110 m**, because photos from one spot differ in the fifth decimal and would
+  otherwise each be "repeatedly the same query" by the provider's definition.
+- **Serialise, do not merely count.** Requests queue behind a ≥1 s interval. A rate *counter* still permits a
+  burst; a queue cannot.
+- **Failure is not retried into the policy.** A provider error resolves to nothing and the surface keeps showing
+  the raw coordinate. There is no retry loop, because a retry against a blocked client is what turns a refusal
+  into a ban.
+
+**One requirement is currently met by accident, and a plausible hardening pass would break it.** The policy also
+wants "a valid HTTP Referer or User-Agent identifying the application". We send neither deliberately: the browser
+default puts our origin in `Referer`, and measured 2026-09-20 the repository sets **no** `Referrer-Policy`
+anywhere. Adding `Referrer-Policy: no-referrer` — an ordinary, otherwise-desirable hardening — would silently
+put every instance outside the provider's policy. Whoever adds one owes this seam an explicit identifying header
+instead; the trap is also written on the fetch itself, where someone editing it will see it.
+
+**What this does not reopen.** [uc.memory.place](../features/memory/use-cases/uc.memory.place.md) rejected
+per-item geocoding for a Memory's medoid — N fetches for one answer, on every open. That rejection stands
+untouched. A per-photo name is a different shape: one name, once ever, for the photo in front of the user, sealed
+into the tier the medoid already reads.
+
 ## Consequences
 
 - **The veyq operator never sees a coordinate or a place name** — the request is client-direct to a party the
