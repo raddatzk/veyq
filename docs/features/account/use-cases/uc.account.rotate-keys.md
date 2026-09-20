@@ -24,7 +24,8 @@
 1. **Entry.** Settings → Personal → security. The screen states, before any button, the three things that
    decide whether the user should be here at all: it ends the compromise but retracts nothing; it signs every
    other device out and takes their saved keys; and it needs the Emergency Kit.
-2. **The cold gate.** The client asks for the password + Secret Key — on **every** path, cold ones included,
+2. **The cold gate.** The client asks for the password + Secret Key (the shared control —
+   [uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — on **every** path, cold ones included,
    because rewriting the two cold wraps needs both as material and no KEK survives the unlock — re-derives the
    floor KEK, and requires it to open the stored `PASSWORD` wrap to the Master Key already held. That live
    proof *is* the gate ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2): the

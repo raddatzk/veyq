@@ -17,8 +17,9 @@
 1. From an **authenticated-but-locked** state, the client obtains the **password** (reused from a login
    that just happened, or re-prompted on a fresh app session) and the **Secret Key** (from the Emergency
    Kit, or already held by an enrolled device). The Secret Key may be **typed/pasted** or **imported from the
-   Emergency Kit** — uploading the kit file or scanning its QR code, both decoded **on-device** (the kit's
-   machine-readable token never leaves the device).
+   Emergency Kit** — uploading the kit file, scanning its QR code, or pasting its machine-readable token in
+   place of the key, all decoded **on-device** (the token never leaves the device). This is **one control**,
+   not a per-screen affordance — see *One Secret-Key control* under Quality notes.
 2. The client retrieves its **PASSWORD `MasterKeyWrap`** (the wrapped key + its KDF parameters/salt) from
    the server.
 3. The client derives the **Unlock KEK** `= Argon2id(password + Secret Key, wrap KDF params)` — **domain-
@@ -89,6 +90,21 @@ stateDiagram-v2
   **not** persist it. Routine re-unlock without re-entering the high-entropy Secret Key (a DEVICE wrap /
   biometric) is the **"Trust this device"** use-case — so this floor path is typically the *first* unlock
   on a device.
+- **One Secret-Key control, wherever the Secret Key is asked for.** This use-case owns the property, and the
+  other screens that ask for a Secret Key — the recovery reset ([uc.account.recover-access](uc.account.recover-access.md)),
+  the authenticated password change ([uc.account.change-password](uc.account.change-password.md)), the key
+  rotation ([uc.account.rotate-keys](uc.account.rotate-keys.md)) and a tenant-invite acceptance by someone who
+  already has an account ([uc.admin.create-tenant](../../admin/use-cases/uc.admin.create-tenant.md)) — offer
+  the *same* import, because a person opening their Emergency Kit under stress must meet what they already
+  know. It is one component for a second reason too: a screen that renders a bare input instead is
+  indistinguishable from one that simply has not been built yet, which is how the import came to exist on
+  exactly one of five screens while three use-cases asserted it everywhere.
+- **A kit from the wrong account warns; it never blocks.** Where the screen already knows which account is
+  expected (an invite's owner e-mail, the recovery material's e-mail, the signed-in account), an imported kit
+  carrying a *different* e-mail says so. It cannot be an error: the e-mail in a kit is metadata, an account may
+  have changed address since, and only the wrap can decide whether a key is right. The alternative to warning
+  is not a stricter check — it is the generic AEAD tag mismatch of E1, which tells the person their password
+  might be wrong when in fact they picked up the wrong kit.
 - **Unlocks the E2EE layer.** Once unlocked, the account key is available — this is what lets the client
   decrypt **E2EE session names** (planned — `uc.account.sessions` is reserved in ADR 0004, not yet written) and all content.
 

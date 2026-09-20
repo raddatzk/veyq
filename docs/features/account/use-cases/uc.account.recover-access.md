@@ -32,8 +32,9 @@
 4. The client presents the token to **release** the `RECOVERY` wrap. The server looks the token up by hash,
    checks it is live and unspent, and returns the wrap (plus the suite id and the wrapped identity private key).
    This is the only path on which that wrap is ever served — the ordinary key-material read filters it out.
-5. The client asks for the **Secret Key**, typed or imported from the Emergency Kit (file or QR, both decoded
-   on-device).
+5. The client asks for the **Secret Key** through the shared control
+   ([uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*), which also names the expected
+   account here — the recovery material carries the e-mail the reset is for.
 6. The client derives the recovery KEK `= Argon2id(Secret Key, wrap KDF params)` — **no password input** — and
    unwraps the **Master Key**. A wrong Secret Key fails here, on the device, with no server round trip.
 7. The client computes the commitment `recoveryAuthTag(Master Key)`. Only someone who actually opened the wrap

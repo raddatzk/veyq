@@ -34,7 +34,10 @@ keys); the invited owner's act is where the tenant's cryptographic root is **bor
 4. **Identity (bound to the invited email):** the accepting account must **own the invited email** — an
    existing user **logs in** as that account; a new user **registers cold** with that email (identity
    keypair, Master Key + wraps, Emergency Kit — see the account model). The owner may **change their
-   email later**; the binding is a one-time gate at acceptance, not a permanent constraint.
+   email later**; the binding is a one-time gate at acceptance, not a permanent constraint. The login branch
+   unlocks on this screen, so it asks for a Secret Key and uses the shared control for it
+   ([uc.account.unlock](../../account/use-cases/uc.account.unlock.md) § *One Secret-Key control*), with the
+   invited email as the expected account; the cold-register branch **mints** the Secret Key and asks for none.
 5. On acceptance the client generates the **`TENANT` scope cold**: a fresh **scope key `K_SC`**, then seals
    it as the **first grant** to the owner's **own identity public key**, and uploads
    `{ scopeId, grant, possession-proof of the bootstrap secret }`.

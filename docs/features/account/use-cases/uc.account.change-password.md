@@ -21,8 +21,9 @@
 ## Main flow
 
 1. The actor, already signed in and unlocked, opens **"Change password"** from account settings.
-2. The client asks for the **Secret Key** (typed or imported from the Emergency Kit) — required regardless of
-   entry point, since the vault never retained it past unlock.
+2. The client asks for the **Secret Key** through the shared control
+   ([uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — required regardless of entry
+   point, since the vault never retained it past unlock.
 3. The actor enters their **current password** (this is the deliberate-change entry; A1 covers the forgotten
    case).
 4. The client derives the **old** auth keypair from the current password (the same derivation login uses,
