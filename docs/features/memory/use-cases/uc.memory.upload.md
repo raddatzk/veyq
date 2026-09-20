@@ -27,8 +27,11 @@
    [derivatives](../enablers/en.memory.derivatives.md)) and sent **direct-to-store**, then attached to the
    Memory node — the seal → start → PUT → attach choreography is
    [en.memory.media](../enablers/en.memory.media.md)'s. Per-file + per-batch **progress** advance as it uploads.
-4. Opening the uploads popup shows each batch's files with status (queued / uploading / done / failed /
-   cancelled), a progress bar, and a **cancel** control while a file is queued/uploading.
+   **Each tile names the stage its file is actually in** — *queued*, *preparing*, *uploading* — because they are
+   three different waits and in two of them no byte has left the device yet. A tile that said *"uploading"*
+   while the device was still decoding is what made a large batch read as hung.
+4. Opening the uploads popup shows each batch's files with the same status (queued / preparing / uploading /
+   done / failed / cancelled), a progress bar, and a **cancel** control while a file is queued/uploading.
 5. As each file finishes, its optimistic tile **reconciles into the real decrypted thumbnail** (matched by the
    returned `mediaId`) with no empty-flash and no duplicate: the tile's **content** changes, its **position**
    does not. The user can **close** (acknowledge) the finished batch in the tray.
@@ -43,8 +46,10 @@
   Safari **populates `input.files` late / across repeated picks**. The picker therefore (a) accepts a
   file by **extension** when its `type` is empty, (b) **re-reads** the input over a short retry window and
   **merges** (never replaces) by a `name:size:lastModified:type` signature, and (c) infers a `mediaType` from
-  the extension so derivation can still run (HEIC/MOV). Underivable bytes upload **original-only** (the gallery
-  shows an icon).
+  the extension so derivation can still run (HEIC/MOV). **The window never delays the files already in hand** —
+  each re-read enqueues only what is genuinely new, as an additional batch; gating the first enqueue on it made
+  every browser pay for the one this workaround exists for. Underivable bytes upload **original-only** (the
+  gallery shows an icon).
 - **E4 — underivable media:** if on-device derivation fails (codec the browser can't decode), the original is
   uploaded without derivatives rather than failing the upload.
 
@@ -59,13 +64,17 @@
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** Drop photos or videos into a memory and they upload in the background — a button up top shows how each
-one is going, and you can cancel any of them. Everything is scrambled on your device before it leaves; the
-server only ever stores the scrambled pieces.
+**EN —** Drop photos or videos into a memory and they upload in the background — each picture tells you what it
+is doing (waiting, getting ready, uploading), a button up top shows the whole batch, and you can cancel any of
+them. Getting a photo ready takes a moment before anything is sent, which is why a big batch does not start
+moving the instant you pick it. Everything is scrambled on your device before it leaves; the server only ever
+stores the scrambled pieces.
 
-**DE —** Leg Fotos oder Videos in eine Erinnerung — sie laden im Hintergrund hoch; ein Button oben zeigt den
-Fortschritt jedes Uploads, und du kannst jeden abbrechen. Alles wird auf deinem Gerät verschlüsselt, bevor es es
-verlässt; der Server speichert nur die verschlüsselten Teile.
+**DE —** Leg Fotos oder Videos in eine Erinnerung — sie laden im Hintergrund hoch; jedes Bild sagt dir, was
+gerade passiert (wartet, wird vorbereitet, lädt hoch), ein Button oben zeigt den ganzen Stapel, und du kannst
+jeden Upload abbrechen. Ein Foto vorzubereiten dauert einen Moment, bevor überhaupt etwas gesendet wird —
+deshalb setzt sich ein großer Stapel nicht sofort in Bewegung. Alles wird auf deinem Gerät verschlüsselt, bevor
+es das Gerät verlässt; der Server speichert nur die verschlüsselten Teile.
 
 ## Related
 

@@ -59,13 +59,20 @@
 
 ## Generation & attachment (in the upload flow)
 
-On upload (the add-media flow), the client derives **preview + thumbnail** from the source (image: downscale;
-video: first-frame poster), seals **each as its own blob** under a fresh random `K_blob`, and uploads all
-three in **one batch** (the control plane is already batch-shaped, [en.memory.media](en.memory.media.md)). The
+On upload (the add-media flow), the client derives **preview + thumbnail** (image: downscale; video: first-frame
+poster), seals **each as its own blob** under a fresh random `K_blob`, and uploads all three in **one batch**
+(the control plane is already batch-shaped, [en.memory.media](en.memory.media.md)). The
 **media** record then references the blobs **by role** — `original` plus `derivatives: [{ kind, blob }]`,
 `kind ∈ THUMBNAIL | PREVIEW`. A consumer picks by role and falls back to the original when the role is absent.
 A type that is neither image nor video (no derivable frame) attaches the **original only**; the gallery falls
 back to an icon + name. **Upload always generates the derivatives** — there is no produce-later path.
+
+**The source is decoded once, and the order is what makes that possible.** The **preview** is derived from the
+original; the **thumbnail** is then derived from that already-downscaled preview rather than from a second pass
+over the full-resolution source. 4032 → 2048 → 512 traverses the same ≤2× halving steps two independent runs
+would, so § *The three tiers*' downscale rule is honoured rather than traded for the saving — but it does mean
+the two derivations are **ordered**, not interchangeable. The intrinsic size that decode measures is handed
+back with the bytes, so the sealed metadata tier's geometry costs no decode of its own either.
 
 ## Decisions (settled)
 
