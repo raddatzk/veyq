@@ -3,7 +3,11 @@
 // (an optional folder-header card, then the Memories section + the Folders section, each a card grid with a
 // "create" card) so memory.css styles it identically; only the data is ours — decrypted TreeNodes instead of
 // server Memory/MemoryFolder DTOs, and the breadcrumb/navigation are derived on device (the server is blind).
-// The folder header carries delete (as in the original) plus rename, added in-style.
+// The folder header carries delete (as in the original) plus rename, added in-style. Two deliberate deviations
+// from that source: the browse toolbar (trash + view mode) sits *inside* the Memories section header rather than
+// on a row of its own — right-aligned controls on an otherwise empty row read as a blank line — and the Memories
+// section stays mounted in map mode (the map is its body instead of the grid), which is what keeps the toolbar
+// reachable there without a second copy of it.
 import { computed, watch } from 'vue'
 import { reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -103,22 +107,6 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
 
 <template>
   <div class="memory-route-surface">
-    <div class="memory-browse-toolbar">
-      <!-- The space's node trash (uc.memory.delete-node): a deleted Memory has no Memory to hang a Trash tab
-           from, so it lives on the SPACE and opens from here. Hidden during a pending-deletion grace window,
-           like every other write affordance — a restore is a write. -->
-      <Button
-        v-if="!readonly"
-        type="button"
-        :label="t('memory.spaceTrash.open')"
-        icon="pi pi-trash"
-        severity="secondary"
-        outlined
-        size="small"
-        @click="$emit('openTrash')"
-      />
-      <ViewModeToggle show-map />
-    </div>
     <section v-if="folder" class="veyq-section memory-section">
       <div class="veyq-section-header">
         <div class="veyq-card memory-folder-card memory-folder-overview-card">
@@ -150,17 +138,32 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
       </div>
     </section>
 
-    <section v-if="viewMode === 'map'" class="veyq-section memory-section">
-      <SpaceMap :pins="pins" :covers="covers" @open="onPinOpen" />
-    </section>
-
-    <template v-else>
+    <!-- One Memories section in every view mode: its header carries the browse toolbar (so the controls share the
+         heading's row instead of claiming an empty one of their own), its body is the card grid or the map. -->
     <section class="veyq-section memory-section">
       <div class="veyq-section-header memory-section-header">
         <h2>{{ t('memory.memories') }}</h2>
-        <span>{{ memories.length }}</span>
+        <!-- the map's pins span the whole subtree, so this level's count would misread there -->
+        <span v-if="viewMode !== 'map'">{{ memories.length }}</span>
+        <div class="memory-browse-toolbar">
+          <!-- The space's node trash (uc.memory.delete-node): a deleted Memory has no Memory to hang a Trash tab
+               from, so it lives on the SPACE and opens from here. Hidden during a pending-deletion grace window,
+               like every other write affordance — a restore is a write. -->
+          <Button
+            v-if="!readonly"
+            type="button"
+            :label="t('memory.spaceTrash.open')"
+            icon="pi pi-trash"
+            severity="secondary"
+            outlined
+            size="small"
+            @click="$emit('openTrash')"
+          />
+          <ViewModeToggle show-map />
+        </div>
       </div>
-      <div class="memory-card-grid memory-card-grid-memories" :class="{ 'is-list': viewMode === 'list' }">
+      <SpaceMap v-if="viewMode === 'map'" :pins="pins" :covers="covers" @open="onPinOpen" />
+      <div v-else class="memory-card-grid" :class="{ 'is-list': viewMode === 'list' }">
         <p v-if="!memories.length" class="veyq-empty veyq-empty-inline">
           {{ t('memory.memoryEmpty') }}
         </p>
@@ -187,7 +190,7 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
       </div>
     </section>
 
-    <section class="veyq-section memory-section">
+    <section v-if="viewMode !== 'map'" class="veyq-section memory-section">
       <div class="veyq-section-header memory-section-header">
         <h2>{{ t('memory.folders') }}</h2>
         <span>{{ folders.length }}</span>
@@ -217,16 +220,15 @@ watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
         </button>
       </div>
     </section>
-    </template>
   </div>
 </template>
 
 <style scoped>
 .memory-browse-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
-  justify-content: flex-end;
-  margin-bottom: 0.75rem;
+  margin-left: auto;
 }
 </style>

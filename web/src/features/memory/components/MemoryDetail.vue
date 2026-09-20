@@ -474,7 +474,7 @@ watch(
             <ViewModeToggle />
           </div>
           <div
-            class="memory-card-grid memory-card-grid-memories"
+            class="memory-card-grid"
             :class="{ 'is-list': viewMode === 'list' }"
             :aria-label="t('memory.chapters')"
           >
