@@ -96,10 +96,12 @@ buys is exact — it restores the **Secret-Key floor** for that one device, so t
 there. It is deliberately not a default and not a checkbox: it costs the person holding that device their
 Emergency Kit, which is right for a lost laptop and wrong for tidying up an old login.
 
-**It is offered on every row but your own.** Your own device's equivalent is the untrust/forget on the device
-panel, which removes the local key *as well as* the server wrap; the remote-only half here would leave this
-browser holding a record whose wrap is gone — a state [uc.account.trust-device](uc.account.trust-device.md) E1
-tolerates when an operator withholds a wrap, and that this screen must not create on purpose.
+**It is offered on every row but your own.** Your own device's equivalent sits on that row instead — the
+untrust/forget of [uc.account.trust-device](uc.account.trust-device.md) § Untrust, which removes the local key
+*as well as* the server wrap; the remote-only half here would leave this browser holding a record whose wrap is
+gone — a state that use-case's E1 tolerates when an operator withholds a wrap, and that this screen must not
+create on purpose. The two live one row apart and must never converge into one control: only the local half can
+reach a local key, and only on the device in hand.
 
 The two calls run in that order — **family first, then wrap** — because the revoke is what stops an attacker
 who is online *now*, while the wrap only matters at a future sign-in; the urgent half must not be blocked by the

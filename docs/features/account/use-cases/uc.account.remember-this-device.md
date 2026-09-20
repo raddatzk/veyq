@@ -101,9 +101,9 @@ sequenceDiagram
 
 ## Removing it
 
-Untrusting from this device's own settings drops both local tiers and deletes the server wrap; removing it for
-a device that is **not** in hand — a lost phone — is the escalation beside that device's session row in
-[uc.account.sessions](uc.account.sessions.md), and the rule that a plain sign-out does *not* do it is
+Untrusting from this device's own row in *Devices and sessions* drops both local tiers and deletes the server
+wrap; removing it for a device that is **not** in hand — a lost phone — is the escalation beside that device's
+session row in [uc.account.sessions](uc.account.sessions.md), and the rule that a plain sign-out does *not* do it is
 [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md). Both are the same account-scoped wrap
 deletion; only the surface differs. For a password-less wrap the consequence is the sharpest of any tier: the
 device goes from opening with no credentials at all to needing the password **and** the Secret Key.

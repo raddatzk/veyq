@@ -91,10 +91,22 @@ a trust removes **one wrap**; content is never re-encrypted. The endpoint delete
 convenience wraps** (whitelist: DEVICE and DEVICE_KEY): the PASSWORD floor *and* the RECOVERY/PASSKEY methods
 are out of its reach, so this control can never strip the 2SKD floor or a recovery path.
 
+**The control is named by its row, not by a rubric of its own.** It lives on the current device's row in the
+settings hub's *Devices and sessions* rubric ([uc.account.sessions](uc.account.sessions.md)) — the row that
+already exists to say *"you are here"*. There is no separate "This device" section: a device's unlock tier and
+its logins are two answers about one object, and stating the tier twice, in two vocabularies, is how the two
+statements start to disagree. The consequence that binds the layout is below — the forget action sits **beside**
+the escalation it must never be mistaken for.
+
 **A device's trust can also be removed from another device.** The wrap endpoint is account-scoped, not
 device-scoped, so the same deletion is what
 [uc.account.sessions](uc.account.sessions.md)'s *"sign out and remove this device's saved key"* performs — for
-a device that is lost, where nobody can press "untrust" on the device itself. What reaches the removed device
+a device that is lost, where nobody can press "untrust" on the device itself. The two therefore keep **separate
+labels, separate confirmations and separate severities** even now that they sit on the same row: forgetting
+reaches this device's local key as well as its server wrap and leaves the session alone, while the escalation
+ends a session and can only ever reach the server's wrap. The server cannot reach a remote device's local key,
+and that asymmetry is what forbids the cheap-looking simplification of one "remove this device" button. What
+reaches the removed device
 is nothing: its IndexedDB entry survives as an unusable handle and it falls back to the Secret-Key floor, which
 is E1 below reached deliberately instead of by accident. Whether a wrap may be removed remotely at all, and why
 a plain revoke does *not* do it, is [ADR 0058](../../../decisions/0058-revoke-never-takes-key-material.md).
