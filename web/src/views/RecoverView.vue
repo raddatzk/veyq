@@ -5,8 +5,11 @@
 // enter the Secret Key, then the new password. The token rides the #fragment (like every other veyq secret in a
 // link) so it never reaches the server as part of a navigation and never lands in an access log.
 //
-// Nothing here invents UI. The Secret-Key field is the same control as on the sign-in screen — same import and
-// scan affordances — because a person opening their Emergency Kit under stress should meet what they already know.
+// Nothing here invents UI. The Secret-Key field IS the sign-in screen's control (`shared/ui/SecretKeyField`) —
+// same upload, scan and paste affordances — because a person opening their Emergency Kit under stress should
+// meet what they already know. This comment claimed that for a while before it was true: the field was a bare
+// input and the affordances existed on one screen only, which is what uc.account.unlock § One Secret-Key
+// control now pins.
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -19,7 +22,7 @@ import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import Message from 'primevue/message'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
-import { parseKit } from '../features/account/emergencyKit/emergencyKit'
+import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { HttpStatus, isHttpStatus } from '../shared/httpError'
 import type { RecoveryMaterial } from '../api/generated/auth'
 
@@ -109,18 +112,11 @@ async function askForLink() {
   }
 }
 
-/** Accept a pasted kit token as well as a bare Secret Key — the same leniency the unlock screen has. */
-function normalizedSecretKey(): string {
-  const raw = secretKey.value.trim()
-  const kit = parseKit(raw)
-  return kit?.secretKey ?? raw
-}
-
 async function openAccount() {
   busy.value = true
   error.value = ''
   try {
-    opened.value = await openWithSecretKey(material.value!, normalizedSecretKey())
+    opened.value = await openWithSecretKey(material.value!, secretKey.value.trim())
   } catch {
     // A wrong Secret Key fails on the device. The token is untouched, so say so rather than sending them back.
     error.value = t('recovery.keyFailed')
@@ -141,7 +137,7 @@ async function setNewPassword() {
   busy.value = true
   error.value = ''
   try {
-    await completeRecovery(token.value, material.value!, opened.value!, normalizedSecretKey(), newPassword.value)
+    await completeRecovery(token.value, material.value!, opened.value!, secretKey.value.trim(), newPassword.value)
     done.value = true
     setTimeout(() => router.push({ name: 'login' }), 2500)
   } catch {
@@ -182,7 +178,7 @@ async function setNewPassword() {
         <p class="veyq-form-copy">{{ t('recovery.forAccount', { email: material.email }) }}</p>
         <label class="veyq-field">
           {{ t('unlock.secretKey') }}
-          <InputText v-model="secretKey" name="secret-key" autocomplete="off" spellcheck="false" required />
+          <SecretKeyField v-model="secretKey" :expected-email="material.email" required />
           <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
         </label>
         <Button type="submit" :label="t('recovery.continueLabel')" icon="pi pi-key" :loading="busy" />

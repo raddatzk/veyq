@@ -22,7 +22,8 @@ import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
-import InputText from 'primevue/inputtext'
+import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
+import { account } from '../../../app/account'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
@@ -47,7 +48,7 @@ const canSubmit = computed(() => password.value.length > 0 && secretKey.value.tr
 
 const { run, pending: busy } = useAsyncAction(
   async () => {
-    const outcome = await rotateKeys(password.value, secretKey.value)
+    const outcome = await rotateKeys(password.value, secretKey.value.trim())
     // The secrets leave this component the moment they are spent — the screen stays mounted afterwards to
     // render the per-scope status, and there is no reason for it to still be holding them.
     password.value = ''
@@ -112,7 +113,8 @@ async function confirm() {
         </div>
         <div class="settings-field">
           <label for="rotation-secret-key">{{ t('rotation.secretKeyLabel') }}</label>
-          <InputText id="rotation-secret-key" v-model="secretKey" autocomplete="off" :disabled="busy" />
+          <SecretKeyField v-model="secretKey" input-id="rotation-secret-key"
+                          :expected-email="account.email" :disabled="busy" />
           <small>{{ t('rotation.secretKeyHint') }}</small>
         </div>
 

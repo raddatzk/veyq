@@ -424,6 +424,8 @@ const en = {
     scanHint: 'Point your camera at the QR code in your Emergency Kit.',
     scanError: 'Camera unavailable — upload your kit or paste your Secret Key.',
     kitUnreadable: 'Couldn’t read that kit. Try another file or paste your Secret Key.',
+    kitEmailMismatch:
+      'That kit belongs to {kitEmail}, but this is for {expected}. Carry on if you know it’s the right key — we can’t tell until it opens your account.',
     failed: 'Unlock failed. Check your password and Secret Key.',
     untrust: 'Untrust this device',
   },
@@ -1286,6 +1288,8 @@ const de: typeof en = {
     scanHint: 'Richte deine Kamera auf den QR-Code in deinem Notfall-Kit.',
     scanError: 'Kamera nicht verfügbar — lade dein Kit hoch oder füge deinen Secret Key ein.',
     kitUnreadable: 'Konnte das Kit nicht lesen. Versuche eine andere Datei oder füge deinen Secret Key ein.',
+    kitEmailMismatch:
+      'Dieses Kit gehört zu {kitEmail}, hier geht es aber um {expected}. Mach weiter, wenn du weißt, dass es der richtige Schlüssel ist — sicher ist das erst, wenn er dein Konto öffnet.',
     failed: 'Entsperren fehlgeschlagen. Prüfe Passwort und Secret Key.',
     untrust: 'Vertrauen aufheben',
   },

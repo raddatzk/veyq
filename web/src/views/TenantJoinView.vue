@@ -17,6 +17,7 @@ import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
 import { sealName } from '../features/account/profile/profile'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
+import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { InviteRole } from '../api/generated/tenants'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
 import { login, withRefresh } from '../features/account/login/login'
@@ -337,7 +338,10 @@ async function mapError(e: unknown): Promise<string> {
           <p class="veyq-form-copy">{{ jcopy('signinSub', { email: ownerEmail }) }}</p>
           <form class="veyq-form" @submit.prevent="signInAndAccept">
             <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="signin-password" /></label>
-            <label>{{ t('unlock.secretKey') }}<InputText v-model="secretKey" autocomplete="off" required /></label>
+            <label>{{ t('unlock.secretKey') }}
+              <SecretKeyField v-model="secretKey" input-id="signin-secret-key" :expected-email="ownerEmail" required />
+              <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
+            </label>
             <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
             <Button type="submit" :label="jcopy('join')" icon="pi pi-check" :loading="busy"
                     :disabled="!username.trim() || password.length === 0 || secretKey.trim().length === 0" />

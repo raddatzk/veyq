@@ -165,9 +165,11 @@ describe('RecoverView', () => {
 
     expect(releaseRecoveryMaterial).toHaveBeenCalledWith('tok-123')
     expect(w.text()).toContain('For kevin@example.com.')
-    // Exactly one field on this step: the Secret Key. The address is known, so re-typing it is a step that
-    // could only go wrong.
-    expect(w.findAll('input')).toHaveLength(1)
+    // Exactly one field to fill on this step: the Secret Key. The address is known, so re-typing it is a step
+    // that could only go wrong. The shared control's own hidden file picker is excluded by type — it is an
+    // affordance of the field, not a second field, and it is what the person clicks the upload icon to reach.
+    expect(w.findAll('input').filter((i) => i.attributes('type') !== 'file')).toHaveLength(1)
+    expect(w.find('input[name="secret-key"]').exists()).toBe(true)
   })
 
   it('picks up the token when the link is opened in the SAME tab, after asking for it here', async () => {
@@ -225,7 +227,7 @@ describe('RecoverView', () => {
     const w = mountView()
     await flushPromises()
 
-    await w.find('input').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await w.find('form').trigger('submit')
     await flushPromises()
 
@@ -250,7 +252,7 @@ describe('RecoverView', () => {
     const w = mountView()
     await flushPromises()
 
-    await w.find('input').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await w.find('form').trigger('submit')
     await flushPromises()
 
@@ -280,7 +282,7 @@ describe('RecoverView', () => {
     const w = mountView()
     await flushPromises()
 
-    await w.find('input').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await w.find('form').trigger('submit')
     await flushPromises()
 

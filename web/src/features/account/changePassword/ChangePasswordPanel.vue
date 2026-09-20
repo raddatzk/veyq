@@ -9,7 +9,7 @@
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
-import InputText from 'primevue/inputtext'
+import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { changePassword, ChangePasswordRefused } from './changePassword'
@@ -145,7 +145,7 @@ function startOver() {
           </label>
           <label class="settings-field">
             {{ t('changePassword.secretKeyLabel') }}
-            <InputText v-model="secretKey" autocomplete="off" spellcheck="false" :disabled="busy" />
+            <SecretKeyField v-model="secretKey" :expected-email="account.email" :disabled="busy" />
             <small>{{ t('changePassword.secretKeyHint') }}</small>
           </label>
 

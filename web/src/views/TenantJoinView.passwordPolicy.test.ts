@@ -140,9 +140,8 @@ describe('TenantJoinView — where it must NOT apply', () => {
     const w = await mountFor(true)
     await w.find('input[name="username"]').setValue('kevin')
 
-    const inputs = w.findAll('input')
     await w.find('input[type="password"]').setValue('short')                  // 5 < 10
-    await inputs[inputs.length - 1].setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await flushPromises()
 
     expect(w.text()).not.toContain('Use at least 10 characters.')

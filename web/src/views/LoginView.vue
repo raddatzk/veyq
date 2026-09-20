@@ -17,8 +17,8 @@ import { useCapabilities } from '../shared/state/useCapabilities'
 import { useAsyncAction } from '../shared/state/useAsyncAction'
 import { ACCOUNT_DEVICE_TRUST } from '../features/platform/capabilities'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
-import { importKitFromFile, parseKit, type KitData } from '../features/account/emergencyKit/emergencyKit'
-import KitScanner from '../features/account/emergencyKit/KitScanner.vue'
+import { parseKit, type KitData } from '../features/account/emergencyKit/emergencyKit'
+import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { parsePairingPayload } from '../features/account/pairing/pairing'
 import JoinDeviceCard from '../features/account/pairing/JoinDeviceCard.vue'
 import SignInWithCodeCard from '../features/account/pairing/SignInWithCodeCard.vue'
@@ -72,10 +72,6 @@ const lockedEntry = ref(false)
 const noPersist = ref(false)
 // The confirmation the locked state leaves standing after it hands the screen back.
 const notice = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-const showSecret = ref(false)
-const scanOpen = ref(false)
-const scanSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
 // uc.account.onboard-device — the handle of a pairing channel this device just scanned. Non-empty means the
 // join card has replaced the form (routeless, like the locked state above it): this device is being let in from
 // one that is already signed in, so it has no email, no password and no Secret Key to type here.
@@ -239,33 +235,17 @@ function onLockedUnlock() {
   noPersist.value = true
 }
 
-function triggerUpload() {
-  error.value = ''
-  fileInput.value?.click()
-}
-
-/** Fill the form from an imported/scanned Emergency Kit — both its email and Secret Key. Setting the email
- *  re-resolves the device state via its watcher; a kit is authoritative, so it overwrites any typed-in email. */
+/** A kit arrived (uploaded, scanned or pasted) — the control has already filled the Secret Key; this screen
+ *  also takes its email. Setting the email re-resolves the device state via its watcher; a kit is
+ *  authoritative, so it overwrites any typed-in email. */
 function applyKit(kit: KitData) {
   email.value = kit.email
-  secretKey.value = kit.secretKey
   error.value = ''
 }
 
-async function onUpload(event: Event) {
-  const input = event.target as HTMLInputElement
-  const file = input.files?.[0]
-  input.value = '' // allow re-picking the same file
-  if (!file) return
-  const kit = await importKitFromFile(file)
-  // generic failure — never reveal why a kit couldn't be read
-  if (kit) applyKit(kit)
-  else error.value = t('unlock.kitUnreadable')
-}
-
-/** Which decoded strings this screen's scanner should stop on. The scanner itself is decoder-agnostic (it hands
- *  back whatever jsQR read), so recognising a payload is the caller's job — and keeping it a predicate is what
- *  lets the camera scan past a foreign QR instead of reporting it as a failure.
+/** Which decoded strings this screen's scanner should stop on. `SecretKeyField` keeps this a caller-supplied
+ *  predicate precisely so this screen can widen it — and keeping it a predicate is what lets the camera scan
+ *  past a foreign QR instead of reporting it as a failure.
  *
  *  ONE scan entry serves both codes this app produces: an Emergency Kit (`veyqkit:`) and a pairing channel
  *  (`veyqpair:`). A second button would be a second camera lifecycle, a second permission prompt and a second
@@ -275,13 +255,10 @@ function acceptsScan(text: string): boolean {
   return parseKit(text) !== null || parsePairingPayload(text) !== null
 }
 
-function onScanned(text: string) {
-  const kit = parseKit(text)
-  if (kit) applyKit(kit)
-  // Dispatch on the prefix, not on which of the two happens to parse: a pairing payload cannot be a kit and
-  // vice versa, and reading it in this order keeps the Emergency-Kit path byte-identical to what it was.
-  else joinHandle.value = parsePairingPayload(text) ?? ''
-  scanOpen.value = false
+/** The half of that dispatch the shared control cannot own: a decoded string it accepted but did not
+ *  recognise as a kit is this screen's pairing payload. */
+function onForeignScan(text: string) {
+  joinHandle.value = parsePairingPayload(text) ?? ''
 }
 
 /** The join completed: this device now holds its own session and an open vault, so it leaves like any other
@@ -417,56 +394,15 @@ onMounted(async () => {
         </label>
         <label v-if="needsSecretKey">
           {{ t('unlock.secretKey') }}
-          <div class="secret-field" :style="{ '--secret-icons': scanSupported ? 3 : 2 }">
-            <InputText
-              v-model="secretKey"
-              id="unlock-secret-key"
-              :type="showSecret ? 'text' : 'password'"
-              name="secret-key"
-              autocomplete="off"
-              :spellcheck="false"
-              required
-              fluid
-            />
-            <span class="secret-icons">
-              <button
-                type="button"
-                class="secret-icon"
-                :aria-label="t('unlock.upload')"
-                :title="t('unlock.upload')"
-                @click="triggerUpload"
-              >
-                <i class="pi pi-upload" aria-hidden="true" />
-              </button>
-              <button
-                v-if="scanSupported"
-                type="button"
-                class="secret-icon"
-                :aria-label="t('unlock.scan')"
-                :title="t('unlock.scan')"
-                @click="scanOpen = true"
-              >
-                <i class="pi pi-qrcode" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                class="secret-icon"
-                :aria-label="t(showSecret ? 'common.hide' : 'common.show')"
-                :title="t(showSecret ? 'common.hide' : 'common.show')"
-                @click="showSecret = !showSecret"
-              >
-                <i :class="showSecret ? 'pi pi-eye-slash' : 'pi pi-eye'" aria-hidden="true" />
-              </button>
-            </span>
-          </div>
-          <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
-          <input
-            ref="fileInput"
-            type="file"
-            accept="application/pdf,image/*"
-            class="visually-hidden"
-            @change="onUpload"
+          <SecretKeyField
+            v-model="secretKey"
+            input-id="unlock-secret-key"
+            :accepts="acceptsScan"
+            required
+            @kit="applyKit"
+            @scanned="onForeignScan"
           />
+          <small class="field-hint">{{ t('unlock.secretKeyHint') }}</small>
         </label>
         <div v-if="rememberSupported" class="checkbox-row">
           <Checkbox v-model="remember" input-id="remember-me" binary />
@@ -541,7 +477,6 @@ onMounted(async () => {
       </div>
     </template>
   </Card>
-  <KitScanner v-if="scanOpen" :accepts="acceptsScan" @found="onScanned" @close="scanOpen = false" />
 </template>
 
 <style scoped>

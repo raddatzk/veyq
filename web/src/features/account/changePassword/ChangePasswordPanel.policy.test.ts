@@ -73,7 +73,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[0].setValue('the-current-one')
     await pw[1].setValue('short')  // 5 < 10
     await pw[2].setValue('short')
-    await w.find('input:not([type="password"])').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await flushPromises()
 
     expect(w.text()).toContain('Use at least 10 characters.')
@@ -103,7 +103,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await pw[0].setValue('old')    // 3 < 10, and correctly irrelevant
     await pw[1].setValue('a long enough new password')
     await pw[2].setValue('a long enough new password')
-    await w.find('input:not([type="password"])').setValue('the-secret-key')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await flushPromises()
 
     expect(submitDisabled(w)).toBe(false)
