@@ -220,8 +220,10 @@ services:
       - "--certificatesresolvers.letsencrypt.acme.storage=/acme/acme.json"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
       - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
-      # Point this at Let's Encrypt's staging directory while you are still testing a deployment — a handful of
-      # failed production orders per hostname per hour is all it takes to be rate-limited out for a week.
+      # Point this at Let's Encrypt's staging directory while you are still testing a deployment. In production 5
+      # failed validations lock a hostname out for an hour, and 50 issued certificates per registered domain per
+      # week is the cap a burst of test tenants reaches (letsencrypt.org/docs/rate-limits). Staging certificates are
+      # not browser-trusted: switch back before you hand the instance to anyone.
       - "--certificatesresolvers.letsencrypt.acme.caserver=${VEYQ_ACME_CASERVER:-https://acme-v02.api.letsencrypt.org/directory}"
     ports:
       - "80:80"

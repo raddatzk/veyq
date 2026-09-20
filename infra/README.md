@@ -186,8 +186,10 @@ plain HTTP the refresh cookie is set and never sent back and "remember me" break
 link is built as `https://<domain>/tenant/accept#<token>`, so an HTTP-only instance mails links pointing at a
 scheme it does not answer. Traefik obtains a Let's Encrypt certificate over the HTTP-01 challenge, which needs
 port 80 reachable from the internet and `VEYQ_DOMAIN` resolving to this host. While you are still testing a
-deployment, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory — a handful of failed production
-orders per hostname per hour is all it takes to be locked out for a week.
+deployment, point `VEYQ_ACME_CASERVER` at Let's Encrypt's staging directory. In production 5 failed validations
+lock a hostname out for an hour, and the weekly limit is on **issued** certificates — 50 per registered domain,
+which a burst of test tenants reaches ([rate limits](https://letsencrypt.org/docs/rate-limits/)). Staging
+certificates are not browser-trusted, so switch back before anyone uses the instance.
 
 **The config-secret volume is the point of this file.** `veyq-config-secret` is mounted at `/var/lib/veyq` and
 `VEYQ_SECURITY_CONFIG_SECRET_FILE` points into it. Without it, every `up -d --force-recreate app` regenerates the
@@ -275,18 +277,22 @@ policy the app writes on first start ([ADR 0013 §4](../docs/decisions/0013-blob
 measures why `*` is the only policy the bundled store can express for many tenants). `admin.domain` is the
 optional third.
 
-**TLS is a passthrough, and it is a precondition here as much as under compose.** The chart configures no
-certificate issuer: it stamps `ingress.annotations` verbatim on every `Ingress` — its own three, and every
-tenant `Ingress` the app writes at runtime — and emits `spec.tls` by a named mode, `ingress.tls.mode`:
+**TLS is a passthrough, and it is a precondition here as much as under compose.** The app only ever stamps a
+reference: `ingress.annotations` verbatim on every `Ingress` — the chart's own three, and every tenant `Ingress`
+the app writes at runtime — and `spec.tls` by a named mode, `ingress.tls.mode`. The issuer that reference names is
+yours, or — opted in — the one the chart templates (below):
 
 - `none` (the default, so that nothing moves): no `spec.tls` anywhere. Right where TLS terminates upstream of
   the ingress controller. Wrong everywhere else — the refresh cookie is `Secure` and every mailed link is
   `https`, so an instance nothing terminates TLS for boots, serves every page, and silently breaks sessions.
 - `per-domain`: one `spec.tls` per `Ingress` whose `secretName` is the object's own name, which is
-  cert-manager's ingress-shim shape. With `cert-manager.io/cluster-issuer: <issuer>` in the annotations, every
-  tenant domain — a custom domain included — gets its own certificate with no chart edit and no restart. Point
-  the annotation at a **staging** issuer while you test a deployment: each new tenant is a certificate order,
-  and the production rate limit is a week. Residue worth knowing: when a tenant is suspended and its `Ingress`
+  cert-manager's ingress-shim shape. Every tenant domain — a custom domain included — gets its own certificate
+  with no chart edit and no restart, from `ingress.tls.acme`'s issuer or, bringing your own, from the one
+  `cert-manager.io/cluster-issuer: <issuer>` in the annotations names. Test a deployment against a **staging**
+  directory: each new tenant is a certificate order, and what Let's Encrypt production limits is not what it
+  sounds like — 5 **failed** validations per hostname lock that hostname out for an **hour**, while the week is a
+  cap of 50 **issued** certificates per registered domain ([rate limits](https://letsencrypt.org/docs/rate-limits/)).
+  Residue worth knowing: when a tenant is suspended and its `Ingress`
   withdrawn, cert-manager does **not** delete the `Secret` it issued unless it runs with
   `--enable-certificate-owner-ref`. A withdrawn domain therefore leaves an orphaned TLS `Secret` in the
   namespace — visible to you, not a routing leak (the `Ingress` is gone) and not an access leak (a suspended
@@ -296,6 +302,37 @@ tenant `Ingress` the app writes at runtime — and emits `spec.tls` by a named m
   certificate you obtained yourself. A working instance with no ACME at all, at the price of per-tenant custom
   domains: a custom domain routes and the browser refuses it. The app refuses `shared` without a secret name
   — loud, and with tenant routing disabled — rather than projecting routes without TLS.
+
+**The ACME opt-in: the chart's counterpart of `VEYQ_ACME_EMAIL`.** Set `ingress.tls.acme.enabled: true`, an
+`email` and `mode: per-domain`, and the chart templates one namespaced cert-manager `Issuer`, `veyq-acme` (ACME
+HTTP-01, its solver on `ingress.className`), and adds `cert-manager.io/issuer: veyq-acme` to the annotation map —
+so it reaches every tenant `Ingress` the app projects later, exactly as a resolver reference does under compose.
+
+```yaml
+ingress:
+  className: nginx
+  tls:
+    mode: per-domain
+    acme:
+      enabled: true
+      email: ops@example.org
+      # server: https://acme-staging-v02.api.letsencrypt.org/directory   # while testing; default is production
+```
+
+- **Preconditions the chart cannot meet for you.** cert-manager runs in the cluster — the chart does not install
+  it (its CRDs and `ClusterRole` are cluster-wide), and without it `helm install` fails whole, before creating
+  anything. Port 80 of every host reaches the ingress controller, since HTTP-01 answers there. A tenant's DNS
+  points here **before** the tenant is created: the creation is the order, and cert-manager checks reachability
+  itself before it asks the CA to validate, so an order for a name that does not resolve yet waits there.
+- **`server` defaults to Let's Encrypt production**, as `VEYQ_ACME_CASERVER` does; any ACME CA is one URL. A
+  staging certificate is not browser-trusted — an instance left on staging boots and every browser refuses it.
+- **Refused, not resolved:** `values.schema.json` rejects the opt-in with any mode but `per-domain`, with no
+  e-mail, or beside an issuer annotation of your own — two issuers on one `Ingress` would be cert-manager's
+  choice, not yours.
+- **Lifecycle.** `helm uninstall` removes the `Issuer`. The `Certificate` cert-manager creates for an `Ingress`
+  is owned by that `Ingress`, so it goes when a tenant's domain is withdrawn; the issued `Secret` stays (the
+  residue above). The ACME account key (`veyq-acme-account-key`) is cert-manager's `Secret`, not the chart's,
+  and may remain after an uninstall.
 
 **What the app's cluster identity can and cannot do.** A namespace-local `ServiceAccount` + `Role` with the
 `Ingress` verbs, never a `ClusterRole`: the app manages routing in its own namespace and nowhere else. The

@@ -149,7 +149,9 @@ class KubernetesIngressSinkTest {
         // The property nothing in this tree has ever needed: a file sink cannot delete a stranger's file by
         // being wrong about which lines are its content, but a reconcile-by-list sink can delete a stranger's
         // object by being wrong about which objects are its. This object is in the sink's own namespace, is an
-        // Ingress, and is not in the desired set — everything a careless reconcile needs to remove it.
+        // Ingress, and is not in the desired set — everything a careless reconcile needs to remove it. The live
+        // example beside the chart's ACME opt-in: cert-manager's `cm-acme-http-solver-*` Ingress, labelled
+        // `acme.cert-manager.io/http01-solver` and never with veyq's value, created in this namespace mid-order.
         val stranger = IngressBuilder()
             .withNewMetadata()
             .withName("operator-own-status-page")

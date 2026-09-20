@@ -29,7 +29,7 @@ handling of reported shares.
   domain the request arrived on, resolved through that same table and never from the `Host` header. The
   Kubernetes sink ([ADR 0064](../../decisions/0064-kubernetes-helm-deployment-target.md)) is a second sink for
   the same projection — **built**, deployed by `charts/veyq`, with a certificate per tenant domain obtained
-  through the operator's issuer by a named TLS mode)
+  through the operator's issuer — or the chart's ACME opt-in — by a named TLS mode)
 - Invite members, grant access & assign roles — planned
 - Manage server users & roles — planned
 - ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)

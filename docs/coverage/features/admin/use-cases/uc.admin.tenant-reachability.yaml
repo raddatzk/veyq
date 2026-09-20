@@ -60,8 +60,9 @@ acceptanceCriteria:
     # Main-flow step 3's promise ("for each domain that appears, obtains a certificate for it") finally having a
     # Kubernetes half (ADR 0064, the TLS passthrough). The sink stamps a REFERENCE — spec.tls per named mode plus
     # the operator's annotations, verbatim — and configures nothing; the certificate itself is the operator's
-    # issuer's, which no test in this repository can run, so the refs prove what the backend emits and that a
-    # custom domain is not excluded from it. The mode-none and shared-without-secret refs are the negatives with
+    # issuer's, or the one the chart templates on opt-in (its render is held by the hand-run
+    # scripts/chart_meta_check.py, which no CI executes, so it is no ref here). No test in this repository can run
+    # an issuer, so the refs prove what the backend emits and that a custom domain is not excluded from it. The mode-none and shared-without-secret refs are the negatives with
     # their controls: none emits neither, and a shared mode that names no Secret is refused loudly rather than
     # routing without TLS.
     text: On Kubernetes every projected tenant Ingress carries the TLS reference and the operator's annotations the configured mode names — per-domain with the object's own name as the Secret (a custom domain included, and legal at the contract's domain cap), shared with the one pre-provisioned Secret, none with neither — and a shared mode with no Secret disables the sink loudly instead of projecting routes without TLS.

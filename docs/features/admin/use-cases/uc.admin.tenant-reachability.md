@@ -28,8 +28,8 @@
    ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)).
 3. The reverse proxy picks the new description up without restarting and, for each domain that appears,
    obtains a certificate for it — on compose through Traefik's ACME resolver, on Kubernetes through the
-   operator's issuer, which acts on the annotation and TLS reference every projected `Ingress` carries **by a
-   named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
+   operator's issuer — or the one the chart templates on opt-in — which acts on the annotation and TLS reference
+   every projected `Ingress` carries **by a named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
    A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
    choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
    pair** of routes the bootstrap domain has: the app, and the blob path on that same origin with its prefix
@@ -102,8 +102,11 @@ flowchart LR
   the browser to a projection that never ran.
 - **E2 — certificates are rate-limited:** domains can now be added as fast as tenants are created, and each
   new one is a certificate order. Point the ACME client at a staging directory while testing a deployment —
-  [`infra/README.md`](../../../../infra/README.md) carries the setting for compose, and on Kubernetes the
-  staging issuer is the operator's, named through the same annotation the production one is.
+  [`infra/README.md`](../../../../infra/README.md) carries the setting for both targets: `VEYQ_ACME_CASERVER` on
+  compose, the chart's `ingress.tls.acme.server` on Kubernetes (or, with an issuer of the operator's own, a
+  staging issuer named through the same annotation the production one is). What production limits is an hour's
+  lockout of a hostname after repeated failed validations and a weekly cap on issued certificates per
+  registered domain; staging certificates are not browser-trusted.
 
 ## Quality notes
 
@@ -153,7 +156,8 @@ tun: der Server leitet nur nach Adresse weiter, und was darin liegt, bleibt für
   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md) Decision 5 (the signing mode
   itself — one named mechanism, so a store on its own address is not a deployment's special case),
   [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md) (the second sink and the chart that
-  deploys it, TLS as a passthrough to the operator's issuer — and one of that mode's two callers).
+  deploys it, TLS as a passthrough to the operator's issuer or the chart's ACME opt-in — and one of that mode's
+  two callers).
 - Related use-cases: [create-tenant](uc.admin.create-tenant.md) (where a domain comes from, and where it is
   moved), [suspend-tenant](uc.admin.suspend-tenant.md) (the transition whose routing withdrawal this carries).
 - Operations: [`infra/README.md`](../../../../infra/README.md) (the shared volume the projection is written to,
