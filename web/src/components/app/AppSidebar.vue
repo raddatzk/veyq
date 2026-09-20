@@ -3,7 +3,12 @@
 // the space switcher, the Personal-space nav, the ProfileMenu) so layout.css styles it identically; only the
 // data is ours — the tenants come from listMyTenants() (E2EE: the server only knows membership), switching is a
 // full navigation to that tenant's domain, and the bottom is the ProfileMenu (theme + language + sign-out).
-// Favorites + groups are later slices.
+//
+// The rail also carries the **groups** section and the **favorites** section — each pinned Memory with its own
+// chosen cover (uc.memory.cover's fourth surface, after the browse card, the detail header and the map pin).
+// The covers come from the shared `coverStore`: this component asks it WHICH nodes are on screen and reads the
+// result, and imports **no key API at all** — the epoch chain that opens a node's `K_mem` has no business in an
+// always-mounted rail, and keeping it out is a property worth preserving, not an accident of one diff.
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
@@ -24,6 +29,8 @@ import { SPACES_GROUPS } from '../../features/platform/capabilities'
 import { favoritesStore } from '../../app/favoritesStore'
 import { useThemeState } from '../../shared/state/useThemeState'
 import { treeStore } from '../../features/memory/treeStore'
+import { covers, ensureCovers } from '../../features/memory/coverStore'
+import MemoryCoverImage from '../../features/memory/components/MemoryCoverImage.vue'
 import { nodeById } from '../../features/memory/browse'
 import { hashForNode, parseHash, TENANT_SCOPE, isPersonalScope, personalScope } from '../../features/memory/location'
 import { getMyProfile } from '../../features/account/profile/profile'
@@ -220,6 +227,16 @@ const favoriteMemories = computed(() =>
     .filter((n): n is TreeNode => !!n && n.kind === NodeKind.Memory)
     .map((n) => ({ id: n.id, name: n.name, hash: hashForNode(treeStore.nodes, n.id, activeScope.value) })),
 )
+/** The pinned Memories' covers, resolved by the shared store. A favorite without one keeps the placeholder —
+ *  uc.memory.cover E1 stands: there is no auto-cover, and the rail adds no branch to say so. */
+const favoriteCover = (id: string) => covers.value.get(id)
+watch(
+  // The tree and the epoch both matter: a rotation swaps the keys a cover was decrypted under, and the store
+  // drops them, so the rail must ask again rather than sit on an empty map.
+  [() => favoriteMemories.value.map((m) => m.id).join(','), () => activeSpace.epoch, () => treeStore.nodes.length],
+  () => ensureCovers(favoriteMemories.value.map((m) => m.id)),
+  { immediate: true },
+)
 
 onMounted(async () => {
   await loadTenants()
@@ -362,7 +379,9 @@ function closeMobileMenu() {
         :to="{ name: 'home', hash: memory.hash }"
         class="sidebar-scope-link sidebar-favorite-link"
       >
-        <span class="sidebar-favorite-cover"><span class="pi pi-images" /></span>
+        <span class="sidebar-favorite-cover">
+          <MemoryCoverImage :src="favoriteCover(memory.id)?.url" :crop="favoriteCover(memory.id)?.crop ?? null" :alt="memory.name" />
+        </span>
         <span><strong>{{ memory.name }}</strong></span>
       </RouterLink>
     </section>
@@ -534,10 +553,12 @@ function closeMobileMenu() {
               v-for="memory in favoriteMemories"
               :key="memory.id"
               :to="{ name: 'home', hash: memory.hash }"
-              class="mobile-nav-item"
+              class="mobile-nav-item mobile-nav-favorite"
               @click="closeMobileMenu"
             >
-              <span class="sidebar-scope-icon pi pi-images" /><span><strong>{{ memory.name }}</strong></span>
+              <span class="sidebar-favorite-cover">
+                <MemoryCoverImage :src="favoriteCover(memory.id)?.url" :crop="favoriteCover(memory.id)?.crop ?? null" :alt="memory.name" />
+              </span><span><strong>{{ memory.name }}</strong></span>
             </RouterLink>
           </div>
         </section>
