@@ -39,11 +39,30 @@ acceptanceCriteria:
           - src/features/memory/media.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: lightbox-exif-detail
-    text: Opening an item lazily fetches its sealed heavy EXIF tier (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device under K_mem to show the camera detail (camera, lens, focal length, aperture, exposure, ISO, dimensions). The capture date + coordinates come instantly from the always-listed metadata tier (wrappedMeta), not the lazy EXIF. The blind server never sees any field; an item without sealed EXIF shows a no-detail message (cr-0064/0068).
+    text: Opening an item lazily fetches its sealed panel bundle (wrappedExif) via the exif endpoint (getMediaExif) — kept out of the list so it stays constant-small — and unwraps it on device under K_mem to fill the detail panel. The bundle's contents are a versioned client-only shape and are deliberately NOT enumerated here (the fields themselves are covered by panel-shows-what-the-photo-knows); what this criterion pins is the tier mechanics. The capture date, coordinates and resolved place name come instantly from the always-listed metadata tier (wrappedMeta), not the lazy bundle. The blind server never sees any field; an item without a sealed bundle shows a no-detail message (cr-0064/0068).
     coverage:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip, MediaSliceTest.mediaExifWithoutExifIsNull, MediaSliceTest.mediaExifForUnknownMediaIs404] }
       web:
         unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: panel-shows-what-the-photo-knows
+    text: The detail panel renders, from the two sealed tiers, the file (original name, plaintext size — byteSize minus 28 per chunk, never the raw ciphertext size — and format), the camera and lens, the exposure (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, and whether the flash fired — read as the EXIF BITFIELD, so 16 means it did not), the provenance an editor wrote in (software, author, copyright, rating, title, description), and the geo block (altitude, camera view direction, positioning accuracy). Every row appears only when the photo carries that value; none of it is ever sent, and the filename in particular is sealed and never leaves the device.
+    # The tag NAMES and the parse options are pinned separately by readExif.fixture.test.ts, the one test that
+    # runs the UN-MOCKED exifr over a generated fixture — without it every mocked assertion here would pass
+    # just as well against an invented tag. It caught four on its first run.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/readExif.fixture.test.ts
+          - src/features/memory/media.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: panel-place-name-and-map
+    text: Where the user has consented to maps, a photo that carries a coordinate shows a RESOLVED PLACE NAME above the coordinate (which stays visible) and a small map below it with a needle for the recorded view direction. The name is resolved client-direct from the bare coordinate, ONCE PER PLACE (the client cache is keyed on the coordinate rounded to ~110 m, and requests are serialised at >= 1 s — ADR 0016 Request discipline), then sealed into the listed tier and read from there forever. Without consent no coordinate and no tile leave the device and the rows stand alone; a read-only viewer never writes. Distinct from uc.memory.place's sealed-location-on-node, which is ONE named place per NODE, set deliberately by a user.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/placeName.test.ts
           - src/features/memory/media.test.ts
           - src/features/memory/components/MediaLightbox.test.ts
   - id: date-sorted-grid
