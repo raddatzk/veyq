@@ -1,0 +1,42 @@
+package com.veyq.app.features.content.itemfavorites
+
+import com.veyq.app.shared.membership.MembershipStore
+import jakarta.enterprise.context.ApplicationScoped
+import jakarta.transaction.Transactional
+import java.time.Instant
+
+/** One member's sealed item-mark blob for a node, as the read hands it out. */
+data class MemberItemFavorites(val userId: String, val ciphertext: String)
+
+/**
+ * Persistence for per-(member, scope, node) item favorites (ADR 0068). Operator-blind: stores the sealed
+ * ciphertext only. Scope access = the caller holds a membership for the scope (same gate as the Memory tree).
+ */
+@ApplicationScoped
+class ItemFavoritesStore(private val membership: MembershipStore) {
+
+    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
+
+    /**
+     * **Every** member's sealed blob for the node — not just the caller's. That is the point of this resource:
+     * the aggregate the gallery renders is computed on device, so the client needs the per-member blobs.
+     */
+    fun listForNode(scopeId: String, nodeId: String): List<MemberItemFavorites> =
+        ItemFavoritesEntity.list("scopeId = ?1 and nodeId = ?2", scopeId, nodeId)
+            .map { MemberItemFavorites(it.userId, it.ciphertext) }
+
+    /** Last-write-wins upsert of the **caller's own** blob for the node. */
+    @Transactional
+    fun upsert(userId: String, scopeId: String, nodeId: String, ciphertext: String) {
+        val id = ItemFavoritesEntity.key(userId, scopeId, nodeId)
+        val row = ItemFavoritesEntity.findById(id) ?: ItemFavoritesEntity().apply {
+            this.id = id
+            this.userId = userId
+            this.scopeId = scopeId
+            this.nodeId = nodeId
+        }
+        row.ciphertext = ciphertext
+        row.updatedAt = Instant.now()
+        row.persist()
+    }
+}

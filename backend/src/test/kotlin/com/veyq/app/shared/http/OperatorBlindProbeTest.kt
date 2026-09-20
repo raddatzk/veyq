@@ -68,6 +68,9 @@ class OperatorBlindProbeTest {
         Probe("content.deleteNode", "DELETE", "/api/scopes/{scopeId}/nodes/$someId"),
         Probe("content.getFavorites", "GET", "/api/scopes/{scopeId}/favorites"),
         Probe("content.putFavorites", "PUT", "/api/scopes/{scopeId}/favorites", """{"ciphertext":"$b64"}"""),
+        Probe("content.getItemFavorites", "GET", "/api/scopes/{scopeId}/nodes/$someId/item-favorites"),
+        Probe("content.putItemFavorites", "PUT", "/api/scopes/{scopeId}/nodes/$someId/item-favorites",
+            """{"ciphertext":"$b64"}"""),
         // --- media ---
         Probe("media.startBlobUploads", "POST", "/api/scopes/{scopeId}/blob-uploads-batch",
             """{"items":[{"chunkCount":1,"byteSize":1024,"wrappedBlobKey":"$b64"}]}"""),

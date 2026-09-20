@@ -3,6 +3,7 @@ package com.veyq.app.features.spaces.scope
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.tenant.TenantHostResolver
@@ -237,10 +238,17 @@ class ScopesStore(
         }
     }
 
-    /** Delete a member's membership (layer-1 removal — the instant access cut). */
+    /**
+     * Delete a member's membership (layer-1 removal — the instant access cut).
+     *
+     * Their **item favorites** for this scope go with it (ADR 0068). Unlike the private pin set, those blobs
+     * feed an aggregate every remaining member sees: left behind, a removed member keeps voting on which
+     * photos are the good ones, forever, with no way for anyone — including them — to take it back.
+     */
     @Transactional
     fun removeMembership(userId: String, scopeId: String) {
         MembershipEntity.delete("userId = ?1 and scopeId = ?2", userId, scopeId)
+        ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", userId, scopeId)
     }
 
     /** The scope's current content-key epoch, or null if there's no such scope. */

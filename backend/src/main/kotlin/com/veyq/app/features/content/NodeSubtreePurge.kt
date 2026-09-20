@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaEntity
@@ -78,6 +79,11 @@ class NodeSubtreePurge(
             reclaim.record(covers.map { StoreObjectRef(it.storageKey, it.chunkCount) })
             BlobEntity.delete("id in ?1", coverBlobIds)
         }
+
+        // 4. every member's item-favorite blob for these nodes. Keyed on the node, not the scope: the scope
+        //    survives this purge. They are dropped only HERE and not at soft-delete, for the same reason as
+        //    the covers above — a restore inside the window must hand back the Memory with its marks intact.
+        ItemFavoritesEntity.delete("nodeId in ?1", nodeIds)
 
         expired.forEach { NodeEntity.deleteById(it.id) }
     }

@@ -3,6 +3,7 @@ package com.veyq.app.features.spaces.scope
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.content.favorites.FavoritesEntity
+import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
@@ -98,6 +99,7 @@ class ScopePurge(
         BlobEntity.delete("scopeId", scopeId)
         UploadSessionEntity.delete("scopeId", scopeId)
         FavoritesEntity.delete("scopeId", scopeId)
+        ItemFavoritesEntity.delete("scopeId", scopeId)
         NodeEntity.delete("scopeId", scopeId)
         ScopeEpochEntity.delete("scopeId", scopeId)
         MembershipEntity.delete("scopeId", scopeId)

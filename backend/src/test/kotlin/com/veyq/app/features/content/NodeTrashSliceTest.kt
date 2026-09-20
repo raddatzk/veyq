@@ -3,6 +3,7 @@ package com.veyq.app.features.content
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
@@ -327,6 +328,14 @@ class NodeTrashSliceTest {
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
 
+        // item favorites on BOTH subtrees: the doomed one's must go, the in-window one's must not (ADR 0068).
+        // Keyed on the node, so the purge is the only thing that reaches them — the scope survives.
+        for (n in listOf(memory, survivor)) {
+            given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+                .body("""{"ciphertext":"bWFya3M="}""")
+                .`when`().put("/api/scopes/$scopeId/nodes/$n/item-favorites").then().statusCode(204)
+        }
+
         // a control subtree, trashed but still INSIDE the window — the purge must not touch it
         val freshMediaId = completeOne(userId, scopeId, survivor, "ZnJlc2g=")
         given().header("Authorization", token(userId))
@@ -364,10 +373,16 @@ class NodeTrashSliceTest {
             assertTrue(BucketEntity.find("nodeId = ?1", memory).list().isEmpty()) { "bucket rows must be gone" }
             assertNull(BucketEntity.findById(subBucket)) { "the sub-bucket row must be gone" }
             assertNull(BlobEntity.findById(coverBlob)) { "the cover blob row must be gone" }
+            assertTrue(ItemFavoritesEntity.find("nodeId = ?1", memory).list().isEmpty()) {
+                "the purged subtree's item-favorite blobs must be gone"
+            }
 
             // control: the in-window subtree is untouched on every arm
             assertNotNull(NodeEntity.findById(survivor)) { "a trashed subtree still inside the window must survive" }
             assertNotNull(MediaEntity.findById(freshMediaId)) { "its media must survive too" }
+            assertTrue(ItemFavoritesEntity.find("nodeId = ?1", survivor).list().isNotEmpty()) {
+                "and its item favorites must survive — a restore inside the window hands the marks back"
+            }
         }
         assertTrue(recorder.deletedKeys.containsAll(keys)) {
             "the purge + sweep must hand every reclaimed chunk key (original + derivative + cover) to the store; " +
