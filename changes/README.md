@@ -905,6 +905,24 @@ pointed at the justification instead of the inventory: **a parenthetical that ma
 claim, and claims get re-measured.** A CR that already knows to re-run its own grep should also re-run the
 "this costs nothing" check.
 
+### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
+
+**"Measure first, and stop if it is no longer the felt cost" sounds rigorous and can still answer neither
+branch.** `cr-upload-prepare-visibly-and-decode-once`'s phase 3 — overlap the next file's on-device preparation
+with this file's PUTs — was gated exactly that way. The measurement came back: preparation *was* still the felt
+cost (93% of a 12-photo batch), and the phase would have reclaimed **none** of it, because overlapping is
+bounded by the time spent on the wire and that was 7%. Both of the written branches were wrong: *stop, it no
+longer hurts* was false, and *build, it still hurts* was irrelevant. The phase was closed on an owner's call
+the CR had not anticipated needing.
+
+The fix is one clause at refine. Ask what the phase **moves**, and gate on that: not *"is preparation still
+slow?"* but *"how much of the batch is spent on the wire, since that is the ceiling on hiding anything behind
+it?"*. Stated that way the same run decides by itself, with nobody adjudicating. Two riders the same example
+earned: name the **substrate** a performance number is measured on — a loopback object store understates every
+network-bound gain, so the number bounds the decision *here* and not everywhere — and record the measurement
+where the follow-up will look for it, which is the inbox row for the work it gates, not a retrospective that is
+deleted with its CR.
+
 ### `git status` before the first edit of a contracts-phase CR
 
 **A dirty shared spec is stop-and-confirm, not proceed.** Two CRs touching one `*.openapi.yaml` mix unrelated deltas into a single commit: #103's mechanical
