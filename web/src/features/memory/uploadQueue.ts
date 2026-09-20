@@ -115,6 +115,57 @@ export function mergeFiles(existing: File[], incoming: File[]): File[] {
   return merged
 }
 
+/** How long after a pick the input is re-read, in ms. Spread wide enough to outlast a slow Photos import. */
+const PICK_RETRY_DELAYS = [250, 750, 1500, 3000]
+/** The input is released this long after the LAST re-read — see the clear's own note in `collectPickedFiles`. */
+const PICK_RELEASE_AFTER = PICK_RETRY_DELAYS[PICK_RETRY_DELAYS.length - 1] + 100
+
+/**
+ * Drive one pick of a `<input type="file">` through uc.memory.upload E3's re-read window and hand each batch to
+ * `enqueue`. Lives here rather than in a component because E3 is a property of **the picker** — every screen
+ * that lets someone choose files needs it, and a second copy is a screen that silently loses photos.
+ *
+ * Two rules the shape encodes, both of which a plausible-looking implementation gets wrong:
+ *
+ * - **The window never delays the files already in hand.** The first read enqueues immediately and each re-read
+ *   enqueues only what is genuinely new, as an additional batch. Gathering across the window and enqueueing
+ *   once satisfies E3's letter and makes every browser pay a quiet second for the one browser this exists for.
+ * - **Clearing the input is the window's TEARDOWN, not part of the pick.** Safari goes on filling the list it
+ *   handed over at pick time; `input.value = ''` swaps a fresh empty list into the element, so a clear in the
+ *   same tick as the first read throws away exactly the late arrivals the window exists to catch — while four
+ *   timers still run and four empty reads still look perfectly correct.
+ *
+ * It knows nothing about *where* the files go: the caller's `enqueue` closes over its own `UploadTarget`, so the
+ * curator's `{ scopeId, nodeId, memoryKey }` and a contributor's share-scoped `upload` are equally invisible here.
+ *
+ * Returns a **canceller** that tears the window down — call it on unmount, and on a fresh pick, which supersedes
+ * whatever the previous window was still waiting for.
+ */
+export function collectPickedFiles(input: HTMLInputElement, enqueue: (files: File[]) => void): () => void {
+  /** Every file already handed to `enqueue` for THIS pick — the de-dupe memory each re-read is checked against. */
+  let enqueued: File[] = []
+  let cancelled = false
+  const timers: ReturnType<typeof setTimeout>[] = []
+
+  const collect = () => {
+    if (cancelled) return
+    const incoming = Array.from(input.files ?? []).filter(isSupportedMediaFile)
+    const merged = mergeFiles(enqueued, incoming)
+    const fresh = merged.slice(enqueued.length) // only what this read added
+    enqueued = merged
+    if (fresh.length > 0) enqueue(fresh)
+  }
+
+  collect()
+  for (const delay of PICK_RETRY_DELAYS) timers.push(setTimeout(collect, delay))
+  timers.push(setTimeout(() => { input.value = '' }, PICK_RELEASE_AFTER))
+
+  return () => {
+    cancelled = true
+    for (const t of timers) clearTimeout(t)
+  }
+}
+
 // --- queue -----------------------------------------------------------------
 
 function nextQueued(): UploadFile | null {
