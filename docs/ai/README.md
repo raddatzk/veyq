@@ -88,6 +88,16 @@ Five rules follow:
    is the **whole branch** — `git log --all --grep` plus the files' existence — never the recent log window,
    which is how the 2026-07-22 sweep found seven rows that had been stale for weeks.
 
+   **The same rule reaches a LIVE verification, where a wrong substrate reads as a product bug.** On 2026-09-20
+   a hand pass against the running app reported "the sidebar shows no cover" twice. Neither reading was about
+   the code: the first page had a stale hot-reloaded module (`ReferenceError` in the console), the second was
+   measured on a page that had not finished booting, and the dev server was meanwhile serving a tree three
+   parallel sessions were merging into — one of which briefly 500'd the app entry. A browser observation is a
+   measurement like any other: **wait for a state, not for a duration; read the console and the failed-request
+   list before believing the DOM; and name which tree the dev server is serving.** The fix that pass did find
+   was real, but it was found only after the substrate was established — everything before that was noise
+   presented as evidence.
+
    **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** Commits
    here go straight to `main`, so a second session's tip and its uncommitted tree share yours. Two moves are
    therefore forbidden regardless of how clean the tree *looked* when the phase started: `git add -A` (which on

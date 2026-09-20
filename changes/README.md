@@ -975,6 +975,27 @@ machine where you would test it. The live copy of the rule moved to the entity K
 surface's own `CLAUDE.md` before executing a phase that edits it** — a CR is a plan written elsewhere, and the
 conventions live where the files do.
 
+### Keying a cache is half the fix — something must still ASK it again
+
+**An invalidation-free cache is a lovely design and it is inert until a watcher's dependencies include the same
+key.** `cr-sidebar-favorites-show-their-cover` extracted a per-surface cover cache into one store and dissolved
+its staleness trap in the cache *key*: the entry records the `wrappedMeta` it was resolved from, so a changed
+cover re-resolves with no invalidation call to forget. That half was right. The other half was written as "a
+watch on the favorites set + the epoch + the tree", and "the tree" got implemented as the node **count** —
+while the thing that changes on a cover edit is `wrappedMeta`, **mutated in place**. Ids unchanged, epoch
+unchanged, count unchanged: the watch never fired, the store was never asked, and the rail showed the old cover.
+The same slip sat in the surface the CR was refactoring, for the same reason.
+
+So when a CR says "cache keyed on X", read the trigger in the same breath: **the watcher's dependencies must
+contain X**, not a proxy for it. An in-place mutation is the case that makes identity-based dependencies lie.
+
+**And this is why that CR's hand-pass line was not ceremony.** Both surfaces' component tests mock the store —
+correctly, they are about rendering — so the seam between trigger and cache was untested *by construction*, and
+no unit test could have caught it. The bite that finally pinned it asserts the **trigger** (`ensureCovers` is
+called again after a meta change) rather than the rendering, which is the only thing a mocked-store test can
+say. When a CR extracts a shared store out of its consumers, expect exactly one new untestable seam and plan a
+live pass for it.
+
 ### `git status` before the first edit of a contracts-phase CR
 
 **A dirty shared spec is stop-and-confirm, not proceed.** Two CRs touching one `*.openapi.yaml` mix unrelated deltas into a single commit: #103's mechanical
