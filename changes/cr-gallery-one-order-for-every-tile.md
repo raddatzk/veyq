@@ -97,7 +97,7 @@ the site list is wrong, not the grep.
 
 ## Phases
 
-- [ ] 1 web — **one capture-time key, one implementation.** Export from `media.ts` the rule
+- [x] 1 web — **one capture-time key, one implementation.** Export from `media.ts` the rule
       `sealMetadata` already applies (EXIF date, else the file's date, plus the `'exif' | 'file'` source) and
       have `sealMetadata` itself consume it, so there is exactly one definition. `useOptimisticTiles` probes it
       per picked file in the pass that already probes dimensions + the video poster, and `OptimisticTileVM`
@@ -105,19 +105,19 @@ the site list is wrong, not the grep.
       the same file. Lever: drop `lastModified` from the tile's own call — that argument survives every later
       phase, so the bite cannot be disarmed by this CR's own completion. · Done when: `npm run check` green in
       `web/`, B2 green and demonstrably red under its lever.
-- [ ] 2 web — **the merged list in the Memory gallery.** `layoutItems` becomes one sorted sequence over both
+- [x] 2 web — **the merged list in the Memory gallery.** `layoutItems` becomes one sorted sequence over both
       tile kinds under the existing `sortDir`; undated tiles keep sorting last. The media tile's `index` and the
       lightbox snapshot stay keyed on the media-only order (see Traps). · **Bite (live defect, B1):** a completed
       upload keeps its grid slot — with two files in flight and one settling, the settled tile's DOM position is
       unchanged before and after reconcile. This reddens on the untouched tree; run it first, and read *which*
       assertion reddens, not merely that the test did. · Done when: `npm run check` green, B1 red before the
       change and green after.
-- [ ] 3 web — **the same in `ShareView.vue`.** Its local `layoutItems` + `sortedItems` (hardcoded newest-first,
+- [x] 3 web — **the same in `ShareView.vue`.** Its local `layoutItems` + `sortedItems` (hardcoded newest-first,
       no toggle) take the identical merge. · **Bite (live defect, B3):** B1's assertion at the share viewer.
       `ShareView.test.ts` mocks the tiles away, so this needs the mock lifted for that case or a sibling file
       that mounts the real grid — decide which at implement time and say so in the retro. · Done when:
       `npm run check` green.
-- [ ] 4 docs + coverage — **supersede the claim, at every site the second locator returns.** The shape of each
+- [x] 4 docs + coverage — **supersede the claim, at every site the second locator returns.** The shape of each
       correction: `uc.memory.upload.yaml#optimistic-in-grid-tiles` is **narrowed** — the clause *"pinned ahead of
       the listed media"* is **deleted** and replaced by a pointer to the gallery's rule, the rest of the
       criterion (per-file reconcile, no empty-flash, no duplicate) stands unchanged.
@@ -148,8 +148,41 @@ of that would assert the absence of code nobody has a reason to write.
 Live proof, once the phases are green: pick several photos into a Memory with the dev backend and watch a
 middle one settle — its tile must not move. A tile that finishes and stays put is the whole deliverable.
 
+## Status — phases 1–4 done, the live proof is NOT run
+
+Committed on `main`: `5fadfbd` (phase 1), `c5907ad` (phase 2), `1c1a8f0` (phase 3), `650e858` (phase 4).
+`npm run check` green, all 32 `scripts/validate_*.py` green before the first edit and after the last, and
+`git diff --name-only 0d56237..HEAD -- backend contracts` returns **0 files**.
+
+**What is left is the Definition of done's last line, and only that.** The live proof — pick several photos
+into a Memory against the dev backend and watch a middle tile settle without moving — could not run: the dev
+auto-unlock answers **401 at `/api/login/verify`**, the documented creds↔DB mismatch
+([`web/CLAUDE.md`](../web/CLAUDE.md) § *Footgun*), not a fault in this work. Repairing it means
+`npm run bootstrap:user`, which reseeds the owner and rewrites `.run/.env` — the owner's call, not the agent's.
+**Do not delete this CR until that proof is run.**
+
 ## Retrospective
 
-_To be filled at implement time — what went wrong in planning, in execution, and in process/collaboration
-(did we honour the conventions we already agreed: language, workflow, the memory notes?), root cause, and one
-concrete "next time"._
+**B3's open question, answered:** its own file, `web/src/views/ShareView.order.test.ts`, not a lifted mock in
+`ShareView.test.ts`. That file's subject is the accountless terms gate and it stubs both heavy media
+composables inert *on purpose*; lifting the `useOptimisticTiles` stub would drag real previews and object URLs
+into a test about a gate. The new file resolves the share as a **VIEWER** although in-flight uploads belong to
+a contributor — joining as one posts a sealed display name over the network, and the grid does not branch on
+role (measured: `layoutItems`/`sortedItems` read neither `role` nor `isUploader`). That substitution is written
+into the file's header, because a reader will otherwise ask.
+
+**One planning claim did not survive contact, and it is the useful one.** The CR predicted B1 would redden on
+the *position* assertion. It reddened on the assertion **before** it — the order was
+`['u1.jpg','u2.jpg','media-0']`, enqueue order ahead of the listed media, so the position assertion was never
+reached. Both are kept and the comment now records which one bit. Root cause: the phases were written from the
+code's *shape* (two blocks concatenated) but the bite was described by its *purpose* (the slot after
+reconcile), and those are different assertions. **Next time:** when a bite has two assertions in sequence,
+name which one is expected to fail first — the prediction is cheap to make and it is the thing that gets
+checked against reality.
+
+**One design property the CR did not name, decided here:** an in-flight tile's key is *seeded synchronously*
+from the file's own date and *refined* to the EXIF date in the probe pass. The CR said only "probes it per
+picked file", which taken literally would leave a tile keyless for one frame — it would appear among the
+undated and then jump, which is the defect in miniature. The seed is the fallback half of the same rule, so it
+costs nothing and the tile never appears in the wrong place. The remaining refinement (file date → EXIF date)
+happens before any byte is uploaded and is the same one-time refinement the aspect ratio has always had.
