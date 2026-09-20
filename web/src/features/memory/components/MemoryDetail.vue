@@ -214,12 +214,18 @@ function onBucketChanged() { void load() }
 function onBucketUpload() { triggerUpload() }
 
 // --- upload trigger (uc.memory.upload). The Safari Photos picker populates input.files LATE / across repeated
-// picks with empty MIME types — so we re-read the input over a short window, MERGE (never replace) the picks,
-// and only enqueue after a brief quiet period; selection accepts files by extension when the MIME is empty.
+// picks with empty MIME types — so we re-read the input over a short window and MERGE (never replace) the picks;
+// selection accepts files by extension when the MIME is empty.
+//
+// **The re-read window no longer gates the first enqueue.** It used to: every pick waited out a quiet period
+// before anything started, so on every browser but the one the workaround is for, the grid sat still for over a
+// second before the first byte could leave. What the window is actually for is files that arrive LATE — so each
+// re-read now enqueues only what is genuinely new, as an additional batch, and the files already in hand start
+// immediately. E3 is preserved in full: `mergeFiles` still de-dupes by signature, so a file read twice is
+// enqueued once, and `enqueued` is what carries that memory across the window.
 const RETRY_DELAYS = [250, 750, 1500, 3000]
-const QUIET_MS = 1200
-let selection: File[] = []
-let quietTimer: ReturnType<typeof setTimeout> | null = null
+/** Every file already handed to the queue for THIS pick — the de-dupe memory the re-reads are checked against. */
+let enqueued: File[] = []
 
 function triggerUpload() {
   fileInput.value?.click()
@@ -228,27 +234,25 @@ function triggerUpload() {
 function onFilesPicked() {
   const input = fileInput.value
   if (!input) return
+  enqueued = []
   collect(input)
   RETRY_DELAYS.forEach((d) => setTimeout(() => collect(input), d))
+  // Cleared only after the LAST re-read, not at the first enqueue: clearing it earlier would throw away exactly
+  // the late-arriving files this window exists to catch. Re-picking the same file works from then on.
+  setTimeout(() => { if (fileInput.value) fileInput.value.value = '' }, RETRY_DELAYS[RETRY_DELAYS.length - 1] + 100)
 }
 
 function collect(input: HTMLInputElement) {
-  const before = selection.length
   const incoming = Array.from(input.files ?? []).filter(isSupportedMediaFile)
-  selection = mergeFiles(selection, incoming)
-  if (selection.length !== before || (selection.length > 0 && quietTimer === null)) {
-    if (quietTimer) clearTimeout(quietTimer)
-    quietTimer = setTimeout(flushSelection, QUIET_MS)
-  }
+  const merged = mergeFiles(enqueued, incoming)
+  const fresh = merged.slice(enqueued.length) // only what this read added
+  enqueued = merged
+  if (fresh.length > 0) enqueueBatch(fresh)
 }
 
-function flushSelection() {
-  quietTimer = null
+function enqueueBatch(picked: File[]) {
   const key = props.memoryKey
-  const picked = selection
-  selection = []
-  if (fileInput.value) fileInput.value.value = '' // allow re-picking the same file
-  if (picked.length === 0 || !key) return
+  if (!key) return
   const targetNodeId = props.node.id
   enqueueUploads(
     { scopeId: props.scopeId, nodeId: targetNodeId, memoryKey: key },

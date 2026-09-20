@@ -3,6 +3,9 @@
 // node render immediately as preview tiles (progress / failed-with-retry), and reconcile into the real media by
 // mediaId (never a duplicate). The pure selection/merge model is covered in optimisticUpload.test.ts; here we
 // prove the component wiring — render from the queue, the reconcile handoff, and preview-url revoke on unmount.
+//
+// The second describe covers the step BEFORE a tile exists: the picker. It belongs here rather than in its own
+// file because what it proves is when the first tile can appear at all, and it reuses this file's mount harness.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
 vi.mock('../../../api/client', () => ({
@@ -22,6 +25,9 @@ vi.mock('../uploadQueue', async (orig) => {
     ...actual,
     useUploadQueue: () => ({ batches: computed(() => batches), activeFileCount: computed(() => 0) }),
     retryFile: vi.fn(),
+    // Spied, not stubbed away in spirit: `mergeFiles` / `isSupportedMediaFile` stay REAL through `...actual`,
+    // so the picker's de-dupe is exercised rather than mocked out.
+    enqueueUploads: vi.fn(),
   }
 })
 
@@ -30,7 +36,7 @@ import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { addMedia, type MediaDeriver } from '../media'
-import { retryFile } from '../uploadQueue'
+import { retryFile, enqueueUploads } from '../uploadQueue'
 import { mediaApi, contentApi } from '../../../api/client'
 import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
@@ -57,7 +63,7 @@ const i18n = createI18n({
         upload: 'Upload', gallery: 'Memory gallery', itemCount: 'No items | {count} item | {count} items',
         openItem: 'Open item {index}', empty: 'No photos in this Memory yet.', unavailable: 'Unavailable', loading: 'Loading…',
         sortNewest: 'Newest first', sortOldest: 'Oldest first', uploadRetry: 'Retry',
-        uploadStatus: { queued: 'Queued', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
+        uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
         uploadTilePreview: 'Uploading {name}', uploadTileFailed: 'Upload failed',
       },
     },
@@ -192,6 +198,41 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     expect(after.indexOf('media-0')).toBe(slotBefore) // the whole point: finishing changed the CONTENT, not the place
   })
 
+  // A queued file has not sent a byte, and a preparing one is still being decoded on this device. The tile used
+  // to assert "Uploading" for both — in the ring's label and, independently, in the container's — so a large
+  // batch read as stuck while the device was busy. Both labels are asserted, because fixing one leaves a screen
+  // reader saying "Uploading" over a file that has not started.
+  it('a queued tile says queued — neither label claims it is uploading', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const wrapper = mountDetail(v1.randomBytes(32))
+    await flushPromises()
+
+    pushBatch([uploadFile('u1', 'queued', { lastModified: OLD })])
+    await flushPromises()
+
+    const tile = wrapper.find('.gallery-tile-optimistic')
+    expect(tile.attributes('aria-label')).not.toContain('Uploading')
+    expect(tile.find('.upload-tile-progress').attributes('aria-label')).not.toContain('Uploading')
+    expect(tile.text()).toContain('Queued') // and it says what it IS, visibly
+  })
+
+  it('a preparing tile says preparing — the stage where the device is busy and the wire is not', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const wrapper = mountDetail(v1.randomBytes(32))
+    await flushPromises()
+
+    pushBatch([uploadFile('u1', 'preparing', { lastModified: OLD })])
+    await flushPromises()
+
+    const tile = wrapper.find('.gallery-tile-optimistic')
+    expect(tile.text()).toContain('Preparing…')
+    expect(tile.attributes('aria-label')).not.toContain('Uploading')
+  })
+
   it('a failed upload shows an inline retry that re-runs it', async () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
@@ -252,5 +293,45 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
     wrapper.unmount()
     expect(revoke).toHaveBeenCalledWith(src)
+  })
+})
+
+describe('MemoryDetail — the picker does not make everyone wait for Safari', () => {
+  /** Put `files` on the hidden input the way a picker does, then fire the change the component listens for. */
+  async function pick(wrapper: ReturnType<typeof mountDetail>, files: File[]) {
+    const el = wrapper.find('input[type="file"]')
+    Object.defineProperty(el.element, 'files', { value: files, configurable: true })
+    await el.trigger('change')
+  }
+  const jpg = (name: string) => new File([new Uint8Array([1, 2, 3])], name, { type: 'image/jpeg' })
+
+  // The re-read window exists for the Safari Photos picker, which populates `input.files` late. It used to gate
+  // the FIRST enqueue too, so every browser paid a quiet period before anything could start. The control is the
+  // second half: a picker that simply stopped merging would pass the first assertion and fail the rest.
+  it('enqueues what it already has before any re-read, and still catches a late arrival as its own batch', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const wrapper = mountDetail(v1.randomBytes(32))
+    await flushPromises()
+
+    const a = jpg('a.jpg')
+    const b = jpg('b.jpg')
+    vi.useFakeTimers()
+    try {
+      await pick(wrapper, [a])
+      // no timer has run yet — this is the whole point
+      expect(vi.mocked(enqueueUploads)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(enqueueUploads).mock.calls[0][1].map((s) => s.file.name)).toEqual(['a.jpg'])
+
+      // Safari fills the rest in later: a second batch, carrying ONLY what is new (E3's de-dupe still holds).
+      Object.defineProperty(wrapper.find('input[type="file"]').element, 'files', { value: [a, b], configurable: true })
+      await vi.advanceTimersByTimeAsync(800)
+
+      expect(vi.mocked(enqueueUploads)).toHaveBeenCalledTimes(2)
+      expect(vi.mocked(enqueueUploads).mock.calls[1][1].map((s) => s.file.name)).toEqual(['b.jpg'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

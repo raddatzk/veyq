@@ -1,7 +1,13 @@
 <script setup lang="ts">
 // One optimistic in-grid upload tile (uc.memory.upload, cr-0074 + cr-0101) — a picked file shown instantly as a
-// dimmed local preview with a progress ring (or a failed state with an inline retry), pinned in the gallery grid
-// while it uploads. Shared by the internal gallery (MemoryDetail) and the anonymous contributor viewer
+// dimmed local preview with a progress ring (or a failed state with an inline retry), at its capture-time place
+// in the gallery grid while it uploads.
+//
+// **The tile names the stage it is actually in.** `queued`, `preparing` and `uploading` are three different
+// waits — the first byte has not left the device in two of them — and the tile used to assert "Uploading" for
+// all three, in the visible ring's label AND in the container's. A large batch therefore looked stuck: every
+// tile claimed to be uploading while the device was still decoding. The strings already existed and the TopBar
+// tray already rendered them; only the tile failed to ask. Shared by the internal gallery (MemoryDetail) and the anonymous contributor viewer
 // (ShareView). Positioning (transform + width/height) is applied by the parent via inherited attrs. Not
 // clickable — the lightbox opens the real media once it lands.
 import { useI18n } from 'vue-i18n'
@@ -17,6 +23,8 @@ const emit = defineEmits<{ retry: [fileId: string]; delete: [fileId: string] }>(
 
 const { t } = useI18n()
 const RING_CIRCUMFERENCE = 2 * Math.PI * 16 // matches the SVG circle radius below
+/** What this file is doing right now, in the user's language — the same string the upload tray shows. */
+const statusLabel = () => t(`media.uploadStatus.${props.tile.status}`)
 // A settled uploader tile stays in the grid (its upload lists no media for the uploader) with a delete affordance
 // instead of the progress ring — the local preview IS the session-only own-view.
 const isDoneDeletable = () => props.deletable === true && props.tile.status === 'done'
@@ -27,7 +35,7 @@ const isDoneDeletable = () => props.deletable === true && props.tile.status === 
     class="gallery-tile gallery-tile-optimistic"
     :class="{ 'is-failed': tile.status === 'failed', 'is-done': isDoneDeletable() }"
     :data-upload-id="tile.fileId"
-    :aria-label="t('media.uploadTilePreview', { name: tile.name })"
+    :aria-label="`${statusLabel()} – ${tile.name}`"
   >
     <!-- The poster (image OR a derived video first-frame) shows once ready; until then the dimmed background + the
          progress ring below carry the state — no separate placeholder glyph (the ring is the signal, #105). The
@@ -56,7 +64,7 @@ const isDoneDeletable = () => props.deletable === true && props.tile.status === 
         <span>{{ t('media.uploadRetry') }}</span>
       </button>
     </div>
-    <div v-else class="upload-tile-state upload-tile-progress" :aria-label="t('media.uploadStatus.uploading')">
+    <div v-else class="upload-tile-state upload-tile-progress" :aria-label="statusLabel()">
       <svg class="upload-ring" viewBox="0 0 36 36" role="progressbar">
         <circle class="upload-ring-track" cx="18" cy="18" r="16" />
         <circle
@@ -68,6 +76,8 @@ const isDoneDeletable = () => props.deletable === true && props.tile.status === 
           :stroke-dasharray="`${tile.progress * RING_CIRCUMFERENCE} ${RING_CIRCUMFERENCE}`"
         />
       </svg>
+      <!-- Same slot the failed state uses for its label, so this adds no control and no new geometry. -->
+      <span class="upload-tile-status-label">{{ statusLabel() }}</span>
     </div>
   </div>
 </template>
@@ -200,6 +210,13 @@ const isDoneDeletable = () => props.deletable === true && props.tile.status === 
 .upload-tile-failed-label {
   font-size: 0.78rem;
   font-weight: 600;
+}
+/* The stage label under the ring — the failed state's label type, so the two states read as one family. */
+.upload-tile-status-label {
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-shadow: 0 1px 2px var(--app-backdrop-strong);
 }
 .upload-tile-retry {
   display: inline-flex;
