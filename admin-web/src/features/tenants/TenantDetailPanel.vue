@@ -16,6 +16,7 @@ import { buildInviteLink, copyText } from '../../shared/inviteLink'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
+import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
 import { isUnauthorized } from '../../shared/httpError'
 
@@ -24,6 +25,9 @@ const props = defineProps<{ tenantId: string }>()
 
 const { t } = useI18n()
 const toast = useToast()
+// Confirmation is the console's own dialog (`shared/ui/ConfirmDialog.vue`, mounted once in App.vue), never the
+// browser's box — `no-alert` in eslint.config.js is what keeps it that way (cr-admin-web-own-confirm-dialog).
+const { ask } = useConfirm()
 const router = useRouter()
 const on401 = handle401(router)
 
@@ -91,7 +95,15 @@ function reassign() {
 // still there, and the Server Owner is expected to bring it back — so it reloads in place rather than routing away.
 // Suspend is confirm-gated (it locks every member out at once); reactivate is not (it only ever restores access).
 async function setSuspended(suspend: boolean) {
-  if (suspend && !window.confirm(t('tenant.suspendConfirm'))) return
+  if (suspend) {
+    const accepted = await ask({
+      header: t('tenant.suspendConfirmTitle'),
+      message: t('tenant.suspendConfirm'),
+      acceptLabel: t('tenant.suspend'),
+      acceptIcon: 'pi pi-pause',
+    })
+    if (!accepted) return
+  }
   actionError.value = ''
   try {
     await (suspend ? suspendTenant(props.tenantId) : reactivateTenant(props.tenantId))
@@ -110,7 +122,13 @@ async function setSuspended(suspend: boolean) {
 async function changeDomain() {
   const next = domain.value.trim().toLowerCase()
   if (!tenant.value || next.length === 0 || next === tenant.value.domain) return
-  if (!window.confirm(t('tenant.changeDomainConfirm', { domain: next }))) return
+  const accepted = await ask({
+    header: t('tenant.changeDomainConfirmTitle'),
+    message: t('tenant.changeDomainConfirm', { domain: next }),
+    acceptLabel: t('tenant.changeDomainSubmit'),
+    acceptIcon: 'pi pi-arrow-right',
+  })
+  if (!accepted) return
   actionError.value = ''
   try {
     await changeTenantDomain(props.tenantId, next)
@@ -129,7 +147,13 @@ async function changeDomain() {
 }
 
 async function revoke() {
-  if (!window.confirm(t('tenant.revokeConfirm'))) return
+  const accepted = await ask({
+    header: t('tenant.revokeConfirmTitle'),
+    message: t('tenant.revokeConfirm'),
+    acceptLabel: t('tenant.revoke'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!accepted) return
   actionError.value = ''
   try {
     await revokeTenant(props.tenantId)

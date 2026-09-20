@@ -31,7 +31,18 @@ styles elsewhere. Wrap a shared primitive in a feature component rather than cop
 
 **This gets stronger as web grows, and that is the design.** A rule that enumerates values goes stale the moment
 the code moves; a rule that says *"match your neighbour"* cannot. It is also the one rule here that is
-demonstrably obeyed — `.veyq-dialog-action-row`: 15 uses, zero per-component copies.
+demonstrably obeyed — `.veyq-dialog-action-row`: **23 uses across 18 components** in `web/`, plus 6 across 3 in
+`admin-web/`, and **zero** per-component copies [M: 2026-09-20]. Uses are markup uses, not occurrences, so the
+number is re-measurable rather than remembered:
+
+```
+grep -rn 'class="[^"]*veyq-dialog-action-row' web/src | wc -l   # uses
+grep -rln 'class="[^"]*veyq-dialog-action-row' web/src | wc -l  # components
+```
+
+This sentence said *15* until 2026-09-20, having been written when that was true — which is the paragraph's own
+argument landing on the paragraph. **The load-bearing half is "zero copies", and only that half is a rule**; the
+counts are colour, and colour is what goes stale. Re-measure before quoting them, or quote neither.
 
 ## Color — semantic role tokens
 
@@ -106,14 +117,51 @@ or a one-off `1rem` label sitting in them.
   `ask()`, which resolves `true`/`false` so the call site keeps its guard clause
   (`if (!(await ask({ … }))) return`). It is mounted **once** in `App.vue` beside the toasts and follows the
   footer rules above. This is the default for a destructive action that needs a sentence of consequence.
+  **`admin-web` has its own copy of both files**, not an import — [ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md),
+  the same relationship `shared/state/useToast.ts` already has with web's. There is no shared UI package and
+  there must not be one.
 - **The inline two-step confirm** — a confirm label revealed in the row itself (`groups.deleteConfirm`,
   `kit.backupDownloadConfirm`, …). Deliberate and unchanged: the low-ceremony, in-row form.
-- **A dedicated dialog** where the dialog does more than ask — it owns the mutation, its busy state and its
-  inline error (`DeleteNodeDialog.vue`, the untrust dialog, the trash purge). The shared dialog resolves and
-  closes; it never runs the action, so anything that needs a `:loading` confirm button stays its own component.
+- **A dedicated dialog** where the dialog does more than ask — it owns the mutation, its busy state and/or its
+  inline error. The shared dialog resolves and closes; it never runs the action, so anything that needs a
+  `:loading` confirm button stays its own component. There are **five** in `web/` [M: 2026-09-20]:
 
-**`window.confirm` is retired, and `no-alert` in `web/eslint.config.js` is what keeps it retired** — including
-in test files, which are not exempted: a fixture is the easiest place to quietly bring a native dialog back.
+  | Dialog | What it owns beyond asking |
+  |---|---|
+  | `memory/components/DeleteNodeDialog.vue` | busy (gates `closable`/`close-on-escape`) + inline error; folder-vs-Memory header variant |
+  | `account/trustDevice/DeviceTrustControl.vue` | busy + inline error |
+  | `memory/components/MemoryDetail.vue` (trash purge) | a data payload (the ids) + busy + pluralised body; **no** inline error |
+  | `account/rotation/KeyRotationPanel.vue` | busy + inline error, both shared with the form it gates |
+  | `memory/components/MemoryBuckets.vue` (delete bucket) | a **form** — type-the-name — + saving state + an inline error field |
+
+  **They are deliberately not merged into a mutation-owning `ConfirmDialog` variant**, and the table is the
+  argument: they share no contract. One has no inline error at all, one carries a payload and pluralised copy,
+  one closes only after a state re-read, one is a form built from a different button family. What is actually
+  duplicated is ~12 lines of dialog *chrome* plus a `.dialog-copy` rule; what differs is precisely the mutation
+  ownership the shared dialog exists to refuse. A shared component whose five callers agree on nothing is five
+  props and five branches.
+
+#### Header voice follows the mechanism
+
+Two title voices coexist, and that is the rule rather than an inconsistency to flatten [M: 2026-09-20]:
+
+- **Imperative header on the shared `ask()`** — "Sign this device out", "Remove member", "Cancel invite",
+  "Take this tenant offline". **10 of 10** `ask()` call sites. Their `message` is the pre-existing `*Confirm`
+  sentence, which already *asks*, so a second question in the header would ask twice.
+- **Question header on a mutation-owning dedicated dialog** — "Forget this device?", "Delete forever?",
+  "Replace your keys?", "Delete bucket?". **4 of 4** question headers sit there, on a consequence-only body.
+
+So: match the voice to the mechanism you picked, and do not "fix" one to look like the other. The single
+counterexample is `DeleteNodeDialog` ("Delete folder" / "Delete Memory") — a dedicated dialog wearing the
+imperative voice. It is the mechanism axis it crosses, not the voice one: both its headers are imperative.
+
+**`window.confirm` is retired, and `no-alert` is what keeps it retired** — in `web/eslint.config.js` and in
+`admin-web/eslint.config.js`, including in test files, which are deliberately not exempted.
+**Know exactly how far that reaches** [M: 2026-09-20, bite-tested]: `no-alert` flags a native *call*, in `src`
+and in tests alike. It does **not** flag the `window.confirm = () => …` *stub assignment* — which is the shape
+a test fixture actually uses, and the shape seven lines of `TenantDetailPanel.test.ts` used. Those were found
+by `grep`, not by the linter. So the rule stops a native dialog being *used*; only a grep stops one being
+*faked*, and a faked one is worse — it passes a confirm-gating test by confirming nothing.
 
 **An action's name has to be visible, not only accessible.** An icon-only destructive action names itself in
 `aria-label`/`title` alone, so prose that quotes its label quotes something no reader can see — and a label
@@ -151,6 +199,7 @@ before component-specific media queries.
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.
 - Confirmed a destructive action through `useConfirm` (or an existing inline/dedicated form) — never
-  `window.confirm`; and any label your copy quotes is one the reader can actually see.
+  `window.confirm`, and never a test that *stubs* one; gave its header the voice its mechanism takes; and any
+  label your copy quotes is one the reader can actually see.
 - Matched the surrounding density rather than introducing a size of your own.
 - Grepped for remaining readers before deleting any i18n key, in both locale blocks.

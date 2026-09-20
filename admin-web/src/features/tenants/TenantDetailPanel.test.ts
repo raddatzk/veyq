@@ -25,6 +25,11 @@ vi.mock('../../shared/inviteLink', () => ({
   buildInviteLink: vi.fn().mockReturnValue('https://acme.example/#invite=sek'),
   copyText: vi.fn().mockResolvedValue(true),
 }))
+// Confirmation is the console's own dialog (cr-admin-web-own-confirm-dialog), mounted once in App.vue: the
+// panel awaits `ask()` and this answers it. Stubbing `window.confirm` would now pass every one of the
+// confirm-gating cases below by confirming nothing — which is why `no-alert` is not exempted for tests.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
 import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError } from './tenants'
@@ -37,23 +42,30 @@ const i18n = createI18n({
         loading: 'Loading', notAuthorized: 'Not authorized', empty: 'Gone', loadFailed: 'Failed',
         statusPending: 'Pending', statusActive: 'Active', ownerEmail: 'Owner email', resend: 'Resend',
         reassignSubmit: 'Reassign', revoke: 'Revoke', revokeConfirm: 'sure?', actionFailed: 'x',
+        revokeConfirmTitle: 'Revoke this pending tenant',
         resent: 'resent', reassigned: 'reassigned', inviteReissued: 'reissued',
         statusSuspended: 'Suspended', suspend: 'Take offline', reactivate: 'Bring back online',
-        suspendConfirm: 'offline?', suspended: 'offline', reactivated: 'online',
+        suspendConfirm: 'offline?', suspendConfirmTitle: 'Take this tenant offline',
+        suspended: 'offline', reactivated: 'online',
         suspendedHint: 'This tenant is offline.',
         changeDomainTitle: 'Move address', changeDomainSubmit: 'Move', changeDomainHint: 'hint',
-        changeDomainConfirm: 'move to {domain}?', domainChanged: 'moved',
+        changeDomainConfirm: 'move to {domain}?', changeDomainConfirmTitle: 'Move this tenant to a new address',
+        domainChanged: 'moved',
         domainTaken: 'taken', domainNotMovable: 'offline tenants cannot move', domainInvalid: 'not an address',
       },
       members: { copyLinkIntro: 'copy', copyLink: 'link', copied: 'copied' },
-      common: { done: 'Done' },
+      common: { done: 'Done', cancel: 'Cancel' },
     },
   },
 })
 
 const stubs = {
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
-  Button: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\', $event)">{{ label }}</button>' },
+  // `emits` is load-bearing: without it the parent's @click ALSO arrives as a native fallthrough listener, so
+  // one trigger runs the handler twice. That was invisible while confirmation was `window.confirm` (both runs
+  // got the same answer) and is not once a declined `ask()` is answered only ONCE — the second run would then
+  // read the default "yes" and perform the very mutation the case asserts was refused.
+  Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\', $event)">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
 }
 
@@ -70,6 +82,7 @@ const submitMove = (w: ReturnType<typeof mountPanel>) => w.find('form.change-dom
 describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    confirmAsk.mockResolvedValue(true)
     vi.mocked(listTenants).mockResolvedValue([PENDING as never])
   })
 
@@ -96,12 +109,14 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     const w = mountPanel('t-2')
     await flushPromises()
 
-    window.confirm = () => false
+    confirmAsk.mockResolvedValueOnce(false)
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
     expect(suspendTenant).not.toHaveBeenCalled()
+    // The dialog is asked with the console's own copy — an imperative header over the question-voice body
+    // that spells the consequence out (styleguide § Confirming a destructive action).
+    expect(confirmAsk.mock.calls[0][0]).toMatchObject({ header: 'Take this tenant offline', message: 'offline?' })
 
-    window.confirm = () => true
     vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'SUSPENDED' } as never])
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
@@ -126,11 +141,12 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(listTenants).mockResolvedValue([SUSPENDED as never])
     const w = mountPanel('t-3')
     await flushPromises()
-    // No window.confirm stub on purpose: reactivating only ever restores access, so it must not be gated —
-    // if the component asked, happy-dom's unstubbed confirm would answer false and the call would not happen.
     await btn(w, 'Bring back online').trigger('click')
     await flushPromises()
     expect(reactivateTenant).toHaveBeenCalledWith('t-3')
+    // Asserted from the mock rather than from a refused answer: reactivating only ever restores access, so it
+    // must not ask at all. `ask` defaults to `true` here, so a gate that crept in would otherwise pass.
+    expect(confirmAsk).not.toHaveBeenCalled()
   })
 
   it('a PENDING tenant offers no availability lever — it is withdrawn with revoke, not suspended', async () => {
@@ -153,12 +169,11 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     const w = mountPanel()
     await flushPromises()
 
-    window.confirm = () => false
+    confirmAsk.mockResolvedValueOnce(false)
     await btn(w, 'Revoke').trigger('click')
     await flushPromises()
     expect(revokeTenant).not.toHaveBeenCalled()
 
-    window.confirm = () => true
     await btn(w, 'Revoke').trigger('click')
     await flushPromises()
     expect(revokeTenant).toHaveBeenCalledWith('t-1')
@@ -173,12 +188,13 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     expect((w.findAll('input')[0].element as HTMLInputElement).value).toBe('live.example')
 
     await w.findAll('input')[0].setValue('moved.example')
-    window.confirm = () => false
+    confirmAsk.mockResolvedValueOnce(false)
     await submitMove(w)
     await flushPromises()
     expect(changeTenantDomain).not.toHaveBeenCalled()
+    // The one confirm whose body interpolates: the address it is about has to be IN the sentence.
+    expect(confirmAsk.mock.calls[0][0]).toMatchObject({ message: 'move to moved.example?' })
 
-    window.confirm = () => true
     vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, domain: 'moved.example' } as never])
     await submitMove(w)
     await flushPromises()
@@ -209,7 +225,6 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
     const w = mountPanel('t-2')
     await flushPromises()
-    window.confirm = () => true
 
     for (const [failure, expected] of [
       [{ status: 409, code: 'domain_taken' }, 'taken'],

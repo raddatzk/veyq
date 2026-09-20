@@ -29,7 +29,9 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
    others' media). Because the role is UPLOADER, the client shows a **mandatory name pre-screen** with a **clear
    note that uploads are visible only in this browser tab**; the visitor names themselves → the name is sealed
    under `K_mem` and an anonymous **share identity** + a `contributorToken` are created.
-4. **Add photos.** The uploader picks images; each is sealed under `K_mem` and uploaded via the **share-scoped**
+4. **Add photos.** The uploader picks images — through the **same picker** the curator's own gallery uses, so
+   [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
+   `input.files` late) holds here unchanged. Each is sealed under `K_mem` and uploaded via the **share-scoped**
    endpoints (as CONTRIBUTOR). The client keeps the returned `{ mediaId }` + the **local preview** in session
    memory and renders it with the **same gallery mechanic** (grid + optimistic tile) — **from the local preview,
    never a download**. The photo appends to the Memory (the curator sees it).

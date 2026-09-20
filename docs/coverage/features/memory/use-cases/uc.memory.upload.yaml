@@ -52,12 +52,22 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/uploadQueue.test.ts]
   - id: safari-photos-import
-    text: Files imported from the Photos gallery (empty MIME, late/repeated input population) are accepted by extension, merged without dropping earlier picks (signature de-dupe), and sealed under a media type inferred from the extension. The re-read window does NOT gate the first enqueue — files already in hand are queued before any re-read, and each re-read enqueues only what is genuinely new, as its own batch.
+    text: >-
+      Files imported from the Photos gallery (empty MIME, late/repeated input population) are accepted by
+      extension, merged without dropping earlier picks (signature de-dupe), and sealed under a media type
+      inferred from the extension. The re-read window does NOT gate the first enqueue — files already in hand
+      are queued before any re-read, and each re-read enqueues only what is genuinely new, as its own batch.
+      Releasing the input (`value = ''`) is the window's TEARDOWN rather than part of the pick — a clear in the
+      same tick as the first read throws away exactly the late arrivals the window exists to catch, while four
+      timers still run and four empty reads still look correct. All of it is ONE orchestration the pickers
+      call, so the property reaches every screen that lets someone choose files — the curator's gallery and the
+      contributor's share page both drive the same window.
     coverage:
       web:
         unit:
           - src/features/memory/uploadQueue.test.ts
           - src/features/memory/components/MemoryDetail.optimistic.test.ts
+          - src/views/ShareView.picker.test.ts
   - id: best-effort-derivation
     text: Underivable media (a codec the browser can't decode, or an empty MIME type) uploads original-only instead of failing the whole upload.
     coverage:

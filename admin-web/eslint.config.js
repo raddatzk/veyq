@@ -27,6 +27,14 @@ export default defineConfigWithVueTs(
   {
     name: 'veyq-admin/rules',
     rules: {
+      // The console confirms through its own dialog (`shared/state/useConfirm`), never the browser's: a native
+      // box carries no product voice, no danger colour, and here it carries the sentence that has to spell out
+      // that taking a tenant offline changes nothing inside it (cr-admin-web-own-confirm-dialog). This is what
+      // keeps that swap from being a one-time sweep. Deliberately NOT exempted for test files: nothing in `src`
+      // may reach for a native dialog, and a fixture is the easiest place to quietly re-introduce one — which
+      // here would be worse than a style lapse, since a stubbed `window.confirm` passes a confirm-gating test
+      // by confirming nothing at all.
+      'no-alert': 'error',
       // Security backstop: the server is operator-blind and the client renders decrypted HTML.
       // Any `v-html` must be an explicit, reviewed opt-out with a sanitising helper — never silent.
       'vue/no-v-html': 'error',
