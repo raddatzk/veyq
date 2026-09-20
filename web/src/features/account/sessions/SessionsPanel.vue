@@ -264,7 +264,8 @@ async function escalate(family: SessionFamily) {
   const accepted = await ask({
     header: t('sessions.escalateConfirmTitle'),
     message: t('sessions.escalateConfirm'),
-    acceptLabel: t('sessions.escalate'),
+    // The label of the button that opened it — the short, visible one, not the accessible sentence.
+    acceptLabel: t('sessions.escalateShort'),
     acceptIcon: 'pi pi-shield',
   })
   if (!accepted) return
@@ -424,10 +425,14 @@ async function removeOtherKeys() {
               />
               <!-- ADR 0058's escalation, offered ONLY where the register names a served wrap for that device —
                    never as a checkbox on the revoke above, and separately named because the consequence lands on
-                   whoever is holding that device. A locked panel reaches this never: the join is sealed. -->
+                   whoever is holding that device. A locked panel reaches this never: the join is sealed.
+                   "Separately named" is kept VISIBLY: the short label is on the button, the full sentence stays
+                   the accessible name and the dialog's subject. An icon-only escalation named the action only to
+                   a screen reader, while the hint below quoted a label nobody could see. -->
               <Button
                 v-if="renamingFamily !== family.id && wrapsOf(family).length > 0"
                 class="session-escalate"
+                :label="t('sessions.escalateShort')"
                 icon="pi pi-shield"
                 severity="danger"
                 size="small"

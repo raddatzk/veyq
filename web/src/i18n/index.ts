@@ -213,6 +213,7 @@ const en = {
     renamed: 'The device was renamed.',
     renameFailed: 'The device could not be renamed. Please try again.',
     escalate: 'Sign out and remove this device’s saved key',
+    escalateShort: 'Sign out + remove key',
     escalateConfirmTitle: 'Sign out and remove the saved key',
     escalateConfirm: 'Sign this device out and remove its saved key? Signing out alone still lets it open your memories with your password. Without its saved key it needs your password and your Secret Key — so whoever is holding it, including you, will need the Emergency Kit there next time.',
     escalated: 'That device was signed out and its saved key removed.',
@@ -245,7 +246,7 @@ const en = {
     lockedDoneStillHere: 'Every other device was signed out. This device could not be signed out — use “Sign out” below.',
     lockedBack: 'I have my Secret Key after all',
     lockedBackHint: 'Unlock here without saving anything on this device.',
-    hint: 'Device names are stored scrambled and never reach the server, so they appear only once you unlock — on a locked screen you see dates instead. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server — if a device is really gone, use “sign out and remove this device’s saved key” instead, so your password alone no longer opens it there.',
+    hint: 'Device names are stored scrambled and never reach the server, so they appear only once you unlock — on a locked screen you see dates instead. A device you have not signed in on since naming arrived shows no name yet, and stays fully signable-out either way. Signing a device out cuts it off from the server; if a device is really gone, its row also offers “Sign out + remove key”, so your password alone no longer opens it there. That button sits on another device’s row — never on the one you are using — and only where this app knows that device kept a saved key.',
   },
   // uc.account.onboard-device (ADR 0059) — adding a device from one that is already signed in and unlocked.
   pairing: {
@@ -1120,6 +1121,7 @@ const de: typeof en = {
     renamed: 'Das Gerät wurde umbenannt.',
     renameFailed: 'Das Gerät konnte nicht umbenannt werden. Bitte versuche es erneut.',
     escalate: 'Abmelden und gespeicherten Schlüssel entfernen',
+    escalateShort: 'Abmelden + Schlüssel entfernen',
     escalateConfirmTitle: 'Abmelden und gespeicherten Schlüssel entfernen',
     escalateConfirm: 'Dieses Gerät abmelden und seinen gespeicherten Schlüssel entfernen? Abmelden allein hindert es nicht daran, deine Erinnerungen mit deinem Passwort zu öffnen. Ohne seinen gespeicherten Schlüssel braucht es dein Passwort und deinen Secret Key — wer das Gerät gerade hat, auch du selbst, braucht dort beim nächsten Mal das Notfall-Kit.',
     escalated: 'Das Gerät wurde abgemeldet und sein gespeicherter Schlüssel entfernt.',
@@ -1148,7 +1150,7 @@ const de: typeof en = {
     lockedDoneStillHere: 'Alle anderen Geräte wurden abgemeldet. Dieses Gerät konnte nicht abgemeldet werden — nutze unten „Abmelden“.',
     lockedBack: 'Ich habe meinen Secret Key doch dabei',
     lockedBackHint: 'Hier entsperren, ohne dass etwas auf diesem Gerät gespeichert wird.',
-    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie — sie erscheinen deshalb erst nach dem Entsperren, auf einem gesperrten Bildschirm siehst du stattdessen Daten. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server — ist ein Gerät wirklich weg, nimm stattdessen „Abmelden und gespeicherten Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet.',
+    hint: 'Gerätenamen liegen verschlüsselt und erreichen den Server nie — sie erscheinen deshalb erst nach dem Entsperren, auf einem gesperrten Bildschirm siehst du stattdessen Daten. Ein Gerät, auf dem du dich seit Einführung der Namen nicht angemeldet hast, zeigt noch keinen Namen und lässt sich trotzdem vollständig abmelden. Ein abgemeldetes Gerät kommt nicht mehr an den Server; ist ein Gerät wirklich weg, bietet seine Zeile zusätzlich „Abmelden + Schlüssel entfernen“, damit dein Passwort es dort nicht mehr allein öffnet. Diese Schaltfläche steht in der Zeile eines anderen Geräts — nie bei dem, das du gerade benutzt — und nur dort, wo diese App weiß, dass das Gerät einen gespeicherten Schlüssel behalten hat.',
   },
   pairing: {
     navTitle: 'Gerät hinzufügen',

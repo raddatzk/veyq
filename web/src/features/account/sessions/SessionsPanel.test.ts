@@ -384,6 +384,29 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(removeSavedKey).not.toHaveBeenCalled()
   })
 
+  it('names the escalation where a reader can SEE it, and keeps the full sentence as its accessible name', async () => {
+    // "Separately named" (uc.account.sessions) was half-kept: the action was icon-only, so its name existed
+    // for a screen reader and nowhere on screen. The visible half is asserted against the accessible half
+    // precisely because keeping only one of them is the failure this pins — and the plain revoke beside it
+    // stays icon-only on purpose, which is why the visible text is read off THIS button, not off the row.
+    withEscalatableOther()
+    const wrapper = await mountPanel()
+    const button = escalateButton(wrapper, 1)!
+
+    expect(button.text()).toContain(i18n.global.t('sessions.escalateShort'))
+    expect(button.attributes('aria-label')).toBe(i18n.global.t('sessions.escalate'))
+  })
+
+  it('quotes in the hint exactly the label that is on the button — in both locales', async () => {
+    // The hint used to tell the reader to use a label that appears nowhere on screen. Two strings that have to
+    // agree drift at the next copy edit unless something reads them together, and a locale that is edited alone
+    // is the likely half — so both are checked, and the check is the same one twice.
+    for (const locale of ['en', 'de'] as const) {
+      i18n.global.locale.value = locale
+      expect(i18n.global.t('sessions.hint')).toContain(i18n.global.t('sessions.escalateShort'))
+    }
+  })
+
   // --- § Devices with a saved key, and the exclusion-shaped bulk action (ADR 0058 §5) ---
 
   it('lists a signed-out device that still holds a saved key, and removes it from there', async () => {
