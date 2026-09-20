@@ -415,6 +415,65 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(meta).toMatchObject({ gpsLat: 48.137, gpsLng: 11.575 }) // GPS available at list-level for the medoid
   })
 
+  // B1.1 / B1.3 / B1.5 / B1.6 in one pass over one upload: everything the panel shows must reach the LAZY
+  // tier, the filename must reach it too, the LISTED tier must not grow any of it (it is capped at 512 base64
+  // and shared with the capture-time PUT), and the filename must not appear in anything sent.
+  //
+  // The raw shapes below are not invented: they are what the un-mocked library actually returns for the
+  // generated fixture, pinned by `readExif.fixture.test.ts`. Keep the two in step — that test is the only
+  // thing standing between this mock and a green lie.
+  it('seals the panel fields and the filename in the LAZY tier, and leaks neither into the listed one nor the wire', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    deriver.sourceDims = { w: 4032, h: 3024 }
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm F1.8 STM',
+      FocalLength: 50, FocalLengthIn35mmFormat: 75, FNumber: 1.8, ExposureTime: 0.002, ISO: 200,
+      ExposureCompensation: -0.7, Flash: 9, Orientation: 6,
+      DateTimeOriginal: new Date(CAPTURED_AT),
+      Software: 'veyq fixture 1.0', Artist: 'A. Photographer', Copyright: '(c) 2021 A. Photographer',
+      Rating: 4,
+      title: { lang: 'x-default', value: 'Marienplatz' },
+      description: { lang: 'x-default', value: 'Marienplatz at golden hour' },
+      GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
+      GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
+      latitude: 48.137, longitude: 11.575,
+    } as never)
+
+    const memoryKey = v1.randomBytes(32)
+    const FILENAME = 'IMG_0042_holiday.HEIC'
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg', name: FILENAME }, deriver)
+
+    // B1.1 + B1.3 — the lazy tier carries every new field, the filename included
+    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(store.captured.completeItem.wrappedExif), 'media-exif')))
+    expect(exif).toMatchObject({
+      name: FILENAME,
+      focalLength35: 75, exposureCompensation: -0.7, flash: 9, orientation: 6,
+      software: 'veyq fixture 1.0', artist: 'A. Photographer', rating: 4,
+      title: 'Marienplatz', description: 'Marienplatz at golden hour',
+      altitude: 519.4, imgDirection: 215.3, imgDirectionRef: 'T', gpsAccuracy: 4.8,
+    })
+    expect(exif.copyright).toContain('A. Photographer')
+
+    // B1.5 — the LISTED tier grew nothing. Asserted as an allow-list rather than field by field, so a future
+    // panel-only field added to the wrong tier reddens here without anyone remembering to add a case.
+    // Read the SEALED payload, not `unsealMeta`'s normalised view: that view materialises every key of the
+    // type (`capturedAtOverride` among them) whether or not it was sealed, so keying the assertion off it
+    // would measure the normaliser instead of what actually rides in the capped tier.
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    const sealedMeta = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(item.wrappedMeta!), 'media-meta')))
+    expect(Object.keys(sealedMeta).sort()).toEqual(
+      ['capturedAt', 'capturedAtSource', 'gpsLat', 'gpsLng', 'h', 'mediaType', 'v', 'w'].sort(),
+    )
+
+    // B1.6 — nothing the client SENT carries the filename. uc.memory.gallery's "no pixel, no filename" is a
+    // claim about the server's view, and this is what keeps it true now that the name exists at all.
+    expect(JSON.stringify(store.captured)).not.toContain('IMG_0042')
+    expect(JSON.stringify(store.captured)).not.toContain('holiday')
+  })
+
   it('falls back to the file creation date when the source carries no EXIF date', async () => {
     const store = fakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)

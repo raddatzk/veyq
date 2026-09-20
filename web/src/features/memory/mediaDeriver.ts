@@ -19,7 +19,14 @@ export const TIER_SPECS: Record<MediaDerivativeKind, { maxEdge: number; quality:
 export type Dimensions = { w: number; h: number }
 
 /** The source to attach: the pristine original bytes + their MIME type, plus the file's creation date (cr-0066). */
-export type AddMediaSource = { bytes: Uint8Array; mediaType: string; lastModified?: number }
+export type AddMediaSource = {
+  bytes: Uint8Array
+  mediaType: string
+  lastModified?: number
+  /** The original's filename. Sealed into the lazy EXIF tier and **never sent** — the server's view of a media
+   *  is still "no pixel, no filename" (uc.memory.gallery). Absent for a source that has no name of its own. */
+  name?: string
+}
 
 /**
  * The platform-native pixel stage behind an interface: the real one uses Canvas + `<video>`; tests inject a

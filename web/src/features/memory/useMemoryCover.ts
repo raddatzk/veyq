@@ -101,6 +101,7 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
           bytes: new Uint8Array(await intent.file.arrayBuffer()),
           mediaType: intent.file.type,
           lastModified: intent.file.lastModified,
+          name: intent.file.name,
         })
         cover = { source: { kind: 'upload', ref }, crop: intent.crop }
       } else if (intent.kind === 'media') {

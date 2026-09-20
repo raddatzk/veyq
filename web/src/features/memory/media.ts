@@ -93,14 +93,38 @@ export type MediaMeta = {
  */
 export type MediaExif = {
   v: number
+  /** The original's filename, sealed here and nowhere else — it never reaches the server (uc.memory.gallery). */
+  name?: string
   make?: string
   model?: string
   lens?: string
   focalLength?: number
+  /** The 35 mm-equivalent focal length, which is what makes a crop-sensor number comparable. */
+  focalLength35?: number
   fNumber?: number
   exposureTime?: number
+  /** EV compensation the photographer dialled in. Signed — exifr calls this `ExposureCompensation`. */
+  exposureCompensation?: number
   iso?: number
+  /** The raw EXIF Flash **bitfield**, not a boolean: bit 0 is "fired", so 16 is truthy and means it did NOT.
+   *  Kept raw so the surface can phrase it in the reader's language instead of the library's English. */
+  flash?: number
   orientation?: number
+  /** Provenance the editor wrote in: the software, and who claims the picture. */
+  software?: string
+  artist?: string
+  copyright?: string
+  /** What an editor wrote into XMP/IPTC — a 0..5 star rating and the two text fields. */
+  rating?: number
+  title?: string
+  description?: string
+  /** Metres above sea level, already signed (`GPSAltitudeRef` 1 means below). */
+  altitude?: number
+  /** Where the camera was pointing, in degrees, and whether that is true or magnetic north. */
+  imgDirection?: number
+  imgDirectionRef?: string
+  /** The fix's own claimed accuracy in metres — how much the coordinate should be trusted. */
+  gpsAccuracy?: number
   w?: number
   h?: number
 }
@@ -177,6 +201,16 @@ export function unsealMeta(memoryKey: Uint8Array, item: MediaItem): MediaMeta | 
     /* not openable / malformed → treated as no metadata */
   }
   return null
+}
+
+/**
+ * The original's **plaintext** size in bytes, recovered from what the server stores. Every chunk is framed with
+ * a 12-byte nonce + a 16-byte AEAD tag, so the ciphertext carries exactly 28 bytes per chunk that the file
+ * never had. Showing `byteSize` raw would report a size the user's own file does not have — and would drift
+ * with the chunking, not with the photo.
+ */
+export function plaintextSize(ref: { byteSize: number; chunkCount: number }): number {
+  return Math.max(0, ref.byteSize - 28 * ref.chunkCount)
 }
 
 /** The effective capture time of a media's metadata tier: the user's correction if set, else the derived original. */
@@ -263,6 +297,35 @@ function toEpochMs(d: unknown): number | undefined {
   return finiteNum(d)
 }
 
+/**
+ * The option set every EXIF read passes — exported because the fixture test parses with **exactly this** or it
+ * proves nothing about the client (`readExif.fixture.test.ts`).
+ *
+ * **`translateValues: false` is load-bearing, and was measured rather than assumed.** With exifr's default
+ * translation `Flash` arrives as the English string "Flash fired, compulsory flash mode" and `Orientation` as
+ * "Rotate 90 CW" — so a bit test on Flash silently reads 0, and `finiteNum(raw.Orientation)` has been yielding
+ * `undefined` since this bundle was introduced, meaning the sealed `orientation` field never once carried a
+ * value. Raw values also keep the phrasing ours: a library's English string sealed into a user's tier would be
+ * shown untranslated to a German reader. `reviveValues` stays ON, because it is what makes `DateTimeOriginal` a
+ * `Date`, which the capture-time rule depends on.
+ */
+export const EXIF_PARSE_OPTIONS = { tiff: true, exif: true, gps: true, xmp: true, iptc: true, translateValues: false } as const
+
+/** XMP text arrives as a language alternative (`{ lang, value }`), not a string. Take the value. */
+function xmpText(v: unknown): string | undefined {
+  if (typeof v === 'string') return v
+  if (v && typeof v === 'object' && 'value' in v) return cleanStr((v as { value: unknown }).value)
+  return undefined
+}
+
+/** Altitude, signed. `GPSAltitudeRef` 1 means *below* sea level, and exifr hands it back byte-indexed. */
+function signedAltitude(alt: unknown, ref: unknown): number | undefined {
+  const metres = finiteNum(alt)
+  if (metres === undefined) return undefined
+  const refByte = typeof ref === 'object' && ref !== null ? finiteNum((ref as Record<number, unknown>)[0]) : finiteNum(ref)
+  return refByte === 1 ? -metres : metres
+}
+
 /** Whether an EXIF bundle carries anything beyond the version tag (else there's nothing worth sealing). */
 function hasExifPayload(e: MediaExif): boolean {
   return Object.entries(e).some(([k, val]) => k !== 'v' && val !== undefined)
@@ -289,18 +352,32 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
   if (!source.mediaType.startsWith('image/')) return { exif: null }
   try {
     const blob = new Blob([source.bytes as BlobPart], { type: source.mediaType })
-    const raw = await exifr.parse(blob, { tiff: true, exif: true, gps: true })
+    const raw = await exifr.parse(blob, EXIF_PARSE_OPTIONS)
     if (!raw) return { exif: null }
     const exif: MediaExif = {
       v: 1,
+      name: cleanStr(source.name),
       make: cleanStr(raw.Make),
       model: cleanStr(raw.Model),
       lens: cleanStr(raw.LensModel ?? raw.LensMake),
       focalLength: finiteNum(raw.FocalLength),
+      focalLength35: finiteNum(raw.FocalLengthIn35mmFormat),
       fNumber: finiteNum(raw.FNumber),
       exposureTime: finiteNum(raw.ExposureTime),
+      exposureCompensation: finiteNum(raw.ExposureCompensation),
       iso: finiteNum(raw.ISO),
+      flash: finiteNum(raw.Flash),
       orientation: finiteNum(raw.Orientation),
+      software: cleanStr(raw.Software ?? raw.CreatorTool),
+      artist: cleanStr(raw.Artist ?? raw.Creator),
+      copyright: cleanStr(raw.Copyright ?? raw.Rights),
+      rating: finiteNum(raw.Rating),
+      title: cleanStr(xmpText(raw.title) ?? raw.ObjectName),
+      description: cleanStr(xmpText(raw.description) ?? raw.ImageDescription ?? raw['Caption-Abstract']),
+      altitude: signedAltitude(raw.GPSAltitude, raw.GPSAltitudeRef),
+      imgDirection: finiteNum(raw.GPSImgDirection),
+      imgDirectionRef: cleanStr(raw.GPSImgDirectionRef),
+      gpsAccuracy: finiteNum(raw.GPSHPositioningError),
       w: finiteNum(raw.ExifImageWidth ?? raw.ImageWidth),
       h: finiteNum(raw.ExifImageHeight ?? raw.ImageHeight),
     }
@@ -816,7 +893,7 @@ export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: Media
 export type ChunkProvider = {
   /** Total chunk count of the whole blob — the AAD `total` every `getPlaintextChunk` binds (never a subset). */
   readonly chunkCount: number
-  /** Total ciphertext byte size (sum of framed chunk sizes); plaintext size = `byteSize − 28·chunkCount`. */
+  /** Total ciphertext byte size (sum of framed chunk sizes). Use [plaintextSize] for the original's own size. */
   readonly byteSize: number
   /** Open exactly chunk `index` to plaintext. Re-presigns the whole blob once on a stale-URL 403, then retries. */
   getPlaintextChunk(index: number): Promise<Uint8Array>

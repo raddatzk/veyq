@@ -61,6 +61,14 @@ const i18n = createI18n({
         iso: 'ISO',
         dimensions: 'Dimensions',
         location: 'Location',
+        fileName: 'File', fileSize: 'Size', fileFormat: 'Format', focalLength35: 'Equivalent',
+        exposureCompensation: 'Exposure compensation', flash: 'Flash',
+        flashFired: 'Fired', flashNotFired: 'Did not fire',
+        software: 'Software', artist: 'Author', copyright: 'Copyright', rating: 'Rating',
+        title: 'Title', description: 'Description',
+        altitude: 'Altitude', direction: 'Direction',
+        directionTrue: '{deg}° (true north)', directionMagnetic: '{deg}° (magnetic north)',
+        gpsAccuracy: 'Position accuracy', place: 'Place',
         status: 'Status',
         editCapturedAt: 'Edit capture time',
         resetCapturedAt: 'Reset to original',
@@ -449,6 +457,69 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(dds).toContain('1/125 s')
     expect(dds).toContain('200')
     expect(dds).toContain('48.137000, 11.575000') // coordinates as text (a map is a later CR)
+  })
+
+  // B1.2 — the rows this CR adds. Asserted on the VALUES, so a label typo is a separate failure from a field
+  // that never reached the tier, and the second half asserts the omissions: a phone snapshot must not render
+  // twenty empty rows.
+  it('renders the file, exposure, provenance and geo rows, and omits the ones the photo does not carry', async () => {
+    const memoryKey = v1.randomBytes(32)
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', Model: 'EOS R', FocalLength: 50, FocalLengthIn35mmFormat: 75,
+      ExposureCompensation: -0.7, Flash: 9, Orientation: 6, ISO: 200,
+      Software: 'veyq fixture 1.0', Artist: 'A. Photographer', Copyright: '(c) 2021 A. Photographer',
+      Rating: 4,
+      title: { lang: 'x-default', value: 'Marienplatz' },
+      description: { lang: 'x-default', value: 'Marienplatz at golden hour' },
+      GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
+      GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
+      latitude: 48.137, longitude: 11.575,
+    } as never)
+
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(3), mediaType: 'image/jpeg', name: 'IMG_0042.HEIC' }, stubDeriver())
+    const items = await listMedia(SCOPE_ID, NODE_ID)
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
+
+    expect(dds).toContain('IMG_0042.HEIC') // the filename, sealed at upload and nowhere else
+    expect(dds).toContain('image/jpeg')
+    expect(dds).toContain('75 mm') // the 35 mm equivalent, beside the native 50 mm
+    expect(dds).toContain('-0.7 EV')
+    expect(dds).toContain('Fired') // Flash 9 → bit 0 set
+    expect(dds).toContain('★★★★☆')
+    expect(dds).toContain('veyq fixture 1.0')
+    expect(dds).toContain('A. Photographer')
+    expect(dds).toContain('Marienplatz')
+    expect(dds).toContain('Marienplatz at golden hour')
+    expect(dds).toContain('519 m')
+    expect(dds).toContain('215° (true north)')
+    expect(dds).toContain('4.8 m')
+  })
+
+  it('a flash value of 16 reads as "did not fire" — the bitfield, not a truthiness test', async () => {
+    const memoryKey = v1.randomBytes(32)
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 } as never)
+
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(5), mediaType: 'image/jpeg' }, stubDeriver())
+    const items = await listMedia(SCOPE_ID, NODE_ID)
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
+
+    expect(dds).toContain('Did not fire')
+    // …and the rows this photo carries nothing for are absent, not blank
+    expect(dds).not.toContain('★★★★☆')
+    expect(dds.some((v) => v.includes('EV'))).toBe(false)
+    expect(dds.some((v) => v.includes('north'))).toBe(false)
   })
 
   it('shows the no-detail message when the item carries no sealed EXIF', async () => {

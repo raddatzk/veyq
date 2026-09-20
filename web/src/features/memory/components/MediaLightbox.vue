@@ -20,6 +20,7 @@ import {
   backfillMediaType,
   isVideoMediaType,
   effectiveCapturedAt,
+  plaintextSize,
   type MediaItem,
   type MediaExif,
   type MediaMeta,
@@ -218,6 +219,40 @@ function formatExposure(s?: number): string {
   if (!s || s <= 0) return ''
   return s >= 1 ? `${Number(s.toFixed(1))} s` : `1/${Math.round(1 / s)} s`
 }
+/** EV compensation, signed and explicit: "0 EV" is a real setting, so 0 is shown rather than filtered out. */
+function formatEv(ev?: number): string {
+  return ev !== undefined && Number.isFinite(ev) ? `${ev > 0 ? '+' : ''}${Number(ev.toFixed(1))} EV` : ''
+}
+/** The EXIF Flash **bitfield** — bit 0 is "fired". 16 is truthy and means it did not, which is why this is a
+ *  bit test and not a boolean cast; the raw number is what `translateValues: false` keeps available. */
+function formatFlash(flash?: number): string {
+  if (flash === undefined || !Number.isFinite(flash)) return ''
+  return (flash & 0x1) === 1 ? t('media.flashFired') : t('media.flashNotFired')
+}
+function formatMetres(m?: number, digits = 0): string {
+  return m !== undefined && Number.isFinite(m) ? `${Number(m.toFixed(digits))} m` : ''
+}
+/** The direction the camera faced, named against the north it was measured from ('M' = magnetic). */
+function formatDirection(deg?: number, ref?: string): string {
+  if (deg === undefined || !Number.isFinite(deg)) return ''
+  const rounded = Math.round(deg)
+  return ref === 'M' ? t('media.directionMagnetic', { deg: rounded }) : t('media.directionTrue', { deg: rounded })
+}
+/** A 0..5 star rating, drawn rather than spelled so it reads the same in every language. */
+function formatRating(stars?: number): string {
+  if (stars === undefined || !Number.isFinite(stars) || stars <= 0) return ''
+  const n = Math.max(0, Math.min(5, Math.round(stars)))
+  return '★'.repeat(n) + '☆'.repeat(5 - n)
+}
+/** Byte size in the reader's locale. The PLAINTEXT size — see [plaintextSize]; `byteSize` is the ciphertext. */
+function formatBytes(bytes?: number): string {
+  if (bytes === undefined || !Number.isFinite(bytes) || bytes <= 0) return ''
+  const units = ['B', 'kB', 'MB', 'GB']
+  let n = bytes
+  let u = 0
+  while (n >= 1024 && u < units.length - 1) { n /= 1024; u += 1 }
+  return `${new Intl.NumberFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { maximumFractionDigits: u === 0 ? 0 : 1 }).format(n)} ${units[u]}`
+}
 
 // GPS rides the always-listed metadata tier now (cr-0068), so coordinates show instantly from `captured` —
 // no wait for the lazy EXIF fetch (and it's the same source the place medoid reads).
@@ -228,20 +263,38 @@ const hasGps = computed(() => {
 const gpsLabel = computed(() =>
   hasGps.value ? `${captured.value!.gpsLat!.toFixed(6)}, ${captured.value!.gpsLng!.toFixed(6)}` : '',
 )
+// What the photo itself knows, in the order someone reads it: when, what it is, what took it, how it was
+// exposed, who made it, and where. Every row is filtered out when its value is absent, so a phone snapshot
+// shows three rows and a raw file from a camera shows twenty — without either shape being a special case.
 const metadataRows = computed(() => {
   const e = exif.value
-  // The capture date comes from the always-listed capture-time tier (independent of the lazy EXIF); the
-  // camera/lens/exposure rows come from the EXIF tier once it loads.
+  // The capture date comes from the always-listed capture-time tier (independent of the lazy EXIF); everything
+  // below it comes from the EXIF tier once it loads.
   const rows = [{ label: t('media.captured'), value: formatCaptured(effectiveCaptured.value) }]
   if (e) {
     rows.push(
+      { label: t('media.fileName'), value: e.name ?? '' },
+      { label: t('media.fileSize'), value: formatBytes(item.value ? plaintextSize(item.value.original) : undefined) },
+      { label: t('media.fileFormat'), value: captured.value?.mediaType ?? '' },
       { label: t('media.camera'), value: [e.make, e.model].filter(Boolean).join(' ').trim() },
       { label: t('media.lens'), value: e.lens ?? '' },
       { label: t('media.focalLength'), value: formatFocal(e.focalLength) },
+      { label: t('media.focalLength35'), value: formatFocal(e.focalLength35) },
       { label: t('media.aperture'), value: formatAperture(e.fNumber) },
       { label: t('media.exposure'), value: formatExposure(e.exposureTime) },
+      { label: t('media.exposureCompensation'), value: formatEv(e.exposureCompensation) },
       { label: t('media.iso'), value: e.iso !== undefined ? String(e.iso) : '' },
+      { label: t('media.flash'), value: formatFlash(e.flash) },
       { label: t('media.dimensions'), value: e.w && e.h ? `${e.w} × ${e.h} px` : '' },
+      { label: t('media.title'), value: e.title ?? '' },
+      { label: t('media.description'), value: e.description ?? '' },
+      { label: t('media.rating'), value: formatRating(e.rating) },
+      { label: t('media.software'), value: e.software ?? '' },
+      { label: t('media.artist'), value: e.artist ?? '' },
+      { label: t('media.copyright'), value: e.copyright ?? '' },
+      { label: t('media.altitude'), value: formatMetres(e.altitude) },
+      { label: t('media.direction'), value: formatDirection(e.imgDirection, e.imgDirectionRef) },
+      { label: t('media.gpsAccuracy'), value: formatMetres(e.gpsAccuracy, 1) },
     )
   }
   return rows.filter((row) => row.value)

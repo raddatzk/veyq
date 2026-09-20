@@ -145,7 +145,7 @@ async function uploadOne(file: UploadFile): Promise<void> {
     // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_mem (default).
     // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
     const upload: UploadFn = t.upload ?? ((source, opts) => addMedia(t.scopeId!, t.nodeId!, t.memoryKey!, source, undefined, opts))
-    const { mediaId } = await upload({ bytes, mediaType: file.mediaType, lastModified: file.file.lastModified }, {
+    const { mediaId } = await upload({ bytes, mediaType: file.mediaType, lastModified: file.file.lastModified, name: file.name }, {
       onProgress: (p) => {
         if (file.status === 'preparing') file.status = 'uploading' // first PUT progress → the network phase began
         file.progress = p
