@@ -57,6 +57,15 @@ nothing over the proof and would send somebody already holding their Emergency K
 What the record earns is the *sentence on the screen* — why the Secret Key is being asked for here — so the
 demand reads as the defence it is rather than as an unexplained hurdle.
 
+**The gate is not rotation's — it belongs to every flow that MINTS a cold credential, and change-password is
+the other one.** `POST /api/account/password` writes a new `PASSWORD` floor plus the `auth_public_key` derived
+from it: exactly the material this decision is about. It shipped without the gate and with a *"I don't remember
+my current password"* entry point that waived it, which made it the bypass of this record — a `DEVICE_KEY`
+holder minted a cold credential for themselves and then passed the gate below for the victim's account. Both
+screens now run one shared implementation of the proof
+([uc.account.change-password](../features/account/use-cases/uc.account.change-password.md) § *One entry
+point*); a third screen that mints one inherits the same obligation.
+
 This gate is what keeps the feature from being net-negative, and it is the sharpest thing in this record. The
 attacker this exists for holds the Master Key and the identity key and can therefore rotate too — **first**,
 locking the legitimate holder out of their own account permanently. What that attacker does *not* hold is the

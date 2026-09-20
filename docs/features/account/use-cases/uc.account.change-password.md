@@ -1,9 +1,9 @@
 # UC: Change your password while signed in
 
 - **ID:** uc.account.change-password
-- **Primary actor:** an authenticated account holder — either **deliberately** changing a password they still
-  know, or someone who has **forgotten it** but is still signed in (most often via a password-less `DEVICE_KEY`
-  "remember me" wrap).
+- **Primary actor:** an authenticated account holder changing a password they still know. Someone who has
+  **forgotten** it goes to [uc.account.recover-access](uc.account.recover-access.md) instead, whichever wrap
+  their session was opened by — see § *One entry point*.
 - **Goal:** set a **new password** without losing any content, by re-wrapping the *same* Master Key under the
   new password and re-registering the auth keypair it derives — the authenticated sibling of
   [uc.account.recover-access](uc.account.recover-access.md), reached from a live session instead of a mailed
@@ -11,62 +11,75 @@
   Key, or the Master Key ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)).
 - **Preconditions:** an authenticated, **unlocked** caller (the Master Key must already be open — this flow
   re-wraps it, it does not derive it from scratch). The actor holds the **Secret Key** — the vault does not
-  retain it past unlock, so it is typed in fresh for this flow regardless of entry point (`web/src/app/vault.ts`
-  holds `masterKey`/`identityPrivate`, never `secretKey`). The account has a `PASSWORD` floor to rewrite.
+  retain it past unlock, so it is typed in fresh for this flow (`web/src/app/vault.ts` holds
+  `masterKey`/`identityPrivate`, never `secretKey`) — **and the current password**. The account has a
+  `PASSWORD` floor to rewrite, and **that pair is proven against it before anything is derived or sent**
+  ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — this flow mints a cold
+  credential, so it is gated exactly as rotation is).
 - **Postconditions (success):** the account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**;
   every `DEVICE` and `DEVICE_KEY` wrap is gone and every *other* session is revoked (never the caller's own —
   see Quality notes). The **Master Key, identity keypair, scope keys and all content are unchanged** — nothing
-  is re-encrypted. The Emergency Kit is **still valid**: the Secret Key did not change.
+  is re-encrypted. The Emergency Kit is **still valid**, and that is now something the flow *checked* rather
+  than something it assumed about what the actor typed: the new floor is built under the very Secret Key that
+  just opened the old one. The session is marked **cold** — it has proven password + Secret Key, whatever wrap
+  originally opened it.
 
 ## Main flow
 
 1. The actor, already signed in and unlocked, opens **"Change password"** from account settings.
 2. The client asks for the **Secret Key** through the shared control
-   ([uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — required regardless of entry
-   point, since the vault never retained it past unlock.
-3. The actor enters their **current password** (this is the deliberate-change entry; A1 covers the forgotten
-   case).
-4. The client derives the **old** auth keypair from the current password (the same derivation login uses,
+   ([uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — it is typed in even on a session
+   that was opened cold, since the vault never retained it past unlock.
+3. The actor enters their **current password**.
+4. **The client proves the pair against the stored floor before anything else**: it reads the account's
+   `PASSWORD` wrap, derives its KEK from the password and Secret Key just typed, opens it, and requires the
+   result to equal the Master Key the vault is holding. This is the same live proof — the same implementation —
+   that [uc.account.rotate-keys](uc.account.rotate-keys.md) §2 runs (E1). Nothing is derived or sent until it
+   passes.
+5. The client derives the **old** auth keypair from the current password (the same derivation login uses,
    [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)) and signs the **new** auth public key
    with the old auth private key — an attestation that whoever is changing the password still controls the
    password being replaced.
-5. The actor chooses a **new password**. The client derives the new Ed25519 auth keypair and builds a fresh
+6. The actor chooses a **new password**. The client derives the new Ed25519 auth keypair and builds a fresh
    `PASSWORD` wrap over the *same* Master Key (already open in the vault) with a new salt and nonce, exactly as
    [uc.account.recover-access](uc.account.recover-access.md) step 8 does.
-6. The client sends the new wrap, the new auth public key and the attestation signature in **one authenticated
+7. The client sends the new wrap, the new auth public key and the attestation signature in **one authenticated
    request**.
-7. The server verifies the attestation against the account's **current** `auth_public_key`. On a match it
+8. The server verifies the attestation against the account's **current** `auth_public_key`. On a match it
    applies, in a single transaction: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every
    `DEVICE` and `DEVICE_KEY` wrap, and revoke every session **except the one the request arrived on**.
-8. The actor's current device asks for the Secret Key once more (step 2 already did this) and may **re-enrol**
+9. The actor's current device asks for the Secret Key once more (step 2 already did this) and may **re-enrol**
    its own `DEVICE`/`DEVICE_KEY` wrap in a follow-up call to the existing
    [uc.account.trust-device](uc.account.trust-device.md) endpoint, so it is not left signed out of its own
    change. Every *other* device is signed out and must sign in fresh with the new password.
 
 ## Alternate / exception flows
 
-- **A1 — the actor has forgotten the current password (but is signed in via `DEVICE_KEY`):** step 3 is skipped
-  and no attestation is sent — the client omits the signature field entirely rather than sending an empty one.
-  The live session plus the freshly-typed Secret Key (step 2) is the re-authentication, at the same trust level
-  [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 already accepts for rotation:
-  the server cannot see which wrap opened the vault, so this gate is enforced by the **client** choosing to
-  reach this screen only from an unlocked session, not by anything the server can verify. Everything else in
-  steps 4–8 is identical (step 4 does not run).
-- **E1 — the attestation signature is missing where it is required:** not applicable — the server never
-  *requires* it; its presence is what makes the change a verified deliberate one instead of a
-  session-authenticated one. Both are accepted; see Quality notes for why that is safe.
+- **E1 — the current password and Secret Key do not open the account's floor (step 4):** refused **on the
+  device**, before any derivation and before any request. The actor may retry. This is the half of the proof a
+  blind server cannot make: it holds only ciphertext there. It also refuses a *stale* proof — a floor rewritten
+  underneath this session — because the opened Master Key is compared against the one the vault holds, not
+  merely required to decrypt.
 - **E2 — the attestation signature does not verify:** the caller typed the current password wrong. Refused;
-  nothing is written. The actor may retry with the current password.
+  nothing is written. The actor may retry with the current password. A request carrying **no** attestation is
+  not a flow at all: the field is required by the contract, so it is refused at the boundary with `400`.
 - **E3 — the account has no `PASSWORD` floor to rewrite:** refused; nothing is written — mirrors
   [uc.account.rotate-keys](uc.account.rotate-keys.md)'s `rotation_unavailable` shape for the same reason (a
   half-applied credential change is a lockout, not a degraded state).
 
 ## Quality notes
 
-- **Two entry points, one mechanism — not two mechanisms.** The only difference between "I know my old
-  password" and "I forgot it" is whether an attestation signature rides along; the server-side rewrite (step 7)
-  is identical either way. This mirrors [uc.account.recover-access](uc.account.recover-access.md), which is
-  also one mechanism reached differently (a mailed token instead of a live session).
+- **One entry point, and the proof has two halves checked in two places.** This screen mints a **cold
+  credential** — a `PASSWORD` floor plus the `auth_public_key` derived from it — so
+  [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 applies to it exactly as it
+  applies to rotation: it may not be reachable without the material an attacker lacks. The attestation is the
+  half the server can check for itself (it holds `auth_public_key`); the Secret Key is the half only the device
+  can check (the server holds ciphertext), so the client opens the current floor with it first. **Neither half
+  is optional.** This flow once offered a second entry point — *"I don't remember my current password"* — which
+  sent no attestation and proved no Secret Key; a stolen unlocked phone could mint a credential for itself, and
+  from there rotation's own gate passed for the attacker. It is deleted, not gated: what a forgotten password
+  needs is [uc.account.recover-access](uc.account.recover-access.md), which proves control of the address
+  instead of waiving the proof.
 - **The attestation is a signed statement, not a fresh server challenge.** It signs the **new** auth public key
   directly, not a server-minted nonce — there is nothing to replay it *into*: a captured signature only ever
   re-authorizes the exact new key it was made for, which the legitimate actor already approved. This is
@@ -79,7 +92,7 @@
   Every *other* session is still cut, because the new password is the only credential that should open a new
   one from here on. Mirrors [uc.account.rotate-keys](uc.account.rotate-keys.md)'s `presentedAccessToken`-spared
   revoke, not [uc.account.recover-access](uc.account.recover-access.md)'s revoke-everything.
-- **`DEVICE_KEY`/`DEVICE` wraps still die, on both entry points.** They carry no password input, so a wrap
+- **`DEVICE_KEY`/`DEVICE` wraps still die.** They carry no password input, so a wrap
   minted under the *old* password would keep granting password-less (or Secret-Key-less) entry after a change
   meant to close exactly that door — the same reasoning
   [uc.account.recover-access](uc.account.recover-access.md) already applies. The acting device may immediately
@@ -95,17 +108,20 @@
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** You can change your password any time you're signed in — you don't need to wait for a "forgot
-password" email. If you remember your current password, enter it along with your Secret Key and your new
-password. If you've forgotten your current password but you're still signed in (for example your phone
-remembered you), you only need your Secret Key. Either way, your other devices are signed out and will need
-the new password to sign back in — this one stays signed in and just asks you to reconfirm you want it
-remembered.
+password" email. You need three things: your current password, your Secret Key from the Emergency Kit, and the
+new password. Both of the first two are checked on your device before anything is sent, so a wrong one costs
+you a retry and nothing else. If you've genuinely forgotten your current password, use the reset-by-email
+route instead — being signed in is not enough on its own, on purpose: it is also all a thief with your unlocked
+phone would have. Your other devices are signed out and will need the new password to sign back in — this one
+stays signed in and just asks you to reconfirm you want it remembered.
 
 **DE —** Du kannst dein Passwort jederzeit ändern, während du angemeldet bist — du musst nicht auf eine
-"Passwort vergessen"-Mail warten. Wenn du dein aktuelles Passwort noch weißt, gib es zusammen mit deinem
-Secret Key und deinem neuen Passwort ein. Hast du dein aktuelles Passwort vergessen, bist aber noch angemeldet
-(zum Beispiel hat dein Handy dich sich gemerkt), brauchst du nur deinen Secret Key. So oder so werden deine
-anderen Geräte abgemeldet und müssen sich mit dem neuen Passwort neu anmelden — dieses Gerät bleibt angemeldet
+"Passwort vergessen"-Mail warten. Du brauchst drei Dinge: dein aktuelles Passwort, deinen Secret Key aus dem
+Notfall-Kit und das neue Passwort. Die ersten beiden werden auf deinem Gerät geprüft, bevor irgendetwas
+gesendet wird — ein Tippfehler kostet dich also einen zweiten Versuch und sonst nichts. Hast du dein aktuelles
+Passwort wirklich vergessen, nimm den Weg über die E-Mail-Zurücksetzung: angemeldet zu sein reicht hier
+absichtlich nicht — genau das hätte auch jemand, der dein entsperrtes Handy in die Hand bekommt. Deine anderen
+Geräte werden abgemeldet und müssen sich mit dem neuen Passwort neu anmelden — dieses Gerät bleibt angemeldet
 und fragt dich nur, ob es sich weiter merken soll.
 
 ## Related
@@ -119,5 +135,5 @@ und fragt dich nur, ob es sich weiter merken soll.
   after (step 8), and every other device runs on its next sign-in
 - [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) — why a new password means a new auth
   keypair
-- [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) — the client-side cold-credential gate
-  this flow's A1 mirrors
+- [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — the cold-credential gate
+  this flow runs, in the same shared implementation rotation runs
