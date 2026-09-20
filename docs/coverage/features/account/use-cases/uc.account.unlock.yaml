@@ -7,9 +7,26 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/unlock/unlock.test.ts] }
   - id: secret-key-import-from-kit
-    text: The Secret Key can be imported from the Emergency Kit (upload the kit file or scan its QR), decoded on-device via parseKit (cr-0007).
+    text: >
+      The Secret Key can be typed, or imported from the Emergency Kit three ways — upload the kit file, scan its
+      QR, or paste its token in place of the key — all decoded on-device via parseKit, through ONE shared control
+      that every screen asking for a Secret Key uses (cr-0007, cr-shared-secret-key-field).
     coverage:
-      web: { unit: [src/features/account/emergencyKit/emergencyKit.test.ts] }
+      web:
+        unit:
+          - src/features/account/emergencyKit/emergencyKit.test.ts
+          - src/shared/ui/SecretKeyField.test.ts
+          - src/views/TenantJoinView.kitImport.test.ts
+  - id: kit-from-another-account-warns
+    text: >
+      Where the screen knows which account it is for, an imported kit carrying a different e-mail WARNS and does
+      not block — the key is still applied and the submit still goes through, because only the wrap can judge a
+      key and a kit's e-mail is metadata.
+    coverage:
+      web:
+        unit:
+          - src/shared/ui/SecretKeyField.test.ts
+          - src/views/TenantJoinView.kitImport.test.ts
   - id: wrong-credentials-generic-failure
     text: A wrong password or wrong Secret Key fails with a generic unlock failure (AEAD tag mismatch) and holds no key material; the server is uninvolved (E1).
     coverage:
