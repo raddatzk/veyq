@@ -74,7 +74,7 @@ sealed interface DownloadOutcome {
 }
 
 sealed interface MediaExifOutcome {
-    /** The media's sealed heavy EXIF (opaque base64), or null when none was sealed. */
+    /** The media's sealed panel bundle (opaque base64), or null when none was sealed. */
     data class Found(val wrappedExif: String?) : MediaExifOutcome
     object NoMedia : MediaExifOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
 }
@@ -331,7 +331,7 @@ class MediaHandler(
         return ListMediaOutcome.Page(rows, mediaRevision, deleteRevision, mediaIds)
     }
 
-    /** The media's lazy heavy EXIF tier for the lightbox. Non-member or unknown media → NoMedia (a 404, no reveal). */
+    /** The media's lazy, panel-only tier for the detail panel. Non-member or unknown media → NoMedia (a 404, no reveal). */
     fun mediaExif(userId: String, scopeId: String, mediaId: String): MediaExifOutcome {
         if (!store.isMember(userId, scopeId)) return MediaExifOutcome.NoMedia
         val media = store.findMedia(scopeId, mediaId) ?: return MediaExifOutcome.NoMedia

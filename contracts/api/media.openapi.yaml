@@ -497,9 +497,11 @@ paths:
       operationId: getMediaExif
       summary: A media's sealed EXIF bundle (lazy, opaque) — for the lightbox detail.
       description: >
-        Returns the media's `wrappedExif`: the heavy EXIF bundle (camera, lens, aperture, ISO, orientation,
-        dimensions, …) sealed client-side under the Memory's `K_mem` (opaque base64), or null when none was
-        sealed at upload. Deliberately **not** part of `listNodeMedia` (which stays constant-small): the lightbox
+        Returns the media's `wrappedExif`: the **lazy, panel-only** metadata bundle sealed client-side under the
+        Memory's `K_mem` (opaque base64), or null when none was sealed at upload. Its contents are a versioned
+        **client-only** shape and deliberately not enumerated here — the server never parses it, so listing the
+        fields would only go stale. What defines the tier is where it is read (one item's detail panel, on
+        demand) and not what is in it. Deliberately **not** part of `listNodeMedia` (which stays constant-small): the lightbox
         fetches + unseals this only when an item opens. The listed essentials — geometry, capture time, and GPS —
         live in `wrappedMeta`, not here. Operator-blind — the server stores + returns the ciphertext verbatim,
         never inspecting the fields inside.
@@ -859,10 +861,10 @@ components:
         wrappedExif:
           type: [string, "null"]
           description: >
-            The original's **heavy EXIF bundle** (camera, lens, aperture, ISO, orientation, dimensions, …) sealed
-            under the Memory's `K_mem` (opaque base64). Stored verbatim, **not** returned by `listNodeMedia` (kept
-            constant-small) — the lightbox lazy-loads it via `getMediaExif`. Absent when the source carried no
-            readable EXIF. The listed essentials — capture time and GPS — live in `wrappedMeta`, not here. Larger,
+            The original's **lazy, panel-only** metadata bundle sealed under the Memory's `K_mem` (opaque
+            base64) — a versioned client-only shape, not enumerated here because the server never parses it.
+            Stored verbatim, **not** returned by `listNodeMedia` (kept constant-small); the lightbox lazy-loads
+            it via `getMediaExif`. Absent when the source carried nothing to seal. The listed essentials — capture time and GPS — live in `wrappedMeta`, not here. Larger,
             so a wider cap.
           contentEncoding: base64
           maxLength: 16384
@@ -1088,9 +1090,9 @@ components:
         wrappedExif:
           type: [string, "null"]
           description: >
-            The original's heavy EXIF bundle sealed under `K_mem` (opaque base64); the lightbox unwraps it to
-            show camera/lens/exposure. Null when none was sealed at upload. Capture time + GPS live in
-            `wrappedMeta`, not here.
+            The original's lazy, panel-only metadata bundle sealed under `K_mem` (opaque base64); the lightbox
+            unwraps it to fill the detail panel. Null when none was sealed at upload. The listed essentials —
+            geometry, capture time, GPS and the resolved place name — live in `wrappedMeta`, not here.
           contentEncoding: base64
           maxLength: 16384
           example: ZXhpZi1jaXBoZXJ0ZXh0

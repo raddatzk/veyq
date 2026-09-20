@@ -480,7 +480,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(dds).toContain('f/1.8')
     expect(dds).toContain('1/125 s')
     expect(dds).toContain('200')
-    expect(dds).toContain('48.137000, 11.575000') // coordinates as text (a map is a later CR)
+    expect(dds).toContain('48.137000, 11.575000') // the coordinate as text; the map beside it is asserted below
   })
 
   // B1.2 — the rows this CR adds. Asserted on the VALUES, so a label typo is a separate failure from a field

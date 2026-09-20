@@ -93,6 +93,14 @@ is [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md). This us
   on demand) was rejected: it would make `derivedMode: 'auto'` re-medoid an N-fetch operation on every upload.
   Still sealed under `K_mem`, still operator-blind; no backfill — older media without the listed tier don't
   contribute to the medoid (exactly as they don't to date-`auto`).
+- **A per-PHOTO place name is a different shape, and does not reopen the rejection above.** What was rejected is
+  N per-item fetches to compute **one** answer (the medoid), repeated on **every open**. The detail panel
+  resolves **one** name for the **one** photo in front of the user, **once ever**, and seals it into the same
+  listed tier the medoid already reads — so the second open is free and every later reader gets it from the
+  tier. Different frequency, different trigger, same boundary: still client-direct, still identity-free, still
+  gated on the same consent, and now under an explicit request discipline
+  ([ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md) § *Request discipline*) that the
+  medoid path never needed because it never asked per item.
 
 ## What this means for you / Was das für dich bedeutet
 

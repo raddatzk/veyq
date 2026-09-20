@@ -31,9 +31,23 @@
    the page as the demuxer needs them (no whole-blob wait). Where no Service Worker is available it falls back to
    fetching + decrypting the whole original into a typed blob URL. A **play badge** marks a video's grid tile
    (#104/#105).
-4. **Download:** an explicit download fetches the **original** (the only pristine, full-resolution copy) and
+4. **The detail panel — what the photo itself knows.** Opening an item also opens a panel beside it, filled
+   from **two** sealed sources: the **listed tier**, already in hand from the listing (capture time, GPS and a
+   resolved place name), and the **panel bundle**, fetched lazily for this one item. Between them the panel
+   shows the file (its original name, its plaintext size, its format), the camera and lens, the exposure
+   (focal length and its 35 mm equivalent, aperture, shutter, ISO, exposure compensation, whether the flash
+   fired), the provenance an editor wrote in (software, author, copyright, rating, title, description) and the
+   geo block (altitude, the direction the camera faced, the fix's own accuracy). **Every row is present only
+   when the photo carries it** — a phone snapshot shows a handful, a raw file from a camera shows twenty, and
+   neither is a special case. Where the user has consented to maps ([ADR 0018](../../../decisions/0018-map-tiles-provider-neutrality.md))
+   the coordinate is joined by a **resolved place name** above it and a small map below, with a needle for the
+   view direction; without consent the rows stand alone and **no tile and no coordinate leave the device**.
+   The place name is resolved **once per place** and sealed — see
+   [uc.memory.place](uc.memory.place.md) and [ADR 0016](../../../decisions/0016-geocoding-provider-neutrality.md)
+   § *Request discipline*.
+5. **Download:** an explicit download fetches the **original** (the only pristine, full-resolution copy) and
    saves it.
-5. **Favorite:** the header toggle pins / unpins the Memory ([en.memory.favorites](../enablers/en.memory.favorites.md)).
+6. **Favorite:** the header toggle pins / unpins the Memory ([en.memory.favorites](../enablers/en.memory.favorites.md)).
 
 ## Alternate / exception flows
 
@@ -67,7 +81,11 @@
 A **video** shows a small ▶ badge on its tile — open it and press play to watch it right there. Everything is
 decrypted on **your own device** — the server only ever stores scrambled files and never sees your pictures or
 videos. Pictures are ordered by **when they were taken**, newest first unless you flip the order — and one that
-is still uploading already sits in its right place, so nothing jumps around once it finishes. To keep it quick, the grid and the large view use **compact copies your device made**; the
+is still uploading already sits in its right place, so nothing jumps around once it finishes. Open a picture
+and a panel beside it tells you what the picture knows about itself: the file and its size, the camera and
+lens, how it was exposed, who made it — and, if it was taken with location on, **where**, as a place name and a
+small map rather than a pair of numbers. Nothing you did not give it appears there, and none of it is ever
+readable by the server. To keep it quick, the grid and the large view use **compact copies your device made**; the
 **full-quality original is only fetched when you actually download it** — and a video is **streamed piece by
 piece as you watch**, so only the parts you actually play are fetched, not the whole file. Journal, chapters,
 maps and playlists come in later steps.
@@ -77,7 +95,11 @@ durch die anderen zu blättern. Ein **Video** zeigt ein kleines ▶-Abzeichen au
 drücke Play, um es direkt dort anzusehen. Alles wird auf **deinem eigenen Gerät** entschlüsselt — der Server
 speichert nur verschlüsselte Dateien und sieht deine Bilder und Videos nie. Sortiert wird nach **Aufnahmezeit**,
 neueste zuerst, solange du die Richtung nicht umdrehst — und was noch hochlädt, steht schon an seiner richtigen
-Stelle, sodass nach dem Fertigwerden nichts mehr springt. Damit es flott bleibt, nutzen das
+Stelle, sodass nach dem Fertigwerden nichts mehr springt. Öffnest du ein Bild, erzählt dir eine Leiste daneben,
+was das Bild über sich selbst weiß: die Datei und ihre Größe, Kamera und Objektiv, wie belichtet wurde, wer es
+gemacht hat — und, wenn es mit eingeschaltetem Ort aufgenommen wurde, **wo**, als Ortsname und kleine Karte
+statt als Zahlenpaar. Es steht dort nichts, was du nicht selbst mitgegeben hast, und nichts davon kann der
+Server lesen. Damit es flott bleibt, nutzen das
 Raster und die Großansicht **kompakte Kopien, die dein Gerät erstellt hat**; das **Original in voller Qualität
 wird nur geladen, wenn du es wirklich herunterlädst** — und ein Video wird beim Ansehen **Stück für Stück
 gestreamt**, sodass nur die tatsächlich abgespielten Teile geladen werden, nicht die ganze Datei. Journal,

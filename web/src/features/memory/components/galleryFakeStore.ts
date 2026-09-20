@@ -69,7 +69,7 @@ export function galleryFakeStore() {
       deleteRevision: 0,
       mediaIds: null,
     })),
-    // The heavy EXIF, echoed only through the exif endpoint (kept out of the list) — operator-blind ciphertext.
+    // The panel bundle, echoed only through the exif endpoint (kept out of the list) — operator-blind ciphertext.
     getMediaExif: vi.fn(async ({ mediaId }: any) => ({
       wrappedExif: media.find((m) => m.mediaId === mediaId)?.wrappedExif ?? null,
     })),

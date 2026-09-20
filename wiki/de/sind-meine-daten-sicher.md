@@ -22,7 +22,9 @@ stehlen — nur unverständlicher Datenmüll:
 - deine **Tagebuchtexte**,
 - die **sensiblen Details**: Titel, Bildunterschriften, Beschreibungen, Orte, die abgebildeten
   Personen, Schlagwörter,
-- **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand.
+- **wo** ein Foto aufgenommen wurde (GPS) und **wann** es entstand,
+- der **Dateiname** selbst und alles, was die Kamera ins Bild geschrieben hat: Kamera und Objektiv, wie
+  belichtet wurde, wer es gemacht hat, und der Ortsname, der neben den Koordinaten steht.
 
 ## Was wir trotzdem sehen — und warum
 

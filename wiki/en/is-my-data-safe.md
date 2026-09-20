@@ -19,7 +19,9 @@ database:
 - your **photos and videos** (and the smaller preview versions),
 - your **journal text**,
 - the **sensitive details**: titles, captions, descriptions, places, the people in them, tags,
-- **where** a photo was taken (GPS) and **when** it was captured.
+- **where** a photo was taken (GPS) and **when** it was captured,
+- the **file's own name**, and everything the camera wrote into the picture: the camera and lens, how it was
+  exposed, who made it, and the place name shown beside the coordinate.
 
 ## What we *can* still see — and why
 

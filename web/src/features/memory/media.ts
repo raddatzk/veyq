@@ -354,7 +354,7 @@ async function probeDims(source: AddMediaSource, deriver: MediaDeriver): Promise
 
 /**
  * Read an image's original bytes with `exifr` (HEIC/JPEG/TIFF/PNG; GPS auto-decoded DMS→decimal) and split the
- * result into the **capture time** (epoch-ms, cr-0066) and the **EXIF bundle** (camera/lens/gps/dims, date-free).
+ * result into the **capture time** (epoch-ms, cr-0066) and the **panel bundle** ([MediaExif], date-free).
  * Best-effort: non-images, unreadable/absent EXIF, or a decode error → `{ capturedAt: undefined, exif: null }`
  * (the item still uploads). Never leaves the device in the clear — the caller seals both.
  */
@@ -405,7 +405,8 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
 /**
  * Seal the two metadata tiers under `K_mem` (best-effort, operator-blind): the always-listed **metadata** tier
  * (`{v,w,h,capturedAt,capturedAtSource,gpsLat,gpsLng}` — geometry + the EXIF date, else the file's creation date,
- * + GPS) and the lazy **EXIF** tier (camera/lens/dims). Each tier is null when its source is absent.
+ * + GPS + a resolved place name) and the lazy, panel-only **EXIF** tier ([MediaExif]). Each tier is null when
+ * its source is absent.
  */
 async function sealMetadata(
   source: AddMediaSource,

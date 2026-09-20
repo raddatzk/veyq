@@ -92,7 +92,8 @@ const error = ref(false)
 const downloading = ref(false)
 // The listed-metadata tier (cr-0066/0068): unsealed instantly from the listed item (no fetch). Null = none sealed.
 const captured = ref<MediaMeta | null>(null)
-// The heavy EXIF (cr-0064): camera/lens, lazy-loaded per item via the exif endpoint. Null = none/undecoded.
+// The panel bundle (cr-0064): everything the detail panel shows beyond the listed tier, lazy-loaded per item
+// via the exif endpoint. What is in it is [MediaExif]'s business, not this comment's. Null = none/undecoded.
 const exif = ref<MediaExif | null>(null)
 const detailsLoading = ref(false)
 const isDetailsOpen = ref(false) // mobile bottom-sheet toggle (the design's swipe handle)
@@ -138,8 +139,9 @@ async function loadPreview() {
 // removes the item and the array shifts, so the same index now holds a different item (its mediaId changes).
 watch(() => item.value?.mediaId, loadPreview, { immediate: true })
 
-// When the item changes: unseal the listed metadata tier (date + GPS) **instantly** from the listed item (no
-// fetch), then lazily fetch + unseal the heavy EXIF tier (camera/lens) via the exif endpoint (never listed).
+// When the item changes: unseal the listed tier (date + GPS + place) **instantly** from the listed item (no
+// fetch), then lazily fetch + unseal the panel bundle via the exif endpoint (never listed). Finally, resolve
+// the place name if this photo has a coordinate and no name yet — see `resolvePlaceForCurrent` for its gates.
 async function loadDetails() {
   exif.value = null
   isEditingCapturedAt.value = false // close the editor when the item changes

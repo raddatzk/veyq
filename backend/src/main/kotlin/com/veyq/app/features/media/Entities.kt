@@ -108,7 +108,17 @@ class MediaEntity : PanacheEntityBase {
     @Column(name = "wrapped_meta")
     var wrappedMeta: String? = null
 
-    /** The original's heavy EXIF bundle sealed under `K_mem` (opaque base64); lazy-loaded by the lightbox, never listed (cr-0064; GPS moved to `wrappedMeta` in cr-0068). */
+    /**
+     * The original's **lazy, panel-only** metadata bundle sealed under `K_mem` (opaque base64); fetched per item
+     * when a detail panel opens, never listed (cr-0064). A versioned **client-only** shape the server never
+     * parses, so what belongs in it is decided client-side and is deliberately not enumerated here — an
+     * enumeration in a place that cannot read the thing only goes stale. The listed essentials (geometry,
+     * capture time, GPS, the resolved place name) live in `wrappedMeta`; GPS moved there in cr-0068.
+     *
+     * This KDoc is the **live** copy of that rule. `V15__media_metadata.sql` and `V18__media_meta.sql` describe
+     * an older split and are deliberately left untouched: an applied Flyway migration is never edited, not even
+     * in a comment, because the checksum check fails startup on every instance that already ran it.
+     */
     @Column(name = "wrapped_exif")
     var wrappedExif: String? = null
 
