@@ -11,6 +11,7 @@ import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../features/memory/location'
 import { isHttpStatus, HttpStatus } from '../shared/httpError'
 import { resetTree, loadTree } from '../features/memory/treeStore'
+import { resetCovers } from '../features/memory/coverStore'
 import { clearFavorites, loadFavoritesFor } from './favoritesStore'
 import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features/tasks/grantDeliveryPolling'
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
@@ -118,8 +119,9 @@ export async function enterScope(token: string): Promise<void> {
     activeSpace.tenantId = opened.tenantId
     activeSpace.kind = opened.kind
     activeSpace.name = opened.name ?? null
-    resetTree() // no stale tree/favorites bleed across scopes — the view reloads for the new scope
+    resetTree() // no stale tree/favorites/covers bleed across scopes — the view reloads for the new scope
     clearFavorites()
+    resetCovers() // …and every decrypted cover URL is revoked rather than left dangling on the old scope
     activeSpace.status = 'ready'
     // cr-0114: refresh the tenant's terms status so the router accept-gate knows if a (re-)accept is due. The
     // tenant is the same regardless of which scope (tenant/personal/group) is open, and terms are member-readable.
@@ -161,6 +163,7 @@ export async function refreshActiveScope(): Promise<void> {
   activeSpace.name = opened.name ?? null
   resetTree()
   clearFavorites()
+  resetCovers() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
   await loadTree()
   const eks = activeEpochKeys()
   if (eks) await loadFavoritesFor(activeSpace.scopeId, eks)
@@ -186,6 +189,7 @@ export function clearActiveSpace(): void {
   epochKeys = null
   scopeKey = null
   clearFavorites()
+  resetCovers() // sign-out / re-lock: decrypted cover thumbnails must not outlive the keys that opened them
 }
 
 /** A 404 from the scope endpoints means no tenant claims this Host (`tenant_not_found`). */
