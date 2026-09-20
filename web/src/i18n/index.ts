@@ -524,6 +524,9 @@ const en = {
     themeSystem: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
+    // Axis-neutral "follow the device": the language pickers used to borrow shell.themeSystem, which tied a
+    // language label to the theme block's wording for no reason.
+    systemDefault: 'System',
   },
   groups: {
     createTitle: 'New group',
@@ -1417,6 +1420,7 @@ const de: typeof en = {
     themeSystem: 'System',
     themeLight: 'Hell',
     themeDark: 'Dunkel',
+    systemDefault: 'System',
   },
   groups: {
     createTitle: 'Neue Gruppe',

@@ -14,9 +14,22 @@ vi.mock('../../features/spaces/scopes', () => ({
   openMyTenantIcon: vi.fn().mockResolvedValue(null),
 }))
 
+// The shared cover store — the rail reads it and holds no key API of its own, which is the property phase 1
+// exists for. Driven directly here so a favorite can be given a cover without opening a scope.
+const storeCovers = vi.hoisted(() => ({ map: new Map<string, { url: string; crop: unknown }>() }))
+vi.mock('../../features/memory/coverStore', () => ({
+  // A plain getter, not a `computed`: the hoisted holder is not reactive, so a computed would cache the first
+  // map it saw and every later test would assert against the previous one's covers.
+  covers: { get value() { return storeCovers.map } },
+  ensureCovers: vi.fn(),
+  resetCovers: vi.fn(),
+}))
+
 import AppSidebar from './AppSidebar.vue'
 import { listMyTenants } from '../../features/spaces/scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
+import { treeStore } from '../../features/memory/treeStore'
+import { favoritesStore } from '../../app/favoritesStore'
 
 const i18n = createI18n({
   legacy: false,
@@ -172,5 +185,54 @@ describe('AppSidebar tenant switcher', () => {
     expect(assign).toHaveBeenCalledWith('https://verein.localhost')
 
     assign.mockRestore()
+  })
+})
+
+// uc.memory.cover promises a chosen cover is shown "identically wherever the Memory appears". The rail is the
+// fourth such surface and was never wired: it drew a hardcoded glyph whatever cover the Memory carried. The
+// tell was in the stylesheet — `.sidebar-favorite-cover .memory-cover-image` and three `.mobile-nav-favorite`
+// rules existed with nothing in the markup matching them.
+describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
+  const MEMORY = {
+    id: 'n1', name: 'Rom 2026', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0,
+    wrappedContentKey: 'k', wrappedMeta: 'm',
+  }
+
+  beforeEach(() => {
+    treeStore.nodes = [MEMORY] as unknown as typeof treeStore.nodes
+    favoritesStore.ids = new Set(['n1'])
+    storeCovers.map = new Map([['n1', { url: 'blob:cover-1', crop: { x: 0, y: 0, w: 1, h: 1 } }]])
+  })
+  afterEach(() => {
+    treeStore.nodes = []
+    favoritesStore.ids = new Set()
+    storeCovers.map = new Map()
+  })
+
+  it('renders the cover image in the desktop rail, not a glyph', async () => {
+    const wrapper = await mountAt('')
+    const tile = wrapper.get('.sidebar-favorite-link .sidebar-favorite-cover')
+    const img = tile.find('img')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toBe('blob:cover-1')
+    expect(img.attributes('alt')).toBe('Rom 2026')
+  })
+
+  it('falls back to the placeholder for a favorite with no cover — E1, no auto-cover', async () => {
+    storeCovers.map = new Map()
+    const wrapper = await mountAt('')
+    const tile = wrapper.get('.sidebar-favorite-link .sidebar-favorite-cover')
+    expect(tile.find('img').exists()).toBe(false)
+    expect(tile.find('.memory-cover-image').exists()).toBe(true) // the component's own placeholder, not a branch here
+  })
+
+  it('the mobile row carries the cover tile and the class its stylesheet has been waiting for', async () => {
+    const wrapper = await mountAt('')
+    await wrapper.get('.mobile-navigation-button').trigger('click')
+    await flushPromises()
+
+    const row = wrapper.findAll('.mobile-nav-item').find((i) => i.text().includes('Rom 2026'))!
+    expect(row.classes()).toContain('mobile-nav-favorite')
+    expect(row.get('.sidebar-favorite-cover img').attributes('src')).toBe('blob:cover-1')
   })
 })

@@ -126,7 +126,14 @@ and it names the sites rather than merely raising doubt. cr-0171's refine asked 
 which, and not knowing is the whole miss. Two conditions:
 - **Agreement is worth exactly what the independence is worth.** Two angles that share a blind spot agree, and
   the agreement then reads as confirmation — worse than a single angle, because it manufactures confidence.
-  `grep -c` against `grep -rc` is one angle twice: cost paid, nothing bought.
+  `grep -c` against `grep -rc` is one angle twice: cost paid, nothing bought. **Independence in KIND is not
+  independence in SUBJECT, and a CR that retires more than one thing needs a key per thing.**
+  `cr-shell-preferences-into-profile-menu` removed two top-bar controls and asked from two properly different
+  kinds of key — the prose claim and the symbols — but both were keyed on *theme*, so everything the codebase
+  called *the gear* went unfound: an ADR decision the CR had declared untouched, four comments in the hub's own
+  view, and a style citation. One `grep -rni gear` at refine would have listed all six. The tell is arithmetic,
+  not judgement: count the things the CR retires, count the keys, and if the second number is smaller the
+  sweep has a hole shaped like the difference.
 - **Spend it where the number decides something** — a go/no-go call, or a predicate that *is* the CR's own rule
   ("what counts as a container" was ADR 0044's decision, measured by a probe that quietly re-implemented it).
   Not on every grep: this repo dies of ceremony faster than of arithmetic.

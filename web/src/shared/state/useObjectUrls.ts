@@ -3,7 +3,17 @@
 // Decrypted media/cover bytes are shown as `blob:` object URLs; each MUST be revoked exactly once — on replace,
 // on drop, on unmount — or the tab leaks the decrypted blob. Hand-rolling that dance at every call site was the
 // bug surface this replaces: the URL is minted ONLY inside here, and the composable auto-revokes on unmount.
-import { ref, onBeforeUnmount, type Ref } from 'vue'
+import { ref, onBeforeUnmount, getCurrentInstance, type Ref } from 'vue'
+
+/**
+ * Register the auto-revoke **only when there is a component to unmount**. A module-level store (the cover cache)
+ * has no instance, and calling `onBeforeUnmount` outside one both warns and silently never fires — so without
+ * this guard a non-component caller would have to hand-roll its own revoke dance, which is the second
+ * implementation this composable exists to prevent. Such a caller owns its lifetime and calls `clear()` itself.
+ */
+function revokeOnUnmount(clear: () => void): void {
+  if (getCurrentInstance()) onBeforeUnmount(clear)
+}
 
 /** A single owned object URL: `set` revokes the previous before minting the next; unmount revokes the last one. */
 export function useObjectUrl(): {
@@ -20,7 +30,7 @@ export function useObjectUrl(): {
     clear()
     if (blob) url.value = URL.createObjectURL(blob)
   }
-  onBeforeUnmount(clear)
+  revokeOnUnmount(clear)
   return { url, set, clear }
 }
 
@@ -57,6 +67,6 @@ export function useObjectUrls(): {
     for (const u of urls.value.values()) URL.revokeObjectURL(u)
     urls.value = new Map()
   }
-  onBeforeUnmount(clear)
+  revokeOnUnmount(clear)
   return { urls, get, set, adopt, drop, clear }
 }
