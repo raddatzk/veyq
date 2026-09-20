@@ -1,0 +1,133 @@
+// @vitest-environment happy-dom
+import { describe, it, expect, vi } from 'vitest'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
+
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
+import { mount } from '@vue/test-utils'
+import { createI18n } from 'vue-i18n'
+import PrimeVue from 'primevue/config'
+import ProfileMenu from './ProfileMenu.vue'
+import { useThemeState, setThemePreference } from '../../shared/state/useThemeState'
+import { localePreference, setLocalePreference } from '../../i18n'
+
+const i18n = createI18n({
+  legacy: false,
+  locale: 'en',
+  missingWarn: false,
+  fallbackWarn: false,
+  messages: {
+    en: {
+      shell: {
+        theme: 'Appearance',
+        themeSystem: 'System',
+        themeLight: 'Light',
+        themeDark: 'Dark',
+        systemDefault: 'System',
+        language: 'Language',
+        settings: 'Settings',
+        logout: 'Sign out',
+      },
+    },
+  },
+})
+
+// A pass-through stub for the teleporting PrimeVue TieredMenu: renders the model's top rows and, one level
+// down, each row's submenu items as buttons that run `command`. `toggle` stands in for the popup so the
+// trigger's wiring is observable.
+const toggle = vi.fn()
+const TieredMenuStub = {
+  props: ['model'],
+  methods: { toggle },
+  template: `<ul>
+    <li v-for="(it, i) in model" :key="i">
+      <button class="menu-item" @click="it.command && it.command()">{{ it.label }}</button>
+      <ul v-if="it.items">
+        <li v-for="(sub, j) in it.items" :key="j">
+          <button class="sub-item" :class="sub.icon" :data-parent="it.label" @click="sub.command && sub.command()">
+            {{ sub.label }}
+          </button>
+        </li>
+      </ul>
+    </li>
+  </ul>`,
+}
+
+const mountMenu = () =>
+  mount(ProfileMenu, { global: { plugins: [i18n, PrimeVue], stubs: { TieredMenu: TieredMenuStub } } })
+
+const subItemsOf = (w: ReturnType<typeof mountMenu>, parent: string) =>
+  w.findAll(`.sub-item[data-parent="${parent}"]`)
+
+describe('ProfileMenu appearance quick-picker', () => {
+  it('offers a labelled System/Light/Dark submenu and applies the picked one', async () => {
+    setThemePreference('system')
+    const { themePreference } = useThemeState()
+    const w = mountMenu()
+
+    const items = subItemsOf(w, 'Appearance')
+    expect(items.map((i) => i.text())).toEqual(['System', 'Light', 'Dark'])
+
+    await items[2].trigger('click') // Dark
+    expect(themePreference.value).toBe('dark')
+    await items[0].trigger('click') // System
+    expect(themePreference.value).toBe('system')
+  })
+
+  it('marks the active entry with a check, so the submenu says which mode is on', async () => {
+    setThemePreference('light')
+    const w = mountMenu()
+    const checked = subItemsOf(w, 'Appearance').filter((i) => i.classes('pi-check'))
+    expect(checked.map((i) => i.text())).toEqual(['Light'])
+    setThemePreference('system')
+  })
+
+  it('the profile button is the menu trigger', async () => {
+    toggle.mockClear()
+    const w = mountMenu()
+    await w.find('.profile-button').trigger('click')
+    expect(toggle).toHaveBeenCalledOnce()
+  })
+})
+
+describe('ProfileMenu language quick-picker', () => {
+  it('still applies a locale, and its "system" row no longer borrows the theme key', async () => {
+    setLocalePreference('en')
+    const w = mountMenu()
+
+    const items = subItemsOf(w, 'Language')
+    expect(items.map((i) => i.text())).toEqual(['System', 'English', 'Deutsch'])
+
+    await items[2].trigger('click') // Deutsch
+    expect(localePreference().value).toBe('de')
+    await items[0].trigger('click') // System
+    expect(localePreference().value).toBe('system')
+    setLocalePreference('en')
+  })
+})
+
+// The property this CR exists for, and the one that rots first — the next surface that wants a gear adds a
+// second door. Asserted over the source tree rather than a mounted shell, because the predicate is about the
+// SET of navigations, which no single component can see. SettingsHubView is excluded by hand: its `back()` is
+// navigation INSIDE the hub, not a door into it. That one legitimate exception is why this is a test and not a
+// scripts/ guard; a second exception is the signal to promote it.
+describe('the shell offers exactly one door into the settings hub', () => {
+  const SRC = join(__dirname, '..', '..')
+  const DOOR = /push\(['"]\/settings['"]\)|to=["']\/settings["']/
+
+  const vueFilesUnder = (dir: string): string[] =>
+    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = join(dir, e.name)
+      if (e.isDirectory()) return vueFilesUnder(full)
+      return e.isFile() && e.name.endsWith('.vue') ? [full] : []
+    })
+
+  it('only ProfileMenu navigates to /settings', () => {
+    const doors = vueFilesUnder(SRC)
+      .filter((f) => !f.endsWith('SettingsHubView.vue'))
+      .filter((f) => DOOR.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(SRC, f))
+    expect(doors).toEqual(['components/app/ProfileMenu.vue'])
+  })
+})

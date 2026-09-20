@@ -135,8 +135,8 @@ onBeforeUnmount(() => {
 .uploads-tray {
   position: relative;
 }
-/* Match the sibling topbar icon buttons (theme, settings): transparent + borderless, hover tint only — not the
-   boxed border+surface look it carried before (cr-0058). Same 2.25rem (36px) square + radius as .topbar-icon-button. */
+/* Match the one sibling topbar icon button, .invitations-trigger: 2.25rem (36px) square, 0.5rem radius,
+   transparent + borderless, hover tint only — not the boxed border+surface look it carried before (cr-0058). */
 .uploads-trigger {
   position: relative;
   display: grid;
