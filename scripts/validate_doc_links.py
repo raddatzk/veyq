@@ -17,6 +17,13 @@ is **stripped before resolving**, so a dead anchor inside an existing file passe
 sentence (a `validate_*.py` cited in another guard's docstring) and a `§ section-name` citation are not
 markdown links, so nothing here — or anywhere — checks them.
 
+**Citing a LINE: write `#L60`, never `:60`.** The fragment is stripped before resolving, so
+`…/rotateKeys.ts#L60` resolves to the file *and* still carries the line for a reader — and it is the anchor
+GitHub renders. A `:60` is part of the path as far as this guard is concerned, so the link is reported dead.
+Measured, both forms in one probe file against this guard: the anchor passed, the colon failed. The cost of
+not knowing it is real — cr-change-password-cold-credential-gate shipped ten `:NNN` links in one file and
+reddened the run — so the recommendation lives here, where somebody reading the failure will find it.
+
 Scans every `*.md` under those roots for inline markdown links + images `[text](target)` / `![alt](target)`:
   - external (http/https/mailto/tel) and pure in-page anchors (`#section`) are skipped
   - a `#fragment` and a "title" suffix are stripped before resolving
