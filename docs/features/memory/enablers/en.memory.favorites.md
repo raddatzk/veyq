@@ -39,7 +39,10 @@ sealing the **set** is what hides which of them are favorited.
 2. Toggling a Memory's pin updates the in-memory set at once, then re-seals it (`symWrap` under `K_SC`) and
    `PUT`s the new blob. A failure reverts the optimistic change.
 3. The sidebar resolves the pinned ids against the **local decrypted tree** to render the Favorites section (a
-   pinned node that no longer exists simply drops).
+   pinned node that no longer exists simply drops) — each entry with its **name and its chosen cover**
+   ([uc.memory.cover](../use-cases/uc.memory.cover.md)), read from the shared cover store. The rail asks that
+   store which nodes are on screen and holds **no key material of its own**: the chain that opens a node's
+   `K_mem` stays out of an always-mounted component.
 
 ## Quality notes
 

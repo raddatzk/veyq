@@ -126,7 +126,14 @@ and it names the sites rather than merely raising doubt. cr-0171's refine asked 
 which, and not knowing is the whole miss. Two conditions:
 - **Agreement is worth exactly what the independence is worth.** Two angles that share a blind spot agree, and
   the agreement then reads as confirmation — worse than a single angle, because it manufactures confidence.
-  `grep -c` against `grep -rc` is one angle twice: cost paid, nothing bought.
+  `grep -c` against `grep -rc` is one angle twice: cost paid, nothing bought. **Independence in KIND is not
+  independence in SUBJECT, and a CR that retires more than one thing needs a key per thing.**
+  `cr-shell-preferences-into-profile-menu` removed two top-bar controls and asked from two properly different
+  kinds of key — the prose claim and the symbols — but both were keyed on *theme*, so everything the codebase
+  called *the gear* went unfound: an ADR decision the CR had declared untouched, four comments in the hub's own
+  view, and a style citation. One `grep -rni gear` at refine would have listed all six. The tell is arithmetic,
+  not judgement: count the things the CR retires, count the keys, and if the second number is smaller the
+  sweep has a hole shaped like the difference.
 - **Spend it where the number decides something** — a go/no-go call, or a predicate that *is* the CR's own rule
   ("what counts as a container" was ADR 0044's decision, measured by a probe that quietly re-implemented it).
   Not on every grep: this repo dies of ceremony faster than of arithmetic.
@@ -337,6 +344,26 @@ third is the reason this is worth the keystrokes:
 The bar is judgement, not ceremony: a decision that binds this CR's work, on a surface it touches. Not every
 ADR it cites for context, and never a second copy of the ADR's reasoning — a pointer, or the sentence stays as
 it is and takes its chances.
+
+### When a CR sorts the code into kinds, every kind gets a locator — including the ones it spares
+
+A sweep-shaped CR almost always opens by classifying: *"three mechanisms exist and only one is wrong"*, *"four
+call sites, four tests"*. The locator discipline above then gets applied to the kind being **changed** — that
+one is the subject, and the author reaches for `grep` naturally — while the kinds being **kept** are written as
+prose with one example each. Those are the rows that are wrong, because sparing a kind is a completeness claim
+too, and it is the one nothing re-checks: no phase touches it, no test covers it, no guard grades it.
+
+`cr-web-own-confirm-dialog` carried three commands for `window.confirm` and prose for its two siblings. The
+prose said the *dedicated dialog* mechanism was `DeleteNodeDialog.vue`; there were three of them, all
+hand-rolling the same shape — the sentence in the docs phase would have been written wrong from it. The same
+slip one size down, in the phase text: *"the four test files that stub `window.confirm`"* — there were five,
+and the fifth stubbed it because it **mounts** a component that calls it, which is exactly the class a prose
+count cannot see and `grep -rln` answers in one line.
+
+So: **a classification is an inventory, and every class in it ships with the command that produces its
+members** — the one being removed, the ones being kept, and the surfaces explicitly excluded. Cheap (the
+locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
+itself is wrong, which is worth finding at refine rather than in the retrospective.
 
 ### Coverage is part of the work, not a follow-up
 

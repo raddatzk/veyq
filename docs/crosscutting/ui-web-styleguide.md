@@ -100,6 +100,27 @@ or a one-off `1rem` label sitting in them.
   destructive actions show an in-progress state and **disable confirm/cancel/close + inputs while the mutation
   runs** (no double-submit).
 
+### Confirming a destructive action — three mechanisms, and the one that is retired
+
+- **The app's own dialog** — `shared/ui/ConfirmDialog.vue`, asked for through `shared/state/useConfirm`'s
+  `ask()`, which resolves `true`/`false` so the call site keeps its guard clause
+  (`if (!(await ask({ … }))) return`). It is mounted **once** in `App.vue` beside the toasts and follows the
+  footer rules above. This is the default for a destructive action that needs a sentence of consequence.
+- **The inline two-step confirm** — a confirm label revealed in the row itself (`groups.deleteConfirm`,
+  `kit.backupDownloadConfirm`, …). Deliberate and unchanged: the low-ceremony, in-row form.
+- **A dedicated dialog** where the dialog does more than ask — it owns the mutation, its busy state and its
+  inline error (`DeleteNodeDialog.vue`, the untrust dialog, the trash purge). The shared dialog resolves and
+  closes; it never runs the action, so anything that needs a `:loading` confirm button stays its own component.
+
+**`window.confirm` is retired, and `no-alert` in `web/eslint.config.js` is what keeps it retired** — including
+in test files, which are not exempted: a fixture is the easiest place to quietly bring a native dialog back.
+
+**An action's name has to be visible, not only accessible.** An icon-only destructive action names itself in
+`aria-label`/`title` alone, so prose that quotes its label quotes something no reader can see — and a label
+too long for its row is what tempts the icon-only shape in the first place. Where both are true, give the
+button a short visible label and keep the full sentence as its accessible name and the dialog's header
+subject, then quote the *visible* one in the surrounding copy.
+
 ## Product language
 
 **Memory / Chapter** (DE: *Kapitel*) for content; folders are organizational and visually **secondary**
@@ -129,5 +150,7 @@ before component-specific media queries.
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.
+- Confirmed a destructive action through `useConfirm` (or an existing inline/dedicated form) — never
+  `window.confirm`; and any label your copy quotes is one the reader can actually see.
 - Matched the surrounding density rather than introducing a size of your own.
 - Grepped for remaining readers before deleting any i18n key, in both locale blocks.

@@ -99,7 +99,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     expect(nav).not.toContain('Server administration')
   })
 
-  it('a Group scope: the gear opens that group’s detail page, and the Gruppen collection lists owned groups by name', async () => {
+  it('a Group scope: entering the hub opens that group’s detail page, and the Gruppen collection lists owned groups by name', async () => {
     vi.mocked(listMyGroups).mockResolvedValue([
       { scopeId: 'g-1', tenantId: 't-1', name: 'Familie Raddatz', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null },
       { scopeId: 'g-2', tenantId: 't-1', name: 'Reise-Crew', role: 'OWNER', deletedAt: null, purgeAfter: null, icon: null },
@@ -110,7 +110,7 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     const w = await mountHub()
     expect(navText(w)).toContain('Familie Raddatz') // the Gruppen collection lists owned groups by name
     expect(navText(w)).toContain('Reise-Crew')
-    expect(w.find('.stub-group-members').exists()).toBe(true) // gear → the active group's own detail page
+    expect(w.find('.stub-group-members').exists()).toBe(true) // no param → the active group's own detail page
     expect(w.find('.stub-members').exists()).toBe(false) // the Tenant panel is not shown in a group
   })
 
@@ -144,7 +144,7 @@ describe('SettingsHubView — split view index vs detail', () => {
   it('wide/no param redirects to the current scope section (tenant members) as an explicit detail URL', async () => {
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Tenant
-    stubMatchMedia(true) // wide → the gear's default section becomes the explicit /settings/<section> URL
+    stubMatchMedia(true) // wide → the default section becomes the explicit /settings/<section> URL
     const w = await mountHub('/settings')
     await flushPromises()
     expect(w.find('.stub-members').exists()).toBe(true)

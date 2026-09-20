@@ -1,10 +1,11 @@
 <script setup lang="ts">
-// The settings hub (cr-0078/cr-0087, ADR 0022) — one scope-contextual page reached from the top-bar gear. A
+// The settings hub (cr-0078/cr-0087, ADR 0022) — one scope-contextual page, reached from the profile menu's
+// Settings entry, which is the shell's only door into it. A
 // responsive NavigationSplitView: wide viewports show the section rail + detail; narrow collapses to a list that
 // drills into /settings/<section>. The rail mixes two axes (ADR 0022 §3): scope-in-path sections (Persönlich
 // always; Tenant members while in the Tenant scope) and **collection categories** — collapsible groups that fan
-// out to per-entity detail pages (Gruppen → a group I own → its members). The gear is context-aware: with no
-// explicit section it opens the active scope's entity (a group → that group's page).
+// out to per-entity detail pages (Gruppen → a group I own → its members). That entry is context-aware: with
+// no explicit section it opens the active scope's entity (a group → that group's page).
 import { computed, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
@@ -36,7 +37,7 @@ const route = useRoute()
 const router = useRouter()
 
 // The groups the caller OWNs — the Gruppen collection (ADR 0022 §3). Names decrypted on-device; a member-only
-// group isn't listed (nothing to manage), though its detail page stays reachable via a direct/gear link.
+// group isn't listed (nothing to manage), though its detail page stays reachable by a direct link.
 const ownedGroups = ref<GroupSpace[]>([])
 const createGroupOpen = ref(false)
 
@@ -127,8 +128,8 @@ const categories = computed<NavCategory[]>(() => {
   return cats
 })
 
-// The gear (no param) opens the active scope's entity: a group → its page, the Tenant scope → its members, else
-// Persönlich. Narrow with no param shows the list only.
+// Entering the hub with no param opens the active scope's entity: a group → its page, the Tenant scope → its
+// members, else Persönlich. Narrow with no param shows the list only.
 const defaultId = computed(() =>
   activeSpace.kind === ScopeKind.Group && activeSpace.scopeId
     ? `group-${activeSpace.scopeId}`
@@ -139,7 +140,7 @@ const defaultId = computed(() =>
 const activeId = computed(() => (route.params.section as string | undefined) || defaultId.value)
 const hasSection = computed(() => Boolean(route.params.section))
 
-// On a WIDE viewport the gear (no section) already auto-shows a default section's detail — make the URL explicit by
+// On a WIDE viewport entering with no section already auto-shows a default section's detail — make the URL explicit by
 // replacing /settings → /settings/<defaultId> (contextual: the Tenant scope → members, a group → its page). On
 // NARROW (≤720px) /settings is the drill-down list, so it stays put (redirecting there would break the back path).
 function reflectDefaultSection() {

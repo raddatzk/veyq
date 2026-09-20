@@ -1,12 +1,14 @@
 useCase: uc.memory.cover
 feature: memory
 title: Memory cover — a chosen, cropped cover shown everywhere
-# Built web-first across two slices. The cover reuses the node's `wrappedMeta` blob (date cr-0067, location cr-0069)
-# and adds a `cover` sub-object `{ source (media mediaId | upload blob ref), crop{x,y,width,height} 0..1 }`, sealed
-# under K_mem, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
-# normalized crop shown identically on the browse card, the detail header, and the map pin. cr-0072 built the
-# existing-media source (web, no backend); cr-0073 added the new-upload source — a standalone cover blob
-# (contract + backend + web) committed with no `veyq_media` row.
+# Built web-first. The cover reuses the node's `wrappedMeta` blob (date cr-0067, location cr-0069) and adds a
+# `cover` sub-object `{ source (media mediaId | upload blob ref), crop{x,y,width,height} 0..1 }`, sealed under
+# K_mem, set via the same partial updateNode, returned on listNodes. Deliberate pick (no auto-cover), one
+# normalized crop shown identically on **four** surfaces: the browse card, the detail header, the map pin, and
+# the sidebar's Favorites entry. cr-0072 built the existing-media source (web, no backend); cr-0073 added the
+# new-upload source — a standalone cover blob (contract + backend + web) committed with no `veyq_media` row; the
+# sidebar surface and the shared cover store came last, and the store is why a fifth surface would cost a read
+# rather than a decrypt.
 acceptanceCriteria:
   - id: sealed-cover-on-node
     text: A MEMORY/CHAPTER node's `wrappedMeta.cover` carries ONE cover — a source (an existing media `mediaId`, or a standalone uploaded blob ref) + a `crop {x,y,width,height}` normalized to 0..1 of the source image — sealed under K_mem in the same client-versioned blob as the date + location (no contract change for the media source), set via the partial updateNode and returned on listNodes. The operator-blind server never sees which image or the crop.
@@ -17,21 +19,32 @@ acceptanceCriteria:
         e2e:
           - src/features/memory/memoryCover.e2e.test.ts
   - id: deliberate-no-auto-cover
-    text: A cover exists only by a deliberate pick (choose a media, or upload a cover image); there is no auto-cover. Unset ⇒ the placeholder (the soft-accent images tile) shows on every surface. A dangling source (the chosen media was deleted) falls back to the placeholder, never a broken card/pin.
+    text: A cover exists only by a deliberate pick (choose a media, or upload a cover image); there is no auto-cover. Unset ⇒ the placeholder (the soft-accent images tile) shows on every surface — the browse card, the detail header, the map pin and the sidebar's Favorites entry — and NO surface branches on it — they all render the one component whose own placeholder appears. A dangling source (the chosen media was deleted) falls back to the placeholder, never a broken card, pin or rail tile.
     coverage:
       web:
         unit:
           - src/features/memory/memoryCover.test.ts
           - src/features/memory/components/MemoryCoverImage.test.ts
           - src/features/memory/components/MemoryCard.test.ts
+          - src/components/app/AppSidebar.test.ts
+  - id: covers-resolved-once-per-scope
+    text: One store resolves a Memory's cover for EVERY surface that shows one — a thumbnail is decrypted once per Memory per scope, not once per surface — re-resolves it when the node's sealed meta changes (the cache is keyed on `wrappedMeta`, so a cover edited on one surface cannot leave a stale image on another), and releases every decrypted object URL when the active space is left, rotated or cleared. The surfaces read the result and hold no key material — the epoch chain that opens a node's K_mem stays out of the always-mounted rail.
+    # Both halves are bitten by injection, since the store is new and neither defect is live: keying the entry on
+    # the nodeId alone reddens the stale-cover and removed-cover cases, and deleting the reset from
+    # clearActiveSpace reddens the release case.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/coverStore.test.ts
   - id: one-crop-everywhere
-    text: One stored normalized crop renders identically at any container size — the browse card, the detail header, and the map pin — via one shared display formula (expand the decrypted thumbnail inside an overflow-hidden box + offset by the crop). No per-surface crop, no cropped-image upload for the existing-media source.
+    text: One stored normalized crop renders identically at any container size — a sidebar rail tile, the browse card, the detail header, the map pin — via one shared display formula (expand the decrypted thumbnail inside an overflow-hidden box + offset by the crop). No per-surface crop, no cropped-image upload for the existing-media source. Note what is one shared FORMULA and not one shared component — SpaceMap applies `coverImageStyle` inline rather than mounting MemoryCoverImage, so the formula is the invariant and the component is not.
     coverage:
       web:
         unit:
           - src/features/memory/memoryCover.test.ts
           - src/features/memory/components/MemoryCoverImage.test.ts
           - src/features/memory/components/MemoryCard.test.ts
+          - src/components/app/AppSidebar.test.ts
   - id: set-cover-and-crop-editor
     text: Choosing "Set as cover" on a photo in the gallery lightbox opens the crop EDITOR seeded on that photo (its already-decrypted thumbnail is the crop source), the lightbox staying OPEN beneath the modal with its keyboard suspended so it neither navigates nor closes underneath; the user frames the 16:9 crop and saves (a photo already the cover pre-loads its stored crop). The same editor crops one source — a Memory photo picked in the lightbox, an uploaded image, OR the current cover re-framed — in a fixed 16:9 viewport with drag-to-pan + zoom (1–3×), hand-rolled (no crop library); Save normalizes the pan/zoom back to the 0..1 crop and seals it; Remove clears the cover; reopening an existing cover restores its pan/zoom. Browsing existing media stays in the gallery (scales to any count), never a modal grid. (cr-0109 replaced the earlier one-click full-frame set.)
     coverage:

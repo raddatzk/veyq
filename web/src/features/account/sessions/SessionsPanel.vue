@@ -36,8 +36,10 @@
 //     device, who then needs their Emergency Kit — right for a lost laptop, wrong for tidying up an old login.
 //
 // Markup + classes mirror TenantMembersPanel (settings-section-header + veyq-list-row + veyq-badge) — the built
-// list panel is the design source. Confirmation is `window.confirm`, as on that panel's per-row destructive
-// action; the inline rename mirrors GroupMembersPanel's owner-only inline rename.
+// list panel is the design source. Confirmation goes through the app's own dialog (`useConfirm`), never the
+// browser's — the consequence sentences below are the longest the app owns and belong in a surface with the
+// product's voice and a danger-coloured primary; the inline rename mirrors GroupMembersPanel's owner-only
+// inline rename.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -55,6 +57,7 @@ import { useAsyncData, loadErrorKind } from '../../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { handle401 } from '../../../shared/handle401'
 import { useToast } from '../../../shared/state/useToast'
+import { useConfirm } from '../../../shared/state/useConfirm'
 import { vaultState } from '../../../app/vault'
 import { account } from '../../../app/account'
 import {
@@ -72,6 +75,7 @@ import DeviceTrustControl from '../trustDevice/DeviceTrustControl.vue'
 const { t, locale } = useI18n()
 const router = useRouter()
 const toast = useToast()
+const { ask } = useConfirm()
 const on401 = handle401(router)
 
 const families = ref<SessionFamily[]>([])
@@ -214,14 +218,26 @@ const { run: runRevokeOthers, pending: busyOthers } = useAsyncAction(
 )
 
 async function revoke(family: SessionFamily) {
-  const question = family.current ? t('sessions.revokeSelfConfirm') : t('sessions.revokeConfirm')
-  if (!window.confirm(question)) return
+  const self = family.current
+  const accepted = await ask({
+    header: self ? t('sessions.revokeSelfConfirmTitle') : t('sessions.revokeConfirmTitle'),
+    message: self ? t('sessions.revokeSelfConfirm') : t('sessions.revokeConfirm'),
+    acceptLabel: self ? t('sessions.revokeSelf') : t('sessions.revoke'),
+    acceptIcon: 'pi pi-sign-out',
+  })
+  if (!accepted) return
   actionError.value = ''
   await runRevoke(family)
 }
 
 async function revokeOthers() {
-  if (!window.confirm(t('sessions.revokeOthersConfirm'))) return
+  const accepted = await ask({
+    header: t('sessions.revokeOthersConfirmTitle'),
+    message: t('sessions.revokeOthersConfirm'),
+    acceptLabel: t('sessions.revokeOthers'),
+    acceptIcon: 'pi pi-sign-out',
+  })
+  if (!accepted) return
   actionError.value = ''
   await runRevokeOthers()
 }
@@ -254,7 +270,14 @@ const { run: runEscalate, pending: escalating } = useAsyncAction(
 )
 
 async function escalate(family: SessionFamily) {
-  if (!window.confirm(t('sessions.escalateConfirm'))) return
+  const accepted = await ask({
+    header: t('sessions.escalateConfirmTitle'),
+    message: t('sessions.escalateConfirm'),
+    // The label of the button that opened it — the short, visible one, not the accessible sentence.
+    acceptLabel: t('sessions.escalateShort'),
+    acceptIcon: 'pi pi-shield',
+  })
+  if (!accepted) return
   actionError.value = ''
   await runEscalate(family)
 }
@@ -286,7 +309,13 @@ const { run: runRemoveKey, pending: removingKey } = useAsyncAction(
 )
 
 async function removeKeyOf(device: SavedKeyDevice) {
-  if (!window.confirm(t('sessions.removeKeyConfirm', { device: device.label }))) return
+  const accepted = await ask({
+    header: t('sessions.removeKeyConfirmTitle'),
+    message: t('sessions.removeKeyConfirm', { device: device.label }),
+    acceptLabel: t('sessions.removeKey'),
+    acceptIcon: 'pi pi-key',
+  })
+  if (!accepted) return
   actionError.value = ''
   await runRemoveKey(device)
 }
@@ -303,7 +332,13 @@ const { run: runRemoveOtherKeys, pending: removingOthers } = useAsyncAction(
 )
 
 async function removeOtherKeys() {
-  if (!window.confirm(t('sessions.removeOtherKeysConfirm'))) return
+  const accepted = await ask({
+    header: t('sessions.removeOtherKeysConfirmTitle'),
+    message: t('sessions.removeOtherKeysConfirm'),
+    acceptLabel: t('sessions.removeOtherKeys'),
+    acceptIcon: 'pi pi-key',
+  })
+  if (!accepted) return
   actionError.value = ''
   await runRemoveOtherKeys()
 }
@@ -403,10 +438,14 @@ async function removeOtherKeys() {
               />
               <!-- ADR 0058's escalation, offered ONLY where the register names a served wrap for that device —
                    never as a checkbox on the revoke above, and separately named because the consequence lands on
-                   whoever is holding that device. A locked panel reaches this never: the join is sealed. -->
+                   whoever is holding that device. A locked panel reaches this never: the join is sealed.
+                   "Separately named" is kept VISIBLY: the short label is on the button, the full sentence stays
+                   the accessible name and the dialog's subject. An icon-only escalation named the action only to
+                   a screen reader, while the hint below quoted a label nobody could see. -->
               <Button
                 v-if="renamingFamily !== family.id && wrapsOf(family).length > 0"
                 class="session-escalate"
+                :label="t('sessions.escalateShort')"
                 icon="pi pi-shield"
                 severity="danger"
                 size="small"

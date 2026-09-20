@@ -116,7 +116,10 @@ acceptanceCriteria:
       action this screen exists for. It is never a checkbox on the revoke and never a default, because the
       consequence lands on a person holding another device, who then needs their Emergency Kit. It is also never
       offered on the caller's OWN row: the local equivalent drops the local key too, and the remote-only half
-      would leave this browser holding a record whose wrap is gone.
+      would leave this browser holding a record whose wrap is gone. "Separately named" means named **visibly**
+      in the row, not only in its accessible name: the button carries a short visible label, keeps the full
+      sentence as its accessible name and as the confirmation's subject, and the panel's own hint quotes the
+      visible one — a label a reader cannot see is a name the copy around it cannot honestly refer to.
   - id: escalation-cuts-the-family-first-and-tells-the-truth-on-a-half-success
     text: >-
       The escalation runs family-first, wrap-second, and the ORDER is the assertion — the revoke stops an
@@ -249,6 +252,19 @@ gaps:
     `/settings/:section?`, red on a NEW shell route with no gate (so it is not merely pinned to the routes that
     happen to exist), and GREEN on a comment carrying the phrase, which is the false positive the line-based
     first probe produced.
+    cr-web-own-confirm-dialog adds two cases to `SessionsPanel.test.ts` for the visibility half of
+    `removing-a-device-key-is-a-named-escalation`: the escalation's rendered TEXT carries the short label while
+    its `aria-label` keeps the full sentence (reverting to icon-only reddens it), and the panel's hint quotes
+    exactly that label in BOTH locale blocks (editing the label in one locale alone reddens it) — the drift
+    that a later copy edit would otherwise make invisible. A third case pins that the row asks with the sentence
+    belonging to it, your own device's against another's, which the one-variable `window.confirm` call used to
+    encode implicitly. The confirmation channel itself is covered where it lives, not here:
+    `src/shared/state/useConfirm.test.ts` (accept, decline, single-flight, reuse) and
+    `src/shared/ui/ConfirmDialog.test.ts` (each way out of the dialog reaching the same answer), both bite-tested
+    — forcing every settle to `true` reddens four cases, and letting a second ask overwrite the pending resolver
+    hangs the first promise until the timeout. The declined-confirmation cases on this panel are the guard on the
+    call sites themselves: deleting the `if (!(await ask(…))) return` line in `revoke()` reddens exactly the
+    declined case while every accepted one stays green.
     cr-devices-and-sessions-one-rubric folds the device-trust half into `SessionsPanel.test.ts` and DELETES the
     device panel's own suite: the component is still its own (`DeviceTrustControl.vue`, a control rather than a
     settings-hub panel), but every assertion about it is now made from
@@ -257,7 +273,10 @@ gaps:
     device), the password-less tier winning when both are present, a plain device offering nothing, forgetting
     dropping both tiers while calling no revoke, the failed status read offering nothing (with a SUCCEEDING read
     as its live control, so the assertion is about the catch path and not about a button that never renders from
-    the new mount point at all), the unsupported browser, and the two actions staying two. Two of the three were
+    the new mount point at all), the unsupported browser, and the two actions staying two — two labels, two confirm texts and two
+    MECHANISMS, the escalation through the shared `ask()` and the forget through its own dialog, which is the
+    half that keeps a later tidy-up from folding the forget into `ask()` and losing the busy state and inline
+    error it needs. Two of the three were
     bite-tested against a deliberately-awaited variant before the wiring landed: putting the device-local read
     inside `useAsyncData` reddens the hanging-read case (zero rows) and the failed-read case by name, which is
     exactly the defect the merge makes possible and nothing could catch while the two panels were separate.

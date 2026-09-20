@@ -48,6 +48,10 @@ vi.mock('../features/account/deviceIdentity', () => ({
 vi.mock('../features/account/sessions/sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
 vi.mock('../app/authPrefill', () => ({ takeAuthPrefill: () => null }))
 vi.mock('../app/pendingRoute', () => ({ takeRoute: () => null }))
+// The locked sign-out this view renders confirms through the app's own dialog (cr-web-own-confirm-dialog),
+// which is mounted in App.vue — out of reach of a view-level mount, so its answer is mocked here.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 vi.mock('../app/vault', async () => {
   const { reactive } = await import('vue')
   return { vaultState: reactive({ unlocked: false }), masterKey: () => new Uint8Array(32) }
@@ -162,7 +166,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     vi.mocked(cacheSessionVault).mockResolvedValue(undefined)
     vi.mocked(clearSessionVault).mockResolvedValue(undefined)
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
-    window.confirm = vi.fn(() => true)
+    confirmAsk.mockResolvedValue(true)
     // The scan entry is capability-gated on a camera; happy-dom has none, so the control would not render.
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })

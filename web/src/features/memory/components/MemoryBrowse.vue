@@ -9,20 +9,17 @@
 // section stays mounted in map mode (the map is its body instead of the grid), which is what keeps the toolbar
 // reachable there without a second copy of it.
 import { computed, watch } from 'vue'
-import { reactive } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
-import { nodeContentKey, type TreeNode } from '../tree'
+import { type TreeNode } from '../tree'
 import { keyAt, type EpochKeys } from '../../spaces/epochs'
 import { sortNodesByDate } from '../memoryDate'
 import { nodeById } from '../browse'
 import { treeStore } from '../treeStore'
 import { collectLocatedPins } from '../spaceMap'
-import { loadNodeCover, type LoadedCover, type CoverCrop } from '../memoryCover'
+import { covers, ensureCovers } from '../coverStore'
 import { isFavorite } from '../../../app/favoritesStore'
-import { activeSpace } from '../../../app/activeSpace'
 import { useViewMode } from '../../../shared/state/useViewMode'
-import { useObjectUrls } from '../../../shared/state/useObjectUrls'
 import MemoryCard from './MemoryCard.vue'
 import ViewModeToggle from './ViewModeToggle.vue'
 import SpaceMap from './SpaceMap.vue'
@@ -64,45 +61,23 @@ function onPinOpen(nodeId: string) {
   if (node) emit('openMemory', node)
 }
 
-// Each node's chosen cover (nodeId → decrypted thumbnail + crop, cr-0072), loaded lazily on device. Kept here
-// (we hold `scopeKey` + `scopeId`); passed read-only to the cards AND SpaceMap. `nodeContentKey` is resolved off
-// the reactive proxy so K_mem bytes never enter Vue's reactivity (matching activeSpace's key handling). A node
-// without a cover (or a not-yet-openable key) is retried until settled, so a `null` outcome isn't looked up forever.
-// The object-URL lifecycle (incl. revoke-on-unmount) is owned by `useObjectUrls`; the crop rides alongside.
-const coverUrls = useObjectUrls()
-const coverCrops = reactive(new Map<string, CoverCrop>())
-const coverTried = new Set<string>() // nodeIds resolved to a definite cover-or-none (so a "no cover" isn't retried)
-// The display map the cards + SpaceMap read: pair each minted URL with its crop.
-const covers = computed(() => {
-  const m = new Map<string, LoadedCover>()
-  for (const [id, url] of coverUrls.urls.value) {
-    const crop = coverCrops.get(id)
-    if (crop) m.set(id, { url, crop })
-  }
-  return m
-})
-
-/** Resolve the chosen cover for the currently-visible nodes — the card grid's Memories, or the map's pins —
- *  decrypting the chosen media's thumbnail on device (best-effort, parallel), cached so a settled node isn't redone. */
+// The chosen covers come from the shared `coverStore` (cr-0072 + the sidebar rail): one decrypt per Memory per
+// scope for every surface, instead of one per surface. This view only says WHICH nodes are on screen — the
+// store owns the key chain, the object-URL lifecycle and the staleness rule, and the cards + SpaceMap read the
+// same `Map<string, LoadedCover>` they always did.
 function syncCovers() {
-  if (!activeSpace.scopeId || !props.epochs) return
-  const scopeId = activeSpace.scopeId
-  const epochs = props.epochs
   const nodes = viewMode.value === 'map' ? pins.value.map((pin) => pin.node) : props.memories
-  for (const node of nodes) {
-    if (coverTried.has(node.id)) continue
-    const nodeKey = nodeContentKey(epochs, treeStore.nodes, node.id)
-    if (!nodeKey) continue // K_mem not openable yet (e.g. still unlocking) — leave un-tried so a later pass retries
-    coverTried.add(node.id)
-    void loadNodeCover(scopeId, nodeKey, node).then((cover) => {
-      if (!cover) return
-      coverCrops.set(node.id, cover.crop)
-      coverUrls.set(node.id, cover.blob)
-    })
-  }
+  ensureCovers(nodes.map((n) => n.id))
 }
 
-watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
+// The sealed meta is part of the key for the same reason it is in the rail: a cover edit patches `wrappedMeta`
+// in place, so watching the array (whose identity does not change) would leave a stale cover on the very card
+// the new one was chosen from. The store re-resolves on a changed meta — but only when it is asked to.
+watch(
+  [viewMode, pins, () => props.memories.map((n) => `${n.id}:${n.wrappedMeta ?? ''}`).join('|')],
+  syncCovers,
+  { immediate: true },
+)
 </script>
 
 <template>

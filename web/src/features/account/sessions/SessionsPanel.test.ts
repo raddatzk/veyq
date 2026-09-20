@@ -41,8 +41,14 @@ vi.mock('../deviceIdentity', () => ({
 }))
 vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
+// Confirmation is the app's own dialog (cr-web-own-confirm-dialog), mounted once in App.vue: the panel awaits
+// `ask()` and this answers it. Stubbing `window.confirm` would now pass every test by confirming nothing.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 // The device-local half the current row now mounts (DeviceTrustControl). Mocked to the NO-TIER default so every
-// behaviour above keeps asserting exactly what it always did; the cases that care opt in explicitly.
+// behaviour above keeps asserting exactly what it always did; the cases that care opt in explicitly. It confirms
+// through its OWN dialog, not through `ask()` — the styleguide's third mechanism, because that dialog owns the
+// mutation, its busy state and its inline error. That difference is asserted below, not incidental.
 vi.mock('../trustDevice/trustDevice', () => ({
   isTrusted: vi.fn(),
   untrustThisDevice: vi.fn(),
@@ -67,8 +73,9 @@ const OTHER = { id: 'bbbbbbbb-2222-4222-8222-222222222222', createdAt: new Date(
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
-  // The forget action confirms in a DIALOG where the session actions use window.confirm — the two acts do not
-  // look alike, and this stub keeps that difference visible to the tests below.
+  // The forget action owns its own dialog (the styleguide's third mechanism — it carries the mutation, its busy
+  // state and its inline error) where the session actions ask through the shared one. The two acts do not look
+  // alike, and this stub keeps that difference visible to the tests below.
   Dialog: { props: ['visible', 'header'], template: '<div class="dialog" v-if="visible">{{ header }}<slot /></div>' },
   InputText: {
     props: ['modelValue'],
@@ -132,7 +139,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(isRemembered).mockResolvedValue(false)
     vi.mocked(untrustThisDevice).mockResolvedValue(undefined)
     vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
-    window.confirm = vi.fn(() => true)
+    confirmAsk.mockResolvedValue(true)
   })
 
   it('lists every active family with both dates and marks exactly the one the server flagged', async () => {
@@ -175,6 +182,26 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(revokeSessionFamily).toHaveBeenCalledWith(CURRENT.id)
     // E2: continuing on this screen with dead tokens is the failure mode; the full sign-out is the behaviour.
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks with the sentence that belongs to the row — your own device is not the general case', async () => {
+    // The two sentences differ in what they promise ("you land back on the sign-in screen" vs "it must sign in
+    // again"), and nothing else in this file would notice if the row picked the wrong one.
+    const wrapper = await mountPanel()
+    await rowButtons(wrapper)[0].trigger('click')
+    await flushPromises()
+    expect(confirmAsk.mock.calls[0][0]).toMatchObject({
+      message: i18n.global.t('sessions.revokeSelfConfirm'),
+      acceptLabel: i18n.global.t('sessions.revokeSelf'),
+    })
+
+    const other = await mountPanel()
+    await rowButtons(other)[1].trigger('click')
+    await flushPromises()
+    expect(confirmAsk.mock.calls[1][0]).toMatchObject({
+      message: i18n.global.t('sessions.revokeConfirm'),
+      acceptLabel: i18n.global.t('sessions.revoke'),
+    })
   })
 
   it('signs out everywhere else through the one endpoint that spares the caller', async () => {
@@ -234,7 +261,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   })
 
   it('does nothing when the confirmation is declined', async () => {
-    window.confirm = vi.fn(() => false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel()
     await rowButtons(wrapper)[0].trigger('click')
     await flushPromises()
@@ -394,12 +421,35 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
 
   it('does nothing when the escalation confirmation is declined', async () => {
     withEscalatableOther()
-    window.confirm = vi.fn(() => false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel()
     await escalateButton(wrapper, 1)!.trigger('click')
     await flushPromises()
     expect(revokeSessionFamily).not.toHaveBeenCalled()
     expect(removeSavedKey).not.toHaveBeenCalled()
+  })
+
+  it('names the escalation where a reader can SEE it, and keeps the full sentence as its accessible name', async () => {
+    // "Separately named" (uc.account.sessions) was half-kept: the action was icon-only, so its name existed
+    // for a screen reader and nowhere on screen. The visible half is asserted against the accessible half
+    // precisely because keeping only one of them is the failure this pins — and the plain revoke beside it
+    // stays icon-only on purpose, which is why the visible text is read off THIS button, not off the row.
+    withEscalatableOther()
+    const wrapper = await mountPanel()
+    const button = escalateButton(wrapper, 1)!
+
+    expect(button.text()).toContain(i18n.global.t('sessions.escalateShort'))
+    expect(button.attributes('aria-label')).toBe(i18n.global.t('sessions.escalate'))
+  })
+
+  it('quotes in the hint exactly the label that is on the button — in both locales', async () => {
+    // The hint used to tell the reader to use a label that appears nowhere on screen. Two strings that have to
+    // agree drift at the next copy edit unless something reads them together, and a locale that is edited alone
+    // is the likely half — so both are checked, and the check is the same one twice.
+    for (const locale of ['en', 'de'] as const) {
+      i18n.global.locale.value = locale
+      expect(i18n.global.t('sessions.hint')).toContain(i18n.global.t('sessions.escalateShort'))
+    }
   })
 
   // --- § Devices with a saved key, and the exclusion-shaped bulk action (ADR 0058 §5) ---
@@ -598,11 +648,14 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(escalateButton(wrapper, 0)).toBeDefined()
     expect(i18n.global.t('unlock.untrust')).not.toBe(i18n.global.t('sessions.escalate'))
 
-    // Two distinct confirmations: the escalation asks through window.confirm, the forget through its dialog —
-    // and neither confirm text is the other's.
+    // Two distinct confirmations, through two distinct MECHANISMS: the escalation asks the app's shared dialog,
+    // the forget owns its own (it carries the mutation, its busy state and its inline error, which the shared one
+    // deliberately never does). Neither confirm text is the other's.
     await escalateButton(wrapper, 0)!.trigger('click')
     await flushPromises()
-    expect(window.confirm).toHaveBeenCalledWith(i18n.global.t('sessions.escalateConfirm'))
+    expect(confirmAsk).toHaveBeenCalledWith(
+      expect.objectContaining({ message: i18n.global.t('sessions.escalateConfirm') }),
+    )
     expect(i18n.global.t('sessions.escalateConfirm')).not.toBe(i18n.global.t('sessions.untrustConfirmBody'))
 
     // …and the two do different things: the escalation ended a session, the forget never does.
@@ -610,9 +663,13 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(untrustThisDevice).not.toHaveBeenCalled()
 
     const fresh = await mountPanel()
+    confirmAsk.mockClear()
     await forgetButton(fresh)!.trigger('click')
     await flushPromises()
     expect(fresh.find('.dialog').text()).toContain(i18n.global.t('sessions.untrustConfirmTitle'))
+    // …and it did NOT route through the shared one. This is the half that keeps the two from quietly becoming
+    // one control: a forget folded into `ask()` would lose the busy state and the inline error it needs.
+    expect(confirmAsk).not.toHaveBeenCalled()
   })
 
   it('offers the forget action ONLY on the current device\'s row', async () => {
