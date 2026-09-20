@@ -4,9 +4,10 @@
          purpose: the first `up` starts everything and exits 0; the second waits only on the mariadb healthcheck
          so Flyway never races a cold DB. The store comes up RUNNING BUT NOT USABLE and there is nothing here to
          wait for it to become usable — since ADR 0067 the backend does that itself on its first start, in the
-         background. The narrow `--wait mariadb` is kept anyway: waiting on the WHOLE project is a habit worth
-         not forming, since any container that exits (even cleanly) makes the flag exit 1. NOTE: IntelliJ strips
-         comments from .run/*.xml whenever it rewrites this file — if you edit the config in the UI, put this
+         background. Waiting on mariadb ALONE is kept anyway: waiting on the WHOLE project is a habit worth
+         not forming, since any container that exits (even cleanly) makes the wait flag exit 1. NOTE: a double hyphen is illegal inside an XML comment — write it out in
+         prose instead, or IntelliJ fails to parse this file and silently offers no run config at all.
+         NOTE: IntelliJ strips comments from .run/*.xml whenever it rewrites this file — if you edit the config in the UI, put this
          back. -->
     <option name="SCRIPT_TEXT" value="docker compose -f infra/docker-compose.yml --profile s3 --profile mail up -d &amp;&amp; docker compose -f infra/docker-compose.yml --profile s3 --profile mail up -d --wait mariadb" />
     <option name="INDEPENDENT_SCRIPT_PATH" value="true" />

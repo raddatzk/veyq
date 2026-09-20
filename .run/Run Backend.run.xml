@@ -21,10 +21,12 @@
            Endpoint + creds point at the bundled compose Garage; these are the documented
            throwaway dev creds (infra/README.md, garage.toml) — not secrets.
            TYPE + GARAGE_ADMIN_* are what let this backend bring that store from RUNNING to USABLE itself
-           (ADR 0067): a `--profile s3 up` no longer seeds the bucket, so the first start after a fresh
+           (ADR 0067): bringing the s3 profile up no longer seeds the bucket, so the first start after a fresh
            `down -v` assigns the layout and creates the bucket, key, grant and CORS policy. The admin API is a
            different port from the S3 one and is published as 19003:3903 in infra/docker-compose.yml. It runs in
            the background and can never fail the boot; GET /api/instance/store-provisioning reports how it went.
+           A double hyphen is illegal inside an XML comment — spell such a flag out in prose, or IntelliJ
+           fails to parse this file and silently offers no run config at all.
            PUBLIC_ENDPOINT is the browser origin the presigned PUT/GET URLs are signed for: it MUST equal the host
            in the address bar (SigV4 signs host+path; the Vite dev server proxies /veyq same-origin to the store).
            It is developer-specific — set it to whatever origin you browse. Here: veyq.localhost:8081 (the *.localhost
