@@ -88,6 +88,15 @@ Five rules follow:
    is the **whole branch** — `git log --all --grep` plus the files' existence — never the recent log window,
    which is how the 2026-07-22 sweep found seven rows that had been stale for weeks.
 
+   **A live parallel session is a hazard for WRITES too, and this one bites harder than a stale count.** Commits
+   here go straight to `main`, so a second session's tip and its uncommitted tree share yours. Two moves are
+   therefore forbidden regardless of how clean the tree *looked* when the phase started: `git add -A` (which on
+   2026-09-20 swept a neighbour's in-progress CR and inbox rows into an unrelated docs commit) and any
+   `git reset` by relative ref such as `HEAD~1` (the same session then reset what it thought was its own tip,
+   hit the neighbour's four newer commits, and a `--hard` discarded a whole finished phase's uncommitted work —
+   recoverable only because every edit was still in the conversation). **Stage by explicit path, and address a
+   commit by its hash, never by its distance from the tip.**
+
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
    whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`
    mapping spawned just after an implement session's first `npm run generate:api` reported the work order's
