@@ -128,12 +128,13 @@ afterEach(() => {
 })
 
 describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
-  it('renders an in-flight upload as a preview tile with a progress ring, ahead of the listed media', async () => {
+  it('renders an in-flight upload as a preview tile with a progress ring, at its capture-time place', async () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png' }, stubDeriver())
+    // the listed media is the NEWER one, so "the tile appeared" and "the tile is first" are different claims
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png', lastModified: NEW }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)
     await flushPromises()
@@ -142,16 +143,19 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     expect(wrapper.findAll('.gallery-tile-optimistic')).toHaveLength(0)
     expect(wrapper.findAll('.media-tile')).toHaveLength(1)
 
-    // an upload starts → an optimistic tile appears immediately, pinned first, with a local preview + a ring
-    pushBatch([uploadFile('u1', 'uploading', { progress: 0.4 })])
+    // an upload starts → an optimistic tile appears IMMEDIATELY, with a local preview + a ring
+    pushBatch([uploadFile('u1', 'uploading', { progress: 0.4, lastModified: OLD })])
+    await flushPromises()
     await flushPromises()
     const optimistic = wrapper.findAll('.gallery-tile-optimistic')
     expect(optimistic).toHaveLength(1)
     expect(optimistic[0].find('img').attributes('src')).toBeTruthy() // a local objectURL preview
     expect(optimistic[0].find('.upload-ring').exists()).toBe(true)
     expect(optimistic[0].find('.upload-tile-failed').exists()).toBe(false)
-    // pinned ahead of the listed media (first tile in DOM order)
-    expect(wrapper.find('.gallery-tile').classes()).toContain('gallery-tile-optimistic')
+    // …and it appears where its capture time puts it, which here is BEHIND the newer listed media. This
+    // assertion replaces the old "pinned ahead of the listed media (first tile in DOM order)": appearing at
+    // once and appearing first were conflated, and only the first of the two was ever the promise.
+    expect(gridOrder(wrapper)).toEqual(['media-0', 'u1.jpg'])
   })
 
   // uc.memory.gallery § "One order for every tile — including one that is still uploading". The defect this

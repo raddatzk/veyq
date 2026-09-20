@@ -62,7 +62,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/media.test.ts]
   - id: optimistic-in-grid-tiles
-    text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, pinned ahead of the listed media — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once.
+    text: Picked files appear immediately as tiles in the Memory's gallery grid — an instant local object-URL preview (never uploaded in the clear) with a per-tile progress ring or failed+retry state, at the place the gallery's ONE ordering rule gives it (uc.memory.gallery#date-sorted-grid owns that rule; this criterion does not restate it) — and each reconciles into the real decrypted thumbnail once its media lists (matched by the returned mediaId) with no empty-flash and no duplicate; the queue records that mediaId on each settled file (cr-0074). Reconcile is PER-FILE (cr-0111) — a per-file `onFileDone` hook fires the moment each upload settles and triggers a targeted live poll that lists just that media, so its tile flips to the real thumbnail the moment IT completes — not only when the whole batch's onComplete re-lists everything at once.
     coverage:
       web:
         unit:
