@@ -17,13 +17,14 @@ menu (which is about *me*), or scattering "settings for the space I'm in" across
 
 ## Decision
 
-**One scope-contextual settings hub**, reached from a gear in the top bar, structured as a responsive
-sidebar↔detail split, with sections filtered by the scopes in the caller's current path and by role.
+**One scope-contextual settings hub**, reached from the profile menu's *Settings* entry, structured as a
+responsive sidebar↔detail split, with sections filtered by the scopes in the caller's current path and by
+role.
 
-1. **A route, not a popup.** The gear (top bar, beside Uploads) navigates to **`/settings`** — a real page,
+1. **A route, not a popup.** The *Settings* entry (sidebar profile menu) navigates to **`/settings`** — a real page,
    deep-linkable per entity (`/settings/group-<id>`, `/settings/tenant-<id>`), back-button-friendly, and
    bookmarkable. A dropdown holds too much; a modal has no URL and on mobile is a full page anyway. (A desktop
-   *overlay* look is an optional later cosmetic over the same routes — no structural difference.) The gear is
+   *overlay* look is an optional later cosmetic over the same routes — no structural difference.) That entry is
    **context-aware**: with no explicit section it resolves to the caller's **active scope as a concrete entity** —
    in a group → **that group's** detail page; in the Tenant scope → the Tenant's members; else *Persönlich*.
 2. **A sidebar ↔ detail split, responsive.** Wide viewports render a persistent section **sidebar +
@@ -50,12 +51,15 @@ sidebar↔detail split, with sections filtered by the scopes in the caller's cur
    location, move, delete) — stay **inline on the object** (its context menu / detail header), never in the
    hub. Rule of thumb: *hub = "about me / about the space / about the server"; inline = "about this one thing
    I'm looking at".* A folder is spatial, not a configuration entry.
-5. **The profile menu stays "me".** The avatar menu keeps a single **Settings** entry that opens the hub (its
-   *Persönlich* section), the **language** quick-picker, and sign out — no duplicated screens, no space/server
-   administration. **Theme** is the exception: it is a very frequent one-tap toggle, so its quick control lives
-   in the **top bar** (beside search), cycling system → light → dark; language stays out of the top bar because
-   it grows more options. Both remain fully configurable in the hub's *Persönlich* section (the canonical home;
-   the top-bar/menu controls are shortcuts).
+5. **The profile menu stays "me" — and it is the shell's only door.** The avatar menu carries the **theme**
+   and **language** quick-pickers, a single **Settings** entry that opens the hub (its *Persönlich* section),
+   and sign out — no duplicated screens, no space/server administration rendered in the menu itself. Theme and
+   language are **one pair, on one shelf**: the hub presents them as a single *Appearance and language* block,
+   so neither axis is an exception and neither sits at the shell's opposite end from the other. Both remain
+   fully configurable in that hub section (the canonical home; the menu's pickers are shortcuts). The **top
+   bar carries no preferences and no second entry into the hub** — it is left to what is genuinely contextual
+   (breadcrumb, invitations badge, upload tray), which matters most below the compact threshold, where it is
+   only 2.1rem tall (`web/src/styles/layout.css`) and every control removed is real room.
 
 ## Consequences
 
@@ -68,6 +72,14 @@ sidebar↔detail split, with sections filtered by the scopes in the caller's cur
 - **Operator-blindness is untouched.** Device-local preferences stay device-local (they never reach the
   server); the member/tenant sections show only already-stored operational metadata (pubkeys, roles,
   grant-present, tenant name/domain) — never a key. The hub is only *where* these are shown.
+- **Rejected — the top-bar gear as the hub's contextual door (a close call, recorded because it nearly won).**
+  § Context's category-error warning cuts against decision 5 itself: the hub holds group, tenant and server
+  sections, so hanging its door off a menu that is about *me* is that error stated one level up, and keeping
+  the gear in the top bar was the reading faithful to it. It lost on the reconciliation: the profile menu
+  gains **one door, not the hub's contents** — *"about me"* describes where the handle is, not what is behind
+  it, and what keeps the hub honest is decision 4's boundary, never the handle's location. What settled it is
+  that two doors into one route is duplication whichever one goes, and the one in the top bar is paid for in
+  the shell's scarcest space (decision 5).
 - **Rejected — a profile submenu for everything.** Buries space settings under "my account" (category error)
   and becomes deep static nesting as groups arrive.
 - **Rejected — a per-scope gear that shows only the current scope.** Cannot present "group **and** tenant
