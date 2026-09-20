@@ -663,6 +663,16 @@ was scored red on a step the test does not exist to check. The tell is purely me
 **read which assertion reddened, not that the test reddened** — a red on a setup line is an unbitten test wearing
 a bitten one's clothes, and it is re-bitten by injection once the earlier fix lands.
 
+**The same mechanism also fires one level in, between two assertions of the same test, and there it is harmless
+but misleading.** cr-gallery-one-order-for-every-tile predicted its live defect would redden on the *position*
+of a settled upload tile; it reddened on the *order* assertion two lines above, because the tile order was
+already wrong before anything settled, so the position was never reached. Nothing was wrong with the test — but
+the CR's prediction and the run disagreed, and only reading the failure told which. The cause is a mismatch of
+altitude: the phases had been written from the code's **shape** (two lists concatenated) while the bite was
+described by its **purpose** (the slot after a reconcile), and those are different assertions. So when a bite
+carries assertions in sequence, **the CR names which one is expected to fail first**. It costs a clause, it is
+checked for free on the first run, and a prediction that misses is worth more than one that was never made.
+
 ### A bite's lever must survive the CR's own later phases
 
 **A CR that fixes a defect and also pins a property against that defect will, if it is not careful, lever the
