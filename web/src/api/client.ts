@@ -23,7 +23,12 @@ import {
 } from './generated/account'
 import { Configuration as TenantsConfiguration, TenantsApi } from './generated/tenants'
 import { Configuration as ScopesConfiguration, ScopesApi } from './generated/scopes'
-import { ContentApi, FavoritesApi, Configuration as ContentConfiguration } from './generated/content'
+import {
+  ContentApi,
+  FavoritesApi,
+  ItemFavoritesApi,
+  Configuration as ContentConfiguration,
+} from './generated/content'
 import { MediaApi, BucketsApi, Configuration as MediaConfiguration } from './generated/media'
 import { TasksApi, Configuration as TasksConfiguration } from './generated/tasks'
 import { SharingApi, Configuration as SharingConfiguration } from './generated/sharing'
@@ -116,6 +121,13 @@ export function contentApi(): ContentApi {
 
 export function favoritesApi(): FavoritesApi {
   return new FavoritesApi(new ContentConfiguration(bearerParams()))
+}
+
+// The item marks inside one Memory (ADR 0068) — the `item-favorites` tag on the content spec → its own
+// ItemFavoritesApi, same content config/auth. A separate resource from `favoritesApi` because the two objects
+// have different audiences, not because the paths differ.
+export function itemFavoritesApi(): ItemFavoritesApi {
+  return new ItemFavoritesApi(new ContentConfiguration(bearerParams()))
 }
 
 export function mediaApi(): MediaApi {

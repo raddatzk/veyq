@@ -1,0 +1,105 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+vi.mock('../features/memory/itemFavorites', () => ({
+  loadItemFavorites: vi.fn(),
+  saveItemFavorites: vi.fn(),
+}))
+
+import {
+  itemFavoritesStore,
+  isMarkedByMe,
+  markCount,
+  markedByAnyone,
+  loadItemFavoritesFor,
+  toggleItemFavorite,
+  clearItemFavorites,
+} from './itemFavoritesStore'
+import { loadItemFavorites, saveItemFavorites } from '../features/memory/itemFavorites'
+
+const KEY = new Uint8Array(32)
+
+/** Two co-members and the caller, as the read hands them over: `own` is the only identity there is. */
+const threeMembers = [
+  { own: true, ids: new Set(['a', 'b']) },
+  { own: false, ids: new Set(['b']) },
+  { own: false, ids: new Set(['b', 'c']) },
+]
+
+beforeEach(() => {
+  vi.clearAllMocks()
+  clearItemFavorites()
+})
+
+describe('itemFavoritesStore', () => {
+  /**
+   * **The aggregate.** The count is across ALL members, not the caller's own — that is the whole difference
+   * between this and a private pin, and it is what the tile heart shows. Counting only the caller's set
+   * reddens here.
+   */
+  it('counts a mark across every member, not just the caller', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+
+    expect(markCount('b')).toBe(3) // all three
+    expect(markCount('a')).toBe(1) // the caller alone
+    expect(markCount('c')).toBe(1) // one co-member alone
+    expect(markCount('zzz')).toBe(0)
+  })
+
+  it('tells the caller-s own marks from everyone-s', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+
+    expect(isMarkedByMe('a')).toBe(true)
+    expect(isMarkedByMe('c')).toBe(false) // marked, but not by me
+    expect([...markedByAnyone()].sort()).toEqual(['a', 'b', 'c'])
+  })
+
+  /**
+   * The aggregate-only rule is carried by the DATA, not by the components. There is no member id anywhere in
+   * what this store holds, so no view can leak one however it is written — and any future change that puts an
+   * identity back on the wire has to pass through this assertion first.
+   */
+  it('holds no member identity beyond "is this mine"', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+
+    for (const m of itemFavoritesStore.marks) {
+      expect(Object.keys(m).sort()).toEqual(['ids', 'own'])
+    }
+    // and exactly one of them is the caller's
+    expect(itemFavoritesStore.marks.filter((m) => m.own)).toHaveLength(1)
+  })
+
+  it('toggles optimistically and persists only the caller-s own set', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+    vi.mocked(saveItemFavorites).mockResolvedValue(undefined)
+
+    await toggleItemFavorite('c', 's', 'n', KEY)
+
+    expect(isMarkedByMe('c')).toBe(true)
+    expect(saveItemFavorites).toHaveBeenCalledWith('s', 'n', KEY, new Set(['a', 'b', 'c']))
+    // the co-members' sets are untouched — the count for 'c' is now the caller plus the one who had it
+    expect(markCount('c')).toBe(2)
+  })
+
+  it('reverts the optimistic mark when the write fails', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+    vi.mocked(saveItemFavorites).mockRejectedValue(new Error('network'))
+
+    await toggleItemFavorite('c', 's', 'n', KEY)
+
+    expect(isMarkedByMe('c')).toBe(false)
+    expect(markCount('c')).toBe(1) // back to the one co-member who had it
+  })
+
+  it('clears when the Memory closes', async () => {
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'n', KEY)
+    clearItemFavorites()
+    expect(itemFavoritesStore.loaded).toBe(false)
+    expect(markCount('b')).toBe(0)
+  })
+})

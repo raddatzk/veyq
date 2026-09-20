@@ -55,6 +55,13 @@ const i18n = createI18n({
         },
       },
       media: {
+        marks: {
+          mark: 'Mark this photo — everyone in this space sees it', unmark: 'Remove your mark',
+          filterLabel: 'Show marked photos',
+          filter: { all: 'All', everyone: "Everyone's", mine: 'Only mine' },
+          emptyMine: 'You have not marked anything in this Memory yet.',
+          emptyEveryone: 'Nobody has marked anything in this Memory yet.',
+        },
         upload: 'Upload',
         information: 'Details',
         toggleInfo: 'Toggle details',
@@ -138,6 +145,62 @@ afterEach(() => {
 })
 
 describe('MemoryDetail (gallery grid + header)', () => {
+  /**
+   * **The bite (uc.memory.gallery E4).** In a personal scope there is nobody to share a mark with, so the
+   * "everyone's / only mine" filter is **absent**, not disabled. Rendering it `:disabled` is the one-line
+   * change the obvious implementation reaches for, and it reddens here — a greyed-out control asks "how do I
+   * turn this on?", a question a personal scope has no answer to.
+   *
+   * The filter's presence is also half of how a user learns that marks are shared at all (ADR 0068), which is
+   * why its gate is the scope KIND and not "has anyone marked yet": a group nobody has marked in yet still
+   * shows it, because the next mark will be seen.
+   */
+  it('hides the mark filter in a personal scope — absent, never disabled', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png' }, stubDeriver())
+
+    const personal = mountDetail(memoryKey, { scopeKey: v1.randomBytes(32), personalScope: true })
+    await flushPromises()
+    await flushPromises()
+    expect(personal.find('.gallery-mark-filter').exists()).toBe(false)
+    expect(personal.findAll('.gallery-mark-filter-option')).toHaveLength(0)
+    // and specifically NOT the disabled spelling
+    expect(personal.findAll('[disabled]').length).toBe(0)
+
+    const group = mountDetail(memoryKey, { scopeKey: v1.randomBytes(32), personalScope: false })
+    await flushPromises()
+    await flushPromises()
+    expect(group.find('.gallery-mark-filter').exists()).toBe(true)
+    expect(group.findAll('.gallery-mark-filter-option').map((o) => o.text())).toEqual(["All", "Everyone's", 'Only mine'])
+  })
+
+  /**
+   * The mark toggle never renders an identity, because it is never given one: the store holds only "is this
+   * mine" and a count. This asserts the rendered result carries no uuid-shaped attribute — the outside-in
+   * version of the store's own "holds no member identity" case.
+   */
+  it('renders the mark toggle without ever naming a member', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png' }, stubDeriver())
+
+    const wrapper = mountDetail(memoryKey, { scopeKey: v1.randomBytes(32), personalScope: false })
+    await flushPromises()
+    await flushPromises()
+
+    const mark = wrapper.find('.media-tile-mark')
+    expect(mark.exists()).toBe(true)
+    expect(mark.attributes('aria-label')).toBe('Mark this photo — everyone in this space sees it')
+    expect(mark.attributes('aria-pressed')).toBe('false')
+    // no member id anywhere in the rendered gallery
+    expect(wrapper.html()).not.toMatch(/member-?id/i)
+  })
+
   it('lists the Memory media → renders the decrypted title, item count and a thumbnail tile per item', async () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)

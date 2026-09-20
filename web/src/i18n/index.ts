@@ -807,6 +807,21 @@ const en = {
     capturedAtSaveFailed: 'Could not save the capture time.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
+    // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
+    // so nothing may suggest it is private. "Only mine" names a filter over what is shown — never a promise
+    // about who can see it. The count beside the heart is the standing evidence that others do.
+    marks: {
+      mark: 'Mark this photo — everyone in this space sees it',
+      unmark: 'Remove your mark',
+      filterLabel: 'Show marked photos',
+      filter: {
+        all: 'All',
+        everyone: "Everyone's",
+        mine: 'Only mine',
+      },
+      emptyMine: 'You have not marked anything in this Memory yet.',
+      emptyEveryone: 'Nobody has marked anything in this Memory yet.',
+    },
   },
   share: {
     share: 'Share',
@@ -1701,6 +1716,18 @@ const de: typeof en = {
     capturedAtSaveFailed: 'Aufnahmezeit konnte nicht gespeichert werden.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
+    marks: {
+      mark: 'Dieses Foto markieren — alle in diesem Bereich sehen es',
+      unmark: 'Deine Markierung entfernen',
+      filterLabel: 'Markierte Fotos anzeigen',
+      filter: {
+        all: 'Alle',
+        everyone: 'Von allen',
+        mine: 'Nur meine',
+      },
+      emptyMine: 'Du hast in dieser Erinnerung noch nichts markiert.',
+      emptyEveryone: 'Niemand hat in dieser Erinnerung bisher etwas markiert.',
+    },
   },
   share: {
     share: 'Teilen',

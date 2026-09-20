@@ -31,6 +31,13 @@ export interface MediaGalleryLiveCtx {
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
   onSettle: () => Promise<void>
+  /**
+   * The item-favorite filter (ADR 0068), or null when the gallery shows everything. It is applied to
+   * `sortedItems` — the one list the grid, each tile's `index` and `openLightboxAt`'s snapshot all derive from
+   * — so filtering narrows the lightbox with the grid. Filtering only the grid would let prev/next page
+   * straight out of the selection the user just made.
+   */
+  markFilter?: () => ((mediaId: string) => boolean) | null
 }
 
 /** A grid tile handed to [MediaGrid]: an in-flight optimistic upload or a listed media. */
@@ -85,7 +92,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
   // both positions in THIS list, never in the merged one, so an in-flight tile can never shift which photo a
   // click opens. The merged list sorts on the same key, so the media order inside it is identical to this.
-  const sortedItems = computed(() => byCaptureTime(items.value, capturedAtOf, sortDirection.value))
+  const sortedItems = computed(() => {
+    const keep = ctx.markFilter?.() ?? null
+    const listed = keep ? items.value.filter((it) => keep(it.mediaId)) : items.value
+    return byCaptureTime(listed, capturedAtOf, sortDirection.value)
+  })
 
   const aspectRatios = computed(() => {
     const key = ctx.memoryKey()
@@ -105,7 +116,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   const layoutItems = computed<MemoryTileItem[]>(() =>
     byCaptureTime<MemoryTileItem>(
       [
-        ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
+        // An in-flight upload carries no marks yet, so it is not part of a filtered view — showing it would
+        // put an unmarked tile inside "only mine". Unfiltered, it keeps its capture-time slot as always.
+        ...(ctx.markFilter?.()
+          ? []
+          : optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t }))),
         ...sortedItems.value.map((it, index) => ({
           id: it.mediaId,
           aspectRatio: aspectRatios.value.get(it.mediaId) ?? FALLBACK_ASPECT,

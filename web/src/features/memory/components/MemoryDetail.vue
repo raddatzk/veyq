@@ -26,6 +26,14 @@ import MemoryBuckets from './MemoryBuckets.vue'
 import OptimisticTile from './OptimisticTile.vue'
 import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
+import {
+  isMarkedByMe,
+  markCount,
+  markedByAnyone,
+  loadItemFavoritesFor,
+  toggleItemFavorite,
+  clearItemFavorites,
+} from '../../../app/itemFavoritesStore'
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
@@ -44,6 +52,12 @@ const props = defineProps<{
   scopeId: string
   memoryKey: Uint8Array | null
   favorite?: boolean
+  // The scope content key at the BASE epoch — what item marks seal under (ADR 0068). Not `memoryKey`: marks
+  // belong to the scope's members, not to this Memory's content grain.
+  scopeKey?: Uint8Array | null
+  // A personal scope has nobody to share a mark with, so "everyone's / only mine" is degenerate there and the
+  // filter is HIDDEN rather than rendered disabled (uc.memory.gallery E4).
+  personalScope?: boolean
   chapters?: TreeNode[] // child CHAPTER nodes of this Memory/chapter (cr-0060)
   shareable?: boolean // this is a personal-scope MEMORY → offer the public-share affordance (cr-0100)
 }>()
@@ -64,6 +78,46 @@ const { hasCapability } = useCapabilities()
 // The uploader (drop-box) link is its OWN memory action (a separate dialog), offered only when the instance keeps
 // the uploader-links capability (ADR 0032) — the server also 422-rejects createShare(UPLOADER) when it is off.
 const canUploadShare = computed(() => !!props.shareable && hasCapability(SHARING_UPLOADER_LINKS))
+
+// --- item favorites (ADR 0068) ---
+// The marks inside this Memory, shared with the scope. The filter is declared BEFORE the gallery core because
+// the core takes it as a predicate; `all` means no filter at all, so the unfiltered gallery pays nothing.
+const markFilter = ref<'all' | 'everyone' | 'mine'>('all')
+const markFilterPredicate = computed<((mediaId: string) => boolean) | null>(() => {
+  if (markFilter.value === 'mine') return (id) => isMarkedByMe(id)
+  if (markFilter.value === 'everyone') {
+    const marked = markedByAnyone()
+    return (id) => marked.has(id)
+  }
+  return null
+})
+
+/** Load every member's marks for this Memory — re-runs when the Memory or the scope key changes. */
+async function loadMarks() {
+  const key = props.scopeKey
+  if (!key) return
+  try {
+    await loadItemFavoritesFor(props.scopeId, props.node.id, key)
+  } catch {
+    /* marks are an accent on the gallery, never a precondition for it — an empty aggregate is the fallback */
+  }
+}
+
+async function onToggleMark(mediaId: string) {
+  const key = props.scopeKey
+  if (!key) return
+  await toggleItemFavorite(mediaId, props.scopeId, props.node.id, key)
+}
+
+watch(
+  () => [props.node.id, props.scopeKey] as const,
+  () => {
+    clearItemFavorites()
+    markFilter.value = 'all' // a filter is about the Memory you are in, not a mode you carry into the next
+    void loadMarks()
+  },
+  { immediate: true },
+)
 
 // The live-gallery core (uc.memory.gallery) — listed media, the thumbnail pipeline (cr-0150) + optimistic tiles,
 // the cr-0107 live poll (load/merge/upsert), the justified layout, and the optimistic-delete/undo — extracted into
@@ -89,6 +143,7 @@ const {
   node: () => props.node,
   memoryKey: () => props.memoryKey,
   onSettle: () => settle(),
+  markFilter: () => markFilterPredicate.value,
 })
 // The Trash tab (cr-0110/0111) lives in `useMediaTrash` (cr-0147): its listing, thumbnails, batch select, the
 // restore/purge menu + confirm. A restore/purge lifts the gallery tombstone; a restore re-lists the gallery.
@@ -421,8 +476,29 @@ watch(
                 <span class="pi" :class="sortDir === 'newest' ? 'pi-sort-amount-down' : 'pi-sort-amount-up-alt'" />
                 <span>{{ sortDir === 'newest' ? t('media.sortNewest') : t('media.sortOldest') }}</span>
               </button>
+              <!-- The mark filter. In a personal scope there is nobody to share a mark with, so it is HIDDEN
+                   rather than disabled (uc.memory.gallery E4) — a greyed-out control invites the question
+                   "how do I enable this?", which has no answer. Its presence is also half of what tells the
+                   user that marks here are seen by the others (ADR 0068). -->
+              <div v-if="!personalScope" class="gallery-mark-filter" role="group" :aria-label="t('media.marks.filterLabel')">
+                <button
+                  v-for="opt in (['all', 'everyone', 'mine'] as const)"
+                  :key="opt"
+                  type="button"
+                  class="gallery-mark-filter-option"
+                  :class="{ 'is-active': markFilter === opt }"
+                  :aria-pressed="markFilter === opt"
+                  @click="markFilter = opt"
+                >
+                  {{ t(`media.marks.filter.${opt}`) }}
+                </button>
+              </div>
             </div>
-            <MediaGrid :items="layoutItems" :aria-label="t('media.gallery')">
+            <!-- E5: a filter that empties the grid names itself, so it never reads as a broken Memory. -->
+            <p v-if="markFilter !== 'all' && !layoutItems.length" class="veyq-empty">
+              {{ markFilter === 'mine' ? t('media.marks.emptyMine') : t('media.marks.emptyEveryone') }}
+            </p>
+            <MediaGrid v-else :items="layoutItems" :aria-label="t('media.gallery')">
               <template #tile="{ tile, item }">
                 <!-- optimistic in-grid upload tile (cr-0074): the shared OptimisticTile (preview + progress / retry) -->
                 <OptimisticTile
@@ -447,7 +523,12 @@ watch(
                   :has-derivatives="hasDerivatives(item.media)"
                   :is-video="galleryVideoIds.has(item.media.mediaId)"
                   :open-label="t('media.openItem', { index: item.index + 1 })"
+                  :markable="!!scopeKey"
+                  :mark-count="personalScope ? 0 : markCount(item.media.mediaId)"
+                  :marked-by-me="isMarkedByMe(item.media.mediaId)"
+                  :mark-label="isMarkedByMe(item.media.mediaId) ? t('media.marks.unmark') : t('media.marks.mark')"
                   @open="openLightboxAt(item.index)"
+                  @toggle-mark="onToggleMark(item.media.mediaId)"
                 />
               </template>
             </MediaGrid>
@@ -642,6 +723,27 @@ watch(
 </template>
 
 <style scoped>
+.gallery-mark-filter {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--app-radius-sm);
+  background: var(--app-control-bg);
+}
+.gallery-mark-filter-option {
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--app-radius-sm);
+  background: transparent;
+  color: var(--app-muted);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+.gallery-mark-filter-option.is-active {
+  background: var(--app-surface);
+  color: var(--app-text);
+}
+
 .gallery-toolbar {
   display: flex;
   justify-content: flex-end;
