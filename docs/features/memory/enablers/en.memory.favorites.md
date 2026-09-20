@@ -1,59 +1,119 @@
-# Enabler: Favorites (pin a Memory)
+# Enabler: Favorites (pin a Memory, mark an item)
 
 - **ID:** en.memory.favorites
 - **Type:** **Enabler** — a navigation aid, no standalone end-user goal
   ([features/README → use-case vs enabler vs ADR vs change-request](../../README.md#use-case-vs-enabler-vs-adr-vs-change-request)).
-  It speeds finding a Memory; value flows through the [Memory](../_index.md) use-cases it accelerates.
-- **Provides:** a **per-(user, scope) set of pinned Memory ids**, sealed on device and stored as **one opaque
-  blob** — surfaced as the sidebar **Favorites** section + a heart toggle on the Memory card and detail.
-- **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (the header favorite toggle) +
-  [uc.memory.browse](../use-cases/uc.memory.browse.md) (the sidebar Favorites section) — a shortcut to
-  frequently-opened Memories.
-- **Depends on:** [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (the `K_SC`
-  the set is sealed under) + [en.memory.tree](en.memory.tree.md) (the nodes pinned).
-- **Preconditions:** An **authenticated, unlocked** member with the scope open (so `K_SC` is in memory).
-- **Postconditions (success):** The caller's pinned-id set for the scope is sealed under `K_SC` and stored as
-  a single ciphertext blob; the client holds the decrypted set in memory and reflects it in the UI. The server
-  never learns **which** Memories are pinned.
+  It speeds finding a Memory and narrows a gallery; value flows through the [Memory](../_index.md) use-cases it
+  accelerates.
+- **Provides:** **two** favorite objects with **two different audiences**
+  ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)) — a **private** per-(user, scope)
+  set of pinned **Memory ids**, and a **shared, member-attributed** per-(member, scope, node) set of marked
+  **media ids**. Each is sealed on device and stored as an opaque blob.
+- **Serves (use-cases):** [uc.memory.gallery](../use-cases/uc.memory.gallery.md) (the header pin toggle, and the
+  per-item mark + the *everyone's / only mine* filter) + [uc.memory.browse](../use-cases/uc.memory.browse.md)
+  (the sidebar Favorites section) — a shortcut to frequently-opened Memories, and a way to single out the good
+  pictures inside one.
+- **Depends on:** [en.spaces.personal-scope](../../spaces/enablers/en.spaces.personal-scope.md) (the `K_SC` the
+  **item** set is sealed under) + the account **master key** (the **pin** set) + [en.memory.tree](en.memory.tree.md)
+  (the nodes pinned) + [en.memory.media](en.memory.media.md) (the items marked).
+- **Preconditions:** An **authenticated, unlocked** member with the scope open (so `K_SC` and the master key are
+  in memory); for item marks, an **open Memory**.
+- **Postconditions (success):** The caller's pin set for the scope is sealed under their **master key**; their
+  item set for the open Memory is sealed under `K_SC` and readable by co-members. The client holds both
+  decrypted in memory and reflects them in the UI. The server never learns **which** Memories are pinned or
+  **which** items are marked.
+
+## Two objects, because they have two audiences
+
+They look like one feature and are not. The full rule, its rejected alternatives and its measurements live in
+[ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md); what binds here:
+
+| | **Memory favorite** (the pin) | **Item favorite** (the mark) |
+| --- | --- | --- |
+| what | a node id | a `veyq_media` id |
+| audience | **private to the member** | **shared** with the scope, member-attributed |
+| seal | `symWrap(masterKey, …, "favorites")` | `symWrap(K_SC@E_0, …, "item-favorites")` |
+| stored | one blob per **(user, scope)** | one blob per **(member, scope, node)** |
+| read | the caller's blob only | the scope's **per-member** blobs |
+| surfaces | sidebar Favorites, heart on card/detail | gallery filter + per-tile aggregate |
+
+One blob has one key and therefore one audience, so a single envelope carrying both sets is not available — that
+is *why* there are two, not a convenience.
 
 ## Operator-blind: a favorite is ciphertext
 
-A plaintext `favorite` boolean per node would break the
+A plaintext `favorite` boolean per node or per item would break the
 [operator-blind invariant](../../../crosscutting/security-model.md): it sanctions only *IDs, sizes, coarse
 timestamps, scope/membership, blinded tokens* as server-visible metadata. A pin is a **preference** — **none of
-those** — so a plaintext flag would leak to the operator *what matters to you* among the (opaque) nodes. The
-invariant therefore forces a favorite to be **ciphertext**:
+those** — so a plaintext flag would leak to the operator *what matters to you* among the (opaque) nodes and
+items. The invariant therefore forces a favorite to be **ciphertext**:
 
-- The caller's pinned-id **set** is AEAD-sealed under `K_SC` (context `favorites`) and stored as **one opaque
-  blob** per `(user, scope)`. The server sees only the ciphertext + its size — never the subset of pinned ids.
-- **Last-write-wins.** Toggling re-seals the *whole* set and `PUT`s it (the set is tiny). The UI updates
-  optimistically and reverts on a failed write.
+- Each set is AEAD-sealed on device and stored as **one opaque blob**. The server sees only the ciphertext + its
+  size — never the subset that is favorited.
+- **Last-write-wins.** Toggling re-seals the *whole* affected set and `PUT`s it. The UI updates optimistically
+  and reverts on a failed write.
+- Access is **member-grant gated** (a non-member gets `404`, like the tree). The ids inside reference nodes and
+  media the server already knows opaquely; sealing the **set** is what hides which of them are favorited.
 
-`GET / PUT /api/scopes/{scopeId}/favorites` carry only the opaque blob; access is **member-grant gated** (a
-non-member gets `404`, like the tree). The pinned ids inside reference nodes the server already knows opaquely;
-sealing the **set** is what hides which of them are favorited.
+`GET / PUT /api/scopes/{scopeId}/favorites` carries the caller's pin blob and **never** another member's.
+`GET /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` returns `[{ memberId, ciphertext }]` — every member's
+blob for that Memory; the `PUT` writes only the caller's.
 
 ## Main flow
 
-1. On opening a scope, the client `GET`s the favorites blob and `symUnwrap`s it with `K_SC` → the pinned-id set.
-2. Toggling a Memory's pin updates the in-memory set at once, then re-seals it (`symWrap` under `K_SC`) and
-   `PUT`s the new blob. A failure reverts the optimistic change.
+**Pinning a Memory.**
+
+1. On opening a scope, the client `GET`s the pin blob and `symUnwrap`s it with the **master key** → the pinned-id
+   set. There is no branch on scope type: the seal is the same in a personal and in a group scope.
+2. Toggling a Memory's pin updates the in-memory set at once, then re-seals it and `PUT`s the new blob. A failure
+   reverts the optimistic change.
 3. The sidebar resolves the pinned ids against the **local decrypted tree** to render the Favorites section (a
    pinned node that no longer exists simply drops) — each entry with its **name and its chosen cover**
    ([uc.memory.cover](../use-cases/uc.memory.cover.md)), read from the shared cover store. The rail asks that
    store which nodes are on screen and holds **no key material of its own**: the chain that opens a node's
    `K_mem` stays out of an always-mounted component.
 
+**Marking an item.**
+
+4. Opening a Memory, the client `GET`s that node's item-favorite blobs and `symUnwrap`s **each** with `K_SC` →
+   one marked-id set per member. Their union feeds the *everyone's* filter, the caller's own feeds *only mine*,
+   and the per-item **count** across them feeds the tile aggregate.
+5. Toggling an item's mark updates the caller's set for that Memory, re-seals it and `PUT`s it — only that
+   Memory's set moves, never the scope's.
+6. A marked item that has been trashed or purged simply drops client-side when the grid resolves the ids against
+   the Memory's live media, exactly as a dead pin drops from the sidebar.
+
 ## Quality notes
 
-- **Operator-blind, per-user.** Ciphertext set under `K_SC`; for a **personal** scope `K_SC` is per-user, so the
-  blob is inherently private. **In a group `K_SC` is shared** — so group favorites must seal under the member's
-  **own identity key**, not `K_SC` ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)); folded
-  in when favorites reach group scopes.
-- **No new crypto.** The same `symWrap` / `symUnwrap` name-sealing the tree uses
-  ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)), a new context string `favorites`.
+- **Operator-blind, and — for the pin — per-user for real.** The pin blob seals under the member's **master
+  key**, so it is private to them in **every** scope. This is the fix for a real defect: it previously sealed
+  under `K_SC`, which is *shared* in a group, so every co-member could already decrypt another member's pins —
+  the data leaked, the UI merely never showed it
+  ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §7, discharged by
+  [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md)).
+- **The aggregate is a presentation choice, not a confidentiality guarantee — and copy must not say otherwise.**
+  Item marks are sealed under `K_SC`, which every member of a group holds; and because the server is
+  operator-blind it **cannot aggregate on our behalf**, so the client necessarily receives the **per-member**
+  blobs and could name who marked what. Showing only a count is a UI decision on top of data that is not
+  private between members. So **no string in the UI or in `wiki/` may imply that nobody can see what you
+  marked** — *"only mine"* is a **filter**, never a promise. This is the same trap as the pin defect above, one
+  level down, which is why that one was fixed rather than deferred.
+- **The write shape is the size limit, and it is why item blobs are per-node.** The whole set is re-sealed on
+  every single toggle, so a set's size is also its *per-click upload*. `measured` (real UUIDs +
+  `JSON.stringify`, against this tree): a 65 536-char `ciphertext` cap holds **1 259** ids, and at 500 ids a
+  single toggle already re-uploads 25 KiB. Partitioning item marks **per node** keeps the ceiling beyond a
+  Memory's practical media count and the upload at that Memory's set — and it costs **no** extra metadata,
+  because the client has just fetched that node's media list, so the server already observed the node id. A
+  larger cap, per-item rows and keyed-hash buckets were all rejected; the reasoning is in
+  [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §4.
+- **Two seals, two contexts.** `symWrap` / `symUnwrap` as everywhere else
+  ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)), with **distinct** context strings `favorites`
+  and `item-favorites` — so a blob authenticated for one can never be opened as the other.
+- **The base epoch survives only on the shared side.** Item marks seal under `K_SC` at the **base epoch `E_0`**,
+  so a scope-key rotation cannot strand a set. Pins no longer need that: the master key does not rotate with
+  scope epochs.
 - **Idempotent + recoverable.** A missing/unreadable blob decodes to the empty set; the feature never blocks
-  browse.
+  browse or the gallery.
 
 > **No end-user section.** As an enabler it carries no standalone wiki story — favoriting shows up in the
 > Memory use-cases' bilingual sections.
@@ -61,7 +121,10 @@ sealing the **set** is what hides which of them are favorited.
 ## Related
 
 - Feature: [Memory](../_index.md)
-- Sibling: [en.memory.tree](en.memory.tree.md) (the nodes pinned)
+- Siblings: [en.memory.tree](en.memory.tree.md) (the nodes pinned),
+  [en.memory.media](en.memory.media.md) (the items marked)
 - Concepts: [Security Model](../../../crosscutting/security-model.md) (operator-blind metadata boundary)
-- Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC` sealing),
-  [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (group favorites under the identity key)
+- Decisions: [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two objects —
+  the governing decision), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_SC` sealing),
+  [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (the epoch chain behind `E_0`),
+  [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §7 (the defect this fixes)

@@ -4,14 +4,16 @@
 - **Primary actor:** A member with an **unlocked vault**, inside one of their spaces, who **opens a Memory**
   from the shell.
 - **Goal:** Open a Memory and look through its media — a thumbnail **grid**, an item **lightbox** (full view,
-  prev/next), and **download** an original — with every byte decrypted **on device**.
+  prev/next), and **download** an original — with every byte decrypted **on device**; **mark** the good ones and
+  narrow the grid to *everyone's favorites* or *only mine*.
 - **Preconditions:** The user has unlocked the vault and is browsing the tree
   ([uc.memory.browse](uc.memory.browse.md)); the Memory exists and its **`K_mem`** can be unwrapped; its media
   carry **derivatives** ([en.memory.derivatives](../enablers/en.memory.derivatives.md); a non-derivable item
   shows an icon tile).
 - **Postconditions (success):** The user sees the Memory's media as a grid, opens any item in a lightbox and
-  pages through, **plays a video** in place, can favorite the Memory, and can download an item's original. The
-  server saw only **ciphertext fetches** — no pixel, no filename, no content key.
+  pages through, **plays a video** in place, can pin the Memory, can **mark individual items** and filter the
+  grid by those marks, and can download an item's original. The server saw only **ciphertext fetches** — no
+  pixel, no filename, no content key, and never which items are marked.
 
 ## Main flow
 
@@ -19,7 +21,8 @@
    client unwraps the Memory's **`K_mem`** (already held from the tree).
 2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) and fetches each
    item's **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) via presigned GET,
-   decrypts on device, and renders a **grid** under a header (title, item count, favorite toggle). The grid is
+   decrypts on device, and renders a **grid** under a header (title, item count, pin toggle, and — in a group
+   scope — the favorites filter). The grid is
    ordered by **effective capture time** — newest first by default, a header toggle for oldest first, undated
    media last — read from each media's sealed capture tier, so the blind server never sees a timestamp yet the
    order is exact on device (cr-0066).
@@ -47,7 +50,15 @@
    § *Request discipline*.
 5. **Download:** an explicit download fetches the **original** (the only pristine, full-resolution copy) and
    saves it.
-6. **Favorite:** the header toggle pins / unpins the Memory ([en.memory.favorites](../enablers/en.memory.favorites.md)).
+6. **Pin the Memory:** the header toggle pins / unpins it
+   ([en.memory.favorites](../enablers/en.memory.favorites.md)). This pin is **private to the user**.
+7. **Mark an item, and narrow by marks.** A heart on each tile (and in the lightbox) marks that item. Unlike the
+   header pin, an item mark is **shared with the scope**: the tile's heart carries a **count** — how many
+   members marked it — and that count is the whole of what the UI shows. **Who** marked an item is never
+   displayed: no faces, no names, no per-member attribution
+   ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §6).
+   A header filter narrows the grid to **everyone's favorites** or **only mine**; the grid's ordering rule is
+   unchanged, the filter only removes tiles. A marked item that has since been trashed or purged simply drops.
 
 ## Alternate / exception flows
 
@@ -57,6 +68,11 @@
 - **E2 — vault locked / Memory not open:** without `K_mem` the media can't be read → the gallery is unavailable
   until unlock + the Memory is opened.
 - **E3 — empty Memory:** the grid shows an empty state.
+- **E4 — personal scope:** *"everyone's favorites"* is degenerate when the user is the only member, so the
+  filter is **hidden** — not rendered disabled. The per-tile count is likewise pointless and is not shown; the
+  item heart still marks, it just has no audience to report.
+- **E5 — a filter that empties the grid** (e.g. *only mine* with nothing marked yet): the grid shows an empty
+  state that names the active filter, so it never reads as a broken or empty Memory.
 
 ## Quality notes
 
@@ -73,11 +89,30 @@
   it reads.
 - **Reuse the existing UI/UX — never invent** ([ui-web-styleguide](../../../crosscutting/ui-web-styleguide.md)
   § Reuse first). The grid + lightbox are existing components; only the **data layer** is client-side crypto
-  over the contracts client.
+  over the contracts client. The item mark reuses the **same heart** as the Memory pin: a Memory in the shell
+  and a photo in a grid are different elements in different places, so *what* is being marked was never the
+  ambiguous part — a second icon would be invented UI solving a problem nobody has.
+- **The aggregate is a presentation choice, not a confidentiality guarantee, and the copy here must not blur
+  that.** Item marks seal under `K_SC`, which every member of a group holds, and the operator-blind server
+  cannot aggregate for us — so the client receives the **per-member** blobs and *could* name who marked what.
+  Showing only a count is a decision about the UI, not a property of the data. Therefore **no string on this
+  screen may suggest that nobody can see what you marked**: *"only mine"* names a **filter**, never a promise.
+  The reasoning and the rejected alternatives are in
+  [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md).
+- **Two carriers tell the user the mark is shared, because neither covers the other's case.** The per-tile
+  **count** says it continuously — but it fails at the exact moment it matters most, the **first** mark, where
+  "1" is the user's own and proves nothing about who else sees it. That case is carried by the **filter**,
+  which is present in the header precisely when marks are shared and hidden when they are not (E4). Dropping
+  either one puts the user back to guessing from the icon.
 
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** Open a Memory and you see its photos as a grid; tap one to view it large and swipe through the rest.
+You can **mark the good ones with a heart**, and then show only the marked ones — either **everyone's** or
+**just yours**. Worth knowing: in a shared space a mark on a photo is **not private** — the others in that
+space see that the photo was marked, and the heart shows **how many** people marked it. veyq does not show
+*who* did, but it cannot hide it either, so treat a mark as something you do in front of the group. The heart
+on the **Memory itself** is the other way round: that one is **only yours**, and nobody else can see it.
 A **video** shows a small ▶ badge on its tile — open it and press play to watch it right there. Everything is
 decrypted on **your own device** — the server only ever stores scrambled files and never sees your pictures or
 videos. Pictures are ordered by **when they were taken**, newest first unless you flip the order — and one that
@@ -91,7 +126,12 @@ piece as you watch**, so only the parts you actually play are fetched, not the w
 maps and playlists come in later steps.
 
 **DE —** Öffne eine Erinnerung und du siehst ihre Fotos als Raster; tippe eines an, um es groß zu sehen und
-durch die anderen zu blättern. Ein **Video** zeigt ein kleines ▶-Abzeichen auf seiner Kachel — öffne es und
+durch die anderen zu blättern. Du kannst **die guten mit einem Herz markieren** und dann nur die markierten
+anzeigen — entweder **die von allen** oder **nur deine**. Wichtig zu wissen: In einem geteilten Bereich ist
+eine Markierung an einem Foto **nicht privat** — die anderen in diesem Bereich sehen, dass das Foto markiert
+wurde, und das Herz zeigt, **wie viele** Leute es markiert haben. veyq zeigt nicht, *wer* es war, kann es aber
+auch nicht verbergen; betrachte eine Markierung also als etwas, das du vor der Gruppe tust. Das Herz an der
+**Erinnerung selbst** ist umgekehrt: das gehört **nur dir** und ist für niemanden sonst sichtbar. Ein **Video** zeigt ein kleines ▶-Abzeichen auf seiner Kachel — öffne es und
 drücke Play, um es direkt dort anzusehen. Alles wird auf **deinem eigenen Gerät** entschlüsselt — der Server
 speichert nur verschlüsselte Dateien und sieht deine Bilder und Videos nie. Sortiert wird nach **Aufnahmezeit**,
 neueste zuerst, solange du die Richtung nicht umdrehst — und was noch hochlädt, steht schon an seiner richtigen
@@ -110,9 +150,11 @@ Kapitel, Karten und Playlists kommen in späteren Schritten.
 - Feature: [Memory](../_index.md)
 - Enablers: [en.memory.derivatives](../enablers/en.memory.derivatives.md) (the three tiers),
   [en.memory.media](../enablers/en.memory.media.md) (the blob transport),
-  [en.memory.favorites](../enablers/en.memory.favorites.md) (the favorite toggle),
+  [en.memory.favorites](../enablers/en.memory.favorites.md) (the Memory pin **and** the item mark),
   [en.memory.tree](../enablers/en.memory.tree.md) (`K_mem`)
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (direct-to-store
-  media), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_mem` → `K_blob`)
+  media), [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (`K_mem` → `K_blob`),
+  [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) (the two favorite objects, the
+  aggregate-only rule, and why the copy above says what it says)
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);
   the journal / chapters / map — planned

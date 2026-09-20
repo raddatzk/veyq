@@ -125,15 +125,19 @@ and which is confidential even from the tenant owner.**
      [ADR 0024](0024-scope-key-rotation.md)). "Stop new grants + rotate forward"; already-read content cannot be
      retracted (a stated limitation).
 
-7. **Group favorites are per-user under the identity key, not `K_SC`.** The favorites blob
-   ([en.memory.favorites](../features/memory/enablers/en.memory.favorites.md)) seals under `K_SC` for a personal
-   scope, but `K_SC` is **shared** in a group, so a group's per-user favorites must seal under the **member's own
-   identity key** to stay private to them. Folded in when favorites reach group scopes.
+7. **A member's Memory favorites are private to them, not sealed under `K_SC`.** `K_SC` is **shared** in a
+   group, so the favorites blob ([en.memory.favorites](../features/memory/enablers/en.memory.favorites.md))
+   sealed under it is readable by every member. **Decided and discharged** by
+   [ADR 0068](0068-favorites-two-confidentiality-levels.md): the pin seals under the member's **master key**, in
+   every scope without a branch — "own identity key" here named the *property*, not the primitive. That ADR also
+   settles what this clause did not anticipate: a **second**, deliberately **shared** favorite object on
+   individual media items, which is why the rule is stated there rather than extended here.
 
 ## Consequences
 
 - **Groups reuse the content stack.** The Memory tree ([ADR 0012](0012-content-key-hierarchy.md)), browse, and
-  (with the identity-key caveat) favorites work per-scope already — a group is "another scope" to them.
+  favorites work per-scope already — a group is "another scope" to them. Favorites are the one place that needed
+  more than "another scope": see §7 and [ADR 0068](0068-favorites-two-confidentiality-levels.md).
 - **Confidential even from the tenant owner.** The strongest practical privacy statement veyq makes: a group's
   *content and name* are sealed; only its *existence + membership* are visible to whoever runs the server, and
   the product surfaces neither to the tenant owner.
