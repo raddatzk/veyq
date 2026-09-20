@@ -25,6 +25,12 @@ export async function loadFavorites(scopeId: string, scopeKey: Uint8Array): Prom
     const ids = JSON.parse(json)
     return Array.isArray(ids) ? new Set(ids.filter((id): id is string => typeof id === 'string')) : new Set()
   } catch {
+    // Deliberate: a corrupt or wrong-key blob degrades to "nothing pinned" rather than blocking browse.
+    //
+    // TRAP, and it cost a bite test: because this swallows, any assertion phrased over THIS function —
+    // "loading with the wrong key yields nothing" — is green before a fix, after it, and after a revert. It
+    // can never redden, so it proves nothing about the seal. A test about WHICH key opens the set must assert
+    // on `v1.symUnwrap` throwing directly (src/app/favoritesPrivacy.test.ts does).
     return new Set()
   }
 }

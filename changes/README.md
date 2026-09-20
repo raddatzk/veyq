@@ -1018,6 +1018,24 @@ live pass for it.
 enum narrowing landed on top of uncommitted `cr-space-icon` WIP in `scopes.openapi.yaml`, and only a pre-edit
 `git status` caught it. Split the go — land one, then the other as its own commit — and the history stays legible.
 
+### "Which one is mine?" is a flag, not an id — and dropping the id is the stronger answer
+
+**When a read hands back a collection of per-party blobs and the client only needs to find its own, the field
+to add is a boolean on the caller's entry, not that party's identifier.** The array already separates the
+parties, and a count across it needs no names — so an id is data the read did not have to carry, and the only
+fact the client genuinely cannot derive is *which entry is mine*, which the server knows as the token's
+principal.
+
+`cr-favorites-two-objects` shipped `ItemFavoritesEntry.memberId` in its contracts phase and replaced it with
+`self: boolean` two phases later, when the web phase revealed the client has no way to know its own user id at
+all — so the field could not even do the job it was added for. The replacement is smaller *and* stronger: the
+product rule was "never show who marked what", and with no member id on the wire a client **cannot** attribute
+a mark however it is written. A policy the UI is trusted to keep became a property of the data.
+
+The general form: **prefer removing an identity over adding a rule about not displaying it.** A rule holds
+until someone writes the next component; a shape holds by construction. Ask it at refine, where the answer is
+a line in an ADR — the section below is the same question about whether the field earns its place at all.
+
 ### Before adding a read field to expose a server fact
 
 **Prove the fact isn't already *implied* — and that the server can *reliably know* it.** A new field earns its place only when the value is both (a) not derivable from
