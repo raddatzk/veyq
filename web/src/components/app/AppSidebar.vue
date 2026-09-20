@@ -2,7 +2,8 @@
 // The shell's left rail (cr-0030/0031). Markup + classes are the design source's TenantSidebar verbatim (brand,
 // the space switcher, the Personal-space nav, the ProfileMenu) so layout.css styles it identically; only the
 // data is ours — the tenants come from listMyTenants() (E2EE: the server only knows membership), switching is a
-// full navigation to that tenant's domain, and the bottom is the ProfileMenu (theme + language + sign-out).
+// full navigation to that tenant's domain, and the bottom is the ProfileMenu (theme + language + settings +
+// sign-out — the shell's one door into the hub).
 //
 // The rail also carries the **groups** section and the **favorites** section — each pinned Memory with its own
 // chosen cover (uc.memory.cover's fourth surface, after the browse card, the detail header and the map pin).

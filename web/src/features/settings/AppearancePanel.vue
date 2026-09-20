@@ -1,7 +1,7 @@
 <script setup lang="ts">
-// The "Persönlich" section of the settings hub (cr-0078) — appearance (theme) + language. Device-local
-// preferences (never synced, operator-blind); reuses the existing theme/locale state (cr-0035/0037) that the
-// profile menu's quick toggles also drive, so the two stay in sync. No new behaviour — just a settings home.
+// The "Persönlich" section of the settings hub (cr-0078) — appearance (theme) + language. This is the
+// canonical home of both (ADR 0022 §5); the profile menu's two quick-picker submenus are shortcuts onto the
+// same device-local state (cr-0035/0037, never synced, operator-blind), so the surfaces stay in sync.
 import { useI18n } from 'vue-i18n'
 import { useThemeState, setThemePreference, type ThemePreference } from '../../shared/state/useThemeState'
 import {
@@ -18,7 +18,7 @@ const localePref = localePreference()
 
 const themes: ThemePreference[] = ['system', 'light', 'dark']
 const themeLabel = (p: ThemePreference) => t(`shell.theme${p.charAt(0).toUpperCase()}${p.slice(1)}`)
-const localeLabel = (p: LocalePreference) => (p === 'system' ? t('shell.themeSystem') : LOCALE_LABELS[p])
+const localeLabel = (p: LocalePreference) => (p === 'system' ? t('shell.systemDefault') : LOCALE_LABELS[p])
 </script>
 
 <template>

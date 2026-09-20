@@ -30,8 +30,8 @@ const { count } = useMyInvitations()
 </template>
 
 <style scoped>
-/* Match the sibling top-bar icon buttons (theme, uploads, settings): transparent + borderless, hover tint only,
-   same 2.25rem (36px) square + radius. Mirrors .uploads-trigger (UploadStatusMenu). */
+/* Match the one sibling top-bar icon button, .uploads-trigger (UploadStatusMenu): transparent + borderless,
+   hover tint only, same 2.25rem (36px) square + radius. */
 .invitations-trigger {
   position: relative;
   display: grid;
