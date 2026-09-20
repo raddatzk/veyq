@@ -125,6 +125,20 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
     expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
   })
 
+  it('says out loud that a language with no text will not survive the save', async () => {
+    // inbox #138's measured trap: the backend drops a blank locale on normalize, so the row the owner just
+    // added vanishes on reload. The row is still the right intermediate state — what was missing is saying so.
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: 'EN' } } as never)
+    const w = await mountPanel()
+    expect(w.text()).toContain(t('terms.blankLocaleWarning', { langs: 'Deutsch' }))
+  })
+
+  it('stays quiet when every language it lists actually holds text', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } } as never)
+    const w = await mountPanel()
+    expect(w.text()).not.toContain(t('terms.blankLocaleWarning', { langs: 'Deutsch' }))
+  })
+
   it('renders read-only for a member who is not the owner', async () => {
     vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { en: '# Terms' } } as never)
     vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' }] as never)

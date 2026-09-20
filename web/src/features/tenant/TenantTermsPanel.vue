@@ -94,6 +94,15 @@ async function insertTemplate(loc: string) {
   terms.value = { ...terms.value, [loc]: TERMS_TEMPLATE[loc] }
 }
 
+/**
+ * Which languages exist but still hold nothing. The backend drops a blank locale on normalize, so this is a
+ * state the editor can show and the server will not keep — inbox #138's "the UI must not offer that state".
+ * The answer is not to forbid the row (an added-but-unwritten language is a real, useful intermediate) but to
+ * say out loud that it will not survive Save, which is the part the owner could not see before.
+ */
+const blankLocales = computed(() => Object.keys(terms.value).filter((loc) => !terms.value[loc].trim()))
+const blankLocaleNames = computed(() => blankLocales.value.map(localeLabel).join(', '))
+
 /** Dropping a published language is not the weight of dropping a share note, so the terms panel vetoes it. */
 function confirmRemove(loc: string): Promise<boolean> {
   const lang = localeLabel(loc)
@@ -172,6 +181,9 @@ async function save() {
             />
           </template>
         </LocaleMarkdownEditor>
+        <Message v-if="blankLocales.length" severity="warn" :closable="false">
+          {{ t('terms.blankLocaleWarning', { langs: blankLocaleNames }) }}
+        </Message>
         <small class="settings-muted">{{ t('terms.markdownHint') }}</small>
         <div class="terms-editor-actions">
           <Button :label="t('terms.save')" icon="pi pi-save" :loading="saving" @click="save" />
