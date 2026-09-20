@@ -22,6 +22,7 @@ import { startMediaRevisionPolling, stopMediaRevisionPolling } from './mediaRevi
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useThumbnailPipeline } from './useThumbnailPipeline'
 import { useOptimisticTiles, type OptimisticTileVM } from './useOptimisticTiles'
+import { byCaptureTime } from './optimisticUpload'
 
 /** The reactive context MemoryDetail hands the gallery core — getters so props stay reactive, plus the reconcile
  *  settle callback (auto-date + auto-location self-heal) run after every list refresh. */
@@ -80,19 +81,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const key = ctx.memoryKey()
     return key ? effectiveCapturedAt(unsealMeta(key, item)) : undefined
   }
-  // Tiles ordered by effective capture time (newest first by default, toggleable); undated media always last.
-  const sortedItems = computed(() => {
-    const dir = sortDir.value === 'newest' ? -1 : 1
-    return items.value
-      .map((it, i) => ({ it, i, t: capturedAtOf(it) }))
-      .sort((a, b) => {
-        if (a.t === undefined && b.t === undefined) return a.i - b.i // both undated → stable list order
-        if (a.t === undefined) return 1 // undated last, regardless of direction
-        if (b.t === undefined) return -1
-        return (a.t - b.t) * dir
-      })
-      .map((x) => x.it)
-  })
+  const sortDirection = computed<1 | -1>(() => (sortDir.value === 'newest' ? -1 : 1))
+  // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
+  // both positions in THIS list, never in the merged one, so an in-flight tile can never shift which photo a
+  // click opens. The merged list sorts on the same key, so the media order inside it is identical to this.
+  const sortedItems = computed(() => byCaptureTime(items.value, capturedAtOf, sortDirection.value))
 
   const aspectRatios = computed(() => {
     const key = ctx.memoryKey()
@@ -104,18 +97,27 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     return m
   })
   const FALLBACK_ASPECT = galleryDisplayAspectRatio(undefined, undefined)
-  // The tile list handed to [MediaGrid] — optimistic upload tiles pinned ahead of the listed media (the freshest
-  // action, in enqueue order), each carrying its content so the grid slot renders it without a lookup.
-  const layoutItems = computed<MemoryTileItem[]>(() => [
-    ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
-    ...sortedItems.value.map((it, index) => ({
-      id: it.mediaId,
-      aspectRatio: aspectRatios.value.get(it.mediaId) ?? FALLBACK_ASPECT,
-      kind: 'media' as const,
-      media: it,
-      index,
-    })),
-  ])
+  // The tile list handed to [MediaGrid] — ONE order over both kinds of tile (uc.memory.gallery § "One order for
+  // every tile"), each carrying its content so the grid slot renders it without a lookup. An in-flight upload
+  // sorts on the capture time it will be sealed with, so it appears where it will stay: settling changes a
+  // tile's content, never its place. Optimistic tiles are passed first so an equal key resolves in their
+  // favour — that is how a settling tile hands its own slot to the media it becomes.
+  const layoutItems = computed<MemoryTileItem[]>(() =>
+    byCaptureTime<MemoryTileItem>(
+      [
+        ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
+        ...sortedItems.value.map((it, index) => ({
+          id: it.mediaId,
+          aspectRatio: aspectRatios.value.get(it.mediaId) ?? FALLBACK_ASPECT,
+          kind: 'media' as const,
+          media: it,
+          index,
+        })),
+      ],
+      (tile) => (tile.kind === 'optimistic' ? tile.optimistic.capturedAt : capturedAtOf(tile.media)),
+      sortDirection.value,
+    ),
+  )
   // Whether the gallery has anything to show — real media or in-flight optimistic uploads.
   const hasContent = computed(() => items.value.length > 0 || optimisticTiles.value.length > 0)
 

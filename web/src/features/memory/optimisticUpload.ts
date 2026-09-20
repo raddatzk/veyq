@@ -2,9 +2,9 @@
 // (no DOM, no object URLs) so it's unit-testable; MemoryDetail owns the reactive preview lifecycle around it.
 //
 // When a user picks photos for a Memory the queue's still-in-flight files render **immediately** as grid tiles
-// (a local preview + progress/error state), pinned ahead of the listed media. Each optimistic tile reconciles
-// into the real decrypted thumbnail once the upload round-trip lists its media — matched by the `mediaId` the
-// queue records on `done` — for a clean 1:1 handoff (never a duplicate).
+// (a local preview + progress/error state), **in the one grid order every tile obeys** — see [byCaptureTime].
+// Each optimistic tile reconciles into the real decrypted thumbnail once the upload round-trip lists its media
+// — matched by the `mediaId` the queue records on `done` — for a clean 1:1 handoff (never a duplicate).
 import { batchKey, type UploadBatch, type UploadFile } from './uploadQueue'
 import type { MediaItem } from './media'
 
@@ -14,7 +14,8 @@ export const optimisticTileId = (fileId: string): string => `upload:${fileId}`
 
 /**
  * The upload files that should render as optimistic tiles for `nodeId`, in enqueue order (batch seq, then file
- * order) so the freshest picks pin ahead of the listed media. A file shows while it is still in flight
+ * order) — the order they are handed over in, not the order they are drawn in ([byCaptureTime] decides that).
+ * A file shows while it is still in flight
  * (`queued` / `uploading`) or `failed` (with a retry), **or** `done` but its `mediaId` is not yet among the
  * listed media. `cancelled` files, and `done` files already reconciled into the list (same `mediaId`), drop out.
  */
@@ -44,4 +45,26 @@ export function selectOptimisticUploads(
 export function removedThumbIds(currentThumbIds: Iterable<string>, listed: readonly MediaItem[]): string[] {
   const next = new Set(listed.map((m) => m.mediaId))
   return [...currentThumbIds].filter((id) => !next.has(id))
+}
+
+/**
+ * **The one grid order**, for both kinds of tile and both surfaces (the Memory gallery and the share viewer):
+ * by effective capture time, direction-toggled, undated last whichever way it points, and stable within a tie.
+ *
+ * It takes ONE list because that is the whole rule: an in-flight tile and a listed media are sorted against
+ * each other, not concatenated. An optimistic tile's key is the same `captureTimeOf` value `sealMetadata` will
+ * seal for that file, so when an upload settles its media lands on the key its tile already held — and the tie
+ * (equal keys) resolves to the caller's input order, which is why callers pass the optimistic tiles FIRST:
+ * a tile hands its exact slot to the media it becomes, instead of swapping places with it for one frame.
+ */
+export function byCaptureTime<T>(entries: readonly T[], keyOf: (entry: T) => number | undefined, dir: 1 | -1): T[] {
+  return entries
+    .map((entry, i) => ({ entry, i, t: keyOf(entry) }))
+    .sort((a, b) => {
+      if (a.t === undefined && b.t === undefined) return a.i - b.i // both undated → input order
+      if (a.t === undefined) return 1 // undated last, regardless of direction
+      if (b.t === undefined) return -1
+      return a.t === b.t ? a.i - b.i : (a.t - b.t) * dir
+    })
+    .map((x) => x.entry)
 }

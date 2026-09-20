@@ -39,6 +39,9 @@ import { galleryFakeStore } from './galleryFakeStore'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
+/** Two capture moments, far apart, so nothing below depends on a tie-break it did not mean to test. */
+const OLD = Date.UTC(2019, 2, 3)
+const NEW = Date.UTC(2024, 8, 9)
 
 const i18n = createI18n({
   legacy: false,
@@ -73,14 +76,30 @@ function stubDeriver(): MediaDeriver {
 }
 
 /** A queued/uploading/failed/done UploadFile for NODE_ID, minimal shape the component reads. */
-function uploadFile(id: string, status: string, opts: { progress?: number; mediaId?: string } = {}) {
+function uploadFile(id: string, status: string, opts: { progress?: number; mediaId?: string; lastModified?: number } = {}) {
   return {
     id, name: `${id}.jpg`, sizeBytes: 3, mediaType: 'image/jpeg', status,
     progress: opts.progress ?? (status === 'done' ? 1 : 0), attempts: 1,
-    controller: new AbortController(), file: new File([new Uint8Array([1, 2, 3])], `${id}.jpg`, { type: 'image/jpeg' }),
+    controller: new AbortController(),
+    file: new File([new Uint8Array([1, 2, 3])], `${id}.jpg`, { type: 'image/jpeg', lastModified: opts.lastModified }),
     mediaId: opts.mediaId,
   }
 }
+
+/** The grid's tiles in DOM order, each named: a real media by its id, an optimistic tile by its file name. */
+function gridOrder(wrapper: ReturnType<typeof mountDetail>): string[] {
+  const grid = wrapper.find('.media-grid').element
+  return Array.from(grid.children).map(
+    (el) => el.getAttribute('data-media-id') ?? el.querySelector('img')?.getAttribute('alt') ?? '?',
+  )
+}
+/** Mark a queued file settled onto a real media, the way the queue does on `done`. */
+function settle(batchIndex: number, fileIndex: number, mediaId: string) {
+  const batch = hoisted.ref.batches[batchIndex] as { files: { status: string; mediaId?: string }[] }
+  batch.files[fileIndex].status = 'done'
+  batch.files[fileIndex].mediaId = mediaId
+}
+
 function pushBatch(files: unknown[], nodeId = NODE_ID) {
   hoisted.ref.batches.push({
     id: `b-${hoisted.ref.batches.length}`, label: `${files.length}`,
@@ -133,6 +152,40 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     expect(optimistic[0].find('.upload-tile-failed').exists()).toBe(false)
     // pinned ahead of the listed media (first tile in DOM order)
     expect(wrapper.find('.gallery-tile').classes()).toContain('gallery-tile-optimistic')
+  })
+
+  // uc.memory.gallery § "One order for every tile — including one that is still uploading". The defect this
+  // replaces: a tile left the front block the instant its media listed and reappeared BEHIND every tile still
+  // in flight, so finishing an upload moved it. Both halves are asserted here, and on the old two-block layout
+  // the one that reddened first was the ORDER (`['u1.jpg','u2.jpg','media-0']` — enqueue order, ahead of the
+  // listed media), which is why the position assertion after it was never reached. Keep both: the order is
+  // what this CR changed, the position is what it changed it FOR.
+  it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    // one listed media, captured OLD; an upload of that same moment is what will settle onto it
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png', lastModified: OLD }, stubDeriver())
+
+    const wrapper = mountDetail(memoryKey)
+    await flushPromises()
+    await flushPromises()
+
+    // two in flight: u1 of the OLD moment (the one that will settle), u2 of a NEWER one
+    pushBatch([uploadFile('u1', 'uploading', { progress: 0.4, lastModified: OLD }), uploadFile('u2', 'uploading', { progress: 0.1, lastModified: NEW })])
+    await flushPromises()
+    await flushPromises()
+    expect(gridOrder(wrapper)).toEqual(['u2.jpg', 'u1.jpg', 'media-0']) // newest first; u1 ties with its own media and leads it
+    const slotBefore = gridOrder(wrapper).indexOf('u1.jpg')
+
+    // u1 settles onto the already-listed media-0 → its optimistic tile reconciles away
+    settle(0, 0, 'media-0')
+    await flushPromises()
+
+    const after = gridOrder(wrapper)
+    expect(after).not.toContain('u1.jpg') // handed off, not duplicated
+    expect(after.indexOf('media-0')).toBe(slotBefore) // the whole point: finishing changed the CONTENT, not the place
   })
 
   it('a failed upload shows an inline retry that re-runs it', async () => {
