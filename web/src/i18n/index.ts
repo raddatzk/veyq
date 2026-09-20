@@ -440,6 +440,16 @@ const en = {
     failed: 'Unlock failed. Check your password and Secret Key.',
     untrust: 'Untrust this device',
   },
+  // The shared per-locale markdown editor (`shared/ui/LocaleMarkdownEditor.vue`). Neutral on purpose: it is
+  // driven by both the share note and the tenant terms, so its chrome may name neither.
+  localeEditor: {
+    empty: 'No language added yet.',
+    addLanguage: 'Add {lang}',
+    edit: 'Edit',
+    removeLang: 'Remove {lang}',
+    editTitle: 'Edit {lang}',
+    bodyLabel: 'Markdown',
+  },
   terms: {
     navTitle: 'Terms',
     editorSub: 'The terms members of this space agree to. Set them per language; a change asks everyone to agree again.',
@@ -447,8 +457,6 @@ const en = {
     loading: 'Loading terms…',
     loadFailed: 'Couldn’t load the terms.',
     readonlyNote: 'Only the space owner can edit these terms.',
-    localeDe: 'German',
-    localeEn: 'English',
     placeholder: 'Write the terms in Markdown…',
     markdownHint: 'Markdown is supported. Use {contact} as a placeholder for your contact details.',
     insertTemplate: 'Insert template',
@@ -877,12 +885,6 @@ const en = {
     hasNote: 'Note',
     edit: 'Edit',
     actionFailed: 'That didn’t work — please try again.',
-    noteEmpty: 'No message yet.',
-    noteSelectLang: 'Select language',
-    noteAddLanguage: 'Add language',
-    noteEditTitle: 'Edit {lang}',
-    noteMarkdownLabel: 'Markdown',
-    noteRemoveLang: 'Remove {lang}',
     // uploader (drop-box) share dialog — a separate memory action, same dialog with no role switcher
     uploadRequest: 'Request upload',
     uploaderTitle: 'Request upload',
@@ -1336,6 +1338,16 @@ const de: typeof en = {
     failed: 'Entsperren fehlgeschlagen. Prüfe Passwort und Secret Key.',
     untrust: 'Vertrauen aufheben',
   },
+  // The shared per-locale markdown editor (`shared/ui/LocaleMarkdownEditor.vue`). Neutral on purpose: it is
+  // driven by both the share note and the tenant terms, so its chrome may name neither.
+  localeEditor: {
+    empty: 'Noch keine Sprache hinzugefügt.',
+    addLanguage: '{lang} hinzufügen',
+    edit: 'Bearbeiten',
+    removeLang: '{lang} entfernen',
+    editTitle: '{lang} bearbeiten',
+    bodyLabel: 'Markdown',
+  },
   terms: {
     navTitle: 'Nutzungsbedingungen',
     editorSub: 'Die Bedingungen, denen Mitglieder dieses Bereichs zustimmen. Lege sie je Sprache fest; bei einer Änderung wird erneut um Zustimmung gebeten.',
@@ -1343,8 +1355,6 @@ const de: typeof en = {
     loading: 'Bedingungen werden geladen…',
     loadFailed: 'Bedingungen konnten nicht geladen werden.',
     readonlyNote: 'Nur die Besitzperson des Bereichs kann diese Bedingungen bearbeiten.',
-    localeDe: 'Deutsch',
-    localeEn: 'Englisch',
     placeholder: 'Bedingungen als Markdown schreiben…',
     markdownHint: 'Markdown wird unterstützt. Nutze {contact} als Platzhalter für deine Kontaktangaben.',
     insertTemplate: 'Vorlage einfügen',
@@ -1771,12 +1781,6 @@ const de: typeof en = {
     hasNote: 'Hinweis',
     edit: 'Bearbeiten',
     actionFailed: 'Das hat nicht geklappt — bitte erneut versuchen.',
-    noteEmpty: 'Noch keine Nachricht.',
-    noteSelectLang: 'Sprache auswählen',
-    noteAddLanguage: 'Sprache hinzufügen',
-    noteEditTitle: '{lang} bearbeiten',
-    noteMarkdownLabel: 'Markdown',
-    noteRemoveLang: '{lang} entfernen',
     // uploader (drop-box) share dialog — a separate memory action, same dialog with no role switcher
     uploadRequest: 'Upload anfragen',
     uploaderTitle: 'Upload anfragen',
