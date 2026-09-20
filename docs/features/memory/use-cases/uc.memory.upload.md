@@ -20,7 +20,9 @@
    the Memory key. The TopBar **uploads** button shows a spinner + an active-file count badge, **and** the picked
    photos appear **immediately as tiles in that Memory's gallery grid** — an instant **local preview** (the user's
    own image, before it is sealed — a local object URL, never uploaded in the clear) with a per-tile progress /
-   error(+retry) state (cr-0074).
+   error(+retry) state (cr-0074). A tile appears **at its capture-time place**, not at the front: the sort key is
+   derived on device before sealing, from the same rule the sealed tier will carry, so the tile is already where
+   it will stay. [uc.memory.gallery](uc.memory.gallery.md) owns that ordering rule.
 3. The queue uploads **one file at a time**: each file is sealed on-device (with its
    [derivatives](../enablers/en.memory.derivatives.md)) and sent **direct-to-store**, then attached to the
    Memory node — the seal → start → PUT → attach choreography is
@@ -28,8 +30,8 @@
 4. Opening the uploads popup shows each batch's files with status (queued / uploading / done / failed /
    cancelled), a progress bar, and a **cancel** control while a file is queued/uploading.
 5. As each file finishes, its optimistic tile **reconciles into the real decrypted thumbnail** (matched by the
-   returned `mediaId`) with no empty-flash and no duplicate; the tile sorts into its date position. The user can
-   **close** (acknowledge) the finished batch in the tray.
+   returned `mediaId`) with no empty-flash and no duplicate: the tile's **content** changes, its **position**
+   does not. The user can **close** (acknowledge) the finished batch in the tray.
 
 ## Alternate / exception flows
 

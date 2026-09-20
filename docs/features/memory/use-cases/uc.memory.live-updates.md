@@ -22,7 +22,8 @@
    `listNodeMedia` with `If-None-Match: <cached revision>`.
 3. **Nothing changed ⇒ `304`.** The client does nothing; no media query ran server-side.
 4. **Something changed ⇒ `200` + delta.** The client **upserts** the delta media by `mediaId` (new tiles
-   auto-insert into the justified grid, laid out beside any optimistic upload tiles, cr-0074), **drops** any
+   auto-insert into the justified grid, laid out beside any optimistic upload tiles under the one ordering rule
+   [uc.memory.gallery](uc.memory.gallery.md) owns, cr-0074), **drops** any
    cached `mediaId` no longer in the returned id-set (removals disappear), advances its cursor + revision, and
    re-sorts chronologically.
 5. **Close / navigate away ⇒ stop polling.** The interval + visibility listener are torn down.

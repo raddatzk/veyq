@@ -19,7 +19,10 @@
    client unwraps the Memory's **`K_mem`** (already held from the tree).
 2. The client **lists the Memory's media** ([en.memory.media](../enablers/en.memory.media.md)) and fetches each
    item's **thumbnail** ([en.memory.derivatives](../enablers/en.memory.derivatives.md)) via presigned GET,
-   decrypts on device, and renders a **grid** under a header (title, item count, favorite toggle).
+   decrypts on device, and renders a **grid** under a header (title, item count, favorite toggle). The grid is
+   ordered by **effective capture time** — newest first by default, a header toggle for oldest first, undated
+   media last — read from each media's sealed capture tier, so the blind server never sees a timestamp yet the
+   order is exact on device (cr-0066).
 3. **Lightbox:** clicking an item opens it full-view; the client fetches that item's **preview**, decrypts, and
    displays it; **prev/next** page through the grid order. (The preview — not the multi-MB original — keeps the
    lightbox fast.) A **video** (known from its sealed `mediaType`, [ADR 0047](../../../decisions/0047-inline-video-playback-range-streaming.md))
@@ -46,6 +49,14 @@
 - **Operator-blind.** Every tier is fetched as **ciphertext** and decrypted on device; the server never sees a
   pixel, a filename, or a content key. The lightbox shows the **preview**, not the original — the original
   leaves the store only on explicit download.
+- **One order for every tile — including one that is still uploading.** The grid has a single ordering rule
+  and no privileged front. A picked file takes its capture-time place the moment its tile appears — *before* it
+  is sealed or uploaded — because that key is derivable on device from the same **EXIF date, else the file's
+  date** rule the sealed tier will carry. Finishing an upload therefore changes a tile's **content** (the local
+  preview becomes the real decrypted thumbnail), never its **place**. This is stated as an obligation because
+  the obvious implementation breaks it: holding in-flight tiles in a block of their own is one line shorter and
+  makes every completed upload jump *behind* the files still going — the more a user picks at once, the worse
+  it reads.
 - **Reuse the existing UI/UX — never invent** ([ui-web-styleguide](../../../crosscutting/ui-web-styleguide.md)
   § Reuse first). The grid + lightbox are existing components; only the **data layer** is client-side crypto
   over the contracts client.
@@ -55,7 +66,8 @@
 **EN —** Open a Memory and you see its photos as a grid; tap one to view it large and swipe through the rest.
 A **video** shows a small ▶ badge on its tile — open it and press play to watch it right there. Everything is
 decrypted on **your own device** — the server only ever stores scrambled files and never sees your pictures or
-videos. To keep it quick, the grid and the large view use **compact copies your device made**; the
+videos. Pictures are ordered by **when they were taken**, newest first unless you flip the order — and one that
+is still uploading already sits in its right place, so nothing jumps around once it finishes. To keep it quick, the grid and the large view use **compact copies your device made**; the
 **full-quality original is only fetched when you actually download it** — and a video is **streamed piece by
 piece as you watch**, so only the parts you actually play are fetched, not the whole file. Journal, chapters,
 maps and playlists come in later steps.
@@ -63,7 +75,9 @@ maps and playlists come in later steps.
 **DE —** Öffne eine Erinnerung und du siehst ihre Fotos als Raster; tippe eines an, um es groß zu sehen und
 durch die anderen zu blättern. Ein **Video** zeigt ein kleines ▶-Abzeichen auf seiner Kachel — öffne es und
 drücke Play, um es direkt dort anzusehen. Alles wird auf **deinem eigenen Gerät** entschlüsselt — der Server
-speichert nur verschlüsselte Dateien und sieht deine Bilder und Videos nie. Damit es flott bleibt, nutzen das
+speichert nur verschlüsselte Dateien und sieht deine Bilder und Videos nie. Sortiert wird nach **Aufnahmezeit**,
+neueste zuerst, solange du die Richtung nicht umdrehst — und was noch hochlädt, steht schon an seiner richtigen
+Stelle, sodass nach dem Fertigwerden nichts mehr springt. Damit es flott bleibt, nutzen das
 Raster und die Großansicht **kompakte Kopien, die dein Gerät erstellt hat**; das **Original in voller Qualität
 wird nur geladen, wenn du es wirklich herunterlädst** — und ein Video wird beim Ansehen **Stück für Stück
 gestreamt**, sodass nur die tatsächlich abgespielten Teile geladen werden, nicht die ganze Datei. Journal,
