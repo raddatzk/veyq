@@ -18,6 +18,7 @@ import { withRefresh } from '../login/login'
 import { setUnlocked } from '../../../app/vault'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
+import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
 import { openScopeById } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
@@ -113,10 +114,16 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
       }),
     )
 
-    // Master-Key-sealed blobs, re-sealed under MK'. Best-effort on purpose: both degrade to empty rather than
-    // fail (a lost pin re-pins on first use, an unnamed device still revokes), so neither is worth failing a
-    // rotation that has already published.
-    await resealBestEffort(oldMasterKey, newMasterKey)
+    // Master-Key-sealed blobs, re-sealed under MK'. Best-effort on purpose: all three degrade to empty rather
+    // than fail (a lost contact-pin re-pins on first use, an unnamed device still revokes, an unpinned Memory
+    // is still there to re-pin), so none is worth failing a rotation that has already published.
+    //
+    // Memory pins joined this list when they moved off `K_SC` onto the Master Key (ADR 0068). Their two lists
+    // partition the caller's scopes, so the union is every scope a pin set can exist in.
+    await resealBestEffort(oldMasterKey, newMasterKey, [
+      ...result.soleMemberScopeIds,
+      ...result.queuedScopeIds,
+    ])
 
     // Self-served: alone in the scope, so there is nobody to be re-admitted by and nobody to exclude but the
     // old identity. Runs while the vault still holds that old identity — it is what opens the current grant.
@@ -139,8 +146,8 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
   }
 }
 
-/** Re-seal both Master-Key-sealed blobs, swallowing failures — see `rotateKeys` on why neither may fail it. */
-async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
+/** Re-seal every Master-Key-sealed blob, swallowing failures — see `rotateKeys` on why none may fail it. */
+async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: string[]): Promise<void> {
   try {
     await resealPinsUnderNewMasterKey(oldMk, newMk)
   } catch {
@@ -150,6 +157,11 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array): Promise<v
     await resealRegisterUnderNewMasterKey(oldMk, newMk)
   } catch {
     /* an unnamed device row still lists and still revokes (uc.account.sessions §E4) */
+  }
+  try {
+    await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds)
+  } catch {
+    /* an unreadable pin set is an empty one; the Memories are all still there, just no longer pinned */
   }
 }
 

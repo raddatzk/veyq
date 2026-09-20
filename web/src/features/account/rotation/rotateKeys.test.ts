@@ -23,6 +23,7 @@ vi.mock('../../../app/vault', () => ({
 }))
 vi.mock('../identityPins', () => ({ resealPinsUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../deviceRegister', () => ({ resealRegisterUnderNewMasterKey: vi.fn(async () => {}) }))
+vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
@@ -46,6 +47,7 @@ import { rotateKeys, RotationRefused } from './rotateKeys'
 import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
 import { masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
+import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { openScopeById } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
@@ -317,9 +319,34 @@ describe('what a rotation leaves behind', () => {
     expect(srv.rotateScope).not.toHaveBeenCalled()
   })
 
+  /**
+   * Memory pins joined the Master-Key-sealed blobs when they moved off `K_SC` (ADR 0068), so a rotation has to
+   * carry them or it silently empties every user's Favorites — a degradation nobody would attribute to the
+   * rotation, because an unreadable pin blob decodes to an empty set rather than an error.
+   *
+   * It asserts the **scope list**, not just that the call happened: the pin set is stored per scope, and the
+   * two result lists partition the caller's scopes, so re-sealing only one of them loses the other's pins.
+   */
+  it('carries the Memory pins of EVERY scope across the new Master Key', async () => {
+    fakeServer({ sole: ['scope-personal'], queued: ['scope-shared'] })
+    vi.mocked(openScopeById).mockResolvedValue({
+      scopeId: 'scope-personal',
+      epochs: { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) },
+    } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    vi.mocked(listScopeMembers).mockResolvedValue([])
+
+    await rotateKeys(PASSWORD, SECRET_KEY_B64)
+
+    expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledTimes(1)
+    const scopeIds = vi.mocked(resealFavoritesUnderNewMasterKey).mock.calls[0][2]
+    expect([...scopeIds].sort()).toEqual(['scope-personal', 'scope-shared'])
+  })
+
   it('does not fail a published rotation because a Master-Key-sealed blob could not be re-sealed', async () => {
-    // Both blobs degrade to empty rather than break (a lost pin re-pins on first use, an unnamed device still
-    // revokes), so neither is worth failing a rotation the server has already committed.
+    // All three blobs degrade to empty rather than break (a lost contact-pin re-pins on first use, an unnamed
+    // device still revokes, an unpinned Memory is still there), so none is worth failing a rotation the server
+    // has already committed.
+    vi.mocked(resealFavoritesUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     vi.mocked(resealPinsUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     fakeServer({ queued: ['s1'] })
 

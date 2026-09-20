@@ -165,8 +165,9 @@ export async function refreshActiveScope(): Promise<void> {
   clearFavorites()
   resetCovers() // a rotation swaps the epoch keys: every held cover was decrypted under the old ones
   await loadTree()
-  const eks = activeEpochKeys()
-  if (eks) await loadFavoritesFor(activeSpace.scopeId, eks)
+  // The pin set survives a scope rotation untouched: it seals under the member's master key, not under an
+  // epoch key (ADR 0068). It is still re-read here because `clearFavorites()` above dropped the in-memory copy.
+  await loadFavoritesFor(activeSpace.scopeId)
 }
 
 /** Drop the active space + zero the held key (logout / re-lock). */

@@ -7,6 +7,7 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
+import { keyAt } from '../features/spaces/epochs'
 import { setBreadcrumb } from '../app/breadcrumb'
 import { isFavorite, toggleFavorite, loadFavoritesFor, favoritesStore } from '../app/favoritesStore'
 import { treeStore, loadTree, patchNodeMeta } from '../features/memory/treeStore'
@@ -120,16 +121,26 @@ watch(
 async function reenter(scope: string) {
   await enterScope(scope)
   if (activeSpace.status === 'ready' && !treeStore.loaded) await loadTree()
-  const eks = activeEpochKeys()
-  if (activeSpace.status === 'ready' && activeSpace.scopeId && eks && !favoritesStore.loaded) {
-    await loadFavoritesFor(activeSpace.scopeId, eks)
+  if (activeSpace.status === 'ready' && activeSpace.scopeId && !favoritesStore.loaded) {
+    // No epoch key here any more: the pin set seals under the member's MASTER key (ADR 0068), which does not
+    // rotate with the scope, so the whole base-epoch dance left with it. It still applies to item marks below.
+    await loadFavoritesFor(activeSpace.scopeId)
   }
 }
 watch(currentScope, (scope) => void reenter(scope), { immediate: true })
 
-function onToggleFavorite(node: TreeNode) {
+// Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
+// the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.
+// `activeSpace.epoch` is the reactive signal that a rotation happened — without reading it this would not
+// recompute after `refreshActiveScope`.
+const itemMarkKey = computed<Uint8Array | null>(() => {
+  void activeSpace.epoch
   const eks = activeEpochKeys()
-  if (activeSpace.scopeId && eks) void toggleFavorite(node.id, activeSpace.scopeId, eks)
+  return eks ? keyAt(eks, 0) : null
+})
+
+function onToggleFavorite(node: TreeNode) {
+  if (activeSpace.scopeId) void toggleFavorite(node.id, activeSpace.scopeId)
 }
 
 function openFolder(folder: TreeNode) {
@@ -191,6 +202,8 @@ async function onDeleteDone() {
         :node="currentNode"
         :scope-id="activeSpace.scopeId"
         :memory-key="memoryKey"
+        :scope-key="itemMarkKey"
+        :personal-scope="activeSpace.kind === 'PERSONAL'"
         :favorite="isFavorite(currentNode.id)"
         :chapters="level.chapters"
         :shareable="shareable"
