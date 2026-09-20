@@ -233,7 +233,7 @@ describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
   it('asks the store again when a favorite’s sealed meta changes', async () => {
     const { ensureCovers } = await import('../../features/memory/coverStore')
     const wrapper = await mountAt('')
-    expect(wrapper.get('.sidebar-favorite-link').exists()).toBe(true)
+    wrapper.get('.sidebar-favorite-link') // throws if the rail never rendered the favorite at all
     const before = vi.mocked(ensureCovers).mock.calls.length
 
     treeStore.nodes[0].wrappedMeta = 'm2' // exactly what setting a cover does
