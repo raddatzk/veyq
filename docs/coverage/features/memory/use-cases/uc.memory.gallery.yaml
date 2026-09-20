@@ -21,9 +21,20 @@ acceptanceCriteria:
       backend: { integration: [MediaSliceTest.startCompleteListRoundTrip], e2e: [BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes] }
       web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts] }
   - id: favorite-toggle
-    text: The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites).
+    text: >
+      The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites), and the pin is
+      PRIVATE to its member: it seals under their master key, in every scope without branching on scope type,
+      so a co-member holding the shared K_SC cannot open it. Asserted on the raw symUnwrap throwing, because
+      the loader swallows a failed unwrap by design and a bite phrased over it could never redden. The set is
+      carried across a master-key rotation for every scope the member belongs to.
+      cr-favorites-two-objects (ADR 0068 §1-§3, discharging ADR 0014 §7).
     coverage:
-      web: { unit: [src/app/favoritesStore.test.ts, src/features/memory/favorites.test.ts] }
+      web:
+        unit:
+          - src/app/favoritesStore.test.ts
+          - src/app/favoritesPrivacy.test.ts
+          - src/features/memory/favorites.test.ts
+          - src/features/account/rotation/rotateKeys.test.ts
   - id: operator-blind-fetch
     text: Every tier (thumbnail/preview/original) is fetched as ciphertext via presigned GET and decrypted on device; the server sees no pixel, filename, or content key.
     coverage:
@@ -155,3 +166,65 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/components/MediaLightbox.test.ts
+  - id: item-marks-are-shared-and-attributed-to-nobody
+    text: >
+      A member marks an individual medium inside a Memory; the mark is SHARED with the scope, sealed under
+      K_SC at the base epoch with its own `item-favorites` context, and stored as one blob per
+      (member, scope, node). The read returns every member's blob — deliberately not filtered to the caller,
+      because an operator-blind server cannot aggregate for the client — but carries no member id at all: the
+      only identity on the wire is a `self` flag on the caller's own entry. Aggregate-only is therefore a
+      property of the data, not a rule the UI is trusted to keep. cr-favorites-two-objects (ADR 0068 §1, §5, §6).
+    coverage:
+      backend:
+        integration:
+          - ItemFavoritesSliceTest.getReturnsEveryMembersBlobNotJustTheCallers
+          - ItemFavoritesSliceTest.aPutTouchesOnlyTheCallersBlob
+          - ItemFavoritesSliceTest.putThenGetReturnsTheVerbatimCiphertext
+          - ItemFavoritesSliceTest.nonMemberIs404
+      web:
+        unit:
+          - src/app/itemFavoritesStore.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+      crypto:
+        unit:
+          - src/v1.conformance.test.ts
+  - id: item-marks-are-partitioned-per-memory
+    text: >
+      Marks are stored per node, not per scope: the partition keeps the 65 536-char ciphertext cap out of
+      reach and stops one toggle re-uploading the scope's whole set, and it costs no metadata because the
+      client has just listed that node's media, so the server already observed the node id. Marks in one
+      Memory never surface in another. cr-favorites-two-objects (ADR 0068 §4).
+    coverage:
+      backend: { integration: [ItemFavoritesSliceTest.blobsArePerNodeNotPerScope, ItemFavoritesSliceTest.lastWriteWins] }
+      web: { unit: [src/app/itemFavoritesStore.test.ts] }
+  - id: gallery-filters-by-marks-and-shows-an-aggregate
+    text: >
+      The gallery header filters the grid to everyone's marks or only the caller's, and each tile's heart
+      carries the number of members who marked that item — never a name or a face. The filter is applied to
+      the one sorted list the grid, each tile's index and the lightbox snapshot all derive from, so prev/next
+      cannot page out of the active selection. An in-flight upload is not part of a filtered view.
+      cr-favorites-two-objects (ADR 0068 §6).
+    coverage:
+      web:
+        unit:
+          - src/app/itemFavoritesStore.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: degenerate-filter-is-hidden-not-disabled
+    text: >
+      In a personal scope there is nobody to share a mark with, so the everyone/mine filter is ABSENT rather
+      than rendered disabled, and no per-tile count is shown (E4); a filter that empties the grid names itself
+      so it never reads as a broken Memory (E5). cr-favorites-two-objects (ADR 0068 §7).
+    coverage:
+      web: { unit: [src/features/memory/components/MemoryDetail.test.ts] }
+  - id: marks-are-reclaimed-with-what-they-point-at
+    text: >
+      Item marks die with the things they describe: the scope purge erases them (enforced structurally — the
+      table's scope FK puts it in the erasure closure, so validate_scope_erasure_arity.py stays red until
+      ScopePurge names it), the node subtree purge drops a purged Memory's marks while a still-restorable one
+      keeps them, and revoking a member's grant removes theirs so they cannot keep voting in an aggregate
+      nobody can take back. cr-favorites-two-objects (ADR 0068 Consequences).
+    coverage:
+      backend:
+        integration:
+          - NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects
+          - ItemFavoritesSliceTest.removingAMemberDropsTheirItemFavorites
