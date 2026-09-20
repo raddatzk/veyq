@@ -8,8 +8,9 @@
 //
 // No preferences and no settings door live here (ADR 0022 §5) — theme, language and the shell's one entry into
 // the hub are all in the sidebar's ProfileMenu. What is left is what is genuinely contextual: the breadcrumb,
-// the invitations badge and the upload tray. That is what keeps the bar usable below the compact threshold,
-// where layout.css gives it 2.1rem.
+// the invitations badge and the upload tray. That matters below the compact threshold, where layout.css gives
+// this bar 3rem (≤1020px) and then auto height around a 2.35rem breadcrumb (≤720px): the actions sit in the
+// same row as the breadcrumb, so each one is width the crumbs no longer have.
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import Breadcrumb from 'primevue/breadcrumb'
