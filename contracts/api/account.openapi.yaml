@@ -469,14 +469,15 @@ paths:
         auth-key rewrite, with one deliberate difference — this flow has a caller session to spare and must
         not revoke it, where recovery has none.
 
-        Two entry points share this one body, distinguished only by `attestationSignature`. **Deliberate**
-        (the caller still knows the current password): `attestationSignature` is present, an Ed25519
-        signature over `authPublicKey`'s raw bytes made with the OLD auth private key, proving the caller
-        still controls the password being replaced. **Forgotten** (the caller reached this only from an
-        already-unlocked session, most often via a `DEVICE_KEY` wrap): `attestationSignature` is absent, and
-        no old-password proof is attempted — the client-side cold-credential gate (ADR 0060 Decision 2) is
-        what already restricted reaching this form, exactly as rotation's gate does; the server holds no
-        evidence of which wrap opened the vault and cannot adjudicate that itself.
+        `attestationSignature` is **required**: an Ed25519 signature over `authPublicKey`'s raw bytes made
+        with the OLD auth private key, proving the caller still controls the password being replaced. It is
+        the one half of the cold credential a blind server can verify for itself — it holds
+        `auth_public_key` (ADR 0003) and nothing else about the password. The other half, that the Secret Key
+        the new wrap is built under is this account's, is proven **on the client** by opening the current
+        `PASSWORD` wrap before anything is sent; the server holds only ciphertext there and cannot adjudicate
+        it. Both together are ADR 0060 Decision 2: a flow that mints a cold credential may not be reachable
+        without the material an attacker lacks. Someone who has forgotten their password goes through
+        `POST /api/recovery/request`, not here.
 
         This is **not** a rotation: the identity keypair is untouched and no scope is touched — see
         `POST /api/account/rotation` for the compromise-recovery mechanism, which is mandatory-paired and
@@ -505,7 +506,7 @@ paths:
               example: { code: authentication_failed }
         "403":
           description: >
-            An `attestationSignature` was present but did not verify against the current `auth_public_key`.
+            The `attestationSignature` did not verify against the current `auth_public_key`.
             Distinct from `401`: the caller **is** authenticated, they failed the additional old-password
             proof. Nothing was written.
           content:
@@ -935,10 +936,10 @@ components:
     ChangePasswordRequest:
       type: object
       description: >
-        Everything `POST /api/account/password` needs, for either entry point. `attestationSignature` is
-        absent on the forgotten-password path — the client-side cold-credential gate is what already decides
-        which path a caller may reach, not this field (see the operation description).
-      required: [passwordWrap, authPublicKey]
+        Everything `POST /api/account/password` needs. All three fields are required: the wrap and the auth
+        key are what is installed, and `attestationSignature` is the half of the proof the server can check
+        itself (see the operation description).
+      required: [passwordWrap, authPublicKey, attestationSignature]
       properties:
         passwordWrap:
           $ref: "#/components/schemas/RotatedWrap"
@@ -955,12 +956,11 @@ components:
           type: string
           description: >
             Ed25519 signature over `authPublicKey`'s raw bytes, produced with the OLD auth private key —
-            proof the caller still controls the password being replaced. Absent on the forgotten-password
-            entry point, where no such proof is attempted.
+            proof the caller still controls the password being replaced.
           contentEncoding: base64
           maxLength: 256
           example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
