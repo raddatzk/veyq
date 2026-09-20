@@ -59,6 +59,8 @@ MEDIUMTEXT_BACKED: dict[tuple[str, str, str], str] = {
     ("account.openapi.yaml", "IdentityPinsUpdate", "blob"): "sealed_blob",
     ("content.openapi.yaml", "Favorites", "ciphertext"): "ciphertext",
     ("content.openapi.yaml", "PutFavoritesRequest", "ciphertext"): "ciphertext",
+    ("content.openapi.yaml", "ItemFavoritesEntry", "ciphertext"): "ciphertext",
+    ("content.openapi.yaml", "PutItemFavoritesRequest", "ciphertext"): "ciphertext",
     ("tasks.openapi.yaml", "ClaimedJob", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "EnqueueRequest", "sealedBody"): "sealed_body",
     ("tasks.openapi.yaml", "CompleteRequest", "sealedResult"): "sealed_result",

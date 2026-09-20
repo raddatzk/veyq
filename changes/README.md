@@ -48,10 +48,18 @@ A small CR is single-phase. Each phase ends with the repo in a
 working, verifiable state (its own "Done when:"). The natural seam is the dependency order:
 contracts → backend → web. **Genuinely independent work = separate CRs, not phases.**
 
-**A contracts phase that ADDS an operation is the one phase that cannot end green everywhere, and that is
-correct rather than a violation of the rule above.** The generated `…Api` interface gains a method the moment
-the spec does, so the `…Resource` implementing it no longer compiles until the backend phase — there is no
-ordering that avoids this and no reason to want one. Its "Done when" is therefore the checks that *can* run
+**A contracts phase that adds an operation to an EXISTING tag cannot end green everywhere, and that is correct
+rather than a violation of the rule above.** The generated `…Api` interface gains a method the moment the spec
+does, so the `…Resource` implementing it no longer compiles until the backend phase — there is no ordering that
+avoids this and no reason to want one.
+
+**The qualifier is load-bearing: an operation on a NEW tag ends green.** A new tag generates a *new* `…Api`
+interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
+is green on every surface, `./gradlew check` included. `cr-favorites-two-objects` predicted a red from the
+unconditional wording this paragraph used to carry, ran `./gradlew check` to confirm it, and got `BUILD
+SUCCESSFUL`. Cheap to check and worth checking: the prediction decides whether the phase's Done-when lists the
+backend at all, and a phase that says "this will not compile" is a phase nobody runs the backend check on —
+which is how a real red would get waved through as the expected one. Its "Done when" is therefore the checks that *can* run
 (`npm run generate:api` + `npm run check`, the contracts guards), stated as exactly that; do not reach for a
 stub implementation in the contracts commit to make `./gradlew check` green, which buys a green tick by adding
 a second thing to remember to delete.

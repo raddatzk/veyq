@@ -63,10 +63,13 @@ ls backend/src/main/resources/db/migration | sed 's/__.*//;s/V//' | sort -n | ta
       since neither context is pinned today — a `sym_favorites` vector beside it; **generate** both from the
       real primitives, never hand-write a vector. Add the two new capped base64 fields to
       `MEDIUMTEXT_BACKED` in `scripts/validate_maxlength_storage.py`.
-      · **Done when:** `npm run generate:api` + `cd web && npm run check` green, and every
-      `scripts/validate_*.py` green. `./gradlew check` **will not compile** in this phase — the generated
-      `ItemFavoritesApi` has no implementation until phase 2. That is correct; do **not** add a stub to buy a
-      green tick.
+      · **Done when:** `npm run generate:api` + `cd web && npm run check` green, every
+      `scripts/validate_*.py` green, **and `cd backend && ./gradlew check` green too** — measured, `BUILD
+      SUCCESSFUL`. This phase *does* end green everywhere, against the CR's own first prediction: the new
+      operations hang off a **new tag**, so they generate a fresh `ItemFavoritesApi` that nothing implements
+      yet, and an unimplemented interface compiles. `changes/README.md` § *phases only above real size* is
+      about the other shape — an operation added to an **existing** tag, where the `…Resource` already
+      implementing that interface stops compiling.
 
 - [ ] **2 backend** — `V49__item_favorites.sql`: `veyq_scope_item_favorites` with PK
       `id VARCHAR(110)` = `"$userId|$scopeId|$nodeId"`, `user_id`/`scope_id`/`node_id VARCHAR(36)`,

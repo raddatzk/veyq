@@ -26,10 +26,24 @@ tags:
       Distinct from the `/api/scopes` scopes resource.
   - name: favorites
     description: >
-      The caller's **per-(user, scope) favorites** — the set of pinned Memory ids, sealed client-side under
-      `K_SC` and stored as a single opaque blob (en.memory.favorites, cr-0031). Operator-blind: a favorite is a
-      personal preference, NOT in the sanctioned metadata set, so the server never sees *which* nodes are
+      The caller's **per-(user, scope) Memory pins** — the set of pinned Memory ids, sealed client-side under
+      the member's **master key** and stored as a single opaque blob (en.memory.favorites). **Private to the
+      member:** this resource returns the caller's own blob and never another member's, and the seal does not
+      branch on scope type, so a co-member holding the shared `K_SC` cannot open it
+      ([ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md)). Operator-blind: a pin is
+      a personal preference, NOT in the sanctioned metadata set, so the server never sees *which* nodes are
       pinned — only an opaque ciphertext + its size. Own resource interface (one path).
+  - name: item-favorites
+    description: >
+      The **per-(member, scope, node) item marks** — the set of marked `veyq_media` ids inside one Memory,
+      sealed client-side under `K_SC` and stored as one opaque blob per member
+      (en.memory.favorites, [ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md)).
+      Deliberately **shared and member-attributed**, unlike the `favorites` pin: the read returns **every**
+      member's blob for that node so the client can render *everyone's / only mine* and a per-item count. The
+      write carries no member id — a caller can only replace their own. Partitioned **per node** because the
+      server has already observed that node id (the client just listed its media), so the partition adds no
+      metadata; a scope-wide set would instead be capped and would re-upload on every toggle. Operator-blind:
+      the server never sees *which* items are marked, only opaque ciphertext + its size.
 
 paths:
   /api/scopes/{scopeId}/nodes:
@@ -267,15 +281,84 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
 
+  /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites:
+    get:
+      tags: [item-favorites]
+      operationId: getItemFavorites
+      summary: Get every member's sealed item-mark blob for the node.
+      description: >
+        Returns one entry per member who has ever stored item marks for this node — the caller's own included,
+        and an empty array when nobody has. Each entry's ciphertext is the sealed set of marked media ids,
+        which the client opens with `K_SC`; the operator sees only opaque blobs. This read is deliberately
+        **not** filtered to the caller: it is what lets the client render *everyone's favorites* and a per-item
+        count without the blind server aggregating for it.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      responses:
+        "200":
+          description: Every member's item-mark blob for the node (empty when none stored).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/ItemFavoritesEntry" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+    put:
+      tags: [item-favorites]
+      operationId: putItemFavorites
+      summary: Replace the caller's sealed item-mark blob for the node.
+      description: >
+        Upserts the **caller's own** item marks for this node (last-write-wins). The body carries no member id,
+        so a caller cannot address another member's blob — the identity comes from the token. The client seals
+        the whole marked set for this node under `K_SC` and PUTs the opaque result; the server stores it
+        verbatim.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+        - $ref: "#/components/parameters/NodeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PutItemFavoritesRequest" }
+            example: { ciphertext: aXRlbS1mYXZvcml0ZXMtY2lwaGVy }
+      responses:
+        "204":
+          description: The item-mark blob was stored.
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "404":
+          description: No such scope, or the caller holds no grant for it.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+
   /api/scopes/{scopeId}/favorites:
     get:
       tags: [favorites]
       operationId: getFavorites
       summary: Get the caller's sealed favorites blob for the scope.
       description: >
-        Returns the caller's own favorites ciphertext for the scope (the sealed set of pinned Memory ids), or a
-        null ciphertext if none was ever stored. The client decrypts it with `K_SC`; the operator sees only an
-        opaque blob.
+        Returns the caller's own pin ciphertext for the scope (the sealed set of pinned Memory ids), or a null
+        ciphertext if none was ever stored. The client decrypts it with its **master key** — never `K_SC`, which
+        is shared in a group and would make the set readable by every co-member. Another member's blob is never
+        returned here. The operator sees only an opaque blob.
       security:
         - bearerAuth: []
       parameters:
@@ -300,8 +383,8 @@ paths:
       operationId: putFavorites
       summary: Replace the caller's sealed favorites blob for the scope.
       description: >
-        Upserts the caller's favorites ciphertext for the scope (last-write-wins). The client seals the whole
-        pinned set under `K_SC` and PUTs the opaque result; the server stores it verbatim.
+        Upserts the caller's pin ciphertext for the scope (last-write-wins). The client seals the whole pinned
+        set under its **master key** and PUTs the opaque result; the server stores it verbatim.
       security:
         - bearerAuth: []
       parameters:
@@ -581,7 +664,7 @@ components:
       properties:
         ciphertext:
           type: [string, "null"]
-          description: The caller's pinned-Memory set, AEAD-sealed under `K_SC` (opaque base64); null when unset.
+          description: The caller's pinned-Memory set, AEAD-sealed under the member's **master key**, context `favorites` (opaque base64); null when unset. Private to the member — `K_SC` does not open it.
           contentEncoding: base64
           maxLength: 65536
           example: ZmF2b3JpdGVzLWNpcGhlcnRleHQ=
@@ -592,10 +675,39 @@ components:
       properties:
         ciphertext:
           type: string
-          description: The pinned-Memory set, AEAD-sealed under `K_SC` (opaque base64).
+          description: The pinned-Memory set, AEAD-sealed under the member's **master key**, context `favorites` (opaque base64).
           contentEncoding: base64
           maxLength: 65536
           example: ZmF2b3JpdGVzLWNpcGhlcnRleHQ=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ItemFavoritesEntry:
+      type: object
+      required: [memberId, ciphertext]
+      properties:
+        memberId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The member whose marks this blob holds. Present so the client can tell its own set apart from the others' — the UI shows only an aggregate count, never who marked what.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        ciphertext:
+          type: string
+          description: That member's marked-media-id set for this node, AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
+          contentEncoding: base64
+          maxLength: 65536
+          example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
+
+    PutItemFavoritesRequest:
+      type: object
+      required: [ciphertext]
+      properties:
+        ciphertext:
+          type: string
+          description: The caller's marked-media-id set for this node, AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
+          contentEncoding: base64
+          maxLength: 65536
+          example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:

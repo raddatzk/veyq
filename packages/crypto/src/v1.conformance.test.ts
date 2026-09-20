@@ -140,6 +140,33 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
   })
 
+  it('symmetric wrap with the favorites context (ADR 0068 — the private Memory pin)', () => {
+    const w = vectors.wrap.sym_favorites
+    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
+    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
+  })
+
+  it('symmetric wrap with the item-favorites context (ADR 0068 — the shared item mark)', () => {
+    const w = vectors.wrap.sym_item_favorites
+    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
+    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
+  })
+
+  it('the favorites and item-favorites contexts are domain-separated', () => {
+    // The two favorite objects carry DIFFERENT audiences (ADR 0068): the pin set is private to the member,
+    // the item marks are shared with the scope. These vectors share kek, nonce and plaintext so only the
+    // context varies — without the separation a private pin blob would open in the shared slot and vice
+    // versa, which is the leak this whole split exists to close.
+    const f = vectors.wrap.sym_favorites
+    const i = vectors.wrap.sym_item_favorites
+    expect(f.kek).toBe(i.kek)
+    expect(f.nonce).toBe(i.nonce)
+    expect(f.plaintext).toBe(i.plaintext)
+    expect(f.blob).not.toBe(i.blob)
+    expect(() => v1.symUnwrap(unhex(f.kek), unhex(f.blob), i.context)).toThrow()
+    expect(() => v1.symUnwrap(unhex(i.kek), unhex(i.blob), f.context)).toThrow()
+  })
+
   it('the device-register and identity-pins contexts are domain-separated', () => {
     // Same kek, same nonce, same plaintext, different context ⇒ different blob, and neither opens under the
     // other's context. Without this a register blob could be replayed into the pin store's slot.

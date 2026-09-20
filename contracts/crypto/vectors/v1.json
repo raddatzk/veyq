@@ -55,7 +55,7 @@
       "kek": "e28662b5cff7c3d8f2a259c1e3f3f28e79d714022f0635a2a4ab708600a976ba"
     },
     "recovery_argon2id_m32768": {
-      "note": "kekRecovery at PRODUCTION Argon2 params (m=32 MiB) \u2014 pins the invite-temp-key KEK so the B1-class param mismatch (m=65536 vs 32768) cannot silently recur. Same inputs as recovery_argon2id, only m differs.",
+      "note": "kekRecovery at PRODUCTION Argon2 params (m=32 MiB) — pins the invite-temp-key KEK so the B1-class param mismatch (m=65536 vs 32768) cannot silently recur. Same inputs as recovery_argon2id, only m differs.",
       "params": {
         "t": 3,
         "m": 32768,
@@ -133,7 +133,7 @@
       "blob": "01b9093f49685c1949fdb253a9f23b87d8892e640ef54b5824a14f826c0fc93742114dafc70d2b3716f711c034457ea5cf3064194216c9d2c5677b5287107fe4812fb9d31320070853731bb88cb2ac7d2d6a35022d3f33364a2f6477c3425f8a643cb55586e51d8aecac2d01328d97bedb7781a1bb025e4a39ae5f75afda7bc81c05a88d4c1f972037a07c31145aa25c6a8464b837b9384b20e1d8ef8b0fa8ede5a95974758245d757bc7a13beaacfb0906374f6e987e30042d91e39260d2d9f5d42770b887be7d482a9c7d6bdfe853b4c99f7e2689d9a0ec91213ad4d88cff8b9c4d94ff7e742c184e1d0524a71e0e9fd872fa3c6dbce1b75b89c9039a57ba9acee1382e71ec46cd274fca100704359be603f48d1eb34179d8ddb3e880d3cee65353f858acbb4f5256ba582a0d8b43797e0a8e35fd2d54be4ae7e4bf6f38c8906dbc6fcbc7e477c39955930f244a26d45fc556dbab7768d0e2c3f8e64d54cb1b0637d0c6b73b1b0ec0321f86955b947d076839951ac8f9633c1318c46c7eda371f2b2b28e727d0bb87218d3b919983ff906f1889da872591b1f565c35464a84fa8113e01404124b275294a4da51b9fee3896fb632a423073639616b6ffdb263495822f81251ea4f6a9c07a15c488f6b38c665bb81834e3867ddb67ae6b6f8eb8d189899406c247bf61fb1a11fc85d8ee08adc0e1588a1487ede5f0d751675d935df1ccbdade29ec869b54364fe80f3ea084e8d415ba432d4ce82e2a0c13068d255c11b552bc6d085e9ebf4cf3c1ec7a6fabbc8315821d923696dcfc801673da595bac2a2c49da5893a7a7e79516134e20c7949ab750d74dd1c4630e0a0d6da67876f52a8eaa03aa9fa06663c8d3fa0b84887a40add1923e3e969dcee685ea8b17aa3a8491e4f0aa2e15e532b286c5b792181386d9cb0bf4998b2a6e4dfd4b110edca1f181290e471ce441df8f9d0a72a5192440ec099a0be8cd4212bc74ec3c0ae89a3459ca81c9059f541562c9c8cc55f897c824dc960512f4f1dd05456096ab0513f0687aa47199b9ad7372a76bbc49003f047955761b474218efa360369d6a8a8e713b72889e2ee5b63bb5bcbe41dbabfedfaab3aea5b90872e5b1bfe494619fa07093588d155f113ecbb1838c2d0f699107396033d9b40f1a92b37dca3091ca550ffedcf5df3a5eecaf61fbdaabad0cb7b5d3dd1c57c9d2346895a5770a19cb69da7aa6b20b7c266b6b4d7becf1550cf89c48304cd03c13f9c6d3cf08bfc1f382c0e96ced36045c5d9648a258fcf898c2cf2b196e61d134e8cc8152ffd859b9bef26f4cd46d159f69388942e2e5b1467529c486037ef1f5e27158fc47ff9ea23451d9c16ee36ec3a542929cd228c5e62d4544c6001a21a2d1d90afcc52451e896021d3760daac3ff286e1940a7c8f53125e2b1abe8cb10781e5d2538f1505d19a10af356d29b87dcc797b0e22c4c0659a9337817037cbde0d8d8a3e94d52dbbcf52f183d26b9bd6e51379a59661dbdf54d4a5f03a9e6cce207e919e0e0e3daf18580a91b64365285ade2d75b32a248c752eec7a75dc5dca5a8f1bcfa14e970a0b0c0d0e0f101112131415d9b2b36fbc724280c9a276df1b67a05412e90d5b28608993b2f6bca3b0d28f42733565bfdf4cd8bc3125a84da29f83e9"
     },
     "sym_invite_temp_key": {
-      "note": "symWrap with the invite-temp-key context \u2014 pins the wrap-context string across platforms. kek = recovery_argon2id_m32768.kek.",
+      "note": "symWrap with the invite-temp-key context — pins the wrap-context string across platforms. kek = recovery_argon2id_m32768.kek.",
       "kek": "ccddfe96872cf9e46c3ea4ba109b12f48b6690ffd7bf9b7a77b7748314f15381",
       "context": "invite-temp-key",
       "nonce": "0a0b0c0d0e0f101112131415",
@@ -163,6 +163,22 @@
       "nonce": "0a0b0c0d0e0f101112131415",
       "plaintext": "7b2264657669636573223a7b7d2c2266616d696c696573223a7b7d7d",
       "blob": "020a0b0c0d0e0f101112131415e2eafbce6bf8ab1a8487506ed92f5f908f4cbeafb7c1555ee75f4f6e9d90ad9c198b0294df8a27ba0b7425f7"
+    },
+    "sym_favorites": {
+      "note": "ADR 0068: the member's PRIVATE Memory pin set, sealed under the Master Key with the 'favorites' context (en.memory.favorites). Private to the member in every scope — the shared K_SC does not open it, which is the defect ADR 0014 §7 named and this seal closes. plaintext = utf8 of the bare pinned-node-id array. kek = sym_master_key.kek.",
+      "kek": "aea8086000d1cee65ee4521561e6489492f67bf220ebc35dcac5a43d40c03542",
+      "context": "favorites",
+      "nonce": "1a1b1c1d1e1f202122232425",
+      "plaintext": "5b2237633366306532612d396231642d346136652d386232632d316632643365346135623663225d",
+      "blob": "021a1b1c1d1e1f202122232425f462efedc6503e0c1a6bd25c826fae7e0e2ae0a2c279cbf2566adb5f7cee6b48874eed07e76846504709af9cfb2c9694f3461368192fb124"
+    },
+    "sym_item_favorites": {
+      "note": "ADR 0068: the member's SHARED per-node item marks, sealed under K_SC at the base epoch with the 'item-favorites' context (en.memory.favorites). Deliberately readable by co-members — the gallery's everyone's/only-mine filter needs it. plaintext = utf8 of the bare marked-media-id array. It shares sym_favorites' kek and nonce ON PURPOSE, so the domain-separation test varies only the context; in production this blob is sealed under K_SC and the pin set under the Master Key.",
+      "kek": "aea8086000d1cee65ee4521561e6489492f67bf220ebc35dcac5a43d40c03542",
+      "context": "item-favorites",
+      "nonce": "1a1b1c1d1e1f202122232425",
+      "plaintext": "5b2237633366306532612d396231642d346136652d386232632d316632643365346135623663225d",
+      "blob": "021a1b1c1d1e1f202122232425f462efedc6503e0c1a6bd25c826fae7e0e2ae0a2c279cbf2566adb5f7cee6b48874eed07e76846503239cbc4e41c4032c2ecbd99165217c6"
     }
   },
   "group_name_key": {
@@ -185,7 +201,7 @@
     "note": "AD-26 blinded slug token: slugKey = HKDF(contentKey, \"veyq/v1/slug-token:\" + parentSlot); token = HMAC-SHA256(slugKey, NFC(slug)). parentSlot = parent node id, or scope id at the root. (slug stored DECOMPOSED/NFD on purpose, so a platform that skips NFC normalization computes a different token and fails this vector.)",
     "contentKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "parentSlot": "b6b1f2c0-0000-4000-8000-00000000aa01",
-    "slug": "italien-2026-cafe\u0301",
+    "slug": "italien-2026-café",
     "token": "7bab374606a8ff5d04d1ebdc6ed6226524f64d242219dfdcaf6e592f5e21c868"
   },
   "chunk_frame": {
@@ -215,7 +231,7 @@
     "note": "Journal seal: blob = salt(16) || nonce(12) || AES-256-GCM(HKDF(contentKey, salt, \"veyq/v1/journal\"), nonce, plaintext). journalOpen(contentKey, blob) must return plaintext."
   },
   "kdf_params": {
-    "note": "kdfParams wire format: u32be t || m || p || dkLen || salt. The one fixed-layout cross-platform serialization (web encodes at setup/reset, mobile decodes at login) \u2014 pins encode + decode round-trip.",
+    "note": "kdfParams wire format: u32be t || m || p || dkLen || salt. The one fixed-layout cross-platform serialization (web encodes at setup/reset, mobile decodes at login) — pins encode + decode round-trip.",
     "params": {
       "t": 3,
       "m": 32768,
