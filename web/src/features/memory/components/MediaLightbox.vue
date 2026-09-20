@@ -30,6 +30,7 @@ import {
 import { derivedDownloadName, saveBytes, sniffMediaType } from '../download'
 import { resolvePlaceName } from '../placeName'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
+import MemoryMap from './MemoryMap.vue'
 import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
 
@@ -273,7 +274,22 @@ const placeLabel = computed(() => captured.value?.placeName ?? '')
 // Resolved once per photo, then read from the sealed tier forever. Four gates, and each one is a bite:
 // consent (`geocodingAvailable` — with it off NO coordinate leaves the device), a coordinate to resolve,
 // a writable surface (the public share viewer is `readonly` and must never write), and no name sealed yet.
-const { geocoderUrl, geocodingAvailable } = useMapConfig()
+const { mapsAvailable, tileUrl, tileAttribution, tileMaxZoom, geocoderUrl, geocodingAvailable } = useMapConfig()
+
+// The mini map: the SAME MemoryMap the location editor uses, read-only (no crosshair, no frame handling) and
+// gated on `mapsAvailable` — without consent no tile is requested and the text rows stand alone. A fixed close
+// zoom, because the question this answers is "where in the town", not "where in the world".
+const MINI_MAP_ZOOM = 15
+const mapCenter = computed(() =>
+  hasGps.value ? { lat: captured.value!.gpsLat!, lng: captured.value!.gpsLng! } : null,
+)
+const showMiniMap = computed(() => mapsAvailable.value && mapCenter.value !== null)
+/** The direction the camera faced, as a CSS rotation for the compass needle drawn over the map (phase 1's
+ *  `GPSImgDirection`). Absent on a photo whose fix carried no direction — then no needle is drawn at all. */
+const viewDirection = computed(() => {
+  const deg = exif.value?.imgDirection
+  return deg !== undefined && Number.isFinite(deg) ? deg : null
+})
 
 async function resolvePlaceForCurrent() {
   const target = item.value
@@ -636,6 +652,26 @@ onBeforeUnmount(() => {
               <dd>{{ gpsLabel }}</dd>
             </template>
           </dl>
+          <!-- The map is an illustration of the coordinate above it, never a replacement: without consent the
+               rows stand alone and no tile is fetched (ADR 0018). -->
+          <div v-if="showMiniMap" class="media-lightbox-map">
+            <MemoryMap
+              :tile-url="tileUrl"
+              :attribution="tileAttribution"
+              :max-zoom="tileMaxZoom"
+              :center="mapCenter!"
+              :zoom="MINI_MAP_ZOOM"
+              :marker="mapCenter"
+            />
+            <span
+              v-if="viewDirection !== null"
+              class="media-lightbox-view-direction"
+              :style="{ transform: `rotate(${viewDirection}deg)` }"
+              :aria-label="formatDirection(viewDirection, exif?.imgDirectionRef)"
+            >
+              <span class="pi pi-arrow-up" aria-hidden="true" />
+            </span>
+          </div>
           <p v-else class="media-lightbox-no-detail">{{ t('media.noDetail') }}</p>
         </template>
       </aside>
@@ -653,6 +689,33 @@ onBeforeUnmount(() => {
   color: var(--app-on-strong);
   background: var(--app-accent);
   border-color: var(--app-accent);
+}
+/* The mini map in the detail panel: a fixed, unobtrusive band under the rows — an illustration of the
+   coordinate, not a second map surface. The compass needle sits over it, anchored to the marker. */
+.media-lightbox-map {
+  position: relative;
+  height: 160px;
+  margin-top: 0.75rem;
+  overflow: hidden;
+  border-radius: var(--app-radius-sm);
+}
+.media-lightbox-map :deep(.leaflet-container) {
+  height: 100%;
+}
+.media-lightbox-view-direction {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 500;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin: -34px 0 0 -15px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--app-backdrop-strong) 65%, transparent);
+  color: #fff;
+  pointer-events: none;
 }
 .media-lightbox-no-detail {
   margin: 0;

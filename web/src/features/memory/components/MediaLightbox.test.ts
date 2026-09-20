@@ -620,6 +620,53 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(geocoderCalls(geo)).toHaveLength(0) // and it does not even ask, since it could not use the answer
   })
 
+  // B3.1 / B3.2 — the map is an illustration of the coordinate, and consent is what decides it exists.
+  it('renders the map on the photo’s coordinate with consent, and no map at all without it', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = true
+    mapConfig.geocoder = 'https://geo.example'
+    const memoryKey = v1.randomBytes(32)
+    const { items } = await seedGeotagged(memoryKey)
+
+    const withConsent = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await flushPromises()
+    expect(withConsent.find('.media-lightbox-map').exists()).toBe(true)
+    // the needle drawn from phase 1's GPSImgDirection is absent on a fix that carried none
+    expect(withConsent.find('.media-lightbox-view-direction').exists()).toBe(false)
+
+    // Lever for B3.2: drop the `mapsAvailable` gate on `showMiniMap` and this reddens.
+    mapConfig.maps = false
+    const withoutConsent = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await flushPromises()
+    expect(withoutConsent.find('.media-lightbox-map').exists()).toBe(false)
+    expect(withoutConsent.findAll('.media-lightbox-metadata dd').map((d) => d.text())).toContain('48.137000, 11.575000')
+  })
+
+  it('draws the view-direction needle when the photo’s fix carried one', async () => {
+    resetPlaceNameCache()
+    mapConfig.maps = true
+    mapConfig.geocoder = null // no geocoder: this test is about the needle, not the name
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', latitude: 48.137, longitude: 11.575, GPSImgDirection: 215.3, GPSImgDirectionRef: 'T',
+    } as never)
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(2), mediaType: 'image/jpeg' }, stubDeriver())
+    const items = await listMedia(SCOPE_ID, NODE_ID)
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await flushPromises()
+
+    const needle = wrapper.find('.media-lightbox-view-direction')
+    expect(needle.exists()).toBe(true)
+    expect(needle.attributes('style')).toContain('215.3deg')
+  })
+
   it('shows the no-detail message when the item carries no sealed EXIF', async () => {
     const memoryKey = v1.randomBytes(32)
     vi.mocked(exifr.parse).mockResolvedValue(undefined as never) // no readable EXIF → nothing sealed
