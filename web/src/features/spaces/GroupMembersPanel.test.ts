@@ -34,6 +34,10 @@ vi.mock('../account/identityPins', () => ({
 vi.mock('../account/profile/profile', () => ({ getMyProfile: vi.fn() }))
 vi.mock('./spaceIconSignal', () => ({ bumpSpaceIcon: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({ useToast: () => ({ success: vi.fn(), error: vi.fn() }) }))
+// Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
+// given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
 import { listScopeMembers } from './members'
@@ -89,7 +93,7 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
     vi.clearAllMocks()
     globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
     globalThis.URL.revokeObjectURL = vi.fn()
-    window.confirm = vi.fn().mockReturnValue(true)
+    confirmAsk.mockResolvedValue(true)
   })
 
   it('shows the owner an "add icon" control when the group has no icon (and no remove)', async () => {

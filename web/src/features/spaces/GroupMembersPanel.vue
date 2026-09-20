@@ -20,6 +20,7 @@ import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { useToast } from '../../shared/state/useToast'
+import { useConfirm } from '../../shared/state/useConfirm'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../components/app/TenantAvatar.vue'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
@@ -31,6 +32,7 @@ const props = defineProps<{ scopeId: string; name?: string }>()
 
 const { t, locale } = useI18n()
 const toast = useToast()
+const { ask } = useConfirm()
 const emit = defineEmits<{ lifecycleChanged: [] }>()
 
 const myUsername = ref('')
@@ -298,7 +300,13 @@ async function onIconSave(bytes: Uint8Array) {
 }
 
 async function removeIcon() {
-  if (!window.confirm(t('spaceIcon.removeConfirm'))) return
+  const accepted = await ask({
+    header: t('spaceIcon.removeConfirmTitle'),
+    message: t('spaceIcon.removeConfirm'),
+    acceptLabel: t('spaceIcon.remove'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!accepted) return
   iconBusy.value = true
   iconError.value = ''
   try {

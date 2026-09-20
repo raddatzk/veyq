@@ -24,6 +24,10 @@ vi.mock('../../shared/inviteLink', () => ({
   buildInviteLink: (secret: string) => `https://x.test/tenant/accept#${secret}`,
   copyText: vi.fn().mockResolvedValue(true),
 }))
+// Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
+// given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
 import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite } from './members'
@@ -153,7 +157,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
   })
 
   it('revokes an invite after confirmation', async () => {
-    window.confirm = vi.fn().mockReturnValue(true)
+    confirmAsk.mockResolvedValue(true)
     vi.mocked(revokeMemberInvite).mockResolvedValue(undefined)
     const wrapper = await mountPanel('OWNER')
     await wrapper.find('[aria-label="Cancel invite"]').trigger('click')
@@ -162,7 +166,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
   })
 
   it('does not revoke when the confirm is dismissed', async () => {
-    window.confirm = vi.fn().mockReturnValue(false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel('OWNER')
     await wrapper.find('[aria-label="Cancel invite"]').trigger('click')
     await flushPromises()

@@ -24,6 +24,12 @@ export default defineConfigWithVueTs(
   {
     name: 'veyq/rules',
     rules: {
+      // The app confirms through its own dialog (`shared/state/useConfirm`), never the browser's: a native
+      // box carries no product voice, no danger colour, and on the sessions panel the longest sentence the
+      // app owns (cr-web-own-confirm-dialog). This is what keeps that swap from being a one-time sweep.
+      // Deliberately NOT exempted for test files: nothing in `src` may reach for a native dialog, and a
+      // fixture is the easiest place to quietly re-introduce one.
+      'no-alert': 'error',
       // Security backstop: the server is operator-blind and the client renders decrypted HTML.
       // Any `v-html` must be an explicit, reviewed opt-out with a sanitising helper — never silent.
       'vue/no-v-html': 'error',

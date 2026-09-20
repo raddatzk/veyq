@@ -39,6 +39,10 @@ vi.mock('../deviceIdentity', () => ({
 }))
 vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
+// Confirmation is the app's own dialog (cr-web-own-confirm-dialog), mounted once in App.vue: the panel awaits
+// `ask()` and this answers it. Stubbing `window.confirm` would now pass every test by confirming nothing.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import SessionsPanel from './SessionsPanel.vue'
 import { listSessionFamilies, revokeSessionFamily, revokeOtherSessionFamilies } from './sessions'
@@ -100,7 +104,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(listSavedKeyWraps).mockResolvedValue([])
     vi.mocked(removeSavedKey).mockResolvedValue(undefined)
     vi.mocked(localWrapId).mockResolvedValue(null)
-    window.confirm = vi.fn(() => true)
+    confirmAsk.mockResolvedValue(true)
   })
 
   it('lists every active family with both dates and marks exactly the one the server flagged', async () => {
@@ -143,6 +147,26 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(revokeSessionFamily).toHaveBeenCalledWith(CURRENT.id)
     // E2: continuing on this screen with dead tokens is the failure mode; the full sign-out is the behaviour.
     expect(signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('asks with the sentence that belongs to the row — your own device is not the general case', async () => {
+    // The two sentences differ in what they promise ("you land back on the sign-in screen" vs "it must sign in
+    // again"), and nothing else in this file would notice if the row picked the wrong one.
+    const wrapper = await mountPanel()
+    await rowButtons(wrapper)[0].trigger('click')
+    await flushPromises()
+    expect(confirmAsk.mock.calls[0][0]).toMatchObject({
+      message: i18n.global.t('sessions.revokeSelfConfirm'),
+      acceptLabel: i18n.global.t('sessions.revokeSelf'),
+    })
+
+    const other = await mountPanel()
+    await rowButtons(other)[1].trigger('click')
+    await flushPromises()
+    expect(confirmAsk.mock.calls[1][0]).toMatchObject({
+      message: i18n.global.t('sessions.revokeConfirm'),
+      acceptLabel: i18n.global.t('sessions.revoke'),
+    })
   })
 
   it('signs out everywhere else through the one endpoint that spares the caller', async () => {
@@ -202,7 +226,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   })
 
   it('does nothing when the confirmation is declined', async () => {
-    window.confirm = vi.fn(() => false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel()
     await rowButtons(wrapper)[0].trigger('click')
     await flushPromises()
@@ -352,7 +376,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
 
   it('does nothing when the escalation confirmation is declined', async () => {
     withEscalatableOther()
-    window.confirm = vi.fn(() => false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel()
     await escalateButton(wrapper, 1)!.trigger('click')
     await flushPromises()
