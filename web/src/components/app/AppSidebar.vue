@@ -232,9 +232,13 @@ const favoriteMemories = computed(() =>
  *  uc.memory.cover E1 stands: there is no auto-cover, and the rail adds no branch to say so. */
 const favoriteCover = (id: string) => covers.value.get(id)
 watch(
-  // The tree and the epoch both matter: a rotation swaps the keys a cover was decrypted under, and the store
-  // drops them, so the rail must ask again rather than sit on an empty map.
-  [() => favoriteMemories.value.map((m) => m.id).join(','), () => activeSpace.epoch, () => treeStore.nodes.length],
+  // Keyed on each favorite's **sealed meta**, not merely on which ids are pinned — the same key the store uses
+  // for staleness, because the store only re-resolves what it is asked about. `patchNodeMeta` mutates
+  // `wrappedMeta` IN PLACE, so a watch over the ids, the node count or the array identity never fires and a
+  // cover set in the detail header leaves the rail showing the old one. The epoch is here for the other half:
+  // a rotation swaps the keys a cover was decrypted under and the store drops them, so the rail must ask again
+  // rather than sit on an empty map.
+  () => favoriteMemories.value.map((m) => `${m.id}:${nodeById(treeStore.nodes, m.id)?.wrappedMeta ?? ''}`).join('|') + `#${activeSpace.epoch}`,
   () => ensureCovers(favoriteMemories.value.map((m) => m.id)),
   { immediate: true },
 )

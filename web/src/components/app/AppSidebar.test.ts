@@ -226,6 +226,23 @@ describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
     expect(tile.find('.memory-cover-image').exists()).toBe(true) // the component's own placeholder, not a branch here
   })
 
+  // The trigger half of the staleness rule, and the one a mocked store CAN see. The store re-resolves when a
+  // node's sealed meta changes — but only if somebody asks it to. `patchNodeMeta` mutates `wrappedMeta` IN
+  // PLACE, so a watch keyed on the favorites' ids, the epoch and the node COUNT never fires, and a cover set in
+  // the detail header leaves the rail showing the old one. Found by the hand pass, which is what it is for.
+  it('asks the store again when a favorite’s sealed meta changes', async () => {
+    const { ensureCovers } = await import('../../features/memory/coverStore')
+    const wrapper = await mountAt('')
+    expect(wrapper.get('.sidebar-favorite-link').exists()).toBe(true)
+    const before = vi.mocked(ensureCovers).mock.calls.length
+
+    treeStore.nodes[0].wrappedMeta = 'm2' // exactly what setting a cover does
+    await flushPromises()
+
+    expect(vi.mocked(ensureCovers).mock.calls.length).toBeGreaterThan(before)
+    expect(vi.mocked(ensureCovers).mock.calls.at(-1)![0]).toEqual(['n1'])
+  })
+
   it('the mobile row carries the cover tile and the class its stylesheet has been waiting for', async () => {
     const wrapper = await mountAt('')
     await wrapper.get('.mobile-navigation-button').trigger('click')

@@ -70,7 +70,14 @@ function syncCovers() {
   ensureCovers(nodes.map((n) => n.id))
 }
 
-watch([viewMode, pins, () => props.memories], syncCovers, { immediate: true })
+// The sealed meta is part of the key for the same reason it is in the rail: a cover edit patches `wrappedMeta`
+// in place, so watching the array (whose identity does not change) would leave a stale cover on the very card
+// the new one was chosen from. The store re-resolves on a changed meta — but only when it is asked to.
+watch(
+  [viewMode, pins, () => props.memories.map((n) => `${n.id}:${n.wrappedMeta ?? ''}`).join('|')],
+  syncCovers,
+  { immediate: true },
+)
 </script>
 
 <template>
