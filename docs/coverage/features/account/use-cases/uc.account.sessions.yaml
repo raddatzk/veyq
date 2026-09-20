@@ -24,6 +24,13 @@ title: Manage active sessions — see every login, sign out remotely
 # the structural invariant it rests on to `scripts/validate_shell_route_gate.py`: every `layout: 'app'` route
 # also declares `requiresUnlock: true`, so the shortcut E3's whole shape exists to avoid cannot be taken quietly.
 #
+# cr-devices-and-sessions-one-rubric folds the former "This device" rubric into this one: the current device's
+# row now also states how THIS device unlocks and offers the forget action, the hub's `device` section is gone
+# (replaced, not redirected — ADR 0022), and the rubric is "Devices and sessions". Web-only; no contract, no
+# backend, no key material moved. The property it rests on, and the only new defect the merge makes possible, is
+# that the device-local status read is resolved BESIDE this view's loader rather than inside it — see the
+# criterion below.
+#
 # What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
 # than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
 # the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
@@ -137,6 +144,20 @@ acceptanceCriteria:
       that has not signed in yet (ADR 0058 §5). The caller's own saved key survives it; a caller holding none
       removes all of them and is unharmed by that. The client filters to the two device methods for honesty, but
       the server's DELETE whitelist is the guarantee.
+  - id: the-current-row-says-how-this-device-unlocks
+    text: >-
+      The current device's row states this device's own unlock tier (remembered / trusted / none, or "this
+      browser cannot remember a device") and offers the forget action beside it — one rubric answering both
+      questions a person has about a device, rather than two rubrics stating the same fact in two vocabularies.
+      Three properties are the criterion, not one. The status is a fact about THIS device, so no other row
+      carries it. The list never WAITS on it: the status read is device-local, unbounded IndexedDB work, so a
+      read that hangs forever must still leave every row rendered and every revoke working — the trap this panel
+      exists not to fall into, and the one defect the merge newly makes possible (a read pulled into the loader
+      takes the whole list down with it). And forgetting stays a DIFFERENT action from the escalation above:
+      forgetting reaches this device's local key as well as its server wrap and leaves the session alone, while
+      the escalation ends a session and can only ever reach the server's wrap — the server cannot reach a remote
+      device's local key, and that asymmetry is what forbids collapsing the two into one "remove this device"
+      button (ADR 0058). Two labels, two confirms, two severities.
   - id: the-device-wrap-join-never-reaches-the-server
     text: >-
       The join lives only inside the Master-Key-sealed register: the PUT body is exactly a sealed blob and a
@@ -228,3 +249,14 @@ gaps:
     `/settings/:section?`, red on a NEW shell route with no gate (so it is not merely pinned to the routes that
     happen to exist), and GREEN on a comment carrying the phrase, which is the false positive the line-based
     first probe produced.
+    cr-devices-and-sessions-one-rubric folds the device-trust half into `SessionsPanel.test.ts` and DELETES
+    `DeviceTrustPanel.test.ts`: the component is still its own, but every assertion about it is now made from
+    the mount point, because a row that lost its action to the parent's data would lose it silently. Seven cases
+    — the tier stated on the current row only (with a second row as the control that says it is a fact about THIS
+    device), the password-less tier winning when both are present, a plain device offering nothing, forgetting
+    dropping both tiers while calling no revoke, the failed status read offering nothing (with a SUCCEEDING read
+    as its live control, so the assertion is about the catch path and not about a button that never renders from
+    the new mount point at all), the unsupported browser, and the two actions staying two. Two of the three were
+    bite-tested against a deliberately-awaited variant before the wiring landed: putting the device-local read
+    inside `useAsyncData` reddens the hanging-read case (zero rows) and the failed-read case by name, which is
+    exactly the defect the merge makes possible and nothing could catch while the two panels were separate.

@@ -64,7 +64,11 @@ acceptanceCriteria:
       web:
         unit: [src/features/account/rememberMe/deviceKeyWrap.test.ts]
   - id: forget-remembered-from-settings-ui
-    text: A user can forget the password-less remember-me tier from the settings hub — the "This device" panel shows the remembered state and its forget action drops the DEVICE_KEY wrap (via clearDeviceKey), so this device next needs its Secret Key.
+    text: >-
+      A user can forget the password-less remember-me tier from the settings hub — the current device's row in
+      the Devices-and-sessions rubric shows the remembered state (it wins over a trusted one, being the tier the
+      user actually experiences) and its forget action drops the DEVICE_KEY wrap (via clearDeviceKey), so this
+      device next needs its Secret Key.
     coverage:
       web:
-        unit: [src/features/account/trustDevice/DeviceTrustPanel.test.ts]
+        unit: [src/features/account/sessions/SessionsPanel.test.ts]

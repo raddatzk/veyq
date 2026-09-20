@@ -33,9 +33,16 @@ acceptanceCriteria:
       backend: { integration: [AccountWrapsSliceTest.deleteByIdRemovesTheWrap] }
       web: { unit: [src/features/account/trustDevice/trustDevice.test.ts] }
   - id: untrust-from-settings-ui
-    text: A user can forget the current device from the settings hub — the "This device" panel reflects the device's unlock tier (remembered / trusted / none) and its forget action (behind a confirm) drops whichever convenience tier this device holds, flipping it to none.
+    text: >-
+      A user can forget the current device from the settings hub — the control is named by its ROW in the
+      Devices-and-sessions rubric, not by a rubric of its own. That row reflects this device's unlock tier
+      (remembered / trusted / none) and its forget action (behind its own dialog) drops whichever convenience
+      tier this device holds, flipping it to none. Two properties keep the merge honest and both are the
+      criterion: the action is offered only where a tier is POSITIVELY known to be here (a failed status read
+      reads as none and offers nothing, with a successful read as its live control), and it stays a different
+      action from the neighbouring escalation — two labels, two confirms, and forgetting never ends a session.
     coverage:
-      web: { unit: [src/features/account/trustDevice/DeviceTrustPanel.test.ts] }
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: multi-device
     text: Multiple devices each enrol their own DEVICE wrap on the same Master Key (they coexist).
     coverage:
