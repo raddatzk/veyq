@@ -6,7 +6,7 @@
 // Ported presentation from the design source (legacy/frontend-noe2ee); only the data layer is ours. Decrypted
 // thumbnails become object URLs that are **revoked** on reload / unmount (no lingering plaintext blob URLs).
 // Out of scope (own CRs): journal, chapters + chapter-nested media, map/tracks, playlists, buckets, sharing.
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Tabs from 'primevue/tabs'
@@ -24,7 +24,7 @@ import MediaGrid from './MediaGrid.vue'
 import MediaTile from './MediaTile.vue'
 import MemoryBuckets from './MemoryBuckets.vue'
 import OptimisticTile from './OptimisticTile.vue'
-import { enqueueUploads, isSupportedMediaFile, inferMediaType, mergeFiles, retryFile } from '../uploadQueue'
+import { enqueueUploads, collectPickedFiles, inferMediaType, retryFile } from '../uploadQueue'
 import { useMediaGalleryLive } from '../useMediaGalleryLive'
 import MediaLightbox from './MediaLightbox.vue'
 import MemoryDateEditor from './MemoryDateEditor.vue'
@@ -214,18 +214,11 @@ function onBucketChanged() { void load() }
 function onBucketUpload() { triggerUpload() }
 
 // --- upload trigger (uc.memory.upload). The Safari Photos picker populates input.files LATE / across repeated
-// picks with empty MIME types — so we re-read the input over a short window and MERGE (never replace) the picks;
-// selection accepts files by extension when the MIME is empty.
-//
-// **The re-read window no longer gates the first enqueue.** It used to: every pick waited out a quiet period
-// before anything started, so on every browser but the one the workaround is for, the grid sat still for over a
-// second before the first byte could leave. What the window is actually for is files that arrive LATE — so each
-// re-read now enqueues only what is genuinely new, as an additional batch, and the files already in hand start
-// immediately. E3 is preserved in full: `mergeFiles` still de-dupes by signature, so a file read twice is
-// enqueued once, and `enqueued` is what carries that memory across the window.
-const RETRY_DELAYS = [250, 750, 1500, 3000]
-/** Every file already handed to the queue for THIS pick — the de-dupe memory the re-reads are checked against. */
-let enqueued: File[] = []
+// picks with empty MIME types, so a pick runs through `collectPickedFiles` — the shared E3 window that re-reads
+// the input, merges by signature and releases it afterwards. It lives in the queue module because the
+// contributor's picker in ShareView needs the identical behaviour; the window's rules (and why the deferred
+// clear is load-bearing) are documented there, once.
+let cancelPickWindow: (() => void) | null = null
 
 function triggerUpload() {
   fileInput.value?.click()
@@ -234,21 +227,11 @@ function triggerUpload() {
 function onFilesPicked() {
   const input = fileInput.value
   if (!input) return
-  enqueued = []
-  collect(input)
-  RETRY_DELAYS.forEach((d) => setTimeout(() => collect(input), d))
-  // Cleared only after the LAST re-read, not at the first enqueue: clearing it earlier would throw away exactly
-  // the late-arriving files this window exists to catch. Re-picking the same file works from then on.
-  setTimeout(() => { if (fileInput.value) fileInput.value.value = '' }, RETRY_DELAYS[RETRY_DELAYS.length - 1] + 100)
+  cancelPickWindow?.() // a fresh pick supersedes whatever the previous window was still waiting for
+  cancelPickWindow = collectPickedFiles(input, enqueueBatch)
 }
 
-function collect(input: HTMLInputElement) {
-  const incoming = Array.from(input.files ?? []).filter(isSupportedMediaFile)
-  const merged = mergeFiles(enqueued, incoming)
-  const fresh = merged.slice(enqueued.length) // only what this read added
-  enqueued = merged
-  if (fresh.length > 0) enqueueBatch(fresh)
-}
+onBeforeUnmount(() => cancelPickWindow?.())
 
 function enqueueBatch(picked: File[]) {
   const key = props.memoryKey

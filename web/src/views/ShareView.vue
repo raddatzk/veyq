@@ -32,7 +32,7 @@ import {
   type ContributorSession,
 } from '../features/memory/share'
 import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../features/memory/media'
-import { isSupportedMediaFile, inferMediaType, enqueueUploads, retryFile, removeFile } from '../features/memory/uploadQueue'
+import { collectPickedFiles, inferMediaType, enqueueUploads, retryFile, removeFile } from '../features/memory/uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../features/memory/useOptimisticTiles'
 import { byCaptureTime } from '../features/memory/optimisticUpload'
 import { useThumbnailPipeline } from '../features/memory/useThumbnailPipeline'
@@ -208,17 +208,24 @@ async function submitName() {
 
 // Add photos (contributor): enqueue the picked files on the SHARED upload queue with a share-scoped transport —
 // they render as optimistic tiles (progress/retry) immediately and reconcile into the gallery on completion.
+// The pick runs through `collectPickedFiles`, the same uc.memory.upload E3 window the curator's picker uses: a
+// visitor importing from Safari's Photos gallery hits the identical late `input.files` population, and reading
+// the input once would drop whatever had not arrived yet — silently, and a contributed photo is not ours to lose.
 const fileInput = ref<HTMLInputElement | null>(null)
+let cancelPickWindow: (() => void) | null = null
 function triggerAddPhotos() {
   fileInput.value?.click()
 }
 function onFilesPicked() {
   const input = fileInput.value
-  const picked = Array.from(input?.files ?? []).filter(isSupportedMediaFile)
-  if (input) input.value = ''
+  if (!input) return
+  cancelPickWindow?.() // a fresh pick supersedes whatever the previous window was still waiting for
+  cancelPickWindow = collectPickedFiles(input, enqueueBatch)
+}
+function enqueueBatch(picked: File[]) {
   const s = session.value
   const key = rootMemoryKey.value
-  if (!picked.length || !s || !key) return
+  if (!s || !key) return
   enqueueUploads(
     { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, memoryKey: key, ...s, pwToken: pwToken.value }, source, undefined, opts) },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
@@ -328,7 +335,10 @@ onMounted(() => {
   void load()
 })
 
-onBeforeUnmount(() => pipeline.revokeAll())
+onBeforeUnmount(() => {
+  pipeline.revokeAll()
+  cancelPickWindow?.() // the E3 re-read window owns its teardown — no timer outlives the view
+})
 </script>
 
 <template>

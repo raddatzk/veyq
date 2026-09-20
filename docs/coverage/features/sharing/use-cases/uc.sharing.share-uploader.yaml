@@ -57,3 +57,15 @@ acceptanceCriteria:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: picked-photo-is-never-silently-dropped
+    text: >-
+      A photo the visitor picked is uploaded — losing one silently is worse than failing loudly, and a visitor
+      is the one person who cannot be told to pick again. The picker itself is the SHARED one; the Safari Photos
+      window and its rules belong to uc.memory.upload E3 and are not restated here. What this use-case asserts
+      is the outcome on the share page: the files already in hand are enqueued before any re-read runs, a file
+      the browser delivers late is enqueued afterwards as its own additional batch, the input is released only
+      once the window has closed (an early clear would discard those late arrivals), and the window is torn
+      down if the visitor leaves mid-pick.
+    coverage:
+      web:
+        unit: [src/views/ShareView.picker.test.ts]

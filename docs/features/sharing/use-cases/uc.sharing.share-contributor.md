@@ -34,7 +34,11 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    **anonymous share identity** (`POST /api/shares/{shareId}/identities { sealedDisplayName }` → `{ identityId,
    contributorToken }`, held on device). The server stores only the ciphertext name + opaque ids.
 4. **View + contribute.** The Memory renders read-only (the shared viewer). An **Add photos** affordance lets the
-   contributor pick images: the client seals each under a fresh `K_blob` (wrapped under `K_mem`) with its
+   contributor pick images — through the **same picker** the curator's own gallery uses, so
+   [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
+   `input.files` late) holds here unchanged; it is a property of the picker, not of the screen, and a visitor
+   is exactly the person who cannot be told to retry. The client then seals each under a fresh `K_blob`
+   (wrapped under `K_mem`) with its
    derivatives + metadata, uploads the ciphertext chunks **direct-to-store** via the **share-scoped** presign
    (`POST /api/shares/{shareId}/blob-uploads`, presenting the `contributorToken`), then completes + attaches
    (`POST /api/shares/{shareId}/media`) to the shared Memory root — stamped with the contributor's `identityId`.
