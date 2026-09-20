@@ -1,0 +1,216 @@
+// @vitest-environment happy-dom
+// uc.admin.tenant-terms (web) — the owner-gated Terms rubric, rebuilt on `shared/ui/LocaleMarkdownEditor`
+// (cr-terms-editor-lists-the-languages-that-have-terms). The panel had no test at all before this; what it owes
+// one for is not the editor's chrome (that is pinned next to the component) but the **data shape**: the panel
+// holds a `LocaleMap`, so a language is present because the server carries it, and `''` is a language somebody
+// started rather than one that is absent. The two flat `de`/`en` refs it used to hold could say neither.
+//
+// The second thing only this file can pin: the starter template ASKS, and the question it asks depends on
+// whether there is already text to lose.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
+
+vi.mock('./tenantTerms', () => ({
+  getTenantTerms: vi.fn(),
+  updateTenantTerms: vi.fn(),
+}))
+vi.mock('../spaces/scopes', () => ({ listMyTenants: vi.fn() }))
+vi.mock('../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }),
+}))
+
+import TenantTermsPanel from './TenantTermsPanel.vue'
+import { getTenantTerms, updateTenantTerms } from './tenantTerms'
+import { listMyTenants } from '../spaces/scopes'
+import { TERMS_TEMPLATE } from './termsTemplate'
+import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
+import { ScopeKind } from '../../api/generated/scopes'
+import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
+import { i18n } from '../../i18n'
+
+const stubs = {
+  Button: {
+    props: ['label', 'loading', 'disabled'],
+    emits: ['click'],
+    template: '<button v-bind="$attrs" :disabled="loading || disabled" @click="$emit(\'click\')">{{ label }}</button>',
+  },
+  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  Dialog: { props: ['visible', 'header'], emits: ['update:visible'], template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>' },
+}
+
+const t = (k: string, named?: Record<string, unknown>) => i18n.global.t(k, named ?? {})
+
+async function mountPanel() {
+  const router = createRouter({
+    history: createMemoryHistory(),
+    routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }],
+  })
+  const wrapper = mount(TenantTermsPanel, { global: { plugins: [router, i18n], stubs } })
+  await flushPromises()
+  return wrapper
+}
+
+const rows = (w: VueWrapper) => w.findAll('.locale-md-row')
+const langs = (w: VueWrapper) => rows(w).map((r) => r.find('.locale-md-lang').text())
+const button = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+/** The "Insert template" action inside a given language's row — the slot the panel hangs there. */
+const templateButton = (w: VueWrapper, index: number) =>
+  rows(w)[index].findAll('button').find((b) => b.text() === t('terms.insertTemplate'))
+const saveButton = (w: VueWrapper) => button(w, t('terms.save'))!
+
+/** Answer whatever the panel is currently asking, and let the click's promise chain settle. */
+async function answer(w: VueWrapper, accepted: boolean) {
+  expect(confirmRequest.value, 'nothing was asked').not.toBeNull()
+  const asked = confirmRequest.value!
+  settleConfirm(accepted)
+  await flushPromises()
+  await w.vm.$nextTick()
+  return asked
+}
+
+describe('TenantTermsPanel — the languages that carry terms', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.global.locale.value = 'en'
+    if (confirmRequest.value) settleConfirm(false)
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' }] as never)
+  })
+
+  it('lists only the languages that have terms — a language with none gets no box', async () => {
+    // BITE 1 (lever: render `SUPPORTED_LOCALES` instead of the map's keys). This is the whole point of the CR:
+    // before it, the missing language was an empty textarea that said nothing about whether that was deliberate.
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { de: '# Bedingungen' } } as never)
+    const w = await mountPanel()
+
+    expect(rows(w)).toHaveLength(1)
+    expect(langs(w)).toEqual(['Deutsch'])
+    expect(w.find('textarea').exists()).toBe(false) // no editor is open, so no box for anything
+    // …and the one that is absent is offered as something to ADD, by name.
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+  })
+
+  it('treats a server null the same as an absent locale, and an empty string as a language that exists', async () => {
+    // BITE 2 (lever: collapse the map with `filter(v => v)`). `LocalizedMarkdown` spells "not there" two ways;
+    // only `''` means "somebody added this language and has not written it yet".
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: '', en: null } } as never)
+    const w = await mountPanel()
+
+    expect(langs(w)).toEqual(['Deutsch'])
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+  })
+
+  it('sends an absent language as absent, not as an empty string', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } } as never)
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 1, terms: { de: 'DE' } } as never)
+    const w = await mountPanel()
+
+    await saveButton(w).trigger('click')
+    await flushPromises()
+    const [, sent] = vi.mocked(updateTenantTerms).mock.calls[0]
+    expect(sent).toEqual({ de: 'DE', en: undefined })
+  })
+
+  it('shows nothing but the empty state when the tenant has no terms at all', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: null } as never)
+    const w = await mountPanel()
+
+    expect(rows(w)).toHaveLength(0)
+    expect(w.text()).toContain(t('localeEditor.empty'))
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+  })
+
+  it('renders read-only for a member who is not the owner', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 2, acceptedVersion: 2, terms: { en: '# Terms' } } as never)
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'MEMBER' }] as never)
+    const w = await mountPanel()
+
+    expect(w.text()).toContain(t('terms.readonlyNote'))
+    expect(rows(w)).toHaveLength(0) // no editor at all, not a disabled one
+    expect(button(w, t('terms.save'))).toBeUndefined()
+  })
+})
+
+describe('TenantTermsPanel — the starter template asks', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.global.locale.value = 'en'
+    if (confirmRequest.value) settleConfirm(false)
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+    vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', role: 'OWNER' }] as never)
+  })
+
+  // BITE 3 (lever: restore the silent `if (!trim()) …` skip). Two cases, and they are not the same case: with
+  // the skip back the EMPTY one still passes — the template still lands — while the overwrite one goes red.
+  // That asymmetry is what says the dialog is about the overwrite and not merely about the insert.
+  it('asks before filling an empty language, and fills it on yes', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 0, acceptedVersion: 0, terms: { de: '' } } as never)
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 1, acceptedVersion: 0, terms: { de: TERMS_TEMPLATE.de } } as never)
+    const w = await mountPanel()
+
+    await templateButton(w, 0)!.trigger('click')
+    const asked = await answer(w, true)
+    expect(asked.message).toBe(t('terms.insertTemplateAsk', { lang: 'Deutsch' }))
+
+    await saveButton(w).trigger('click')
+    await flushPromises()
+    expect(vi.mocked(updateTenantTerms).mock.calls[0][1]).toEqual({ de: TERMS_TEMPLATE.de, en: undefined })
+  })
+
+  it('asks with the overwrite named when the language already holds text, and replaces it on yes', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 4, acceptedVersion: 3, terms: { de: TERMS_TEMPLATE.de } } as never)
+    const w = await mountPanel()
+
+    await templateButton(w, 0)!.trigger('click')
+    const asked = await answer(w, true)
+    expect(asked.message).toBe(t('terms.insertTemplateOverwriteAsk', { lang: 'Deutsch' }))
+
+    await saveButton(w).trigger('click')
+    await flushPromises()
+    expect(vi.mocked(updateTenantTerms).mock.calls[0][1]).toEqual({ de: TERMS_TEMPLATE.de, en: undefined })
+  })
+
+  it('leaves the text alone when the overwrite is declined', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
+    vi.mocked(updateTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'Selbst geschrieben.' } } as never)
+    const w = await mountPanel()
+
+    await templateButton(w, 0)!.trigger('click')
+    await answer(w, false)
+
+    await saveButton(w).trigger('click')
+    await flushPromises()
+    expect(vi.mocked(updateTenantTerms).mock.calls[0][1]).toEqual({ de: 'Selbst geschrieben.', en: undefined })
+  })
+
+  it('asks before removing a language, and a “no” keeps it', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } } as never)
+    const w = await mountPanel()
+
+    const remove = w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang: 'Deutsch' }))
+    await remove!.trigger('click')
+    const asked = await answer(w, false)
+    expect(asked.message).toBe(t('terms.removeLangAsk', { lang: 'Deutsch' }))
+    // `SUPPORTED_LOCALES` order, which is where the panel's row order comes from — en before de.
+    expect(langs(w)).toEqual(['English', 'Deutsch'])
+  })
+
+  it('removes the language once the question is answered yes', async () => {
+    vi.mocked(getTenantTerms).mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE', en: 'EN' } } as never)
+    const w = await mountPanel()
+
+    const remove = w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang: 'Deutsch' }))
+    await remove!.trigger('click')
+    await answer(w, true)
+    expect(langs(w)).toEqual(['English'])
+  })
+})

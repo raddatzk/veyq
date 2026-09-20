@@ -3,12 +3,17 @@
 // sets the server's terms as per-locale (DE+EN) markdown; a normalized change bumps the version server-side,
 // re-gating members (uc.account.accept-terms). Member-readable → non-owners see it read-only; the editor + Save
 // are owner-only (the backend 403s otherwise). Operator-blind: terms are the operator's PUBLIC policy, no key.
+//
+// **The terms are a `LocaleMap`, not two `de`/`en` refs** (cr-terms-editor-lists-the-languages-that-have-terms).
+// The two flat refs this panel used to hold could not tell `''` from *absent*, so it rendered a textarea for a
+// language nobody had written and said nothing about whether that emptiness was deliberate. With the map, a
+// key's presence IS the answer: the editor lists the languages that carry terms, and adding one is an act.
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
-import { getTenantTerms, updateTenantTerms } from './tenantTerms'
+import { getTenantTerms, updateTenantTerms, type LocalizedMarkdown } from './tenantTerms'
 import { TERMS_TEMPLATE } from './termsTemplate'
 import { listMyTenants } from '../spaces/scopes'
 import { activeSpace } from '../../app/activeSpace'
@@ -16,47 +21,101 @@ import { renderMarkdown } from '../../shared/markdown'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
+import { useConfirm } from '../../shared/state/useConfirm'
 import { handle401 } from '../../shared/handle401'
 import { httpStatus, HttpStatus, isUnauthorized } from '../../shared/httpError'
+import LocaleMarkdownEditor from '../../shared/ui/LocaleMarkdownEditor.vue'
+import { localeLabel, type LocaleMap } from '../../shared/ui/localeMap'
+import { SUPPORTED_LOCALES } from '../../i18n'
 
 const { t, locale } = useI18n()
 const toast = useToast()
+const { ask } = useConfirm()
 const on401 = handle401(useRouter())
 
-const de = ref('')
-const en = ref('')
+const terms = ref<LocaleMap>({})
 const version = ref(0)
 const isOwner = ref(false)
 const actionError = ref('')
 
+/**
+ * The wire shape → the map: a locale is a KEY only if the server actually carries it. `LocalizedMarkdown` has
+ * every locale optional and nullable, and both spellings of "not there" (`undefined`, `null`) mean absent —
+ * collapsing them here is what keeps "this language has no terms" expressible at all. Iterated over
+ * `SUPPORTED_LOCALES` so the rows come out in a stable order rather than in JSON key order.
+ */
+function toMap(wire: LocalizedMarkdown | undefined | null): LocaleMap {
+  const map: LocaleMap = {}
+  for (const loc of SUPPORTED_LOCALES) {
+    const text = wire?.[loc]
+    if (text !== undefined && text !== null) map[loc] = text
+  }
+  return map
+}
+
+/** Which languages the starter template can fill. Derived from the template itself, never a second list. */
+const templated = (loc: string): loc is keyof typeof TERMS_TEMPLATE => loc in TERMS_TEMPLATE
+
 // The terms in the active UI locale (fallback to the other) — drives the owner's live preview and the non-owner
-// read-only view. Rendered to a safe HTML subset (escape-first), so `v-html` is safe.
-const previewBody = computed(() => (locale.value === 'de' ? de.value : en.value) || en.value || de.value || '')
+// read-only view. `||` and not `??`: a language that exists but is still empty must fall through to one that
+// has text, or the preview would go blank on a language somebody just added.
+const previewBody = computed(() => terms.value[locale.value] || terms.value.en || terms.value.de || '')
 const renderedPreview = computed(() => renderMarkdown(previewBody.value))
 
 const { pending: loading, error: loadErr } = useAsyncData(async () => {
   if (!activeSpace.tenantId) throw new Error('no-active-tenant') // no HTTP status → classified as 'failed' below
-  const terms = await getTenantTerms(activeSpace.tenantId)
-  version.value = terms.termsVersion
-  de.value = terms.terms?.de ?? ''
-  en.value = terms.terms?.en ?? ''
+  const current = await getTenantTerms(activeSpace.tenantId)
+  version.value = current.termsVersion
+  terms.value = toMap(current.terms)
   const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
   isOwner.value = mine?.role === 'OWNER'
 }, { onError: on401 })
 const loadError = computed<'' | 'failed'>(() => (loadErrorKind(loadErr.value) ? 'failed' : ''))
 
-/** Seed an empty locale from the clause template (never clobbers text the owner already wrote). */
-function insertTemplate() {
-  if (!de.value.trim()) de.value = TERMS_TEMPLATE.de
-  if (!en.value.trim()) en.value = TERMS_TEMPLATE.en
+/**
+ * Fill ONE language from the starter template, and ask first — in both directions.
+ *
+ * The old shape wrote the template into every empty locale at once and silently skipped the ones that already
+ * held text: restraint the owner never asked for and could not see. Now the act names its language, and the
+ * question names its consequence: inserting into an empty language is an offer, inserting over text somebody
+ * wrote is a replacement, and the owner is told which one they are agreeing to.
+ */
+async function insertTemplate(loc: string) {
+  if (!templated(loc)) return
+  const lang = localeLabel(loc)
+  const overwrites = (terms.value[loc] ?? '').trim().length > 0
+  const accepted = await ask({
+    header: t('terms.insertTemplate'),
+    message: t(overwrites ? 'terms.insertTemplateOverwriteAsk' : 'terms.insertTemplateAsk', { lang }),
+    acceptLabel: t('terms.insertTemplate'),
+    acceptIcon: 'pi pi-file-plus',
+  })
+  if (!accepted) return
+  terms.value = { ...terms.value, [loc]: TERMS_TEMPLATE[loc] }
+}
+
+/** Dropping a published language is not the weight of dropping a share note, so the terms panel vetoes it. */
+function confirmRemove(loc: string): Promise<boolean> {
+  const lang = localeLabel(loc)
+  return ask({
+    header: t('localeEditor.removeLang', { lang }),
+    message: t('terms.removeLangAsk', { lang }),
+    acceptLabel: t('localeEditor.removeLang', { lang }),
+    acceptIcon: 'pi pi-trash',
+  })
 }
 
 const { run: runSave, pending: saving } = useAsyncAction(
   async () => {
-    const updated = await updateTenantTerms(activeSpace.tenantId!, { de: de.value, en: en.value })
+    // A language the map does not carry is sent as `undefined`, i.e. omitted — which is how the absence
+    // reaches the server at all. Trap: the round-trip is NOT lossless in the other direction. The backend
+    // drops a blank locale on normalize and treats an all-blank update as a no-op, so a language that was
+    // added and left empty comes back absent, and removing the last language leaves the stored terms standing.
+    // That is the right server behaviour (an empty language is not a published translation) — it is written
+    // here because the reply below is what the editor re-renders from, so the owner sees the server's truth.
+    const updated = await updateTenantTerms(activeSpace.tenantId!, { de: terms.value.de, en: terms.value.en })
     version.value = updated.termsVersion
-    de.value = updated.terms?.de ?? ''
-    en.value = updated.terms?.en ?? ''
+    terms.value = toMap(updated.terms)
     toast.success(t('terms.saved', { version: updated.termsVersion }))
   },
   {
@@ -92,27 +151,30 @@ async function save() {
       <template v-else-if="isOwner">
         <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
 
-        <div class="locale-markdown-editor">
-          <div class="locale-markdown-editor-entry">
-            <span>{{ t('terms.localeDe') }}</span>
-            <textarea v-model="de" rows="12" :placeholder="t('terms.placeholder')"></textarea>
-          </div>
-          <div class="locale-markdown-editor-entry">
-            <span>{{ t('terms.localeEn') }}</span>
-            <textarea v-model="en" rows="12" :placeholder="t('terms.placeholder')"></textarea>
-          </div>
-        </div>
+        <!-- One row per language that HAS terms, plus an explicit act to add one that does not. The starter
+             template hangs in the row's own actions, because it fills that one language and asks first. -->
+        <LocaleMarkdownEditor
+          v-model="terms"
+          :placeholder="t('terms.placeholder')"
+          :before-remove="confirmRemove"
+        >
+          <template #row-actions="{ locale: loc }">
+            <Button
+              v-if="templated(loc)"
+              type="button"
+              :label="t('terms.insertTemplate')"
+              icon="pi pi-file-plus"
+              text
+              severity="secondary"
+              size="small"
+              :disabled="saving"
+              @click="insertTemplate(loc)"
+            />
+          </template>
+        </LocaleMarkdownEditor>
         <small class="settings-muted">{{ t('terms.markdownHint') }}</small>
         <div class="terms-editor-actions">
           <Button :label="t('terms.save')" icon="pi pi-save" :loading="saving" @click="save" />
-          <Button
-            :label="t('terms.insertTemplate')"
-            icon="pi pi-file-plus"
-            severity="secondary"
-            outlined
-            :disabled="saving"
-            @click="insertTemplate"
-          />
         </div>
 
         <div v-if="previewBody" class="terms-preview">
@@ -139,12 +201,6 @@ async function save() {
   gap: 0.75rem;
   align-items: center;
   margin-top: 0.5rem;
-}
-.locale-markdown-editor-entry textarea {
-  min-height: 14rem;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.85em;
-  line-height: 1.5;
 }
 .terms-preview {
   margin-top: 1rem;
