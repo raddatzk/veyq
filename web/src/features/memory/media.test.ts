@@ -30,6 +30,7 @@ import {
   backfillMediaType,
   isVideoMediaType,
   effectiveCapturedAt,
+  readCaptureTime,
   CHUNK_SIZE,
   COVER_SPEC,
   TIER_SPECS,
@@ -386,6 +387,41 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(meta).toMatchObject({ v: 1, w: 640, h: 480 })
     expect(effectiveCapturedAt(meta)).toBe(FILE_MTIME) // file-date fallback
     expect(meta?.capturedAtSource).toBe('file') // marked untrustworthy for the Memory `auto` range
+  })
+
+  // The capture-time key has TWO consumers: the metadata tier sealed at upload, and the in-flight upload tile
+  // that must know its grid place BEFORE a byte is uploaded (useOptimisticTiles). They agree because they
+  // consume one rule — `captureTimeOf` — and this is the bite that says so rather than assuming it. Lever:
+  // drop `lastModified` from the tile-side call and the file-date branch below parts company with the seal.
+  it('the picked file’s capture time is the one the tier seals — EXIF date, else the file date', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    const FILE_MTIME = Date.UTC(2019, 5, 6, 7, 8, 9)
+    const bytes = new Uint8Array([1, 2, 3])
+    const asPickedFile = () => new File([bytes as BlobPart], 'p.jpg', { type: 'image/jpeg', lastModified: FILE_MTIME })
+
+    // (a) the file carries a real EXIF date → both sides take it, and the file date is ignored by both
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) } as never)
+    const keyA = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, keyA, { bytes, mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
+    const sealedA = unsealMeta(keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
+    const tileA = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
+    expect(tileA.capturedAt).toBe(sealedA?.capturedAt)
+    expect(tileA.capturedAt).toBe(CAPTURED_AT)
+    expect(tileA.capturedAtSource).toBe(sealedA?.capturedAtSource)
+
+    // (b) no readable EXIF → both fall back to the file's own date. This is the half the lever removes.
+    vi.mocked(exifr.parse).mockResolvedValue(undefined as never)
+    const keyB = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, keyB, { bytes, mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
+    const listed = await listMedia(SCOPE_ID, NODE_ID)
+    const sealedB = unsealMeta(keyB, listed[listed.length - 1])
+    const tileB = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
+    expect(tileB.capturedAt).toBe(sealedB?.capturedAt)
+    expect(tileB.capturedAt).toBe(FILE_MTIME)
+    expect(tileB.capturedAtSource).toBe('file')
   })
 
   it('seals no capture date in the tier when there is neither an EXIF date nor a file date', async () => {

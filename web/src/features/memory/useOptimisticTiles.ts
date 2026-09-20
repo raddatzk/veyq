@@ -2,11 +2,13 @@
 // internal gallery (MemoryDetail) and the anonymous contributor viewer (ShareView). The global upload queue's
 // still-in-flight files for a given grouping `key` (a Memory node id, or a shareId) render immediately as grid
 // tiles: an instant local preview (a `URL.createObjectURL` of the user's own file — never uploaded in the clear)
-// + a per-tile progress / failed-with-retry state, pinned ahead of the listed media. Each reconciles into the
-// real decrypted thumbnail once its media lists (matched by the `mediaId` the queue records on `done`). The pure
-// selection/merge logic lives in ./optimisticUpload; this composable owns the reactive preview lifecycle.
+// + a per-tile progress / failed-with-retry state, **at their capture-time place in the one grid order**
+// ([uc.memory.gallery](../../../../docs/features/memory/use-cases/uc.memory.gallery.md)). Each reconciles into
+// the real decrypted thumbnail once its media lists (matched by the `mediaId` the queue records on `done`) — a
+// change of content, never of place, because both sides derive the key from the same `captureTimeOf` rule. The
+// pure selection/merge logic lives in ./optimisticUpload; this composable owns the reactive preview lifecycle.
 import { reactive, computed, watch, onBeforeUnmount, type Ref } from 'vue'
-import { createBrowserDeriver } from './media'
+import { captureTimeOf, createBrowserDeriver, readCaptureTime } from './media'
 import { galleryDisplayAspectRatio } from './mediaGridLayout'
 import { useUploadQueue, type UploadFile } from './uploadQueue'
 import { selectOptimisticUploads, optimisticTileId } from './optimisticUpload'
@@ -24,6 +26,10 @@ export type OptimisticTileVM = {
   status: UploadFile['status']
   progress: number
   isVideo: boolean
+  /** The grid sort key — the same one `sealMetadata` will seal for this file (EXIF date, else the file's).
+   *  Present from the first frame: the file-date half needs no decode, and the EXIF half refines it in the
+   *  probe pass below, before any byte is uploaded. Undefined only for a file carrying neither. */
+  capturedAt?: number
 }
 
 /**
@@ -37,7 +43,7 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
   // `url` is null for a video until its first-frame poster is derived: an <img> can't decode raw video bytes, so a
   // video's preview is a locally-derived poster (badge drawn over it, #105) — matching the persisted tile. Images
   // use the raw file blob url directly.
-  type Preview = { url: string | null; aspectRatio: number; donated: boolean }
+  type Preview = { url: string | null; aspectRatio: number; donated: boolean; capturedAt?: number }
   const previews = reactive(new Map<string, Preview>())
 
   const optimisticFiles = computed(() => selectOptimisticUploads(batches.value, key.value, listedMediaIds.value))
@@ -54,6 +60,7 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
         status: f.status,
         progress: f.progress,
         isVideo: f.mediaType.startsWith('video/'),
+        capturedAt: p?.capturedAt,
       }
     }),
   )
@@ -78,6 +85,10 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
           url: isVideo ? null : URL.createObjectURL(f.file),
           aspectRatio: galleryDisplayAspectRatio(undefined, undefined),
           donated: false,
+          // The fallback half of the capture-time rule, available synchronously — so the tile has a place in
+          // the sort from the frame it appears, rather than landing among the undated and moving once the
+          // probe below returns.
+          capturedAt: captureTimeOf(undefined, f.file.lastModified).capturedAt,
         })
         void probePreview(f, isVideo)
       }
@@ -87,6 +98,11 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
 
   async function probePreview(f: UploadFile, isVideo: boolean) {
     try {
+      // The capture-time key is refined to the EXIF date here, in the same pass that refines the aspect ratio
+      // and derives a video poster — one read of the picked file, before it is queued onto the wire.
+      const { capturedAt } = await readCaptureTime(f.file, f.mediaType, f.file.lastModified)
+      const withDate = previews.get(f.id)
+      if (withDate) previews.set(f.id, { ...withDate, capturedAt })
       const dims = await deriver.probeDimensions?.(f.file, f.mediaType)
       const withDims = previews.get(f.id)
       if (withDims && dims) previews.set(f.id, { ...withDims, aspectRatio: galleryDisplayAspectRatio(dims.w, dims.h) })

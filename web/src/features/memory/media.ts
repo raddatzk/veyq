@@ -184,6 +184,43 @@ export function effectiveCapturedAt(meta: MediaMeta | null): number | undefined 
   return finiteNum(meta?.capturedAtOverride) ?? finiteNum(meta?.capturedAt)
 }
 
+// --- the capture-time key ---------------------------------------------------
+//
+// ONE rule with TWO consumers, which is why it is a named export rather than a line inside `sealMetadata`:
+// the metadata tier sealed at upload (below), and the in-flight upload tile that must know where it belongs in
+// the gallery **before a byte is uploaded** (`useOptimisticTiles`). If these two ever disagreed, a tile would
+// jump the moment its upload settled — which is the defect this rule's single definition exists to prevent.
+
+/** A media's capture time and where it came from — an EXIF date is trustworthy, a file date is a fallback. */
+export type CaptureTime = { capturedAt?: number; capturedAtSource?: 'exif' | 'file' }
+
+/**
+ * The rule: the EXIF date if the image carries one, else the file's own date. The source is recorded because
+ * only a trustworthy EXIF date (or a user override) may feed a Memory's `auto` range (cr-0067) — a file
+ * modification date must not stretch it.
+ */
+export function captureTimeOf(exifDate: number | undefined, lastModified: number | undefined): CaptureTime {
+  const capturedAt = exifDate ?? finiteNum(lastModified)
+  if (capturedAt === undefined) return {}
+  return { capturedAt, capturedAtSource: exifDate !== undefined ? 'exif' : 'file' }
+}
+
+/**
+ * The same rule applied to a **picked file**, before anything is read into memory or uploaded: parse its EXIF
+ * date (best-effort — a non-image, absent EXIF or a decode error yields nothing) and fall back to the date the
+ * file itself carries. `lastModified` is passed explicitly rather than read off the blob, so the fallback half
+ * of the rule is visible at the call site and a caller cannot silently lose it.
+ */
+export async function readCaptureTime(file: Blob, mediaType: string, lastModified: number | undefined): Promise<CaptureTime> {
+  if (!mediaType.startsWith('image/')) return captureTimeOf(undefined, lastModified)
+  try {
+    const raw = await exifr.parse(file, { tiff: true, exif: true })
+    return captureTimeOf(raw ? exifCapturedAt(raw) : undefined, lastModified)
+  } catch {
+    return captureTimeOf(undefined, lastModified)
+  }
+}
+
 // --- add-media -------------------------------------------------------------
 
 /** A blob sealed and ready to upload: the wrap + the ciphertext frames + the declared shape. */
@@ -213,6 +250,11 @@ function finiteNum(n: unknown): number | undefined {
 function cleanStr(s: unknown): string | undefined {
   const t = typeof s === 'string' ? s.trim() : ''
   return t.length ? t : undefined
+}
+
+/** The EXIF capture date, by its one precedence rule. Both readers of an image's date go through here. */
+function exifCapturedAt(raw: { DateTimeOriginal?: unknown; CreateDate?: unknown; ModifyDate?: unknown }): number | undefined {
+  return toEpochMs(raw.DateTimeOriginal ?? raw.CreateDate ?? raw.ModifyDate)
 }
 
 /** Coerce an EXIF date (exifr yields a `Date`; some sources a number) to epoch-ms, or undefined when unusable. */
@@ -263,7 +305,7 @@ async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; 
       h: finiteNum(raw.ExifImageHeight ?? raw.ImageHeight),
     }
     return {
-      capturedAt: toEpochMs(raw.DateTimeOriginal ?? raw.CreateDate ?? raw.ModifyDate),
+      capturedAt: exifCapturedAt(raw),
       gpsLat: finiteNum(raw.latitude), // GPS rides the listed tier now (cr-0068), not the lazy EXIF
       gpsLng: finiteNum(raw.longitude),
       exif: hasExifPayload(exif) ? exif : null,
@@ -284,17 +326,13 @@ async function sealMetadata(
   memoryKey: Uint8Array,
 ): Promise<{ wrappedMeta: string | null; wrappedExif: string | null }> {
   const [dims, meta] = await Promise.all([probeDims(source, deriver), readExif(source)])
-  const capturedAt = meta.capturedAt ?? finiteNum(source.lastModified) // EXIF date, else the file's creation date
-  // the source distinguishes a trustworthy EXIF date from a file-modification-date fallback (cr-0067): only
-  // the former (or a user override) feeds a Memory's `auto` range — a file date must not stretch it.
-  const capturedAtSource: 'exif' | 'file' | undefined =
-    meta.capturedAt !== undefined ? 'exif' : capturedAt !== undefined ? 'file' : undefined
+  const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, source.lastModified)
   const metaTier: MediaMeta = {
     v: 1,
     w: dims?.w,
     h: dims?.h,
     capturedAt,
-    capturedAtSource: capturedAt !== undefined ? capturedAtSource : undefined,
+    capturedAtSource,
     gpsLat: meta.gpsLat,
     gpsLng: meta.gpsLng,
     mediaType: cleanStr(source.mediaType), // the persisted video signal (#104/#105); the file's own type, sealed
