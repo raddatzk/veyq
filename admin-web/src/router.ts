@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { serverState } from './shared/state/serverState'
 import { session } from './app/session'
 import SetupView from './views/SetupView.vue'
@@ -17,14 +17,25 @@ import AdminConsoleView from './views/AdminConsoleView.vue'
 // blank page. The guard below only handles what it can decide WITHOUT a round trip (setup pending, no token);
 // the owner-vs-non-owner distinction needs the backend's own 403 and therefore lives in AdminConsoleView,
 // which renders the refusal. Authorization stays server-side on every call either way.
+//
+// `meta.layout` picks the shell `App.vue` renders the view in, the same mechanism `web/src/router.ts` uses and
+// with web's own vocabulary: `'plain'` is "the full viewport, not the narrow public card". It is an OPT-OUT —
+// anything without it gets the centred card shell, which is what a new sign-in-shaped screen wants. The word
+// that must never appear here is web's other one, `layout: 'app'`: there it means the vault-gated Memory shell,
+// `scripts/validate_shell_route_gate.py` asserts that every route carrying it is also `requiresUnlock: true`,
+// and this surface has no vault — it would be a security vocabulary borrowed for a layout.
+//
+// Exported for `App.test.ts`, which mounts these records (metas included) behind stub components.
+export const routes: RouteRecordRaw[] = [
+  { path: '/', name: 'console', component: AdminConsoleView, meta: { layout: 'plain' } },
+  { path: '/setup', name: 'setup', component: SetupView },
+  { path: '/login', name: 'login', component: LoginView },
+  { path: '/:pathMatch(.*)*', redirect: { name: 'console' } },
+]
+
 const router = createRouter({
   history: createWebHistory(),
-  routes: [
-    { path: '/', name: 'console', component: AdminConsoleView },
-    { path: '/setup', name: 'setup', component: SetupView },
-    { path: '/login', name: 'login', component: LoginView },
-    { path: '/:pathMatch(.*)*', redirect: { name: 'console' } },
-  ],
+  routes,
 })
 
 router.beforeEach((to) => {

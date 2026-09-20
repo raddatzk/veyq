@@ -12,12 +12,35 @@
 @import './styles/settings.css';
 @import './styles/dark.css';
 
+/* The public shell — every card screen (first-run setup, sign-in, the unreachable notice) is centred in it.
+   A PORT of web's `.public-shell` (`web/src/styles/layout.css` § .public-shell) together with the
+   `.veyq-shell-inner` that web keeps scoped inside `components/app/AppShell.vue`; never an import, because
+   ADR 0065 keeps the two packages' styling independent, and `layout.css` as a whole stays out — the rest of it
+   is the Memory shell, sidebar and topbar this surface does not have.
+
+   The two rules live side by side on purpose: web splits them across two files, and the half that ended up in
+   `web/src/style.css` went dead without anyone noticing.
+
+   The mobile override is not cosmetic. Under `place-items: center` a card taller than the viewport overflows
+   UPWARD, out of reach — and setup's Emergency-Kit step is the tallest card in either app. */
 .veyq-shell {
-  min-height: 100dvh;
   display: grid;
   place-items: center;
-  padding: 1.5rem;
+  width: 100%;
+  min-height: 100dvh;
+  padding: 2rem;
   background: var(--app-background-pattern);
+}
+
+.veyq-shell-inner {
+  width: min(460px, 100%);
+}
+
+@media (max-width: 720px) {
+  .veyq-shell {
+    align-items: start;
+    padding: 1rem;
+  }
 }
 
 .veyq-banner {

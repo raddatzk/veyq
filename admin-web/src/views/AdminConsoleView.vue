@@ -160,6 +160,11 @@ async function signOut() {
   margin: 0 auto;
   padding: 1.5rem 1rem 3rem;
 }
+/* The refusal branch's card is 460px wide (`styles/forms.css` § .login-card) inside this 68rem column — left
+   unset it clings to the left edge, which makes an answered `403` read as a half-rendered page. */
+.admin-shell > .login-card {
+  margin-inline: auto;
+}
 .admin-shell__bar {
   display: flex;
   align-items: flex-start;
