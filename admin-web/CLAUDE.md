@@ -67,7 +67,8 @@ contracts change.
   access. `AdminConsoleView.test.ts` pins one case per verdict — keep it that way.
 
 ## Conventions
-- Styles, `httpError`, `inviteLink`, the async-state helpers and the Emergency-Kit module are **copies** of
+- Styles, `httpError`, `inviteLink`, the async-state helpers, the confirmation channel
+  (`shared/state/useConfirm.ts` + `shared/ui/ConfirmDialog.vue`) and the Emergency-Kit module are **copies** of
   `web/`'s, on purpose: ADR 0065 keeps everything but the crypto independent per package, so a redesign of
   one surface is never a regression in the other. Do not build a shared UI package. Two later ports follow the
   same rule and carry their own traps: `.veyq-shell` + `.veyq-shell-inner` in `style.css` (web's
