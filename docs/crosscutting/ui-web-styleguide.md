@@ -6,9 +6,17 @@ gallery or social network.
 
 ## Source of truth
 
-**`web/src/styles/`** — nine stylesheets (~175 KB: `base` tokens, `ui`, `layout`, `forms`, `memory`, `media`,
+**`web/src/styles/`** — eight stylesheets (~175 KB: `base` tokens, `ui`, `layout`, `forms`, `memory`, `media`,
 `settings`, **`dark`**); `web/src/style.css` is the import barrel. Individual edits carry a comment with their
 reason where the reason isn't obvious.
+
+**`admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout`, `memory` and `media`,
+which style a Memory shell, a gallery and a viewer that surface does not have — and the rules on this page
+govern it too. The copy is deliberate, not drift: [ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)
+keeps the two packages independent in everything but `@veyq/crypto`, so a redesign of one is never a regression
+in the other. **The flip side is that nothing here is automatically true of both** — a token added on this side
+reaches the admin surface only when somebody carries it over, and the admin package's own `style.css` holds the
+shell rules web keeps in `layout.css`.
 
 **The design system is complete — there is nothing to fetch from anywhere.** If something seems missing, that
 is a **design decision to make**, not a copy job. What the code already does is the answer; this page only says

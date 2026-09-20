@@ -69,7 +69,14 @@ contracts change.
 ## Conventions
 - Styles, `httpError`, `inviteLink`, the async-state helpers and the Emergency-Kit module are **copies** of
   `web/`'s, on purpose: ADR 0065 keeps everything but the crypto independent per package, so a redesign of
-  one surface is never a regression in the other. Do not build a shared UI package. The kit module is the
+  one surface is never a regression in the other. Do not build a shared UI package. Two later ports follow the
+  same rule and carry their own traps: `.veyq-shell` + `.veyq-shell-inner` in `style.css` (web's
+  `.public-shell`, which web splits across `layout.css` and a scoped block — kept together here, because the
+  half that landed in web's own `style.css` went dead unnoticed), and `shared/state/systemTheme.ts` (web's
+  `useThemeState` reduced to the system-following half: no preference, no switcher, because there is no
+  settings screen to drive one). `layout.css` is still **not** imported and should stay that way — the rest of
+  it is the Memory shell. And `systemTheme.ts` must stay reachable from `main.ts` alone: it imports SVGs with
+  Vite's `?raw`, which the CLI's bare esbuild bundle cannot resolve. The kit module is the
   **write half only** — no `importKitFromFile`, and therefore no `jsqr`, which `web/CLAUDE.md` carries as a
   single argued exception to the no-unmaintained-dependency rule. An exception earned once does not travel.
 - **A green `npm run check` here does NOT prove this package's dependencies are declared.** npm workspaces
