@@ -9,7 +9,6 @@ import { computed, onMounted, reactive, ref, watch, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import AppearancePanel from '../features/settings/AppearancePanel.vue'
-import DeviceTrustPanel from '../features/account/trustDevice/DeviceTrustPanel.vue'
 import SessionsPanel from '../features/account/sessions/SessionsPanel.vue'
 import KeyRotationPanel from '../features/account/rotation/KeyRotationPanel.vue'
 import ChangePasswordPanel from '../features/account/changePassword/ChangePasswordPanel.vue'
@@ -63,10 +62,10 @@ const categories = computed<NavCategory[]>(() => {
       collapsible: false,
       items: [
         { id: 'appearance', label: t('settings.appearance'), icon: 'pi pi-palette' },
-        // Device trust is device-local + always relevant (uc.account.trust-device § Untrust) — no scope needed.
-        { id: 'device', label: t('settings.device'), icon: 'pi pi-desktop' },
-        // Every active session of the account + the remote sign-out (uc.account.sessions). Account-wide, not
-        // scope-bound, and gated on a session rather than an unlock — so it belongs beside device trust.
+        // Every signed-in device + the remote sign-out (uc.account.sessions), AND how this device unlocks
+        // (uc.account.trust-device § Untrust) — one rubric, because both are facts about a device and the list
+        // already carries a row for this one. Account-wide, not scope-bound, and gated on a session rather than
+        // an unlock. The former separate "This device" section was REPLACED, not redirected (ADR 0022).
         { id: 'sessions', label: t('settings.sessions'), icon: 'pi pi-mobile' },
         // Change password (uc.account.change-password) sits beside sessions: it is the credential-adjacent
         // action, account-wide like sessions, gated on a session rather than an unlock (like it, and unlike
@@ -76,9 +75,9 @@ const categories = computed<NavCategory[]>(() => {
         // `requiresUnlock: true` is the gate and it is the correct one here: the granting device is unlocked by
         // premise — it seals the Master Key it is holding.
         { id: 'pairing', label: t('pairing.navTitle'), icon: 'pi pi-qrcode' },
-        // Replacing the account's keys after a compromise (uc.account.rotate-keys). It sits below the two
-        // sections whose failure it answers — a device trusted by mistake, a session that revoking cannot
-        // reach — because that is the order the person arrives in. The route's `requiresUnlock: true` is the
+        // Replacing the account's keys after a compromise (uc.account.rotate-keys). It sits below the rubric
+        // whose failure it answers — a device trusted by mistake, a session that revoking cannot reach — because
+        // that is the order the person arrives in. The route's `requiresUnlock: true` is the
         // right gate: the rotation rewrites Master-Key-sealed material, so a locked vault could not run it at
         // all; its OWN gate is narrower still and lives in the panel (ADR 0060 Decision 2 — a device wrap
         // opened this vault is refused before the form is offered).
@@ -163,7 +162,6 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   }
   if (id === 'server-admin') return { component: ServerAdminPanel, props: {} }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
-  if (id === 'device') return { component: DeviceTrustPanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
   if (id === 'password') return { component: ChangePasswordPanel, props: {} }
   if (id === 'pairing') return { component: AddDevicePanel, props: {} }

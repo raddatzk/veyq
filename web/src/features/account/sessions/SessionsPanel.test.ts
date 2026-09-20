@@ -13,7 +13,9 @@
 //   - the escalation (ADR 0058) cuts the family FIRST and the wrap second, is offered only where the register
 //     names a served wrap for that device, and on a half-success says exactly what did and did not happen (E5);
 //   - § Devices with a saved key is the retry surface for that half-success, and its bulk action is defined by
-//     EXCLUDING this device's own saved key — never by a claim about the others (ADR 0058 §5).
+//     EXCLUDING this device's own saved key — never by a claim about the others (ADR 0058 §5);
+//   - the current device's row also states how THIS device unlocks and offers the FORGET action
+//     (uc.account.trust-device § Untrust), which is a different act from the escalation above and stays one.
 //
 // The register is mocked to a NAMELESS default on purpose. That is the §E4 state, and it is the state the four
 // original behaviours above were written against — so they keep asserting exactly what they always did, and the
@@ -39,6 +41,14 @@ vi.mock('../deviceIdentity', () => ({
 }))
 vi.mock('../savedKeys', () => ({ listSavedKeyWraps: vi.fn(), removeSavedKey: vi.fn() }))
 vi.mock('../localWrap', () => ({ localWrapId: vi.fn() }))
+// The device-local half the current row now mounts (DeviceTrustPanel). Mocked to the NO-TIER default so every
+// behaviour above keeps asserting exactly what it always did; the cases that care opt in explicitly.
+vi.mock('../trustDevice/trustDevice', () => ({
+  isTrusted: vi.fn(),
+  untrustThisDevice: vi.fn(),
+  isTrustSupported: vi.fn(),
+}))
+vi.mock('../rememberMe/deviceKeyWrap', () => ({ isRemembered: vi.fn(), clearDeviceKey: vi.fn() }))
 
 import SessionsPanel from './SessionsPanel.vue'
 import { listSessionFamilies, revokeSessionFamily, revokeOtherSessionFamilies } from './sessions'
@@ -46,7 +56,10 @@ import { signOut } from '../login/signOut'
 import { readRegisterView, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
 import { listSavedKeyWraps, removeSavedKey } from '../savedKeys'
 import { localWrapId } from '../localWrap'
+import { isTrusted, untrustThisDevice, isTrustSupported } from '../trustDevice/trustDevice'
+import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { vaultState } from '../../../app/vault'
+import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
 
 const CURRENT = { id: 'aaaaaaaa-1111-4111-8111-111111111111', createdAt: new Date('2026-08-01T09:12:00Z'), lastUsedAt: new Date('2026-08-12T07:45:00Z'), current: true }
@@ -54,6 +67,9 @@ const OTHER = { id: 'bbbbbbbb-2222-4222-8222-222222222222', createdAt: new Date(
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  // The forget action confirms in a DIALOG where the session actions use window.confirm — the two acts do not
+  // look alike, and this stub keeps that difference visible to the tests below.
+  Dialog: { props: ['visible', 'header'], template: '<div class="dialog" v-if="visible">{{ header }}<slot /></div>' },
   InputText: {
     props: ['modelValue'],
     emits: ['update:modelValue'],
@@ -86,6 +102,16 @@ const escalateButton = (w: VueWrapper, row: number) =>
 
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
+/** A row's plain revoke, by aria-label — the row now carries more than one destructive action. */
+const revokeButton = (w: VueWrapper, row: number) =>
+  w.findAll('.session-row')[row]
+    .findAll('button')
+    .find((b) => b.attributes('aria-label') === i18n.global.t(row === 0 ? 'sessions.revokeSelf' : 'sessions.revoke'))
+
+/** The FORGET action of the current device's row — labelled, not positional, so it cannot be confused with a revoke. */
+const forgetButton = (w: VueWrapper) =>
+  w.findAll('.session-row')[0].findAll('button').find((b) => b.text() === i18n.global.t('unlock.untrust'))
+
 describe('SessionsPanel (uc.account.sessions, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -100,6 +126,12 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(listSavedKeyWraps).mockResolvedValue([])
     vi.mocked(removeSavedKey).mockResolvedValue(undefined)
     vi.mocked(localWrapId).mockResolvedValue(null)
+    account.email = 'me@x.z'
+    vi.mocked(isTrustSupported).mockReturnValue(true)
+    vi.mocked(isTrusted).mockResolvedValue(false)
+    vi.mocked(isRemembered).mockResolvedValue(false)
+    vi.mocked(untrustThisDevice).mockResolvedValue(undefined)
+    vi.mocked(clearDeviceKey).mockResolvedValue(undefined)
     window.confirm = vi.fn(() => true)
   })
 
@@ -300,6 +332,16 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     })
   }
 
+  /** A register that names THIS device and joins it to a served wrap — both row actions live at once. */
+  function withEscalatableCurrent() {
+    vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-mine', method: 'DEVICE' }])
+    vi.mocked(readRegisterView).mockResolvedValue({
+      names: { [CURRENT.id]: 'Dieser Rechner' },
+      wrapsOfFamily: { [CURRENT.id]: ['w-mine'] },
+      savedKeyDevices: [],
+    })
+  }
+
   it('cuts the session first and the wrap second — the urgent half is never blocked by the other', async () => {
     withEscalatableOther()
     const order: string[] = []
@@ -456,5 +498,129 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
     // …and the naming half is untouched by it: the list still renders and still revokes.
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
+  })
+  // --- the merged rubric: how THIS device unlocks, stated in the row that is already about it ---
+
+  it('states this device\'s unlock tier on its own row, and nowhere else', async () => {
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const wrapper = await mountPanel()
+    const rows = wrapper.findAll('.session-row')
+    expect(rows[0].text()).toContain(i18n.global.t('sessions.deviceTrusted'))
+    // The control on the same predicate: the status is a fact about THIS device, so no other row may carry it.
+    // Without it, a status rendered once per row would satisfy the line above perfectly.
+    expect(rows[1].text()).not.toContain(i18n.global.t('sessions.deviceTrusted'))
+  })
+
+  it('shows the password-LESS tier when a device somehow holds both, and offers nothing on a plain one', async () => {
+    // A device holds at most one convenience tier (login drops the other first). If both are somehow present the
+    // stronger, password-less one is what the user actually experiences, so it is what the row must say.
+    vi.mocked(isRemembered).mockResolvedValue(true)
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const both = await mountPanel()
+    expect(both.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceRemembered'))
+    expect(both.findAll('.session-row')[0].text()).not.toContain(i18n.global.t('sessions.deviceTrusted'))
+
+    // …and a device on the PASSWORD floor says so and offers nothing to forget — there is nothing here to drop.
+    vi.mocked(isRemembered).mockResolvedValue(false)
+    vi.mocked(isTrusted).mockResolvedValue(false)
+    const plain = await mountPanel()
+    expect(plain.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    expect(forgetButton(plain)).toBeUndefined()
+  })
+
+  it('forgets this device from its row: both tiers dropped, the session untouched', async () => {
+    vi.mocked(isRemembered).mockResolvedValueOnce(true).mockResolvedValue(false) // before -> after
+    const wrapper = await mountPanel()
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceRemembered'))
+
+    await forgetButton(wrapper)!.trigger('click') // open the dialog
+    await flushPromises()
+    await wrapper.find('.dialog').findAll('button').at(-1)!.trigger('click') // confirm
+    await flushPromises()
+
+    expect(untrustThisDevice).toHaveBeenCalledWith('me@x.z')
+    expect(clearDeviceKey).toHaveBeenCalled()
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    // The line that keeps forgetting from becoming the escalation: forgetting is not a sign-out (ADR 0058).
+    expect(revokeSessionFamily).not.toHaveBeenCalled()
+    expect(signOut).not.toHaveBeenCalled()
+  })
+
+  // BITE 1 — the forget action is offered only where a convenience tier is POSITIVELY known to be here.
+  it('offers no forget action when the trust read FAILS — the best-effort default is none', async () => {
+    vi.mocked(isRemembered).mockRejectedValue(new Error('idb gone'))
+    vi.mocked(isTrusted).mockRejectedValue(new Error('idb gone'))
+    const wrapper = await mountPanel()
+
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    expect(forgetButton(wrapper)).toBeUndefined()
+    // The live control on the same predicate: a read that SUCCEEDS with a tier does offer it, so the line above
+    // is about the catch path and not about a button that never renders from this mount point at all.
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    vi.mocked(isRemembered).mockResolvedValue(false)
+    expect(forgetButton(await mountPanel())).toBeDefined()
+  })
+
+  it('offers no forget action where the browser cannot remember a device', async () => {
+    vi.mocked(isTrustSupported).mockReturnValue(false)
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const wrapper = await mountPanel()
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUnsupported'))
+    expect(forgetButton(wrapper)).toBeUndefined()
+  })
+
+  // BITE 2 — the defect the MERGE makes possible: the two panels could not block each other while they were
+  // separate. The device-local status read is device-local and unbounded (IndexedDB), so the list must resolve
+  // it BESIDE its own load, never inside it. Red against a loader that awaits the trust read.
+  it('renders and revokes while the device-trust read HANGS — the list never waits on it', async () => {
+    vi.mocked(isRemembered).mockReturnValue(new Promise<boolean>(() => {})) // never settles
+    vi.mocked(isTrusted).mockReturnValue(new Promise<boolean>(() => {}))
+    const wrapper = await mountPanel()
+
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
+    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.loading'))
+    expect(rowButtons(wrapper).every((b) => b.attributes('disabled') === undefined)).toBe(true)
+
+    await revokeButton(wrapper, 1)!.trigger('click')
+    await flushPromises()
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+  })
+
+  // BITE 3 — the simplification this merge invites and ADR 0058 forbids: ONE "remove this device" button. The
+  // server can never reach a remote device's LOCAL key, only its wrap, so the two acts cannot be one.
+  it('keeps the forget action and the escalation two actions, with two labels and two confirms', async () => {
+    withEscalatableCurrent()
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const wrapper = await mountPanel()
+
+    // Two distinct labels on the same row.
+    expect(forgetButton(wrapper)).toBeDefined()
+    expect(escalateButton(wrapper, 0)).toBeDefined()
+    expect(i18n.global.t('unlock.untrust')).not.toBe(i18n.global.t('sessions.escalate'))
+
+    // Two distinct confirmations: the escalation asks through window.confirm, the forget through its dialog —
+    // and neither confirm text is the other's.
+    await escalateButton(wrapper, 0)!.trigger('click')
+    await flushPromises()
+    expect(window.confirm).toHaveBeenCalledWith(i18n.global.t('sessions.escalateConfirm'))
+    expect(i18n.global.t('sessions.escalateConfirm')).not.toBe(i18n.global.t('sessions.untrustConfirmBody'))
+
+    // …and the two do different things: the escalation ended a session, the forget never does.
+    expect(revokeSessionFamily).toHaveBeenCalledWith(CURRENT.id)
+    expect(untrustThisDevice).not.toHaveBeenCalled()
+
+    const fresh = await mountPanel()
+    await forgetButton(fresh)!.trigger('click')
+    await flushPromises()
+    expect(fresh.find('.dialog').text()).toContain(i18n.global.t('sessions.untrustConfirmTitle'))
+  })
+
+  it('offers the forget action ONLY on the current device\'s row', async () => {
+    vi.mocked(isTrusted).mockResolvedValue(true)
+    const wrapper = await mountPanel()
+    const otherRow = wrapper.findAll('.session-row')[1]
+    // A remote device's local key is unreachable from here by construction; offering "forget" there would be a
+    // promise the client cannot keep.
+    expect(otherRow.findAll('button').some((b) => b.text() === i18n.global.t('unlock.untrust'))).toBe(false)
   })
 })

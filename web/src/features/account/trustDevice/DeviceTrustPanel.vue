@@ -1,9 +1,21 @@
 <script setup lang="ts">
-// The "This device" section of the settings hub (cr-untrust-device-button) — device trust, uc.account.trust-device
-// § Untrust. Shows whether THIS device is trusted (a DEVICE wrap that unlocks with just the password) and lets the
-// user untrust it: delete the server DEVICE wrap + the local device key, so unlock here falls back to the PASSWORD
-// floor + Secret Key. Device-local + operator-blind — reuses the already-built trustDevice logic, never re-encrypts
-// content, and (endpoint whitelist) can only ever touch DEVICE wraps, never the 2SKD floor or a recovery path.
+// This device's unlock tier + its forget action (uc.account.trust-device § Untrust) — mounted by the SESSIONS
+// panel's own row for the current device, not by the settings hub. There is one rubric about a device now
+// ("Devices and sessions"), and the fact "this device holds a saved key" is stated there once.
+//
+// Still a component of its own, and deliberately so: everything below is device-LOCAL (IndexedDB trust record,
+// IndexedDB device key, the DEVICE-wrap endpoints) and knows nothing about session families. Keeping it out of
+// the sessions code is what lets the row mount it **beside** its data rather than inside its loader — the
+// status reads are never awaited by the list (see SessionsPanel's header: the panel must never disable the
+// action it exists to offer).
+//
+// Operator-blind: reuses the already-built trustDevice logic, never re-encrypts content, and (endpoint
+// whitelist) can only ever touch DEVICE wraps, never the 2SKD floor or a recovery path.
+//
+// **This is not the escalation, and must never be collapsed into it** (ADR 0058). Forgetting reaches this
+// device's LOCAL key as well as its server wrap and leaves the session alone; the row's neighbouring
+// `sessions.escalate` ends a session and can only ever reach the server's wrap. The server cannot reach a
+// remote device's local key — that asymmetry is what forces two names, two confirms and two severities.
 import { computed, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
@@ -36,6 +48,8 @@ async function refresh() {
   if (await isRemembered().catch(() => false)) { state.value = 'remembered'; return }
   state.value = (await isTrusted(account.email).catch(() => false)) ? 'trusted' : 'none'
 }
+// Fired here and never returned to the parent: the row renders complete without it, and a read that hangs or
+// throws costs this line its status — never the list its revokes.
 onMounted(refresh)
 
 const { run: runUntrust, pending: busy } = useAsyncAction(
@@ -47,7 +61,7 @@ const { run: runUntrust, pending: busy } = useAsyncAction(
     await refresh()
     confirmOpen.value = false
   },
-  { onError: () => { error.value = t('settings.untrustFailed') } },
+  { onError: () => { error.value = t('sessions.untrustFailed') } },
 )
 
 async function confirmUntrust() {
@@ -57,67 +71,72 @@ async function confirmUntrust() {
 </script>
 
 <template>
-  <section class="veyq-surface settings-panel">
-    <section class="settings-form">
-      <div class="settings-section-header">
-        <div>
-          <h2>{{ t('settings.deviceTitle') }}</h2>
-          <p>{{ t('settings.deviceSub') }}</p>
-        </div>
-      </div>
+  <div class="device-trust">
+    <p class="device-status">
+      <i
+        class="pi"
+        :class="!supported ? 'pi-info-circle' : hasConvenience ? 'pi-shield' : 'pi-lock'"
+        aria-hidden="true"
+      />
+      <span>{{
+        !supported
+          ? t('sessions.deviceUnsupported')
+          : state === 'remembered'
+            ? t('sessions.deviceRemembered')
+            : state === 'trusted'
+              ? t('sessions.deviceTrusted')
+              : t('sessions.deviceUntrusted')
+      }}</span>
+    </p>
 
-      <p class="device-status">
-        <i
-          class="pi"
-          :class="!supported ? 'pi-info-circle' : hasConvenience ? 'pi-shield' : 'pi-lock'"
-          aria-hidden="true"
-        />
-        <span>{{
-          !supported
-            ? t('settings.deviceUnsupported')
-            : state === 'remembered'
-              ? t('settings.deviceRemembered')
-              : state === 'trusted'
-                ? t('settings.deviceTrusted')
-                : t('settings.deviceUntrusted')
-        }}</span>
-      </p>
+    <!-- Offered only where a convenience tier is positively known to be here — the catch-path default is
+         'none', so a failed read offers nothing rather than an action with no subject. -->
+    <div v-if="supported && hasConvenience" class="device-action">
+      <Button
+        type="button"
+        :label="t('unlock.untrust')"
+        icon="pi pi-lock"
+        severity="danger"
+        outlined
+        size="small"
+        @click="confirmOpen = true"
+      />
+    </div>
 
-      <div v-if="supported && hasConvenience" class="device-action">
-        <Button
-          type="button"
-          :label="t('unlock.untrust')"
-          icon="pi pi-lock"
-          severity="danger"
-          outlined
-          @click="confirmOpen = true"
-        />
-      </div>
-    </section>
-
+    <!-- A dialog, where the neighbouring session actions use window.confirm: the two are not the same act and
+         must not look like it. -->
     <Dialog
       v-model:visible="confirmOpen"
-      :header="t('settings.untrustConfirmTitle')"
+      :header="t('sessions.untrustConfirmTitle')"
       modal
       :closable="!busy"
       :close-on-escape="!busy"
     >
-      <p class="dialog-copy">{{ t('settings.untrustConfirmBody') }}</p>
+      <p class="dialog-copy">{{ t('sessions.untrustConfirmBody') }}</p>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="confirmOpen = false" />
         <Button type="button" :label="t('unlock.untrust')" icon="pi pi-lock" severity="danger" :loading="busy" @click="confirmUntrust" />
       </div>
     </Dialog>
-  </section>
+  </div>
 </template>
 
 <style scoped>
+.device-trust {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+  margin-top: 0.35rem;
+}
 .device-status {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin: 0.5rem 0 1rem;
+  margin: 0;
+  color: var(--app-muted);
+  font-size: 0.9rem;
 }
 .device-status .pi {
   color: var(--app-muted);

@@ -1,7 +1,15 @@
 <script setup lang="ts">
-// uc.account.sessions (web, cr-account-sessions-list-and-revoke) — the "Sessions" rubric of the settings hub.
-// Every place the account is currently signed in, and the remote sign-out that logout cannot do: logout only
-// ends the family it is presented from, so a laptop left behind stays signed in until this screen exists.
+// uc.account.sessions (web, cr-account-sessions-list-and-revoke) — the "Devices and sessions" rubric of the
+// settings hub. Every place the account is currently signed in, and the remote sign-out that logout cannot do:
+// logout only ends the family it is presented from, so a laptop left behind stays signed in until this screen
+// exists.
+//
+// It is also the ONE place that says what this device is. The current device's row mounts `DeviceTrustPanel`
+// (uc.account.trust-device § Untrust), which states this device's unlock tier and offers the forget action —
+// there is no separate "This device" rubric to disagree with. **The trap that merge introduced, and the reason
+// the mount is a child and not a prop: the device-local status read is unbounded IndexedDB work, so it must be
+// resolved BESIDE this loader, never inside it.** Pull it into `useAsyncData` below and a hanging read takes
+// the whole list — and its revokes — down with it. That is asserted, not assumed.
 //
 // **Nothing here waits on the vault.** A session is auth, not unlock (ADR 0003), so listing and revoking must
 // work on a locked device — that is the whole point: cutting off a lost device is exactly what you do before
@@ -59,6 +67,7 @@ import {
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { listSavedKeyWraps, removeSavedKey, type SavedKeyWrap } from '../savedKeys'
 import { localWrapId } from '../localWrap'
+import DeviceTrustPanel from '../trustDevice/DeviceTrustPanel.vue'
 
 const { t, locale } = useI18n()
 const router = useRouter()
@@ -351,6 +360,10 @@ async function removeOtherKeys() {
                 <span v-if="family.current" class="veyq-badge success">{{ t('sessions.currentBadge') }}</span>
                 <span class="veyq-badge session-id" :title="family.id">{{ shortId(family.id) }}</span>
               </div>
+              <!-- The one row that can say how THIS device unlocks, so it is the one place that says it. The
+                   component reads its own status on mount and is never awaited here: a hanging or throwing
+                   device-local read costs this line, never the list or its revokes. -->
+              <DeviceTrustPanel v-if="family.current && renamingFamily !== family.id" />
             </div>
             <div class="management-actions">
               <template v-if="renamingFamily === family.id">

@@ -14,7 +14,6 @@ vi.mock('../app/serverRole', () => ({
 }))
 vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn().mockResolvedValue([]) }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
-vi.mock('../features/account/trustDevice/DeviceTrustPanel.vue', () => ({ default: { template: '<div class="stub-device" />' } }))
 vi.mock('../features/account/sessions/SessionsPanel.vue', () => ({ default: { template: '<div class="stub-sessions" />' } }))
 vi.mock('../features/spaces/TenantMembersPanel.vue', () => ({ default: { template: '<div class="stub-members" />' } }))
 vi.mock('../features/spaces/GroupMembersPanel.vue', () => ({ default: { template: '<div class="stub-group-members" />' } }))
@@ -41,7 +40,7 @@ const i18n = createI18n({
       serverAdmin: { navTitle: 'Server administration', title: 'Server administration', sub: 's', where: 'w', whyMoved: 'y' },
       settings: {
         title: 'Settings', back: 'Back', personal: 'Personal', tenant: 'Shared space', group: 'Group', server: 'Server',
-        appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', device: 'This device', sessions: 'Sessions',
+        appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', sessions: 'Devices and sessions',
       },
     },
   },
@@ -169,16 +168,27 @@ describe('SettingsHubView — split view index vs detail', () => {
     expect(w.get('.settings-hub').classes()).toContain('is-detail')
   })
 
-  it('Sessions is a Personal section reachable with no scope at all (uc.account.sessions)', async () => {
+  it('Devices and sessions is a Personal section reachable with no scope at all (uc.account.sessions)', async () => {
     // Account-wide, not scope-bound: it gates on a session, not on a space, so an account that has entered no
     // tenant must still reach it. The unresolved-id fallback is the appearance panel, so mounting the sessions
     // stub — rather than that one — is what says the route actually resolved.
     clearActiveSpace()
     serverRole.canManage = false
     const w = await mountHub('/settings/sessions')
-    expect(navText(w)).toContain('Sessions')
+    expect(navText(w)).toContain('Devices and sessions')
     expect(w.find('.stub-sessions').exists()).toBe(true)
     expect(w.find('.stub-appearance').exists()).toBe(false)
+  })
+
+  it('has no separate "This device" section — it was replaced, not redirected (ADR 0022)', async () => {
+    // One rubric now answers both questions about a device. The old route is not kept alive as a redirect: it
+    // falls through to the unresolved-id default, which is the appearance panel.
+    clearActiveSpace()
+    serverRole.canManage = false
+    const w = await mountHub('/settings/device')
+    expect(navText(w)).not.toContain('This device')
+    expect(w.find('.stub-sessions').exists()).toBe(false)
+    expect(w.find('.stub-appearance').exists()).toBe(true)
   })
 
   it('the Server signpost opens the panel that says administration moved to its own surface', async () => {
