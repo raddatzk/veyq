@@ -4,8 +4,9 @@
 // thumb already is.
 //
 // Built from pointer events and a progress track rather than wrapped around something existing — measured, the
-// client has no slide/swipe control anywhere and PrimeVue's imported set carries none; the current pattern for
-// a destructive confirm is `window.confirm`.
+// client has no slide/swipe control anywhere and PrimeVue's imported set carries none. The ordinary destructive
+// confirm was `window.confirm` when this was written and is the app's own dialog today (`useConfirm`,
+// cr-web-own-confirm-dialog) — either way one tap, which is the thing this control exists to refuse.
 //
 // **Keyboard is a first-class path, and it is deliberately not one keypress.** The control carries the slider
 // role by hand and steps on the arrow keys; `End`/`Home` are NOT bound, because a key that jumps straight to

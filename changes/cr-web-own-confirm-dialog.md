@@ -1,7 +1,7 @@
 ---
 id: cr-web-own-confirm-dialog
 title: the app's own confirmation dialog replaces window.confirm, and the sessions panel names the action its copy quotes
-status: planned
+status: in-progress
 satisfies: ["uc.account.sessions"]
 adrs: ["0058"]
 invariants:
@@ -138,20 +138,20 @@ spot-check that `DeleteNodeDialog.vue`'s footer really is the styleguide shape b
 
 ## Phases
 
-- [ ] **1 the dialog, the sweep and the guard** — new `web/src/shared/ui/ConfirmDialog.vue` +
+- [x] **1 the dialog, the sweep and the guard** — new `web/src/shared/ui/ConfirmDialog.vue` +
   `web/src/shared/state/useConfirm.ts` (Decisions 1–5) with `useConfirm.test.ts` and `ConfirmDialog.test.ts`;
   mounted once in `App.vue` beside the toasts. Every site from the locator swapped (Decision 3, 6), new header
   keys in both locale blocks, `SessionsPanel.vue:31`'s comment corrected (Decision 12). The four test files that
   stub `window.confirm` drive the dialog instead. `eslint.config.js` gains `no-alert` (Decision 7).
   · Done when: `npm run check` green in `web/`; `grep -rn "window\.confirm" web/src` returns nothing outside a
   historical comment; the `no-alert` guard seen red by B3's lever before it is believed.
-- [ ] **2 the sessions panel says what it offers** — `settings.css` gains Decision 8's rule; the escalate button
+- [x] **2 the sessions panel says what it offers** — `settings.css` gains Decision 8's rule; the escalate button
   gains `sessions.escalateShort` as a visible label while keeping its full accessible name (Decision 9);
   `sessions.hint` rewritten in both locales (Decision 10); new cases in `SessionsPanel.test.ts` for B4/B5.
   · Done when: `npm run check` green; the gap between list and hint **measured** in the running dev server
   (`getBoundingClientRect`, not eyeballed) on both sessions sections; the row read back at desktop and at an
   emulated phone width to confirm the labelled button does not push the row's actions into a second line.
-- [ ] **3 docs** — `docs/crosscutting/ui-web-styleguide.md` § *Buttons & dialog actions*: the three mechanisms,
+- [x] **3 docs** — `docs/crosscutting/ui-web-styleguide.md` § *Buttons & dialog actions*: the three mechanisms,
   which one is retired, and that `no-alert` is what enforces it; one line added to § *Checklist*.
   `docs/coverage/features/account/use-cases/uc.account.sessions.yaml`: Decision 13's clause on
   `removing-a-device-key-is-a-named-escalation`, plus the new test cases listed under the criterion they serve. `uc.account.sessions.md` needs **no** change — its
@@ -199,5 +199,48 @@ spot-check that `DeleteNodeDialog.vue`'s footer really is the styleguide shape b
 
 ## Retrospective
 
-_Filled at implement. Planning and execution misses, root cause, one concrete change; both directions; end with
-"next time"._
+**What is built (commits on `worktree-cr-web-own-confirm-dialog`):** phase 1 `8e079cc`, phase 2 `e3bce91`,
+phase 3 with this file. `npm run check` green in `web/` after each phase (1033 tests, 10 e2e files skipped for
+lack of a backend); guard baseline `ls scripts/validate_*.py | wc -l` = **32** before the first edit and 32 at
+the end, as this CR adds none. All six bites were seen red by their own lever, each restored by
+snapshot-and-restore: B1 (force every settle to `true` -> 4 cases red), B2 (drop the `if (!(await ask(...)))`
+line in `revoke()` -> the declined case red, the accepted ones green), B3 (`window.confirm('x')` in a `src`
+file AND in a test file -> `no-alert` red in both), B4 (escalation back to icon-only -> the visible-text case
+red), B5 (the DE label edited alone -> the hint case red), B6 (let a second `ask()` overwrite the pending
+resolver -> the first promise never settles, red at the timeout).
+
+**The one done-when still open.** Phase 2 asks for the row read back at desktop and at an emulated phone width.
+The dev backend was not running and restarting it is the owner's, so the owner chose the no-login route: the
+spacer was measured against the real stylesheet chain in a browser (0px -> 12px, on BOTH sessions sections), and
+the wrap question was left to a live check. What the measurement DOES say about it, so the live check knows what
+to look for: at 0.875rem in the app's font the new DE label is **208px**, the full sentence it replaces is
+**320px** — wider on its own than the ~319px a row's action strip gets inside a 375px viewport, which is
+Decision 9's 44-character argument in pixels. But label + icon + padding + the two icon-only buttons still comes
+to roughly 337px, so the strip may not fit, and `.management-actions` is `flex-wrap: nowrap` — it would overflow
+rather than wrap. **If the live read-back confirms it, the remedy is one rule in settings.css's <820px block
+(`.management-actions { flex-wrap: wrap }`), not a shorter label** — below that breakpoint the row is already
+single-column and left-aligned, so a second line there is the layout doing what it already does.
+
+**Planning miss, and it is the interesting one: the CR carried a locator for the mechanism it REMOVES and prose
+for the mechanisms it KEEPS — and the prose was wrong.** § Context names three mechanisms and says the dedicated
+dialog is `DeleteNodeDialog.vue`. There are three of those (plus `DeviceTrustPanel.vue:100` and
+`MemoryDetail.vue:645`), each hand-rolling the same `Dialog` + `.veyq-dialog-action-row` + `*ConfirmTitle`
+shape. The same slip one size down: "the four test files that stub `window.confirm`" — there are five, the
+fifth being `LoginView.test.ts`, which stubs it because it MOUNTS `LockedSignOut`. Neither cost much (both are
+now inbox #144 and a corrected sweep), but both were found by running a command the CR did not carry, and both
+sat in the sections that grade the design rather than in the phase plan. Root cause: the locator discipline was
+applied to the CR's subject and not to its context. -> `changes/README.md` gains the rule.
+
+**Second miss, smaller: `*ConfirmTitle` already existed, with a different voice.** Two keys (`untrustConfirmTitle`,
+`purgeConfirmTitle`) ask a question and pair with a consequence-only body; this CR's ten reuse the same suffix
+but must be imperative, because Decision 6 keeps the existing `*Confirm` sentence — which already asks — as the
+message. Decided rather than left: match `memory.deleteFolderTitle`'s imperative voice, do not rewrite ten of
+the most consequential sentences in the app to fit a naming convention, and record the split in inbox #144 so a
+later unification weighs it once instead of rediscovering it.
+
+**Deviation from Decision 7, deliberately:** `no-alert` is NOT exempted for test files. After the swap no test
+stubs a native dialog, so the exemption would have had zero users — config nobody has seen fail, which is the
+thing B3 exists to prevent — and a fixture is the easiest place to reintroduce one. Bitten in both directions.
+
+**Next time:** when a CR sorts the code into kinds, carry a locator for every kind it names — the one it changes
+and the ones it spares — because the sparing is a completeness claim too, and it is the one nothing re-checks.

@@ -29,10 +29,12 @@ import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError
 import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
+import { useConfirm } from '../../shared/state/useConfirm'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 
 const { t } = useI18n()
 const toast = useToast()
+const { ask } = useConfirm()
 
 // Locally-decrypted real names (first+last) keyed by userId — the sealed blob opened with K_tenant on-device.
 const names = ref<Record<string, MemberName | null>>({})
@@ -110,7 +112,14 @@ async function onIconSave(bytes: Uint8Array) {
 }
 
 async function removeIcon() {
-  if (!activeSpace.scopeId || !window.confirm(t('spaceIcon.removeConfirm'))) return
+  if (!activeSpace.scopeId) return
+  const accepted = await ask({
+    header: t('spaceIcon.removeConfirmTitle'),
+    message: t('spaceIcon.removeConfirm'),
+    acceptLabel: t('spaceIcon.remove'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!accepted) return
   iconBusy.value = true
   iconError.value = ''
   try {
@@ -152,7 +161,13 @@ async function reissue(invite: PendingMemberInvite) {
 // server runs the whole cascade; here we just fire it and refresh the directory (the ex-member drops out). Not
 // offered on OWNER rows (owners are managed via co-ownership, not removed from the roster here).
 async function remove(member: ScopeMember) {
-  if (!window.confirm(t('members.removeConfirm'))) return
+  const accepted = await ask({
+    header: t('members.removeConfirmTitle'),
+    message: t('members.removeConfirm'),
+    acceptLabel: t('members.remove'),
+    acceptIcon: 'pi pi-user-minus',
+  })
+  if (!accepted) return
   actionError.value = ''
   reissuedTo.value = ''
   try {
@@ -166,7 +181,13 @@ async function remove(member: ScopeMember) {
 }
 
 async function revoke(invite: PendingMemberInvite) {
-  if (!window.confirm(t('members.revokeConfirm'))) return
+  const accepted = await ask({
+    header: t('members.revokeConfirmTitle'),
+    message: t('members.revokeConfirm'),
+    acceptLabel: t('members.revoke'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!accepted) return
   actionError.value = ''
   reissuedTo.value = ''
   try {

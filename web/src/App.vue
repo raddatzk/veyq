@@ -7,6 +7,7 @@
 import Toast from 'primevue/toast'
 import { useI18n } from 'vue-i18n'
 import AppShell from './components/app/AppShell.vue'
+import ConfirmDialog from './shared/ui/ConfirmDialog.vue'
 import { UNDO_GROUP } from './shared/state/useToast'
 
 const { t } = useI18n()
@@ -20,6 +21,10 @@ interface UndoMessage {
 
 <template>
   <AppShell />
+  <!-- The app's confirmation dialog for a destructive action, mounted once beside the toasts and driven by
+       `useConfirm` — the one that retired `window.confirm` (cr-web-own-confirm-dialog). It is here rather than
+       in the authenticated shell because the locked sign-out asks from the public sign-in card. -->
+  <ConfirmDialog />
   <!-- Success acknowledgements: auto-dismissing, top-right (retires the inline `notice` refs). -->
   <Toast />
   <!-- Undo-toasts: bottom-center dark pill carrying a "Rückgängig" action (retires the two hand-rolled bars). -->

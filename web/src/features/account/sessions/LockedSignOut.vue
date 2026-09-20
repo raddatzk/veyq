@@ -26,8 +26,10 @@ import Message from 'primevue/message'
 import { revokeOtherSessionFamilies } from './sessions'
 import { logout } from '../login/login'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import { useConfirm } from '../../../shared/state/useConfirm'
 
 const { t } = useI18n()
+const { ask } = useConfirm()
 
 const emit = defineEmits<{
   /** The action ran. `signedOut` is whether THIS device's own session could be ended too. */
@@ -56,7 +58,13 @@ const { run, pending } = useAsyncAction(
 async function signOutEverywhere() {
   // The confirmation carries the consequence, as on every other destructive action of this use-case: a device
   // that was set to stay signed in needs the Emergency Kit at its next start.
-  if (!window.confirm(t('sessions.lockedConfirm'))) return
+  const accepted = await ask({
+    header: t('sessions.lockedConfirmTitle'),
+    message: t('sessions.lockedConfirm'),
+    acceptLabel: t('sessions.lockedAction'),
+    acceptIcon: 'pi pi-sign-out',
+  })
+  if (!accepted) return
   error.value = ''
   await run()
 }

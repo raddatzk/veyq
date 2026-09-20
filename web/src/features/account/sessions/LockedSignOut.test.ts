@@ -13,6 +13,10 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
 vi.mock('../login/login', () => ({ logout: vi.fn() }))
+// Confirmation is the app's own dialog (cr-web-own-confirm-dialog), mounted in App.vue and reached from the
+// public sign-in card too: the component awaits `ask()`, so the answer is given here.
+const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
+vi.mock('../../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import LockedSignOut from './LockedSignOut.vue'
 import { revokeOtherSessionFamilies } from './sessions'
@@ -45,7 +49,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     i18n.global.locale.value = 'en'
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
     vi.mocked(logout).mockResolvedValue(undefined)
-    window.confirm = vi.fn(() => true)
+    confirmAsk.mockResolvedValue(true)
   })
 
   it('cuts the other sessions off FIRST and only then signs this device out', async () => {
@@ -84,7 +88,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
   })
 
   it('does nothing when the confirmation is declined', async () => {
-    window.confirm = vi.fn(() => false)
+    confirmAsk.mockResolvedValue(false)
     const wrapper = mountLocked()
     await pressAction(wrapper)
 

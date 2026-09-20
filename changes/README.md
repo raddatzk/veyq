@@ -345,6 +345,26 @@ The bar is judgement, not ceremony: a decision that binds this CR's work, on a s
 ADR it cites for context, and never a second copy of the ADR's reasoning — a pointer, or the sentence stays as
 it is and takes its chances.
 
+### When a CR sorts the code into kinds, every kind gets a locator — including the ones it spares
+
+A sweep-shaped CR almost always opens by classifying: *"three mechanisms exist and only one is wrong"*, *"four
+call sites, four tests"*. The locator discipline above then gets applied to the kind being **changed** — that
+one is the subject, and the author reaches for `grep` naturally — while the kinds being **kept** are written as
+prose with one example each. Those are the rows that are wrong, because sparing a kind is a completeness claim
+too, and it is the one nothing re-checks: no phase touches it, no test covers it, no guard grades it.
+
+`cr-web-own-confirm-dialog` carried three commands for `window.confirm` and prose for its two siblings. The
+prose said the *dedicated dialog* mechanism was `DeleteNodeDialog.vue`; there were three of them, all
+hand-rolling the same shape — the sentence in the docs phase would have been written wrong from it. The same
+slip one size down, in the phase text: *"the four test files that stub `window.confirm`"* — there were five,
+and the fifth stubbed it because it **mounts** a component that calls it, which is exactly the class a prose
+count cannot see and `grep -rln` answers in one line.
+
+So: **a classification is an inventory, and every class in it ships with the command that produces its
+members** — the one being removed, the ones being kept, and the surfaces explicitly excluded. Cheap (the
+locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
+itself is wrong, which is worth finding at refine rather than in the retrospective.
+
 ### Coverage is part of the work, not a follow-up
 
 Every CR updates `docs/coverage/` for the
