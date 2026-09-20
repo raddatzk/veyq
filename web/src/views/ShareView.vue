@@ -34,6 +34,7 @@ import {
 import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../features/memory/media'
 import { isSupportedMediaFile, inferMediaType, enqueueUploads, retryFile, removeFile } from '../features/memory/uploadQueue'
 import { useOptimisticTiles, type OptimisticTileVM } from '../features/memory/useOptimisticTiles'
+import { byCaptureTime } from '../features/memory/optimisticUpload'
 import { useThumbnailPipeline } from '../features/memory/useThumbnailPipeline'
 import { galleryDisplayAspectRatio } from '../features/memory/mediaGridLayout'
 import { renderMarkdown } from '../shared/markdown'
@@ -132,30 +133,33 @@ const securityDocUrl = computed(() =>
 )
 
 // --- justified grid tiles (fed to the shared MediaGrid) ---------------------
-// Newest-first by effective capture time (undated last) — mirrors the curator gallery's default order.
-const sortedItems = computed(() =>
-  items.value
-    .map((si, i) => ({ si, i, t: effectiveCapturedAt(unsealMeta(si.memoryKey, si.item)) }))
-    .sort((a, b) => {
-      if (a.t === undefined && b.t === undefined) return a.i - b.i
-      if (a.t === undefined) return 1
-      if (b.t === undefined) return -1
-      return b.t - a.t
-    })
-    .map((x) => x.si),
-)
+// Newest-first by effective capture time (undated last) — mirrors the curator gallery's default order, through
+// the SAME comparator, so the two surfaces cannot drift into two orderings.
+const capturedAtOf = (si: ShareItem) => effectiveCapturedAt(unsealMeta(si.memoryKey, si.item))
+// The LISTED media in grid order — the lightbox's world: the tile's `openLightboxAt(sortedItems.indexOf(…))`
+// is a position in THIS list, never in the merged one, so an in-flight tile cannot shift which photo opens.
+const sortedItems = computed(() => byCaptureTime(items.value, capturedAtOf, -1))
 const FALLBACK_ASPECT = galleryDisplayAspectRatio(undefined, undefined)
 type ShareTileItem =
   | { id: string; aspectRatio: number; kind: 'optimistic'; optimistic: OptimisticTileVM }
   | { id: string; aspectRatio: number; kind: 'media'; si: ShareItem }
-const layoutItems = computed<ShareTileItem[]>(() => [
-  // optimistic upload tiles pin ahead of the listed media (the freshest action)
-  ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
-  ...sortedItems.value.map((si) => {
-    const dims = unsealMeta(si.memoryKey, si.item)
-    return { id: si.item.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h) || FALLBACK_ASPECT, kind: 'media' as const, si }
-  }),
-])
+// ONE order over both kinds of tile (uc.memory.gallery § "One order for every tile") — a contributor's
+// in-flight upload sorts on the capture time it will be sealed with, so settling changes its content, not its
+// place. Optimistic tiles go in first so an equal key resolves in their favour: that is how a settling tile
+// hands its own slot to the media it becomes.
+const layoutItems = computed<ShareTileItem[]>(() =>
+  byCaptureTime<ShareTileItem>(
+    [
+      ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
+      ...sortedItems.value.map((si) => {
+        const dims = unsealMeta(si.memoryKey, si.item)
+        return { id: si.item.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h) || FALLBACK_ASPECT, kind: 'media' as const, si }
+      }),
+    ],
+    (tile) => (tile.kind === 'optimistic' ? tile.optimistic.capturedAt : capturedAtOf(tile.si)),
+    -1,
+  ),
+)
 // Show the grid when there's anything to render — listed media OR an in-flight optimistic upload.
 const hasContent = computed(() => items.value.length > 0 || optimisticTiles.value.length > 0)
 
