@@ -11,6 +11,7 @@ import { useRoute } from 'vue-router'
 import Toast from 'primevue/toast'
 import Message from 'primevue/message'
 import { useI18n } from 'vue-i18n'
+import ConfirmDialog from './shared/ui/ConfirmDialog.vue'
 import { serverState } from './shared/state/serverState'
 
 const { t } = useI18n()
@@ -30,6 +31,10 @@ const cardLayout = computed(() => serverState.unreachable || route.meta.layout !
   <main v-else class="admin-root">
     <RouterView />
   </main>
+  <!-- The console's confirmation dialog for a destructive action, mounted once beside the toast and driven by
+       `useConfirm` — the one that retired `window.confirm` here (cr-admin-web-own-confirm-dialog). It sits
+       outside both shells because either may ask. -->
+  <ConfirmDialog />
   <Toast />
 </template>
 
