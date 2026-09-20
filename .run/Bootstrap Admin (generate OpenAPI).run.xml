@@ -1,0 +1,17 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Bootstrap Admin (generate OpenAPI)" type="js.build_tools.npm">
+    <!-- (Re)generate admin-web's gitignored src/api/generated from the contracts: the four specs this surface
+         is allowed to reach (setup, auth, tenants, instance) and no more.
+         Why `run generate:api` here while "Bootstrap Frontend" runs `install`: dependencies for BOTH surfaces
+         come from the ONE workspace install at the repo root (root package.json workspaces: packages/crypto,
+         web, admin-web), so installing is the root's job and this configuration does the one step that is
+         admin-web's own. Fast and idempotent — re-run it after any contracts change. -->
+    <package-json value="$PROJECT_DIR$/admin-web/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="generate:api" />
+    </scripts>
+    <node-interpreter value="project" />
+    <method v="2" />
+  </configuration>
+</component>

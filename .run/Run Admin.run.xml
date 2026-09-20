@@ -1,0 +1,26 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Run Admin" type="js.build_tools.npm">
+    <!-- Vite dev server for the Server-Owner administration surface (ADR 0065). Both envs are already
+         defaulted in admin-web/vite.config.ts and are spelled out anyway, because a default you cannot see is
+         a default you cannot change: VITE_ADMIN_PORT is the port that config reads, VEYQ_API_TARGET is the
+         backend its dev proxy forwards to — mirroring what nginx does inside the container, so the browser
+         sees ONE origin either way and the refresh cookie stays same-origin.
+         This is the surface first-run setup lives on, so it is what you open on a FRESH instance: the app at
+         veyq.localhost has no Server Owner to log in as yet.
+         NOTE: a double hyphen is illegal inside an XML comment — write such a flag out in prose, or IntelliJ
+         fails to parse this file and silently offers no run configuration at all
+         (scripts/validate_run_configs.py holds that). NOTE: IntelliJ strips comments from .run/*.xml whenever
+         it rewrites this file — if you edit the configuration in the UI, put this back. -->
+    <package-json value="$PROJECT_DIR$/admin-web/package.json" />
+    <command value="run" />
+    <scripts>
+      <script value="dev" />
+    </scripts>
+    <node-interpreter value="project" />
+    <envs>
+      <env name="VITE_ADMIN_PORT" value="5174" />
+      <env name="VEYQ_API_TARGET" value="http://127.0.0.1:8080" />
+    </envs>
+    <method v="2" />
+  </configuration>
+</component>
