@@ -37,6 +37,7 @@ import {
   type MediaDeriver,
   type MediaItem,
   type MediaMeta,
+  type Dimensions,
 } from './media'
 import exifr from 'exifr'
 import { mediaApi } from '../../api/client'
@@ -135,14 +136,24 @@ function fakeStore() {
   return { api, fetchStub, objects, captured }
 }
 
-/** A stub deriver: returns a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
-function stubDeriver(): MediaDeriver & { images: number; posters: number } {
+/**
+ * A stub deriver: returns a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct.
+ *
+ * `imageSources` records the BYTE SIZE of every blob handed to `deriveImage`, which is what lets a test count
+ * decodes **of the original** apart from the cheap pass over the already-downscaled preview. `sourceDims` is
+ * null by default — modelling a deriver that reports no size, so the geometry falls back to a probe; set it to
+ * model the real browser deriver, which always knows the size of what it just decoded.
+ */
+function stubDeriver(): MediaDeriver & { images: number; posters: number; imageSources: number[]; sourceDims: Dimensions | null } {
   const d = {
     images: 0,
     posters: 0,
-    deriveImage: vi.fn(async (_blob: Blob, { maxEdge }: { maxEdge: number; quality: number }) => {
+    imageSources: [] as number[],
+    sourceDims: null as Dimensions | null,
+    deriveImage: vi.fn(async (blob: Blob, { maxEdge }: { maxEdge: number; quality: number }) => {
       d.images++
-      return new Uint8Array([0xff, 0xd8, maxEdge & 0xff, (maxEdge >> 8) & 0xff])
+      d.imageSources.push(blob.size)
+      return { bytes: new Uint8Array([0xff, 0xd8, maxEdge & 0xff, (maxEdge >> 8) & 0xff]), source: d.sourceDims }
     }),
     deriveVideoPoster: vi.fn(async () => {
       d.posters++
@@ -189,11 +200,14 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
 
     // three blobs declared in one start batch (original + 2 derivatives)
     expect(store.captured.startItems).toHaveLength(3)
-    // the deriver produced two downscales at the pinned tier specs; no video poster
+    // Both tiers are still produced at their pinned specs — the property this always asserted. What changed is
+    // that the ORIGINAL is decoded once: PREVIEW comes from it, THUMBNAIL comes from PREVIEW. The order is
+    // therefore reversed and load-bearing, not incidental.
     expect(deriver.images).toBe(2)
     expect(deriver.posters).toBe(0)
-    expect(deriver.deriveImage).toHaveBeenNthCalledWith(1, expect.anything(), TIER_SPECS.THUMBNAIL)
-    expect(deriver.deriveImage).toHaveBeenNthCalledWith(2, expect.anything(), TIER_SPECS.PREVIEW)
+    expect(deriver.deriveImage).toHaveBeenNthCalledWith(1, expect.anything(), TIER_SPECS.PREVIEW)
+    expect(deriver.deriveImage).toHaveBeenNthCalledWith(2, expect.anything(), TIER_SPECS.THUMBNAIL)
+    expect(deriver.imageSources.filter((n) => n === data.length)).toHaveLength(1) // the source, exactly once
 
     // complete attached one role-tagged media: original + [THUMBNAIL, PREVIEW]
     expect(store.captured.completeItem.nodeId).toBe(NODE_ID)
@@ -206,6 +220,38 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     // each tier has its OWN K_blob wrap (per-blob keys, never shared)
     const wraps = store.captured.startItems.map((i) => i.wrappedBlobKey)
     expect(new Set(wraps).size).toBe(3)
+  })
+
+  // The original used to be decoded four times per picked photo: once per tier, once for the sealed geometry,
+  // and once for the in-flight tile's aspect ratio. Inside `addMedia` it is now decoded ONCE. Lever: restore the
+  // second `deriveImage` over the source blob in `deriveTiers` and `imageSources` carries two entries at the
+  // source's size. That lever is a call this CR deletes and no later phase reintroduces.
+  //
+  // The counting probe matters as much as the count: `stubDeriver` deliberately ships WITHOUT `probeDimensions`,
+  // so the geometry decode runs in no other test — a bite that did not install one here would be counting a
+  // path that never ran.
+  it('decodes the original once for both tiers and the sealed geometry', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const deriver = stubDeriver()
+    deriver.sourceDims = { w: 4032, h: 3024 } // the real deriver always knows what it just decoded
+    const probe = vi.fn(async () => ({ w: 1, h: 1 }))
+    deriver.probeDimensions = probe
+
+    const memoryKey = v1.randomBytes(32)
+    const data = new Uint8Array(64).fill(5)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: data, mediaType: 'image/jpeg' }, deriver)
+
+    expect(deriver.imageSources.filter((n) => n === data.length)).toHaveLength(1) // ONE decode of the original
+    expect(probe).not.toHaveBeenCalled() // nothing re-measured what that decode already knew
+    // …and the geometry it knew is what got sealed, at full source resolution — not the preview's size
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(unsealMeta(memoryKey, item)).toMatchObject({ w: 4032, h: 3024 })
+    // both tiers still arrive, at their pinned specs
+    expect(store.captured.completeItem.derivatives.map((d: { kind: string }) => d.kind)).toEqual(['THUMBNAIL', 'PREVIEW'])
+    expect(deriver.deriveImage).toHaveBeenNthCalledWith(1, expect.anything(), TIER_SPECS.PREVIEW)
+    expect(deriver.deriveImage).toHaveBeenNthCalledWith(2, expect.anything(), TIER_SPECS.THUMBNAIL)
   })
 
   it('a video derives a single poster and uses it for both the thumbnail and preview tier', async () => {

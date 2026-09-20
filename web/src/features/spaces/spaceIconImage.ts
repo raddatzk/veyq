@@ -43,7 +43,7 @@ async function bakeSquareCrop(img: HTMLImageElement, crop: CropRect): Promise<Bl
 export async function renderSpaceIcon(deriver: MediaDeriver, img: HTMLImageElement, crop: CropRect): Promise<Uint8Array> {
   const square = await bakeSquareCrop(img, crop)
   for (const quality of QUALITY_STEPS) {
-    const bytes = await deriver.deriveImage(square, { maxEdge: ICON_EDGE, quality, mimeType: 'image/webp' })
+    const { bytes } = await deriver.deriveImage(square, { maxEdge: ICON_EDGE, quality, mimeType: 'image/webp' })
     if (bytes.length <= ICON_ENCODED_BUDGET) return bytes
   }
   throw new Error('icon_encode_too_large')

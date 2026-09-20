@@ -324,8 +324,11 @@ async function sealMetadata(
   source: AddMediaSource,
   deriver: MediaDeriver,
   memoryKey: Uint8Array,
+  /** The geometry the tier derivation already measured, when it had it — an image always does. Absent for a
+   *  video or an underivable source, and only then is a probe (its own decode) worth paying for. */
+  knownDims: Dimensions | null = null,
 ): Promise<{ wrappedMeta: string | null; wrappedExif: string | null }> {
-  const [dims, meta] = await Promise.all([probeDims(source, deriver), readExif(source)])
+  const [dims, meta] = await Promise.all([knownDims ?? probeDims(source, deriver), readExif(source)])
   const { capturedAt, capturedAtSource } = captureTimeOf(meta.capturedAt, source.lastModified)
   const metaTier: MediaMeta = {
     v: 1,
@@ -395,8 +398,10 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   const { onProgress, signal } = opts
   throwIfAborted(signal)
-  const tiers = await deriveTiers(source, deriver)
-  const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey)
+  // ONE decode of the original: `deriveTiers` produces both tiers from it and hands back the geometry it
+  // already measured, so `sealMetadata` has nothing left to probe for an image.
+  const { derivatives: tiers, dimensions } = await deriveTiers(source, deriver)
+  const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey, dimensions)
   // index 0 = original; the rest are the role-tagged derivatives, in order
   const sealedOriginal = sealBlob(memoryKey, source.bytes)
   const sealedTiers = tiers.map((t) => ({ kind: t.kind, sealed: sealBlob(memoryKey, t.bytes) }))
@@ -509,7 +514,7 @@ export async function uploadCoverBlob(
   let bytes = source.bytes
   if (source.mediaType.startsWith('image/')) {
     try {
-      bytes = await deriver.deriveImage(new Blob([source.bytes as BlobPart], { type: source.mediaType }), COVER_SPEC)
+      bytes = (await deriver.deriveImage(new Blob([source.bytes as BlobPart], { type: source.mediaType }), COVER_SPEC)).bytes
     } catch {
       /* undecodable codec → seal the pristine bytes (still a valid, if larger, cover) */
     }

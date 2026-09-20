@@ -65,11 +65,11 @@ describe('deriveTiers — an undecodable/hanging video degrades to original-only
 
   it('returns [] (original only) when the poster derive rejects — via the catch, never re-thrown', async () => {
     const deriver: MediaDeriver = {
-      deriveImage: vi.fn(async () => new Uint8Array()),
+      deriveImage: vi.fn(async () => ({ bytes: new Uint8Array(), source: null })),
       deriveVideoPoster: vi.fn(async () => { throw new Error('video_seeked_timeout') }),
       probeDimensions: vi.fn(async () => null),
     }
-    await expect(deriveTiers(videoSource, deriver)).resolves.toEqual([])
+    await expect(deriveTiers(videoSource, deriver)).resolves.toEqual({ derivatives: [], dimensions: null })
     expect(deriver.deriveVideoPoster).toHaveBeenCalledTimes(1)
   })
 })

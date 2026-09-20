@@ -33,10 +33,20 @@ export interface MediaDeriver {
    * drawing (a hex/CSS colour) so a transparent source does not flatten onto the canvas default (transparent
    * black → black once JPEG-flattened); omit it to keep alpha (only meaningful with an alpha-capable `mimeType`).
    */
-  deriveImage(source: Blob, opts: { maxEdge: number; quality: number; mimeType?: string; background?: string }): Promise<Uint8Array>
+  deriveImage(
+    source: Blob,
+    opts: { maxEdge: number; quality: number; mimeType?: string; background?: string },
+  ): Promise<{ bytes: Uint8Array; source: Dimensions | null }>
   /** Decode a video's first frame to a JPEG poster (used for both the thumbnail and the preview tier). */
   deriveVideoPoster(source: Blob): Promise<Uint8Array>
-  /** Probe the source's intrinsic pixel `{w,h}` for the justified grid (cr-0059). Optional + best-effort. */
+  /**
+   * Probe the source's intrinsic pixel `{w,h}` for the justified grid (cr-0059). Optional + best-effort.
+   *
+   * **A decode of its own, so it is for sources nothing else decodes** — the in-flight upload tile (which needs
+   * an aspect ratio before the file's turn in the queue) and videos (whose poster path reports no size). An
+   * image on the upload path must NOT come through here: [deriveTiers] already decodes it once and hands the
+   * geometry back, and re-probing would pay for that decode twice.
+   */
   probeDimensions?(source: Blob, mediaType: string): Promise<Dimensions | null>
 }
 
@@ -57,7 +67,10 @@ export function createBrowserDeriver(): MediaDeriver {
     async deriveImage(source, { maxEdge, quality, mimeType = 'image/jpeg', background }) {
       const bitmap = await createImageBitmap(source)
       try {
-        return drawEncoded(bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
+        // The intrinsic size rides back with the bytes: this decode already knows it, and it is exactly what
+        // the sealed metadata tier wants. Without it the same original is decoded a second time just to measure.
+        const bytes = await drawEncoded(bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
+        return { bytes, source: { w: bitmap.width, h: bitmap.height } }
       } finally {
         bitmap.close()
       }
@@ -205,23 +218,43 @@ export function firstPresentedFrame(video: HTMLVideoElement, timeoutMs = VIDEO_E
   })
 }
 
-/** Generate the role-tagged derivatives for a source (image: two downscales; video: one poster for both). */
-export async function deriveTiers(source: AddMediaSource, deriver: MediaDeriver): Promise<{ kind: MediaDerivativeKind; bytes: Uint8Array }[]> {
+/**
+ * Generate the role-tagged derivatives for a source (image: two downscales; video: one poster for both), and
+ * hand back the original's intrinsic size when the decode knew it.
+ *
+ * **The original is decoded ONCE.** The thumbnail is derived from the already-downscaled PREVIEW rather than a
+ * second pass over the full-resolution source: 4032 → 2048 → 512 traverses the same ≤2× halving steps that two
+ * independent runs would ([en.memory.derivatives](../../../../docs/features/memory/enablers/en.memory.derivatives.md)
+ * § The three tiers), so the pinned downscale rule is honoured rather than traded for the saving. The order is
+ * therefore load-bearing: PREVIEW must be produced first, because THUMBNAIL now reads it.
+ *
+ * `dimensions` is null for a video (the poster path reports no size), for an underivable source, and for any
+ * deriver that does not report a size; the caller falls back to a probe there, which is the only place that
+ * decode is still worth paying for.
+ */
+export async function deriveTiers(
+  source: AddMediaSource,
+  deriver: MediaDeriver,
+): Promise<{ derivatives: { kind: MediaDerivativeKind; bytes: Uint8Array }[]; dimensions: Dimensions | null }> {
   const blob = new Blob([source.bytes as BlobPart], { type: source.mediaType })
   // Best-effort: a codec the browser can't decode (e.g. HEIC off Safari), an empty MIME type, or corrupt bytes
   // must NOT fail the upload — fall back to original-only (the gallery shows an icon, uc.memory.upload E4).
   try {
     if (source.mediaType.startsWith('image/')) {
-      const thumbnail = await deriver.deriveImage(blob, TIER_SPECS.THUMBNAIL)
       const preview = await deriver.deriveImage(blob, TIER_SPECS.PREVIEW)
-      return [{ kind: 'THUMBNAIL', bytes: thumbnail }, { kind: 'PREVIEW', bytes: preview }]
+      const previewBlob = new Blob([preview.bytes as BlobPart], { type: 'image/jpeg' })
+      const thumbnail = await deriver.deriveImage(previewBlob, TIER_SPECS.THUMBNAIL)
+      return {
+        derivatives: [{ kind: 'THUMBNAIL', bytes: thumbnail.bytes }, { kind: 'PREVIEW', bytes: preview.bytes }],
+        dimensions: preview.source,
+      }
     }
     if (source.mediaType.startsWith('video/')) {
       const poster = await deriver.deriveVideoPoster(blob) // one poster serves both tiers
-      return [{ kind: 'THUMBNAIL', bytes: poster }, { kind: 'PREVIEW', bytes: poster }]
+      return { derivatives: [{ kind: 'THUMBNAIL', bytes: poster }, { kind: 'PREVIEW', bytes: poster }], dimensions: null }
     }
   } catch {
     /* underivable → original only */
   }
-  return [] // no derivable frame → original only (the gallery falls back to an icon)
+  return { derivatives: [], dimensions: null } // no derivable frame → original only (the gallery falls back to an icon)
 }
