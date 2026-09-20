@@ -28,7 +28,7 @@ class ItemFavoritesHandler(private val store: ItemFavoritesStore) {
 
     fun get(userId: String, scopeId: String, nodeId: String): GetItemFavoritesOutcome {
         if (!store.isMember(userId, scopeId)) return GetItemFavoritesOutcome.NoScope
-        return GetItemFavoritesOutcome.Found(store.listForNode(scopeId, nodeId))
+        return GetItemFavoritesOutcome.Found(store.listForNode(userId, scopeId, nodeId))
     }
 
     fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String): PutItemFavoritesOutcome {

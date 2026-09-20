@@ -16,9 +16,10 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
  * generated [ItemFavoritesApi]; thin (ADR 0001) — delegates to [ItemFavoritesHandler]. `@Authenticated`; the
  * caller must hold a grant for the scope (a non-member gets 404).
  *
- * Operator-blind: only sealed ciphertext crosses. The `memberId` on each entry is sanctioned metadata (scope
- * membership, which the server already holds) and is what lets the client tell its own set apart from the
- * others' — the UI renders an aggregate count from it and never names a member.
+ * Operator-blind: only sealed ciphertext crosses, and the sole identity on it is the `self` flag on the
+ * caller's own entry. No member id is sent: the array separates the members and an item's count is how many
+ * entries hold it, so the aggregate-only rule (ADR 0068 §6) is carried by the data shape rather than by
+ * trusting the UI to withhold a name it was handed.
  */
 @Authenticated
 @RateLimitExempt(
@@ -35,7 +36,7 @@ class ItemFavoritesResource(
         when (val o = handler.get(identity.principal.name, scopeId.toString(), nodeId.toString())) {
             is GetItemFavoritesOutcome.Found ->
                 Response.ok(
-                    o.entries.map { ItemFavoritesEntry(memberId = UUID.fromString(it.userId), ciphertext = it.ciphertext) },
+                    o.entries.map { ItemFavoritesEntry(self = it.own, ciphertext = it.ciphertext) },
                 ).build()
             is HttpFailure -> httpError(o)
         }

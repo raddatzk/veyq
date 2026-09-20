@@ -70,7 +70,7 @@ class ItemFavoritesSliceTest {
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200)
             .body("$", hasSize<Any>(1))
-            .body("[0].memberId", equalTo(userId))
+            .body("[0].self", equalTo(true))
             .body("[0].ciphertext", equalTo(mine))
     }
 
@@ -87,14 +87,21 @@ class ItemFavoritesSliceTest {
         put(alice, scopeId, node, mine)
         put(bob, scopeId, node, theirs)
 
-        for (caller in listOf(alice, bob)) {
+        for ((caller, ownBlob) in listOf(alice to mine, bob to theirs)) {
             val body = given().header("Authorization", token(caller))
                 .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
                 .then().statusCode(200).body("$", hasSize<Any>(2))
                 .extract().jsonPath()
-            val byMember = (0..1).associate { body.getString("[$it].memberId") to body.getString("[$it].ciphertext") }
-            assert(byMember[alice] == mine && byMember[bob] == theirs) {
-                "caller $caller must receive BOTH members' blobs verbatim, got $byMember"
+            val entries = (0..1).map { body.getBoolean("[$it].self") to body.getString("[$it].ciphertext") }
+            assert(entries.map { it.second }.toSet() == setOf(mine, theirs)) {
+                "caller $caller must receive BOTH members' blobs verbatim, got $entries"
+            }
+            assert(entries.filter { it.first }.map { it.second } == listOf(ownBlob)) {
+                "exactly one entry is flagged self, and it is the caller's own — got $entries"
+            }
+            // No member id anywhere on the wire: the product never shows who marked what, so it is never sent.
+            assert(body.getString("[0].memberId") == null && body.getString("[1].memberId") == null) {
+                "entries must carry no member id at all"
             }
         }
     }
@@ -114,9 +121,11 @@ class ItemFavoritesSliceTest {
         val body = given().header("Authorization", token(bob))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(2)).extract().jsonPath()
-        val byMember = (0..1).associate { body.getString("[$it].memberId") to body.getString("[$it].ciphertext") }
-        assert(byMember[alice] == rewritten) { "the caller's own blob is replaced" }
-        assert(byMember[bob] == theirs) { "a co-member's blob must be untouched by someone else's PUT" }
+        val entries = (0..1).map { body.getBoolean("[$it].self") to body.getString("[$it].ciphertext") }
+        assert(entries.single { it.first }.second == theirs) {
+            "bob's own blob must be untouched by alice's PUT — got $entries"
+        }
+        assert(entries.single { !it.first }.second == rewritten) { "alice's own blob is the one that moved" }
     }
 
     /**
@@ -169,7 +178,8 @@ class ItemFavoritesSliceTest {
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200)
             .body("$", hasSize<Any>(1))
-            .body("[0].memberId", equalTo(alice))
+            .body("[0].self", equalTo(true))
+            .body("[0].ciphertext", equalTo(mine))
     }
 
     @Test

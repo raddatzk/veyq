@@ -287,10 +287,11 @@ paths:
       operationId: getItemFavorites
       summary: Get every member's sealed item-mark blob for the node.
       description: >
-        Returns one entry per member who has ever stored item marks for this node — the caller's own included,
-        and an empty array when nobody has. Each entry's ciphertext is the sealed set of marked media ids,
-        which the client opens with `K_SC`; the operator sees only opaque blobs. This read is deliberately
-        **not** filtered to the caller: it is what lets the client render *everyone's favorites* and a per-item
+        Returns one entry per member who has ever stored item marks for this node — the caller's own included
+        and flagged `self`, and an empty array when nobody has. Each entry's ciphertext is the sealed set of
+        marked media ids, which the client opens with `K_SC`; the operator sees only opaque blobs. Entries carry
+        **no member id**: the array separates the members, and the count of an item is how many entries hold it,
+        so nothing needs a name. This read is deliberately **not** filtered to the caller: it is what lets the client render *everyone's favorites* and a per-item
         count without the blind server aggregating for it.
       security:
         - bearerAuth: []
@@ -683,14 +684,20 @@ components:
 
     ItemFavoritesEntry:
       type: object
-      required: [memberId, ciphertext]
+      required: [self, ciphertext]
       properties:
-        memberId:
-          x-veyq-visibility: id
-          type: string
-          format: uuid
-          description: The member whose marks this blob holds. Present so the client can tell its own set apart from the others' — the UI shows only an aggregate count, never who marked what.
-          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        self:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True on the caller's own blob. This is the ONLY identity on the wire, and deliberately so: the array
+            already separates the members, and an item's count is simply how many entries contain its id — so no
+            member id is needed to render "everyone's / only mine" or the aggregate. Leaving it out makes the
+            aggregate-only rule a property of the DATA rather than a convention the UI is trusted to keep: a
+            client cannot attribute a mark to a named member because it was never told who. The caller cannot
+            derive this flag from anything else the read carries, and the server knows it truthfully — it is the
+            token's principal.
+          example: true
         ciphertext:
           type: string
           description: That member's marked-media-id set for this node, AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
