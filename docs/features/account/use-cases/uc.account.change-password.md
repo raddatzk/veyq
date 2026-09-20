@@ -80,6 +80,16 @@
   from there rotation's own gate passed for the attacker. It is deleted, not gated: what a forgotten password
   needs is [uc.account.recover-access](uc.account.recover-access.md), which proves control of the address
   instead of waiving the proof.
+- **What removing it costs — weighed and accepted, not overlooked.** It lands on exactly one population: an
+  instance with **no mail transport**, where recovery refuses with `503 mail_unavailable`
+  ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md), § A2 there), and someone who
+  has forgotten their password but is still signed in via `DEVICE_KEY`. They had a self-service route and no
+  longer do. That removes a lucky escape hatch rather than creating a lockout class — on such an instance that
+  person is already one sign-out from a permanent lockout — and the hatch was the attacker's ramp in the same
+  breath. The alternative would make the Secret Key checkable **without** the current password, which needs
+  either releasing the `RECOVERY` wrap to an authenticated session (dropping cold unlock from two factors to
+  one, amending [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)) or storing a
+  server-side commitment over the Secret Key. Each is its own decision; neither was taken here.
 - **The attestation is a signed statement, not a fresh server challenge.** It signs the **new** auth public key
   directly, not a server-minted nonce — there is nothing to replay it *into*: a captured signature only ever
   re-authorizes the exact new key it was made for, which the legitimate actor already approved. This is
