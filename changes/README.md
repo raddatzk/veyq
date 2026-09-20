@@ -923,6 +923,31 @@ network-bound gain, so the number bounds the decision *here* and not everywhere 
 where the follow-up will look for it, which is the inbox row for the work it gates, not a retrospective that is
 deleted with its CR.
 
+### Where a mapping depends on a library's output, one un-mocked test runs BEFORE the mapping
+
+**A suite that mocks the library proves the mapping and never the tag name, so an invented name passes
+everything and is `undefined` in production forever.** `cr-media-detail-panel-and-place-name` planned eleven new
+EXIF fields against `exifr` and scheduled a single fixture test — a generated JPEG parsed by the **real**
+library — to run first. It caught four of them before a line of panel code existed: `ExposureBiasValue` does not
+exist (the key is `ExposureCompensation`); `Flash` is the bitfield the plan assumed only under
+`translateValues: false`, and is otherwise an English sentence on which `& 0x1` reads 0; the same option is what
+makes `Orientation` a number, which exposed a **pre-existing** defect — that field had been sealed as
+`undefined` since it was introduced; and two more shapes were objects where strings were expected. Every one of
+those would have been green under the mock.
+
+So: **generate the fixture, do not borrow a file.** A real photo carries a licence question and someone's
+metadata; a generated one is reproducible, auditable byte for byte, and carries exactly the tags being claimed.
+Write its generator with **no third-party import** — one that needs Pillow installed is a fixture nobody can
+regenerate on the machine where it next matters.
+
+**The same instinct, pointed at the CR itself: a phase can specify work a convention forbids.** The same CR's
+doc phase listed two applied Flyway migrations as "edited". `backend/CLAUDE.md` forbids that outright, and the
+reason is not style — `migrate-at-start` validates each applied migration's checksum, so a one-word comment fix
+fails startup on every instance that already ran it, and `%dev`'s `repair-at-start` hides exactly that on the
+machine where you would test it. The live copy of the rule moved to the entity KDoc instead. **Read the target
+surface's own `CLAUDE.md` before executing a phase that edits it** — a CR is a plan written elsewhere, and the
+conventions live where the files do.
+
 ### `git status` before the first edit of a contracts-phase CR
 
 **A dirty shared spec is stop-and-confirm, not proceed.** Two CRs touching one `*.openapi.yaml` mix unrelated deltas into a single commit: #103's mechanical
