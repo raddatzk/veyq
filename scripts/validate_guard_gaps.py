@@ -83,6 +83,16 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      Python guard, and the honest alternative (widen the filter to the four scope directories) costs ~70 files'
      worth of no-op mutation runs against the 10 that are in scope. Pinned so the limit in that guard's
      docstring is executable rather than a sentence.
+  15 a `$PROJECT_DIR$`-rooted path inside a run configuration's `<env>`/`<entry>` value pointing nowhere passes
+     `validate_run_configs`, which resolves a configuration's *subject* (the `package.json` plus the script it
+     names, the Gradle project, the shell working directory) and never an env value. **Left open on purpose** —
+     a build output legitimately does not exist on a clean tree (`VEYQ_TENANT_INVITE_DEV_FILE` →
+     `backend/build/dev-invites.jsonl`, written by the backend it configures), so resolving env paths would
+     make that guard red on arrival, and red-because-wrong is indistinguishable from red-because-broken for
+     every later reader. The same limit covers the value that actually bites — a
+     `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
+     presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
+     that guard's docstring is executable rather than a sentence.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -100,6 +110,7 @@ A `validate_*.py`, so the trust-chain glob runs it on every push with no build. 
 from __future__ import annotations
 
 import pathlib
+import re
 import shutil
 import subprocess
 import sys
@@ -339,6 +350,22 @@ def forge_tenant_suspend_without_reproject(root: pathlib.Path) -> str:
     return "a tenant suspend that never re-projects the routing (must be REJECTED — the domain keeps resolving)"
 
 
+def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
+    # validate_run_configs resolves a configuration's SUBJECT and never an env value, so point an env value at
+    # a path that does not exist and it still reports green. No module-level anchor for this one on purpose: the
+    # forgery finds any `$PROJECT_DIR$`-rooted env value itself, because the one that exists today
+    # (VEYQ_TENANT_INVITE_DEV_FILE) is a developer-tunable line — pinning its spelling would turn an innocent
+    # edit into a red guard, which is the opposite of what a gap-pin is for.
+    env_path = re.compile(r'(<(?:entry|env)\s+(?:key|name)="[^"]+"\s+value=")\$PROJECT_DIR\$/[^"]*(")')
+    for f in sorted((root / ".run").glob("*.xml")):
+        src = f.read_text()
+        if env_path.search(src):
+            f.write_text(env_path.sub(r"\1$PROJECT_DIR$/does-not-exist/guard-gap-probe.jsonl\2", src, count=1))
+            return ("a run configuration's env value pointing at a path that does not exist "
+                    "(the env-values-unresolved open gap)")
+    raise ForgeError("no .run/*.xml carries a $PROJECT_DIR$-rooted env value — re-anchor this forgery")
+
+
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
@@ -355,6 +382,7 @@ CASES = [
     ("12", "validate_blob_reference_arity.py", forge_fourth_blob_reference_arm, False),
     ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
     ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
+    ("15", "validate_run_configs.py", forge_run_config_env_path_into_the_void, True),
 ]
 
 
