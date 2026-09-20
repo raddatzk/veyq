@@ -511,6 +511,23 @@ silently regress. The tell that this was needed: an audit finding for a rule tha
 nothing enforced (e.g. the styleguide mandated `@ConfigMapping`, yet 28 sites drifted). If a one-shot check
 genuinely suffices, the CR says why.
 
+### A proof about WHERE a thing lives cannot be a grep for WHAT it says
+
+**The corollary of the section above, one step earlier: before a one-shot proof is promoted, check that it
+measures its own subject.** `cr-terms-editor-lists-the-languages-that-have-terms` rested on *"one locale-markdown
+editor exists, and it lives in `shared/ui/`"* and handed over
+`grep -rln '<the component name>' web/src/features/ --include=*.vue` as the proof, with the comment *"imports
+only, never a definition"*. Run against the untouched tree — the tree where the component **was** in a feature —
+it returned exactly one path: the **importer**. It never named the definition, and could not: a component file
+does not contain its own name, because the name is the filename. The proof was green on the defective tree and
+would have been green on every tree, which is the failure § *the UNTOUCHED tree* is built to catch, arriving a
+step earlier than that section expects it.
+
+The general form: **when a claim is about a file's identity or location, the instrument is the filesystem
+(`rglob`, a basename match, a resolved import path), never a content grep** — and the tell is a proof whose
+subject is a *place* while its predicate is a *string*. The same trap has an inverse, already recorded one
+section down: a guard whose subject *is* text must ask whether its own source is in its corpus.
+
 ### A guard derives its anchor set from the code; it does not list it
 
 **§ *the locator, not the number* applied to a guard's own subject.** A guard that names *what* to check —
