@@ -6,10 +6,6 @@
   margin-inline: auto;
 }
 
-.veyq-page-narrow {
-  max-width: 1180px;
-}
-
 .veyq-section {
   display: grid;
   min-width: 0;
@@ -34,8 +30,7 @@
   font-size: 1.12rem;
 }
 
-.veyq-section-header span,
-.veyq-section-count {
+.veyq-section-header span {
   color: var(--app-muted);
   font-size: 0.9rem;
 }
@@ -71,8 +66,7 @@
   transform: translateY(-1px);
 }
 
-.veyq-empty,
-.veyq-loading {
+.veyq-empty {
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -90,22 +84,12 @@
   align-self: stretch;
 }
 
-.veyq-empty-action {
-  flex-wrap: wrap;
-}
-
-.veyq-action-row,
-.veyq-button-row,
 .veyq-dialog-action-row,
 .veyq-action-group {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.veyq-action-row {
-  justify-content: space-between;
 }
 
 .veyq-dialog-action-row {
@@ -119,8 +103,6 @@
   margin-left: auto;
 }
 
-.veyq-button-row .p-button,
-.veyq-button-row button,
 .veyq-dialog-action-row .p-button,
 .veyq-dialog-action-row button {
   max-width: 100%;
@@ -164,8 +146,7 @@
   outline-offset: 2px;
 }
 
-.veyq-form,
-.veyq-form-grid {
+.veyq-form {
   display: grid;
   min-width: 0;
   gap: 1rem;
@@ -430,35 +411,6 @@
   background: var(--app-surface-muted);
 }
 
-.veyq-support-button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  min-height: 2.35rem;
-  padding: 0 0.8rem;
-  border: 1px solid var(--app-success-line);
-  border-radius: 8px;
-  background: var(--app-surface);
-  color: var(--app-success-text);
-  font-family: inherit;
-  font-size: var(--p-button-font-size, 1rem);
-  font-weight: var(--p-button-label-font-weight, 500);
-  line-height: normal;
-  text-decoration: none;
-}
-
-.veyq-support-button:hover {
-  border-color: var(--app-success);
-  background: var(--app-success-soft);
-  color: var(--app-success-text);
-}
-
-.veyq-support-button.veyq-support-button span {
-  color: currentColor;
-  overflow-wrap: normal;
-}
-
 .veyq-text-button:disabled,
 .veyq-dialog-button:disabled {
   cursor: default;
@@ -473,7 +425,6 @@
 }
 
 @media (max-width: 720px) {
-  .veyq-action-row,
   .veyq-action-group {
     display: grid;
     grid-template-columns: 1fr;
@@ -483,18 +434,14 @@
   .veyq-action-group {
     margin-left: 0;
   }
-
 }
 
 @media (max-width: 420px) {
-  .veyq-button-row,
   .veyq-dialog-action-row {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .veyq-button-row .p-button,
-  .veyq-button-row button,
   .veyq-dialog-action-row .p-button,
   .veyq-dialog-action-row button {
     width: 100%;
