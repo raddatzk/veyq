@@ -27,9 +27,35 @@ acceptanceCriteria:
       backend: { integration: [LoginSliceTest.refreshRotatesAndChains] }
       web: { unit: [src/features/account/login/login.test.ts] }
   - id: refresh-reuse-detection
-    text: A replayed superseded refresh token revokes the whole family (reuse detection).
+    text: A replayed superseded refresh token two or more generations behind revokes the whole family
+      (reuse detection) — and so does one at distance zero, the successor a grace rotation already replaced.
     coverage:
-      backend: { integration: [LoginSliceTest.replayedSupersededRefreshRevokesFamily] }
+      backend:
+        integration: [LoginSliceTest.replayedSupersededRefreshRevokesFamily, LoginSliceTest.theOrphanedSuccessorIsAClone]
+  - id: refresh-one-generation-grace
+    text: A superseded refresh token exactly one generation behind the family's current one rotates instead of
+      revoking — a client whose successor never reached it (a dropped response, or a sibling call that lost the
+      race) keeps its session, and repeating the same stale presentation stays benign because the grace
+      re-mints under the orphan's own generation rather than a higher one.
+    coverage:
+      backend:
+        integration: [LoginSliceTest.refreshAfterALostResponseRotatesInsteadOfRevoking, LoginSliceTest.concurrentRefreshOfOneTokenKeepsTheFamily, LoginSliceTest.graceDoesNotIncrementSoTheNextStaleCallerIsStillAtDistanceOne]
+  - id: refresh-deadlock-is-retried
+    text: A rotation the database rolls back as a deadlock victim (SQLSTATE 40001) is replayed rather than
+      surfaced as a 500, which a client cannot tell apart from a dead session.
+    coverage:
+      backend:
+        unit: [SessionRotationRetryTest.retriesADeadlockVictimAndSucceeds, SessionRotationRetryTest.givesUpRatherThanLoopingForever, SessionRotationRetryTest.doesNotRetryAnythingThatIsNotASerializationFailure, SessionRotationRetryTest.findsTheSqlStateThroughTheWHOLEcauseChain]
+    gaps:
+      - surface: backend
+        reason: >
+          No test on this stack can produce the deadlock itself. The cycle is an InnoDB insert-intention gap
+          lock in ux_refresh_token_hash and the test profile is H2, so the retry is proven by injection —
+          a body throwing the exception the driver throws, wrapped as Hibernate wraps it — never end to end.
+  - id: refresh-is-single-flight-per-tab
+    text: Authed calls that 401 together share one refresh request instead of each presenting the same token.
+    coverage:
+      web: { unit: [src/features/account/login/login.test.ts] }
   - id: unknown-refresh-dos-safe
     text: An unknown refresh token is a plain 401 and revokes no family (DoS-safe).
     coverage:
