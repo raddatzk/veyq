@@ -12,7 +12,8 @@ info:
 
     A successful login issues an opaque, rotating **access + refresh** token pair grouped into a **session
     family** (ADR 0004). Refresh rotates the pair; presenting a superseded refresh token revokes the whole
-    family (reuse detection). This API gates only a **session** — it performs no content crypto and never
+    family (reuse detection) — except the one generation immediately behind the current one, which rotates
+    instead, so a client that never received its successor is not mistaken for a clone. This API gates only a **session** — it performs no content crypto and never
     unlocks content (auth ≠ unlock).
 
     Challenge issuance and every failure are deliberately **non-enumerable**: the server behaves
@@ -133,8 +134,11 @@ paths:
       summary: Rotate the session tokens.
       description: >
         Exchanges a valid refresh token for a fresh access + refresh pair and supersedes the old refresh
-        token. Presenting a superseded refresh token whose secret verifies is treated as a clone and
-        revokes the entire family (ADR 0004); an unverifiable, expired, or revoked token is a plain 401.
+        token. A superseded token is read by how far behind the family's current generation it is (ADR 0004
+        § the one-generation grace): exactly **one** generation behind rotates — that is a caller whose
+        successor never reached it, and the successor is re-minted under the same generation number —
+        while **zero** (a successor a grace rotation already replaced) or **two or more** is a clone and
+        revokes the entire family. An unverifiable, expired, or revoked token is a plain 401.
       requestBody:
         required: true
         content:
@@ -184,7 +188,10 @@ paths:
         that. This verb spends it: the presented token is rotated through the same rotation refresh uses, and
         the successor comes back as an httpOnly refresh cookie plus the session's own family id, never as a
         body token. The handed-over token is therefore a **one-shot bearer**, superseded by the time the
-        response lands; presenting it a second time is ADR 0004's clone case and revokes the family.
+        response lands. A second presentation is still fatal, but by distance rather than unconditionally
+        (ADR 0004 § the one-generation grace): a device whose adopt response was *lost* re-presents at
+        distance one and recovers, which is the case the grace exists for, while the successor it orphans is
+        at distance zero and takes the family down.
 
         Adoption changes **transport, never authority** — its caller must already present a valid CURRENT
         refresh token, exactly what refresh demands — so it is deliberately not gated on how the family was
@@ -791,8 +798,9 @@ components:
           type: string
           description: >
             The opaque refresh token this device was granted, carried in the body because a device with no
-            cookie has no other way to receive one. It is spent by this call: the rotation supersedes it, so a
-            second presentation is the clone case and revokes the family (ADR 0004).
+            cookie has no other way to receive one. It is spent by this call: the rotation supersedes it. A
+            second presentation is answered by the same distance rule every refresh uses (ADR 0004 § the
+            one-generation grace) — it recovers a lost response, it does not grant a second session.
           maxLength: 512
           example: cmVmcmVzaC10b2tlbi1vcGFxdWU
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
