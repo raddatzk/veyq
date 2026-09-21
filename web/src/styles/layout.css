@@ -124,7 +124,6 @@
 
 .sidebar-tenant-link,
 .sidebar-nav-link,
-.sidebar-memory-link,
 .sidebar-scope-link {
   display: grid;
   grid-template-columns: 2.35rem minmax(0, 1fr) auto;
@@ -151,17 +150,14 @@
 
 .sidebar-tenant-link:hover,
 .sidebar-nav-link:hover,
-.sidebar-memory-link:hover,
 .sidebar-scope-link:hover,
 .sidebar-tenant-link-active,
 .sidebar-nav-link.router-link-active,
-.sidebar-memory-link.router-link-active,
 .sidebar-scope-link.router-link-active {
   background: var(--app-hover);
 }
 
 .sidebar-tenant-avatar,
-.sidebar-memory-thumb,
 .sidebar-scope-icon,
 .sidebar-nav-link > .pi {
   display: grid;
@@ -248,11 +244,6 @@
   font-size: 0.72rem;
 }
 
-.sidebar-memory-thumb {
-  background: var(--app-warning-soft);
-  color: var(--app-warning-text);
-}
-
 .sidebar-scope-icon.pi-users {
   background: var(--app-danger-soft);
   color: var(--app-danger);
@@ -283,7 +274,6 @@
 }
 
 .sidebar-tenant-text,
-.sidebar-memory-link span:last-child,
 .sidebar-scope-link span:last-child {
   display: grid;
   min-width: 0;
@@ -294,7 +284,6 @@
    section labels (BEREICHE/FAVORITEN/GRUPPEN) carry the hierarchy. One weight for all four so the list is
    consistent (the `<strong>` tags remain for semantics/ellipsis). */
 .sidebar-tenant-text strong,
-.sidebar-memory-link strong,
 .sidebar-scope-link strong {
   overflow: hidden;
   color: var(--app-text);
@@ -305,7 +294,6 @@
 }
 
 .sidebar-tenant-text small,
-.sidebar-memory-link small,
 .sidebar-scope-link small {
   overflow: hidden;
   color: var(--app-muted);
@@ -347,10 +335,6 @@
   font-size: 0.68rem;
 }
 
-.compact-menu-button {
-  display: none;
-}
-
 .compact-group-nav,
 .compact-group-measure {
   display: none;
@@ -365,7 +349,6 @@
   gap: 1rem;
 }
 
-.mobile-nav-sheet-header,
 .mobile-nav-item {
   display: grid;
   grid-template-columns: 2.35rem minmax(0, 1fr);
@@ -374,18 +357,11 @@
   min-width: 0;
 }
 
-.mobile-nav-sheet-header {
-  padding: 0.25rem 0 0.75rem;
-  border-bottom: 1px solid var(--app-line);
-}
-
-.mobile-nav-sheet-header span:last-child,
 .mobile-nav-item span:last-child {
   display: grid;
   min-width: 0;
 }
 
-.mobile-nav-sheet-header strong,
 .mobile-nav-item strong,
 .mobile-nav-item small {
   overflow: hidden;
@@ -399,9 +375,7 @@
   font-weight: 400;
 }
 
-.mobile-nav-sheet-header small,
-.mobile-nav-item small,
-.mobile-nav-empty {
+.mobile-nav-item small {
   color: var(--app-muted);
 }
 
@@ -440,27 +414,6 @@
   background: var(--app-hover);
 }
 
-.mobile-nav-action {
-  width: 100%;
-  color: var(--app-text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.mobile-nav-action:not(:hover) {
-  background: transparent;
-}
-
-.mobile-nav-action > .pi {
-  display: grid;
-  place-items: center;
-  width: 2.35rem;
-  height: 2.35rem;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-accent-soft);
-  color: var(--app-accent);
-}
-
 .mobile-nav-favorite {
   grid-template-columns: 3.2rem minmax(0, 1fr);
 }
@@ -472,17 +425,6 @@
 .mobile-nav-favorite > span:last-child {
   align-self: center;
   gap: 0.12rem;
-}
-
-.mobile-nav-empty {
-  margin: 0;
-  padding: 0.65rem 0.25rem;
-}
-
-.sidebar-error {
-  margin: 0;
-  color: var(--app-danger);
-  font-size: 0.8rem;
 }
 
 .workspace-topbar {
@@ -643,9 +585,7 @@
   .sidebar-section-label,
   .sidebar-section-action,
   .sidebar-tenant-text small,
-  .sidebar-memory-link small,
-  .sidebar-scope-link small,
-  .sidebar-error {
+  .sidebar-scope-link small {
     display: none;
   }
 
@@ -696,9 +636,7 @@
 
   .sidebar-tenant-link,
   .sidebar-nav-link,
-  .sidebar-memory-link,
-  .sidebar-scope-link,
-  .compact-menu-button {
+  .sidebar-scope-link {
     display: inline-grid;
     width: auto;
     min-width: 0;
@@ -743,7 +681,6 @@
 
   .sidebar-tenant-text,
   .sidebar-nav-link span:last-child,
-  .sidebar-memory-link span:last-child,
   .sidebar-scope-link span:last-child {
     display: grid;
     min-width: 0;
@@ -751,7 +688,6 @@
 
   .sidebar-tenant-text strong,
   .sidebar-nav-link span:last-child,
-  .sidebar-memory-link strong,
   .sidebar-scope-link strong {
     max-width: 8.5rem;
     overflow: hidden;
@@ -760,7 +696,6 @@
   }
 
   .sidebar-tenant-avatar,
-  .sidebar-memory-thumb,
   .sidebar-scope-icon,
   .sidebar-nav-link > .pi {
     width: 2.35rem;
@@ -876,17 +811,6 @@
     display: block;
   }
 
-  .workspace-search {
-    position: relative;
-    justify-self: end;
-    width: 2.35rem;
-    transition: width 180ms ease;
-  }
-
-  .workspace-search-open {
-    width: min(32rem, max(18rem, 52vw));
-  }
-
   .workspace-topbar-actions {
     flex-wrap: nowrap;
   }
@@ -902,14 +826,6 @@
 }
 
 @media (max-width: 720px) {
-  .notification-panel {
-    position: fixed;
-    top: 6.9rem;
-    right: 0.65rem;
-    left: 0.65rem;
-    width: auto;
-    max-height: min(420px, calc(100dvh - 8rem));
-  }
 
   .public-shell {
     align-items: start;
@@ -938,15 +854,6 @@
     align-items: center;
   }
 
-  .workspace-search {
-    justify-self: end;
-    width: 2.35rem;
-  }
-
-  .workspace-search-open {
-    width: min(18rem, calc(100vw - 2rem));
-  }
-
   .workspace-topbar-actions {
     grid-column: auto;
     width: auto;
@@ -954,18 +861,8 @@
     overflow-x: visible;
   }
 
-  .workspace-actions {
-    justify-content: flex-end;
-  }
-
   .content {
     padding: 1rem 1rem 2rem;
-  }
-
-  .workspace-actions .p-button-label {
-    max-width: 11rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .tenant-sidebar {
@@ -994,21 +891,18 @@
 
   .sidebar-tenant-link,
   .sidebar-nav-link,
-  .sidebar-memory-link,
   .sidebar-scope-link {
     grid-template-columns: 2.35rem;
     min-height: 2.5rem;
     padding: 0.2rem;
   }
 
-  .compact-menu-button,
   .sidebar-profile .profile-button {
     grid-template-columns: 2.35rem auto;
     min-height: 2.5rem;
     padding: 0.2rem 0.45rem 0.2rem 0.2rem;
   }
 
-  .compact-tenant-menu-button,
   .sidebar-personal-link,
   .sidebar-favorites-section,
   .sidebar-groups-section {
@@ -1040,25 +934,17 @@
 
   .sidebar-tenant-text,
   .sidebar-nav-link span:last-child,
-  .sidebar-memory-link span:last-child,
   .sidebar-scope-link span:last-child,
-  .compact-menu-label,
   .sidebar-profile .profile-button-name {
     display: none;
   }
 
-  .profile-button-name,
-  .workspace-action-divider {
+  .profile-button-name {
     display: none;
   }
 
-  .compact-menu-chevron,
   .profile-button-chevron {
     display: inline-block;
-  }
-
-  .empty-state {
-    grid-template-columns: 1fr;
   }
 }
 
