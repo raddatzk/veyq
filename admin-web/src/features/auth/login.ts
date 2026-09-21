@@ -6,15 +6,18 @@
 // Deliberately NARROWER than web/'s login, and the omissions are the design: no passkey, no "remember me"
 // device-key wrap, no session vault, no password recovery. This surface holds no content key and no vault to
 // unlock — a session is all it ever needs — and every one of those features is another place that would touch
-// key material. A 401 lands on /login rather than triggering a silent refresh from a view; `withRefresh` is
-// the one place that refreshes, around an authed call.
+// key material. A 401 lands on /login (`shared/handle401.ts`) rather than triggering a silent refresh from a
+// view, and the ONLY refresh this surface performs is the one at boot — there is no retry-on-401 wrapper here
+// and no view that could produce two refreshes at once. `web/` needs both because its views fan out authed
+// calls that 401 as a group; this one has a single authed screen. If that ever changes, copy `web/`'s
+// `refreshSession` WITH its shared in-flight promise, rather than reviving a bare wrapper: the two behave
+// differently under concurrency and only one of them is safe to fan out.
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { loginApi, sessionApi, tokenApi } from '../../api/client'
 import { clearTokens, session, setTokens } from '../../app/session'
 import { resetServerRole } from '../../app/serverRole'
-import { isUnauthorized } from '../../shared/httpError'
 
 /**
  * Log in with email + password. Requests a challenge, derives the auth keypair with the instance salt the
@@ -58,19 +61,5 @@ export async function logout(): Promise<void> {
   } finally {
     clearTokens()
     resetServerRole()
-  }
-}
-
-/** Run an authed call, transparently refreshing once on a 401 and retrying. The 401 detection duck-types the
- *  shared response shape ({@link isUnauthorized}) so it fires for every generated client package. */
-export async function withRefresh<T>(call: () => Promise<T>): Promise<T> {
-  try {
-    return await call()
-  } catch (e) {
-    if (isUnauthorized(e)) {
-      await refreshSession()
-      return await call()
-    }
-    throw e
   }
 }
