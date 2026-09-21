@@ -1,28 +1,7 @@
-.settings-page {
-  width: 100%;
-}
 
 .settings-panel {
   display: grid;
   gap: 1.35rem;
-}
-
-.tenant-settings-stack {
-  display: grid;
-  gap: 1.35rem;
-}
-
-.tenant-settings-header {
-  display: grid;
-  gap: 0.25rem;
-  padding-inline: 0.15rem;
-}
-
-.tenant-settings-header h1 {
-  margin: 0;
-  color: var(--app-text);
-  font-size: clamp(1.55rem, 1rem + 1vw, 2rem);
-  line-height: 1.12;
 }
 
 .settings-panel h1 {
@@ -47,10 +26,6 @@
   border-top: 0;
 }
 
-.settings-form-disabled {
-  opacity: 0.72;
-}
-
 .settings-form h2 {
   margin: 0;
   font-size: 1rem;
@@ -59,27 +34,6 @@
 .settings-form h3 {
   margin: 0;
   font-size: 0.95rem;
-}
-
-.login-method-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.2rem;
-  align-items: start;
-}
-
-.login-method-panel {
-  display: grid;
-  min-width: 0;
-  gap: 1rem;
-}
-
-.login-method-subsection {
-  display: grid;
-  gap: 0.85rem;
-  margin-top: 0.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--app-line);
 }
 
 .settings-section-header {
@@ -92,17 +46,6 @@
 
 .settings-section-header h2 {
   margin: 0;
-}
-
-.settings-danger-zone {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.settings-danger-zone h2 {
-  color: var(--app-danger);
 }
 
 .settings-form label {
@@ -131,30 +74,9 @@
   margin-top: 0.75rem;
 }
 
-.management-list-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0 0.25rem;
-  color: var(--app-muted);
-  font-size: 0.82rem;
-  font-weight: 700;
-}
-
 .management-list-items {
   display: grid;
   gap: 0.55rem;
-}
-
-.management-control {
-  min-width: 8.5rem;
-  max-width: 11rem;
-}
-
-.management-control .p-select,
-.management-control select {
-  width: 100%;
 }
 
 .management-actions {
@@ -174,9 +96,7 @@
     padding: 1rem;
   }
 
-  .settings-section-header,
-  .settings-danger-zone,
-  .locale-markdown-editor-row {
+  .settings-section-header {
     align-items: flex-start;
     flex-direction: column;
   }
@@ -184,14 +104,13 @@
   .management-actions {
     justify-content: flex-start;
   }
-
-  .management-add-row {
-    grid-template-columns: 1fr;
-  }
 }
 
-/* Shared muted caption + invite-link row/input — promoted from 6+4 byte-identical
-   scoped copies across the settings/member/invite components (cr-0149, audit #64/P2a). */
+/* Shared muted caption — promoted from 6 byte-identical scoped copies across the
+   settings/member/invite components (cr-0149, audit #64/P2a). The invite-link row and
+   input this comment used to name with it were promoted the same way and then lost
+   their last markup user; the three `wrapper.find('.invite-link-input')` calls left in
+   the suite all assert it is ABSENT. Deleted with the rest of the dead sheets (#146). */
 .settings-muted {
   margin: 0;
   color: var(--app-muted);
@@ -202,15 +121,4 @@
    with the same air on both sides. This is the pattern, not one panel — hence a shared rule, not a scoped one. */
 .management-list + .settings-muted {
   margin-top: 0.75rem;
-}
-.invite-link-row {
-  display: flex;
-  gap: 0.5rem;
-  align-items: center;
-}
-.invite-link-input {
-  flex: 1;
-  min-width: 0;
-  font-family: var(--font-mono, ui-monospace, monospace);
-  font-size: 0.85em;
 }
