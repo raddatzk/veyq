@@ -21,11 +21,6 @@
   font-weight: 700;
 }
 
-.memory-list {
-  display: grid;
-  gap: 0.75rem;
-}
-
 .media-grid {
   position: relative;
   display: block;
@@ -233,12 +228,6 @@
   white-space: normal;
 }
 
-.memory-scope-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-}
-
 .memory-card-cover,
 .memory-card-icon {
   display: grid;
@@ -269,22 +258,6 @@
 .memory-card-icon.pi::before {
   transform: scale(1.45);
   transform-origin: center;
-}
-
-.memory-card-menu-button {
-  flex: 0 0 auto;
-  width: 2rem;
-  height: 2rem;
-  padding: 0;
-}
-
-.memory-card-menu-button .p-button-icon {
-  font-size: 1rem;
-}
-
-.memory-card-menu .memory-menu-danger .p-menu-item-content,
-.memory-card-menu .memory-menu-danger .p-menu-item-link {
-  color: var(--app-danger);
 }
 
 .memory-route-surface,
@@ -371,7 +344,6 @@
 }
 
 .memory-folder-card,
-.memory-scope-card,
 .memory-create-card {
   display: grid;
   grid-template-columns: 42px minmax(0, 1fr);
@@ -400,7 +372,6 @@
 }
 
 .memory-folder-card > .pi,
-.memory-scope-card-icon,
 .memory-create-card .pi {
   display: grid;
   place-items: center;
@@ -455,7 +426,6 @@
 }
 
 .memory-folder-card > .pi,
-.memory-scope-card-icon,
 .memory-create-card .pi {
   width: 42px;
   height: 42px;
@@ -552,18 +522,7 @@
   white-space: normal;
 }
 
-.memory-scope-card-user .memory-scope-card-icon {
-  background: var(--app-success-soft);
-  color: var(--app-success-text);
-}
-
-.memory-scope-card-group .memory-scope-card-icon {
-  background: var(--app-warning-soft);
-  color: var(--app-warning-text);
-}
-
-.memory-card-text,
-.memory-scope-card-text {
+.memory-card-text {
   display: grid;
   gap: 0.3rem;
   min-width: 0;
@@ -575,7 +534,6 @@
 }
 
 .memory-folder-card strong,
-.memory-scope-card strong,
 .memory-create-card strong {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -599,16 +557,11 @@
   white-space: nowrap;
 }
 
-.memory-card-text small,
-.memory-scope-card-text small {
+.memory-card-text small {
   color: var(--app-muted);
 }
 
-.memory-tracks,
-.memory-context,
-.asset-buckets,
-.memory-tabs,
-.memory-journal {
+.memory-tabs {
   --memory-active-border: var(--app-success);
   --memory-active-surface: color-mix(in srgb, var(--app-surface) 88%, var(--app-success) 12%);
   --memory-active-ring: color-mix(in srgb, var(--app-success) 24%, transparent);
@@ -618,37 +571,12 @@
   .memory-action-collapsible.p-button {
     display: none;
   }
-
-  .memory-actions-overflow-secondary.p-button {
-    display: inline-flex;
-  }
-
-  .memory-detail-control-panel {
-    align-items: flex-end;
-  }
-}
-
-@container memory-detail-header (max-width: 820px) {
-  .memory-upload-action.p-button {
-    min-width: 2.55rem;
-    width: 2.55rem;
-    padding-inline: 0;
-  }
-
-  .memory-upload-action.p-button .p-button-label {
-    display: none;
-  }
-
-  .memory-header-playlist-link {
-    padding-inline: 0.55rem;
-  }
 }
 
 @media (min-width: 721px) and (max-width: 1120px) {
   .memory-action-collapsible.p-button {
     display: none;
   }
-
 }
 
 .memory-tabs {
@@ -714,11 +642,6 @@
   border-radius: var(--app-radius-sm);
   background: var(--app-on-strong);
   cursor: pointer;
-}
-
-.memory-cover-option-selected {
-  border-color: var(--app-accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-accent) 18%, transparent);
 }
 
 .memory-cover-option input {
@@ -865,9 +788,6 @@
 }
 
 @media (max-width: 720px) {
-  .memory-titlebar {
-    flex-direction: column;
-  }
 
   .memory-card .p-card-content {
     gap: 0.55rem;
@@ -878,14 +798,6 @@
   }
 
   .memory-action-inline.p-button {
-    display: none;
-  }
-
-  .memory-actions-overflow-mobile.p-button {
-    display: inline-flex;
-  }
-
-  .memory-actions-overflow-secondary.p-button {
     display: none;
   }
 
@@ -903,7 +815,6 @@
     scroll-snap-align: start;
     min-width: max-content;
   }
-
 }
 
 /* Gallery header copy/title/count — promoted from MemoryDetail's scoped base + ShareView's
