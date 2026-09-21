@@ -7,10 +7,6 @@
   box-shadow: var(--app-shadow-md);
 }
 
-.login-card.login-card-wide {
-  width: min(680px, 100%);
-}
-
 .login-card .p-card-title {
   color: var(--app-text);
   font-size: 1.65rem;
@@ -25,10 +21,6 @@
   max-height: calc(100dvh - 2rem);
 }
 
-.group-detail-dialog {
-  width: min(680px, calc(100vw - 2rem));
-}
-
 .share-dialog {
   width: min(560px, calc(100vw - 2rem));
 }
@@ -41,21 +33,18 @@
   margin-top: 0;
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button,
-.tenant-dialog .p-dialog-header-icon {
+.tenant-dialog .p-dialog-header-actions .p-button {
   border: 0;
   background: transparent;
   box-shadow: none;
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:hover,
-.tenant-dialog .p-dialog-header-icon:hover {
+.tenant-dialog .p-dialog-header-actions .p-button:hover {
   border: 0;
   background: var(--app-surface-muted);
 }
 
-.tenant-dialog .p-dialog-header-actions .p-button:focus-visible,
-.tenant-dialog .p-dialog-header-icon:focus-visible {
+.tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
   outline: 2px solid var(--app-focus-ring);
   outline-offset: 2px;
   box-shadow: none;
@@ -77,10 +66,6 @@
     border-radius: var(--app-radius);
   }
 
-  .registration-privacy-provider-list {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
   .login-card .p-card-body {
     padding: 1rem;
   }
@@ -88,14 +73,5 @@
   .tenant-dialog {
     width: min(100vw - 1rem, 420px);
     max-height: calc(100dvh - 1rem);
-  }
-
-  .inline-form,
-  .inline-form.compact {
-    grid-template-columns: 1fr;
-  }
-
-  .toggle-row {
-    align-items: flex-start;
   }
 }
