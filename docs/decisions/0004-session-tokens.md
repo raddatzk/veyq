@@ -7,7 +7,8 @@
   **management half** — listing the account's families and revoking one remotely
   ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **not yet built**: the
   contract reserves the family id, and today only the caller's own family can be ended, by logout. This ADR
-  records the agreed design for that half.
+  records the agreed design for that half. The **one-generation grace** below (refined 2026-09-21 from inbox
+  #123) is likewise **decided, not built**: rotation today revokes on any superseded generation.
 
 ## Context
 
@@ -45,12 +46,18 @@ into **named session families**. No JWTs.
   issuance cannot be narrowed to delegated families without first making them a recognisable class.
   **Refresh rotates:** each refresh mints a new access + new refresh token and supersedes the prior
   refresh (numbered generations).
-- **Reuse detection.** Presentation of a **superseded** refresh token (an older generation) is a clone
-  signal ⇒ **revoke the entire family**. This catches the undetected-theft case that proactive revocation
+- **Reuse detection.** Presentation of a **superseded** refresh token is a clone signal ⇒ **revoke the
+  entire family** — with the one-generation exception decided below, which is what separates a clone from a
+  client that never received its successor. This catches the undetected-theft case that proactive revocation
   misses. To avoid a denial-of-service where a guessed `familyId` force-revokes a family, the superseded
-  token's **secret is verified** before revoking — the server keeps enough state (current + previous
-  generation hash) to verify the realistic reuse window; an older, unverifiable token is merely *invalid*,
-  not a family-killer.
+  token's **secret is verified** before revoking: only a presented token whose *hash* matches a stored row
+  can revoke anything, so a family cannot be killed by anyone who does not already hold one of its tokens.
+  **Retention is the full refresh TTL, not two generations.** Every superseded row survives until
+  `expiresAt` (30 days) and each one is a family-killer at a distance of two generations or more; the purge
+  matches strictly on expiry. An earlier wording here claimed the server kept only *"current + previous
+  generation hash"* and that anything older was "merely invalid" — that was never built, and it is corrected
+  rather than deferred. What the grace decision below restores is its *intent*: the pair (current, previous)
+  is the only distinction the rule needs, and it is now the distinction the code actually draws.
 - **Refresh expiry ⇒ full re-login** (challenge-response). Sliding lifetime via refresh; idle-expiry on
   the refresh token.
 - **Unnamed families — the name lives off the family entirely.** A login creates a family the server can
@@ -92,6 +99,51 @@ into **named session families**. No JWTs.
   what went in. So it is deliberately **not** gated on how the family was born — it could not be, and the
   rejected alternative below says why that is the right way round.
 
+## Decision — the one-generation grace: a benign re-presentation rotates, it does not revoke
+
+**A presented `SUPERSEDED` refresh token whose generation is exactly one behind its family's `CURRENT`
+generation rotates normally, superseding the orphaned successor. Any greater distance stays a clone signal
+and revokes the family.** The bound is the **generation distance**, deliberately not a time window.
+
+**Why this is not a softening of reuse detection.** Whoever holds the orphaned successor is caught on their
+*next* refresh: after the re-rotation that successor is itself superseded, now at a distance of two, and
+presenting it revokes the family. Detection is therefore not removed but **deferred by at most one access
+token's lifetime** (15 minutes), because that is how long a holder can operate before it must refresh. A
+time window buys exactly the same deferral and loses the case below, which is why it is rejected.
+
+**The case that forces this, measured** (2026-09-21, `main` @ `c0add4e`, live backend on MariaDB 11.4).
+A refresh whose **response never reaches the client** already committed server-side: the rows go to
+`[gen 1 SUPERSEDED, gen 2 CURRENT]` while the browser still holds gen 1 in its cookie. The next page load
+presents gen 1 — and today that is read as a clone and **revokes the family**. So a single dropped response
+permanently ends a session, with no attacker, no second tab and no concurrency involved. The same shape
+arrives by concurrency: six simultaneous refreshes of one token yield `1 × 200` and `5 × 401`, and all five
+losers are at distance 1. A genuine replay is not: after a chain of three rotations the oldest token sits at
+distance 3 and still revokes, as it must. **The distance is therefore the exact discriminator between the
+benign set and the clone set** — that is the measurement this decision rests on, not an intuition about
+windows.
+
+**Why not a time window.** The benign late case is a person coming back — a reload minutes or hours after
+the dropped response. Any window short enough to keep theft detection meaningful is far too short for that,
+so a window would fix the concurrency half and leave the half that motivated the rule.
+
+**One implementation constraint, found by biting the rule before writing it down.** The successor's
+generation must be counted from the family's **`CURRENT`** row, not from the presented one. Rotation today
+mints `presented.generation + 1`; re-rotating from generation N−1 would then mint a *second* row numbered N
+and destroy the uniqueness the distance is read from. In the ordinary path the two are the same row, so this
+changes nothing there. Measured invariants the rule stands on: `mint` has exactly two call sites (a new
+family at generation 1, and rotation), so a family holds **exactly one `CURRENT` row**, and a chain numbers
+its generations monotonically and uniquely (`1,2,3,4` with only the last `CURRENT`).
+
+**No schema change.** The distance is `CURRENT.generation - presented.generation`, read via
+`family_id + status`, an index that already exists. This is also the first time `generation` is **read**:
+it is written at mint and rotation and compared nowhere, which is why the drift corrected above could sit
+in the ADR unnoticed.
+
+**What this does not settle.** Clients still owe a shared in-flight refresh per tab — this decision makes a
+concurrent refresh *harmless*, not *free*, and a client that fires six of them still wastes five rotations.
+And it says nothing about the deadlock the same concurrency provokes in the unique index over token hashes
+(a retryable `SQLSTATE 40001` currently surfaced as a `500`), which is a storage concern, not a session one.
+
 ## Decision — web refresh cookie lifetimes (session vs persistent)
 
 The web cookie transport comes in **two lifetimes**, chosen by the client at login via the optional
@@ -123,7 +175,11 @@ refresh re-decide its own lifetime, breaking the same-named-cookie rule this sec
 - **Instant revocation** is intrinsic (delete / mark the family revoked) — logout, "log out everywhere,"
   and theft response are all one operation.
 - **Undetected theft is caught** by rotation + reuse detection — the gap a single revocable token leaves
-  open.
+  open, now with the theft's *discovery* deferred by at most one access-token lifetime (§ the one-generation
+  grace) in exchange for sessions no longer dying of a dropped response.
+- **A lost or raced refresh costs a rotation, not the session.** Before the grace rule, every interrupted
+  refresh response and every pair of simultaneous refreshes ended the family; a client could provoke it by
+  ordinary means and a flaky network by none at all.
 - **Operator stays blind.** The server sees opaque family ids, coarse timestamps, and a device *count* —
   never a cleartext device fingerprint, and no name in any form. Listing and revoking work at the **auth
   layer** (no unlock needed); **reading** the names needs unlock (they are sealed under the Master Key), so
@@ -147,6 +203,17 @@ refresh re-decide its own lifetime, breaking the same-named-cookie rule this sec
   marks the channel spent, so by the time a device could redeem, the row it would be checked against is already
   terminal. Restricting adoption would therefore cost a migration, a contradiction, and a change to the pairing
   ceremony's single-use rule, to remove an exposure nobody could state.
+- **Rejected — a time-bounded grace window instead of the generation distance:** it covers the concurrent
+  case and misses the one that motivated the rule. The benign late re-presentation is a person reloading
+  minutes or hours after a dropped response, and any window short enough to keep theft detection meaningful
+  is far shorter than that. It also buys no extra safety: both forms defer discovery by the same one access
+  lifetime.
+- **Rejected — answering `401` without revoking, inside the window:** it saves the family and not the
+  session. The client's cookie still holds the dead token, so every subsequent attempt fails the same way and
+  the person must sign in again regardless — the family surviving is not an outcome anyone can observe.
+- **Rejected — keeping only two generations and purging the rest,** which is what this ADR wrongly claimed
+  for a year: it would make an older token *silently invalid* instead of a clone signal, deleting the
+  tripwire the reuse-detection bullet exists for, and buying only a little storage.
 - **Rejected — cleartext device names server-side** (e.g. storing the user-agent as the session label):
   an operator-blind violation. Names are **E2EE** (client-built, encrypted under the account key).
 - **Rejected — server-generated cleartext codename** (e.g. `violet-otter`): operator-meaningless and
