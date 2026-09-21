@@ -211,46 +211,6 @@ a.lightbox-icon-button,
   background: #000;
 }
 
-.media-original-fullscreen {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  background: #05070b;
-  color: var(--app-on-strong);
-}
-
-.media-original-fullscreen .media-original-nav {
-  position: absolute;
-  border-color: rgb(255 255 255 / 18%);
-  background: rgb(15 23 42 / 72%);
-  color: var(--app-on-strong);
-  box-shadow: none;
-}
-
-.media-original-fullscreen .media-original-nav:not(:disabled):hover {
-  background: rgb(30 41 59 / 88%);
-}
-
-.media-original-fullscreen img,
-.media-original-fullscreen video {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-}
-
-.media-original-fullscreen img {
-  opacity: 0;
-}
-
-.media-original-fullscreen .media-original-loaded {
-  opacity: 1;
-}
-
 .media-original-loading {
   position: absolute;
   display: inline-flex;
@@ -404,63 +364,6 @@ a.lightbox-icon-button,
 
 .media-lightbox-metadata a {
   color: var(--app-accent);
-}
-
-.upload-dropzone {
-  position: relative;
-  display: grid;
-  place-items: center;
-  gap: 0.35rem;
-  min-height: 150px;
-  padding: 1rem;
-  border: 1px dashed var(--app-line);
-  border-radius: 8px;
-  background: var(--app-control-bg);
-  cursor: pointer;
-  text-align: center;
-}
-
-.upload-dropzone input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-
-.upload-dropzone .pi {
-  color: var(--app-info-text);
-  font-size: 1.5rem;
-}
-
-.upload-list {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.upload-row {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: start;
-  gap: 0.6rem;
-  padding: 0.65rem;
-  border: 1px solid var(--app-line);
-  border-radius: 8px;
-}
-
-.upload-row strong,
-.upload-row small {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.upload-row small {
-  color: var(--app-muted);
-}
-
-.upload-error {
-  color: var(--app-danger) !important;
 }
 
 @media (max-width: 900px) {
