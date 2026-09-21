@@ -11,7 +11,12 @@ here; the server is blind.
 - **`npm run check` does NOT regenerate the client — so on its own it proves nothing about a contract change.**
   It runs lint/typecheck/test/build over whatever `src/api/generated/` already holds, which is the *previous*
   spec. Change `contracts/api/` and a green `check` is a green run against stale code: run **`npm run
-  generate:api` first**, then `check`. (Unlike the backend, where `./gradlew check` generates as part of the
+  generate:api` first**, then `check`. **Authoring the change is not the only trigger — any time the spec moves
+  under you, it counts**: merging a contracts-phase CR, switching branches, or checking out a fresh worktree
+  (each worktree has its own untracked `src/api/generated/`). Merging `cr-favorites-two-objects` into a main
+  tree whose client predated it produced `error TS7006: Parameter 'e' implicitly has an 'any' type` on a
+  generated call — which reads as a defect in the merged code and is in fact the generated client being one
+  spec behind. (Unlike the backend, where `./gradlew check` generates as part of the
   build — the asymmetry is the trap.) cr-0171 nearly shipped "the markers are inert to both generators" on a
   check that had never seen them.
 - **Dev credentials come from a seeder — never hardcode or guess them. Two paths, and they are NOT
