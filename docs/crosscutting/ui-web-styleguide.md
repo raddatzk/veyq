@@ -6,9 +6,11 @@ gallery or social network.
 
 ## Source of truth
 
-**`web/src/styles/`** — eight stylesheets (~175 KB: `base` tokens, `ui`, `layout`, `forms`, `memory`, `media`,
+**`web/src/styles/`** — eight stylesheets (~80 KB: `base` tokens, `ui`, `layout`, `forms`, `memory`, `media`,
 `settings`, **`dark`**); `web/src/style.css` is the import barrel. Individual edits carry a comment with their
-reason where the reason isn't obvious.
+reason where the reason isn't obvious. It read *~175 KB* until 2026-09-21, when the 67 % of it that no markup
+had ever matched was deleted (#146) — the sheets had come across from the pre-E2EE source with the design
+system of views this repo never had. Re-measure before quoting the size; `du -ch web/src/styles/*.css`.
 
 **`admin-web/src/styles/`** is a five-sheet **copy** of it — everything but `layout`, `memory` and `media`,
 which style a Memory shell, a gallery and a viewer that surface does not have — and the rules on this page
@@ -46,8 +48,13 @@ counts are colour, and colour is what goes stale. Re-measure before quoting them
 
 ## Color — semantic role tokens
 
-Use `--app-*` role tokens before raw colors — they are defined in `styles/base.css`, and **every semantic color
-carries a dark value in `styles/dark.css`**. A new one must define both:
+Use `--app-*` role tokens before raw colors. **Both values live in `styles/base.css`**: the light one under
+`:root`, the dark one under `:root.veyq-dark` (40 tokens there [M: 2026-09-21]). A new one must define both.
+
+**`styles/dark.css` is not where the values are, and this page said it was until 2026-09-21.** That sheet
+defines no custom property at all — it is one `.veyq-dark { … }` of *component* overrides that read the tokens.
+Checked with `grep -nE '^\s*--' web/src/styles/dark.css`, which returns nothing, and returned nothing on the
+pre-#146 file too: the sentence was wrong when written, not made wrong by a deletion.
 
 - **accent / brand** — brand marks, selected states, focus accents, navigation highlights.
 - **success / positive** — submit, save, confirm, upload, consent, progress, maps, tracks, journal links.
@@ -194,7 +201,7 @@ before component-specific media queries.
 ## Checklist before finishing web UI work
 
 - Reused a `.veyq-*` class and `--app-*` token before adding local styles / raw colors.
-- Defined light **and** dark (`styles/dark.css`) for any new semantic color.
+- Defined light **and** dark for any new semantic color — both in `styles/base.css` (`:root` and `:root.veyq-dark`).
 - Memory/Chapter language; folders secondary; no Album/Explorer.
 - Rows for management data, cards for content; no nested cards.
 - Dialog actions ordered + in-progress-safe; icon-only actions labelled.

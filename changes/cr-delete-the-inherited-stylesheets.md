@@ -1,7 +1,7 @@
 ---
 id: cr-delete-the-inherited-stylesheets
 title: Delete the pre-E2EE stylesheets that outlived the views they were written for
-status: planned
+status: done
 satisfies: []
 adrs: []
 invariants:
@@ -71,20 +71,20 @@ that one class.
 
 Staged by risk, deliberately: the earlier a phase, the less its deletion can be wrong.
 
-- [ ] 1 web — **provably dead by an absent dependency.** The `.cm-*` CodeMirror block in `memory.css`, and any
+- [x] 1 web — **provably dead by an absent dependency.** The `.cm-*` CodeMirror block in `memory.css`, and any
       other vendor block whose package is not in `web/package.json`. ·
       Done when: `grep -ri codemirror web/package.json web/src` returns nothing, `cd web && npm run check`
       green, live pass clean.
-- [ ] 2 web — **whole dead sections and whole dead files**, where every class in a block is a candidate.
+- [x] 2 web — **whole dead sections and whole dead files**, where every class in a block is a candidate.
       Deleting a section is more reviewable than picking classes out of a live block, so this phase takes all
       of them before any phase touches a mixed block. ·
       Done when: `npm run check` green, live pass clean.
-- [ ] 3 web — **the remainder, one stylesheet per commit**, with the live pass between commits rather than at
+- [x] 3 web — **the remainder, one stylesheet per commit**, with the live pass between commits rather than at
       the end of the phase. ·
       Done when: `npm run check` green, live pass clean per sheet, and the re-run predicate is near zero.
-- [ ] 4 admin-web — the same predicate and the same staging over `admin-web/src/styles/` + `admin-web/src/style.css`. ·
+- [x] 4 admin-web — the same predicate and the same staging over `admin-web/src/styles/` + `admin-web/src/style.css`. ·
       Done when: `cd admin-web && npm run check` green, live pass clean.
-- [ ] 5 docs + the guard question — close #136, #137 and #146 in `docs/inbox.md`, correct anything the
+- [x] 5 docs + the guard question — close #136, #137 and #146 in `docs/inbox.md`, correct anything the
       styleguide now states falsely, and **re-ask #140**. ·
       **Entry condition for the guard half, phrased against what this phase would change:** the re-run predicate
       returns few enough hits that a guard is green on the tree this CR leaves behind. If it does not, #140's
@@ -118,4 +118,34 @@ number, or reopened as a guard that was **seen green on the untouched tree first
 
 ## Retrospective
 
-<!-- filled at close -->
+**Planning.** The phase-2 premise did not survive contact: *"whole dead sections"* assumes section headers, and
+these sheets have none — `grep -n '^/\*'` finds 7 top-level comments in `memory.css`, 0 in `forms.css`, and all
+of them are later reason notes. The reviewable unit had to be re-derived at implement time as a *contiguous run
+of dead rules*. Cheap to fix, but it is the second time a CR named a structure it had not looked at; the locator
+block would have caught it, since the CR already had the habit of carrying one for counts but not for *shapes*.
+**Next time:** when a phase names a structural unit ("sections", "blocks", "groups"), the locator proves that
+unit exists, not just that the corpus does.
+
+**Planning, the good call worth keeping.** *"The predicate is a work-list, never an authority"* earned its
+place four times over. The predicate was wrong four times, each in a different direction, and three of the four
+were found by the second angle (a blunt substring sweep) rather than by the live pass. A CR that had trusted
+461 would have deleted six live classes in phase 1.
+
+**Execution.** The `;` hole in the CSS parser is the real miss: `@import` statements swallowed the first rule
+after them, so `.veyq-shell` was never in the *defined* set and could not be reported unused — the predicate
+would have missed inbox #136, the hand-found grain this CR folded in precisely because it was already known.
+The tell was available from minute one and ignored: the CR's own Locator said *"grep -c . web/src/style.css"*,
+i.e. the entry barrel is part of the corpus, and the entry barrel is the one file that is mostly at-rules.
+**Root cause:** the parser was written for `styles/*.css` and then pointed at `style.css` without re-reading
+what makes that file different. **Next time:** when one input to a scanner is structurally unlike the others,
+run the scanner on that one alone and eyeball its output before trusting the aggregate.
+
+**Execution.** Walked straight into `changes/README.md` § *An exit code from a chain is not the command's exit
+code* — `echo … && grep -c … && python3 apply.py; echo "APPLY EXIT: $?"` reported `1` from the `grep` that
+found zero matches, while the applier never ran at all. The rule was in the brief for this session. **Next
+time:** no `&&` between a diagnostic and the command whose status is being read; run the command alone and
+capture `$?` on the next line.
+
+**Process.** Two working lessons are now rules rather than retro prose (§ *bite the MEASUREMENT*, § *a false
+positive is explained, not excluded*), because both are about gates in general and not about CSS.
+

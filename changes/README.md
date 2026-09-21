@@ -926,6 +926,41 @@ it. Its sibling holds too: when a bite asserts that an injection reddens **one**
 against the *named* other case, never against "nothing else went red" — the injection legitimately reddens
 every test that depends on the same branch, and rejecting those turns a correct bite into a false alarm.
 
+### When the CR's gate is a bespoke measurement, bite the MEASUREMENT before trusting its green
+
+**§ *bite-proof a guard* applied one level up.** Every rule around it assumes the gate is `check` or a
+`scripts/` guard that somebody already bit. A CR whose real gate is something built for that CR — a probe, a
+diff, a rewriter — carries an assertion nobody has ever tested, and a green from it reads exactly like a green
+from a gate that works. `cr-delete-the-inherited-stylesheets` had no automatic gate at all (nothing in
+`npm run check` renders a pixel, and Vite neither purges nor validates CSS), so its gate was a computed-style
+fingerprint plus a CSS rewriter. Both were wrong on the first try and both said so only when bitten:
+
+- The **rewriter** was checked by *"every declaration belonging to a surviving selector must still be present
+  byte for byte, and the braces must balance"* — run against the untouched tree, then against a copy with the
+  deletion applied. It failed on all eight sheets: the deletion span started at the beginning of the line
+  containing the rule's start offset, which sits **after the previous rule's closing brace**, so each deletion
+  ate a `}`. Nothing else would have caught that before the build.
+- The **measurement** was checked by deleting one live rule through the CSSOM and requiring it to go red —
+  and the first two victims moved no computed value, so the bite proved nothing until the victim was *chosen*
+  by "deleting it provably changes a computed property". § *prove the injection LANDED*, for a probe.
+
+The cheap version of this rule: **a measurement that has only ever been green has not been tested.** Make it
+red on purpose once, in the same session, before any green from it is allowed to authorise a deletion.
+
+### A false positive in a measurement is explained, not excluded
+
+The corollary, and the place where the repair is more dangerous than the fault. The same fingerprint reported
+*every element on the page* changed, with no visible difference, whenever a surface was probed before a
+PrimeVue `Select` or `Tabs` had ever mounted: those components register `--p-select-*` / `--p-tabs-*` on
+`:root` lazily, and custom properties inherit. The obvious repair — drop the vendor's `--p-` namespace from
+the fingerprint — **would have blinded the gate**, because the project's own `base.css` deliberately defines
+some `--p-*` names itself, and their deletion is exactly the regression the gate exists to catch. The repair
+that holds removes the *confounder* instead: warm every surface once before measuring, so the registry is in
+the same state on both sides of the comparison.
+
+Generalised: when a gate is noisy, find out **what** differs before deciding what to ignore. An exclusion is a
+permanent hole in the shape of today's confusion, and it reports green from inside the hole.
+
 ### An exit code from a chain is not the command's exit code
 
 **§ *prove the injection LANDED* generalises past injections, and the ordinary commands are where it is
