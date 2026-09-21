@@ -4,45 +4,7 @@
     color: var(--app-text);
   }
 
-  .workspace-topbar-center,
-  .notification-trigger,
-  .upload-status-trigger,
-  .workspace-action-button.p-button,
-  .notification-panel,
-  .upload-status-panel,
-  .upload-status-inline,
-  .empty-home-card,
-  .login-card,
-  .tenant-row,
-  .tenant-stats div,
-  .memory-card,
-  .memory-scope-root-card,
-  .memory-journal-help,
-  .memory-journal-link,
-  .memory-journal-context,
-  .memory-journal-unavailable,
-  .memory-journal-empty,
-  .memory-journal-type-picker,
-  .memory-journal-media-option,
-  .memory-journal-embed-option,
-  .asset-bucket-button,
-  .asset-camera-chip,
-  .asset-selection-toolbar,
-  .asset-bucket-action-row button,
-  .asset-selection-toolbar button,
-  .asset-batch-form button,
-  .asset-card-options-button,
-  .asset-bucket-media-item,
-  .memory-cover-option,
-  .memory-upload-file-list li,
-  .passkey-row,
-  .support-notice,
-  .suggest-panel,
-  .suggest-row,
-  .lightbox-nav,
-  .media-lightbox-date-form input,
-  .asset-dialog-form input,
-  .asset-dialog-form select {
+  .login-card {
     background: var(--app-surface);
     color: var(--app-text);
   }
@@ -60,23 +22,7 @@
     color: var(--app-warning-text);
   }
 
-  .memory-card:hover,
-  .memory-folder-card:hover,
-  .memory-scope-card:hover,
-  .memory-create-card:hover {
-    border-color: var(--app-line);
-  }
-
-  .settings-table-row.group-list-row:focus-visible,
-  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible,
-  .tenant-dialog .p-dialog-header-icon:focus-visible {
+  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
     outline-color: var(--app-focus);
-  }
-
-  .sidebar-error,
-  .media-lightbox-error,
-  .upload-error,
-  .asset-batch-error {
-    color: var(--app-danger) !important;
   }
 }

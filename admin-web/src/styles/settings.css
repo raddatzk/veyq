@@ -1,28 +1,7 @@
-.settings-page {
-  width: 100%;
-}
 
 .settings-panel {
   display: grid;
   gap: 1.35rem;
-}
-
-.tenant-settings-stack {
-  display: grid;
-  gap: 1.35rem;
-}
-
-.tenant-settings-header {
-  display: grid;
-  gap: 0.25rem;
-  padding-inline: 0.15rem;
-}
-
-.tenant-settings-header h1 {
-  margin: 0;
-  color: var(--app-text);
-  font-size: clamp(1.55rem, 1rem + 1vw, 2rem);
-  line-height: 1.12;
 }
 
 .settings-panel h1 {
@@ -47,10 +26,6 @@
   border-top: 0;
 }
 
-.settings-form-disabled {
-  opacity: 0.72;
-}
-
 .settings-form h2 {
   margin: 0;
   font-size: 1rem;
@@ -59,27 +34,6 @@
 .settings-form h3 {
   margin: 0;
   font-size: 0.95rem;
-}
-
-.login-method-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1.2rem;
-  align-items: start;
-}
-
-.login-method-panel {
-  display: grid;
-  min-width: 0;
-  gap: 1rem;
-}
-
-.login-method-subsection {
-  display: grid;
-  gap: 0.85rem;
-  margin-top: 0.25rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--app-line);
 }
 
 .settings-section-header {
@@ -92,17 +46,6 @@
 
 .settings-section-header h2 {
   margin: 0;
-}
-
-.settings-danger-zone {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.settings-danger-zone h2 {
-  color: var(--app-danger);
 }
 
 .settings-form label {
@@ -120,9 +63,7 @@
     padding: 1rem;
   }
 
-  .settings-section-header,
-  .settings-danger-zone,
-  .locale-markdown-editor-row {
+  .settings-section-header {
     align-items: flex-start;
     flex-direction: column;
   }

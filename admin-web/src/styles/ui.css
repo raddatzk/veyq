@@ -1,7 +1,6 @@
 
 
-.veyq-surface,
-.veyq-card {
+.veyq-surface {
   min-width: 0;
   border: 1px solid var(--app-line);
   border-radius: var(--app-radius);
@@ -14,18 +13,12 @@
   padding: 1.15rem;
 }
 
-.veyq-action-row,
-.veyq-button-row,
 .veyq-dialog-action-row,
 .veyq-action-group {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-}
-
-.veyq-action-row {
-  justify-content: space-between;
 }
 
 .veyq-dialog-action-row {
@@ -39,15 +32,12 @@
   margin-left: auto;
 }
 
-.veyq-button-row .p-button,
-.veyq-button-row button,
 .veyq-dialog-action-row .p-button,
 .veyq-dialog-action-row button {
   max-width: 100%;
 }
 
-.veyq-form,
-.veyq-form-grid {
+.veyq-form {
   display: grid;
   min-width: 0;
   gap: 1rem;
@@ -57,31 +47,6 @@
   margin: 0;
   color: var(--app-muted);
   line-height: 1.5;
-}
-
-/* A labeled field block inside a .veyq-form: label text + control + optional hint (cr-0154). */
-.veyq-form-field {
-  display: grid;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-/* Two related fields side by side (e.g. first name + last name) so a single hint below reads as covering the
-   pair, not just the last field. Each half fills its track; the controls stretch via the global `label` grid. */
-.name-row {
-  display: flex;
-  gap: 1rem;
-}
-.name-row > label {
-  flex: 1;
-  min-width: 0;
-}
-
-/* Inline validation error inside a .veyq-form, shown under the failing field (cr-0154). */
-.veyq-form-error {
-  margin: 0;
-  color: var(--app-danger);
-  font-size: 0.85rem;
 }
 
 .veyq-form .p-inputtext,
@@ -130,10 +95,6 @@
   color: var(--app-warning-text);
 }
 
-.veyq-badge.muted {
-  color: var(--app-muted);
-}
-
 /* Changed-identity warning badge (cr-0099): the directory key differs from the pin (a rotation or a substitution)
    and needs review. The only trust surface shown by default — verified/recognized states are not surfaced. */
 .veyq-badge.changed {
@@ -148,7 +109,6 @@
 }
 
 @media (max-width: 720px) {
-  .veyq-action-row,
   .veyq-action-group {
     display: grid;
     grid-template-columns: 1fr;
@@ -161,14 +121,11 @@
 }
 
 @media (max-width: 420px) {
-  .veyq-button-row,
   .veyq-dialog-action-row {
     display: grid;
     grid-template-columns: 1fr;
   }
 
-  .veyq-button-row .p-button,
-  .veyq-button-row button,
   .veyq-dialog-action-row .p-button,
   .veyq-dialog-action-row button {
     width: 100%;
