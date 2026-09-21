@@ -228,8 +228,10 @@ gaps:
     device shows itself, and the channel is never read again after the seal. `LoginView.test.ts` covers that
     entry's behavioural half, including the camera gate the criterion names.
 
-    **Two things this surface inherits rather than owns.** The adopted session carries inbox #123 — nothing in
-    this client serializes refresh, so two tabs can revoke their own family — exactly as every other web session
-    does; it predates device linking and is not fixed by this flow. And E2E stays out of reach for the reason
+    **One thing this surface inherits rather than owns, and one that was fixed under it.** Inbox #123 — a
+    refresh the client never receives, or two that race, revoking the family — was closed on 2026-09-21 for
+    every web session at once (ADR 0004 § the one-generation grace, plus a shared in-flight refresh in
+    `web/`), so the adopted session no longer carries it. It was never this flow's to fix and it is not this
+    flow's to claim. And E2E stays out of reach for the reason
     the sessions panel's did — the flow needs two live sessions of one account, which the current harness does
     not stand up — which is stated here rather than left as a silently missing ref.
