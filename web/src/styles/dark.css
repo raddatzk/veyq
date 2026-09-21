@@ -5,8 +5,7 @@
   }
 
   .tenant-sidebar,
-  .workspace-topbar,
-  .support-notice {
+  .workspace-topbar {
     box-shadow: var(--app-shadow-sm);
   }
 
@@ -19,78 +18,31 @@
 
   .sidebar-tenant-link,
   .sidebar-nav-link,
-  .sidebar-memory-link,
   .sidebar-scope-link,
   .profile-button,
-  .settings-link-list a,
-  .memory-card-main,
-  .settings-table-row.group-list-row,
-  .suggest-row {
+  .memory-card-main {
     color: var(--app-text);
   }
 
   .sidebar-section-action:hover,
   .sidebar-tenant-link:hover,
   .sidebar-nav-link:hover,
-  .sidebar-memory-link:hover,
   .sidebar-scope-link:hover,
   .sidebar-tenant-link-active,
   .sidebar-nav-link.router-link-active,
-  .sidebar-memory-link.router-link-active,
   .sidebar-scope-link.router-link-active,
   .profile-button:hover,
   .veyq-icon-button:hover,
   .lightbox-nav:not(:disabled):hover,
-  .veyq-text-button:hover:not(:disabled),
-  .asset-bucket-button:hover,
-  .asset-bucket-action-row button:hover,
-  .asset-selection-toolbar button:hover,
-  .asset-batch-form button:hover,
-  .asset-card-options-button:hover,
-  .suggest-row:hover {
+  .veyq-text-button:hover:not(:disabled) {
     background: var(--app-hover);
     color: var(--app-text);
   }
 
-  .workspace-topbar-center,
-  .notification-trigger,
-  .upload-status-trigger,
-  .workspace-action-button.p-button,
-  .notification-panel,
-  .upload-status-panel,
-  .upload-status-inline,
-  .empty-home-card,
   .login-card,
-  .tenant-row,
-  .tenant-stats div,
   .memory-card,
-  .memory-scope-root-card,
-  .memory-journal-help,
-  .memory-journal-link,
-  .memory-journal-context,
-  .memory-journal-unavailable,
-  .memory-journal-empty,
-  .memory-journal-type-picker,
-  .memory-journal-media-option,
-  .memory-journal-embed-option,
-  .asset-bucket-button,
-  .asset-camera-chip,
-  .asset-selection-toolbar,
-  .asset-bucket-action-row button,
-  .asset-selection-toolbar button,
-  .asset-batch-form button,
-  .asset-card-options-button,
-  .asset-bucket-media-item,
-  .memory-cover-option,
-  .memory-upload-file-list li,
-  .passkey-row,
-  .support-notice,
-  .suggest-panel,
-  .suggest-row,
   .lightbox-nav,
-  .media-lightbox-date-form input,
-  .asset-dialog-form input,
-  .asset-dialog-form select {
+  .media-lightbox-date-form input {
     background: var(--app-surface);
     color: var(--app-text);
   }
@@ -99,28 +51,7 @@
     background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   }
 
-  .public-share-header:not(.public-share-header-with-cover) {
-    background: color-mix(in srgb, var(--app-surface) 86%, var(--app-accent) 14%);
-  }
-
-  .auth-method-switch,
-  .toggle-row,
-  .settings-table-head,
-  .locale-markdown-editor-row,
-  .asset-reference-media,
-  .upload-dropzone,
-  .media-thumb,
-  .media-grid-tile,
-  .memory-journal-help code,
-  .memory-cover-option img,
-  .memory-cover-option .pi,
-  .asset-bucket-media-item img,
-  .asset-bucket-media-item > .pi,
-  .asset-reference-media img,
-  .asset-reference-media > .pi,
-  .asset-bucket-action-row button:disabled,
-  .asset-selection-toolbar button:disabled,
-  .asset-batch-form button:disabled {
+  .media-grid-tile {
     background: var(--app-surface-muted);
     color: var(--app-muted);
   }
@@ -128,16 +59,10 @@
   .sidebar-tenant-avatar,
   .sidebar-nav-link > .pi,
   .sidebar-scope-icon,
-  .sidebar-memory-thumb,
-  .memory-scope-root-icon,
   .memory-card-cover,
   .memory-card-icon,
   .memory-folder-card > .pi,
-  .memory-scope-card-icon,
-  .memory-create-card .pi,
-  .memory-detail-cover,
-  .profile-avatar,
-  .empty-state-icon {
+  .memory-create-card .pi {
     background: var(--app-accent-soft);
     color: var(--app-accent);
   }
@@ -147,14 +72,12 @@
     color: var(--app-on-strong);
   }
 
-  .sidebar-scope-icon.pi-users,
-  .memory-scope-card-group .memory-scope-card-icon {
+  .sidebar-scope-icon.pi-users {
     background: var(--app-warning-soft);
     color: var(--app-warning-text);
   }
 
-  .sidebar-scope-icon.pi-user,
-  .memory-scope-card-user .memory-scope-card-icon {
+  .sidebar-scope-icon.pi-user {
     background: var(--app-success-soft);
     color: var(--app-success-text);
   }
@@ -164,41 +87,14 @@
     color: var(--app-accent);
   }
 
-  .sidebar-memory-thumb,
   .memory-folder-card > .pi {
     background: var(--app-info-soft);
     color: var(--app-info-text);
   }
 
-  .memory-detail-cover {
-    background: linear-gradient(135deg, var(--app-accent-soft), var(--app-info-soft));
-  }
-
-  .memory-titlebar p,
   .memory-section-header span,
   .memory-card-main small,
-  .memory-detail-meta,
-  .memory-dialog-copy,
-  .memory-dialog-cover,
-  .memory-cover-zoom,
-  .public-share-header p,
-  .public-share-child span,
-  .tenant-row small,
-  .tenant-stats span,
-  .settings-table-head,
-  .locale-markdown-editor-empty,
-  .memory-journal-field,
-  .memory-journal-help h4 {
-    color: var(--app-muted);
-  }
-
-  .locale-markdown-editor-entry textarea {
-    border-color: var(--app-line);
-    background: var(--app-surface-muted);
-    color: var(--app-text);
-  }
-
-  .locale-markdown-editor-entry textarea::placeholder {
+  .memory-cover-zoom {
     color: var(--app-muted);
   }
 
@@ -221,8 +117,6 @@
     background: var(--app-backdrop-strong);
   }
 
-  .memory-journal-rendered a,
-  .memory-journal-media-option-check,
   .media-lightbox-metadata a,
   .media-lightbox-stage a {
     color: var(--app-success);
@@ -243,21 +137,15 @@
 
   .memory-card:hover,
   .memory-folder-card:hover,
-  .memory-scope-card:hover,
   .memory-create-card:hover {
     border-color: var(--app-line);
   }
 
-  .settings-table-row.group-list-row:focus-visible,
-  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible,
-  .tenant-dialog .p-dialog-header-icon:focus-visible {
+  .tenant-dialog .p-dialog-header-actions .p-button:focus-visible {
     outline-color: var(--app-focus);
   }
 
-  .sidebar-error,
-  .media-lightbox-error,
-  .upload-error,
-  .asset-batch-error {
+  .media-lightbox-error {
     color: var(--app-danger) !important;
   }
 }
