@@ -94,8 +94,13 @@ blob for that Memory; the `PUT` writes only the caller's.
 - **The aggregate is a presentation choice, not a confidentiality guarantee — and copy must not say otherwise.**
   Item marks are sealed under `K_SC`, which every member of a group holds; and because the server is
   operator-blind it **cannot aggregate on our behalf**, so the client necessarily receives the **per-member**
-  blobs and could name who marked what. Showing only a count is a UI decision on top of data that is not
-  private between members. So **no string in the UI or in `wiki/` may imply that nobody can see what you
+  blobs. **It cannot put a name to them** — `ItemFavoritesEntry` carries `self` and nothing else, so the wire
+  holds no member id at all, and that was a deliberate narrowing during the build. What survives is that the
+  entries stay **separable**: one entry is one member's whole coherent set, readable with a key every member
+  holds. So a member learns another member's entire marking pattern as an unnamed set — **and in a small scope
+  the name follows by elimination**, because with two members *"not mine"* is the other person. The narrowing
+  raises the cost of attribution with scope size; it does not remove it, and at the size most spaces actually
+  have it removes very little. So **no string in the UI or in `wiki/` may imply that nobody can see what you
   marked** — *"only mine"* is a **filter**, never a promise. This is the same trap as the pin defect above, one
   level down, which is why that one was fixed rather than deferred.
 - **The write shape is the size limit, and it is why item blobs are per-node.** The whole set is re-sealed on
