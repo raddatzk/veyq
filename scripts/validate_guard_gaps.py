@@ -93,6 +93,13 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      `VEYQ_BLOB_STORE_PUBLIC_ENDPOINT` disagreeing with the origin you browse is green here and a broken
      presigned URL in the browser — which no file-shaped assertion can decide at all. Pinned so the limit in
      that guard's docstring is executable rather than a sentence.
+  16 a CSS class that no markup applies passes `validate_stylesheet_anchors` when it is not the selector's
+     ANCHOR — `.a-live-class .never-applied` is green, `.never-applied` alone is red. **Left open on purpose**
+     — the inside of a selector is exactly where a stylesheet legitimately reaches into a dependency's DOM
+     (`.memory-card .p-card-body`), and the trust-chain job is buildless, so there is no `node_modules` and
+     therefore no honest way to tell a vendor class from a typo at that position. Anchoring is what lets that
+     guard need no vendor list at all. Pinned so the limit in that guard's docstring is executable rather than
+     a sentence.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -366,6 +373,23 @@ def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
     raise ForgeError("no .run/*.xml carries a $PROJECT_DIR$-rooted env value — re-anchor this forgery")
 
 
+def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
+    # validate_stylesheet_anchors judges a selector's ANCHOR compound and nothing deeper, so a class no markup
+    # applies is green wherever it sits behind a combinator. The live anchor is read out of the sheet rather
+    # than spelled here: pinning one class name would turn a rename into a red guard, which is the opposite of
+    # what a gap-pin is for.
+    sheet = root / "web" / "src" / "styles" / "ui.css"
+    if not sheet.is_file():
+        raise ForgeError("web/src/styles/ui.css is missing — the shared primitives sheet moved or was deleted")
+    src = sheet.read_text()
+    m = re.search(r"^\.([a-z][a-z0-9-]*)\s*\{", src, re.M)
+    if not m:
+        raise ForgeError("no class-anchored rule in ui.css — re-anchor this forgery")
+    sheet.write_text(src + "\n.%s .guard-gap-never-applied {\n  color: red;\n}\n" % m.group(1))
+    return ("a class no markup applies, behind a combinator rather than at the anchor "
+            "(the anchor-only open gap)")
+
+
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
@@ -383,6 +407,7 @@ CASES = [
     ("13", "validate_store_reclaim_arity.py", forge_direct_store_delete_bypass, False),
     ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
     ("15", "validate_run_configs.py", forge_run_config_env_path_into_the_void, True),
+    ("16", "validate_stylesheet_anchors.py", forge_dead_class_inside_a_selector, True),
 ]
 
 
