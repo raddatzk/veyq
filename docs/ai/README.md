@@ -62,6 +62,15 @@ Five rules follow:
    fits the old: reconcile into existing crosscutting concerns and features/use-cases; never create
    orphan concepts. Durable decisions → an ADR in `docs/decisions/`. This is a sparring
    conversation, not transcription. **Scope each refinement** — don't refine all of crypto at once.
+   **And re-derive the row's question before answering it — a row records the symptom it was written from, not
+   the problem.** On 2026-09-21 five rows were refined in one pass and **all five** named the wrong open
+   question: #140 asked whether a dead-CSS guard's exceptions could be *derived* (they could — the blocker was
+   that 71 % of the corpus is dead, so the guard would be red on the day it was born), and #144 asked whether
+   three near-identical dialogs should merge (there are five, and they share no contract, so what is duplicated
+   is chrome rather than confirmation). A row is written at the moment of discovery, when only the symptom is
+   visible; asking its question again against the tree was the whole value of each of those refinements. This is
+   step 3's *"re-derive it, don't trust the status word"* applied one step earlier — to an **open** row, where it
+   is cheapest.
 3. **Diff the refined state against the code** — scoped to what you just refined, **measured, not recalled**
    (every count is a cited command's output). This is the step that closes the loop: without it the pipeline
    only runs forward, and nothing ever asks *"is this still true?"*. Read it **both ways** — a disagreement is
