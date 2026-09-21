@@ -160,26 +160,6 @@
     background: color-mix(in srgb, var(--app-surface) 72%, transparent);
   }
 
-  .memory-journal-codemirror .cm-content {
-    caret-color: var(--app-accent);
-  }
-
-  .memory-journal-codemirror .cm-cursor,
-  .memory-journal-codemirror .cm-dropCursor {
-    border-left-color: var(--app-accent);
-  }
-
-  .memory-journal-codemirror .cm-selectionBackground,
-  .memory-journal-codemirror.cm-focused .cm-selectionBackground,
-  .memory-journal-codemirror .cm-focused .cm-selectionBackground {
-    background: color-mix(in srgb, var(--app-accent) 30%, transparent);
-  }
-
-  .cm-tooltip.cm-tooltip-autocomplete ul li[aria-selected="true"] {
-    background: color-mix(in srgb, var(--app-accent) 76%, var(--app-backdrop-strong)) !important;
-    color: var(--app-on-strong) !important;
-  }
-
   .public-share-header:not(.public-share-header-with-cover) {
     background: color-mix(in srgb, var(--app-surface) 86%, var(--app-accent) 14%);
   }
