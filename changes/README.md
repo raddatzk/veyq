@@ -810,6 +810,28 @@ attempt to bite it surfaced which semantics the use-case had meant all along. So
 design question, asked in the cheapest possible place**, and it is worth one round of "what *would* this cost, in
 what the user sees?" before deciding the lever is at fault.
 
+### A threshold added against false positives is where the false NEGATIVES hide
+
+A sensor that scores something continuous — a length, a ratio, a score — almost always grows a floor, because
+without one it cries wolf. The floor is the right move and it creates a blind spot in the one place nobody
+looks: **just under it.** And the defect the sensor exists to catch is frequently small, because small is what
+"not done properly" looks like.
+
+cr-wire-assertion-store-and-http's opacity check reads a declared-opaque field and asks whether it decodes to
+readable text. Short random strings do, now and then — measured, 7 in 5000 at 8 bytes — so it got a floor at
+24 bytes, itself measured (0 in 80 000 above it). Then the bite put an **unsealed Memory name** on the wire:
+**23 bytes**, one under the floor, and the check never looked at it. The floor was correct and the oracle was
+still wrong.
+
+The fix is not a lower floor — that just moves the blind spot and brings the noise back. It is a **second,
+orthogonal test whose direction is opposite**: below the floor, *shortness itself* became the evidence, because
+nothing legitimate on that wire is short (an AEAD value carries a 12-byte nonce and a 16-byte tag before any
+payload, and the measured minimum across every field a real suite sends was 32). Two tests, no gap.
+
+So when a CR introduces a threshold: **write the bite that lands one unit under it**, and if that bite cannot
+be made red, the threshold is hiding something. Where the quantity has a structural minimum, that minimum is
+usually the second test.
+
 ### A named lever that moves nothing is EITHER a design question or an unasserted property — decide which
 
 The section above sends an unbiteable test back to the design. That is one of two answers, and reaching for it
@@ -834,6 +856,13 @@ already bit, and only structurally: a 31-byte AES key throws downstream.)
 has no behaviour of its own — it is asserted only where some test compares it to an independent source. Before
 writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
 before touching either the lever or the design.
+
+**A structured config file has its own way of swallowing a lever: the duplicate key.** Injecting into YAML or
+JSON by inserting a block near an anchor can produce a second `properties:` (or any key) beside the real one,
+and a loader keeps exactly one of them — `yaml.safe_load` keeps the last. The file looks injected, the diff
+looks right, the guard stays green, and the conclusion drawn is *"the guard does not fire"* rather than *"the
+injection did not land"*. Check what the **loader** sees, not what the file says: one line
+(`python3 -c "import yaml; print(yaml.safe_load(open(f))[...])"`) before believing a green.
 
 ### A control's LEVER must itself be bitten — a harness can make one inert and still print green
 
