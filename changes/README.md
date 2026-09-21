@@ -733,6 +733,24 @@ described by its **purpose** (the slot after a reconcile), and those are differe
 carries assertions in sequence, **the CR names which one is expected to fail first**. It costs a clause, it is
 checked for free on the first run, and a prediction that misses is worth more than one that was never made.
 
+### Bite a new RULE against its own dynamics, not only against the state it will read
+
+A decision that changes how the system answers is bitten in two places, and the second is easy to miss. The
+first is its **input**: which cases land on which branch, measured against the untouched tree. The second is
+what the rule **does to the state it reads** — because after it fires once, the next caller sees a world the
+rule itself moved.
+
+ADR 0004's one-generation grace was decided on four measurements of the first kind, all correct: a dropped
+response and five concurrent losers land one generation behind, an ordinary replay lands three behind. It was
+then written as *"rotate and supersede the orphaned successor"*, which increments — and the third concurrent
+caller of the very case it was built for would have been two behind and revoked the family. Nothing in the
+four bites could see it: they measured distances the rule had not yet touched.
+
+The tell is a rule that both **reads** a piece of state and **writes** it. Trace it twice — once for the
+second caller, once for the party it just orphaned — before it is written down, because after it ships those
+two are a security property. Cheap here: it was a paper trace over measurements already in hand, and it cost
+one ADR commit instead of an implementation round.
+
 ### A bite's lever must survive the CR's own later phases
 
 **A CR that fixes a defect and also pins a property against that defect will, if it is not careful, lever the
@@ -894,6 +912,14 @@ so that an operator who renames it has somewhere to say so).
 
 **Assert the expected test goes red by name, never that "something failed".** An injection can break compilation instead of the assertion, and a
 harness that greps for a failing test name then reads *no match* as **green** reports the exact false negative
+**And it reaches the harness a CR uses to PROVE itself, which nothing else in this file guards.** The
+trust-chain job runs `for f in scripts/validate_*.py` behind a `count == 0` backstop, for exactly this reason;
+a local re-implementation of that loop that omits the backstop prints `failures=0` when its glob matched
+nothing, and a CR then cites it as evidence. cr-refresh-one-generation-grace did that twice before noticing,
+because the summary line it read — `GUARDS DONE failures=0` — is identical for "34 green" and "none ran". So
+any harness standing in for a check **reports what it ran, not only what failed**, and treats an empty run as
+a failure. Copy the backstop with the loop.
+
 **The same green-never-earned reaches a test through its own fixture, with no injection involved.** A test that
 asserts *"X survived a round-trip"* proves nothing if its setup hands X over a second time on the way through.
 cr-device-wrap-join-and-remote-cutoff's first round-trip case wrote the register twice and re-supplied the same
