@@ -625,51 +625,6 @@
   background: transparent;
 }
 
-.memory-cover-picker {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
-  gap: 0.75rem;
-  max-height: 420px;
-  overflow: auto;
-}
-
-.memory-cover-option {
-  display: grid;
-  gap: 0.55rem;
-  min-width: 0;
-  padding: 0.55rem;
-  border: 1px solid var(--app-line);
-  border-radius: var(--app-radius-sm);
-  background: var(--app-on-strong);
-  cursor: pointer;
-}
-
-.memory-cover-option input {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.memory-cover-option img,
-.memory-cover-option .pi {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  border-radius: var(--app-radius-sm);
-  background: var(--app-surface-muted);
-  color: var(--app-muted);
-  object-fit: cover;
-}
-
-.memory-cover-option strong {
-  overflow: hidden;
-  color: var(--app-text);
-  font-size: 0.85rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .memory-cover-editor {
   display: grid;
   justify-items: center;
