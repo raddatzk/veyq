@@ -817,6 +817,28 @@ has no behaviour of its own — it is asserted only where some test compares it 
 writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
 before touching either the lever or the design.
 
+### A control's LEVER must itself be bitten — a harness can make one inert and still print green
+
+**A lever you never watched redden is not a control, and it fails in the one direction nobody checks.** The
+rules above are about a lever that visibly moves nothing. This is the quieter case: the lever runs, the suite
+stays green, and that green is read as *"the control held"* when it in fact means *"the harness cannot express
+the defect"*. The two are indistinguishable from the outside, which is why the lever needs its own bite.
+
+`cr-share-picker-inherits-the-safari-rereads` had to pin that a Safari re-read window is not defeated by the
+caller clearing its input. Its third bite was a control over the second: *move the `input.value = ''` back into
+the synchronous pick, and the first test goes red again.* The first draft of that harness copied the reference
+file's `Object.defineProperty(el, 'files', …)`, which installs a **data** property — so a source that clears
+`value` synchronously leaves the test's own `files` untouched, the lever changed nothing observable, and the
+control passed while proving nothing. The harness had to model what the browser actually does: the picker hands
+over a list and goes on filling **that same array**, and `value = ''` swaps a fresh empty one into the element.
+Only then did the lever redden both tests together.
+
+**The general form: run each control's lever and watch it work, in the same pass that writes it.** A control
+whose lever is inert is indistinguishable from a fix that works — both print green, and the one that is lying
+is the one you will trust later. Note what made the gap findable at all: the CR had **named** the lever per bite
+test, so there was something concrete to try. A CR that says only "test that it stays fixed" leaves nothing to
+falsify, and the inert control is never discovered.
+
 ### A "nothing moved" bite names the test that goes RED when it moves
 
 **The default's tests and the default's *detector* are usually not the same tests**, and a bite that lists the
