@@ -79,6 +79,8 @@ Environment (all optional):
 """
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 import os
 import re
@@ -91,11 +93,17 @@ import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
 
+import yaml
+
 # A group's hook shells out to the operator tool for capture/restore, but reuses its rclone plumbing for the one
 # thing the CLI deliberately does not offer (purging a bucket). Importable because Python puts the running
 # script's own directory — `scripts/` — on `sys.path`, which also holds when `validate_e2e_discovery.py`
 # imports this module by path.
 import instance_backup
+# The opacity oracle needs the set of properties a spec DECLARES opaque. It is derived from the
+# contracts here, never listed, by reusing the guard's own predicate — one definition of "opaque",
+# not two that agree today (changes/README § a guard derives its anchor set from the code).
+import validate_field_visibility
 
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
@@ -560,6 +568,216 @@ def sweep(database: str, canary_file: Path, rel: str) -> str | None:
     return None
 
 
+def opaque_property_names() -> set[str]:
+    """Every property name some spec declares `contentEncoding: base64`.
+
+    Matching the recording by NAME is exact here rather than approximate, and that is a measured property of the
+    contracts, not an assumption: across all ten specs the opaque names and the plain ones are **disjoint**
+    (38 against 126, intersection empty). `scripts/validate_opaque_names_disjoint.py` keeps it that way — if a
+    name ever landed in both, this oracle would quietly stop checking the opaque one.
+    """
+    names: set[str] = set()
+    for spec in sorted((REPO / "contracts" / "api").glob("*.yaml")):
+        doc = yaml.safe_load(spec.read_text()) or {}
+        for schema in ((doc.get("components") or {}).get("schemas") or {}).values():
+            for prop, body in (schema.get("properties") or {}).items():
+                if validate_field_visibility.is_opaque(body):
+                    names.add(prop)
+    return names
+
+
+# The shortest thing `symWrap` can emit: a 12-byte nonce and a 16-byte tag, before a single byte of payload.
+# Nothing a client seals can be below it, which is what makes a length check an oracle rather than a heuristic.
+MIN_SEALED_BYTES = 28
+
+
+def opacity_failure(value: str) -> str | None:
+    """Why this declared-opaque value is not opaque, or None if it is fine.
+
+    **Two orthogonal tests, because one of them alone has a hole this CR walked into.** The obvious test is
+    readability: ciphertext does not decode to valid, printable UTF-8. But that test needs a length floor —
+    short random strings do decode to printable UTF-8 now and then (measured: 7/5000 at 8 bytes, 2/5000 at 12,
+    1/5000 at 16, and **0 in 80 000** at 24 and above) — and a floor is exactly where short *plaintext* hides.
+    Biting it proved the point: an unsealed Memory name went over the wire as **23 bytes** and the readability
+    test never looked at it.
+
+    So length is the second test, and on this wire it is not a heuristic at all. Measured across every
+    declared-opaque field a real suite sends, the shortest is **32 bytes** (`instanceSalt`, `nonce`,
+    `kdfParams`, `authPublicKey`, `recoveryMasterKeyTag`, `slugToken`), and the shortest an AEAD *can* be is
+    [MIN_SEALED_BYTES]. Anything below that is not a sealed value, whatever it decodes to.
+
+    A value that is not base64 at all is **not** this sweep's business: what shape a field may take is the
+    contract's question and `validate_field_visibility.py` answers it.
+    """
+    for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+        try:
+            raw = decoder(value + "=" * (-len(value) % 4))
+        except (binascii.Error, ValueError):
+            continue
+        if len(raw) < MIN_SEALED_BYTES:
+            return (f"decodes to {len(raw)} bytes — too short to be sealed at all "
+                    f"(a nonce and a tag are {MIN_SEALED_BYTES} before any payload)")
+        try:
+            text = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return None  # decoded, long enough, not text — the ordinary case
+        printable = sum(1 for ch in text if ch.isprintable() or ch in "\n\t")
+        if text and printable / len(text) >= 0.9:
+            return f"decodes to readable text: {text[:120]!r}"
+        return None
+    return None
+
+
+def walk_opaque(value, names: set[str], found: list[tuple[str, str]]) -> None:
+    """Collect every (property, reason) pair where a declared-opaque field failed [opacity_failure]."""
+    if isinstance(value, dict):
+        for key, entry in value.items():
+            if key in names and isinstance(entry, str):
+                why = opacity_failure(entry)
+                if why is not None:
+                    found.append((key, why))
+            walk_opaque(entry, names, found)
+    elif isinstance(value, list):
+        for entry in value:
+            walk_opaque(entry, names, found)
+
+
+def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
+    """Prove that what the suite SENT and RECEIVED carries no plaintext. Returns None, else why not.
+
+    **Two oracles over one recording, because the surface has two ways to leak.** A declared-opaque field that
+    decodes to readable text is a client that stopped sealing — the opacity check ADR 0044 named and assigned
+    to nobody. A canary appearing anywhere in a URL, a header or a body is the same absence oracle the database
+    sweep uses, and it is here because this is the only surface where path params, query strings, capability
+    headers and presigned URLs exist at all (ADR 0053 §3): by the time anything reaches the store, the URL that
+    carried it is gone.
+
+    **A population of zero is a failure, never a pass.** A recorder that never armed and a suite that made no
+    calls both produce "no leak found", which is indistinguishable from a clean run — the same trap
+    `changes/README` § *a bite test must tell "the guard held" apart from "nothing ran"* records, arriving
+    through a measurement instead of a test.
+    """
+    if not record_file.is_file():
+        return (f"{rel} recorded no HTTP traffic at {record_file.name} — the recorder did not arm, so this "
+                f"sweep would prove nothing. VEYQ_HTTP_RECORD_FILE must reach the suite process.")
+    # `split("\n")`, never `splitlines()`: Python splits the latter on U+0085 and U+2028 as well, which a
+    # recorded body can legitimately contain — it cut a JSON record in half the first time this ran.
+    entries = [json.loads(line) for line in record_file.read_text().split("\n") if line.strip()]
+    if not entries:
+        return f"{record_file.name} is empty — {rel} made no request, so a green HTTP sweep here means nothing."
+
+    canaries = json.loads(canary_file.read_text()) if canary_file.is_file() else []
+    names = opaque_property_names()
+    opacity: list[tuple[str, str, str]] = []
+    leaks: list[tuple[str, str, str]] = []
+    for entry in entries:
+        where = f"{entry['method']} {entry['url'].split('?')[0]}"
+        for body in (entry.get("requestBody"), entry.get("responseBody")):
+            if not body:
+                continue
+            try:
+                parsed = json.loads(body)
+            except (json.JSONDecodeError, TypeError):
+                continue
+            found: list[tuple[str, str]] = []
+            walk_opaque(parsed, names, found)
+            for prop, why in found:
+                opacity.append((where, prop, why))
+        haystack = "\n".join(filter(None, [
+            entry["url"], json.dumps(entry.get("requestHeaders") or {}),
+            entry.get("requestBody") or "", entry.get("responseBody") or "",
+        ]))
+        for canary in canaries:
+            if canary in haystack:
+                leaks.append((where, canary, "url/header/body"))
+
+    if opacity or leaks:
+        log(f"WIRE ASSERTION FAILED for {rel} on HTTP — {len(opacity)} opacity, {len(leaks)} canary hit(s):")
+        for where, prop, why in opacity:
+            log(f"    {where:<44} {prop} {why}")
+        for where, canary, kind in leaks:
+            log(f"    {where:<44} {kind} <- {canary!r}")
+        return (f"the wire assertion failed on HTTP: {len(opacity)} declared-opaque field(s) were not opaque, "
+                f"{len(leaks)} canary hit(s) (listed above)")
+
+    log(f"wire assertion: {len(entries)} request(s) from {rel} carry no readable opaque field and no canary")
+    return None
+
+
+def stored_blob_count(database: str) -> int:
+    """How many completed blobs this suite's own database records — the row side of what the bucket should hold.
+
+    Derived, never listed: it is what tells a suite that *stored nothing* (recovery, scope rotation) apart from
+    one whose objects went missing, without this file carrying a list of which suites upload. `veyq_blob` is the
+    only table a completed object is recorded in (`instance_backup.Database.blob_index`).
+    """
+    proc = subprocess.run(
+        COMPOSE + ["exec", "-T", "mariadb", "mariadb", "-uroot", f"-p{DB_ROOT_PASSWORD}", "-N", "-B",
+                   "-e", "SELECT COUNT(*) FROM veyq_blob;", database],
+        capture_output=True, text=True,
+    )
+    if proc.returncode != 0:
+        raise SweepError(f"could not count blobs in {database}: {proc.stderr.strip()[-300:]}")
+    return int(proc.stdout.strip() or 0)
+
+
+def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir: Path) -> str | None:
+    """Prove that nothing the suite sealed is readable in the object store — keys included.
+
+    **The orchestrator's surface, not the suite's** (ADR 0053 §3): only this side holds the store credentials.
+    A client-side hook would see what the client *sent* and never what is *stored* — not an object the server
+    wrote itself, and not the object key, which is a name the operator reads without opening anything.
+
+    Mirrors with the operator tool's own rclone plumbing rather than a second copy of it, so the sweep reads the
+    bucket the documented backup would capture.
+    """
+    if not canary_file.is_file():
+        return f"{rel} left no canary file — the store sweep would have proved the absence of nothing."
+    canaries = json.loads(canary_file.read_text())
+    if not canaries:
+        return f"{rel} recorded no canary — a green store sweep would mean nothing."
+
+    mirror = workdir / f"store-{bucket}-{rel.replace('/', '_')}"
+    mirror.mkdir(parents=True, exist_ok=True)
+    try:
+        _store_for(bucket).mirror_out(mirror)
+    except instance_backup.BackupError as e:
+        return f"could not mirror {bucket} for the store sweep: {e}"
+
+    objects = [path for path in mirror.rglob("*") if path.is_file()]
+    if not objects:
+        # **A suite that stores nothing is skipped OUT LOUD; a suite whose objects vanished is a failure.** The
+        # two look identical from the bucket, so the discriminator comes from the suite's own database rather
+        # than from a list of which suites upload — a list would go stale the first time a suite grew a file.
+        blobs = stored_blob_count(database)
+        if blobs:
+            return (f"{rel} recorded {blobs} blob(s) in {database} but {bucket} mirrors empty — the objects are "
+                    f"missing, or this sweep is pointed at the wrong bucket. Either way it proves nothing.")
+        log(f"store sweep skipped for {rel}: it stored no object ({database}.veyq_blob is empty), so there is "
+            f"nothing on this surface to prove absent")
+        return None
+
+    hits: list[tuple[str, str, str]] = []
+    for path in objects:
+        key = str(path.relative_to(mirror))
+        blob = path.read_bytes()
+        for canary in canaries:
+            if canary in key:
+                hits.append((key, canary, "object key"))
+            if canary.encode("utf-8") in blob:
+                hits.append((key, canary, "object bytes"))
+
+    if hits:
+        log(f"WIRE ASSERTION FAILED for {rel} on the store — {len(hits)} hit(s) in {bucket}:")
+        for key, canary, where in hits:
+            log(f"    {key:<44} {where} <- {canary!r}")
+        return f"the wire assertion failed on the store: {len(hits)} hit(s) in {bucket} (listed above)"
+
+    log(f"wire assertion: {len(canaries)} canary/canaries from {rel} appear in none of "
+        f"{len(objects)} object(s) of {bucket}, key or bytes")
+    return None
+
+
 class Instance:
     """The three things a boot is pointed at, and the one thing a group's hook replaces wholesale."""
 
@@ -977,6 +1195,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
     secret_file = inst.secret_file
     boot_log = workdir / f"backend-{tag}.log"
     canary_file = workdir / f"canaries-{tag}.json"
+    record_file = workdir / f"http-{tag}.jsonl"
     database = inst.database
     proc = boot(database, secret_file, boot_log, inst.bucket)
     try:
@@ -997,6 +1216,9 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             # The wire-assertion seam (ADR 0053): the suite writes here what it recovered by unsealing; this
             # side reads it back and sweeps. Absolute, because vitest runs with cwd=web/.
             "VEYQ_CANARY_FILE": str(canary_file),
+            # The HTTP half of the same seam: the suite records every request it made and every response it
+            # got, this side reads the file back and sweeps it. Absolute, for the same reason.
+            "VEYQ_HTTP_RECORD_FILE": str(record_file),
         })
         if group_dir is not None:
             # The seam between a group's members: whatever part A must hand part B (an actor's password, the id
@@ -1010,7 +1232,17 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
             # No sweep on a failed suite: the canary set is incomplete by construction, so a hit or a miss would
             # both be unreadable. The run already fails on this.
             return f"the suite failed (vitest exit {result.returncode})"
-        return sweep(database, canary_file, rel)
+        # Three surfaces, three sensors, one canary file (ADR 0053 §3). Run them all and report the FIRST
+        # failure rather than stopping at the database: a run that leaks on two surfaces should say so on the
+        # second one too, once the first is fixed, and a sweep skipped is a sweep nobody notices is missing.
+        for failure in (
+            sweep(database, canary_file, rel),
+            sweep_http(record_file, canary_file, rel),
+            sweep_store(inst.bucket or STORE_BUCKET, database, canary_file, rel, workdir),
+        ):
+            if failure:
+                return failure
+        return None
     finally:
         kill(proc)
 

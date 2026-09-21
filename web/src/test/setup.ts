@@ -4,6 +4,7 @@
 // that stub the shared `useToast` composable are unaffected).
 import { config } from '@vue/test-utils'
 import { beforeEach, afterEach } from 'vitest'
+import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
 
 config.global.plugins.push(ToastService)
@@ -47,6 +48,13 @@ const attempted: string[] = []
 // Armed by default: a request made before the first `beforeEach` (module import time, limit (c)) is still
 // caught rather than dropped.
 let armed = true
+
+// The e2e half of the same concern, and the opposite arrangement: the net below BLOCKS a unit test's request,
+// while this RECORDS an e2e suite's (cc.security.wire-assertion, ADR 0053 §3). They never both apply — the net
+// needs `globalThis.happyDOM`, which the node-environment e2e process does not have, and the recorder needs
+// `VEYQ_HTTP_RECORD_FILE`, which only the orchestrator sets. See `wireRecorder.ts` for why that is not an
+// accident of two mechanisms but the consequence of one measured fact about the environments.
+installWireRecorder()
 
 const happyDOM = (globalThis as unknown as HappyDOMGlobal).happyDOM
 if (happyDOM?.settings?.fetch) {

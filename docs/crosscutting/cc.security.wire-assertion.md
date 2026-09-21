@@ -57,9 +57,9 @@ in CI.
 | Surface | Sensor | State |
 |---|---|---|
 | **Database** — every column of every table of that file's own `veyq_e2e_<n>` | canary absence, swept by the orchestrator | **live** — `scripts/run_web_e2e.py` `sweep()`, a data-only `mariadb-dump` searched for each suite's dump-escaped canaries; every e2e suite feeds `src/test/canaries.ts`, pinned buildless by `scripts/validate_e2e_canaries.py` |
-| **Object store** — object keys and stored bytes | canary absence | planned |
+| **Object store** — object keys and stored bytes | canary absence | **live** — `scripts/run_web_e2e.py` `sweep_store()`, the suite's bucket mirrored out with the operator tool's own rclone plumbing (`instance_backup.Store.mirror_out`) and both the object **keys** and the object **bytes** searched for that suite's canaries. A suite that stored nothing is skipped **out loud**, and the discriminator is its own `veyq_blob` count rather than a list of which suites upload |
 | **Server log** — the boot log, where an error `message` or a stack trace would carry plaintext | canary absence | planned; the orchestrator must first **retain** the log it currently discards |
-| **HTTP bodies** — the `contentEncoding: base64` fields | opacity: a declared-opaque field must not decode to readable text | planned |
+| **HTTP bodies** — the `contentEncoding: base64` fields | opacity **and** canary absence: a declared-opaque field must not decode to readable text *and* must not be implausibly short; no canary may appear in a URL, a header or a body | **live** — `scripts/run_web_e2e.py` `sweep_http()`, over a recording `web/src/test/wireRecorder.ts` makes in the suite process. This is the only surface where path params, query strings, capability headers and presigned URLs exist at all (ADR 0053 §3) |
 | **S3 object key** | the separate guard ADR 0044 promised it | planned, outside this concern's sweep |
 
 ## What a green sweep does not prove
@@ -73,6 +73,19 @@ Load-bearing, and repeated in the guard's own docstring rather than only here:
 - **The residual gap is coverage, not correctness.** The sweep sees only flows some suite drives, and only four
   e2e suites exist — tracked as debt in [architecture §11](../architecture/README.md). The sensor gets stronger
   for free as suites are added; it does not need revisiting for that.
+- **The opacity oracle is two tests, and it needs both.** Readability alone has a hole that biting it found:
+  it needs a length floor, because short random strings do decode to printable UTF-8 now and then (measured:
+  7/5000 at 8 bytes, 0 in 80 000 at 24 and above) — and a floor is exactly where short *plaintext* hides. An
+  unsealed Memory name went over the wire as **23 bytes** and a readability-only check never looked at it. So
+  length is the second test and on this wire it is not a heuristic: every declared-opaque field a real suite
+  sends decodes to **at least 32 bytes**, and an AEAD value cannot be under 28 (a 12-byte nonce, a 16-byte tag).
+- **The HTTP sensor sees only what a spec DECLARES, and only what it can read as text.** A leak through an
+  *undeclared* field, or through a response the server does not mark textual, is outside it — binary bodies are
+  elided by content-type and their evidence is the bucket instead. A header is searched for canaries but never
+  for opacity: it carries no schema.
+- **The store sensor sees one bucket, and it is usually shared.** Only a group with a hook gets its own, so a
+  hit found while sweeping for suite B may have been left by suite A. That is still a true leak and it is still
+  reported — but the suite it is reported *under* is not necessarily the one that caused it.
 - **Passing cannot be arranged from inside the client, but a canary can still be removed.** The oracle is
   outside the code — the bytes are in a database the client process does not write — so an agent cannot satisfy
   the sweep by weakening an assertion. Deleting a canary is a visible diff, exactly like widening an allowlist
