@@ -1,0 +1,193 @@
+// @vitest-environment happy-dom
+// The first test this component has ever had. It shipped with cr-0116 driving the share note and its only
+// caller's test stubs it out (`LocaleMarkdownEditor: true`), so until the lift into `shared/ui` nothing
+// anywhere asserted what it does — which is also why the lift owes one: every other `shared/ui` component here
+// carries a colocated test, and a component nobody tests is a component nobody can move safely.
+//
+// What only this file can pin is the map semantics: **the keys ARE the languages**. A row exists because the
+// map has that key, never because the app supports that language; `''` is a language somebody added and left
+// empty, not a language that is absent. Everything the tenant-terms editor was rebuilt to say rests on that.
+import { describe, it, expect, vi } from 'vitest'
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
+
+import LocaleMarkdownEditor from './LocaleMarkdownEditor.vue'
+import type { LocaleMap } from './localeMap'
+import { i18n } from '../../i18n'
+
+const stubs = {
+  Dialog: {
+    props: ['visible', 'header'],
+    emits: ['update:visible'],
+    template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>',
+  },
+  Button: {
+    props: ['label', 'icon', 'severity'],
+    // `emits` is load-bearing: without it the parent's @click also arrives as a native fallthrough listener,
+    // so one click fires the handler twice (the same trap `ConfirmDialog.test.ts` records).
+    emits: ['click'],
+    template: '<button v-bind="$attrs" :class="severity" @click="$emit(\'click\')">{{ label }}</button>',
+  },
+}
+
+type Props = InstanceType<typeof LocaleMarkdownEditor>['$props']
+const mountEditor = (props: Props, slots: Record<string, string> = {}) =>
+  mount(LocaleMarkdownEditor, { props, slots, global: { plugins: [i18n], stubs } })
+
+const t = (k: string, named?: Record<string, unknown>) => i18n.global.t(k, named ?? {})
+const rows = (w: VueWrapper) => w.findAll('.locale-md-row')
+const langs = (w: VueWrapper) => rows(w).map((r) => r.find('.locale-md-lang').text())
+const button = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
+const emitted = (w: VueWrapper) => w.emitted('update:modelValue') as LocaleMap[][] | undefined
+const lastMap = (w: VueWrapper) => emitted(w)!.at(-1)![0]
+
+i18n.global.locale.value = 'en'
+
+describe('LocaleMarkdownEditor — the map is the language list', () => {
+  it('renders one row per language the map carries, and none for the rest', () => {
+    // BITE 1 (lever: render `SUPPORTED_LOCALES` instead of `Object.keys(modelValue)`). The app speaks two
+    // languages and this map carries one — exactly one row, and it is the one that has text.
+    const w = mountEditor({ modelValue: { de: '# Bedingungen' } })
+    expect(rows(w)).toHaveLength(1)
+    expect(langs(w)).toEqual(['Deutsch'])
+    // Asserted against the ROWS, not the whole render: "Add English" is legitimately on the page, and a
+    // `w.text()` probe would have called that a violation of the very thing this test exists to pin.
+    expect(rows(w).some((r) => r.text().includes('English'))).toBe(false)
+  })
+
+  it('an empty string is a language that EXISTS — not an absent one', () => {
+    // BITE 2 (lever: collapse the map with `.filter(v => v)`). `{ de: '' }` is a German text somebody started;
+    // `{}` is no German at all. Nothing outside this component can see that distinction, so it is pinned here.
+    const started = mountEditor({ modelValue: { de: '' } })
+    expect(langs(started)).toEqual(['Deutsch'])
+    expect(started.find('.locale-md-empty').exists()).toBe(false)
+
+    const absent = mountEditor({ modelValue: {} })
+    expect(rows(absent)).toHaveLength(0)
+    expect(absent.find('.locale-md-empty').text()).toBe(t('localeEditor.empty'))
+  })
+
+  it('names each addable language on its own button, and offers none once all exist', () => {
+    // The shape the CR insisted on: with a two-element locale set the "picker" holds two options, one, or
+    // zero — so it is a button naming the language it adds, never a Select plus an Add.
+    const none = mountEditor({ modelValue: {} })
+    expect(button(none, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
+    expect(button(none, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+
+    const one = mountEditor({ modelValue: { de: 'x' } })
+    expect(button(one, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeUndefined()
+    expect(button(one, t('localeEditor.addLanguage', { lang: 'English' }))).toBeTruthy()
+
+    const both = mountEditor({ modelValue: { de: 'x', en: 'y' } })
+    expect(both.find('.locale-md-add').exists()).toBe(false)
+  })
+
+  it('adding a language adds the KEY, with empty text', async () => {
+    const w = mountEditor({ modelValue: { de: 'x' } })
+    await button(w, t('localeEditor.addLanguage', { lang: 'English' }))!.trigger('click')
+    expect(lastMap(w)).toEqual({ de: 'x', en: '' })
+  })
+
+  it('narrows to the languages the caller allows', () => {
+    const w = mountEditor({ modelValue: {}, locales: ['de'] })
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'Deutsch' }))).toBeTruthy()
+    expect(button(w, t('localeEditor.addLanguage', { lang: 'English' }))).toBeUndefined()
+  })
+})
+
+describe('LocaleMarkdownEditor — editing one language', () => {
+  it('opens the dialog on the row it was asked about and commits the draft on Save', async () => {
+    const w = mountEditor({ modelValue: { de: 'alt', en: 'old' } })
+    await rows(w)[0].findAll('button')[0].trigger('click') // Edit, on the German row
+
+    expect(w.find('.dlg h2').text()).toBe(t('localeEditor.editTitle', { lang: 'Deutsch' }))
+    const area = w.find('textarea')
+    expect((area.element as HTMLTextAreaElement).value).toBe('alt')
+
+    await area.setValue('neu')
+    await button(w, t('common.save'))!.trigger('click')
+    expect(lastMap(w)).toEqual({ de: 'neu', en: 'old' })
+    expect(w.find('.dlg').exists()).toBe(false)
+  })
+
+  it('discards the draft on Cancel — the map is not touched at all', async () => {
+    const w = mountEditor({ modelValue: { de: 'alt' } })
+    await rows(w)[0].findAll('button')[0].trigger('click')
+    await w.find('textarea').setValue('weggeworfen')
+    await button(w, t('common.cancel'))!.trigger('click')
+    expect(emitted(w)).toBeUndefined()
+  })
+
+  it('carries the caller’s placeholder into the textarea — the one string that is per-caller', async () => {
+    const w = mountEditor({ modelValue: { de: '' }, placeholder: 'Write the terms in Markdown…' })
+    await rows(w)[0].findAll('button')[0].trigger('click')
+    expect(w.find('textarea').attributes('placeholder')).toBe('Write the terms in Markdown…')
+  })
+})
+
+describe('LocaleMarkdownEditor — removing a language', () => {
+  const removeButton = (w: VueWrapper, lang: string) =>
+    w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang }))
+
+  it('drops the key outright when nobody vetoes', async () => {
+    const w = mountEditor({ modelValue: { de: 'x', en: 'y' } })
+    await removeButton(w, 'Deutsch')!.trigger('click')
+    await flushPromises()
+    expect(lastMap(w)).toEqual({ en: 'y' })
+  })
+
+  it('asks `beforeRemove` first, and a “no” leaves the map alone', async () => {
+    const veto = vi.fn().mockResolvedValue(false)
+    const w = mountEditor({ modelValue: { de: 'x' }, beforeRemove: veto })
+    await removeButton(w, 'Deutsch')!.trigger('click')
+    await flushPromises()
+    expect(veto).toHaveBeenCalledWith('de')
+    expect(emitted(w)).toBeUndefined()
+  })
+
+  it('removes once `beforeRemove` says yes', async () => {
+    const w = mountEditor({ modelValue: { de: 'x' }, beforeRemove: () => true })
+    await removeButton(w, 'Deutsch')!.trigger('click')
+    await flushPromises()
+    expect(lastMap(w)).toEqual({})
+  })
+})
+
+describe('LocaleMarkdownEditor — the row-actions slot', () => {
+  it('hands each row its own locale, so a caller can hang a per-language action there', () => {
+    const w = mountEditor(
+      { modelValue: { de: 'x', en: 'y' } },
+      { 'row-actions': '<span class="extra">{{ params.locale }}</span>' },
+    )
+    expect(w.findAll('.extra').map((e) => e.text())).toEqual(['de', 'en'])
+  })
+})
+
+describe('the share note still behaves as it did (cr-0116 control)', () => {
+  // BITE 4 (lever: make `locales` required, i.e. drop its `SUPPORTED_LOCALES` default). The lift was supposed
+  // to change nothing for the caller it did not set out to change, and `ShareCreateDialog` drives the component
+  // with exactly these two props — `v-model` and a placeholder, no `:locales`, no `:beforeRemove`, no slot.
+  // Driven that way it must still produce the same map for the same input as before the move.
+  const asShareDialogDrivesIt = (note: LocaleMap) =>
+    mountEditor({ modelValue: note, placeholder: t('share.notePlaceholder') })
+
+  it('offers both languages, adds one empty, and writes the text under its key', async () => {
+    const empty = asShareDialogDrivesIt({})
+    expect(empty.find('.locale-md-empty').exists()).toBe(true)
+    await button(empty, t('localeEditor.addLanguage', { lang: 'Deutsch' }))!.trigger('click')
+    expect(lastMap(empty)).toEqual({ de: '' })
+
+    const started = asShareDialogDrivesIt({ de: '' })
+    await rows(started)[0].findAll('button')[0].trigger('click')
+    await started.find('textarea').setValue('Willkommen!')
+    await button(started, t('common.save'))!.trigger('click')
+    expect(lastMap(started)).toEqual({ de: 'Willkommen!' })
+  })
+
+  it('removes a note language without asking anyone — the share note never had a confirmation', async () => {
+    const w = asShareDialogDrivesIt({ de: 'x', en: 'y' })
+    const remove = w.findAll('button').find((b) => b.attributes('aria-label') === t('localeEditor.removeLang', { lang: 'English' }))
+    await remove!.trigger('click')
+    await flushPromises()
+    expect(lastMap(w)).toEqual({ de: 'x' })
+  })
+})

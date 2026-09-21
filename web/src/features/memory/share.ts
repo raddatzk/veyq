@@ -13,6 +13,7 @@ import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../account/login/login'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
+import type { LocaleMap } from '../../shared/ui/localeMap'
 import { openName, sealName } from './tree'
 import {
   gridRef,
@@ -47,8 +48,9 @@ const SHARE_NAME_CTX = 'share-name'
 const SHARE_PASSWORD_CTX = 'share-password' // cr-0118: the reveal copy of the plaintext password, under K_share
 const noteDecoder = new TextDecoder()
 
-/** A per-locale text map, e.g. `{ de: '…', en: '…' }` (cr-0116). Empty when there is no text. */
-export type LocaleMap = Record<string, string>
+/** A per-locale text map, e.g. `{ de: '…', en: '…' }` (cr-0116). Defined in `shared/ui/localeMap.ts` since the
+ *  editor was lifted there — re-exported so this feature's callers keep reading it from `share.ts`. */
+export type { LocaleMap } from '../../shared/ui/localeMap'
 
 /** Whether a per-locale map has any non-blank text. */
 export function hasLocaleText(map: LocaleMap): boolean {

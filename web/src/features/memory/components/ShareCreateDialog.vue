@@ -14,7 +14,7 @@ import InputText from 'primevue/inputtext'
 import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import DatePicker from 'primevue/datepicker'
-import LocaleMarkdownEditor from './LocaleMarkdownEditor.vue'
+import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
 import { createShare, updateShare, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
@@ -215,7 +215,7 @@ function endOfDay(d: Date): Date {
           <ToggleSwitch v-model="noteEnabled" :aria-label="t('share.noteSection')" :disabled="busy" />
         </div>
         <div v-if="noteEnabled" class="share-group-body">
-          <LocaleMarkdownEditor v-model="note" />
+          <LocaleMarkdownEditor v-model="note" :placeholder="t('share.notePlaceholder')" />
           <p class="share-hint">{{ t('share.noteHint') }}</p>
         </div>
       </div>
