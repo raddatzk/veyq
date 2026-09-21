@@ -14,6 +14,16 @@ vi.mock('../../features/spaces/scopes', () => ({
   openMyTenantIcon: vi.fn().mockResolvedValue(null),
 }))
 
+// `onMounted` also asks for the caller's profile, and that one was missed when the tenant list above was
+// stubbed: unmocked, every mount of this component sent a real `GET /api/account/profile` out of the suite —
+// 14 of them per run, one per test, silently, because AppSidebar catches the failure and falls back (#149).
+// The username is returned EMPTY on purpose: `personalScope('')` is `~me`, which is the hash these tests drive
+// directly, so this stub restores today's behaviour rather than changing what the suite asserts.
+vi.mock('../../features/account/profile/profile', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../features/account/profile/profile')>()),
+  getMyProfile: vi.fn().mockResolvedValue({ username: '', sealedName: null }),
+}))
+
 // The shared cover store — the rail reads it and holds no key API of its own, which is the property phase 1
 // exists for. Driven directly here so a favorite can be given a cover without opening a scope.
 const storeCovers = vi.hoisted(() => ({ map: new Map<string, { url: string; crop: unknown }>() }))
