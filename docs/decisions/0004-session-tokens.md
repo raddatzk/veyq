@@ -53,8 +53,8 @@ into **named session families**. No JWTs.
   token's **secret is verified** before revoking: only a presented token whose *hash* matches a stored row
   can revoke anything, so a family cannot be killed by anyone who does not already hold one of its tokens.
   **Retention is the full refresh TTL, not two generations.** Every superseded row survives until
-  `expiresAt` (30 days) and each one is a family-killer at a distance of two generations or more; the purge
-  matches strictly on expiry. An earlier wording here claimed the server kept only *"current + previous
+  `expiresAt` (30 days) and each one is a family-killer at any distance but one from the family's current
+  generation; the purge matches strictly on expiry. An earlier wording here claimed the server kept only *"current + previous
   generation hash"* and that anything older was "merely invalid" — that was never built, and it is corrected
   rather than deferred. What the grace decision below restores is its *intent*: the pair (current, previous)
   is the only distinction the rule needs, and it is now the distinction the code actually draws.
@@ -102,12 +102,24 @@ into **named session families**. No JWTs.
 ## Decision — the one-generation grace: a benign re-presentation rotates, it does not revoke
 
 **A presented `SUPERSEDED` refresh token whose generation is exactly one behind its family's `CURRENT`
-generation rotates normally, superseding the orphaned successor. Any greater distance stays a clone signal
-and revokes the family.** The bound is the **generation distance**, deliberately not a time window.
+rotates — re-minting the successor under the *same* generation number and superseding the orphaned one.
+A distance of zero or of two or more stays a clone signal and revokes the family.** The bound is the
+**generation distance**, deliberately not a time window.
+
+| distance | who is presenting | outcome |
+|---|---|---|
+| 1 | a client that never received its successor | rotate, re-minting at the successor's own number |
+| **0** | someone holding a successor that a grace rotation already replaced | **revoke** |
+| ≥ 2 | an older generation — an ordinary replay | revoke |
+
+**Distance zero is the detector, and it is what makes the rule closed rather than merely lenient.** It can
+only arise after a grace rotation has happened, which is exactly the moment two parties may hold tokens for
+one family: the one that re-rotated, and the one holding the successor it orphaned. The second to present is
+at zero and takes the family down.
 
 **Why this is not a softening of reuse detection.** Whoever holds the orphaned successor is caught on their
-*next* refresh: after the re-rotation that successor is itself superseded, now at a distance of two, and
-presenting it revokes the family. Detection is therefore not removed but **deferred by at most one access
+*next* refresh: the grace re-mint superseded it under its own number, so presenting it lands at distance
+**zero** and revokes the family. Detection is therefore not removed but **deferred by at most one access
 token's lifetime** (15 minutes), because that is how long a holder can operate before it must refresh. A
 time window buys exactly the same deferral and loses the case below, which is why it is rejected.
 
@@ -126,18 +138,31 @@ windows.
 the dropped response. Any window short enough to keep theft detection meaningful is far too short for that,
 so a window would fix the concurrency half and leave the half that motivated the rule.
 
-**One implementation constraint, found by biting the rule before writing it down.** The successor's
-generation must be counted from the family's **`CURRENT`** row, not from the presented one. Rotation today
-mints `presented.generation + 1`; re-rotating from generation N−1 would then mint a *second* row numbered N
-and destroy the uniqueness the distance is read from. In the ordinary path the two are the same row, so this
-changes nothing there. Measured invariants the rule stands on: `mint` has exactly two call sites (a new
-family at generation 1, and rotation), so a family holds **exactly one `CURRENT` row**, and a chain numbers
-its generations monotonically and uniquely (`1,2,3,4` with only the last `CURRENT`).
+**Why the grace does not increment, and how that was found.** The first form of this decision said the
+grace *"rotates normally, superseding the orphaned successor"* — i.e. incremented. Traced against the
+measured concurrency before any code was written, it fails the case it exists for. Six simultaneous
+refreshes of one token all reach the row (measured: `1 × 200`, `5 × 401`), so under an incrementing grace the
+second presentation mints generation 3 and **the third is at distance 2 and revokes** — the rule collapses at
+three concurrent callers. The same increment breaks the security half: two parties refreshing alternately
+would each sit at distance 1 forever and never be detected. Re-minting under the successor's own number fixes
+both at once: every further presentation of the same stale token stays at distance 1, and the party holding
+the orphaned successor lands on zero.
+
+**So generations are NOT unique within a family, and the rule does not need them to be.** It reads one row —
+the family's `CURRENT` — and compares one integer. What *is* invariant is that there is exactly one `CURRENT`
+row per family: `mint` has two call sites (a new family at generation 1, and rotation), and rotation
+supersedes before it mints.
 
 **No schema change.** The distance is `CURRENT.generation - presented.generation`, read via
 `family_id + status`, an index that already exists. This is also the first time `generation` is **read**:
 it is written at mint and rotation and compared nowhere, which is why the drift corrected above could sit
 in the ADR unnoticed.
+
+**It reaches `POST /api/token/adopt` too, because adoption *is* a rotation.** A device whose adopt response
+is lost is in precisely the position this rule exists for, and recovers by the same distance-1 path. What
+changes is the prose, not the ceremony: the grant token stays a one-shot bearer, and a second presentation is
+still fatal — at distance zero rather than as an unconditional clone signal. The contract text saying a second
+presentation revokes the family is therefore narrowed, not deleted.
 
 **What this does not settle.** Clients still owe a shared in-flight refresh per tab — this decision makes a
 concurrent refresh *harmless*, not *free*, and a client that fires six of them still wastes five rotations.
