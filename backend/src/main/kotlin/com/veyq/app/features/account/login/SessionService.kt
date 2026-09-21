@@ -1,6 +1,7 @@
 package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.crypto.Tokens
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
@@ -90,30 +91,59 @@ class SessionService {
         return DelegatedSession(issued.familyId, issued.refreshToken)
     }
 
-    /** Rotate a refresh token. Returns null (→ 401) on any failure; a superseded-token replay revokes
-     *  the family as a side effect. */
-    @Transactional
-    fun refresh(presented: String): RotatedTokens? {
-        // Lock the row so two concurrent refreshes of the SAME token serialize: the second blocks until
-        // the first commits, then sees status = SUPERSEDED and takes the reuse-detection path instead of
-        // minting a second token pair from one refresh (ADR 0004).
+    /**
+     * Rotate a refresh token. Returns null (→ 401) on any failure; presenting a superseded token revokes the
+     * family unless it is exactly one generation behind (ADR 0004 § the one-generation grace).
+     *
+     * **Not `@Transactional` — the transaction is opened below, per attempt.** A deadlock arrives as a
+     * rollback of the whole transaction, so a retry has to be able to start a new one; an interceptor-managed
+     * transaction around this method could only ever be retried by its caller. There is no outer transaction
+     * to join here in any case: the only callers are the two `TokenResource` endpoints.
+     */
+    fun refresh(presented: String): RotatedTokens? =
+        withDeadlockRetry { QuarkusTransaction.requiringNew().call<RotatedTokens?> { rotate(presented) } }
+
+    private fun rotate(presented: String): RotatedTokens? {
+        // Lock the row so two concurrent refreshes of the SAME token serialize: the second blocks until the
+        // first commits and then reads its status, rather than minting a second pair from one refresh.
         val row = RefreshTokenEntity.find("tokenHash", Tokens.hash(presented))
             .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return null
         val family = SessionFamilyEntity.findById(row.familyId) ?: return null
         if (family.status != SessionFamilyEntity.ACTIVE) return null
 
-        if (row.status == RefreshTokenEntity.SUPERSEDED) {
-            family.status = SessionFamilyEntity.REVOKED // reuse detected → kill the whole family
-            return null
-        }
-        if (row.expiresAt.isBefore(Instant.now())) return null
-
         val now = Instant.now()
-        row.status = RefreshTokenEntity.SUPERSEDED
+        val generation: Int
+        if (row.status == RefreshTokenEntity.SUPERSEDED) {
+            // How far behind the family's live generation is this? One means the caller never received its
+            // successor — a dropped response, or a sibling call that lost the race — and it rotates. Zero
+            // means it IS a successor that an earlier grace already replaced, and two or more is an ordinary
+            // replay: both are clone signals (ADR 0004).
+            val current = currentTokenOf(family.id)
+            if (current == null || current.generation - row.generation != 1) {
+                family.status = SessionFamilyEntity.REVOKED
+                return null
+            }
+            if (row.expiresAt.isBefore(now)) return null
+            // Re-mint under the ORPHAN'S OWN number, never a higher one. Incrementing here would push every
+            // further presentation of this same stale token to distance two, so the third concurrent caller
+            // would revoke the family the first two were spared — the rule would fail the case it exists for.
+            current.status = RefreshTokenEntity.SUPERSEDED
+            generation = current.generation
+        } else {
+            if (row.expiresAt.isBefore(now)) return null
+            row.status = RefreshTokenEntity.SUPERSEDED
+            generation = row.generation + 1
+        }
+
         family.lastUsedAt = now
-        val (access, refresh) = mint(family.id, row.generation + 1, now)
+        val (access, refresh) = mint(family.id, generation, now)
         return RotatedTokens(access, refresh, family.id)
     }
+
+    /** The family's live refresh token — the one row per family whose status is CURRENT (see [mint]). */
+    private fun currentTokenOf(familyId: String): RefreshTokenEntity? =
+        RefreshTokenEntity.find("familyId = ?1 and status = ?2", familyId, RefreshTokenEntity.CURRENT)
+            .firstResult()
 
     /**
      * Resolve the user behind a bearer access token, or null if the token is unknown, expired, or its

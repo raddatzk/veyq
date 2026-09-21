@@ -154,12 +154,78 @@ class LoginSliceTest {
 
     @Test
     fun replayedSupersededRefreshRevokesFamily() {
+        // Two generations behind, deliberately: at ONE generation behind the presenter is a client whose
+        // successor never reached it, and ADR 0004's one-generation grace rotates for it. This test is about
+        // the ordinary replay, so the chain runs far enough that r1 cannot be mistaken for that case.
         val r1 = login().refreshToken
         val r2 = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken")
-        // r1 is now superseded; replaying it is a clone signal → the whole family is revoked.
+        val r3 = refresh(r2).then().statusCode(200).extract().path<String>("refreshToken")
+        // r1 is now two generations behind; replaying it is a clone signal → the whole family is revoked.
         refresh(r1).then().statusCode(401)
-        // ...so even the once-valid r2 no longer works.
-        refresh(r2).then().statusCode(401)
+        // ...so even the current r3 no longer works.
+        refresh(r3).then().statusCode(401)
+    }
+
+    // --- the one-generation grace (ADR 0004 § the one-generation grace) ---
+
+    @Test
+    fun refreshAfterALostResponseRotatesInsteadOfRevoking() {
+        // The rotation commits server-side even when its response never reaches the client, so the client's
+        // cookie still holds the PREVIOUS token. Presenting it again is the commonest benign case there is —
+        // one dropped response used to end the session permanently.
+        val r1 = login().refreshToken
+        refresh(r1).then().statusCode(200) // the successor is minted and then lost in transit
+        val recovered = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken")
+        assertEquals("ACTIVE", familyStatusOf(r1), "a lost response must not cost the family")
+        refresh(recovered).then().statusCode(200) // and the recovered chain keeps rotating
+    }
+
+    @Test
+    fun concurrentRefreshOfOneTokenKeepsTheFamily() {
+        // Three authed calls that 401 together each fire their own refresh with the same cookie. The row lock
+        // serializes them; the grace is what keeps the two losers from reading as clones.
+        val r1 = login().refreshToken
+        val barrier = java.util.concurrent.CyclicBarrier(3)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(3)
+        try {
+            val codes = pool.invokeAll(
+                (0 until 3).map {
+                    java.util.concurrent.Callable {
+                        barrier.await()
+                        refresh(r1).then().extract().statusCode()
+                    }
+                },
+            ).map { it.get() }
+            assertEquals("ACTIVE", familyStatusOf(r1), "concurrent refreshes of one token must not revoke, got $codes")
+            assertEquals(0, codes.count { it == 401 }, "no concurrent presentation of a live token may be read as a clone, got $codes")
+        } finally {
+            pool.shutdownNow()
+        }
+    }
+
+    @Test
+    fun graceDoesNotIncrementSoTheNextStaleCallerIsStillAtDistanceOne() {
+        // The regression test for the shape of the grace. If it MINTED A HIGHER generation, the first stale
+        // presentation would pass and the second would sit two behind and revoke — so the rule would collapse
+        // at three concurrent callers, which is the case it exists for. Re-minting under the orphan's own
+        // number keeps every further presentation of one stale token at distance 1.
+        val r1 = login().refreshToken
+        refresh(r1).then().statusCode(200) // successor minted, lost
+        refresh(r1).then().statusCode(200) // first stale caller — grace
+        refresh(r1).then().statusCode(200) // second stale caller — an incrementing grace fails HERE
+        assertEquals("ACTIVE", familyStatusOf(r1))
+    }
+
+    @Test
+    fun theOrphanedSuccessorIsAClone() {
+        // Distance ZERO, the detector the grace brings with it: whoever holds the successor a grace rotation
+        // replaced is the one party that must not be tolerated, and it is exactly the position an attacker who
+        // raced the legitimate client ends up in.
+        val r1 = login().refreshToken
+        val orphan = refresh(r1).then().statusCode(200).extract().path<String>("refreshToken")
+        refresh(r1).then().statusCode(200) // grace re-mints under the orphan's own generation
+        refresh(orphan).then().statusCode(401)
+        assertEquals("REVOKED", familyStatusOf(r1), "the orphaned successor is a clone signal")
     }
 
     @Test
@@ -278,6 +344,14 @@ class LoginSliceTest {
     }
 
     // --- helpers ---
+
+    /** The status of the session family a refresh token belongs to — read straight from the store. */
+    private fun familyStatusOf(refreshToken: String): String =
+        QuarkusTransaction.requiringNew().call<String> {
+            val row = RefreshTokenEntity.find("tokenHash", com.veyq.app.shared.crypto.Tokens.hash(refreshToken))
+                .firstResult()!!
+            SessionFamilyEntity.findById(row.familyId)!!.status
+        }
 
     private data class Session(val accessToken: String, val refreshToken: String)
 
