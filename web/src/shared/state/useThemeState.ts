@@ -42,8 +42,15 @@ function applyTheme(): void {
   const next = themePreference.value === 'system' ? (mediaQuery?.matches ? 'dark' : 'light') : themePreference.value
   resolvedTheme.value = next
   if (typeof document === 'undefined') return
+  // `.veyq-dark` is the ONLY class any stylesheet reads: dark.css is one `.veyq-dark { ... }`
+  // and PrimeVue's darkModeSelector points at it. A `.veyq-light` companion used to be written
+  // beside it and was read by nothing (inbox #137); admin-web already declined to carry either
+  // (shared/state/systemTheme.ts), so it is gone here too rather than kept by symmetry.
   document.documentElement.classList.toggle('veyq-dark', next === 'dark')
-  document.documentElement.classList.toggle('veyq-light', next === 'light')
+  // `data-theme` is DELIBERATE and is not a CSS hook -- no stylesheet in either package reads it.
+  // It carries the PREFERENCE ('system' | 'light' | 'dark'), which the class cannot: `.veyq-dark`
+  // only reports the resolved theme, so "dark because the OS says so" and "dark because the user
+  // chose it" look identical without this. Kept as a debugging and e2e handle on that basis.
   document.documentElement.dataset.theme = themePreference.value
   applyFavicon(next)
 }
