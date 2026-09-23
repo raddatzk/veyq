@@ -151,7 +151,8 @@ class BlobBatchE2ETest {
      * Overwrite the object a presigned URL names (path-style: `/<bucket>/<key>`) with a `text/html` copy, through
      * the signer as it was before ADR 0013 §6 — a PUT signing only `host`, a GET with no override. That is the
      * matrix's first two rows, and each is asserted: they are what makes the plant land, and what makes the
-     * backend's GET above the thing that neutralises it.
+     * backend's GET above the thing that neutralises it. A presigner and not `S3Client.putObject`: the SDK's
+     * default payload checksum is refused by Garage v2.0.0 (`400 Invalid payload signature`).
      */
     private fun plantLegacyHtml(presigned: URI, bytes: ByteArray) {
         val key = presigned.path.removePrefix("/").substringAfter('/')
