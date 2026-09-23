@@ -67,7 +67,8 @@ sequenceDiagram
 
 - **A1 — reload:** the own-view is session-only; a reload / new tab shows a **dedicated empty-state** (“your earlier
   uploads aren’t shown here, they arrived safely, you can add more”), never a blank/broken gallery.
-- **A2 — revoked / expired:** `enabled = false` / a passed `expiresAt` → resolve + upload + delete `404`/`403`.
+- **A2 — revoked / expired:** `enabled = false` / a passed `expiresAt` → resolve + upload + delete `404`/`403`;
+  an upload in flight stops at its next window or its complete.
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered.
 - **E2 — delete after reload:** not possible — the client no longer holds the id (session-only); the photo remains
   (the curator can still delete it from their own gallery).

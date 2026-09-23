@@ -31,8 +31,10 @@
   operator-blind trade-off).
 - **`chunk_frame`** (vector-pinned, `v1.json`) — each chunk is `nonce(12) ‖ AEAD(K_blob, nonce, plaintext,
   aad = u32be(index) ‖ u32be(total))`. The **AAD binds each frame to its position**, so the server cannot
-  reorder, drop, or splice chunks without detection on `openFrame`. Small media = one frame; large media =
-  many.
+  reorder, drop, or splice chunks without detection on `openFrame`. Every frame but the last carries exactly
+  256 KiB of plaintext — a contract constant, so `chunkCount` and each chunk's size follow from `byteSize`
+  ([ADR 0013 §3](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#3-anti-abuse-is-declare-then-verify-and-the-frame-size-fixes-what-can-be-declared)).
+  Small media = one frame; large media = many.
 - **blob** — the unit of stored bytes: an id, `chunkCount`, `byteSize`, the chunk manifest (per-chunk size),
   and the `K_blob` wrap. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
@@ -54,15 +56,19 @@
 > gallery later sends longer lists — same shape, no contract change.
 
 1. The client has the Memory open: `K_mem` is unwrapped (via `K_SC`, en.memory.tree).
-2. **Seal:** generate a random **`K_blob`**; split the plaintext into chunks; `sealFrame(K_blob, index, total,
-   chunk, nonce)` each. Wrap `K_blob` under `K_mem` (`symWrap(K_mem, K_blob)`).
-3. **Start:** POST a blob-start declaring `chunkCount` + `byteSize` (+ the `K_blob` wrap); the server opens an
-   upload session and returns a **presigned `PUT` URL per chunk**.
-4. **Transfer:** the client `PUT`s the **raw sealed frame bytes** straight to the object store (no base64) —
-   in parallel — bypassing the backend.
-5. **Complete + attach:** POST complete-and-attach `{ uploadId, nodeId }`; the server **stats** each object to
-   confirm presence + size, writes the chunk manifest, enforces the byte budget, promotes the staged objects
-   to a blob, and creates the **media** record linking it to the node. Returns the blob/media ids.
+2. **Key:** generate a random **`K_blob`** and wrap it under `K_mem` (`symWrap(K_mem, K_blob)`). The blob's
+   `byteSize` and `chunkCount` are known from the plaintext length alone, before any frame is sealed.
+3. **Start:** POST a blob-start declaring `byteSize` + `chunkCount` (+ the `K_blob` wrap); the server checks
+   the pair against the frame size, opens an upload session **bound to the caller**, and returns presigned
+   `PUT` URLs for the **first window** of chunks, each signed for its chunk's exact size.
+4. **Transfer, streaming:** the client reads the plaintext one chunk at a time, `sealFrame(K_blob, index,
+   total, chunk, nonce)`s it and `PUT`s the **raw sealed frame bytes** straight to the object store (no base64)
+   — a bounded number in parallel — bypassing the backend. Before a window runs out it asks for the next one;
+   each request is authorized again, and a window that expired is simply asked for again.
+5. **Complete + attach:** POST complete-and-attach `{ uploadId, nodeId }` as the session's opener; the server
+   **stats** each object to confirm presence + exact size, writes the chunk manifest, enforces the byte budget,
+   promotes the staged objects to a blob, and creates the **media** record linking it to the node. Returns the
+   blob/media ids.
 6. **Read back:** to display, the client asks for **presigned `GET` URLs**, fetches the raw frames directly,
    unwraps `K_blob` (via `K_mem`), and `openFrame`s each (the AAD position check verifies order/count).
 
@@ -77,11 +83,15 @@ sequenceDiagram
   participant O as Object store<br>(blind)
   U->>C: add photo
   C->>C: K_blob = random(32)
-  C->>C: frames = [ sealFrame(K_blob, i, n, chunk_i, nonce_i) ]
   C->>C: wrappedBlobKey = symWrap(K_mem, K_blob)
   C->>S: start blob { chunkCount:n, byteSize, wrappedBlobKey }
-  S-->>C: { uploadId, presignedPut[0..n-1] }
-  C->>O: PUT raw frame bytes  (direct, parallel)
+  S-->>C: { uploadId, presignedPut[first window] }
+  loop each window
+    C->>C: frame_i = sealFrame(K_blob, i, n, chunk_i, nonce_i)
+    C->>O: PUT raw frame bytes  (direct, bounded parallel)
+    C->>S: next window { uploadId, fromChunk }
+    S-->>C: presignedPut[next window]
+  end
   C->>S: complete + attach { uploadId, nodeId }
   S->>O: stat each object (size/presence)
   S->>S: write manifest, enforce budget, create media record
@@ -95,9 +105,13 @@ sequenceDiagram
   error** in `%dev`/`%prod` (not a runtime "unavailable" state a client soft-gates on — there is no
   `directTransport` flag). Only the `%test` slice profile runs the in-memory stub (metadata only, no transport)
   ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)).
-- **E2 — declared budget exceeded** (or actual object sizes exceed it at complete): the server rejects and
-  **purges** the staged objects (declare-then-verify, ADR 0013 §3).
-- **E3 — abandoned upload:** an OPEN session never completed → reclaimed by the stale-session GC.
+- **E2 — declared shape refused** (a `chunkCount` that does not follow from `byteSize`, or a size over the
+  ceiling), **or actual objects that do not match it at complete** (a chunk missing, or not at its exact size):
+  the server rejects and **purges** the staged objects (declare-then-verify, ADR 0013 §3).
+- **E3 — abandoned upload:** a session that has not asked for a window within the retention → reclaimed by the
+  stale-session GC, row and staged objects both.
+- **E3a — the upload right is gone mid-upload** (membership removed, share revoked or expired): the next window
+  or the complete is refused; what was already staged is reclaimed as an abandoned upload.
 - **E4 — vault locked / Memory not open:** without `K_mem` the client can neither key nor read a blob → the
   action is unavailable until unlock + the Memory is opened.
 - **E5 — chunk tampered / reordered:** `openFrame` fails the AAD position check → the frame is rejected (the
@@ -118,16 +132,15 @@ sequenceDiagram
 - **No content dedup — by decision.** Duplicate media is stored once per blob; the operator never learns
   blob-equality. The savings dedup would buy aren't worth the scope-internal equality leak on an operator-blind,
   self-hostable app ([ADR 0013 §5](../../../decisions/0013-blob-storage-presigned-direct-to-store.md#5-no-content-dedup)).
-- **Backend is never a byte bottleneck.** It signs short-TTL, single-object, single-method capabilities; the
-  bytes go client↔store. Credentials never reach the client.
+- **Backend is never a byte bottleneck.** It signs short-TTL, single-object, single-method (and, for a `PUT`,
+  single-size) capabilities; the bytes go client↔store. Credentials never reach the client.
 - **Position-bound chunks.** The `chunk_frame` AAD (`index ‖ total`) makes reorder/drop/splice detectable —
   integrity of a multi-chunk blob without trusting the store.
-- **Scope of this slice.** The **batch-shaped** control plane (start → direct PUT → complete+attach → direct
-  GET → open, all list-valued) with clients sending length-1 lists. **Resumable uploads, public-share mirrors,
-  and the gallery/curation UI** are their own later slices
-  ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) defers them); the
-  **thumbnail / preview / original tiers** land in [en.memory.derivatives](en.memory.derivatives.md) (which
-  reuses this transport verbatim — a derivative is just another blob).
+- **An upload is bounded by a ceiling, not by the clock.** A session outlives any one URL, so the presign TTL
+  covers one window, not one file, and a stalled chunk is re-signed rather than restarting the file. Resuming
+  **across a page reload** is deferred ([ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)).
+  The **thumbnail / preview / original tiers** ([en.memory.derivatives](en.memory.derivatives.md)) reuse this
+  transport verbatim — a derivative is just another blob.
 
 > **No end-user section.** As an enabler this has no standalone "what this means for you" story — its end-user
 > value surfaces through the use-case it *serves* ([add media to a Memory](../_index.md)), whose bilingual

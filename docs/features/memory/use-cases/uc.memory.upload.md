@@ -60,7 +60,10 @@
   filename reaches the server in the clear.
 - **The tray is global + non-blocking.** Uploads continue while the user browses other Memories; the queue is a
   module singleton, the popup lives in the app shell.
-- **Sequential, not parallel.** One file at a time keeps the byte-budget + open-session accounting simple.
+- **Sequential, not parallel.** One file at a time keeps the byte budget simple. Within a file the chunks
+  stream — read, sealed and sent a few at a time — so a large video costs the device a few frames of memory,
+  not the file twice, and its size is bounded by the server's ceiling rather than by how fast the uplink is
+  ([en.memory.media](../enablers/en.memory.media.md)).
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -81,4 +84,4 @@ es das Gerät verlässt; der Server speichert nur die verschlüsselten Teile.
 - Feature: [Memory](../_index.md); enabler [en.memory.media](../enablers/en.memory.media.md) (the data layer).
 - Use-cases: [browse](uc.memory.browse.md), [gallery](uc.memory.gallery.md) (where the upload affordance lives).
 - Decisions: [ADR 0013](../../../decisions/0013-blob-storage-presigned-direct-to-store.md) (blob store + transport;
-  **resumable uploads deferred** — large-media/video hardening, a later slice).
+  windowed presigning; resuming **across a page reload** deferred).
