@@ -77,8 +77,17 @@
   (`@field:…NotBlank`/`Size`/`Pattern`) — enforced by `@Valid` at the boundary, 400 before the handler —
   and (b) a **trimming Jackson deserializer**
   (`@field:…JsonDeserialize(using = TrimmingStringDeserializer::class)`) to normalize server-visible name
-  metadata. Keep the standard `maxLength` alongside as the human-readable contract. Only **server-visible**
-  fields may be sanitized server-side; content is ciphertext and stays untouched.
+  metadata. Only **server-visible** fields may be sanitized server-side; content is ciphertext and stays
+  untouched.
+- **In a request body, the schema bound and its annotation are one rule written twice — value for value, both
+  ways.** A `maxLength`/`minLength`/`maxItems`/`minItems`/`minimum`/`maximum`/`pattern` has the annotation that
+  enforces it, a `contentEncoding: base64` has the base64 `@Pattern`, and no annotation enforces a rule the
+  schema does not declare (a client generated from the contract could not know it). **A property holding an
+  object, or a list of objects, whose schema carries any constraint also carries
+  `@field:jakarta.validation.Valid`** — validation does not descend without it, so every annotation below it is
+  dead. That is how `BlobUploadsBatchRequest.items` enforced neither its `maxItems: 256` nor any item's
+  `wrappedBlobKey` checks. Parameters are exempt: the `jaxrs-spec` API generator derives their annotations
+  itself (`useBeanValidation`).
 - **Stateful / cross-field / domain checks stay imperative** in the handler or a guard, close to the
   invariant, and small/named/fail-closed (e.g. crypto-suite allow-list, scope-grant checks, upload
   quota/path-traversal guards). Anything needing DB state does not belong in a field annotation.
