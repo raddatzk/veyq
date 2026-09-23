@@ -20,23 +20,18 @@ four places and one of them trusts the raw header. After this CR:
 - recovery mails only a member of that tenant;
 - recovery answers before it does anything that depends on the address, so the answer's timing no longer tells
   a known address from an unknown one;
-- the server stores the recovery commitment only as its SHA-256;
 - one email normalization and one user-by-email lookup replace the six and four copies.
 
 ## Context & constraints
 
 - **Refined state this builds** (written in the refine commit, read these, don't restate them):
-  [ADR 0054](../docs/decisions/0054-password-recovery-two-factor-release.md) § Decision 1 (the hashed
-  commitment), §4 (the relay of a tenant the account belongs to; a tenantless Server Owner has no recovery),
-  §6 (identical includes timing);
+  [ADR 0054](../docs/decisions/0054-password-recovery-two-factor-release.md) §4 (the relay of a tenant the
+  account belongs to; a tenantless Server Owner has no recovery) and §6 (identical includes timing);
   [uc.account.recover-access](../docs/features/account/use-cases/uc.account.recover-access.md) Preconditions,
-  steps 2 + 10, A1; [scopes-and-tenancy § Tenant resolution](../docs/crosscutting/scopes-and-tenancy.md);
-  [en.account.key-model](../docs/features/account/enablers/en.account.key-model.md) (the tag row).
+  step 2, A1; [scopes-and-tenancy § Tenant resolution](../docs/crosscutting/scopes-and-tenancy.md).
 - **Measured on** worktree branch `claude/interesting-mestorf-21bcdf` at `7c1e310` plus the refine commit. Every
   locator below was run there. Re-run them; don't trust the lists.
-- **Wire shape does not change.** Clients keep sending the raw tag at birth, at rotation and at `complete`. The
-  server hashes it. `scripts/validate_rotation_shape.py` anchors on the *contract* field `recoveryMasterKeyTag`,
-  and a description edit leaves that anchor untouched.
+- **Wire shape does not change.** Phase 1 edits one description.
 - **Out of scope:**
   - Tenant suspension (inbox #157). `TenantSuspensionFilter` keeps calling `TenantHostResolver` directly and
     keeps its behaviour. The web space switcher is host-independent, so suspension cannot live on the Host.
@@ -44,6 +39,10 @@ four places and one of them trusts the raw header. After this CR:
     members is covered by the two factors.
   - A recovery path for a tenantless Server Owner (accepted in refine: none, ADR 0054 §4).
   - The login challenge per email (#175).
+  - Storing the recovery commitment hashed (ADR 0054 § Decision 1). It was split out into
+    `cr-recovery-commitment-stored-hashed`, which is independent and can land before or after this CR. The two
+    overlap only in text: `RecoveryHandler` (`request` here, `complete` there), `AccountStore` and
+    `RecoverySliceTest`.
 - **Neighbours that touch the same code.** Land this **before #157**, because #157 rewrites the scope gates
   inside the `ScopesHandler` methods whose signatures this CR changes. #152 (Admin surface: `SetupResource`,
   `TenantHandler`), #175 (`LoginHandler`), #172 (`RecoveryStore.applyReset`), #171 (`RecoverySliceTest`'s
@@ -93,23 +92,7 @@ four places and one of them trusts the raw header. After this CR:
    - The limiters stay before the hand-off. They are what bounds the queued work (ADR 0054 §6).
    - Invites stay synchronous. Their caller is an authenticated owner who is shown the delivery result, so
      there is no oracle to close.
-6. **The commitment is stored hashed.** Writers are `AccountStore.createAccount` (setup + both accept paths) and
-   `RotationStore` (`grep -rn 'recoveryMasterKeyTag =' backend/src/main/kotlin`). The reader is
-   `RecoveryHandler.complete`, which compares the hash of the presented tag in constant time. Hash with
-   `Tokens.hash` semantics (hex SHA-256 of the UTF-8 base64 string). That keeps today's comparison of the exact
-   string (`RecoveryHandler.kt:113`) and gives it the same treatment as every token. Rename the Kotlin property
-   so it carries "hash", leaving `@Column(name = "recovery_master_key_tag")` as it is. The column is unchanged,
-   and the compiler then lists every writer.
-7. **Existing rows are rewritten by a Kotlin Flyway migration** (`BaseJavaMigration`, version = next free; `V50`
-   at refine, `ls backend/src/main/resources/db/migration | sort -V | tail -1` → `V49`). No SQL spelling hashes
-   in both dialects. Measured in `h2-2.4.240-sources.jar`: `HashFunction` offers `HASH`/`ORA_HASH`, and
-   MySQL mode adds only `UNIX_TIMESTAMP`, `FROM_UNIXTIME`, `DATE`, `LAST_INSERT_ID`. MariaDB has `SHA2(…, 256)`
-   and no `HASH` (remembered). Quarkus 3.36.0's `FlywayProcessor` carries `addJavaMigrations` /
-   `javaMigrationClasses` (measured with `strings` on the deployment jar). Whether it discovers a Kotlin class in
-   `db.migration` has **not been run**, and the tests in phase 4 settle it. **The migration computes SHA-256 itself
-   and never calls `Tokens`.** An applied migration must not change meaning when application code changes
-   (backend/CLAUDE.md § Migrations), so a test pins its output equal to `Tokens.hash` instead.
-8. **One email normalization, equal to the client's salt rule.** The rule is
+6. **One email normalization, equal to the client's salt rule.** The rule is
    `packages/crypto/src/v1.ts:243` (`email.trim().toLowerCase()`). One function in `shared/identity` implements
    it. `AccountStore.findByEmail` and `createAccount` normalize for themselves, and every other user-by-email
    lookup goes through `findByEmail`. The rate-limiter keys and the login-challenge key use the same function.
@@ -151,10 +134,6 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
   - `TenantHandler` ×3, `SetupResource`, `InviteMailRateLimiter`, `RecoveryRateLimiter`, `RecoveryHandler` and
     `LoginHandler`.
   - The second angle, `grep -rn 'lowercase()' backend/src/main/kotlin | grep -i mail`, must name nothing more.
-- **The tag in tests.** `grep -rn 'recoveryMasterKeyTag' backend/src/test | grep -v '"recoveryMasterKeyTag"'`
-  - Only entity seeds and stored-value assertions change: `RecoverySliceTest:279,283`,
-    `PasswordChangeSliceTest:125`, `RotationSliceTest:65,181,233`.
-  - The JSON request bodies keep sending the raw tag.
 - **Tests pinning the refactor.** They must stay green, edited only for Host plumbing.
   `grep -rln 'X-Forwarded-Host\|"Host"' backend/src/test` plus
   `grep -rln 'TenantHostResolver' backend/src/test` →
@@ -169,23 +148,18 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
   - Code KDoc: `BlobStore.kt:132`.
   - All remaining hits are code that phase 2 deletes. `SmtpInviteMailSendTest`'s `tenantIdByDomain` is a local
     test helper, not the deleted symbol.
-- **"Not a secret" about the tag.** `grep -rn -i 'not a secret' contracts/api/auth.openapi.yaml packages/crypto/src/v1.ts`
-  → `auth.openapi.yaml:997` and `v1.ts:165`. ADR 0054 was corrected in refine.
 
 ## Phases
 
-- [ ] 1 contracts: descriptions only. `requestPasswordRecovery`: mails only an account that is a member of the
-      tenant this request's Host resolves to, and answers before the address is looked up.
-      `completePasswordRecovery` and `recoveryAuthTag`: the server compares against a stored SHA-256. **Delete**
-      the "Not a secret" sentence; replace it with "reveals nothing about the master key, but is what the reset
-      accepts". · Done when: `npm run generate:api` + `npm run check` (web) green, the generated Kotlin is
+- [ ] 1 contracts: description only. `requestPasswordRecovery` mails only an account that is a member of the
+      tenant this request's Host resolves to, and answers before the address is looked up. · Done when: `npm run generate:api` + `npm run check` (web) green, the generated Kotlin is
       unchanged, and the trust-chain guards are green.
 - [ ] 2 backend: one resolution, one lookup (behaviour-preserving). **Guard first:**
       `scripts/validate_lookup_single_home.py`, one guard with rules A/B/C from the inventory, each rule matching
       the spellings listed there. Its docstring carries the three fields (changes/README § trust-chain guards).
       Its limit names an alias constant (`const val H = "Host"` read as `getHeaderString(H)`), and
       `validate_guard_gaps.py` pins that gap. Run it on this tree and **record the red**: that is the live-defect
-      bite, and its list must equal the inventory's rule A–C hits. Then Decisions 1–3 and 8. Recovery still looks
+      bite, and its list must equal the inventory's rule A–C hits. Then Decisions 1–3 and 6. Recovery still looks
       the account up across the whole instance at the end of this phase, because phase 3 changes that.
       · Done when: the guard is green, each rule has been bitten once by snapshot-and-restore (a hand parse back
       in `RecoveryResource`, a `find("domain"…)` in a handler, `VeyqUser.find("email"…)` in `LoginHandler`), and
@@ -211,31 +185,14 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
         synchronous). Confirm that it still reds if the transport check is moved below the limiter.
 
       · Done when: both bites were recorded red and are now green, and the full `./gradlew check` is green.
-- [ ] 4 backend: hashed commitment (Decisions 6 + 7). Live defect first: a test takes the value the database
-      holds for an account born over HTTP and presents it as `recoveryAuthTag` to `complete`. Today that is
-      `Applied`; it must become `NotProven`. **Control:** the raw tag still resets. Migration tests:
-      - Discovery: `flyway_schema_history` holds the version with `success = true`. That is the only assertion
-        that sees a migration Flyway silently never picked up. Bite it by renaming the class so Flyway ignores
-        it.
-      - Rewrite: run the migration against a seeded raw row, and the row reads `Tokens.hash(raw)`.
-      - The migration's digest equals `Tokens.hash` for a fixed input.
+- [ ] 4 prose + coverage. ADR 0055 §4 and ADR 0066 name `RequestTenant` instead of the deleted symbols. That is
+      an edit to the symbol only, and the decisions stand. Re-run the prose locator: phases 2–3 wrote KDocs and
+      may have added sites. Coverage for `uc.account.recover-access`:
+      - new criteria `request-reaches-only-this-tenants-accounts` and
+        `request-answers-before-the-address-is-looked-up`;
+      - `request-is-non-enumerable` is **edited** to say "this tenant".
 
-      Run it once against the MariaDB dev stack (`infra/docker-compose.yml`) and read its history row, since the
-      test DB is H2. · Done when: the full `./gradlew check` is green and the MariaDB history row is recorded in
-      the retrospective.
-- [ ] 5 prose + coverage. **Edit** `packages/crypto/src/v1.ts:165` (the "Not a secret" sentence, as in phase 1).
-      ADR 0055 §4 and ADR 0066 name `RequestTenant` instead of the deleted symbols: an edit to the symbol only,
-      and the decisions stand. `backend/CLAUDE.md` § Migrations gains one rule: a data rewrite needing a function
-      outside the H2 ∩ MariaDB subset is a Kotlin `BaseJavaMigration`, self-contained and never calling app
-      code. Re-run the prose locator: phases 2–4 wrote KDocs and may have added sites. Coverage for
-      `uc.account.recover-access`:
-      - new criteria `request-reaches-only-this-tenants-accounts`, `request-answers-before-the-address-is-looked-up`,
-        `commitment-stored-hashed`;
-      - `request-is-non-enumerable` and `commitment-proves-possession` are **edited** to say "this tenant" and
-        "the stored hash".
-
-      · Done when: `python3 scripts/validate_coverage.py` and every `scripts/validate_*.py` are green, and
-      `npm run check` is green in `web/` and `packages/crypto`.
+      · Done when: `python3 scripts/validate_coverage.py` and every `scripts/validate_*.py` are green.
 
 ## Definition of done
 
@@ -246,10 +203,10 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
   on the live defect and bitten per rule, and its alias gap is pinned in `validate_guard_gaps.py`.
 - The recovery e2e suite (`web/src/features/account/recovery/recovery.e2e.test.ts`, via
   `scripts/run_web_e2e.py`) ran once locally, and its log shows the suite executed. It is the only place where
-  birth → hashed tag → reset → sign-in runs end to end with the real client, and where the hand-off meets a real
-  Mailpit. With no remote there is no CI run (inbox #26); say exactly that.
-- Coverage is updated as in phase 5. Inbox #156 is closed with a pointer to the ADR 0054 sections, and this file
-  is deleted after what it taught has moved to where it binds.
+  the hand-off meets a real client and a real Mailpit. With no remote there is no CI run (inbox #26); say exactly
+  that.
+- Coverage is updated as in phase 4. This file is deleted after what it taught has moved to where it binds. Inbox
+  #156 closes once this CR and `cr-recovery-commitment-stored-hashed` are both done.
 
 ## Retrospective
 
