@@ -117,6 +117,7 @@ Passwort nicht von einem nicht existierenden Konto unterscheiden und verrät so 
   keypair), [Security Model](../../../crosscutting/security-model.md) (operator-blind, non-enumerability)
 - Decisions: [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) (password-derived keypair
   + challenge-response), [ADR 0004](../../../decisions/0004-session-tokens.md) (session token form)
-- Related use-cases: [setup-server](../../admin/use-cases/uc.admin.setup-server.md) (registers
+- Related use-cases: [sign-out](uc.account.sign-out.md) (the web side of ending the session this login
+  opened); [setup-server](../../admin/use-cases/uc.admin.setup-server.md) (registers
   `authPublicKey`); unlock the Master Key — planned; log in with a passkey — planned; change password /
   Secret Key — planned

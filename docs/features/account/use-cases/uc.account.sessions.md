@@ -64,9 +64,10 @@ which owns that obligation.
 ## Main flow — sign out
 
 - **One session:** the client asks the server to revoke that family id. The family is marked `REVOKED`; its
-  refresh token stops working at the next rotation attempt, and its access token dies with its own short TTL.
+  refresh token stops working at the next rotation attempt, and its access token at its next request: every
+  authenticated read checks that the family is still `ACTIVE` (`SessionService.resolveUserId`).
 - **Everywhere else:** one call revokes **every family except the caller's own**. Signing yourself out of the
-  device you are holding is [uc.account.login](uc.account.login.md)'s logout, not this; a "sign out everywhere"
+  device you are holding is [uc.account.sign-out](uc.account.sign-out.md), not this; a "sign out everywhere"
   that also ejects the person using it to secure the account is a footgun, not a feature.
 
 Revocation is a **status flip on the family**, which is what makes it instant and total: the family is the
@@ -139,8 +140,8 @@ Key again.
   the call succeeds and changes nothing. Revocation is **idempotent**, and an unknown or foreign id is a silent
   no-op with the same response as a real one — the same non-enumerability posture the wrap endpoints already
   take, so the list cannot be used to probe which ids exist.
-- **E2 — the caller revokes its own family:** permitted, and it means "log me out here too". The client treats
-  the response as a logout and returns to the sign-in screen rather than continuing with dead tokens.
+- **E2 — the caller revokes its own family:** permitted, and it means "log me out here too". The client runs
+  [uc.account.sign-out](uc.account.sign-out.md)'s sequence rather than continuing with dead tokens.
 - **E3 — locked vault, and the way in.** The list renders with ids and coarse dates, no names; revoking works
   normally. *Reaching* that state is the half that had to be built: every shell route requires an unlocked
   vault — permanently now, `scripts/validate_shell_route_gate.py` — and the sign-in form's Secret-Key field is

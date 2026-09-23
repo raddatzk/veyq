@@ -1,0 +1,28 @@
+useCase: uc.account.sign-out
+feature: account
+title: Sign out — and every other way a session ends
+status: planned
+# Refined 2026-09-23 (inbox #168) ahead of any implementation. The server half of signing out — revoking the
+# family — is uc.account.login's `logout-revokes-family` and is not restated here; every criterion below is
+# about what the web client does with the session it ends.
+acceptanceCriteria:
+  - id: one-sign-out-sequence
+    text: Every sign-out entry point (profile menu, revoking your own session, declining the terms, the sign-in
+      card, the locked screen) runs the one sign-out sequence — convenience wraps deleted and the family revoked
+      while the session still works, then the ending — and the ending runs even when the server calls fail,
+      in which case the sign-in page says the sign-out did not reach the server.
+  - id: ending-is-a-new-document
+    text: The ending drops the local convenience tiers, tells the media service worker to drop every playback,
+      and loads the sign-in page as a new document rather than changing route in place.
+  - id: refresh-rejection-ends-the-session
+    text: An authoritative refresh rejection (4xx) in a tab that holds a session runs the ending; a network
+      failure or a 5xx keeps the session and its tokens.
+  - id: other-tabs-end-with-it
+    text: A tab that ends its session announces it on a same-origin channel carrying no account data; every
+      other tab that holds a session runs the ending without calling the server, and none re-announces it.
+  - id: no-session-no-ending
+    text: A tab that holds no session (the sign-in page at boot, a public share, a pairing ceremony) ignores the
+      announcement, and a refresh rejected at boot does not run the ending.
+gaps:
+  web: "Not built: sign-out today resets an incomplete list of stores, and a rejected refresh drops only the tokens."
+  backend: "No backend work: the server half (revoking the family) is uc.account.login's logout-revokes-family, already covered there."
