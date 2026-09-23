@@ -3,10 +3,12 @@ package com.veyq.app.shared.blobstore
 import com.veyq.app.shared.config.VeyqConfig.SigningMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
 import java.net.URI
+import java.net.URLDecoder
 
 /**
  * Presigning is **per-request, not per-instance** (ADR 0063, amending ADR 0013 §4): a URL is signed for the
@@ -168,6 +170,46 @@ class S3BlobStorePresigningTest {
         )
         assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
     }
+
+    @Test
+    fun everyPresignedGetSignsTheInertResponseOverrides() {
+        // ADR 0013 §6: nothing the store serves is renderable, and the SIGNER guarantees it — so the rule holds on
+        // a store veyq never provisions, and on objects stored before it. Both overrides ride in the signed query
+        // (the real store 403s a URL with one removed, which `BlobBatchE2ETest` measures), so asserting them here
+        // is asserting what the store will serve. Every mode, because the rule is not a property of any one of them.
+        for ((mode, store) in allModes()) {
+            val query = queryOf(store.presignGet(KEY, "tenant.example.com"))
+            assertEquals("application/octet-stream", query["response-content-type"], "mode=$mode")
+            assertEquals("attachment", query["response-content-disposition"], "mode=$mode")
+        }
+    }
+
+    @Test
+    fun everyPresignedPutSignsTheContentTypeHeader() {
+        // ADR 0013 §6's other half: the uploader no longer chooses the stored type. A presigned PUT carries no header
+        // VALUES, only the names it signed — so this pins that `content-type` is signed at all (unsigned, a store
+        // ignores whatever the client sends and stores it as sent). WHICH value is signed is a property only the
+        // store can show: `BlobBatchE2ETest` sends `text/html` to such a URL and gets its 403.
+        for ((mode, store) in allModes()) {
+            val signed = queryOf(store.presignPut(KEY, "tenant.example.com"))["X-Amz-SignedHeaders"]
+            assertTrue(signed.orEmpty().split(';').contains("content-type"), "mode=$mode signed=$signed")
+        }
+    }
+
+    /** One store per [SigningMode], each with a public endpoint so no mode is folded into another. */
+    private fun allModes(): Map<SigningMode, S3BlobStore> = SigningMode.entries.associateWith { mode ->
+        S3BlobStore(
+            s3 = NoS3Client, bucket = BUCKET, presignTtlSeconds = 300,
+            internalEndpoint = "http://garage:3900", publicEndpoint = "https://veyq.example.org",
+            signingMode = mode, credentials = CREDENTIALS, region = "us-east-1",
+        )
+    }
+
+    private fun queryOf(url: String): Map<String, String> =
+        URI.create(url).rawQuery.split('&').associate { pair ->
+            val (k, v) = pair.split('=', limit = 2)
+            URLDecoder.decode(k, Charsets.UTF_8) to URLDecoder.decode(v, Charsets.UTF_8)
+        }
 
     /** A store reached at an origin of its own, which is **not** the endpoint the backend uses — ADR 0064's
      *  Kubernetes shape, where the browser gets an Ingress host and the backend a cluster-internal Service. */
