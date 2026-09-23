@@ -1,11 +1,13 @@
 # Concern: Web Content-Security-Policy
 
 - **ID:** cc.security.csp
-- **Type:** **Cross-cutting concern** — a horizontal browser-enforced security mechanism for the `web/` surface;
+- **Type:** **Cross-cutting concern** — a horizontal browser-enforced security mechanism for the two browser
+  surfaces, `web/` and `admin-web/` (§ *admin-web*);
   it has no standalone end-user goal (not a use-case) and is not a feature substrate (not an enabler). Recorded
   here so its policy + rationale + verification are traceable from the threat model.
-- **Status:** baseline shipped as a `<meta>` policy + dev-server header; the header-only directives
-  (`frame-ancestors`, HSTS) are **deferred** to the future production web-serving component (see *Deferred* below).
+- **Status:** baseline shipped as a `<meta>` policy + dev-server header on both surfaces; for `web/` the
+  header-only directives (`frame-ancestors`, HSTS) are **deferred** to the future production web-serving component
+  (see *Deferred* below).
 
 ## Protects against
 
@@ -63,12 +65,25 @@ Why each non-obvious source:
   `connect-src 'self'` covers it. A **split-origin** store deployment must add the store host at the serving
   layer.
 
+## admin-web
+
+The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)) ships its own policy,
+[`admin-web/src/shared/security/csp.ts`](../../admin-web/src/shared/security/csp.ts), delivered the same two ways
+by `admin-web/vite.config.ts`. It is stricter than web's: no map providers, so the only origin besides its own is
+the HIBP range API in `connect-src`. It carries **no `frame-ancestors`** either, for the same reason — a `<meta>`
+policy ignores it. Unlike web, admin-web does have a serving component, its container's nginx, and anti-framing
+is that nginx's `X-Frame-Options: DENY`
+([`admin-web/nginx.conf.template`](../../admin-web/nginx.conf.template)) — the whole guard, not a second layer.
+
 ## Verification
 
 - [`web/src/shared/security/csp.test.ts`](../../web/src/shared/security/csp.test.ts) pins the directives (no
   `unsafe` on script, `object-src 'none'`, no third-party origin baked when providers are unset, `ws:` dev-only,
   no `frame-ancestors`).
 - Live-verified (cr-0133): the app boots under the policy with **zero CSP violations**, styles/fonts/HMR intact.
+- [`admin-web/src/shared/security/csp.test.ts`](../../admin-web/src/shared/security/csp.test.ts) pins admin-web's
+  policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
+  third-party origin anywhere, no `frame-ancestors`.
 
 ## Deferred (own follow-up, needs the prod web server)
 

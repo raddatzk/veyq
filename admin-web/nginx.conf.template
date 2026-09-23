@@ -27,8 +27,9 @@ server {
     # reconnaissance for anyone who reached it at all.
     server_tokens off;
 
-    # Belt-and-braces against this page ever being framed or indexed. The SPA also ships a CSP <meta> with
-    # frame-ancestors 'none' and a robots noindex, but a header cannot be stripped by a broken build.
+    # These headers are the ONLY anti-framing guard this page has: the SPA's CSP ships as a <meta>, and a meta
+    # policy ignores frame-ancestors, so X-Frame-Options here is not a second layer but the whole of it. The
+    # robots noindex is belt-and-braces with the page's own <meta name="robots">.
     #
     # TRAP, measured here: `add_header` does NOT merge across levels. A location that declares even one
     # `add_header` of its own inherits NONE of the server-level ones. So these four have to be repeated in the
