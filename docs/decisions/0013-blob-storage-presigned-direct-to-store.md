@@ -90,9 +90,10 @@ its own.
 
 **CORS is a browser rule, and it is configured on the store** — veyq cannot inject headers into a direct
 fetch: none needed for a bundled store behind a Traefik
-**path route** (same origin); otherwise a bucket/account CORS policy allowing `PUT`+`GET` from the web origin,
-exposing `ETag`. For the bundled store behind Traefik, route the bucket path **without** stripping the prefix and with the
-Host header preserved (SigV4 signs host+path+query).
+**path route** (same origin); otherwise a bucket/account CORS policy allowing `PUT`+`GET` from the web origin
+and the `Content-Type` request header every `PUT` carries (§6), exposing `ETag`. For the bundled store behind
+Traefik, route the bucket path **without** stripping the prefix and with the Host header preserved (SigV4 signs
+host+path+query).
 
 **Two same-origin strategies, chosen per deployment target.** The bundled-store-behind-Traefik path route
 above is the **docker-compose** answer, and depends on that specific proxy's prefix/Host-preservation
@@ -187,9 +188,11 @@ guarantees it,** so the rule holds on the bundled store and on any S3 store veyq
   future presign path that forgets the overrides. The Kubernetes target serves the store on its own origin
   (§4) and relies on the signer alone.
 
-It costs a legitimate client nothing: no client renders a store response — every client `fetch`es the frames
-and opens them (§2), so the type the store reports is never read. The rule is not specific to the store: every
-place that serves uploader-chosen bytes on the app origin applies it, and the playback Service Worker does so in
+It costs a legitimate client one request header and nothing else: no client renders a store response — every
+client `fetch`es the frames and opens them (§2), so the type the store reports is never read. The header is not
+CORS-safelisted, so on the cross-origin branch (§4) the store's policy must allow it; the policy veyq provisions
+allows every header, an operator's own must name it. The rule is not specific to the store: every place that
+serves uploader-chosen bytes on the app origin applies it, and the playback Service Worker does so in
 [ADR 0047](0047-inline-video-playback-range-streaming.md).
 
 ## Consequences
