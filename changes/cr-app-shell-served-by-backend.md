@@ -72,6 +72,10 @@ here) never meet on one response. They share files only textually: `infra/docker
 the store service there, one env line on the app service here), `infra/README.md` and ADR 0013. The second to
 land rebases.
 
+**With `cr-upload-windowed-presign`: no ordering constraint, only overlap.** That CR reshapes the presign sites
+in `BlobStore`, and phase 1 here adds a read of the signer's endpoint resolution beside them. Whichever lands
+second rebases; phase 1's test anchors on whatever presign call exists by then, not on a symbol name.
+
 This CR does put the Service Worker under the app policy for the first time (phase 2). On compose the worker's
 store fetches are same-origin, so `'self'` covers them in either order.
 
@@ -115,7 +119,7 @@ protection than the one before it:
       - HSTS present by default and absent when disabled.
       - The CSP equals the fixture policy plus the store origin, per signing mode: the three modes and the
         in-memory store.
-      - **The appended origin is the origin of a URL `presignGet` actually produced in that mode**, not a
+      - **The appended origin is the origin of a URL the signer actually produced in that mode**, not a
         second reading of the config. This is what makes "cannot disagree with the signer" a tested claim.
       - The no-shell branch: no fallback, plain headers present.
 
