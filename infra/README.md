@@ -169,14 +169,18 @@ change-domain/revoke/suspend/reactivate, plus `release`. It is an HTTP client of
 calls, so it needs no route and no exposed port at all:
 
 ```sh
+read -rs VEYQ_ADMIN_PASSWORD && export VEYQ_ADMIN_PASSWORD
 docker compose exec \
-  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD" \
+  -e VEYQ_ADMIN_EMAIL=you@example.com -e VEYQ_ADMIN_PASSWORD \
   admin veyq-admin tenant list
 ```
 
 Pass the credential **on the invocation**, as above, rather than putting it in `infra/.env`: it is the Server
 Owner's own password, and the CLI signs in fresh on every call and writes nothing to disk, so there is no
-reason for it to sit in a file between calls. Each call therefore pays one Argon2id derivation (~1–3s,
+reason for it to sit in a file between calls. Pass it **by name**: a bare `-e VEYQ_ADMIN_PASSWORD` copies the
+value from your shell into the container, whereas `-e VEYQ_ADMIN_PASSWORD="$VEYQ_ADMIN_PASSWORD"` expands it
+into `docker compose`'s own argv, where `ps` shows it to every user on the host for as long as the call runs —
+the rule `scripts/instance_backup.py` follows for its credentials too. Each call therefore pays one Argon2id derivation (~1–3s,
 measured) before it does anything — the accepted price of never holding a session that outlives the process.
 First-run **setup** is deliberately not a command: it mints key material and shows the Emergency Kit once, so
 it stays on the screen above, where a person can actually save the kit.
