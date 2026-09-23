@@ -8,11 +8,12 @@ docs/coverage/features/<feature>/use-cases/uc.<feature>.<goal>.yaml
 ```
 
 Each file lists acceptance criteria; every criterion's tests are keyed by **area** (which surface) then
-**level** (which kind of test). Surfaces with **no** coverage ref for the use-case are declared under
-`gaps` with a reason — never left silent.
+**level** (which kind of test). Every use-case **owes** `backend` and `web`: each either carries a coverage
+ref or is declared under `gaps` with a reason — never left silent. `crypto` and `admin-web` are opt-in.
 
 > **A surface that no CI job runs makes no coverage claim** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
-> The surfaces are **`backend` and `web`**. `http/` was hand-fired IDE tooling and has been deleted — real
+> The surfaces are **`backend`**, **`web`**, **`crypto`** (`packages/crypto/`) and **`admin-web`**, each run
+> by a CI job. `http/` was hand-fired IDE tooling and has been deleted — real
 > requests that proved nothing, because nobody fired them. A surface enters this model when its CI job is
 > green, not when its code exists.
 
@@ -21,7 +22,7 @@ or the tests they point to).
 
 ## Dimensions
 
-**Area** — *where* the test runs (the surface): `backend` · `web`.
+**Area** — *where* the test runs (the surface): `backend` · `web` · `crypto` · `admin-web`.
 
 **Level** — *what kind* of test it is. Classify by the **scope of behaviour under test**, not by the
 test harness:
@@ -62,7 +63,8 @@ gaps:
   particular level, because coverage is risk-based, not box-ticking.
 - **Areas and levels come from the fixed sets above**; unknown names fail validation (catches typos).
 - **References must resolve:** a `backend` `ClassName.method` ref resolves against *that* test class (a file
-  whose stem is `ClassName`, containing `method`); a `web` ref's file must exist.
+  whose stem is `ClassName`, containing `method`); a `web` ref's file must exist, and so must a `crypto` or
+  `admin-web` one under that package's root.
 - **A backend ref must name a test a CI run executes** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
   A test behind a JUnit gate (`@EnabledIfEnvironmentVariable`, `@Disabled`, `@EnabledOnOs`, …) counts only if
   a Gradle test run declared in `.github/workflows/` satisfies that gate; an opt-in test like
@@ -73,9 +75,16 @@ gaps:
   sentence they do not prove (a real store the hermetic test cannot reach, a deadlock H2 cannot produce). It is
   the mirror of the use-case `gaps` below, which name a surface with **no** ref; removing a criterion's last ref
   on a surface therefore turns its note red rather than leaving it to describe nothing.
-- **Gaps are explicit *and* mean uncovered:** a surface with no coverage ref is listed under `gaps` with a
-  reason (silent omission is not allowed); a surface that **is** covered may not also be a gap — that overlap
-  is a stale gap (a build-note or deferred-slice left behind) and fails validation ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
+- **Gaps are explicit *and* mean uncovered:** an owed surface (`backend`, `web`) with no coverage ref is
+  listed under `gaps` with a reason, and silence fails validation; a surface that **is** covered may not also
+  be a gap — that overlap is a stale gap (a build-note or deferred-slice left behind) and fails validation
+  ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
+- **Only `backend` and `web` are owed** — the two surfaces every use-case crosses. `crypto` is a library
+  proven beneath web, and `admin-web` is the Server-Owner surface only admin use-cases touch. A ref or a gap
+  on either is checked like any other, but silence is legal: owing them would demand a "not applicable" gap
+  on almost every file, burying the few that say something. "No part here" is a legitimate reason, and still
+  a statement: it is how a Server-Owner use-case says its client lives on `admin-web`. And writing it is where
+  a hidden surface shows up — `uc.admin.create-tenant` was silent on web, yet web carries its invite acceptance.
 - **Stop at area × level.** Do not add finer per-test metadata (individual assertions, requirement ids) —
   classification noise without a decision payoff.
 - **One shape is deliberately not expressible: "built on every surface, but one criterion no surface can

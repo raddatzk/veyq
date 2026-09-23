@@ -83,6 +83,20 @@ Keys are closed at both levels, so a misspelling (`gap:`) is an error rather tha
   surface) or an empty reason would have passed. It is the mirror of the use-case rule: a use-case gap names a
   surface with no ref; a criterion gap names a surface that HAS one on that criterion, so removing the last
   ref orphans the note and turns red. Its limit: whether the reason is true is prose, and stays unread.
+
+Every use-case OWES `backend` and `web` (`OWED`): each is covered on some criterion or named under the use-case
+`gaps` with a reason — never silent. `crypto` and `admin-web` are opt-in: a ref or a gap on them is checked like
+any other, and silence is legal.
+  The defect that bought it. The coverage README and the comment on `SURFACES` both said a surface with no ref is
+  "never left silent", and nothing read it. Measured 2026-09-23: six use-cases were silent on backend or web, and
+  one silence hid a real surface — `uc.admin.create-tenant`'s invite acceptance lives in web (`TenantJoinView`),
+  and its coverage file never said so. Read as written, the same sentence also owed `crypto` and `admin-web`,
+  which 49 and 48 of the 52 use-cases never touch: enforcing that would have bought ~97 "not applicable" gaps
+  that bury the few saying something.
+  Its limit. It decides that an owed surface was *addressed*, never that the gap's reason is true (prose, unread).
+  And it owes only the two surfaces every use-case crosses, so a Server-Owner use-case may stay silent on
+  `admin-web`, where its client actually lives (pinned open in `validate_guard_gaps.py`); the `web` gap such a
+  use-case must carry is where its author says where the client went.
 """
 from __future__ import annotations
 
@@ -109,9 +123,14 @@ ADMIN_WEB = ROOT / "admin-web"
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 # The surface set, and the whole of it: a surface counts when a CI job actually runs its tests — the ADR 0040
-# principle, applied by rule rather than by name (the claim follows the build). Every use-case owes every
-# surface here; adding one only ever *permits* refs, so a new surface is one line plus its resolution rule.
+# principle, applied by rule rather than by name (the claim follows the build). Adding one only ever *permits*
+# refs and gaps, so a new surface is one line plus its resolution rule — owing it is a separate decision (OWED).
 SURFACES = {"backend", "web", "crypto", "admin-web"}
+
+# The surfaces every use-case OWES — covered, or under `gaps` with a reason, never silent: the two user-facing
+# surfaces every use-case crosses. `crypto` is a library proven beneath web and `admin-web` the Server-Owner
+# surface only admin use-cases touch, so owing them would demand a "not applicable" gap almost everywhere.
+OWED = {"backend", "web"}
 
 # Surfaces resolved as "a test-file path relative to this root". They differ only in the root they hang off,
 # so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.
@@ -775,6 +794,9 @@ for uc in usecases:
         if area in covered_areas:
             errors.append(f"{where0}: area '{area}' is both covered and a gap "
                           f"(a gap must be an uncovered surface; move build-notes/deferred prose out)")
+    for area in sorted(OWED - covered_areas - set(gaps)):
+        errors.append(f"{where0}: surface '{area}' is silent — no coverage ref and no gap (every use-case owes "
+                      f"{sorted(OWED)}: cite a test, or name it under `gaps` with why it has none)")
 
 if backend_refs and not CI_RUNS:
     errors.append(f"{rel(WORKFLOWS)}: no CI run executes the backend's Gradle tests (an unconditional "

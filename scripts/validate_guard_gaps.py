@@ -66,6 +66,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
   20 a backend ref at a method that exists only inside a KDoc example — rejected: `validate_coverage` scans
      comment- and string-masked source. Unmasked, `TestMailbox`'s KDoc made `TestMailbox.x` a resolvable method
      with a body
+  22 a use-case silent on an owed surface (`uc.settings.appearance-language` with its backend gap removed, so
+     backend has neither a ref nor a gap) — rejected: `validate_coverage` requires every use-case to address
+     `OWED` (backend, web). The coverage README and the `SURFACES` comment had said "never left silent" with
+     nothing reading it; six files were silent (2026-09-23), and one silence hid a real web surface
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -118,6 +122,12 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      an assumption is an arbitrary expression, possibly in a `@BeforeAll` or a helper it calls, so a check
      would catch only the direct spelling: much mechanism for part of the lie, the same trade as 4b. Pinned so
      the limit in that guard's docstring is executable rather than a sentence.
+  23 a Server-Owner use-case silent on `admin-web` (`uc.admin.setup-server` with its admin-web gap removed)
+     passes `validate_coverage`, which owes only backend and web. **Left open on purpose** — owing `admin-web`
+     everywhere would demand a "not applicable" gap on nearly every file, and owing it per feature fits no
+     feature (admin mixes web, admin-web and backend-only use-cases) without a declaration the coverage schema
+     does not carry, the schema growth ADR 0040 declined. The `web` gap such a file must carry is where it says
+     where its client went. Pinned so the limit in that guard's docstring is executable rather than a sentence.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -162,6 +172,12 @@ BACKEND_TEST_REF = f"{BACKEND_TEST_CLASS}.{BACKEND_TEST_METHOD}"
 # A criterion-level gap (a covered surface's refs stopping short) — its surface is what case 19 forges.
 COV_LOGIN = "docs/coverage/features/account/use-cases/uc.account.login.yaml"
 CRITERION_GAP_SURFACE = "      - surface: backend\n"
+# The use-case gap that keeps an owed surface from being silent (case 22 removes it; 4b leans on it), and a
+# Server-Owner use-case's admin-web gap (case 23 removes it, leaving the web gap after it in place).
+OWED_GAP_ANCHOR = "\ngaps:\n  backend: >-\n"
+COV_SETUP = "docs/coverage/features/admin/use-cases/uc.admin.setup-server.yaml"
+ADMIN_WEB_GAP_ANCHOR = "\ngaps:\n  admin-web: >-\n"
+NEXT_GAP_ANCHOR = "\n  web: >-\n"
 # A distinctive base64 cap (the space icon, 21 884) — forging it oversize is the #94 closed-hole probe; a
 # free-text cap (the operator terms, 20 000) — forging it huge is the free-text open-gap probe.
 B64_CAP_ANCHOR = ("contracts/api/scopes.openapi.yaml", "maxLength: 21884", "maxLength: 65536")
@@ -290,12 +306,35 @@ def forge_coverage_status_done(root: pathlib.Path) -> str:
 
 
 def forge_lying_planned(root: pathlib.Path) -> str:
+    # `planned` needs a gap; the file's own backend gap is that gap, so the lie is the status line alone.
     f = root / COV_APPEARANCE
-    t = _sub(f.read_text(), "useCase: uc.settings.appearance-language",
-             "useCase: uc.settings.appearance-language\nstatus: planned")
-    t = t.rstrip() + '\ngaps:\n  backend: "not built yet (a lie: web is fully implemented)"\n'
-    f.write_text(t)
-    return "lying status: planned on an implemented use-case (+ a gap on the untargeted surface)"
+    t = f.read_text()
+    if OWED_GAP_ANCHOR not in t:
+        raise ForgeError(f"anchor not found (drifted?): {OWED_GAP_ANCHOR!r}")
+    f.write_text(_sub(t, "useCase: uc.settings.appearance-language",
+                      "useCase: uc.settings.appearance-language\nstatus: planned"))
+    return "lying status: planned on an implemented use-case (its real backend gap satisfies planned-needs-a-gap)"
+
+
+def forge_owed_surface_silent(root: pathlib.Path) -> str:
+    f = root / COV_APPEARANCE
+    t = f.read_text()
+    cut = t.find(OWED_GAP_ANCHOR)
+    if cut == -1:
+        raise ForgeError(f"anchor not found (drifted?): {OWED_GAP_ANCHOR!r}")
+    f.write_text(t[:cut + 1])  # the backend gap ends the file, so it goes with everything after it
+    return "a use-case silent on backend, an owed surface — no ref, no gap (must be REJECTED)"
+
+
+def forge_admin_use_case_silent_on_admin_web(root: pathlib.Path) -> str:
+    f = root / COV_SETUP
+    t = f.read_text()
+    start = t.find(ADMIN_WEB_GAP_ANCHOR)
+    end = t.find(NEXT_GAP_ANCHOR, start + 1) if start != -1 else -1
+    if end == -1:
+        raise ForgeError(f"anchors not found (drifted?): {ADMIN_WEB_GAP_ANCHOR!r} … {NEXT_GAP_ANCHOR!r}")
+    f.write_text(t[:start] + "\ngaps:" + t[end:])
+    return "a Server-Owner use-case silent on admin-web, an opt-in surface (the owes-only-backend-and-web limit)"
 
 
 def forge_cr_done_no_impl(root: pathlib.Path) -> str:
@@ -499,6 +538,8 @@ CASES = [
     ("19", "validate_coverage.py", forge_criterion_gap_demoted_surface,  False),
     ("20", "validate_coverage.py", forge_backend_ref_kdoc_phantom,       False),
     ("21", "validate_coverage.py", forge_backend_runtime_assumption,     True),
+    ("22", "validate_coverage.py", forge_owed_surface_silent,            False),
+    ("23", "validate_coverage.py", forge_admin_use_case_silent_on_admin_web, True),
 ]
 
 
