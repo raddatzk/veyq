@@ -1,0 +1,52 @@
+useCase: uc.admin.admin-channel
+feature: admin
+title: Administer the instance only through the admin container
+# Refined ahead of implementation (inbox #152). Every negative below is paired with its positive control on the
+# same predicate — the same call answering normally on the admin listener — because a backend that 404s the
+# operation everywhere satisfies a lone negative perfectly.
+status: planned
+acceptanceCriteria:
+  - id: setup-answers-only-on-the-admin-channel
+    text: >-
+      On a fresh instance, POST /api/setup/owner on the public port is answered 404 and creates nothing — setup
+      status still reports setupRequired — while the identical request on the admin listener creates the Server
+      Owner (201).
+  - id: server-owner-operations-answer-only-on-the-admin-channel
+    text: >-
+      Every role-gated operation marked x-veyq-channel admin, called with a Server-Owner session, is answered 404
+      on the public port and executes nothing, while on the admin listener it gives its normal answer.
+  - id: the-refusal-is-an-unknown-route
+    text: >-
+      The public port's refusal of a marked operation is identical in status and body to its answer for an /api
+      path no resource declares.
+  - id: the-socket-decides-not-the-headers
+    text: >-
+      Forged Forwarded, X-Forwarded-Host, X-Forwarded-Port and X-Forwarded-For headers naming the admin listener
+      or a private client address leave the public port's refusal unchanged, with proxy-address forwarding on.
+  - id: a-globally-routable-peer-is-the-public-channel
+    text: >-
+      The admin-channel predicate accepts a request on the admin listener from a loopback, RFC 1918, shared
+      (100.64/10), link-local or unique-local peer, and treats one from a globally routable peer as the public
+      channel.
+  - id: shared-operations-answer-on-both-channels
+    text: >-
+      Setup status, login challenge and verify, refresh and logout carry no marker and answer identically on the
+      public port and the admin listener.
+  - id: the-gate-implies-the-marker
+    text: >-
+      Every operation whose effective backend gate is the Server-Owner role carries x-veyq-channel admin, and every
+      operation so marked resolves to a resource method that exists — so a Server-Owner operation added without
+      the marker fails the build instead of shipping on the public origin.
+  - id: no-admin-listener-no-backend
+    text: >-
+      When the admin listener cannot bind its port, the backend fails to start rather than serving its public port
+      with no admin door.
+gaps:
+  backend: >-
+    Planned — cr-admin-api-only-through-the-admin-container builds the listener, the channel filter, the build-time
+    set derived from the contract marker and the posture sweep; every criterion above is a backend slice or unit
+    test in that CR.
+  web: >-
+    No web criterion, by construction: the property is enforced in the backend. Web's part of the CR is removal —
+    its own call to a marked operation (the serverRole probe) goes — plus pointing the live e2e bootstrap's
+    instance and tenant birth at the admin listener, which every e2e suite then exercises without asserting on it.

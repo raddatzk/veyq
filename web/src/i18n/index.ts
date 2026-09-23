@@ -342,6 +342,7 @@ const en = {
     join: {
       title: 'Accept your invitation',
       loading: 'Checking your invitation…',
+      missing: 'This address holds no invitation. Open the invite link again.',
       invalid: 'This invitation link is invalid.',
       expired: 'This invitation is no longer valid. Ask the operator to resend it.',
       invitedTo: 'You have been invited to own “{tenant}” ({domain}).',
@@ -480,7 +481,7 @@ const en = {
   },
   mail: {
     navTitle: 'Email',
-    editorSub: 'Connect this space to your own email server so member invitations arrive as real emails from your own domain. Leave it off and invites are shared as a copy link, which always works.',
+    editorSub: 'Connect this space to your own email server so member invitations and password-reset links arrive as real emails from your own domain. Until it is set up, neither can be sent.',
     loading: 'Loading email settings…',
     loadFailed: 'Couldn’t load the email settings.',
     notOwner: 'Only the space owner can configure email.',
@@ -503,7 +504,7 @@ const en = {
     tls: 'Use STARTTLS',
     tlsHint: 'Encrypt the connection to your SMTP server (recommended).',
     enabled: 'Send invitations by email',
-    enabledHint: 'When off, invitations are shared as a copy link instead.',
+    enabledHint: 'When off, no invitations or password-reset emails can be sent.',
     templateTitle: 'Invitation email',
     templateVarsHint: 'Write your own subject and body. You can insert {vars} — no other placeholders are allowed. Leave both empty to use the default wording.',
     subject: 'Subject',
@@ -515,7 +516,7 @@ const en = {
     saveFailed: 'Couldn’t save the email settings.',
     invalidTemplate: 'Your template uses a placeholder that isn’t allowed. Only {vars} can be used.',
     kekUnavailable: 'This server can’t encrypt secrets yet, so the password can’t be saved. An administrator needs to configure the encryption key (KEK) first.',
-    keyMismatch: 'The server’s encryption key has changed, so your saved SMTP password can’t be decrypted anymore. Re-enter the password below to save it under the new key, or restore the original key file. Until then, invitations are shared as a copy link.',
+    keyMismatch: 'The server’s encryption key has changed, so your saved SMTP password can’t be decrypted anymore. Re-enter the password below to save it under the new key, or restore the original key file. Until then, no invitations or password-reset emails can be sent.',
   },
   shell: {
     appName: 'veyq',
@@ -1258,6 +1259,7 @@ const de: typeof en = {
     join: {
       title: 'Einladung annehmen',
       loading: 'Einladung wird geprüft…',
+      missing: 'In dieser Adresse steckt keine Einladung. Öffne den Einladungslink erneut.',
       invalid: 'Dieser Einladungslink ist ungültig.',
       expired: 'Diese Einladung ist nicht mehr gültig. Bitte die Person, die den Server betreibt, um eine neue.',
       invitedTo: 'Du wurdest eingeladen, „{tenant}“ ({domain}) zu besitzen.',
@@ -1397,7 +1399,7 @@ const de: typeof en = {
   },
   mail: {
     navTitle: 'E-Mail',
-    editorSub: 'Verbinde diesen Bereich mit deinem eigenen E-Mail-Server, damit Einladungen als echte E-Mails von deiner eigenen Domain ankommen. Lässt du es aus, werden Einladungen als Kopierlink geteilt — der funktioniert immer.',
+    editorSub: 'Verbinde diesen Bereich mit deinem eigenen E-Mail-Server, damit Einladungen und Links zum Zurücksetzen des Passworts als echte E-Mails von deiner eigenen Domain ankommen. Solange das nicht eingerichtet ist, lässt sich beides nicht verschicken.',
     loading: 'E-Mail-Einstellungen werden geladen…',
     loadFailed: 'E-Mail-Einstellungen konnten nicht geladen werden.',
     notOwner: 'Nur die Besitzperson des Bereichs kann E-Mail einrichten.',
@@ -1420,7 +1422,7 @@ const de: typeof en = {
     tls: 'STARTTLS verwenden',
     tlsHint: 'Die Verbindung zu deinem SMTP-Server verschlüsseln (empfohlen).',
     enabled: 'Einladungen per E-Mail senden',
-    enabledHint: 'Ist dies aus, werden Einladungen stattdessen als Kopierlink geteilt.',
+    enabledHint: 'Ist dies aus, lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
     templateTitle: 'Einladungs-E-Mail',
     templateVarsHint: 'Formuliere Betreff und Text selbst. Du kannst {vars} einsetzen — andere Platzhalter sind nicht erlaubt. Lass beide leer, um die Standardformulierung zu verwenden.',
     subject: 'Betreff',
@@ -1432,7 +1434,7 @@ const de: typeof en = {
     saveFailed: 'E-Mail-Einstellungen konnten nicht gespeichert werden.',
     invalidTemplate: 'Deine Vorlage nutzt einen nicht erlaubten Platzhalter. Nur {vars} sind möglich.',
     kekUnavailable: 'Dieser Server kann noch keine Secrets verschlüsseln, daher lässt sich das Passwort nicht speichern. Ein Administrator muss zuerst den Verschlüsselungsschlüssel (KEK) konfigurieren.',
-    keyMismatch: 'Der Verschlüsselungsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr entschlüsseln. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder stelle die ursprüngliche Schlüsseldatei wieder her. Bis dahin werden Einladungen als Kopierlink geteilt.',
+    keyMismatch: 'Der Verschlüsselungsschlüssel des Servers hat sich geändert, daher lässt sich dein gespeichertes SMTP-Passwort nicht mehr entschlüsseln. Gib das Passwort unten neu ein, um es unter dem neuen Schlüssel zu speichern, oder stelle die ursprüngliche Schlüsseldatei wieder her. Bis dahin lassen sich keine Einladungen und keine E-Mails zum Zurücksetzen des Passworts verschicken.',
   },
   shell: {
     appName: 'veyq',

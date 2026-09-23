@@ -2,7 +2,7 @@
 
 - **ID:** cc.security.csp
 - **Type:** **Cross-cutting concern.** It is a horizontal, browser-enforced security mechanism for the `web/`
-  surface and for the response headers of the app origin. It has no standalone end-user goal, so it is not a
+  surface and for the response headers of the app origin, and for the `admin-web/` console (§ *admin-web*). It has no standalone end-user goal, so it is not a
   use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
   rationale and verification are traceable from the threat model.
 - **Status:** **the header delivery described below is decided but not yet built**
@@ -106,6 +106,16 @@ The app shell sends these on the app origin alongside the policy
 Store responses are **not** the app shell's. Wherever the store is reached, including on the app's own origin
 through the compose path route, the rule that makes those responses inert is ADR 0013 §6.
 
+## admin-web
+
+The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)) ships its own policy.
+Its one source is [`admin-web/src/shared/security/csp.ts`](../../admin-web/src/shared/security/csp.ts), and
+`admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
+stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API in
+`connect-src`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is the container
+nginx's `X-Frame-Options: DENY` ([`admin-web/nginx.conf.template`](../../admin-web/nginx.conf.template)), which is
+the whole guard, not a second layer. That nginx sends no HSTS yet (inbox #176).
+
 ## Verification
 
 - [`web/src/shared/security/csp.test.ts`](../../web/src/shared/security/csp.test.ts) pins the directives:
@@ -116,3 +126,6 @@ through the compose path route, the rule that makes those responses inert is ADR
   - no `frame-ancestors`, which is today's `<meta>`-era state.
 - Live-verified (cr-0133): the app boots under the `<meta>` policy with **zero CSP violations**, and styles,
   fonts and HMR are intact.
+- [`admin-web/src/shared/security/csp.test.ts`](../../admin-web/src/shared/security/csp.test.ts) pins admin-web's
+  policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
+  third-party origin anywhere, no `frame-ancestors`.

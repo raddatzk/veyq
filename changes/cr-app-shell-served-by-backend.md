@@ -59,8 +59,8 @@ no policy.
   - Store responses and the playback Service Worker's synthesized responses. They are not the shell's
     ([ADR 0013](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md) §6, ADR 0047) and belong to
     `cr-inert-store-responses`.
-  - admin-web, which has its own nginx with a fallback and headers. Its `<meta>` CSP carries an ignored
-    `frame-ancestors` and it sends no HSTS, but it shares nothing with `web/`.
+  - admin-web, which has its own nginx with a fallback and headers. Its `<meta>` CSP no longer carries the
+    ignored `frame-ancestors` (#165), it sends no HSTS (#176), and it shares nothing with `web/`.
   - `Permissions-Policy` and COOP/COEP, which are not decided.
 
 ## Ordering

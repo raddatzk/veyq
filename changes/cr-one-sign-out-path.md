@@ -54,7 +54,7 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
   doesn't name is a finding. Either the ending clears it or the use-case names it. Don't wave it through.
 - **Out of scope:**
   - `admin-web/src/shared/handle401.ts` has a comment pointing at a `signOut` that admin-web doesn't have.
-    admin-web holds no keys, so that is hygiene for inbox #165.
+    admin-web holds no keys, so that is hygiene for inbox #170 (#165 is done).
   - A sign-in to a different account in another tab (ADR 0070, *Not covered*).
   - The unbuilt idle re-lock that `uc.account.unlock`'s state diagram names (`Unlocked --> Locked : … timeout`).
 

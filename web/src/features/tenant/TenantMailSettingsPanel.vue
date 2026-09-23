@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // uc.admin.tenant-mail-settings (web, cr-email-tenant-mail-settings-web, ADR 0048/0049/0050) — the "Email" rubric
 // of the tenant settings. The tenant OWNER configures per-tenant SMTP + authors the invite subject/body template,
-// so member invites are emailed from the tenant's own domain (else the copy-link fallback, unchanged). The read is
+// so member invites are emailed from the tenant's own domain; without it, inviting is refused (ADR 0055). The read is
 // owner-gated (a non-owner member is 403 → a read-only notice; a non-member 404 → generic failed, ADR 0042), so a
 // successful load already means the caller is the owner. Operator-blind: the panel edits only operator-visible
 // config — SMTP transport + owner-authored template prose over the CLOSED set {{link}}/{{domain}}/{{expiry}} — and

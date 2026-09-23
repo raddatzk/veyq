@@ -53,9 +53,10 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **A1 — other unlock methods (deferred):** a **passkey** (PRF-derived KEK), a **recovery code**, or a
-  **trusted device** (DEVICE wrap) each open the **same** Master Key via their own wrap — separate
-  use-cases, not this flow.
+- **A1 — other unlock methods (deferred):** a **passkey** (PRF-derived KEK) or a **trusted device** (DEVICE
+  wrap) each open the **same** Master Key via their own wrap — separate use-cases, not this flow. So does the
+  Secret Key alone, through the `RECOVERY` wrap, but only to reset a forgotten password
+  ([recover-access](uc.account.recover-access.md)); there is no separate recovery code.
 - **E1 — wrong password or Secret Key:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user

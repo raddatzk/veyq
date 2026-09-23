@@ -56,17 +56,24 @@ Guard first, because the defect is live: the test must go red on today's tree be
       - A spy on `console.warn` does not count as the mechanism. It passes the day vue-i18n changes how it
         reports.
 
-      **Bite: run it before touching the catalogs.** It must be red on `invitations.addedBy` (EN + DE, web)
-      and on `mail.fromPlaceholder` (EN + DE, in both packages). That is the live defect the test exists for,
-      found at refine with a probe against the installed 10.0.8. If the test comes up with a different set of
-      keys, the difference is the finding: explain it before going on.
-      · Done when: both new tests are red on exactly those keys.
-- [ ] 2 web + admin-web: **fix the messages.** Use vue-i18n's literal interpolation for a literal `@`
+      **Bite, web: run it before touching the catalog.** It must be red on `invitations.addedBy` and
+      `mail.fromPlaceholder`, EN and DE each. That is the live defect the test exists for, found at refine with
+      a probe against the installed 10.0.8. If the test comes up with a different set of keys, the difference
+      is the finding: explain it before going on.
+
+      **Bite, admin-web: by injection, because the package has no live defect.** Its copy of `fromPlaceholder`
+      went with the `mail` group that #165 deleted. So its test is green on arrival, and green alone cannot
+      tell *the test held* from *the test walked nothing*. Snapshot the catalog, put a literal `@` into one
+      message, and the test must go red naming that key. Then restore the file, never with `git checkout`
+      ([changes/README](README.md) § *Bite-proof a guard by snapshot-and-restore*).
+      · Done when: web's test is red on exactly those keys, and admin-web's goes red on the injected key and
+      green again after the restore.
+- [ ] 2 web: **fix the messages.** Use vue-i18n's literal interpolation for a literal `@`
       (`{'@'}`). `addedBy` must then render the inviter's name. Add an assertion on the rendered string next to
       the view that shows it (`grep -rn "addedBy" web/src --include='*.vue'`), because a compile test proves the
       message parses, not that it says what we meant. `fromPlaceholder` already renders right despite the error
       and gets the same fix so that the compile test can stay strict.
-      · Done when: `npm run check` is green in both packages.
+      · Done when: `npm run check` is green in `web/`.
 - [ ] 3 web + admin-web: **the bump.** Both `package.json` files go to `"vue-i18n": "^11.4.12"` (or the latest
       11.x on the day), then run `npm install` from the repo root. The lockfile must move every `@intlify/*`
       package with it (`grep -n '"node_modules/\(vue-i18n\|@intlify/[a-z-]*\)"' package-lock.json` before and

@@ -148,7 +148,7 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
   })
 
   it('is honest that enabled alone does not send — it lists what is still missing', async () => {
-    // enabled is ticked, but no host and no stored password ⇒ still falls back to copy-link silently today.
+    // enabled is ticked, but no host and no stored password ⇒ nothing can be sent, and inviting is refused.
     vi.mocked(getTenantMailSettings).mockResolvedValue({ ...READY_VIEW, host: null, passwordSet: false } as never)
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(i18n.global.t('mail.notSendReady'))

@@ -4,7 +4,7 @@
 > organizational structures (tenant / group / personal), how access is granted *cryptographically*
 > (scope keys, grants, shares), how a new member is onboarded (the invite-wrap), and the unified
 > navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
-> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the crypto wire-format spec.
+> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)).
 
 This is the **target model**; first-build scope is tracked via the inbox and change-requests. The general
 **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
