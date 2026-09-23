@@ -31,7 +31,8 @@ env — which could not give a tenant its own sending identity; see Rejected.)
 ## Decision
 
 **Each tenant configures its own SMTP as runtime settings; a mail is sent by building that tenant's SMTP client
-at send time. No tenant SMTP configured ⇒ the copy-link path, unchanged.**
+at send time. No sendable tenant SMTP ⇒ the mail-bound action is refused (§4); only the owner-bootstrap invite
+keeps the copy-link (§5).**
 
 1. **Generic SMTP, no vendor SDK.** Transport is plain SMTP (host / port / username / password / STARTTLS /
    from) over the Vert.x `MailClient` that rides in transitively with the core `quarkus-mailer` extension. No
@@ -84,8 +85,8 @@ at send time. No tenant SMTP configured ⇒ the copy-link path, unchanged.**
 - **Rejected — a hosted provider SDK.** Breaks self-hostability (the security guarantee) + vendor lock;
   deliverability ops are #38, not a transport decision.
 - **Rejected — a server-level default + per-tenant override.** The owner chose per-tenant only; a default
-  reintroduces an instance-wide server-held secret and more config surface, for a case copy-link already covers
-  (bootstrap + unconfigured tenants).
+  reintroduces an instance-wide server-held secret and more config surface, for the one case the copy-link still
+  covers (the bootstrap invite); an unconfigured tenant is refused instead ([ADR 0055](0055-mail-is-a-precondition-not-a-capability.md)).
 - **Rejected — plaintext password in the DB.** Breaks the "a DB dump yields no usable secret" property; encrypted
   at rest instead ([ADR 0050](0050-operator-config-secret-encryption.md)).
 - **Rejected — a full templating engine (Qute/`MailTemplate`/jmustache).** Sections, partials, lambdas and
