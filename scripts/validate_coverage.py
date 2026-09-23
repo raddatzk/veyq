@@ -7,6 +7,7 @@ gaps), and that every referenced test actually exists, so dead refs fail early:
     backend -> "ClassName.method", resolved against *that* class (test file whose stem is ClassName
                must exist, declare method, AND that method must have a non-empty body — an empty `{}`
                block is rejected; a Kotlin expression body `= expr` counts, it delegates to real code)
+               — and some CI run must actually execute it (below)
     web     -> a file path (relative to web/) that both exists AND is a test file (*.test|*.spec)
     crypto  -> the same rule, rooted at packages/crypto/ (the shared crypto workspace package, ADR 0065)
     admin-web -> the same rule, rooted at admin-web/ (the Server-Owner administration surface, ADR 0065)
@@ -31,18 +32,66 @@ The line is deliberate: "is it a test file / does it have a body" is decidable a
 assert the right thing, and the right thing for *this* sentence" is not, and pretending otherwise would
 oversell the green.
 
+A backend ref must name a test some CI run EXECUTES (ADR 0040: a test no CI run executes makes no claim).
+  What it asserts. The workflows under `.github/workflows/` are read for every *CI run of the backend's Gradle
+  tests*: a step invoking `gradlew` with `test`/`check`/`build`, in a workflow triggered by `push` or
+  `pull_request`, with no `if:` and no `continue-on-error` on its job or step (each of those means a green run
+  does not say the test ran and passed). Each run carries the env the invocation sees (workflow ∪ job ∪ step
+  `env:`, plus `export X=…` lines and `X=… ./gradlew` prefixes in that `run:`), the runner OS its `runs-on`
+  names, and its `--tests` filters. A cited test counts iff at least one run selects it and satisfies every
+  JUnit conditional-execution gate on the method or on any class enclosing it — including a gate reached
+  through a composed annotation declared in the backend tests, or through an import alias. Decided gates:
+  `@EnabledIfEnvironmentVariable` (the variable must be set to a value its `matches` regex fully matches) and
+  `@EnabledOnOs`/`@DisabledOnOs` (against the runner OS — so the Windows-only exclusion on
+  `TenantIngressUnwritablePathTest` is fine on today's Linux runners, and turns red the day the Gradle jobs
+  move to a Windows runner). **Every other gate fails closed**: `@Disabled` never runs; `@EnabledIf`/
+  `@DisabledIf` are code, undecidable here; `@…IfSystemProperty` reads the test JVM, which no workflow sets
+  (the Gradle test task forwards no `-D`); `@DisabledIfEnvironmentVariable` depends on the runner's WHOLE
+  environment, of which the workflow files are only part (`CI`, `GITHUB_*` are runner presets); JRE,
+  architecture and native-image gates are simply not decided. Any `@Enabled…`/`@Disabled…` name counts as a
+  gate, so a new one is red until someone decides it here. With no qualifying run at all, no backend ref makes
+  a claim, and that is reported once.
+  The defect that bought it. `BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes` — gated on `VEYQ_S3_E2E=1`,
+  which no workflow sets — was cited under `uc.memory.gallery` / `download-original` until 6f19923 moved it to
+  a gap. Every structural check passed: the file, the method and its body were all real. ADR 0040 Decision 3
+  had said the rule "carries itself … checked by the build, not by a field"; the build skipped the test
+  cleanly and said nothing. The web-e2e job's historical `if: false` is why a conditional job does not count.
+  Its limit. It reads annotations and workflow files, not runtime behaviour: an `Assumptions.assume…` in a
+  body or a `@BeforeAll` skips at runtime and still passes (pinned open in `validate_guard_gaps.py`); so do a
+  custom `ExecutionCondition` behind `@ExtendWith`, a gate inherited from a superclass declared in another
+  file, and a test-task `exclude`/`filter`/`excludeTags` in `backend/build.gradle.kts` (none exists today). A
+  variable a script exports, or one written to `$GITHUB_ENV`, is invisible — fail-closed, so such a ref is
+  rejected until the variable moves into a workflow `env:`. Green means the workflows DECLARE a run that
+  executes the test, never that one happened. It does not prove the step's `gradlew` is the backend's (only
+  one Gradle build exists). And it covers backend refs only: web files gated behind
+  `describe.skipIf(!process.env.VEYQ_E2E)` rely on `run_web_e2e.py` setting that variable, which
+  `validate_e2e_discovery.py` guards from its side, not this one.
+
 Coverage shape (per acceptance criterion):
     coverage:
-      <area>:            # backend | web
+      <area>:            # backend | web | crypto | admin-web
         <level>:         # unit | integration | e2e
           - <ref>        # see resolution rules above
+      gaps:              # optional, per criterion: where this criterion's refs on a COVERED surface stop short
+        - surface: <area>    # must carry a ref on this very criterion
+          reason: <text>     # non-empty: the part of the sentence those refs do not prove, and why
     gaps:
       <area>: <reason>   # surfaces with NO coverage ref for this use-case (an area that IS covered
                          # may not appear here — overlap is a stale gap and fails, ADR 0040)
+Keys are closed at both levels, so a misspelling (`gap:`) is an error rather than a silently dropped gap.
+  The criterion-level list arrived with 635bb01 and 6f19923 and nothing read it — `surface: http` (the demoted
+  surface) or an empty reason would have passed. It is the mirror of the use-case rule: a use-case gap names a
+  surface with no ref; a criterion gap names a surface that HAS one on that criterion, so removing the last
+  ref orphans the note and turns red. Its limit: whether the reason is true is prose, and stays unread.
 """
+from __future__ import annotations
+
+import fnmatch
 import pathlib
 import re
+import shlex
 import sys
+from typing import NamedTuple
 
 try:
     import yaml
@@ -57,6 +106,7 @@ BACKEND_TESTS = ROOT / "backend" / "src" / "test"
 WEB = ROOT / "web"
 CRYPTO = ROOT / "packages" / "crypto"
 ADMIN_WEB = ROOT / "admin-web"
+WORKFLOWS = ROOT / ".github" / "workflows"
 
 # The surface set, and the whole of it: a surface counts when a CI job actually runs its tests — the ADR 0040
 # principle, applied by rule rather than by name (the claim follows the build). Every use-case owes every
@@ -67,15 +117,114 @@ SURFACES = {"backend", "web", "crypto", "admin-web"}
 # so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.
 FILE_ROOTS = {"web": WEB, "crypto": CRYPTO, "admin-web": ADMIN_WEB}
 KNOWN_LEVELS = {"unit", "integration", "e2e"}
+USECASE_KEYS = {"useCase", "feature", "title", "status", "acceptanceCriteria", "gaps"}
+CRITERION_KEYS = {"id", "text", "coverage", "gaps"}
 
 errors: list[str] = []
+
+
+# ---- Kotlin: a lexer (not a parser) that makes comments and literals unable to pose as structure ----
+
+_CODE_TOKEN = re.compile(r'//|/\*|"""|["\'`{}]')
+_STR_TOKEN = re.compile(r'\\.|\$\{|"|\n', re.S)
+_RAW_TOKEN = re.compile(r'\$\{|"""')
+_BLOCK_TOKEN = re.compile(r"/\*|\*/")
+
+
+def _block_comment_end(src: str, start: int) -> int:
+    depth = 0  # Kotlin block comments nest
+    for m in _BLOCK_TOKEN.finditer(src, start):
+        depth += 1 if m.group() == "/*" else -1
+        if depth == 0:
+            return m.end()
+    return len(src)
+
+
+def _mask(src: str) -> str:
+    """`src` with every comment and every string/char literal's contents blanked, at unchanged length.
+
+    Newlines and quote characters survive, so offsets and line numbers stay true and a literal still reads as
+    "an expression here". What it buys: a `fun`, a `class`, an `@Enabled…` or a brace inside a KDoc, a comment
+    or a string can no longer pose as structure — a KDoc showing `fun x() = y` would otherwise resolve as a
+    method with a body, and a comment between a gate and its class could otherwise detach the gate. It knows
+    comments (nested), `"…"` with escapes and `${…}` templates, raw triple-quoted strings, char literals and
+    backticked names — nothing else.
+    """
+    out = list(src)
+    n = len(src)
+
+    def blank(a: int, b: int) -> None:
+        for k in range(a, b):
+            if out[k] != "\n":
+                out[k] = " "
+
+    def string_end(i: int, raw: bool) -> tuple[int, int]:
+        """From just inside an opening quote: (end of the contents, index past the closing delimiter)."""
+        token = _RAW_TOKEN if raw else _STR_TOKEN
+        while True:
+            m = token.search(src, i)
+            if not m:
+                return n, n
+            t = m.group()
+            if t == "${":
+                i = code(m.end(), in_template=True) + 1
+            elif t.startswith("\\"):
+                i = m.end()
+            elif t == "\n":  # an unterminated one-line string is malformed source; stop at the line end
+                return m.start(), m.start()
+            elif raw:  # a raw string closes on the LAST three quotes of a run (`"""a""""` holds `a"`)
+                j = m.start()
+                while src.startswith('"', j + 3):
+                    j += 1
+                return j, j + 3
+            else:
+                return m.start(), m.end()
+
+    def code(i: int, in_template: bool) -> int:
+        """Scan code from i; inside a `${…}` template, return the index of the `}` that closes it."""
+        depth = 0
+        while True:
+            m = _CODE_TOKEN.search(src, i)
+            if not m:
+                return n
+            t, s = m.group(), m.start()
+            if t == "//":
+                e = src.find("\n", s)
+                i = n if e == -1 else e
+                blank(s, i)
+            elif t == "/*":
+                i = _block_comment_end(src, s)
+                blank(s, i)
+            elif t in ('"""', '"'):
+                contents_end, i = string_end(m.end(), raw=t == '"""')
+                blank(m.end(), contents_end)
+            elif t == "'":
+                e = s + 1
+                while e < n and src[e] not in "'\n":
+                    e += 2 if src[e] == "\\" else 1
+                blank(s + 1, min(e, n))
+                i = e + 1
+            elif t == "`":
+                e = src.find("`", s + 1)
+                i = n if e == -1 else e + 1
+            elif t == "{":
+                depth += 1
+                i = m.end()
+            else:  # "}"
+                if in_template and depth == 0:
+                    return s
+                depth -= 1
+                i = m.end()
+
+    code(0, in_template=False)
+    return "".join(out)
 
 
 KOTLIN_FUN = r"fun\s+`?([A-Za-z0-9_]+)`?\s*\("
 
 
-def _kotlin_funs(src: str):
-    """Yield (method-name, has_substance) for each `fun` declared in src.
+def _kotlin_funs(masked: str):
+    """Yield (method-name, has_substance, offset of `fun`) for each `fun` declared in masked source.
 
     has_substance is False only for a **block body** that is empty or comment-only (`fun x() {}`).
     A Kotlin **expression body** (`fun x() = assertWriteGate(...)`) always counts — it delegates to
@@ -83,47 +232,216 @@ def _kotlin_funs(src: str):
     made naive `{}`-only detection wrong). Body-less abstract/expected decls yield False but are never
     ref targets, so it does not matter.
 
-    Regex-with-brace-matching, not a Kotlin parser: the param list is skipped by balanced-paren scan
-    (so a default value's own `()` doesn't end it early); the body delimiter is the first `{` or `=`
-    after the params, bounded by the enclosing `}` so a body-less decl can't borrow the next fun's body.
+    Regex-with-brace-matching over `_mask`ed source, not a Kotlin parser: comments are already blank, so a
+    comment-only body is an empty one; the param list is skipped by balanced-paren scan (so a default value's
+    own `()` doesn't end it early); the body delimiter is the first `{` or `=` after the params, bounded by
+    the enclosing `}` so a body-less decl can't borrow the next fun's body.
     """
-    for m in re.finditer(KOTLIN_FUN, src):
+    for m in re.finditer(KOTLIN_FUN, masked):
         name = m.group(1)
         i = m.end() - 1  # at the '(' of the param list
         depth = 0
-        while i < len(src):  # skip a balanced param list (default values may nest parens)
-            if src[i] == "(":
+        while i < len(masked):  # skip a balanced param list (default values may nest parens)
+            if masked[i] == "(":
                 depth += 1
-            elif src[i] == ")":
+            elif masked[i] == ")":
                 depth -= 1
                 if depth == 0:
                     break
             i += 1
         j = i + 1  # first char past ')'
-        while j < len(src) and src[j] not in "{=}":  # hop over a `: ReturnType` to the body delimiter
+        while j < len(masked) and masked[j] not in "{=}":  # hop over a `: ReturnType` to the body delimiter
             j += 1
-        if j >= len(src) or src[j] == "}":  # no body (abstract/expected) — not a ref target
-            yield name, False
-        elif src[j] == "=":  # expression body — delegates to real code, always substance
-            yield name, True
-        else:  # '{' block body — substance iff non-whitespace, non-comment content remains
-            depth = 0
-            k = j
-            while k < len(src):
-                if src[k] == "{":
-                    depth += 1
-                elif src[k] == "}":
-                    depth -= 1
-                    if depth == 0:
-                        break
+        if j >= len(masked) or masked[j] == "}":  # no body (abstract/expected) — not a ref target
+            yield name, False, m.start()
+        elif masked[j] == "=":  # expression body — delegates to real code, always substance
+            yield name, True, m.start()
+        else:  # '{' block body — substance iff anything but whitespace remains
+            k = _brace_end(masked, j)
+            yield name, masked[j + 1:k].strip() != "", m.start()
+
+
+def _brace_end(masked: str, open_at: int) -> int:
+    depth = 0
+    for k in range(open_at, len(masked)):
+        if masked[k] == "{":
+            depth += 1
+        elif masked[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return k
+    return len(masked)
+
+
+# ---- JUnit conditional-execution gates, and which declaration each one sits on ----
+
+# `(?<![\w@.])` keeps labels (`return@forEach`, `this@Outer`) from reading as annotations.
+_ANNOTATION = re.compile(r"(?<![\w@.])@(?:[a-z]+\s*:\s*)?([A-Za-z_][\w.]*)")
+_WORD = re.compile(r"`[^`\n]*`|[A-Za-z_]\w*")
+_DECL_KEYWORDS = {"class", "interface", "object", "fun", "val", "var", "typealias", "constructor", "init"}
+_IMPORT_ALIAS = re.compile(r"^\s*import\s+[\w.]*?(\w+)\s+as\s+(\w+)", re.M)
+# The name pattern IS the gate set: every JUnit condition is spelled @Enabled…/@Disabled…, so a new one is
+# caught by name and then fails closed in _gate_blocks until someone decides it there.
+_GATE_NAME = re.compile(r"(?:Enabled|Disabled)[A-Z]\w*|Disabled")
+_KT_STRING = r'"((?:[^"\\\n]|\\.)*)"'
+JUNIT_OS = ("LINUX", "MAC", "WINDOWS", "AIX", "FREEBSD", "OPENBSD", "SOLARIS", "OTHER")
+
+
+class Gate(NamedTuple):
+    name: str         # simple annotation name after import-alias resolution, e.g. EnabledIfEnvironmentVariable
+    args: str         # raw argument text — the variable name and regex are read from here
+    masked_args: str  # the same span masked — OS constants are read from here, so a reason string cannot vote
+    at: str           # "File.kt:42", where the gate is written (the composed annotation's own line, if composed)
+
+
+class Decl(NamedTuple):
+    keyword: str      # class | interface | object | fun | val | …
+    name: str         # "" when anonymous (`companion object`)
+    at: int           # offset of the keyword
+    modifiers: tuple  # e.g. ("annotation",) on an annotation class
+
+
+class Fun(NamedTuple):
+    substance: bool
+    gates: tuple      # the gates on this fun and on every class enclosing it
+
+
+class TestClass(NamedTuple):
+    fqcn: str
+    funs: dict        # method name -> [Fun, …] (overloads)
+
+
+def _skip_args(masked: str, i: int) -> int:
+    """If an argument list opens exactly at i, return the index past its balanced close; else i."""
+    if i >= len(masked) or masked[i] != "(":
+        return i
+    depth = 0
+    for k in range(i, len(masked)):
+        if masked[k] == "(":
+            depth += 1
+        elif masked[k] == ")":
+            depth -= 1
+            if depth == 0:
+                return k + 1
+    return len(masked)
+
+
+def _annotated_decl(masked: str, i: int) -> Decl | None:
+    """From just past an annotation, walk over further annotations and modifiers to the declaration they all
+    annotate; None when something other than a declaration follows (an annotated expression)."""
+    modifiers = []
+    while True:
+        while i < len(masked) and masked[i].isspace():
+            i += 1
+        if i >= len(masked):
+            return None
+        if masked[i] == "@":
+            a = _ANNOTATION.match(masked, i)
+            if not a:
+                return None
+            i = _skip_args(masked, a.end())
+            continue
+        w = _WORD.match(masked, i)
+        if not w:
+            return None
+        if w.group() in _DECL_KEYWORDS:
+            k = w.end()
+            while k < len(masked) and masked[k] in " \t":
                 k += 1
-            body = re.sub(r"//[^\n]*", "", src[j + 1:k])
-            body = re.sub(r"/\*.*?\*/", "", body, flags=re.S)
-            yield name, body.strip() != ""
+            name = _WORD.match(masked, k)
+            return Decl(w.group(), name.group().strip("`") if name else "", w.start(), tuple(modifiers))
+        modifiers.append(w.group())
+        i = w.end()
 
 
-def _stem_methods(surface: str, files) -> dict[str, dict[str, bool]]:
-    """Map each test file's stem -> {method name -> has_substance} for the funs it declares.
+def _body_span(masked: str, decl: Decl) -> tuple[int, int]:
+    """The `{…}` body of a class-like declaration; an empty span when it has none (`data class X(val a: Int)`)."""
+    depth = 0
+    stop = re.compile(r"[()\[\]{}]|\b(?:class|interface|object|fun|val|var|typealias)\b")
+    for m in stop.finditer(masked, decl.at + len(decl.keyword)):
+        t = m.group()
+        if t in "([":
+            depth += 1
+        elif t in ")]":
+            depth -= 1
+        elif depth == 0:
+            if t == "{":
+                return m.start(), _brace_end(masked, m.start())
+            return m.start(), m.start()  # a `}` or the next declaration came first: no body
+    return len(masked), len(masked)
+
+
+class _Scan(NamedTuple):
+    path: pathlib.Path
+    masked: str
+    package: str
+    annotations: list  # (resolved simple name, Gate | None, Decl | None)
+
+
+def _scan(path: pathlib.Path) -> _Scan:
+    src = path.read_text()
+    masked = _mask(src)
+    aliases = {alias: original for original, alias in _IMPORT_ALIAS.findall(masked)}
+    pkg = re.search(r"^\s*package\s+([\w.]+)", masked, re.M)
+    found = []
+    for a in _ANNOTATION.finditer(masked):
+        name = a.group(1).rstrip(".").rsplit(".", 1)[-1]
+        name = aliases.get(name, name)
+        end = _skip_args(masked, a.end())
+        gate = None
+        if _GATE_NAME.fullmatch(name):
+            inner = slice(a.end() + 1, end - 1) if end > a.end() else slice(0, 0)
+            gate = Gate(name, src[inner], masked[inner], f"{path.name}:{masked.count(chr(10), 0, a.start()) + 1}")
+        found.append((name, gate, _annotated_decl(masked, end)))
+    return _Scan(path, masked, pkg.group(1) if pkg else "", found)
+
+
+def _composed_gates(scans) -> dict[str, tuple]:
+    """Annotation classes declared in the backend tests that carry a gate (directly or through another
+    composed annotation) -> those gates. JUnit honours such meta-annotations, so `@RequiresRealStore` hiding
+    `@EnabledIfEnvironmentVariable` gates its test exactly as the bare annotation would."""
+    gates: dict[str, list] = {}
+    uses: dict[str, set] = {}
+    for s in scans:
+        for name, gate, decl in s.annotations:
+            if decl and decl.keyword == "class" and "annotation" in decl.modifiers and decl.name:
+                gates.setdefault(decl.name, [])
+                uses.setdefault(decl.name, set()).add(name)
+                if gate:
+                    gates[decl.name].append(gate)
+    changed = True
+    while changed:  # a fixed point: composed-of-composed resolves however deep it nests
+        changed = False
+        for composed, used in uses.items():
+            for g in [g for u in used for g in gates.get(u, ())]:
+                if g not in gates[composed]:
+                    gates[composed].append(g)
+                    changed = True
+    return {k: tuple(v) for k, v in gates.items() if v}
+
+
+def _gated_funs(scan: _Scan, composed: dict[str, tuple]):
+    """Yield (method name, Fun) for each fun in the file, with every gate that decides whether it runs."""
+    file_wide: list = []
+    on_fun: dict[int, list] = {}
+    on_class: list = []  # ((body start, body end), gates)
+    for name, gate, decl in scan.annotations:
+        gates = (gate,) if gate else composed.get(name, ())
+        if not gates:
+            continue
+        if decl is None:  # a gate this walk cannot attach — fail closed, it gates the whole file
+            file_wide.extend(gates)
+        elif decl.keyword == "fun":
+            on_fun.setdefault(decl.at, []).extend(gates)
+        elif decl.keyword in ("class", "interface", "object") and "annotation" not in decl.modifiers:
+            on_class.append((_body_span(scan.masked, decl), gates))
+    for name, has_substance, at in _kotlin_funs(scan.masked):
+        enclosing = [g for (a, b), gs in on_class if a < at < b for g in gs]
+        yield name, Fun(has_substance, tuple(file_wide + on_fun.get(at, []) + enclosing))
+
+
+def _stem_classes(surface: str, files) -> dict[str, TestClass]:
+    """Map each test file's stem -> TestClass(fqcn, {method name -> [Fun, …]}) for the funs it declares.
 
     Class-scoped ref resolution keys on the file stem, so it assumes stems are unique within a
     surface; two files sharing a stem would silently merge their methods and re-open the very
@@ -133,13 +451,16 @@ def _stem_methods(surface: str, files) -> dict[str, dict[str, bool]]:
     Per-file helper/stub/companion classes lump under the file stem; harmless because they are
     never ref targets, and stem-keying ignores them for free.
     """
-    by_stem: dict[str, dict[str, bool]] = {}
+    scans = [_scan(f) for f in files]
+    composed = _composed_gates(scans)
+    by_stem: dict[str, TestClass] = {}
     sources: dict[str, list[str]] = {}
-    for f in files:
-        funs = by_stem.setdefault(f.stem, {})
-        for name, has_substance in _kotlin_funs(f.read_text()):
-            funs[name] = funs.get(name, False) or has_substance  # an overload with any real body counts
-        sources.setdefault(f.stem, []).append(rel(f))
+    for s in scans:
+        stem = s.path.stem
+        cls = by_stem.setdefault(stem, TestClass(f"{s.package}.{stem}" if s.package else stem, {}))
+        for name, fun in _gated_funs(s, composed):
+            cls.funs.setdefault(name, []).append(fun)
+        sources.setdefault(stem, []).append(rel(s.path))
     for stem, paths in sources.items():
         if len(paths) > 1:
             errors.append(f"{surface} test stem '{stem}' is not unique (breaks class-scoped "
@@ -147,8 +468,164 @@ def _stem_methods(surface: str, files) -> dict[str, dict[str, bool]]:
     return by_stem
 
 
-def backend_test_methods() -> dict[str, dict[str, bool]]:
-    return _stem_methods("backend", BACKEND_TESTS.rglob("*.kt")) if BACKEND_TESTS.exists() else {}
+def backend_test_classes() -> dict[str, TestClass]:
+    return _stem_classes("backend", sorted(BACKEND_TESTS.rglob("*.kt"))) if BACKEND_TESTS.exists() else {}
+
+
+# ---- CI: every run of the backend's Gradle tests, as the workflow files declare it ----
+
+# Triggers that run on every change. `workflow_dispatch` alone is someone firing it by hand — the shape `http/`
+# had — and `schedule` gates no change; neither makes a green build mean the test ran against it.
+CI_TRIGGERS = {"push", "pull_request"}
+GRADLE_TEST_TASKS = {"test", "check", "build"}
+RUNNER_OS = {"ubuntu-": "LINUX", "macos-": "MAC", "windows-": "WINDOWS"}
+_GRADLEW = re.compile(r"(?<![\w.-])(?:[\w.-]*/)*gradlew\b")
+_SHELL_VALUE = r"""('[^']*'|"[^"]*"|[^\s;&|]*)"""
+
+
+class CiRun(NamedTuple):
+    where: str        # "ci.yml › backend"
+    env: dict         # name -> value the Gradle invocation sees (None: a `${{ }}` expression, unknowable here)
+    os: str | None    # the runner's JUnit OS constant; None when `runs-on` does not decide it
+    tests: tuple      # `--tests` filters; empty = the whole suite
+
+
+def _env_value(v) -> str | None:
+    if isinstance(v, bool):  # YAML reads `true` as a boolean; the runner exports the string
+        return "true" if v else "false"
+    s = "" if v is None else str(v)
+    return None if "${{" in s else s
+
+
+def _env(mapping) -> dict:
+    return {str(k): _env_value(v) for k, v in mapping.items()} if isinstance(mapping, dict) else {}
+
+
+def _conditional(node: dict) -> bool:
+    """A job or step that may not run (`if:`), or whose failure cannot redden the build (`continue-on-error`).
+    Either way a green build does not say the test ran and passed — the web-e2e job once sat behind `if: false`."""
+    return "if" in node or node.get("continue-on-error") not in (None, False)
+
+
+def _gradle_test_runs(run: str):
+    """Yield (inline env, --tests filters) for each `gradlew` invocation in a `run:` block that runs tests."""
+    text = run.replace("\\\n", " ")
+    for g in _GRADLEW.finditer(text):
+        line_start = text.rfind("\n", 0, g.start()) + 1
+        rest = re.split(r"&&|\|\||[;|\n]", text[g.end():], maxsplit=1)[0]
+        try:
+            tokens = shlex.split(rest)
+        except ValueError:
+            tokens = rest.split()
+        tasks, excluded, tests = [], set(), []
+        it = iter(tokens)
+        for t in it:
+            if t in ("-x", "--exclude-task"):
+                excluded.add(next(it, "").rsplit(":", 1)[-1])
+            elif t.startswith("--exclude-task="):
+                excluded.add(t.split("=", 1)[1].rsplit(":", 1)[-1])
+            elif t == "--tests":
+                tests.append(next(it, ""))
+            elif t.startswith("--tests="):
+                tests.append(t.split("=", 1)[1])
+            elif not t.startswith("-"):
+                tasks.append(t.rsplit(":", 1)[-1])
+        if excluded & {"test", "check"} or not GRADLE_TEST_TASKS & set(tasks):
+            continue
+        env = {}
+        for e in re.finditer(r"^\s*export\s+([A-Za-z_]\w*)=" + _SHELL_VALUE, text[:line_start], re.M):
+            env[e.group(1)] = e.group(2).strip("'\"")
+        prefix = text[line_start:g.start()]  # `X=1 ./gradlew …` — only a pure assignment prefix reaches gradlew
+        if re.fullmatch(r"\s*(?:env\s+)?(?:[A-Za-z_]\w*=" + _SHELL_VALUE + r"\s+)*", prefix):
+            for e in re.finditer(r"([A-Za-z_]\w*)=" + _SHELL_VALUE, prefix):
+                env[e.group(1)] = e.group(2).strip("'\"")
+        yield env, tuple(tests)
+
+
+def ci_backend_runs() -> list[CiRun]:
+    runs = []
+    for wf in sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")]):
+        try:
+            data = yaml.safe_load(wf.read_text()) or {}
+        except yaml.YAMLError:
+            continue  # a workflow GitHub cannot parse runs nothing
+        on = data.get("on", data.get(True))  # YAML 1.1 reads a bare `on:` key as the boolean True
+        triggers = {on} if isinstance(on, str) else set(on or ())
+        if not triggers & CI_TRIGGERS:
+            continue
+        wf_env = _env(data.get("env"))
+        for job_id, job in (data.get("jobs") or {}).items():
+            if not isinstance(job, dict) or _conditional(job):
+                continue
+            runs_on = job.get("runs-on")
+            runner_os = next((os_ for prefix, os_ in RUNNER_OS.items()
+                              if isinstance(runs_on, str) and runs_on.startswith(prefix)), None)
+            job_env = {**wf_env, **_env(job.get("env"))}
+            for step in job.get("steps") or []:
+                if not isinstance(step, dict) or _conditional(step) or not isinstance(step.get("run"), str):
+                    continue
+                step_env = {**job_env, **_env(step.get("env"))}
+                for inline, tests in _gradle_test_runs(step["run"]):
+                    runs.append(CiRun(f"{wf.name} › {job_id}", {**step_env, **inline}, runner_os, tests))
+    return runs
+
+
+def _env_gate_args(args: str) -> tuple[str | None, str | None]:
+    def unescape(s: str) -> str:
+        return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), s)
+
+    named = re.search(r"\bnamed\s*=\s*" + _KT_STRING, args)
+    matches = re.search(r"\bmatches\s*=\s*" + _KT_STRING, args)
+    if named and matches:
+        return unescape(named.group(1)), unescape(matches.group(1))
+    positional = re.findall(_KT_STRING, args)  # declaration order: named, matches
+    if "=" not in re.sub(_KT_STRING, "", args) and len(positional) >= 2:
+        return unescape(positional[0]), unescape(positional[1])
+    return None, None
+
+
+def _gate_blocks(gate: Gate, run: CiRun) -> str | None:
+    """Why `gate` keeps its test from running in `run`; None when it lets it run. Undecided gates block."""
+    if gate.name == "EnabledIfEnvironmentVariable":
+        named, pattern = _env_gate_args(gate.args)
+        if named is None:
+            return "its arguments are not string literals this guard can read"
+        if named not in run.env:
+            return f"{named} is not set"
+        if run.env[named] is None:
+            return f"{named} is set only to a `${{{{ }}}}` expression"
+        try:
+            ok = re.fullmatch(pattern, run.env[named]) is not None
+        except re.error:
+            return f"its pattern {pattern!r} is not a regex this guard can evaluate"
+        return None if ok else f"{named}={run.env[named]!r} does not match {pattern!r}"
+    if gate.name in ("EnabledOnOs", "DisabledOnOs"):
+        listed = set(re.findall(r"\b(" + "|".join(JUNIT_OS) + r")\b", gate.masked_args))
+        if not listed or "architectures" in gate.masked_args:
+            return "its OS/architecture condition is not one this guard decides"
+        if run.os is None:
+            return "the runner OS is not decidable from `runs-on`"
+        return None if (run.os in listed) == (gate.name == "EnabledOnOs") else f"the runner is {run.os}"
+    if gate.name == "Disabled":
+        return "it never runs"
+    return "this guard does not decide that condition (fail-closed — decide it in _gate_blocks before citing)"
+
+
+def _not_run_in_ci(cls: TestClass, method: str, gates: tuple) -> str | None:
+    """None when some CI run executes this test; otherwise why none does."""
+    simple = cls.fqcn.rsplit(".", 1)[-1]
+    names = (cls.fqcn, f"{cls.fqcn}.{method}", simple, f"{simple}.{method}")
+    runs = [r for r in CI_RUNS if not r.tests or any(fnmatch.fnmatchcase(n, p) for p in r.tests for n in names)]
+    if not runs:
+        return "no CI run's `--tests` filter selects it"
+    why = []
+    for r in runs:
+        blocked = next(((g, b) for g in gates if (b := _gate_blocks(g, r))), None)
+        if blocked is None:
+            return None
+        g, reason = blocked
+        why.append(f"in {r.where}, @{g.name} ({g.at}): {reason}")
+    return "; ".join(why)
 
 
 def rel(p: pathlib.Path) -> str:
@@ -158,22 +635,34 @@ def rel(p: pathlib.Path) -> str:
 WEB_TEST_RE = re.compile(r"\.(test|spec)\.(ts|tsx|js|jsx)$")
 
 
-def _check_class_method(area: str, ref: str, stem_map: dict[str, dict[str, bool]], where: str) -> None:
+def _check_class_method(area: str, ref: str, classes: dict[str, TestClass], where: str) -> None:
     """Resolve a "ClassName.method" ref against that class's own methods (not a flat surface set)."""
     cls, sep, method = ref.rpartition(".")
     if not sep:  # no '.', no '/' -> malformed for these surfaces
         errors.append(f"{where}: {area} ref malformed (expected 'ClassName.method'): {ref}")
-    elif cls not in stem_map:
+    elif cls not in classes:
         errors.append(f"{where}: {area} test class not found: {cls}")
-    elif method not in stem_map[cls]:
+    elif method not in classes[cls].funs:
         errors.append(f"{where}: {area} test method not found: {ref}")
-    elif not stem_map[cls][method]:  # symbol resolves but its body is empty/comment-only
-        errors.append(f"{where}: {area} test method has an empty body (proves nothing): {ref}")
+    else:
+        bodies = [f for f in classes[cls].funs[method] if f.substance]
+        if not bodies:  # symbol resolves but its body is empty/comment-only
+            errors.append(f"{where}: {area} test method has an empty body (proves nothing): {ref}")
+        elif CI_RUNS:  # with none at all, main() reports it once rather than once per ref
+            verdicts = [_not_run_in_ci(classes[cls], method, f.gates) for f in bodies]
+            if all(verdicts):
+                errors.append(f"{where}: {area} test runs in no CI run, so it makes no coverage claim "
+                              f"(ADR 0040): {ref} — {verdicts[0]}")
+
+
+backend_refs = 0
 
 
 def check_ref(area: str, ref: str, where: str) -> None:
+    global backend_refs
     if area == "backend":
-        _check_class_method(area, ref, backend_methods, where)
+        backend_refs += 1
+        _check_class_method(area, ref, backend_classes, where)
     elif area in FILE_ROOTS:
         # these refs are file paths relative to the surface's own root, and must be test files (not any real file)
         root = FILE_ROOTS[area]
@@ -184,7 +673,28 @@ def check_ref(area: str, ref: str, where: str) -> None:
                           f"(expected *.test|*.spec .ts/.tsx/.js/.jsx): {ref}")
 
 
-backend_methods = backend_test_methods()
+def check_criterion_gaps(cgaps, covered_here: set, where: str) -> None:
+    """A criterion's `gaps` list: where its refs on a surface it DOES cover stop short of its sentence."""
+    if not isinstance(cgaps, list) or not cgaps:
+        errors.append(f"{where}: criterion gaps must be a non-empty list of {{surface, reason}}")
+        return
+    for g in cgaps:
+        if not isinstance(g, dict) or set(g) != {"surface", "reason"}:
+            errors.append(f"{where}: criterion gap must have exactly the keys surface, reason: {g!r}")
+            continue
+        surface, reason = g["surface"], g["reason"]
+        if surface not in SURFACES:
+            errors.append(f"{where}: criterion gap for unknown surface '{surface}'")
+        elif surface not in covered_here:
+            errors.append(f"{where}: criterion gap for '{surface}', which carries no ref on this criterion "
+                          f"(a criterion gap says where a covered surface's refs stop short; a surface with no "
+                          f"ref for the use-case is a use-case-level gap)")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"{where}: criterion gap for '{surface}' needs a reason")
+
+
+backend_classes = backend_test_classes()
+CI_RUNS = ci_backend_runs()
 usecases = sorted(FEATURES.glob("*/use-cases/uc.*.md"))
 
 for uc in usecases:
@@ -200,6 +710,8 @@ for uc in usecases:
         errors.append(f"{rel(cov)}: invalid YAML: {exc}")
         continue
     where0 = rel(cov)
+    if unknown := sorted(map(str, set(data) - USECASE_KEYS)):
+        errors.append(f"{where0}: unknown key(s) {unknown} (expected {sorted(USECASE_KEYS)})")
     if data.get("useCase") != stem:
         errors.append(f"{where0}: useCase '{data.get('useCase')}' must equal '{stem}'")
     if data.get("feature") != feature:
@@ -219,12 +731,16 @@ for uc in usecases:
     for ac in data.get("acceptanceCriteria") or []:
         acid = ac.get("id", "?")
         where = f"{where0}: criterion '{acid}'"
+        if unknown := sorted(map(str, set(ac) - CRITERION_KEYS)):
+            errors.append(f"{where}: unknown key(s) {unknown} (expected {sorted(CRITERION_KEYS)})")
         coverage = ac.get("coverage") or {}
         ref_count = 0
+        covered_here: set[str] = set()
         for area, levels in coverage.items():
             if area not in SURFACES:
                 errors.append(f"{where}: unknown area '{area}'")
             covered_areas.add(area)
+            covered_here.add(area)
             if not isinstance(levels, dict):
                 errors.append(f"{where}: area '{area}' must map level -> [refs]")
                 continue
@@ -239,8 +755,14 @@ for uc in usecases:
                     check_ref(area, ref, where)
         if ref_count == 0 and not planned:
             errors.append(f"{where}: no tests (needs at least one on {sorted(SURFACES)})")
+        if "gaps" in ac:
+            check_criterion_gaps(ac["gaps"], covered_here, where)
 
     gaps = data.get("gaps") or {}
+    if not isinstance(gaps, dict):
+        errors.append(f"{where0}: use-case gaps must map area -> reason "
+                      f"(the list of {{surface, reason}} belongs on a criterion)")
+        gaps = {}
     if planned and not gaps:
         errors.append(f"{where0}: status 'planned' must declare at least one gap (the surfaces not yet built)")
     for area, reason in gaps.items():
@@ -253,6 +775,11 @@ for uc in usecases:
         if area in covered_areas:
             errors.append(f"{where0}: area '{area}' is both covered and a gap "
                           f"(a gap must be an uncovered surface; move build-notes/deferred prose out)")
+
+if backend_refs and not CI_RUNS:
+    errors.append(f"{rel(WORKFLOWS)}: no CI run executes the backend's Gradle tests (an unconditional "
+                  f"`gradlew test|check|build` step in a push/pull_request workflow), so none of the "
+                  f"{backend_refs} backend ref(s) makes a coverage claim (ADR 0040)")
 
 # Orphan coverage files (coverage without a matching use-case).
 for cov in COVERAGE.glob("*/use-cases/uc.*.yaml"):
@@ -267,4 +794,5 @@ if errors:
         print("  -", e)
     sys.exit(1)
 
-print(f"coverage OK: {len(usecases)} use-case(s) mapped, all acceptance criteria covered")
+print(f"coverage OK: {len(usecases)} use-case(s) mapped, all acceptance criteria covered; "
+      f"{backend_refs} backend ref(s) run in CI ({', '.join(r.where for r in CI_RUNS) or 'no run'})")

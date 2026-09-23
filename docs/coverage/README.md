@@ -47,6 +47,9 @@ acceptanceCriteria:
     coverage:
       <area>:
         <level>: [<ref>, ...]   # backend ref: "ClassName.testMethod"; web ref: a path under web/
+    gaps:                       # optional: where this criterion's refs on a surface it covers stop short
+      - surface: <area>         # must carry a ref on THIS criterion
+        reason: <text>          # the part of the sentence those refs do not prove, and why
 gaps:
   <area>: <reason>              # a surface with NO coverage ref for this use-case (never also covered)
 ```
@@ -60,6 +63,16 @@ gaps:
 - **Areas and levels come from the fixed sets above**; unknown names fail validation (catches typos).
 - **References must resolve:** a `backend` `ClassName.method` ref resolves against *that* test class (a file
   whose stem is `ClassName`, containing `method`); a `web` ref's file must exist.
+- **A backend ref must name a test a CI run executes** ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).
+  A test behind a JUnit gate (`@EnabledIfEnvironmentVariable`, `@Disabled`, `@EnabledOnOs`, …) counts only if
+  a Gradle test run declared in `.github/workflows/` satisfies that gate; an opt-in test like
+  `BlobBatchE2ETest` (`VEYQ_S3_E2E=1`, set by no workflow) is named in a criterion `gaps` entry instead.
+  `validate_coverage.py`'s docstring says which gates it decides and which fail closed.
+- **A criterion's `gaps` say where its refs stop short** — a list of `{surface, reason}` whose surface
+  **does** carry a ref on that criterion: the refs are real and CI-run, and the reason names the part of the
+  sentence they do not prove (a real store the hermetic test cannot reach, a deadlock H2 cannot produce). It is
+  the mirror of the use-case `gaps` below, which name a surface with **no** ref; removing a criterion's last ref
+  on a surface therefore turns its note red rather than leaving it to describe nothing.
 - **Gaps are explicit *and* mean uncovered:** a surface with no coverage ref is listed under `gaps` with a
   reason (silent omission is not allowed); a surface that **is** covered may not also be a gap — that overlap
   is a stale gap (a build-note or deferred-slice left behind) and fails validation ([ADR 0040](../decisions/0040-coverage-gaps-and-http-not-a-surface.md)).

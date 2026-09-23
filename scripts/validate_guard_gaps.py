@@ -53,6 +53,19 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      itself and requires each `TenantHandler` caller to reproject, so ADR 0063's "never an incremental patch"
      cannot decay into "patched by whoever remembered". The defect is silent by construction: the row stays
      right, the routing goes stale, and the first symptom is a domain that does not resolve
+  17 a cited backend test class gated by `@EnabledIfEnvironmentVariable` on a variable no workflow sets —
+     rejected: `validate_coverage` reads the gate and requires a CI run of the Gradle tests that satisfies it
+     (ADR 0040: a test no CI run executes makes no claim). The real instance was `BlobBatchE2ETest`, cited under
+     `uc.memory.gallery` until 6f19923 with every structural check green
+  18 every job that runs the backend's Gradle tests made conditional (`if: false`) — rejected: with no
+     unconditional run left, no backend ref makes a claim, and the guard says so once. `if: false` is the exact
+     shape the web-e2e job carried while four coverage refs rode on it
+  19 a criterion-level gap naming `http`, the surface ADR 0040 demoted — rejected: criterion `gaps` lists are now
+     read (known surface, non-empty reason, and a surface that carries a ref on that criterion). Before, nothing
+     read them at all
+  20 a backend ref at a method that exists only inside a KDoc example — rejected: `validate_coverage` scans
+     comment- and string-masked source. Unmasked, `TestMailbox`'s KDoc made `TestMailbox.x` a resolvable method
+     with a body
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -100,6 +113,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      therefore no honest way to tell a vendor class from a typo at that position. Anchoring is what lets that
      guard need no vendor list at all. Pinned so the limit in that guard's docstring is executable rather than
      a sentence.
+  21 a cited backend test that skips itself at runtime (`Assumptions.assumeTrue(...)` in its body) passes
+     `validate_coverage`, which decides annotation gates, never runtime behaviour. **Left open on purpose** —
+     an assumption is an arbitrary expression, possibly in a `@BeforeAll` or a helper it calls, so a check
+     would catch only the direct spelling: much mechanism for part of the lie, the same trade as 4b. Pinned so
+     the limit in that guard's docstring is executable rather than a sentence.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -139,7 +157,11 @@ COV_APPEARANCE = "docs/coverage/features/settings/use-cases/uc.settings.appearan
 COV_SHARE_NOTE = "docs/coverage/features/sharing/use-cases/uc.sharing.share-note.yaml"
 WEB_TEST_REF = "src/shared/state/useThemeState.test.ts"
 BACKEND_TEST_CLASS = "ShareNoteSliceTest"
-BACKEND_TEST_REF = f"{BACKEND_TEST_CLASS}.createWithNoteThenAnonymousResolveReturnsIt"
+BACKEND_TEST_METHOD = "createWithNoteThenAnonymousResolveReturnsIt"
+BACKEND_TEST_REF = f"{BACKEND_TEST_CLASS}.{BACKEND_TEST_METHOD}"
+# A criterion-level gap (a covered surface's refs stopping short) — its surface is what case 19 forges.
+COV_LOGIN = "docs/coverage/features/account/use-cases/uc.account.login.yaml"
+CRITERION_GAP_SURFACE = "      - surface: backend\n"
 # A distinctive base64 cap (the space icon, 21 884) — forging it oversize is the #94 closed-hole probe; a
 # free-text cap (the operator terms, 20 000) — forging it huge is the free-text open-gap probe.
 B64_CAP_ANCHOR = ("contracts/api/scopes.openapi.yaml", "maxLength: 21884", "maxLength: 65536")
@@ -182,10 +204,7 @@ def forge_web_ref_nontest(root: pathlib.Path) -> str:
 
 
 def forge_backend_empty_fun(root: pathlib.Path) -> str:
-    tests = [t for t in (root / "backend/src/test").rglob("*.kt") if t.stem == BACKEND_TEST_CLASS]
-    if not tests:
-        raise ForgeError(f"backend test class {BACKEND_TEST_CLASS} not found (renamed?)")
-    tf = tests[0]
+    tf = _backend_test_file(root)
     src = tf.read_text()
     cut = src.rstrip().rfind("}")  # inject before the class's final brace
     if cut == -1:
@@ -194,6 +213,73 @@ def forge_backend_empty_fun(root: pathlib.Path) -> str:
     cov = root / COV_SHARE_NOTE
     cov.write_text(_sub(cov.read_text(), BACKEND_TEST_REF, f"{BACKEND_TEST_CLASS}.guardGapEmptyProof"))
     return "backend ref → empty fun body (symbol resolves; the body is now inspected)"
+
+
+def _backend_test_file(root: pathlib.Path) -> pathlib.Path:
+    tests = [t for t in (root / "backend/src/test").rglob("*.kt") if t.stem == BACKEND_TEST_CLASS]
+    if not tests:
+        raise ForgeError(f"backend test class {BACKEND_TEST_CLASS} not found (renamed?)")
+    return tests[0]
+
+
+def forge_backend_ref_env_gated(root: pathlib.Path) -> str:
+    # The BlobBatchE2ETest shape, planted on the class the coverage file already cites so the forgery needs no
+    # second anchor: a class-level gate on a variable no workflow sets, beneath the class's other annotations.
+    tf = _backend_test_file(root)
+    src = _sub(tf.read_text(), "import org.junit.jupiter.api.Test\n",
+               "import org.junit.jupiter.api.Test\nimport org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable\n")
+    tf.write_text(_sub(src, f"\nclass {BACKEND_TEST_CLASS} ",
+                       f'\n@EnabledIfEnvironmentVariable(named = "VEYQ_GUARD_GAP_PROBE", matches = "1")'
+                       f"\nclass {BACKEND_TEST_CLASS} "))
+    return "a cited backend class gated on an env variable no workflow sets (must be REJECTED — it never runs in CI)"
+
+
+def forge_backend_tests_never_run_in_ci(root: pathlib.Path) -> str:
+    # Every job whose steps run the backend's Gradle tests gets `if: false` — the web-e2e job's historical shape.
+    # Text-level on purpose: a forgery must not borrow the guard's own predicate, or it could only ever agree.
+    hits = 0
+    for wf in sorted((root / ".github/workflows").glob("*.yml")):
+        text = wf.read_text()
+        jobs = re.search(r"^jobs:\n", text, re.M)
+        if not jobs:
+            continue
+        parts = re.split(r"(?m)^(?=  [\w-]+:\s*$)", text[jobs.end():])
+        for i, part in enumerate(parts):
+            if re.search(r"gradlew[^\n]*\b(?:check|test|build)\b", part):
+                header, _, rest = part.partition("\n")
+                parts[i] = f"{header}\n    if: false\n{rest}"
+                hits += 1
+        wf.write_text(text[:jobs.end()] + "".join(parts))
+    if not hits:
+        raise ForgeError("no workflow job runs `gradlew check|test|build` — re-anchor this forgery")
+    return f"all {hits} job(s) running the backend's Gradle tests set to `if: false` (must be REJECTED)"
+
+
+def forge_criterion_gap_demoted_surface(root: pathlib.Path) -> str:
+    f = root / COV_LOGIN
+    f.write_text(_sub(f.read_text(), CRITERION_GAP_SURFACE, "      - surface: http\n"))
+    return "a criterion-level gap naming `http`, the demoted surface (must be REJECTED — the list is now read)"
+
+
+def forge_backend_ref_kdoc_phantom(root: pathlib.Path) -> str:
+    tf = _backend_test_file(root)
+    src = tf.read_text()
+    cut = src.rstrip().rfind("}")  # inject before the class's final brace
+    if cut == -1:
+        raise ForgeError(f"no closing brace in {tf.name}")
+    tf.write_text(src[:cut] + "\n    /** An example, not a method: `fun guardGapKdocPhantom() = check(true)` */\n"
+                  + src[cut:])
+    cov = root / COV_SHARE_NOTE
+    cov.write_text(_sub(cov.read_text(), BACKEND_TEST_REF, f"{BACKEND_TEST_CLASS}.guardGapKdocPhantom"))
+    return "backend ref → a `fun` that exists only inside a KDoc (must be REJECTED — comments are masked)"
+
+
+def forge_backend_runtime_assumption(root: pathlib.Path) -> str:
+    tf = _backend_test_file(root)
+    head = f"    fun {BACKEND_TEST_METHOD}() {{\n"
+    tf.write_text(_sub(tf.read_text(), head, head + '        org.junit.jupiter.api.Assumptions.assumeTrue('
+                                                      'System.getenv("VEYQ_GUARD_GAP_PROBE") == "1")\n'))
+    return "a cited backend test that skips itself at runtime via Assumptions (the annotation-only open gap)"
 
 
 def forge_coverage_status_done(root: pathlib.Path) -> str:
@@ -408,6 +494,11 @@ CASES = [
     ("14", "validate_tenant_ingress_triggers.py", forge_tenant_suspend_without_reproject, False),
     ("15", "validate_run_configs.py", forge_run_config_env_path_into_the_void, True),
     ("16", "validate_stylesheet_anchors.py", forge_dead_class_inside_a_selector, True),
+    ("17", "validate_coverage.py", forge_backend_ref_env_gated,          False),
+    ("18", "validate_coverage.py", forge_backend_tests_never_run_in_ci,  False),
+    ("19", "validate_coverage.py", forge_criterion_gap_demoted_surface,  False),
+    ("20", "validate_coverage.py", forge_backend_ref_kdoc_phantom,       False),
+    ("21", "validate_coverage.py", forge_backend_runtime_assumption,     True),
 ]
 
 
