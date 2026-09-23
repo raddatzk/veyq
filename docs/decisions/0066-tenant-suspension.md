@@ -33,9 +33,13 @@ Forces:
   `tenantId` at all. Revoking a member's sessions to lock them out of a suspended tenant would therefore also
   sign them out of every **other**, unaffected tenant they belong to — the opposite of what suspension is
   supposed to scope to. This rules out a session-revoke as part of the mechanism; see Decision.
-- **The per-request Host→tenant resolution this needs already exists.** `ScopesResource.activeHost()` +
-  `ScopesStore.findTenantIdByDomain` (`ScopesResource.kt:223-226`, `ScopesStore.kt:87-89`) is the same lookup a
-  request-level gate needs — reuse, not new machinery.
+- **The `Host` says which domain a request arrived on, not which tenant it acts on.** The space switcher is
+  host-independent: from whichever tenant's domain the app is open on, it reaches every tenant the caller
+  belongs to **by id** (`my-tenants`, then scope-addressed calls). A gate keyed on `Host` therefore refuses a
+  suspended tenant's own domain and nothing else — its scopes stay reachable through any other tenant's domain,
+  and so do its public shares, its background jobs and its entry in `my-tenants`. The tenant a request acts on
+  is known only once the operation has resolved the scope it addresses — which is why a `Host` filter that
+  looks like a lockout is not one.
 - **A global request-boundary filter is an established pattern here**, not a new shape: the rate-limit posture
   (ADR 0051) is enforced by a `@Provider` `ContainerRequestFilter` running at `Priorities.AUTHENTICATION`
   (`RateLimitFilters.kt`), resolving its own axis (IP) straight off the raw request before a principal exists.
@@ -48,8 +52,10 @@ Forces:
 
 ## Decision
 
-**A new `TenantStatus` value, `SUSPENDED`, gates every request to that tenant at the boundary — before
-authentication is even evaluated — resolved from `Host`, so it needs no session state at all.**
+**A new `TenantStatus` value, `SUSPENDED`, refuses every operation that acts on that tenant — decided by the
+one scope-access gate every such operation calls, so it holds whichever domain the request arrived on. A
+`Host`-keyed filter additionally refuses every API request on the tenant's own domain before authentication,
+sign-in included. Neither needs any session state.**
 
 - **`TenantStatus` becomes `[PENDING, ACTIVE, SUSPENDED]`.** Reversible in both directions: a Server Owner can
   suspend an `ACTIVE` tenant and reactivate a `SUSPENDED` one back to `ACTIVE`. This is deliberately **not**
@@ -58,19 +64,30 @@ authentication is even evaluated — resolved from `Host`, so it needs no sessio
   `contracts/api/tenants.openapi.yaml` (`POST /api/tenants/{tenantId}/suspend`,
   `POST /api/tenants/{tenantId}/reactivate`, or one status-transition operation — the CR decides the exact
   shape), guarded the same way every other tenant-admin operation already is.
-- **A request-level gate, not a routing-level one.** A new **pre-matching** request filter
+- **The enforcement is per operation: `ScopeAccess.check`.** Every scope-, tenant-, share- and job-addressed
+  operation calls the one gate in `shared/membership` inline, and the gate reads the addressed scope's tenant
+  status on every call ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md) owns the
+  whole rule). Membership is answered **first** ([ADR 0042](0042-http-failure-projection.md)), so a non-member
+  gets the same 404 as for an invented id and never learns that a tenant is suspended; a member gets
+  `403 tenant_suspended` — reads included. Because the gate reads the status on every call, the lockout is as
+  immediate as the flip: a still-valid access token opens nothing, since each operation asks again. What
+  follows from it: the tenant's public shares answer as revoked links, no background job in it can be claimed
+  or completed, and `my-tenants` still lists it — with its status and without its grant or icon, so the
+  switcher can show it offline.
+- **The `Host` filter stays, for what a `Host` can decide.** A **pre-matching** request filter
   (`TenantSuspensionFilter`) resolves the tenant from the `Host` the same way `ScopesResource.activeHost()`
-  already does and rejects **every** request against a `SUSPENDED` tenant with `403 tenant_suspended` —
-  unauthenticated or not, read or write, before the request reaches a handler or an authentication check. This
-  is what makes the lockout immediate rather than eventual: a still-valid access token cannot be used at all,
-  because the gate never gets far enough to look at it.
-- **No session revoke.** The request gate alone already delivers "blocks immediately, no exceptions" — it
-  resolves the tenant from `Host`, independent of which account presents a token, so it refuses every request
+  already does and refuses every request on a `SUSPENDED` tenant's own domain with `403 tenant_suspended` —
+  unauthenticated or not, before the request reaches a handler or an authentication check. That covers what
+  no scope is addressed by — signing in on that domain — and it is a JAX-RS filter, so it sees API requests
+  only: the static web bundle is not a resource method and never passes through it. It is **not** the
+  enforcement — a request on any other domain never meets it (Forces above).
+- **No session revoke.** The gate already delivers "blocks immediately, no exceptions": it decides by the
+  tenant an operation acts on, independent of which account presents a token, so it refuses every operation
   the moment the status flips, full stop. A session-revoke was considered as extra hardening and **rejected**:
   since sessions are account-scoped, not tenant-scoped (Forces above), it would collaterally sign a
   multi-tenant member out of every *other*, unaffected tenant too — a real defect, not a redundant safety
   margin. A member's refresh token staying technically valid against a suspended tenant is harmless: the gate
-  refuses it exactly like every other request, and it dies as normal on `revokeOtherFamilies` or password
+  refuses every operation it is presented to, and it dies as normal on `revokeOtherFamilies` or password
   change like any other session — suspension does not need to accelerate that.
 - **The ingress projector's "deactivate" trigger** ([ADR 0063](0063-database-driven-tenant-ingress.md)) fires
   on `ACTIVE → SUSPENDED`: the tenant's router entries are removed, same as any other domain no longer served.
@@ -82,8 +99,11 @@ authentication is even evaluated — resolved from `Host`, so it needs no sessio
 
 ## Consequences
 
-- **The gate is a new boundary surface every tenant-scoped route passes through**, so it must be a filter, not
-  a per-handler check — a new route added later inherits it automatically only if it is wired at that layer.
+- **A new route is covered only if it calls the gate — so completeness is a test, not a layer.** A filter
+  would have inherited every new route automatically, and it would have been the wrong layer (Forces above).
+  The per-operation gate inherits nothing, so `OperatorBlindProbeTest` derives the operation set from the
+  contract and fails on any operation that is neither probed against a suspended tenant's member nor named on
+  its reasoned exclusion list.
 - **`TenantStatus` becomes a three-way enum** everywhere it is matched exhaustively (Kotlin `when`, the
   generated TS union) — the CR locates every such site rather than assuming only the two known ones.
 - **"Before authentication" costs a thread hop, and any future boundary gate pays it too.** Pre-matching is the
@@ -92,6 +112,9 @@ authentication is even evaluated — resolved from `Host`, so it needs no sessio
   there (the build rejects it outside "entrypoint" methods), so the filter dispatches explicitly to a worker
   pool. Cheap here, because every resource method in this service is blocking anyway; the constraint is
   recorded because the next gate that needs to read anything will hit it identically.
+- **Rejected — a `Host`-keyed filter as the mechanism:** it refuses the suspended tenant's own domain and
+  nothing else, while the host-independent switcher reaches the tenant's scopes, shares and jobs from any other
+  domain (Forces above); kept for sign-in and every other API call on that domain, never the guarantee.
 - **Rejected — routing-removal only** (the literal reading of ADR 0063's "deactivate"): insufficient on its
   own per the Forces above; kept as a secondary effect, never the guarantee.
 - **Rejected — passive/TTL-based lockout** (suspend the tenant and let existing tokens expire naturally):
@@ -103,6 +126,8 @@ authentication is even evaluated — resolved from `Host`, so it needs no sessio
   drives).
 - [uc.admin.create-tenant.md](../features/admin/use-cases/uc.admin.create-tenant.md) (named this as future
   work: "the operator controls availability, never confidentiality").
+- [uc.spaces.scope-access.md](../features/spaces/use-cases/uc.spaces.scope-access.md) (the one gate that
+  enforces it, and what every other caller is told).
 - [uc.admin.suspend-tenant.md](../features/admin/use-cases/uc.admin.suspend-tenant.md) (the use-case this ADR
   backs).
 - [ADR 0004](0004-session-tokens.md) (the account-global session-family model that ruled out a session-revoke

@@ -44,9 +44,12 @@ sequenceDiagram
   Note right of S: crash before done → lease expires → lazy reclaim by another worker<br>(at-least-once#59; jobId-keyed idempotent completion#59; attempts>max → dead-letter)
 ```
 
-- **Claim / lease.** Atomic (`WHERE status='pending'`, MariaDB `SKIP LOCKED`). Cheap idempotent jobs need no
-  real lease (first-online-wins); expensive jobs lease with a **TTL** and **heartbeat** to keep it. A crash →
-  the lease expires → **lazy reclaim**. `attempts` + a max → **dead-letter**.
+- **Claim / lease.** Atomic (`WHERE status='pending'`, MariaDB `SKIP LOCKED`). Every claim leases with a
+  **TTL**; expensive jobs **heartbeat** to keep it. Only the lease holder heartbeats, completes, fails or
+  declines ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md) §6) — idempotency makes a *repeated*
+  completion harmless, it does not make an *unclaimed* one legitimate. A crash → the lease expires → **lazy
+  reclaim**. `attempts` + a max → **dead-letter**. No job work happens in a deleting scope or a suspended tenant
+  ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)).
 - **Result.** Usually a normal **sealed** write via an existing path (a grant onto a membership, a derivative
   blob, a node update) → mark `done`; the originator observes it through that path. Otherwise an optional sealed
   `sealedResult`. No plaintext result store.
@@ -82,7 +85,7 @@ module (extraction-ready, not extracted).
 ## Consumers
 
 - **First:** member-add grant delivery ([uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md),
-  [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) — trivial blind body, universal tag, no lease;
+  [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) — trivial blind body, universal tag, short lease;
   validates the core loop.
 - **Informing (later):** media derivatives / **transcode** (Uploads — inbox #17),
   **face-recognition / on-device ML** (Agent — inbox #10/#23) — the heavy consumers that
