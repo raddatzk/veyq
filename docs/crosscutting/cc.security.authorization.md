@@ -44,18 +44,19 @@ bucket, rendered by the one writer in `shared/http/` ([ADR 0042](../decisions/00
 
 ## The gate dimensions
 
-Seven dimensions, three role vocabularies, two non-role axes. **The same string means different things on
+Eight dimensions, three role vocabularies, three non-role axes. **The same string means different things on
 different dimensions** — the single most common source of confusion here, and the reason this table exists:
 
 | # | Dimension | Answers | Vocabulary | Enforced by |
 |---|---|---|---|---|
 | 1 | **Session** | is there a valid session? | — | annotation (layer 1) |
 | 2 | **Server role** | may they administer the *server*? | `SERVER_OWNER` · `MEMBER` | annotation (layer 1) — the **only** declarative one |
-| 3 | **Membership** | do they belong to this scope / tenant? | — (a row exists, or not) | `isScopeMember` · `isMember` |
+| 3 | **Membership** | do they belong to this scope / tenant? | — (an *accepted* row exists, or not; a tenant = its root scope) | `ScopeAccess` |
 | 4 | **Grant** | do they hold this scope's key? | — (`wrappedGrant is not null`) | `holdsGrant` |
 | 5 | **Scope role** | may they *manage* this scope? | `OWNER` · `MEMBER` | `isScopeOwner` · `isTenantOwner` · `ownerCount` · `memberRole` |
 | 6 | **Share role** | what may a link-holder do? | `VIEWER` · `CONTRIBUTOR` · `UPLOADER` | `canView` · `canUpload` |
 | 7 | **Share password** | do they know the share's password? | — | `passwordCheck` |
+| 8 | **Space state** | is the tenant suspended, is the scope being deleted? | `ACTIVE` · `SUSPENDED` · `deletedAt` | `ScopeAccess` (after #3) |
 
 **`MEMBER` means three different things:** an ordinary server user (#2), an ordinary scope member (#5), and the
 role a tenant invite confers. **`OWNER` means two** (#5, and the invite's). The server's owner value is
@@ -89,16 +90,19 @@ have given — and unlike a table they cannot go stale.
    The **order is the security property**. Probing existence — or scope *kind* — before the boundary lets a
    non-member distinguish "exists, forbidden" (403) from "no such scope" (404) and enumerate scope ids.
    Membership-gated absence is
-   therefore **404**, uniform for strangers and bogus ids; the residual **403** means precisely "member, but not a
-   key-holder" (`not_key_holder`).
+   therefore **404**, uniform for strangers, bogus ids and unaccepted proposals; the residual **403** means
+   precisely "member, but not a key-holder" (`not_key_holder`). The boundary is **one** call, `ScopeAccess.check`,
+   which answers #8 only after #3 — suspension (403) and, for a write, deletion (409) — so a non-member never
+   learns either ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)).
 
 3. **Role checks key on `scopeId`, never on `tenantId` alone.**
 
-   > `tenantId` expresses belonging; every role check keys on `scopeId`.
+   > `tenantId` groups; belonging and every role check key on `scopeId`.
    > — [ADR 0007](../decisions/0007-membership-role-grant-relation.md)
 
-   Every scope birth mints its creator an `OWNER` row, so a `tenantId`-only owner check silently degrades to
-   `isMember` — it answers **true for every tenant member**. That was a real privilege escalation. Tenant
+   Every scope birth mints its creator an `OWNER` row, so a `tenantId`-only owner check silently degrades to a
+   belonging check — it answers **true for every tenant member**. And a `tenantId`-only *belonging* check is wrong
+   too: it counts a removed member's kept rows and a proposed member's unaccepted one. That was a real privilege escalation. Tenant
    authority keys on the tenant
    **root scope**: `isTenantOwner(u, t) = isScopeOwner(u, t)`.
 
@@ -114,7 +118,8 @@ have given — and unlike a table they cannot go stale.
    operations and the tenant invite `preview`/`register`/`accept` are reached by possessing an **unguessable
    token** — that token *is* the credential. Their callers already know the resource exists, so a **403 is correct
    there** and rule 2 must **not** be applied ([ADR 0042](../decisions/0042-http-failure-projection.md)). They are
-   gated on #6 + #7 instead, and bounded by [cc.security.rate-limit](cc.security.rate-limit.md).
+   gated on #6 + #7 instead, and bounded by [cc.security.rate-limit](cc.security.rate-limit.md). #8 still applies
+   to them — as the answer of a revoked token, since their holders are not members.
 
 ## Known limits (honest — what this doc deliberately does not do)
 
@@ -147,10 +152,13 @@ Nothing is verified by this doc. It points at the guards that already exist:
 
 - `DefaultDenyTest` — an unannotated probe endpoint 401s. Pins layer 1's completeness: a future endpoint added
   without an annotation fails closed.
-- `OperatorBlindProbeTest` — **36 probes**. Fires every authenticated, scope-addressed endpoint as a *non-member*
-  against both a real scope id and an invented one, and asserts the two answers are identical in status and
-  `code`. This is rule 2's enforcement, and the reason it is a test rather than a static check: order is not
-  greppable. **Adding a scope-addressed endpoint means adding a row to its table.**
+- `OperatorBlindProbeTest` — fires every scope-, tenant-, share- and job-addressed operation as a *non-member*
+  against both a real id and an invented one and asserts the two answers are identical in status and `code`,
+  then as an unaccepted proposal, a member of a suspended tenant and a member of a deleting group. This is rule
+  2's enforcement, and the reason it is a test rather than a static check: order is not greppable. Its
+  operation **set** is derived from the contract — every operation is probed or named on a reasoned exclusion
+  list — while its **assertions** stay behavioural, which is what keeps it from being the generated matrix the
+  limits above reject.
 - `SessionTokenIdentityProviderTest` — the token → `SecurityIdentity` resolution (principal + server role) that
   layer 1 rests on.
 - Per-feature slice tests carry the layer-2 cases (owner-only, key-holder-only, share role, share password); the

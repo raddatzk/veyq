@@ -88,6 +88,11 @@ sequenceDiagram
   or an open proposal already exists; no duplicate.
 - **A3 — the invitee is offline / never responds:** the proposal simply **stays pending** — not an error, no key
   at risk (nothing is wrapped). The owner may rescind; there is no auto-expiry in v1 (a deferred polish).
+- **A3a — a proposed member is not a member yet, on any route.** Until they accept, the invitee reads and
+  answers their own invitation and nothing of the group: every group operation — content, media, favorites,
+  shares, roster, jobs — answers them exactly as it answers a stranger (the same 404,
+  [scope-access](uc.spaces.scope-access.md)). Gating the key alone was not enough: a row that counted as a
+  member let an unaccepted invitee write into a group they had never agreed to join.
 - **A4 — re-invite after a decline:** allowed. The decline left no `declined` marker (silent drop), so a fresh
   proposal is just a new soft membership. (The cost, accepted: an owner could re-propose repeatedly — a
   rate-limit/mute is a deferred polish, not a v1 gate.)
