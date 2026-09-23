@@ -51,9 +51,14 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
     sit in one atomic file.
 
   Whichever lands first adds a one-line note to the other's phase 4 text, so the second implementer finds it.
-- **Neighbours on the same lines, not in scope:** the `/veyq` path prefix (#151) and the public Admin API
-  (#152). Both will edit the sink's render after this. That is where compose's routing now lives, and the
-  inventory command below finds it.
+- **Ordering with `cr-admin-api-only-through-the-admin-container` (#152).** That CR moves the admin container
+  onto a second backend listener. It relies on Traefik's `loadbalancer.server.port=8080` label to keep the public
+  routers off that listener, and on tenant routes that "point at `veyq-app@docker`, so they inherit it". After
+  this CR the same pin is the sink's `veyq-app` service URL. The rule: **the sink never renders a service at
+  the admin listener** (ADR 0063 § services), and a projector test asserts that no rendered URL names its port.
+  Whichever of the two lands second checks that the rendered `veyq-app` URL is the public port.
+- **Neighbour on the same lines, not in scope:** the `/veyq` path prefix (#151) will edit the sink's render
+  after this. That is where compose's routing now lives, and the inventory command below finds it.
 - **Out of scope:** container options, networks and anything on Helm. That is
   `cr-runtime-hardening-both-targets`, which depends on this CR because a non-root Traefik could not read the
   socket anyway.
@@ -86,7 +91,8 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
       say which in the retro. Tests (`TenantIngressProjectorTest`):
       - the bootstrap pair is rendered with no tenant row at all;
       - a tenant row carrying the bootstrap domain yields exactly one router per name;
-      - the services are defined in the file and no router names `@docker`;
+      - the services are defined in the file, no router names `@docker`, and no service URL names the
+        backend's admin-listener port;
       - the admin router appears iff the admin domain is set.
 
       **Bite it:** re-add the old exclusion-only behaviour, so the bootstrap pair is absent, and see the

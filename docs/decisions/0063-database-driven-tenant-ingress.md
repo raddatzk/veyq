@@ -59,8 +59,9 @@ startup regenerate.
   Docker provider would need the Docker socket, and a `:ro` mount of it restricts nothing about the API, so
   the internet-facing proxy would hold root on the host. The file therefore carries everything compose
   routes, in one atomic write by one author:
-  - the **services**: the app, the store and the admin surface, at upstreams the recipe passes as
-    configuration. The recipe still owns the topology; the sink only renders it.
+  - the **services**: the app's public listener, the store and the admin surface, at upstreams the recipe
+    passes as configuration. The recipe still owns the topology; the sink only renders it. No service ever
+    points at the backend's admin listener ([ADR 0065](0065-admin-ui-cli-separate-service.md) § admin channel).
   - the **router pair** for every routable domain: an `app` router and a same-origin, prefix-preserved blobs
     router ([ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)). Both reference the `letsencrypt`
     cert resolver, so ACME issues each domain's certificate as its router appears.

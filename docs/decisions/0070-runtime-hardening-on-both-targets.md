@@ -53,7 +53,9 @@ Forces:
      with the app alone; the admin container shares one with the app alone. The internet-facing process cannot
      open a connection to the database.
    - **Helm: a NetworkPolicy set.** Ingress is denied to every pod the chart deploys, then allowed:
-     - the app from the ingress controller and the admin pod;
+     - the app's public port from the ingress controller alone, and its admin listener from the admin pod
+       alone ([ADR 0065](0065-admin-ui-cli-separate-service.md) § admin channel, which introduced that
+       second rule);
      - the store's S3 port from the ingress controller and the app;
      - its admin port from the app alone;
      - the database from the app alone;
@@ -62,7 +64,7 @@ Forces:
        ACME challenge.
 
      Egress is narrowed where it is knowable: the database and the store get only what they use, and the
-     admin pod reaches only the app. The app's egress stays open, because it sends SMTP to hosts the operator
+     admin pod reaches only the app's admin listener. The app's egress stays open, because it sends SMTP to hosts the operator
      chooses and talks to an API server whose address is cluster-specific.
    - **The operator names the ingress controller.** `networkPolicy.enabled` defaults to `true`, and while it
      is, the schema requires `networkPolicy.ingressFrom` (a list of NetworkPolicy peers). An install without
@@ -73,8 +75,9 @@ Forces:
    pod IP inside the same CIDR as every other pod, so any range wide enough to survive a restart trusts every
    pod, which is the finding again. The selector-based policy is what confines who can send a forwarded header.
    The value is for topologies with a stable proxy address: a host-network controller or an external load
-   balancer. On compose, decision 3 already leaves the app only two peers, the proxy and the admin container,
-   and both are proxies veyq ships.
+   balancer. On compose, decision 3 leaves the app's public port reachable only from its network peers. Of
+   those, the proxy is the one that forwards a client's address. The admin container talks to the admin
+   listener, not to the public port.
 
 ## Consequences
 
@@ -85,6 +88,9 @@ Forces:
 - **What cannot be proven here, named.** `helm template` proves what the chart renders, not that a cluster
   enforces it. Whether a NetworkPolicy binds depends on the CNI, and this repository has no cluster to run
   one on.
+- **Compose networks separate by peer, not by port.** The app's admin listener stays reachable from every
+  container that shares a network with the app. [ADR 0065](0065-admin-ui-cli-separate-service.md) residual
+  (i) names that and why it costs nothing. Only the Helm policy separates the two ports.
 - **Commands that join a stack network name a network.** A backup capture that reaches the store joins the
   network the store is on, so the backup runbook changes with the network names.
 - **Rejected — Garage and Traefik at uid 0 with only capabilities dropped.** It avoids the init step, but it

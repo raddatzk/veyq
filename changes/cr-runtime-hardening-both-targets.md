@@ -35,6 +35,15 @@ the Docker socket.
 - **No deployed instance exists** (ADR 0063 § Consequences: the production stack "had never actually been
   deployed"). So there is no migration of root-owned volumes. The init step also covers a first upgrade,
   because it acts on any volume root whose owner does not match.
+- **`cr-admin-api-only-through-the-admin-container` (#152) renders the chart's first NetworkPolicy.** On the
+  app pods it admits the public port from anywhere and the admin listener only from the admin pod, with two
+  `chart_meta_check.py` assertions of its own. This CR **generalises that one; it does not add a second**. The
+  public port narrows to `ingressFrom`, and the admin-listener rule and its assertions stay as that CR wrote
+  them. Whichever lands second merges them into one template with one policy per pod. Two overlapping
+  policies on the app would be additive and hard to read. `networkPolicy.enabled: false` removes every policy
+  the chart renders, the admin-listener rule included. An operator who turns it off owns reachability, and
+  the README says so next to the key. On compose that CR points the admin container at the listener, so the
+  admin container reaches only the app, which is what phase 1's admin network carries.
 - **The forwarded-address trust this narrows** is stated in
   [cc.security.rate-limit](../docs/crosscutting/cc.security.rate-limit.md) § *Trusts the client IP*, already
   updated by this refinement.
@@ -89,11 +98,15 @@ the Docker socket.
         path phase 1 measured, per pod. Extend `chart_meta_check.py` (v) to require it.
       - **`templates/networkpolicy.yaml`**, per ADR 0070 §3:
         - one default-deny policy selecting every pod of the release;
-        - ingress allows for app, the store's S3 and admin ports, MariaDB, admin, and cert-manager's solver pods
-          (`acme.cert-manager.io/http01-solver: "true"`, always rendered because it is harmless without such
-          pods);
+        - ingress allows for:
+          - the app's public port from `ingressFrom`, and its admin listener from the admin pod (#152's rule,
+            kept);
+          - the store's S3 and admin ports, MariaDB, and admin;
+          - cert-manager's solver pods (`acme.cert-manager.io/http01-solver: "true"`), always rendered because
+            the rule is harmless without such pods;
         - egress narrowed for MariaDB, Garage and admin, each with DNS (port 53 to any namespace) plus exactly
-          its peers. Garage's peer is its own RPC port. The app's egress is left open.
+          its peers. Garage's peer is its own RPC port, and admin's is the app's admin listener. The app's
+          egress is left open.
       - **Values/schema:** `networkPolicy.enabled: true` and `networkPolicy.ingressFrom` (a list of peers). The
         schema requires a non-empty `ingressFrom` while `enabled` is true (`if`/`then`), and an install without
         it fails naming the key. `app.trustedProxies` is optional, rendered as
@@ -102,7 +115,8 @@ the Docker socket.
 
       **New `chart_meta_check.py` assertions:**
       - a default-deny policy exists and selects every rendered pod;
-      - the app's ingress peers are exactly `ingressFrom` + the admin pod;
+      - the app's public-port peers are exactly `ingressFrom`, and its admin listener still admits only the
+        admin pod (#152's assertion, kept);
       - MariaDB's only peer is the app;
       - a render with `networkPolicy.enabled=false` has no NetworkPolicy;
       - `helm lint` with `ingressFrom` removed **fails**. That is a negative, so pair it with the positive

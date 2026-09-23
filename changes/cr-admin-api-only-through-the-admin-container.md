@@ -94,13 +94,16 @@ at a door that is closed or does not exist yet.
       - **compose:** the admin service's `BACKEND_URL` points at the listener. The root `Dockerfile` does **not**
         `EXPOSE` it, with a comment saying why (`docker run -P` would publish it). Traefik's
         `loadbalancer.server.port=8080` already pins the public router, and tenant routes point at
-        `veyq-app@docker`, so they inherit it.
+        `veyq-app@docker`, so they inherit it. If `cr-traefik-file-provider-only` lands first, that pin is the
+        ingress sink's `veyq-app` service URL instead; check it names the public port.
       - **chart:** an `admin` containerPort on the app Deployment, and a Service of its own for it — not a second
         port on `veyq-app`, so no Ingress aimed at the app Service can reach it. The admin Deployment's
         `BACKEND_URL` points at that Service. A NetworkPolicy selecting the app pods admits the public port from
         anywhere and the admin port only from the admin pod. `scripts/chart_meta_check.py` gains two assertions:
         no rendered Ingress names the admin Service, and the policy admits only the admin pod to the admin port.
-        It is hand-run — no workflow executes it, which inbox #26 already records — so run it.
+        It is hand-run — no workflow executes it, which inbox #26 already records — so run it. If
+        `cr-runtime-hardening-both-targets` lands first, extend its policy for the app pods rather than adding
+        a second one; that CR's § Context says how the two merge.
       - **live e2e + seeds:** `scripts/run_web_e2e.py` boots each jar with an admin port of its own and hands the
         suites an admin base. `web/src/test/e2eBootstrap.ts` births the owner and the tenant through it. The dev
         seed scripts get an admin base, defaulting to the listener's dev port. Locator, two angles, both derived
