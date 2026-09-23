@@ -1,80 +1,118 @@
 # Concern: Web Content-Security-Policy
 
 - **ID:** cc.security.csp
-- **Type:** **Cross-cutting concern** — a horizontal browser-enforced security mechanism for the `web/` surface;
-  it has no standalone end-user goal (not a use-case) and is not a feature substrate (not an enabler). Recorded
-  here so its policy + rationale + verification are traceable from the threat model.
-- **Status:** baseline shipped as a `<meta>` policy + dev-server header; the header-only directives
-  (`frame-ancestors`, HSTS) are **deferred** to the future production web-serving component (see *Deferred* below).
+- **Type:** **Cross-cutting concern.** It is a horizontal, browser-enforced security mechanism for the `web/`
+  surface and for the response headers of the app origin. It has no standalone end-user goal, so it is not a
+  use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
+  rationale and verification are traceable from the threat model.
+- **Status:** **the header delivery described below is decided but not yet built**
+  ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). Until it is built:
+  - the build injects the same policy into `index.html` as a `<meta>` (without `frame-ancestors`, which a
+    `<meta>` ignores);
+  - the Vite dev server sends it as a header;
+  - the app origin sends none of the other headers.
+
+  Two consequences follow. A store on its own origin (the Kubernetes target) is blocked by `connect-src`, and a
+  `<meta>` cannot be widened from outside.
 
 ## Protects against
 
-The web client is where **all** content crypto happens: it holds decryption keys in memory and renders
-**decrypted** content (Memory notes, terms, share notes via `v-html`). The dominant residual risk is *content
-injection* — a hostile string that reaches the DOM (a crafted shared note, a compromised dependency) and turns
-into executing script. Without a CSP, such a script could exfiltrate keys/plaintext to any host. The CSP is the
-browser-enforced backstop: even if injection happened, `script-src 'self'` blocks a foreign script from running
-and `connect-src` blocks it from phoning home. It is **defense-in-depth**, not the first line — the first line
-is that decrypted HTML is escape-first sanitised ([`renderMarkdown`](../../web/src/shared/markdown.ts)); the CSP
-is what holds if that ever fails.
+The web client is where **all** content crypto happens. It holds decryption keys in memory and renders
+**decrypted** content (Memory notes, terms, and share notes via `v-html`). The dominant residual risk is *content
+injection*: a hostile string reaches the DOM, for example through a crafted shared note or a compromised
+dependency, and turns into executing script. Without a CSP, such a script could send keys and plaintext to any
+host.
 
-This does **not** re-blind the operator or a third party — it is orthogonal to
-[security-model](security-model.md). Map tiles/geocoding remain a *consented* third-party boundary
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)); the CSP simply scopes which origins the page
-may talk to at all.
+The CSP is the browser-enforced backstop. Even if injection happened, `script-src 'self'` stops a foreign script
+from running, and `connect-src` stops it from phoning home. It is **defense-in-depth**, not the first line. The
+first line is that decrypted HTML is sanitised escape-first ([`renderMarkdown`](../../web/src/shared/markdown.ts)).
+The CSP is what holds if that ever fails.
+
+This does **not** re-blind the operator or a third party; it is orthogonal to
+[security-model](security-model.md). Map tiles and geocoding remain a *consented* third-party boundary
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)). The CSP only limits which origins the page may
+talk to at all.
 
 ## Mechanism
 
-A single policy string is generated at build time from the app's own provider config and applied two ways
-([`web/vite.config.ts`](../../web/vite.config.ts) → [`csp.ts`](../../web/src/shared/security/csp.ts)):
+[`csp.ts`](../../web/src/shared/security/csp.ts) is the **one source** of the policy. It is generated from the
+app's own provider config ([`web/vite.config.ts`](../../web/vite.config.ts)) and delivered as a
+**response header**, never as a `<meta>`. This follows [ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md):
 
-- **`<meta http-equiv="Content-Security-Policy">`** injected into the built `index.html` — ships inside the
-  static bundle, needs no server, works on any host (**self-hostable by default**).
-- **The same value as a `Content-Security-Policy` response header on the Vite dev server** — so dev == prod and
-  violations surface while developing (the dev value additionally allows `ws:` for HMR).
+- **In production** the web build emits the policy as a file inside `dist`. The backend's app shell reads it at
+  startup, appends the store origin (below) and sends the result with every response it serves, `sw.js`
+  included. A worker takes its policy from its own script's response, so this is also what puts the playback
+  Service Worker under the policy. The shell refuses to start when `index.html` is present but the emitted
+  policy is missing, or when `index.html` still carries a CSP `<meta>`.
+- **In dev** the Vite dev server sends the same policy as a header, so dev and production match and violations
+  surface while developing. Dev additionally allows `ws:` for HMR.
 
-The baseline policy:
+The policy:
 
 ```
-default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none';
+default-src 'self'; base-uri 'self'; object-src 'none'; frame-src 'none'; frame-ancestors 'none';
 script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline';
 img-src 'self' data: blob: <tile-origin>; media-src 'self' blob:; font-src 'self';
-connect-src 'self' https://api.pwnedpasswords.com <geocoder-origin>; form-action 'self'
+connect-src 'self' https://api.pwnedpasswords.com <geocoder-origin> [<store-origin>]; form-action 'self'
 ```
 
-Why each non-obvious source:
+Why each non-obvious source is there:
 
-- **`script-src 'self'`, no `unsafe-*`.** The entry is a hashed same-origin module; the app has no inline
-  script, no `eval`/`Function`, and no WebAssembly (Argon2id is pure-JS `@noble`), so scripts stay strictly
+- **`script-src 'self'`, with no `unsafe-*`.** The entry is a hashed same-origin module. The app has no inline
+  script, no `eval`/`Function` and no WebAssembly (Argon2id is pure-JS `@noble`), so scripts stay strictly
   same-origin.
-- **`style-src 'unsafe-inline'`** — PrimeVue / `@primeuix` inject runtime `<style>` tags and the app uses
-  `:style` bindings; neither is nonce-able. Style injection is far lower-risk than script — an accepted gap.
-- **`img-src data: blob:` / `media-src blob:`** — favicon SVG + QR `data:` URLs, and decrypted-media object
-  URLs.
-- **`connect-src https://api.pwnedpasswords.com`** — the client-direct HIBP k-anonymity password check (only a
-  5-hex SHA-1 prefix leaves the device).
-- **`<tile-origin>` (img-src) / `<geocoder-origin>` (connect-src)** — the configured basemap + reverse-geocoder
-  ([`mapDefaults.ts`](../../web/src/shared/state/mapDefaults.ts), default OSM/Nominatim, overridable via
-  `VITE_VEYQ_MAP_*`). Derived from the **same** config the app fetches from, so a self-hosted map deployment
-  stays covered without hand-editing the policy — one source, no drift. The consented map feature therefore
-  keeps working under the CSP; only a *per-device localStorage* override to an **arbitrary** host is
-  constrained to origins the operator's policy allows (a static policy can't anticipate a runtime host).
-- **The presigned object store** is same-origin (`/veyq`) in the reference deployment (ADR 0013 §4), so
-  `connect-src 'self'` covers it. A **split-origin** store deployment must add the store host at the serving
-  layer.
+- **`style-src 'unsafe-inline'`.** PrimeVue and `@primeuix` inject `<style>` tags at runtime, and the app uses
+  `:style` bindings. Neither can carry a nonce. Style injection is far lower-risk than script, so this is an
+  accepted gap.
+- **`frame-ancestors 'none'`.** This is the anti-clickjacking rule: no page on any origin may frame the app. It
+  only works in a header, which is one reason the policy is not a `<meta>`.
+- **`img-src data: blob:` / `media-src blob:`.** These cover the favicon SVG and QR `data:` URLs, and the object
+  URLs of decrypted media.
+- **`connect-src https://api.pwnedpasswords.com`.** This is the client-direct HIBP k-anonymity password check.
+  Only a 5-hex SHA-1 prefix leaves the device.
+- **`<tile-origin>` (img-src) / `<geocoder-origin>` (connect-src).** These are the configured basemap and
+  reverse-geocoder ([`mapDefaults.ts`](../../web/src/shared/state/mapDefaults.ts)). The default is
+  OSM/Nominatim, and `VITE_VEYQ_MAP_*` overrides it. Both are derived from the **same** config the app fetches
+  from, so a self-hosted map deployment stays covered without anyone editing the policy by hand: one source, no
+  drift. A *per-device localStorage* override to an **arbitrary** host is limited to the origins the policy
+  allows, because a policy fixed at build time cannot anticipate a runtime host.
+- **`<store-origin>`** is appended by the backend at runtime. Every client `fetch`es store objects and decrypts
+  them; no store response is ever rendered ([ADR 0013](../decisions/0013-blob-storage-presigned-direct-to-store.md)
+  §2). So `connect-src` is the only directive that needs the store. The origin comes from the signer's own
+  endpoint resolution, so it cannot disagree with the URLs the backend signs:
+  - `signing-mode=tenant-domain` (compose) appends **nothing**, because the store is same-origin by
+    construction and `'self'` covers it;
+  - `store-origin` (Kubernetes, [ADR 0064](../decisions/0064-kubernetes-helm-deployment-target.md)) appends
+    the origin of `public-endpoint`;
+  - `internal-endpoint` (a publicly reachable external S3) appends the origin of `endpoint`.
+
+## The other response headers
+
+The app shell sends these on the app origin alongside the policy
+([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)):
+
+- **`X-Content-Type-Options: nosniff`.** A response is only ever what its declared type says.
+- **`Referrer-Policy: strict-origin-when-cross-origin`**, and deliberately not `no-referrer`. The default map
+  providers' usage policies want a Referer from a web page, and ADR 0016 records that a policy which strips it
+  puts every instance outside them. This value sends only the origin cross-origin, never a path.
+- **`Strict-Transport-Security: max-age=15552000`** (180 days), on by default and switchable off per
+  deployment (see [infra/README](../../infra/README.md)). It has no `includeSubDomains` and no `preload`:
+  - tenant domains are arbitrary hosts, and a self-hoster's sibling hosts may still be HTTP-only;
+  - a browser keeps the entry for the whole `max-age` even after the header is switched off, which is why the
+    value is moderate.
+
+  Over plain HTTP a browser ignores the header, so a local or LAN instance is unaffected.
+
+Store responses are **not** the app shell's. Wherever the store is reached, including on the app's own origin
+through the compose path route, the rule that makes those responses inert is ADR 0013 §6.
 
 ## Verification
 
-- [`web/src/shared/security/csp.test.ts`](../../web/src/shared/security/csp.test.ts) pins the directives (no
-  `unsafe` on script, `object-src 'none'`, no third-party origin baked when providers are unset, `ws:` dev-only,
-  no `frame-ancestors`).
-- Live-verified (cr-0133): the app boots under the policy with **zero CSP violations**, styles/fonts/HMR intact.
-
-## Deferred (own follow-up, needs the prod web server)
-
-`frame-ancestors 'none'` (anti-clickjacking) and HSTS are **response-header-only** — a `<meta>` CSP silently
-ignores `frame-ancestors`. There is no production web-serving component in the repo yet (infra routes only the
-store; web is "added in a fuller deployment"), so these are deferred to whatever serves `web/dist` in
-production (a static server or a Traefik middleware), which should emit the full CSP as a header **plus**
-`frame-ancestors 'none'`, `Strict-Transport-Security`, and re-assert the policy. The `<meta>` baseline stands
-in the meantime for the script/connect/style/img backstop.
+- [`web/src/shared/security/csp.test.ts`](../../web/src/shared/security/csp.test.ts) pins the directives:
+  - no `unsafe` on script;
+  - `object-src 'none'`;
+  - no third-party origin baked in when providers are unset;
+  - `ws:` in dev only;
+  - no `frame-ancestors`, which is today's `<meta>`-era state.
+- Live-verified (cr-0133): the app boots under the `<meta>` policy with **zero CSP violations**, and styles,
+  fonts and HMR are intact.
