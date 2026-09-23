@@ -37,7 +37,8 @@ state that gap plainly. In a **self-hosted** deployment the operator is the user
 "Operator-blind" names one adversary: **the veyq server / operator.** It does **not** mean the client never
 talks to any external service. A feature may let the client reach a **third party directly** — today the
 opt-in **reverse-geocoding** lookup that turns a photo coordinate into a place name
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)), tomorrow map tiles for the tenant map. Such a
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) and the opt-in **breached-password check**
+(below), tomorrow map tiles for the tenant map. Such a
 request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
 operator's view:
 
@@ -54,6 +55,22 @@ operator's view:
 - **Results are sealed content.** Anything fetched (e.g. a resolved place name) is sealed under `K_mem` like any
   other content — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
+
+**The breached-password check is the second instance.** The four dialogs that choose a password (set up the
+server, join a tenant, change a password, recover access) can ask the Have I Been Pwned range API whether the
+password appears in known breaches. The fences apply like this:
+
+- **Only a 5-hex SHA-1 prefix leaves the device** (k-anonymity, padded response); the match against the returned
+  suffixes is computed locally.
+- **Only on submit, over the final password — never while typing.** A query at every typing pause sends the
+  prefix of each *partial* password. A short one, or a few keystrokes added to one already recovered, has so
+  few candidates that its 20-bit prefix all but identifies it, so the sequence hands over the password a few
+  keystrokes at a time.
+- **Consent is per dialog:** an unticked box with a one-sentence note saying what leaves the device. Nothing is
+  remembered — a password is chosen rarely, and a standing preference would consent to requests the user no
+  longer sees coming.
+- **It advises, never gates.** A hit, or a check that could not run, stops the first submit once with a message
+  saying which; submitting again goes ahead with the same password. The result is not stored.
 
 So the veyq operator stays blind by construction; the only thing that ever crosses is a consented, identity-free
 request the **user** turned on, straight to the chosen provider.
