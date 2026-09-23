@@ -33,7 +33,7 @@ const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
-type Phase = 'loading' | 'invalid' | 'expired' | 'register' | 'kit' | 'signin' | 'done'
+type Phase = 'loading' | 'missing' | 'invalid' | 'expired' | 'register' | 'kit' | 'signin' | 'done'
 const phase = ref<Phase>('loading')
 const error = ref('')
 const busy = ref(false)
@@ -81,9 +81,15 @@ let built: BuiltAccount | null = null
 
 onMounted(async () => {
   if (!secret) {
-    phase.value = 'invalid'
+    // Not "invalid": the ordinary way here is a reload after the strip below, with a link that still works.
+    phase.value = 'missing'
     return
   }
+  // Strip the live secret from the address bar now that it has been read — it stays valid until accept, and a
+  // register runs through the Emergency Kit screen, the one screen people are told to screenshot. Pass the
+  // router's own history.state through: vue-router keeps its position there, and a null state is what it warns
+  // about.
+  history.replaceState(history.state, '', window.location.pathname + window.location.search)
   try {
     const p = await previewInvite(secret)
     tenantName.value = p.tenantName
@@ -252,6 +258,7 @@ async function mapError(e: unknown): Promise<string> {
     <template #content>
       <p v-if="phase === 'loading'" class="muted">{{ t('tenant.join.loading') }}</p>
 
+      <Message v-else-if="phase === 'missing'" severity="warn" :closable="false">{{ t('tenant.join.missing') }}</Message>
       <Message v-else-if="phase === 'invalid'" severity="error" :closable="false">{{ t('tenant.join.invalid') }}</Message>
       <Message v-else-if="phase === 'expired'" severity="warn" :closable="false">{{ t('tenant.join.expired') }}</Message>
 

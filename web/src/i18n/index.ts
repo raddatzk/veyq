@@ -342,6 +342,7 @@ const en = {
     join: {
       title: 'Accept your invitation',
       loading: 'Checking your invitation…',
+      missing: 'This address holds no invitation. Open the invite link again.',
       invalid: 'This invitation link is invalid.',
       expired: 'This invitation is no longer valid. Ask the operator to resend it.',
       invitedTo: 'You have been invited to own “{tenant}” ({domain}).',
@@ -1258,6 +1259,7 @@ const de: typeof en = {
     join: {
       title: 'Einladung annehmen',
       loading: 'Einladung wird geprüft…',
+      missing: 'In dieser Adresse steckt keine Einladung. Öffne den Einladungslink erneut.',
       invalid: 'Dieser Einladungslink ist ungültig.',
       expired: 'Diese Einladung ist nicht mehr gültig. Bitte die Person, die den Server betreibt, um eine neue.',
       invitedTo: 'Du wurdest eingeladen, „{tenant}“ ({domain}) zu besitzen.',
