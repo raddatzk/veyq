@@ -72,7 +72,9 @@ method cheap ([ADR 0005](0005-unlock-methods-and-device-trust.md)). What changes
 - the `PASSWORD` wrap (fresh salt + nonce, new KEK from the new password),
 - `veyq_user.auth_public_key` (the Ed25519 keypair is derived from the password;
   [ADR 0003](0003-operator-blind-password-auth.md)),
-- and, by deletion, **every `DEVICE` and `DEVICE_KEY` wrap**.
+- and, by deletion, **every wrap but `PASSWORD` and `RECOVERY`** — today every `DEVICE` and `DEVICE_KEY` wrap. The
+  list names survivors, so a method added later dies too until it is declared one
+  ([en.account.key-model](../features/account/enablers/en.account.key-model.md) § Adding / removing unlock methods).
 
 The last one is not housekeeping. `DEVICE` wraps mix the old password and would simply fail, but `DEVICE_KEY`
 wraps take no password at all and would keep working — a device that was trusted before the reset would retain

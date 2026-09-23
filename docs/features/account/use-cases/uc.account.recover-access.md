@@ -16,9 +16,10 @@
   `RECOVERY` wrap and a `recovery_master_key_tag` (both written at account birth since V1). The actor holds the
   **Secret Key**. No session is required, and none helps.
 - **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
-  `DEVICE` and `DEVICE_KEY` wrap is gone and every session is revoked; the recovery token is spent. The **Master
-  Key, identity keypair, scope keys and all content are unchanged** — nothing was re-encrypted. The Emergency Kit
-  is **still valid**: the Secret Key did not change.
+  wrap but `PASSWORD` and `RECOVERY` is gone (today every `DEVICE` and `DEVICE_KEY`; the survivor rule is
+  [en.account.key-model](../enablers/en.account.key-model.md)'s) and every session is revoked; the recovery token
+  is spent. The **Master Key, identity keypair, scope keys and all content are unchanged** — nothing was
+  re-encrypted. The Emergency Kit is **still valid**: the Secret Key did not change.
 
 ## Main flow
 
@@ -51,8 +52,8 @@
 10. The server hashes the commitment and compares the result with the stored `recovery_master_key_tag`, which
     holds only the commitment's SHA-256, so a database read alone yields nothing this step accepts
     ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) § Decision 1). On a match it applies, **in
-    a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every `DEVICE` and
-    `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
+    a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every wrap but
+    `PASSWORD` and `RECOVERY`, revoke all sessions, and mark the token spent.
 11. The actor signs in with the new password. Because all device trust was dropped, this device asks for the
     Secret Key once more and then re-enrols ([uc.account.trust-device](uc.account.trust-device.md)).
 

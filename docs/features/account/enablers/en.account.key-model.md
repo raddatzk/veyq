@@ -116,6 +116,15 @@ Adding a method writes **one new wrap** of the Master Key; removing one deletes 
 never touched. The **password + Secret Key floor cannot be removed** (it guarantees at least one
 breach-resistant path always exists).
 
+**A credential change keeps only the two cold wraps.** A password change, a reset and a rotation each keep
+`PASSWORD` and `RECOVERY` — rewriting what they must — and delete **every other** wrap. The list names the
+survivors, not the victims, and the direction is the point: a method added later is deleted by all three until
+it is explicitly declared a survivor, and that declaration is a decision about the method, taken when it is
+built. The default protects the case a reset exists for — a device- or authenticator-held KEK (`DEVICE`,
+`DEVICE_KEY`, a future `PASSKEY`) would keep opening the account under a credential that was just replaced,
+and "someone else holds my device" is a reason people reset. The backend holds this classification once, in
+`shared/identity`.
+
 ## Rotation after a compromise
 
 When key material has been handed to someone it should not have been — a phished device-link grant is the
