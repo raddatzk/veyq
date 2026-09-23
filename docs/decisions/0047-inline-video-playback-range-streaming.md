@@ -128,6 +128,22 @@ The mechanics (which field, backfill of pre-field media) belong in the CR, not h
 keys on an **opaque per-playback handle** (not `blobId`) plus range offsets; the "exposes nothing new about *what*
 a blob is" reasoning holds a fortiori — a random handle reveals even less than the `id`-class `blobId`.
 
+### The shim serves inert responses — ADR 0013 §6 applied
+
+Sealed is not trusted: `mediaType` is written by the **uploader's** client, and the shim hands it back as the
+response's `Content-Type` on the app origin. The only gate in front of it was `startsWith('video/')`, which
+`video/mp4, text/html` passes — and a browser that opens `/__media/<handle>` as a page (*open video in new
+tab*) resolves a listed `Content-Type` to its **last** valid entry (the Fetch spec's MIME extraction; read, not
+yet browser-measured), so the decrypted bytes become a document on the app origin without a CSP. The shim
+therefore applies [ADR 0013 §6](0013-blob-storage-presigned-direct-to-store.md) to what it serves:
+
+- a medium is a video for the shim only if its `mediaType` is **one** well-formed `video/<subtype>` essence —
+  no list, no parameters; anything else never gets a playback handle;
+- the shim **refuses navigations** (`request.mode === 'navigate'` → 404): a `<video>` fetch is the only caller
+  it has, so a page load of a handle is by definition not one;
+- every shim response carries `X-Content-Type-Options: nosniff` and
+  `Content-Security-Policy: sandbox; default-src 'none'`.
+
 ## Consequences
 
 - **Slicing.** The SW range layer is substantial on its own — SW registration + lifecycle, the range↔chunk math,

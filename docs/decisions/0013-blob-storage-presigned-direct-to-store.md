@@ -66,7 +66,9 @@ slice simply sends longer lists.
 
 **No proxied byte path.** The backend handles only the **control plane** (authorize, presign, verify, attach);
 every byte travels client↔store. This is safe because the store is **blind** (only AEAD ciphertext behind
-per-object short-TTL URLs) and this is **greenfield** (no installed base to keep a fallback for).
+per-object short-TTL URLs) and this is **greenfield** (no installed base to keep a fallback for). Blindness
+makes what the store *holds* safe to hold; it cannot make what the store *serves* safe to open, because nothing
+makes a client upload ciphertext — that half is §6.
 
 ### 3. Anti-abuse is declare-then-verify
 
@@ -149,6 +151,47 @@ media path. Rationale (decided as a sparring trade-off):
   justifies it, **scope-wide convergent dedup** (`K_blob = HKDF(K_SC, content)`, accepting the equality leak)
   is a deliberate later slice — not a default.
 
+### 6. Store responses are inert — enforced by the signer
+
+**The server cannot tell ciphertext from anything else** — that is the operator-blind invariant working as
+intended — so any member or share contributor can `PUT` arbitrary plaintext through their own presigned URL,
+and `complete` verifies only the size (§3). The store then serves it back with whatever `Content-Type` the
+uploader sent. Where the store shares the app's origin (the compose path route, §4), a planted `text/html`
+object opened from a link is a **document on the app origin without a CSP** (the web CSP is a `<meta>` in
+`index.html` and covers that document only), holding every capability the app holds — its storage, its
+refresh cookie, a remember-me key it can *use* though not export, and the genuine domain to draw a fake unlock
+screen on.
+
+Measured against the pinned Garage v2.0.0 on 2026-09-23 (a stdlib SigV4 presigner against the dev store):
+
+| request | result |
+|---|---|
+| presigned `PUT` signing only `host`, sent with `Content-Type: text/html` | 200 — stored as sent |
+| presigned `GET` of that object, direct and through the Traefik same-origin route | `Content-Type: text/html`, no `nosniff`, no CSP |
+| presigned `GET` signing `response-content-type=application/octet-stream` + `response-content-disposition=attachment` | served `application/octet-stream`, `attachment` |
+| that `GET` URL with the override removed | 403 — the override is part of the signature |
+| presigned `PUT` signing `content-type: application/octet-stream`, sent as `text/html` | 403 |
+| the same, sent as `application/octet-stream` | 200 — stored as `application/octet-stream` |
+
+**Decision: nothing the store serves is renderable, and the signer — not the store, not the proxy — is what
+guarantees it,** so the rule holds on the bundled store and on any S3 store veyq never provisions
+([ADR 0067](0067-store-provisioning-from-a-declared-type.md)'s `type: s3`):
+
+- every presigned `GET` signs `response-content-type=application/octet-stream` and
+  `response-content-disposition=attachment` — which also neutralises objects stored before this rule;
+- every presigned `PUT` signs `content-type: application/octet-stream`, so a client must send exactly that
+  header and the store refuses anything else — the uploader no longer chooses the stored type at all;
+- where the store shares the app origin — the compose route for the bootstrap domain **and** every projected
+  tenant domain — the proxy also sets `X-Content-Type-Options: nosniff` and
+  `Content-Security-Policy: sandbox; default-src 'none'` on store responses: a belt that holds even for a
+  future presign path that forgets the overrides. The Kubernetes target serves the store on its own origin
+  (§4) and relies on the signer alone.
+
+It costs a legitimate client nothing: no client renders a store response — every client `fetch`es the frames
+and opens them (§2), so the type the store reports is never read. The rule is not specific to the store: every
+place that serves uploader-chosen bytes on the app origin applies it, and the playback Service Worker does so in
+[ADR 0047](0047-inline-video-playback-range-streaming.md).
+
 ## Consequences
 
 - The backend never streams media bytes: large galleries/downloads don't flow through the app process, and
@@ -183,5 +226,7 @@ media path. Rationale (decided as a sparring trade-off):
   [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) (`chunk_frame` is vector-pinned).
 - [ADR 0063](0063-database-driven-tenant-ingress.md) (per-tenant-domain presigning on a multi-domain server),
   [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes CORS branch of §4).
+- [ADR 0047](0047-inline-video-playback-range-streaming.md) (the playback Service Worker, which applies §6 to
+  the decrypted bytes it serves).
 - Enabler: [en.memory.media](../features/memory/enablers/en.memory.media.md) (the blob/media data layer this
   transport carries). Feature: [Memory](../features/memory/_index.md).
