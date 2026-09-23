@@ -34,3 +34,8 @@ gaps:
     surface tests exist (`admin-web/src/features/setup/setupServer.test.ts`) and are not linked yet, for the
     same reason the sibling admin use-cases are not: no CI run has ever executed in this repository, so ADR
     0040 leaves the claim unmade regardless of how green the suite is locally.
+  web: >-
+    No web part since ADR 0065 moved first-run Server-Owner registration to `admin-web` (the gap above). Web's
+    one trace is the router guard sending every route to `/not-set-up` while `setupRequired` is true
+    (`src/router.ts`), whose `NotSetUpView` deliberately names no admin URL — the operator chose it at deploy
+    time and this app is never told. The criteria here are the setup API's; none describes that redirect.

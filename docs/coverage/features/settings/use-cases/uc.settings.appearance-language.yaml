@@ -29,3 +29,7 @@ acceptanceCriteria:
     text: The shell offers exactly one entry into the settings hub — the profile menu's Settings row; no other surface navigates to /settings.
     coverage:
       web: { unit: [src/components/app/ProfileMenu.test.ts] }
+gaps:
+  backend: >-
+    No backend part: theme and language are device-local preferences, written to local storage and never sent
+    to the server (the use-case's own postcondition; `src/shared/state/useThemeState.ts`).

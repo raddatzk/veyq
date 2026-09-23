@@ -119,3 +119,15 @@ acceptanceCriteria:
     text: The existing-user accept endpoint requires a session (401 when anonymous).
     coverage:
       backend: { integration: [TenantAcceptSliceTest.unauthenticatedAcceptIs401] }
+gaps:
+  web: >-
+    Not "not applicable": web carries Act 2 — the invited owner accepts at `/tenant/accept` (`TenantJoinView`,
+    through `src/features/tenant/tenantInvite.ts`) — while Act 1 is the Server Owner's and lives on `admin-web`
+    (ADR 0065), covered above. No web suite proves any sentence here. Every criterion is a server observable
+    (activation with the cold-born grant, 404/401/403/409/410), and the view's suites mock the facade and stop
+    before accept — the password-floor suite says so in as many words: `TenantJoinView.fragment.test.ts` pins
+    the fragment strip and missing-vs-invalid, `TenantJoinView.passwordPolicy.test.ts` the floor's
+    register-only reach, and the two cited elsewhere pin the kit import (`uc.account.unlock`) and the facade's
+    request shaping (`uc.spaces.add-member`). The web e2e bootstrap does drive the existing-owner accept against
+    a live backend (`src/test/e2eBootstrap.ts`), but as setup in a harness, not in a test file this model can
+    cite. What would close this gap is a view test that carries a join through to the accept call.

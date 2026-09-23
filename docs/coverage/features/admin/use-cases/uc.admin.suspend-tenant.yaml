@@ -74,3 +74,10 @@ acceptanceCriteria:
     text: A request whose Host resolves to no tenant is unaffected by any tenant's suspension.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.aHostClaimingNoTenantPassesThroughUnchanged] }
+gaps:
+  web: >-
+    No web part. The lockout is the backend's pre-matching `TenantSuspensionFilter`, refusing every request on
+    the tenant's own domain before authentication, and the suspend/reactivate controls are the Server Owner's
+    on `admin-web` (ADR 0065), covered above. A tab already open meets `403 tenant_suspended` on its next call,
+    and web has no code that names that refusal (`grep -rli suspend web/src` finds only the lightbox's
+    unrelated `suspendKeys` prop and the view passing it), so there is nothing web-side to test.

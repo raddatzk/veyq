@@ -79,3 +79,9 @@ acceptanceCriteria:
       # compares the file's existence before and after a regenerate, and the STARTUP regenerate has already run
       # by then — so a wrongly-enabled sink writes the projection and both snapshots read `true`. Measured.
       backend: { integration: [TenantIngressNoConfigTest.theConfiguredSinkIsTheDisabledOne, TenantIngressNoConfigTest.regenerateIsANoOpWithNoConfiguredPath] }
+gaps:
+  web: >-
+    No web part. Every criterion is decided on the server — the proxy's router set projected from the tenant
+    table, the origin a presigned URL is signed for, the TLS a projected Ingress carries — and web only follows
+    the URL it is handed. A wrong decision shows in web as media that fails to load, which is why the criteria
+    are pinned where the decision is made rather than where it is noticed.

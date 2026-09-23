@@ -80,3 +80,7 @@ gaps:
     named here: no CI run has executed it either, so it makes no coverage claim yet — and a ref would
     additionally contradict `admin-web` being declared a gap. When the one remaining event happens, this
     surface flips with both refs at once; the CLI is not a third condition to wait for.
+  web: >-
+    Not a target. The release panel moved to `admin-web` with the rest of the Server-Owner administration
+    (ADR 0065, the gap above), and nothing in web reads the release (`grep -rn InstanceRelease web/src` finds
+    nothing). When this use-case flips, it flips on `backend` and `admin-web`; this gap stays.
