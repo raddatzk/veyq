@@ -88,6 +88,8 @@ know yet fails, and takes that tenant's blob route down with it.
       - every tenant blob router `TraefikFileIngressSink` renders (a `middlewares:` entry referencing it
         `@docker`).
 
+      **Ordering:** if `cr-traefik-file-provider-only` lands first, there are no labels to define it on. This
+      phase then becomes a sink change only, and that CR's § Context says what it becomes.
       The sink's projector tests assert the reference. Locator:
       `grep -n 'veyq-blobs\|blobs:' infra/docker-compose*.yml backend/src/main/kotlin/com/veyq/app/shared/tenant/TraefikFileIngressSink.kt`.
       Helm: nothing, because its store has its own origin (ADR 0013 §4). If `infra/README.md` says what each
