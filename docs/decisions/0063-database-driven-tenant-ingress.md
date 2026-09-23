@@ -161,7 +161,7 @@ startup regenerate.
 - [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) (blob transport, same-origin routing — amended
   by this decision).
 - [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes sink).
-- [ADR 0070](0070-runtime-hardening-on-both-targets.md) (what the proxy and the other containers may do,
+- [ADR 0071](0071-runtime-hardening-on-both-targets.md) (what the proxy and the other containers may do,
   now that no container needs the Docker socket).
 - [ADR 0066](0066-tenant-suspension.md) (the "deactivate" trigger this projector reacts to — a request-level
   lockout, of which routing withdrawal is only a secondary effect).

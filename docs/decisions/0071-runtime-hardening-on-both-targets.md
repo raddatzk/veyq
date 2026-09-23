@@ -1,4 +1,4 @@
-# ADR 0070 — Both targets run every container unprivileged, reachable only by the peers it serves
+# ADR 0071 — Both targets run every container unprivileged, reachable only by the peers it serves
 
 - Status: Accepted
 - Date: 2026-09-23

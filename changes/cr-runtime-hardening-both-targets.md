@@ -3,7 +3,7 @@ id: cr-runtime-hardening-both-targets
 title: Every container runs unprivileged on both targets, and reaches only the peers it serves
 status: planned
 satisfies: []
-adrs: ["0070", "0064", "0063"]
+adrs: ["0071", "0064", "0063"]
 invariants: [self-hostable by default]
 ---
 
@@ -24,11 +24,11 @@ the Docker socket.
 ## Context & constraints
 
 - **The decisions, with their measurements and rejected alternatives:**
-  [ADR 0070](../docs/decisions/0070-runtime-hardening-on-both-targets.md). Do not re-derive them here.
+  [ADR 0071](../docs/decisions/0071-runtime-hardening-on-both-targets.md). Do not re-derive them here.
 - **What the chart already holds:** `charts/veyq/templates/_helpers.tpl:24-31` (the shared container context),
   asserted by `scripts/chart_meta_check.py` check (v) at `:335-348`. This CR extends that helper and that
   check. It adds no parallel mechanism.
-- **The two silent failures ADR 0070 measured decide how each phase is proven.** Traefik without a writable
+- **The two silent failures ADR 0071 measured decide how each phase is proven.** Traefik without a writable
   `/acme` stays up and never issues a certificate. A read-only root that misses one scratch path fails at
   runtime, not at `compose config`. So every compose proof is a **live** `up` that reads logs and health, never
   `config -q` alone.
@@ -48,7 +48,7 @@ the Docker socket.
   [cc.security.rate-limit](../docs/crosscutting/cc.security.rate-limit.md) § *Trusts the client IP*, already
   updated by this refinement.
 - **Out of scope:** the dev stack (`infra/docker-compose.yml`, not internet-facing), and egress policy for the
-  app (ADR 0070 §3 says why).
+  app (ADR 0071 §3 says why).
 
 ## Phases
 
@@ -63,12 +63,12 @@ the Docker socket.
       - **`user:`** on MariaDB (999), Garage (1000, as `charts/veyq/templates/garage.yaml` runs it) and Traefik
         (a non-root uid of your choice, the same one the init step chowns to). Not on `app`/`admin`: their
         images declare the user, and the guards read it from the Dockerfile.
-      - **The ownership init service** (ADR 0070 §2). It holds `cap_drop: [ALL]` + `cap_add: [CHOWN]` and
+      - **The ownership init service** (ADR 0071 §2). It holds `cap_drop: [ALL]` + `cap_add: [CHOWN]` and
         chowns the root of the Garage `meta`/`data`/`snapshots` volumes and of `veyq-acme`, each only if not
         already owned by the target uid. It uses an image the recipe already pins, so
         `cr-image-provenance-verifiable`'s guard, if it landed first, covers it. It has `restart: "no"`, and
         Garage and Traefik depend on it with `condition: service_completed_successfully`.
-      - **Networks** (ADR 0070 §3): Traefik+app+Garage on one, app+MariaDB on one, app+admin on one. Nothing
+      - **Networks** (ADR 0071 §3): Traefik+app+Garage on one, app+MariaDB on one, app+admin on one. Nothing
         stays on the implicit `default`, so no service can join a network nobody named.
 
       Keep the app's volume entries in short form (`scripts/validate_guard_gaps.py:149-150` anchors on the
@@ -96,7 +96,7 @@ the Docker socket.
 - [ ] 2 helm — `charts/veyq/`.
       - **`readOnlyRootFilesystem: true`** in the shared container context, and an `emptyDir` for each scratch
         path phase 1 measured, per pod. Extend `chart_meta_check.py` (v) to require it.
-      - **`templates/networkpolicy.yaml`**, per ADR 0070 §3:
+      - **`templates/networkpolicy.yaml`**, per ADR 0071 §3:
         - one default-deny policy selecting every pod of the release;
         - ingress allows for:
           - the app's public port from `ingressFrom`, and its admin listener from the admin pod (#152's rule,
@@ -126,7 +126,7 @@ the Docker socket.
       · Done when: `python3 scripts/chart_meta_check.py` green (it needs `helm`, and runs outside the
         `validate_*` glob by design).
 - [ ] 3 docs —
-      - `infra/README.md`: compose's posture and networks in a few lines. Point at ADR 0070; do not restate it.
+      - `infra/README.md`: compose's posture and networks in a few lines. Point at ADR 0071; do not restate it.
       - The backup commands' network names. The rclone container must join the network the store is on, which
         is no longer `veyq_default`. Locator from two angles:
         `grep -rn -- '--docker-network' infra/README.md scripts/*.py` and

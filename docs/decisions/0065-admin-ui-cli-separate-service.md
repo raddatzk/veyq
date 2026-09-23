@@ -205,7 +205,7 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
     no Ingress aimed at the app Service (the chart's, a projected tenant one, or an operator's) can reach it, and
     a NetworkPolicy admitting only the admin pod to that port.
   - **Residuals, named rather than discovered.** (i) Compose networks separate containers by peer, not by port
-    ([ADR 0070](0070-runtime-hardening-on-both-targets.md)), so every container that shares a network with the
+    ([ADR 0071](0071-runtime-hardening-on-both-targets.md)), so every container that shares a network with the
     app reaches the listener: Traefik, the store and MariaDB. Traefik terminates TLS and MariaDB holds the
     database, so reaching it adds nothing they lack. (ii) On a cluster whose CNI does not enforce NetworkPolicy, any pod in the cluster
     reaches it. (iii) NAT that rewrites a public peer to a private address (Docker's userland proxy) defeats the

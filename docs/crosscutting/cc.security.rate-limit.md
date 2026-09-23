@@ -136,7 +136,7 @@ is gone with the algorithm ([ADR 0052](../decisions/0052-token-bucket-rate-limit
   instance counts independently.
 - **Resets on restart.** A process restart clears every bucket — which, for a limiter, errs toward the caller.
 - **Trusts the client IP.** Behind a proxy the key is the forwarded address, and Quarkus honours that header
-  from any peer that reaches the app. [ADR 0070](../decisions/0070-runtime-hardening-on-both-targets.md)
+  from any peer that reaches the app. [ADR 0071](../decisions/0071-runtime-hardening-on-both-targets.md)
   narrows the peers to the proxies veyq ships or the operator names, by network: separate compose networks,
   and a NetworkPolicy set on Helm. A peer inside that set, or a cluster whose CNI does not enforce policy,
   can still forge the header. A NAT'd source still shares one bucket.

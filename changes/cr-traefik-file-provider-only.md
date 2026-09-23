@@ -3,7 +3,7 @@ id: cr-traefik-file-provider-only
 title: Traefik runs the file provider only — the ingress sink renders all of compose's routing
 status: planned
 satisfies: [uc.admin.tenant-reachability]
-adrs: ["0063", "0065", "0070"]
+adrs: ["0063", "0065", "0071"]
 invariants: [self-hostable by default]
 ---
 
