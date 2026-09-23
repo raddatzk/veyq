@@ -14,6 +14,10 @@ handling of reported shares.
 ## Use-cases
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
+- ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **refined**
+  ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
+  operation, first-run setup included, only on an internal listener the admin container reaches — classified by
+  the socket, never by a header — and 404s it on the public origin)
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **refined**
 - ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **partly built**: both transitions,
   the `Host` filter on the tenant's own domain, and step 4's routing withdrawal, which

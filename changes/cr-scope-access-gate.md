@@ -49,8 +49,12 @@ this file is only the work order.
     both). Only its KDoc changes, because it no longer is the enforcement.
 - **Land it alone.** The gate touches almost every handler in every backend feature. Start it only when no other
   backend-heavy CR is in flight.
-  - Rows **#152** (the admin API surface, `TenantsResource`), **#156** (`RequestTenant` in `shared/tenant`, the
-    package this CR moves `TenantEntity` into) and **#173** land either wholly before this CR or after it.
+  - **#156 lands first.** Its own work order says so (`cr-request-tenant-and-tenant-bound-recovery` §
+    Context, *Neighbours*): it changes the signatures of the `ScopesHandler` methods this CR gates, and
+    Host-resolved handlers then take a `tenantId` instead of a host. Re-run D10's locator after it.
+  - Rows **#152** (the admin API surface, `TenantsResource`) and **#173** land either wholly before this CR or
+    after it. If #173 or #156 already moved `TenantEntity` into `shared/tenant`, phase 2 moves only
+    `ScopeEntity`.
   - This CR **takes #173's `TenantEntity` half** (phase 2), so #173 keeps only the `SessionService` interface
     and `ImageCropper`. Narrow that row when phase 2 lands.
   - **#154** adds a presign-renewal media operation. Whichever of the two lands second makes it call the gate
@@ -169,7 +173,7 @@ Each decision names the line that settles it.
 | Share curation and guest gates | D6, D7 | `grep -n 'ownerAccount ==\|activeShare(\|fun reactivate\|capabilities.isActive' backend/src/main/kotlin/com/veyq/app/features/sharing/*.kt` |
 | Invite-token routes | D6 | `grep -n '@PermitAll\|isLive' backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantsResource.kt backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantAcceptHandler.kt` |
 | Job gates | D8 | `grep -n 'grantedScopeIds(\|leaseHolder = ?' backend/src/main/kotlin/com/veyq/app/features/tasks/TasksStore.kt` |
-| Host-resolved operations | D10 | `grep -rn 'activeHost()\|tenantFor(\|find("domain"' backend/src/main/kotlin/com/veyq/app/features` |
+| Host-resolved operations | D10 | `grep -rn 'activeHost()\|tenantFor(\|find("domain"\|RequestTenant' backend/src/main/kotlin/com/veyq/app/features` |
 | Deletion checks and codes (retired or unified) | D4 | `grep -rn 'scope_pending_deletion\|scope_already_deleted\|isPendingDeletion\|PendingDeletion\|AlreadyDeleted\|deletedAt(scopeId)' backend/src contracts web/src` |
 | Entity users (moved imports) | D11 | Two angles; the difference is same-package users: `grep -rl 'import com.veyq.app.features.spaces.scope.ScopeEntity\|import com.veyq.app.features.admin.tenant.TenantEntity' backend/src` against `grep -rlw 'ScopeEntity\|TenantEntity' backend/src` |
 | Tests asserting the retired semantics | updated to the new answer | `grep -rn 'not_key_holder\|scope_pending_deletion\|scope_already_deleted\|hasMembership\|pendingConsent' backend/src/test` (`MemberRemoveSliceTest`'s private `hasMembership` is **scope**-sense; rename it) |
@@ -267,6 +271,9 @@ Each decision names the line that settles it.
   - Done when: `./gradlew check` is green, the phase-3 suite is green, and each bite went red and then green
     again, with its output quoted in the retrospective.
 - [ ] **5 web** (D12).
+  - **Measure first:** load the app on a suspended tenant's own domain and confirm the shell arrives while
+    `/api` answers `403 tenant_suspended`. `cr-app-shell-served-by-backend` expects exactly that and marks it
+    *not measured*. If the shell itself is refused, the card cannot render: stop and ask.
   - The switcher and home render `status`.
   - `403 tenant_suspended` handling:
     - for another tenant: leave the space and refresh the list;
@@ -284,7 +291,7 @@ Each decision names the line that settles it.
   - *grace covers some writes:* `grep -rni 'server-rejected during the grace\|read-only during grace' web/src backend/src`
 
   Most hits belong to phases 1 and 4. Measured at refine, the ones left for this phase are
-  `docs/crosscutting/developer-styleguide.md:181`, `admin-web/src/features/tenants/tenants.ts:47`,
+  `docs/crosscutting/developer-styleguide.md` (the "add a row" line), `admin-web/src/features/tenants/tenants.ts:47`,
   `charts/veyq/values.yaml:127`, `infra/README.md:303`, `web/src/features/memory/components/MemoryBrowse.vue:30`
   and `web/src/views/MemoryHomeView.vue:37` — a floor, not the set. Re-run the four keys here: phases 1–5 wrote
   prose too. Done when: every hit says the narrowed thing, and the trust-chain glob is green.

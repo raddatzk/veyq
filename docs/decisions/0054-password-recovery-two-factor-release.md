@@ -30,8 +30,9 @@ something the ordinary logged-in user does not have.
 **3. `recoveryAuthTag` already exists for exactly this.** `sha256("veyq/v1/recovery-auth" ‖ masterKey)` is
 written to `veyq_user.recovery_master_key_tag` at birth and read by nothing. Its own comment names the threat:
 *"a reset must reproduce it — which needs the master key, i.e. the Secret Key — so an email-token-only attacker
-cannot hijack the server account."* It is a commitment, not a secret: the master key is 32 random bytes and the
-hash is not invertible.
+cannot hijack the server account."* It reveals nothing about the master key, which is 32 random bytes behind a
+non-invertible hash. What the reset accepts, though, is the tag itself, which is why Decision 1 stores it only
+hashed.
 
 The open question was what gates the release. The originally sketched answer was an email gate, recorded in
 code as "the (future) email-gated recovery flow (cr-0052)" — a CR that no longer exists. Email verification was
@@ -51,6 +52,13 @@ reasoning covers *registration*, not *recovery*, and it was reversed on 2026-08-
 Neither alone suffices. An attacker with mailbox access gets a wrap they cannot open. An attacker with a stolen
 Emergency Kit gets no token. This is why the flow is safe even though the mailbox is, for most people, weaker
 than the account it protects.
+
+**The server keeps only the SHA-256 of the commitment.** The tag says nothing about the Master Key, but the
+reset accepts whoever presents it. Stored as it is, a database read plus the holder's mailbox would complete a
+reset: the attacker could not open any content, but they would take over the login and lock the holder out.
+Stored hashed, a database read yields nothing the reset accepts, which is the treatment every veyq token
+already gets. The wire does not change: clients still send the tag itself, and the server hashes it when it
+writes (at birth and at rotation) and when it compares.
 
 **2. Recovery is not escrow, and the server gains no new power.** The server hands out ciphertext it already
 stores, to a party that must already hold the key that opens it. It cannot open the wrap, cannot derive the
@@ -96,6 +104,16 @@ So an instance with no working SMTP has **no recovery**, and must say so plainly
 that cannot work. That is a real cost of self-hosting and belongs in the operator documentation, not hidden
 behind a spinner.
 
+**The link travels only through a relay of a tenant the account belongs to.** Mail settings are per tenant and
+are chosen by the domain the request arrives on, and each relay is run by that tenant's owner. For an account
+that is not a member of that tenant, the owner is exactly the third party this section excludes. Routing that
+account's token through them would also make every tenant owner an existence oracle for the whole instance,
+which breaks §6. So a request reaches only an account that is a member of the tenant it resolved to, and for
+any other address it answers and does nothing, exactly as for an unknown one. A member's own tenant is the
+channel they joined, and the two factors are what hold there. Two consequences follow. A member of several
+tenants may ask on any of them. An account that belongs to no tenant, which is how first-run setup leaves the
+Server Owner, has no recovery until it joins one. That is the no-SMTP rule above, applied to a single account.
+
 The same reasoning reaches the member-invite copy-link, which handed a tenant owner a token minted for somebody
 else. That is decided in [ADR 0055](0055-mail-is-a-precondition-not-a-capability.md), which retires it and makes
 a working mailer a precondition rather than a hope. **One exception survives it:** the ServerOwner's invite to a
@@ -107,9 +125,17 @@ else. It may not name the user, the tenant beyond its domain, or what is being r
 their own voice, but an owner-authored *recovery* mail is a phishing surface aimed at their own members.
 
 **6. Request is non-enumerable — about the *address*.** A recovery request answers identically for a known and
-an unknown address, mirroring the login challenge ([ADR 0004](0004-session-tokens.md)) — the response is never
-an oracle for "is this address registered here". Rate limiting is per-address and per-source, not per-tenant: an
-account is tenant-global, so the invite limiter's key does not apply.
+an unknown address, and for the address of an account in another tenant (§4), mirroring the login challenge
+([ADR 0004](0004-session-tokens.md)). The response is never an oracle for "is this address registered here",
+and neither is the mail, which only an account of the addressed tenant can receive. Rate limiting is
+per-address and per-source, not per-tenant: an account is tenant-global, so the invite limiter's key does not
+apply.
+
+**Identical includes timing, so the answer comes before anything that depends on the address.** The request
+checks the tenant's transport and charges the limiters, answers, and only then looks the address up, checks
+membership, mints and sends. A request that waited for its own SMTP delivery would answer a known address one
+mail transaction slower than an unknown one, which is an oracle any stopwatch can read. The limiters stay on
+the synchronous side, before the hand-off, and that is what bounds the work queued behind the answer.
 
 That promise is about the address and nothing else. Whether the addressed tenant can send mail at all is a
 property of the deployment, is answered plainly with `503 mail_unavailable`, and is checked **before** the rate
@@ -128,7 +154,7 @@ limiter so the two answers cannot be paired into an address-level oracle
   time of release.
 - **`recovery_master_key_tag` stops being write-only.** A column carried since V1 for an unbuilt flow finally
   has its reader, which also means it is now a correctness dependency: an account whose tag is missing or wrong
-  cannot recover.
+  cannot recover. The column holds the tag's SHA-256, never the tag (Decision 1).
 - **The invite-token lifecycle is the template**, not a new invention: `Tokens.random()` → store only
   `Tokens.hash()` with an expiry and a status → mail the raw token in a URL fragment → look up by hash, check
   liveness, flip status on consumption → scheduled expire-then-purge. Recovery wants a far shorter TTL than an

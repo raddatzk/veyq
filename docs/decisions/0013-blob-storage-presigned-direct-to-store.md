@@ -49,12 +49,18 @@ a *specific* request — one method, one object key, a short expiry. It is a nar
 URL cannot `GET`, grants nothing about any other object, and expires in minutes. The client uses it with a
 plain `PUT`/`GET` and **no credentials of its own**; the store just verifies the signature.
 
-- **Upload:** the client asks the backend to **start a batch of blobs** (each declaring `chunkCount` +
-  `byteSize` + the `K_blob` wrap); the backend opens a session per blob and returns a **presigned `PUT` URL per
-  chunk key**. The client `PUT`s the **raw sealed frame bytes** (no base64, no JSON) straight to the store,
-  then asks the backend to **complete + attach a batch** — which **stats each object** in the store to confirm
-  presence + size, writes the chunk manifest, enforces the byte budget, promotes the staged objects to a blob,
-  and creates the media record (deleting + rejecting that item if verification fails).
+- **Upload:** the client asks the backend to **start a batch of blobs** (each declaring `byteSize`, the
+  `chunkCount` that follows from it (§3), and the `K_blob` wrap); the backend opens a session per blob, **bound
+  to whoever opened it** — an account, or a share contributor's identity — and returns presigned `PUT` URLs for
+  the blob's **first window** of chunks. The client asks for **each next window** as it goes (the same
+  operation re-signs a window whose URLs expired), and every such request is **authorized again**: the session
+  must be open, the caller must be its opener, and the opener must still hold the upload right — membership, or
+  an active share that allows uploads. A revocation therefore stops an in-flight upload at its next window, not
+  only the next upload. The client `PUT`s the **raw sealed frame bytes** (no base64, no JSON) straight to the
+  store, then asks the backend to **complete + attach a batch** — which **stats each object** in the store to
+  confirm presence + exact size, writes the chunk manifest, enforces the byte budget, promotes the staged
+  objects to a blob, and creates the media record (deleting + rejecting that item if verification fails).
+  Completing is authorized like a window: only the session's opener can complete it.
 - **Download:** the client asks for **presigned `GET` URLs for a batch of blobs'** chunks, fetches the raw
   frames directly from the store, and `openFrame`s them (the AAD position check still applies).
 
@@ -64,18 +70,56 @@ result** (partial success: item 3 may fail while 1+2 succeed). This avoids `3N` 
 migration across three clients**. The first media slice exercises lists of length 1; the gallery/curation
 slice simply sends longer lists.
 
+**Why windows, not one signature per chunk at `start`.** A presigned URL carries its own expiry, so signing
+every chunk once at `start` makes **TTL × uplink** — not any configured size — the largest upload that can
+finish: ~1.5 GB at 20 Mbit/s under the 600 s TTL. It also makes `start` a presign amplifier, since one request
+could ask for 256 items × every chunk of each. A window of `veyq.blob.presign-window` chunks (default 64, i.e.
+16 MiB) bounds what one request signs, and the TTL then has to cover one window rather than one file — at the
+default, an uplink down to ~0.22 Mbit/s. The TTL itself stays short and unchanged. A client whose window expires
+anyway (a stall, a very slow link) re-signs from the first chunk it has not sent. **A longer TTL was the one-line
+alternative, and it is rejected:** it keeps every leaked URL alive that long, and it lets an uploader whose right
+was revoked keep writing for that long, where a window stops them at the next request.
+
 **No proxied byte path.** The backend handles only the **control plane** (authorize, presign, verify, attach);
 every byte travels client↔store. This is safe because the store is **blind** (only AEAD ciphertext behind
 per-object short-TTL URLs) and this is **greenfield** (no installed base to keep a fallback for). Blindness
 makes what the store *holds* safe to hold; it cannot make what the store *serves* safe to open, because nothing
 makes a client upload ciphertext — that half is §6.
 
-### 3. Anti-abuse is declare-then-verify
+### 3. Anti-abuse is declare-then-verify, and the frame size fixes what can be declared
 
-The backend cannot see bytes mid-`PUT`, so per-frame size is bounded at **declare** time (`start` caps
-`byteSize`/`chunkCount`; the open-session cap still applies) and the **actual** object sizes are verified
-against the budget at `complete`, **purging** staged objects that exceed it. Abandoned uploads are reclaimed by
-the stale-OPEN-session GC.
+The backend cannot see bytes mid-`PUT`, so it bounds them before and after:
+
+- **The frame size is a contract constant.** Every frame but the last carries exactly **256 KiB of
+  plaintext**, i.e. **262 172 bytes** sealed (a 12-byte nonce and a 16-byte tag around it); the last carries
+  the remainder, and an empty blob is a single 28-byte frame. The constant lives in the crypto vectors beside
+  `chunk_frame` ([`v1.json`](../../contracts/crypto/vectors/v1.json)), and every client and the backend take it
+  from there — range streaming ([ADR 0047](0047-inline-video-playback-range-streaming.md)) already depends on
+  every frame but the last being full. So `chunkCount` follows from `byteSize` (`⌈byteSize / 262 172⌉`), and
+  `start` rejects any other value, and any `byteSize` whose last frame could not exist.
+- **Every presigned `PUT` signs its chunk's exact `Content-Length`**, so a URL is good for one frame of one
+  size and the store refuses anything else. Measured against the pinned Garage v2.0.0 on 2026-09-23 by the
+  security review that raised this (a stdlib SigV4 presigner against the dev store):
+
+  | request | result |
+  |---|---|
+  | presigned `PUT` signing `content-length: N`, sent with N bytes | 200 |
+  | the same URL, sent with a different length | 403 |
+  | the same URL, re-sent with N bytes after it succeeded | 200 — the same object again, at the same size |
+
+  The last row is harmless: it rewrites the uploader's own staged object with a frame of the size it already
+  had. All of it is plain S3 signing, so it holds on a store veyq never provisions as well.
+- **`complete` stats every chunk** and rejects the item unless each one is present at exactly its derived
+  length. The signed length is the first line; this is the one that still holds on a store that ignored it.
+  A rejected item's staged objects are purged.
+- **`veyq.blob.max-bytes` is a sanity ceiling, not a limit anyone plans around** (default 20 GiB). With the TTL
+  no longer bounding an upload (§2), it is what keeps one declaration from being absurd. It bounds a file,
+  never a total: **nothing bounds how much one account or one share link stores** — that is a quota, and it is
+  not decided here. There is no open-session cap either.
+- **Abandoned uploads are reclaimed by the stale-session GC**, which keys on a session's **last issued window**,
+  not on its start. A `PUT` can only begin within the TTL of the window that signed it (S3 honours a signature
+  valid at request start, so one frame may still be streaming), which is why a session with no new window for
+  `veyq.media.upload.retention` can receive no further byte — the bound the retention rests on, now per window.
 
 ### 4. The store must be client-reachable (public endpoint + CORS)
 
@@ -201,24 +245,23 @@ place that serves uploader-chosen bytes on the app origin applies it, and the pl
   rightful owner (self-hosted = the operator's own S3; central = the provider's bucket). End users do **not**
   bring their own S3, so there is no per-tenant credential the backend must be blind to. Content is E2EE
   regardless — holding S3 creds never lets the backend decrypt media (no content key).
-- **Security:** a leaked presigned URL grants only that one object + method until it expires; keep the TTL
-  short. Credentials never reach the client; access control is enforced at URL issuance (the caller must hold
-  a grant for the scope).
+- **Security:** a leaked presigned URL grants only that one object + method (+ for a `PUT`, that one size)
+  until it expires; keep the TTL short. Credentials never reach the client; access control is enforced at URL
+  issuance — every window, not only the first (§2).
+- **The client streams.** It reads, seals and sends a blob one frame at a time, so its memory is bounded by
+  the frames in flight, not by the file. Holding the whole file (and its sealed copy) would put the real
+  ceiling in the browser tab, around 1–2 GiB, and make §3's ceiling a number no upload reaches.
 - **Dev vs test:** `%dev` now runs against a **real store** (the bundled Garage, `docker compose --profile s3`)
   like prod — a missing endpoint fails the dev backend loudly rather than silently degrading, so the full byte
   path is exercised in normal development. Only the `%test` slice suite keeps the in-memory stub (metadata + wraps
   + declare/verify control plane, no byte transfer); the byte transport itself is additionally covered by the
   opt-in e2e (`VEYQ_S3_E2E=1`).
 - **Cost of no-dedup:** duplicate media is stored once per blob. Accepted for operator-blindness.
-- **Deferred (their own later slices, not this ADR):**
-  - **Resumable uploads** — the single most expensive add (persistent upload sessions + `stat`-based gap
-    detection + stale-session GC + per-client retry). It is gated on **large media / video** (small photos can
-    just re-upload on failure) and is **additive without a contract break** (a new resume endpoint + a session
-    table), so it waits.
-  - **Thumbnail/preview** derivatives, and **public-share** transport mirrors.
-
-  The first media slice ships the **batch-shaped** control plane (start → presign-PUT → complete+attach /
-  presign-GET, all list-valued) with clients sending length-1 lists; resume is *not* in it.
+- **Deferred:** **resuming across a page reload.** Within one page the hard part already exists — a session
+  outlives any one URL, and a chunk whose `PUT` failed or whose window expired is re-signed and re-sent without
+  restarting the file (§2). What surviving a reload would add is the client persisting the session and its
+  `K_blob` wrap, and finding its gaps by `stat`. It is additive (a new operation, no contract break) and waits
+  for a real need.
 
 ## Related
 

@@ -78,9 +78,10 @@ sign-in included. Neither needs any session state.**
   (`TenantSuspensionFilter`) resolves the tenant from the `Host` the same way `ScopesResource.activeHost()`
   already does and refuses every request on a `SUSPENDED` tenant's own domain with `403 tenant_suspended` —
   unauthenticated or not, before the request reaches a handler or an authentication check. That covers what
-  no scope is addressed by — signing in on that domain — and it is a JAX-RS filter, so it sees API requests
-  only: the static web bundle is not a resource method and never passes through it. It is **not** the
-  enforcement — a request on any other domain never meets it (Forces above).
+  no scope is addressed by — signing in on that domain. It is a RESTEasy filter, so what it refuses is the
+  API; whether the app shell ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) passes through it does not
+  matter, because nothing the shell does works without the API. It is **not** the enforcement — a request on
+  any other domain never meets it (Forces above).
 - **No session revoke.** The gate already delivers "blocks immediately, no exceptions": it decides by the
   tenant an operation acts on, independent of which account presents a token, so it refuses every operation
   the moment the status flips, full stop. A session-revoke was considered as extra hardening and **rejected**:

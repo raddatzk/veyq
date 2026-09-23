@@ -76,7 +76,9 @@ sequenceDiagram
   mandatory for a CONTRIBUTOR share, ADR 0030); they then view read-only and may add nothing. (A no-name **viewer**
   experience is the separate VIEWER share.)
 - **A2 — revoked / expired:** `enabled = false` or a passed `expiresAt` → the resolve **and** the upload
-  endpoints `404`/`403`; in-flight and already-uploaded photos remain (no retraction — see Quality notes).
+  endpoints `404`/`403`. An upload in flight stops at its next window or at its complete, whichever comes first
+  (every window is authorized again, [ADR 0013 §2](../../../decisions/0013-blob-storage-presigned-direct-to-store.md));
+  already-uploaded photos remain (no retraction — see Quality notes).
 - **A3 — change the grant in place (cr-0119):** the curator edits an existing **VIEWER** share and switches it to
   **CONTRIBUTOR** (or back) from the share-management dialog — the **same link keeps working**, no new `K_share`,
   no re-wrap. `role` is plaintext authorization the server enforces per request, so the new grant bites on the next
@@ -107,8 +109,9 @@ sequenceDiagram
   spam is visible until the curator deletes it or revokes the link. Review-before-publish is a deferred slice.
 - **Attribution is self-asserted.** Anyone with the link can name themselves anything; the contributor token binds
   *their* subsequent uploads to *that* identity but does not authenticate the person (accountless, operator-blind).
-- **Revocation is soft (L1); already-uploaded is not retractable.** Revoke/expiry stop *new* views + uploads;
-  photos already contributed stay in the Memory (the curator deletes them individually if unwanted).
+- **Revocation is soft (L1); already-uploaded is not retractable.** Revoke/expiry stop *new* views and every
+  upload not yet completed; photos already contributed stay in the Memory (the curator deletes them
+  individually if unwanted).
 - **Client-integrity trust tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Same as the viewer:
   the no-install page is passive-operator-safe, not operator-proof against an active foreign operator; surfaced by
   the **footer link** to the security docs. For the self-hosted case (operator = curator) the gap is moot.
