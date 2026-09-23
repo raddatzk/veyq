@@ -17,7 +17,9 @@
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
 - **Out of scope (by design):** **scope, content & share keys** + the invite/onboarding key transfer live in
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md); exact **byte formats** (suite layouts, KEM
-  combiner, wrap encodings) in the crypto wire-format spec. Whole-system security concern: the sibling
+  combiner, wrap encodings) in the conformance-pinned suite
+  ([`packages/crypto/src/v1.ts`](../../../../packages/crypto/src/v1.ts)) and its vectors
+  ([`contracts/crypto/vectors/v1.json`](../../../../contracts/crypto/vectors/v1.json)). Whole-system security concern: the sibling
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
@@ -67,7 +69,7 @@ always ciphertext the server stores but cannot open.
 | Identity public key (`identityPublicKey`) | Hybrid KEM public bundle + signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; signature verification for key/device changes. |
 | Identity private key (`wrappedIdentityPrivateKey`) | Hybrid KEM private bundle + signing private key | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs account/key operations. |
 | `RECOVERY` wrap | A `MasterKeyWrap` opened by the **Secret Key alone** (`kekRecovery(secretKey, salt)` — no password) | `MasterKeyWrap.wrappedKey`, **withheld** server-side until a two-factor release | Opens the Master Key when the password is gone. There is **no separate recovery code**: the recovery factor *is* the Secret Key from the Emergency Kit ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
-| Recovery master-key tag (`recoveryMasterKeyTag`) | Master-key commitment/tag, **not** an unlock key | A one-way tag derived from the Master Key | Proves during reset/recovery that the client recovered the **same** Master Key before replacing auth material. Not a login token; decrypts nothing. |
+| Recovery master-key tag (`recoveryMasterKeyTag`) | Master-key commitment/tag, **not** an unlock key | A one-way tag derived from the Master Key; the server stores only its SHA-256, because the reset accepts the tag itself ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) § Decision 1) | Proves during reset/recovery that the client recovered the **same** Master Key before replacing auth material. Not a login token; decrypts nothing. |
 
 ## Auth vs. unlock — two separate layers
 
@@ -104,8 +106,9 @@ Each KEK is derived **fresh on the device** with a stored salt (so it reproduces
 open its wrap, then **discarded**. None is ever stored or sent — which is exactly why the server stays
 blind.
 
-**Device keys are bound, not stored raw.** The `DEVICE` `deviceKey` is a **non-extractable** HMAC key (its
-bytes never exist in the clear — usable to compute the bind, never exfiltratable); the `DEVICE_KEY` `K` is a
+**Device keys are bound, not stored raw.** The `DEVICE` `deviceKey` is a **non-extractable** HMAC key (no
+script can export its bytes, but the bind it computes is fixed and can be copied once — the password stays the
+wrap's real second factor, [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §5); the `DEVICE_KEY` `K` is a
 random key held by the device. Device trust is **per device**: each trusted/enrolled device writes **its own**
 wrap (own key + salt), so a phone and a laptop are two independent wraps on the same Master Key — unlike the
 floor methods, `DEVICE`/`DEVICE_KEY`/`PASSKEY` may appear more than once ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).

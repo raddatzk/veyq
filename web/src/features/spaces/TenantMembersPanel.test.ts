@@ -20,10 +20,6 @@ vi.mock('./scopes', () => ({
   clearSpaceIcon: vi.fn(),
   openMyTenantIcon: vi.fn().mockResolvedValue(null),
 }))
-vi.mock('../../shared/inviteLink', () => ({
-  buildInviteLink: (secret: string) => `https://x.test/tenant/accept#${secret}`,
-  copyText: vi.fn().mockResolvedValue(true),
-}))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))

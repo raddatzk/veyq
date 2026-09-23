@@ -47,7 +47,13 @@ result**.
    an opaque `leaseHolder` + `leaseExpiry`. The job carries a **TTL**; long jobs **heartbeat** to extend it. A
    crashed worker's lease **expires → lazy reclaim** (the claim query treats `leased ∧ expiry<now` as free).
    `attempts` + a max → **dead-letter** (`failed`, surfaced). Exactly-once is not attempted; effects and the
-   `jobId`-keyed result post are idempotent.
+   `jobId`-keyed result post are idempotent. **Every claimed job has a holder, and only the holder acts on it:**
+   heartbeat, complete, fail and decline all require the current lease (`409 not_lease_holder` otherwise), and
+   completing an already-`done` job stays a no-op success. A result post that skipped the claim would also skip
+   everything the claim decides — above all a worker's own decline, which the rotation exclusion of
+   [ADR 0060](0060-key-rotation-after-compromise.md) Decision 4 is built on.
+   Claims, like every other job write, happen only in a live scope of a non-suspended tenant
+   ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)).
 7. **Result = a sealed artifact, usually via existing paths.** Most results are normal veyq writes (a grant onto
    a membership, a derivative blob, a node update) → the worker performs that sealed write and marks the job
    `done`; the originator observes it through the normal path. A job-specific output rides an optional
@@ -57,7 +63,8 @@ result**.
    rotation re-granting existing members, [ADR 0024](0024-scope-key-rotation.md)). **Content-processing jobs are
    originated by a client/agent** and posted ready, so the server never *picks* a content-semantic task type.
 9. **First consumer = member-add grant delivery** ([ADR 0020](0020-grant-distribution-invite-wrap.md)): a trivial,
-   blind body, a universal tag, no lease needed (idempotent, first-online-wins) — it validates the core loop
+   blind body, a universal tag, a short lease like every job (§6; its completion is idempotent, first-online-wins) —
+   it validates the core loop
    end-to-end. Transcode + face-recognition/ML are the **informing** heavy consumers that shaped the
    lease/tags/result but are built later (floor, not ceiling).
 10. **Persistence: buy, don't build.** The boring queue/claim/lease machinery uses a maintained JVM/DB job library

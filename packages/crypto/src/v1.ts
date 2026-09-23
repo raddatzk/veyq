@@ -1,4 +1,4 @@
-// veyq v1 crypto suite — web (TS). Conformance: docs/api/crypto-vectors/v1.json (see crypto-spec.md).
+// veyq v1 crypto suite (TS), shared by web/ and admin-web/. Conformance: contracts/crypto/vectors/v1.json.
 import { x25519, ed25519 } from '@noble/curves/ed25519.js'
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
@@ -316,7 +316,7 @@ export const serializeIdentityPublic = (pub: Identity['pub']): Uint8Array =>
  * key whose fingerprint matches the display is infeasible.
  *
  * This is VERIFICATION only — the trust anchor stays a client-pinned key; full Key Transparency is the later
- * end-state. Conformance: docs/api/crypto-vectors/v1.json#fingerprint.
+ * end-state. Conformance: contracts/crypto/vectors/v1.json#fingerprint.
  */
 export function fingerprint(pub: Identity['pub']): string {
   const h = sha256(concat(utf8('veyq/v1/fingerprint'), serializeIdentityPublic(pub)))

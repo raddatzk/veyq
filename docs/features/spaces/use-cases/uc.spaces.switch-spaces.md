@@ -62,13 +62,20 @@
   unavailable ([ADR 0019](../../../decisions/0019-token-less-tenant-home.md),
   [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md)). No empty shared room is shown, and that
   tenant's row keeps its **initial** — without the grant its icon cannot be opened either.
+- A3 — **a suspended tenant** ([uc.admin.suspend-tenant](../../admin/use-cases/uc.admin.suspend-tenant.md)):
+  `my-tenants` still lists it, with its status and **without** grant or icon, so the overview shows it marked
+  offline — its initial, not enterable — rather than letting it silently vanish. A `403 tenant_suspended` that
+  arrives while the member is inside one of its spaces leaves that space for the tenant of the domain the app is
+  open on, and the overview then shows the suspended one offline; on the suspended tenant's own domain the app
+  shows a full-page "temporarily offline" notice instead ([uc.spaces.scope-access](uc.spaces.scope-access.md)
+  A7).
 - E1 — **a space can't be opened** (grant unwrap fails): that space is surfaced as unavailable; the others
   remain switchable.
 
 ## Quality notes
 
-- **Operator-blind.** The tenant list returns **membership** metadata — tenant name + domain + the caller's role,
-  all sanctioned operational cleartext — plus, per tenant, **ciphertext only the caller can open**: their own
+- **Operator-blind.** The tenant list returns **membership** metadata — tenant name + domain + the caller's role
+  + the tenant's status, all sanctioned operational cleartext — plus, per tenant, **ciphertext only the caller can open**: their own
   `wrappedGrant` and the tenant's `sealedIcon`. Handing those over discloses nothing the server does not already
   hold; the reasoning, and the trust-tier cost it *does* carry, live once in
   [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md). **Group names are sealed** the same way and

@@ -1,8 +1,10 @@
 useCase: uc.admin.suspend-tenant
 feature: admin
 title: Suspend & reactivate a tenant
-# ADR 0066 — an availability-only, reversible lockout. The two transitions write exactly one column; the
-# lockout itself is TenantSuspensionFilter, a pre-matching request-boundary gate keyed on the resolved Host.
+# ADR 0066 — an availability-only, reversible lockout. The two transitions write exactly one column. The
+# lockout on EVERY domain — the per-operation gate, shares and jobs included — is uc.spaces.scope-access's
+# `suspended-tenant-refuses-its-members` (planned); what is covered here is the Host filter that refuses sign-in
+# and the app shell on the tenant's own domain, which is all these refs ever exercised.
 acceptanceCriteria:
   - id: suspend-active-tenant
     text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
@@ -28,12 +30,12 @@ acceptanceCriteria:
     text: Reactivating a non-SUSPENDED tenant is rejected (409), symmetrically.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.reactivatingANonSuspendedTenantIs409] }
-  - id: suspended-blocks-every-request
+  - id: own-domain-refused-before-authentication
     # Two separate tests on purpose, because they prove different halves. The anonymous one proves the
     # *ordering* (a would-be 401 becomes 403, against its own 401 control — only a gate ahead of authentication
     # can do that); the token one proves the *immediacy* (one unrevoked session, reaching the tenant and then
     # refused). Both assert 403 + `tenant_suspended` by body: a wholesale refusal would satisfy "not 2xx".
-    text: While SUSPENDED, every request resolving to that tenant is refused (403 tenant_suspended) at the request boundary, before authentication — including one carrying a still-valid access token.
+    text: While SUSPENDED, every request arriving on that tenant's own domain is refused (403 tenant_suspended) at the request boundary, before authentication — including one carrying a still-valid access token.
     coverage:
       backend:
         integration:
@@ -60,7 +62,7 @@ acceptanceCriteria:
   - id: suspend-does-not-affect-other-tenants
     # The property that ruled out a session-revoke (ADR 0066), kept as a permanent guard rather than as
     # coverage of a defect: it is red the moment a future implementer adds one "for extra safety".
-    text: A member who belongs to both the suspended tenant and another, unaffected tenant can still reach the other tenant on the same session — suspension gates by resolved Host, never by revoking the account's session.
+    text: A member who belongs to both the suspended tenant and another, unaffected tenant can still reach the other tenant on the same session — suspension never revokes the account's session.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendingOneTenantLeavesAnotherReachableOnTheSameSession] }
   # Step 4 — the routing withdrawal — is NOT a criterion here. It is one half of the projection that tracks

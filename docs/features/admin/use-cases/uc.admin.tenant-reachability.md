@@ -113,7 +113,7 @@ flowchart LR
   smaller and would make every state in A4 permanent, because nothing else ever revisits the file. Re-deriving
   the whole thing is what makes the projection *self-healing* rather than merely *usually correct*.
 - **Two independent layers, and only one of them is a guarantee.** Withdrawing a suspended tenant's routing is
-  a real effect, but the lockout is the request-boundary gate ([suspend-tenant](uc.admin.suspend-tenant.md)
+  a real effect, but the lockout is the per-operation scope-access gate ([suspend-tenant](uc.admin.suspend-tenant.md)
   step 3): an operator's own topology may expose the app by a path no proxy controls, and the gate is what
   holds regardless. Never state routing withdrawal as the reason a suspended tenant is unreachable.
 - **A domain is operational metadata, and this changes nothing about that.** Host routing needs it in cleartext

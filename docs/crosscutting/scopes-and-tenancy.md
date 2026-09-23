@@ -4,7 +4,7 @@
 > organizational structures (tenant / group / personal), how access is granted *cryptographically*
 > (scope keys, grants, shares), how a new member is onboarded (the invite-wrap), and the unified
 > navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
-> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the crypto wire-format spec.
+> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)).
 
 This is the **target model**; first-build scope is tracked via the inbox and change-requests. The general
 **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
@@ -38,6 +38,21 @@ backend resolves **which tenant** is meant from that `Host` (a host → tenant m
 context therefore comes from the domain, not from a tenant id or name in the path; **business data
 within the resolved context is still addressed by opaque scope/node IDs**. Tenant↔domain is
 server-visible operational metadata, so this does not affect operator-blindness.
+
+**The backend resolves the tenant once per request, by one rule.** The header rule (the proxy's
+`X-Forwarded-Host`, else `Host`) and the domain lookup live in one place, `backend/.../shared/tenant/`. An
+operation receives the **resolved tenant**, meaning its id and its *registered* domain, and never the header
+value. Both halves are security properties:
+- A gate that normalizes the Host even slightly differently from the handler behind it guards a different
+  tenant than the one the handler acts on.
+- A domain echoed from the header lets a caller name any origin, for a signed URL or a mailed link. A
+  registered domain can only belong to a tenant the table knows.
+
+A Host that no tenant claims resolves to *no tenant*, never to a default one. An operation the Host addresses
+(the caller's scope list, their per-tenant profile, a recovery request) acts only within that tenant. The
+trap is splitting the two: recovery once chose the relay by the Host but looked the account up across the
+whole instance, which put other tenants' links in a tenant owner's mail relay
+([ADR 0054](../decisions/0054-password-recovery-two-factor-release.md) §4).
 
 Every scope — including personal and group — lives **within** a tenant, so there is no host-less scope:
 each is reached under its tenant's host like everything else. This is what keeps share links on the

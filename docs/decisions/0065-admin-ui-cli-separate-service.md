@@ -38,11 +38,22 @@ Forces:
   is if anything the *most* privileged single action an instance ever takes (it mints the account with total
   control) and is a natural fit for a restricted-reachability surface — and sharing the one crypto module
   genuinely needed, rather than either duplicating it or excluding setup from the move.
+- **Moving the UI did not move the API** (measured 2026-09-23, the security/reuse review): the `admin`
+  container's nginx proxies `/api/` to the **same** backend the public origin routes to with no path
+  restriction (the `veyq-app` Traefik router; `path: /` in the chart's app Ingress). So the first force was
+  half-kept — every Server-Owner operation stayed reachable from the internet behind the owner's login, and
+  `POST /api/setup/owner` behind nothing: it is `@PermitAll`, guarded only by "setup not yet complete", so
+  whoever calls it first after `up -d` becomes Server Owner, on a domain that is in public CT logs minutes after
+  ACME issuance. Two facts constrain the fix. **Nothing a request carries identifies its door:** proxy-address
+  forwarding is on on both targets, so `Host`, the client address and the scheme are values the client writes
+  (`X-Forwarded-*`, `Forwarded`). **Quarkus has one HTTP listener for application resources:** one port, one
+  TLS port, one domain socket, all feeding the same router; its management interface serves Vert.x routes,
+  never JAX-RS.
 
 ## Decision
 
-**The admin surface becomes its own container (`admin`), and stays a pure client of the existing backend
-Admin API — no new backend surface, no direct DB or KEK access.**
+**The admin surface becomes its own container (`admin`), and stays a pure client of the backend Admin API — no
+direct DB or KEK access. The backend answers that API only through it (the *admin channel*, below).**
 
 - **Web UI — a new package, sharing only crypto with `web/` via a minimal npm workspace.** `admin-web/` gets
   its own `package.json` + Vite build + `index.html`, its own narrow generated API client (from
@@ -62,8 +73,8 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     Owner), the terms **accept** side and `getTenantTerms` (any member, not an admin action), the four
     backup/restore E2E rehearsals (unrelated to this feature, parked under `features/admin/` only
     incidentally), and — least obviously — **per-tenant mail settings and terms authoring**. Those two read
-    `activeSpace.tenantId` and hang off the settings hub's `ScopeKind.Tenant` category rather than sitting
-    behind `serverRole.canManage`; the backend gates both with `403 not_tenant_owner`, not with the
+    `activeSpace.tenantId` and hang off the settings hub's `ScopeKind.Tenant` category rather than behind a
+    Server-Owner check; the backend gates both with `403 not_tenant_owner`, not with the
     Server-Owner gate; and a tenant owner is by construction an ordinary user who accepted an invite
     (uc.admin.create-tenant is two-party). Moving them would take a tenant's own email and terms
     configuration away from every owner who is not also the Server Owner — a product change, which this
@@ -76,15 +87,15 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     `features/admin/**` finds the anonymous and ordinary-member callers. It is structurally blind to a file
     that is **owner-scoped by the state it reads** and that nothing imports from outside, which is exactly
     what those two panels are — a **fourth** audience, the tenant owner, that an import graph cannot show.
-  - The lightweight "is this caller a Server Owner" probe (`serverRole.ts`) stays in `web/` too — it is what
-    lets the main SPA conditionally show a link *to* the admin surface, and `TermsAcceptView`'s
-    `resetServerRole` call needs it regardless. `admin-web` performs its own independent probe against the
-    same backend endpoint on load; the two are not shared state, since a separate origin does not even share
-    the session cookie once `ADMIN_DOMAIN` differs from the app's.
-  It reverse-proxies `/api/*` back to the instance's backend from **its own origin** (whatever domain or
-  `localhost` reaches the `admin` container) — **nginx**, serving the built static assets and reverse-proxying
-  `/api/*`, with the backend's address templated into its config at container start (`envsubst` over an
-  `nginx.conf.template`, reading a `BACKEND_URL` env var) — so the browser session stays same-origin
+  - **`web/` carries no "is this caller a Server Owner" probe.** It used to (`serverRole.ts`, calling
+    `listTenants` to show Server Owners a settings note that administration lives elsewhere); under the admin
+    channel that call can only ever 404, so the probe and the note are deleted rather than re-pointed — the
+    Server Owner is by construction the person who ran setup in the admin container. `admin-web` keeps its own
+    probe, which it makes through the admin channel.
+  It reverse-proxies `/api/*` back to the backend's **admin listener** (below) from **its own origin** (whatever
+  domain or `localhost` reaches the `admin` container) — **nginx**, serving the built static assets and
+  reverse-proxying `/api/*`, with the backend's address templated into its config at container start
+  (`envsubst` over an `nginx.conf.template`, reading a `BACKEND_URL` env var) — so the browser session stays same-origin
   regardless of where the container is reached from, avoiding the cross-origin refresh-cookie cost the
   trusted-web SaaS track already flagged as expensive (inbox #53: "cross-origin auth (breaks the same-origin
   cr-0055 refresh-cookie)"). Authentication is the existing Server-Owner session, unchanged — first-run setup
@@ -153,18 +164,66 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     with the instance, not per-tenant, so its route comes from **configuration, never from the tenant
     table**. On compose the ingress sink renders it next to the bootstrap domain's, because that file is the
     only thing Traefik routes from ([ADR 0063](0063-database-driven-tenant-ingress.md)). On Kubernetes it is
-    the chart's own `Ingress`.
+    the chart's own `Ingress`. Set it **after** first-run setup: this mode puts the admin channel on the
+    internet (residual (iv) below).
 - **Trust tier: unchanged, not new.** Per [ADR 0026](0026-client-trust-tiers.md), a self-hosted operator
   running the admin container themselves is the *Self-hosted* tier — moot, operator = user — exactly as the
   embedded admin pages are today. Extraction changes **reachability**, not **trust tier**; no new tier is
   introduced by this ADR.
-- **Backend Admin API is unchanged.** This is a deployment-topology decision, not a contract change — the
-  endpoints `web/src/features/admin/**` already calls keep their existing shape and authz.
+- **The backend answers the Server-Owner surface only on the admin channel** — the property the first force
+  asked for, held where every deployment has it in common rather than at an edge a self-hoster may replace.
+  The behaviour, its failure modes and its acceptance criteria are
+  [uc.admin.admin-channel](../features/admin/use-cases/uc.admin.admin-channel.md)'s; what is decided here:
+  - **The channel is a second backend listener, read from the socket.** The backend starts one more Vert.x
+    HTTP server (default port `8090`) whose request handler is Quarkus' own root handler
+    (`VertxHttpRecorder.getRootHandler()` — the handler Quarkus installs on its HTTP, TLS and domain-socket
+    servers), so it runs the identical pipeline: forwarding, security, JAX-RS. A request is on the admin channel
+    **iff** it arrived on that listener **and** its socket peer is not globally routable — read from
+    `localAddress()` and `connection().remoteAddress()`, never from `remoteAddress()` or any header, which the
+    forwarding layer rewrites from client-written values. Measured in a refine spike: a forged `Forwarded` /
+    `X-Forwarded-Host` moved `host()` and `remoteAddress()` and left `localAddress()` untouched. The peer rule is
+    a belt for topologies the shipped targets do not use (host networking, a published port) — see residuals.
+  - **Which operations: every operation whose backend gate is the Server-Owner gate, plus `createServerOwner`**,
+    which is anonymous by nature and the one this decision exists for. The split rule above applies unchanged —
+    ask which gate the backend applies. `getSetupStatus` stays on both channels (the web app boots from it; the
+    probes of both targets poll it), and so does sign-in, which the admin surface and the CLI need too.
+  - **Declared per operation in `contracts/` (`x-veyq-channel: admin`), derived — never listed — by the
+    backend, and held to the gate.** The backend builds its set from the specs at build time; a posture sweep
+    fails when an operation carries the Server-Owner gate without the marker, or a marker names no resource
+    method. This is **not** the authorization-in-the-spec that [ADR 0008](0008-centralized-http-auth.md)
+    rejected: the marker names which door answers, not a role, the role string stays out of the published
+    contract, and the sweep reads the annotation rather than the spec.
+  - **The public channel refuses with 404, from a filter keyed on the matched resource method** — so no path
+    spelling routes around it. `@RolesAllowed` runs before any post-match filter (measured, independent of
+    filter priority), so an anonymous call to a role-gated operation still gets the 401 it always got and
+    executes nothing; a uniform 404 would need a second, path-template matcher in front of JAX-RS, and buys
+    nothing an attacker lacks — the operation list is in a public repository.
+  - **Setup therefore needs no bootstrap token.** The window "first caller after `up -d`" closes because the
+    public origin never answers the call; the one door that does is the one the operator reaches privately.
+  - **Deployment.** The listener is not `EXPOSE`d (so `docker run -P` does not publish it); compose points the
+    admin container's `BACKEND_URL` — and the CLI's default — at it; the chart gives it a Service of its own, so
+    no Ingress aimed at the app Service (the chart's, a projected tenant one, or an operator's) can reach it, and
+    a NetworkPolicy admitting only the admin pod to that port.
+  - **Residuals, named rather than discovered.** (i) Compose networks separate containers by peer, not by port
+    ([ADR 0070](0070-runtime-hardening-on-both-targets.md)), so every container that shares a network with the
+    app reaches the listener: Traefik, the store and MariaDB. Traefik terminates TLS and MariaDB holds the
+    database, so reaching it adds nothing they lack. (ii) On a cluster whose CNI does not enforce NetworkPolicy, any pod in the cluster
+    reaches it. (iii) NAT that rewrites a public peer to a private address (Docker's userland proxy) defeats the
+    peer rule — which is why it is a belt and the guarantee is that the shipped targets route nothing to the
+    listener. (iv) **Own-domain mode puts the admin container itself on the internet**, and with it the admin
+    channel: before setup that reopens exactly the window this closes, so setup runs over the localhost path
+    first and `ADMIN_DOMAIN` is set afterwards — documented, not enforced.
+  - **Expiry condition.** `getRootHandler()` is public but lives in a `runtime` package, not documented API.
+    An upgrade that removes it fails compilation, loudly; the fallback then is the channel secret rejected
+    below — rejected for its costs, not because it fails.
 
 ## Consequences
 
-- **Smaller public attack surface on the main origin** — an operator can firewall the entire admin container
-  off from the internet without touching the user-facing app.
+- **Smaller public attack surface on the main origin** — it does not answer the Server-Owner API at all, and an
+  operator can firewall the entire admin container off from the internet without touching the user-facing app.
+- **Every client of the Server-Owner API goes through the admin listener**, including the ones that are not the
+  admin surface: the live e2e harness and the dev seed scripts birth instances and tenants through it, and a
+  backend slice test that calls a Server-Owner operation does so on it.
 - **A new deployable, and a new release artifact** (`ghcr.io/<owner>/veyq-admin`), versioned and signed the
   same way as the app image ([ADR 0057](0057-release-identity-and-deployment-recipe.md)) — named as a
   consequence here; the exact CI wiring is a future CR's inventory, not this ADR's.
@@ -181,9 +240,26 @@ Admin API — no new backend surface, no direct DB or KEK access.**
   ships in the main image and origin, so a compromised main-app deployment (a supply-chain issue in a
   dependency, a misconfigured proxy) still exposes admin-capable code at the same reachability as the rest of
   the app — the whole point was to remove that coupling, not re-implement it as a runtime toggle.
+- **Rejected — exclude the admin paths at the edge** (a Traefik rule, an Ingress path). It holds only for the
+  edge this repository ships; a self-hoster's own reverse proxy loses it silently.
+- **Rejected — a channel secret the admin nginx injects as a header.** It is topology-independent, which is its
+  real strength. But it is new credential material at rest in three places (`.env`, the chart Secret, the
+  rendered nginx config) — the multiplication the CLI's no-token-cache decision above refuses — and a leaked copy
+  makes the **public** origin an admin door. A listener has nothing to leak.
+- **Rejected — let the admin container hold state itself** (its own database or KEK path). It breaks the second
+  force, and it drops the owner's login as a layer.
+- **Rejected — a bootstrap token for setup.** Once the public origin never answers setup, a token only adds a
+  secret to distribute for a window the channel already closes.
+- **Rejected — the second listeners Quarkus already has.** The domain socket needs a volume both containers
+  mount, which on Helm means one pod — no longer a separate deployable. The TLS port needs a certificate, and
+  its `isSSL()` is derived from forwarded headers. The management interface serves no JAX-RS.
 
 ## Related
 
+- [uc.admin.admin-channel](../features/admin/use-cases/uc.admin.admin-channel.md) (the property the admin
+  channel holds, and its failure modes).
+- [ADR 0008](0008-centralized-http-auth.md) (authorization stays out of the contract; the channel marker is
+  reachability, not a role).
 - [ADR 0026](0026-client-trust-tiers.md) (trust tiers this container inherits, not extends).
 - [ADR 0050](0050-operator-config-secret-encryption.md) (the secret this ADR deliberately keeps
   single-homed).

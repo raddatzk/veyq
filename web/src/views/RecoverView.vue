@@ -68,8 +68,9 @@ async function consumeFragment() {
   sent.value = false
   error.value = ''
   // Strip the secret from the address bar immediately — it has been read, and a token sitting in a shared
-  // screenshot or a browser-history entry is a token someone else can present.
-  history.replaceState(null, '', window.location.pathname)
+  // screenshot is a token someone else can present. Pass the router's own history.state through: vue-router
+  // keeps its position there, and a null state is what it warns about.
+  history.replaceState(history.state, '', window.location.pathname)
   busy.value = true
   try {
     material.value = await releaseRecoveryMaterial(token.value)
