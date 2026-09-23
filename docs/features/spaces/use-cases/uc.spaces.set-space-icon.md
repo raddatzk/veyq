@@ -55,7 +55,7 @@ Two properties make that field safe to keep inline:
    `sealedIcon = b64std(seal(K_icon_e, paddedIcon, space-icon ‖ scopeId ‖ e))` — the repo's one symmetric seal
    (`0x02 || nonce(12) || aead`) through the typed seal of `@veyq/crypto`, which draws its own nonce, with the
    `space-icon` purpose, the scope and the icon epoch as the AAD context
-   ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)).
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
    Sealing under the **current** epoch is what makes a replaced icon forward-secret — the same reason a rename
    does it. (Note the sibling docs write this step as `symEncrypt(…)`; that is notation, not a symbol.)
 5. **POST the icon.** `POST /api/scopes/{scopeId}/icon { sealedIcon, iconEpoch: e }` — two opaque values.

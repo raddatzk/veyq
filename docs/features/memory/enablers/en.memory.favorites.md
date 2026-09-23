@@ -112,7 +112,7 @@ blob for that Memory; the `PUT` writes only the caller's.
   larger cap, per-item rows and keyed-hash buckets were all rejected; the reasoning is in
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §4.
 - **Two seals, two purposes.** The typed seal as everywhere else
-  ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), with **distinct** purposes `favorites`
+  ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with **distinct** purposes `favorites`
   and `item-favorites` — so a blob authenticated for one can never be opened as the other — each bound to the
   slot it is stored at (the scope, and for an item mark also the member and the node), so the server cannot
   serve one member's or one node's blob as another's.

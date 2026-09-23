@@ -35,7 +35,7 @@ A group reuses the personal scope's machinery — client-driven birth, the hybri
 1. **A name, sealed under a derived name-key.** A personal scope is anonymous (one per `(user, tenant)`); a group
    needs a human name so members can tell groups apart in the switcher. The name is **ciphertext under `K_name`** —
    a key derived from the name's content-epoch key (`K_name = HKDF(E_e, "group-name-key")`), sealed under a
-   purpose of its own ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — so only members (and a
+   purpose of its own ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — so only members (and a
    pending invitee handed `K_name`) read it and the server sees an **unnamed** group
    ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md)). The derived key (vs sealing directly under
    `K_SC`) makes the name **forward-secret** like node names and lets a consent-invitee read the *canonical* name
@@ -58,7 +58,7 @@ A group reuses the personal scope's machinery — client-driven birth, the hybri
 2. The client **generates** the group's scope id and a random scope key `K_SC` (= the birth epoch `E_0`), derives
    `K_name_0 = HKDF(E_0, "group-name-key")`, **seals the name** under `K_name_0` (`encryptedName`), and seals
    `K_SC` to its **own** identity public key (purpose `scope-grant`), both bound to that scope id
-   ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)); it signs the grant with its identity key and
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); it signs the grant with its identity key and
    tags its own membership ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6).
 3. `POST /api/scopes/groups { scopeId, encryptedName, wrappedGrant }` → the server creates the `kind=GROUP`
    scope under that id in the Host's tenant + the caller's self-membership (`role=OWNER`), returns
@@ -111,7 +111,7 @@ sequenceDiagram
 - **No new crypto primitive.** The self-grant is the same hybrid KEM (`asymWrap`, X25519 + ML-KEM-768,
   [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)) as the tenant/personal grant; the
   name uses the same AEAD seal as a node name under a purpose of its own
-  ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), keyed by the derived `K_name` rather than
+  ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), keyed by the derived `K_name` rather than
   `K_SC` directly ([ADR 0027](../../../decisions/0027-group-invite-name-shared-key.md)).
 - **Owner ≠ admin.** The creator is the group's `OWNER`; that is a per-scope role, independent of any tenant
   role ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).

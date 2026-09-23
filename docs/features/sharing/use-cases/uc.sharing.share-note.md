@@ -19,7 +19,7 @@ The note is sealed under the share's own key **`K_share`** (AAD `share-note`) �
 that link's holders read it (mirrors the Memory-name seal `sealedName`). Because `K_share` is minted once and
 never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key = symWrap(K_mem,
 K_share)`** (AAD `share-key-recovery` plus the share's id, since `K_mem` is common to all of a Memory's shares —
-[ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — so the curator, who always holds `K_mem`, can
+[ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — so the curator, who always holds `K_mem`, can
 recover `K_share` **anytime** to re-seal (edit) the note without minting a new link
 ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 **Operator-blind:** the server stores only the two ciphertexts + the opaque note; it never sees `K_share`,
@@ -44,7 +44,9 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 - **UPLOADER share** → the note is the write-only drop-box's instruction ("please upload your pics here"), shown
   above the name field (there is no gallery to banner).
 - **Revoked / expired share** → `resolveShare` is `404` (non-enumerable); the note is gone with the share.
-- **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's creator edits.
+- **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's creator edits,
+  and only while they are still a member of the share's scope — a creator who has left it gets a non-member's 404
+  ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) A3).
 - **A co-member reconstructs the link** (group/tenant scope, later) → possible (they hold `K_mem`), but grants
   nothing new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
   consequences). Moot in the v1 personal-scope cut (one member).

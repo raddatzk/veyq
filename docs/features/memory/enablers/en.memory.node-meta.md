@@ -24,7 +24,7 @@
 ## The envelope
 
 - **`wrappedMeta`** — an optional field on a content node, **AEAD-sealed under the node's `K_mem`** (purpose
-  `node-meta`, bound to the node — [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)),
+  `node-meta`, bound to the node — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)),
   wire-encoded as opaque **base64**. It carries a **client-only, versioned** JSON blob whose shape can **grow
   without a contract change** (the operator never learns a field — the lesson from the media EXIF
   tiers):

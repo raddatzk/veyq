@@ -32,7 +32,7 @@ members; new content seals under it. Nothing is re-encrypted.**
    epoch can **never** derive a newer one. A member's grant wraps the **latest epoch they are entitled to**:
    `asymWrap(memberIdentityPub, E_latest, "scope-grant")` — same primitive, purpose and wire shape as
    [ADR 0020](0020-grant-distribution-invite-wrap.md)'s, only the plaintext is the latest epoch key, and the seal
-   binds the scope and that epoch ([ADR 0069](0069-a-seal-binds-its-object.md)).
+   binds the scope and that epoch ([ADR 0072](0072-a-seal-binds-its-object.md)).
 
 2. **Content is tagged with the epoch it was sealed under.** Node **names**, `slug_token`s and each Memory's
    `K_mem`-wrap seal under the **current** epoch at creation time; every node carries a **server-visible epoch

@@ -17,9 +17,10 @@
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
 - **Out of scope (by design):** **scope, content & share keys** + the invite/onboarding key transfer live in
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md); exact **byte formats** (suite layouts, KEM
-  combiner, seal encodings) are the conformance vectors (`contracts/crypto/vectors/v1.json`) and the code they
-  pin (`packages/crypto`), and what every seal binds is
-  [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md). Whole-system security concern: the sibling
+  combiner, seal encodings) in the conformance-pinned suite
+  ([`packages/crypto/src/v1.ts`](../../../../packages/crypto/src/v1.ts)) and its vectors
+  ([`contracts/crypto/vectors/v1.json`](../../../../contracts/crypto/vectors/v1.json)), and what every seal binds is
+  [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md). Whole-system security concern: the sibling
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
@@ -106,8 +107,9 @@ Each KEK is derived **fresh on the device** with a stored salt (so it reproduces
 open its wrap, then **discarded**. None is ever stored or sent — which is exactly why the server stays
 blind.
 
-**Device keys are bound, not stored raw.** The `DEVICE` `deviceKey` is a **non-extractable** HMAC key (its
-bytes never exist in the clear — usable to compute the bind, never exfiltratable); the `DEVICE_KEY` `K` is a
+**Device keys are bound, not stored raw.** The `DEVICE` `deviceKey` is a **non-extractable** HMAC key (no
+script can export its bytes, but the bind it computes is fixed and can be copied once — the password stays the
+wrap's real second factor, [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §5); the `DEVICE_KEY` `K` is a
 random key held by the device. Device trust is **per device**: each trusted/enrolled device writes **its own**
 wrap (own key + salt), so a phone and a laptop are two independent wraps on the same Master Key — unlike the
 floor methods, `DEVICE`/`DEVICE_KEY`/`PASSKEY` may appear more than once ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).

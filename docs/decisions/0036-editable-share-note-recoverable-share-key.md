@@ -32,7 +32,7 @@ parts.
 1. **Recoverable share key (the enabler).** At `createShare`, in addition to the existing outer wrap
    `wrap = symWrap(K_share, K_mem)` (lets a link-holder unwrap `K_mem`), store a second, **inverse** wrap
    **`sealed_share_key = symWrap(K_mem, K_share)`** (AAD context **`share-key-recovery`**, bound to the share's
-   id — [ADR 0069](0069-a-seal-binds-its-object.md)) on the share row. The
+   id — [ADR 0072](0072-a-seal-binds-its-object.md)) on the share row. The
    **curator always holds `K_mem`** (they opened the Memory from their scope), so they can **recover `K_share`
    anytime** — `K_share = symUnwrap(K_mem, sealed_share_key, "share-key-recovery")` — and thereby read or re-seal
    **any `K_share`-sealed field** of a minted share. The server stores only this ciphertext; it never sees
@@ -47,7 +47,8 @@ parts.
    instruction above the name field; for VIEWER/CONTRIBUTOR it is a banner under the title.
 
 3. **In-place edit.** Add an **owner-gated `updateShare`** (`PATCH /api/shares/{shareId}`, `@Authenticated`,
-   `owner_account`-checked) that accepts a new **`sealedNote`**. The curator, editing from the Memory's share
+   `owner_account`-checked, and only for an owner who is still a member of the share's scope —
+   [uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)) that accepts a new **`sealedNote`**. The curator, editing from the Memory's share
    dialog (which holds `K_mem`), lists their shares (the list now also returns `sealed_note` + `sealed_share_key`),
    recovers `K_share`, re-seals the new note, and PATCHes it — **the link stays valid**. The op is deliberately
    extensible: cr-0116 added the private **`sealedShareName`** (both sealed fields are a full replace), and
@@ -74,7 +75,7 @@ crosses the boundary.
   had `K_share`; now a **scope member** (who holds `K_mem`) can recover `K_share` for any share of that Memory —
   e.g. reconstruct a co-member's link. This grants **nothing new in practice**: a `K_mem`-holder can already
   decrypt the Memory's content directly, and **revoke stays `owner_account`-gated** (a member can't revoke
-  another's share). In the **v1 personal-scope** cut the scope has a single member (the owner), so it is moot; in
+  another's share; an owner who has left the scope can't either). In the **v1 personal-scope** cut the scope has a single member (the owner), so it is moot; in
   the group/tenant lift it is the same "co-members already see the content" posture the security model documents.
   Recorded in the [security model](../crosscutting/security-model.md) operational-metadata list.
 - **Fixes a real limitation** (a bonus): the share-management list can now **show and edit every minted share's

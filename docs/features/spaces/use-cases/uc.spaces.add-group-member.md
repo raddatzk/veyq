@@ -45,7 +45,7 @@ Governance (who may add, the name stays sealed, no tenant-owner power) is [ADR 0
    `grant-delivery` job on the operator-blind background-task mechanism ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
    exactly as for the tenant scope.
 4. The wrap seals `K_SC` to the member's hybrid public key under the `scope-grant` purpose, bound to the scope
-   and epoch ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — the same hybrid KEM as a
+   and epoch ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — the same hybrid KEM as a
    self-grant, only the recipient differs — and the key-holder signs it with its identity key
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). It runs **on the
    key-holder's device** and is posted as the member's grant; the server stores opaque ciphertext.

@@ -30,7 +30,7 @@ strategy; they do not choose it.
    re-encryption migration.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
    `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire, and every
-   seal purpose has exactly one vector ([ADR 0069](0069-a-seal-binds-its-object.md) Decision 6).
+   seal purpose has exactly one vector ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 6).
    `packages/crypto/src/v1.ts` is pinned to it by `packages/crypto/src/v1.conformance.test.ts`. Since the
    native surfaces were dropped (commit `7a1c4e9f`), that web test is the **only** stack asserting the file's
    seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently

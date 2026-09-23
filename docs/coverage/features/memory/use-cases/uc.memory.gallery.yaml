@@ -18,8 +18,17 @@ acceptanceCriteria:
   - id: download-original
     text: An explicit download fetches the pristine, full-resolution original (the only byte-identical copy).
     coverage:
-      backend: { integration: [MediaSliceTest.startCompleteListRoundTrip], e2e: [BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes] }
+      backend: { integration: [MediaSliceTest.startCompleteListRoundTrip] }
       web: { unit: [src/features/memory/media.test.ts, src/features/memory/components/MediaLightbox.test.ts, src/features/memory/download.test.ts] }
+    gaps:
+      - surface: backend
+        reason: >
+          The integration ref runs against the in-memory store, which moves no bytes: it proves the upload's
+          metadata round-trip, not that the original comes back. The real presigned transfer — each sealed chunk
+          PUT to its presigned URL on a real S3-compatible store (the bundled Garage), completed against the
+          stored objects, presigned GET and fetched back byte-identical — is measured only by
+          `BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes`, which runs when `VEYQ_S3_E2E=1`. No CI job sets it,
+          so it makes no coverage claim (ADR 0040) and is named here instead.
   - id: favorite-toggle
     text: >
       The header toggle pins/unpins the Memory (operator-blind, via en.memory.favorites), and the pin is

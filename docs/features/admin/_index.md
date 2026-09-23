@@ -14,12 +14,17 @@ handling of reported shares.
 ## Use-cases
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
+- ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **refined**
+  ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
+  operation, first-run setup included, only on an internal listener the admin container reaches — classified by
+  the socket, never by a header — and 404s it on the public origin)
 - ★ [Create a tenant & invite its owner](use-cases/uc.admin.create-tenant.md) — **refined**
-- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **built**, both layers: the
-  request-boundary gate and both transitions, plus step 4's routing withdrawal, which
-  [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers
-  ([ADR 0066](../../decisions/0066-tenant-suspension.md);
-  an immediate, request-boundary lockout and deliberately **no** session revoke — sessions are account-global, so a
+- ★ [Suspend & reactivate a tenant](use-cases/uc.admin.suspend-tenant.md) — **partly built**: both transitions,
+  the `Host` filter on the tenant's own domain, and step 4's routing withdrawal, which
+  [tenant-reachability](use-cases/uc.admin.tenant-reachability.md) owns and this transition triggers. The
+  enforcement itself — the per-operation gate that holds on every domain, for shares and jobs too — is
+  **planned** ([uc.spaces.scope-access](../spaces/use-cases/uc.spaces.scope-access.md)). ([ADR 0066](../../decisions/0066-tenant-suspension.md);
+  an immediate, per-operation lockout and deliberately **no** session revoke — sessions are account-global, so a
   revoke would sign a multi-tenant member out of unaffected tenants too; never a routing-only toggle, never a
   content-key operation)
 - ★ [Reach a tenant at its own domain](use-cases/uc.admin.tenant-reachability.md) — **built**

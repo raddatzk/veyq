@@ -3,7 +3,7 @@ id: cr-admission-is-a-key-holder-act
 title: Only a key-holder can admit a member, and every grant says who sealed it
 status: planned
 satisfies: [uc.spaces.add-member, uc.spaces.add-group-member, uc.spaces.switch-spaces, uc.spaces.manage-group-members]
-adrs: ["0020", "0028", "0024", "0014", "0069"]
+adrs: ["0020", "0028", "0024", "0014", "0072"]
 invariants: [operator-blind E2EE, API-first]
 ---
 
@@ -31,7 +31,9 @@ Automatic delivery stays.
   [ADR 0014](../docs/decisions/0014-group-scopes-and-governance.md) (the group add).
 - **Builds on `cr-seal-binds-its-object`,** which must be done first. The grant this signs over is the one
   bound to `(scopeId, epoch)`, and both the tag and the signed statement use that CR's canonical encoding.
-  Its "a grant states its epoch" change is what makes the tag's epoch check meaningful.
+  Its "a grant states its epoch" change is what makes the tag's epoch check meaningful. By that order it also
+  lands after `cr-scope-access-gate` (#157), whose gate decides what a *pending* member may do. This CR adds
+  what a pending member needs before anyone wraps to it.
 - **Its sibling is `cr-cold-credential-proves-the-secret-key`,** which closes #159's second door, a session
   installing its own identity through `rotateAccountKeys`. The two are independent. #159 is closed only when
   both are done.
@@ -49,7 +51,7 @@ Automatic delivery stays.
 - **The tag.** `HMAC-SHA256(HKDF(E_epoch, info = "veyq/v1/admission-tag"), encode({scopeId, epoch, admissionId, userId?}))`,
   with the canonical encoding from `cr-seal-binds-its-object`. `userId` is present for a group add (the target
   has an account) and empty for a tenant invite. There is one vector for each case.
-- **The admission id** is client-minted (UUIDv4), per ADR 0069 Decision 3.
+- **The admission id** is client-minted (UUIDv4), per ADR 0072 Decision 3.
 - **Who writes a tag:**
   - **Tenant invite.** `inviteTenantMember` carries `{admissionId, admissionEpoch, admissionTag}`. Both accept
     paths copy them onto the new membership (`grep -n 'fun accept\|fun registerAndAccept' backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantAcceptHandler.kt`).

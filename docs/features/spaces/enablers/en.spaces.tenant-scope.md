@@ -94,6 +94,10 @@ sequenceDiagram
   While it lasts the tenant space is **not openable** → the shell **falls back to Personal** as the effective home
   ([ADR 0019](../../../decisions/0019-token-less-tenant-home.md)); the tenant entry is surfaced as unavailable,
   not offered as an empty room.
+- **E1a — the tenant is suspended:** a second, **standing** reason for no grant. `my-tenants` lists the tenant
+  with its status and withholds both the grant and the sealed icon — suspension refuses its members every read
+  ([uc.spaces.scope-access](../use-cases/uc.spaces.scope-access.md)), and this listing is one of them — so the
+  switcher shows it offline instead of treating it as the awaiting-access window above.
 - **E2 — not unlocked:** without the identity private bundle the client cannot open the grant → entering the
   tenant is deferred until after unlock (the deep-link-through-login restore of
   [ADR 0015](../../../decisions/0015-operator-blind-readable-urls.md) applies unchanged).
@@ -124,8 +128,8 @@ sequenceDiagram
 - **Every tenant's grant, in one Host-independent call.** `GET /api/scopes` is **Host-scoped** — it serves the
   scope rows of the tenant resolved from the request `Host`, and nothing of any other tenant.
   `GET /api/scopes/my-tenants` is **account-scoped** (`MembershipEntity.find("userId", …)`, no Host at all) and
-  therefore carries, per tenant, the caller's **own** `wrappedGrant` for that tenant's **root** scope plus its
-  `sealedIcon` + `iconEpoch` — so a member can render *other* tenants' sealed identity without entering them
+  therefore carries, per tenant, the tenant's status and the caller's **own** `wrappedGrant` for that tenant's
+  **root** scope plus its `sealedIcon` + `iconEpoch` (both withheld while the tenant is suspended, E1a) — so a member can render *other* tenants' sealed identity without entering them
   ([uc.spaces.switch-spaces](../use-cases/uc.spaces.switch-spaces.md),
   [uc.spaces.set-space-icon](../use-cases/uc.spaces.set-space-icon.md)). **This discloses nothing to the
   operator**: a grant is ciphertext sealed to the caller's identity key, the server already holds every one at

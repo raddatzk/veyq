@@ -39,7 +39,7 @@ This use-case is the first consumer of the grant-distribution primitive
    admission tag verifies under its own current epoch key, **eagerly wraps** the key to them. The **first**
    key-holder to do so wins; the rest see the grant already present and no-op.
 4. The wrap seals `K_SC` to the member's hybrid public key under the `scope-grant` purpose, bound to the scope
-   and epoch ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — the same hybrid KEM as a
+   and epoch ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — the same hybrid KEM as a
    self-grant, only the recipient differs — and the key-holder signs it with its identity key
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). It runs **on the
    key-holder's device** and is posted as the member's grant; the server stores opaque ciphertext.

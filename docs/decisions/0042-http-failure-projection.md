@@ -65,21 +65,37 @@ bogus id are **indistinguishable**. The rule:
 > **The membership boundary is the first guard on every scope-addressed operation.** Capability checks
 > (grant-holder, owner) run *after* it and may answer 403 — a member legitimately knows the scope exists.
 
-    if (!isScopeMember(caller, scopeId)) return ScopeNotFound   // 404 — uniform for strangers and bogus ids
-    if (!holdsGrant(caller, scopeId))    return NotKeyHolder     // 403 — member without the key
-    // …existence / kind / state checks only from here on
+The boundary is **one** call, `ScopeAccess.check(caller, scope, READ | WRITE)` in `shared/membership`, and every
+scope-, tenant-, share- and job-addressed operation makes it inline before anything else
+([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md) owns the full rule). It
+answers the states only a member may learn *after* membership, in a fixed order:
+
+    ScopeAccess.check(caller, scopeId, mode)
+      no accepted membership        → the operation's 404   // strangers, bogus ids AND unaccepted proposals
+      tenant SUSPENDED              → 403 tenant_suspended  // reads too (ADR 0066)
+      WRITE, caller left the tenant → the operation's 404
+      WRITE, scope being deleted    → 409 scope_deleting
+    if (!holdsGrant(caller, scopeId)) return NotKeyHolder  // 403 — member without the key
+    // …existence / kind / role / capability checks only from here on
+
+An **unaccepted proposal** (`pendingConsent`, [ADR 0014](0014-group-scopes-and-governance.md) §5) is not a
+membership for this boundary: the proposed member answers their own invitation and gets a stranger's 404
+everywhere else. A predicate that counts proposals (a re-add's idempotency check) is a different question and
+carries a different name.
 
 This applies to *scope-addressed* operations, where the caller names an id they may have guessed. It must **not**
 be applied to paths a non-member reaches legitimately by **possessing an unguessable token** — the `@PermitAll`
 share-guest ops and tenant `preview`/`register`/`accept`. Those callers already know the resource exists, so
-their 403s are correct.
+their 403s are correct. They are still not members, so they learn nothing of a scope's deletion or a tenant's
+suspension either: while either holds, the token answers exactly as a revoked or expired one does.
 
 The projection refactor was deliberately **behaviour-preserving** and only made the drift *visible*;
 the ordering fix also carries the enforcement guard below.
 
 **`not_scope_member` was a misnomer**, retired by cr-0162. The sites named it gated on `holdsGrant`, not on
-membership, so a member whose consent/grant was still pending (ADR 0020) was told they were "not a member". With
-the boundary guard first, the residual 403 means precisely "member, but not a key-holder" → **`not_key_holder`**.
+membership, so a member whose grant was still pending (ADR 0020) was told they were "not a member". With the
+boundary guard first, the residual 403 means precisely "accepted member, but not yet a key-holder" →
+**`not_key_holder`** — never an unaccepted proposal, which the boundary already answered with 404.
 
 ## Consequences
 
@@ -95,11 +111,14 @@ the boundary guard first, the residual 403 means precisely "member, but not a ke
   file; no `…Resource` builds an error envelope directly and no per-resource
   `error`/`forbidden`/`notFound`/`conflict` envelope helper remains. Promoted from cr-0161's one-shot proof grep
   to a CI check (per [changes/README.md](../../changes/README.md)).
-- **Enforcement guard (permanent), ordering:** `OperatorBlindProbeTest` fires every authenticated,
-  scope-addressed endpoint as a **non-member** against both a real scope id and an invented one, and asserts the
-  two answers are identical in status and `code`. A **grep is explicitly not the right guard here** and must not
-  replace it: guard *order* is not greppable, whereas the test fails on any future endpoint that probes before it
-  gates. Adding a scope-addressed endpoint means adding a row to its table.
+- **Enforcement guard (permanent), ordering:** `OperatorBlindProbeTest` fires every scope-, tenant-, share- and
+  job-addressed operation as a **non-member** against both a real id and an invented one and asserts the two
+  answers are identical in status and `code`; it fires the same operations as an unaccepted proposal (the same
+  404), as a member of a suspended tenant (403) and as a member of a deleting group (a write 409s, a read is not
+  refused by the gate). A **grep is explicitly not the right guard here** and must not replace it: guard *order*
+  is not greppable, whereas the test fails on any future operation that probes before it gates. Its operation
+  set is **derived from the contract** (the generated API interfaces), not listed: every operation is either
+  probed or named on a reasoned exclusion list, so an operation nobody classified is red on the day it lands.
 - **Styleguide §13** gains a short pointer ("HTTP failure projection → `shared/http/`; membership-gated absence
   → 404").
 - **Rejected — full collapse to `Either<Failure, Success>` (the finding's literal form).** Delete the sealed

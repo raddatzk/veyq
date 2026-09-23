@@ -26,8 +26,9 @@ per-device KEK derivation live in
 
 The DEVICE wrap keeps **two factors** — it swaps the *cold* Secret Key for a *device-bound* key, but the
 **password stays a real factor**, so a stolen device alone cannot unlock (**not** "raw key at rest"). The
-device key is a **non-extractable** HMAC key: its bytes never exist in JS, so a stolen DB or an XSS payload
-can *use* it but not carry it off for an offline attack. The KEK derivation
+device key is a **non-extractable** HMAC key, so no script can export its bytes — but the device factor it
+computes is fixed, so an injected script that runs once can copy that, and the password is then what still
+protects the wrap ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §5). The KEK derivation
 (`Argon2id(password + device-bind, …)`) is
 [en.account.key-model](../enablers/en.account.key-model.md); storing the Secret Key or the raw Master Key
 at rest is the **rejected** anti-pattern ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
@@ -145,8 +146,9 @@ stateDiagram-v2
 - **Secret Key stays cold.** Enrolment wraps the **already-unlocked** Master Key; it never reads, derives
   from, or stores the Secret Key. The Secret Key lives only in the Emergency Kit.
 - **Non-extractable ≈ HSM *interface*, not *grade*.** A non-extractable WebCrypto key is a **software**
-  boundary (browser-enforced) that beats XSS *exfiltration*; a true hardware root (passkey / Enclave) is the
-  separate **PASSKEY** method.
+  boundary (browser-enforced) that stops a script exporting the key, not copying the fixed factor it computes
+  ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §5); a true hardware root (passkey /
+  Enclave) is the separate **PASSKEY** method.
 - **Device-local, no sync.** A DEVICE wrap is usable only where its key is present; each device enrols its
   own. Wraps are **combinable** on one Master Key (DEVICE + PASSWORD + future PASSKEY/RECOVERY).
 - **Operator-blind.** The server holds only the DEVICE **ciphertext** wrap + opaque metadata — never the

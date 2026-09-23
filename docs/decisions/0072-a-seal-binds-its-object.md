@@ -1,4 +1,4 @@
-# ADR 0069 — A seal binds the object it belongs to, not only its purpose
+# ADR 0072 — A seal binds the object it belongs to, not only its purpose
 
 - Status: Accepted
 - Date: 2026-09-23

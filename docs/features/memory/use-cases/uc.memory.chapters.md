@@ -42,7 +42,7 @@ in [ADR 0012](../../../decisions/0012-content-key-hierarchy.md).
   ciphertext title + blinded slug, and the **opaque `K_mem` wrap** — never a key, name, or pixel. The recursive
   key model keeps least-privilege **crypto-enforced**, not server-gated.
 - **No new key type.** A chapter reuses the Memory key model (`K_mem`, the `content-key` wrap purpose bound to
-  the chapter's own node — [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) one level deeper —
+  the chapter's own node — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) one level deeper —
   the contract change is only *allowing* `wrappedContentKey` on a `CHAPTER`, not a new field.
 - **Reuse the existing UI/UX — never invent** ([ui-web-styleguide](../../../crosscutting/ui-web-styleguide.md)
   § Reuse first). Chapter creation + the nested gallery are the existing shell and grid; only the data layer

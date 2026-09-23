@@ -57,7 +57,7 @@
 
 1. The client has the Memory open: `K_mem` is unwrapped (via `K_SC`, en.memory.tree).
 2. **Key:** mint the media's and the blob's ids (UUIDv4 — the client names what it seals,
-   [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
+   [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
    under `K_mem` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
    are known from the plaintext length alone, before any frame is sealed.
 3. **Start:** POST a blob-start declaring the ids, `byteSize` + `chunkCount` (+ the `K_blob` wrap); the server checks

@@ -9,7 +9,7 @@ acceptanceCriteria:
   - id: domain-actually-routes
     # The whole trigger set in one criterion, because one test walks it: a suspend-specific row would carry the
     # same two refs and be the same claim written twice. What is NOT here on purpose is "a suspended tenant is
-    # unreachable" — that is uc.admin.suspend-tenant's request-boundary gate, which holds whatever the proxy
+    # unreachable" — that is uc.spaces.scope-access's per-operation gate, which holds whatever the proxy
     # does; this criterion is only the second, independent layer.
     # A missed trigger site is a silent staleness bug — right row, stale routing, no crash — so the test drives
     # all five through HTTP, and scripts/validate_tenant_ingress_triggers.py keeps the set complete structurally.

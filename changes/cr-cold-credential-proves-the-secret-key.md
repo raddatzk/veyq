@@ -41,7 +41,10 @@ dump contains.
   that false. `scripts/run_web_e2e.py` names the field too (`grep -n 'recoveryMasterKeyTag' scripts/*.py`).
 - **Order:** independent of `cr-seal-binds-its-object` and `cr-admission-is-a-key-holder-act`, and it may land
   first. If `cr-request-bounds-enforced` is still open, land after it, so the new fields arrive under its
-  guard.
+  guard. It is also inbox #156's C8 side item: it replaced a planned "store the tag hashed" CR that was
+  withdrawn before it started. It overlaps `cr-request-tenant-and-tenant-bound-recovery` in text only
+  (`RecoveryHandler`, `AccountStore`, `RecoverySliceTest`), so either order works and whichever lands second
+  rebases. #156 closes when both are done.
 - **Every existing account lacks the proof key.** Nothing is migrated. Before V1 the owner resets the
   development instance; tell them, and do not wipe their database yourself.
 

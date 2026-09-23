@@ -20,10 +20,13 @@
    (domain-separated from the unlock KEK). The password never leaves the device.
 3. The client requests a **login challenge** for the email; the server issues a **single-use,
    time-bounded nonce**. The server responds **identically** whether or not the account exists
-   (non-enumerable).
-4. The client **signs the nonce** with `authPriv` and sends the signature (with the email).
-5. The server **verifies** the signature against the stored `authPublicKey`. On success it issues a
-   **session** (and the account's server role); on failure it returns a **generic auth failure**.
+   (non-enumerable). A new challenge never replaces an older one: an email may have several outstanding
+   at once, each verifiable on its own.
+4. The client **signs the nonce** with `authPriv` and sends the signature together with the email **and
+   the nonce it signed**.
+5. The server looks up **that** challenge by (email, nonce), consumes it, and **verifies** the signature
+   against the stored `authPublicKey`. On success it issues a **session** (and the account's server role);
+   on failure it returns a **generic auth failure**. No other outstanding challenge is touched.
 
 ```mermaid
 ---
@@ -39,8 +42,8 @@ sequenceDiagram
   S->>S: issue single-use, time-bounded nonce<br>(same response if account absent)
   S-->>C: nonce
   C->>C: sign nonce with authPriv
-  C->>S: POST login/verify { email, signature }
-  S->>S: verify signature against stored authPublicKey
+  C->>S: POST login/verify { email, nonce, signature }
+  S->>S: consume that nonce's challenge<br>verify signature against stored authPublicKey
   alt valid
   S-->>C: session + server role
   else invalid / unknown / stale
@@ -58,6 +61,9 @@ sequenceDiagram
   **non-enumerable**; the response never signals whether the account exists.
 - **E3 — expired or replayed nonce:** a nonce is single-use and time-bounded; a stale or reused nonce is
   rejected and the client must request a fresh challenge.
+- **E4 — someone else asks for a challenge for your email, or sends a bad verify for it:** they get, and
+  can only burn, **their own** challenge. The one your device is signing stays outstanding, so your login
+  completes. They cannot learn your nonce: it goes only to the client that asked for it.
 
 ## Login state
 
@@ -87,7 +93,15 @@ stateDiagram-v2
   Unlock KEK), which is a separate use-case. See
   [Account & Key Model → Auth vs. unlock](../enablers/en.account.key-model.md).
 - **Replay-resistant.** Authentication is a signature over a fresh single-use nonce, not a transmitted
-  bearer secret.
+  bearer secret. Single use holds **per nonce**: the verify row-locks the one challenge it consumes, so two
+  concurrent verifies of the same captured signature cannot both mint a session.
+- **Nobody can keep you from signing in.** Challenges are keyed by nonce, not by email. With one challenge
+  per email, anyone who knew an address could replace it (a new challenge) or burn it (a garbage verify)
+  every second or two, well inside the per-IP rate limit, while the victim's device was still running
+  Argon2id, so every fresh login failed. There is deliberately **no cap** on outstanding challenges per
+  email: a cap that evicts the oldest, or refuses the newest, is the same displacement lever again. The
+  table is bounded instead by the per-IP rate limit ([cc.security.rate-limit](../../../crosscutting/cc.security.rate-limit.md))
+  times the challenge TTL, and expired rows are purged.
 - **Session shape is decided in [ADR 0004](../../../decisions/0004-session-tokens.md).** Opaque,
   server-stored, rotating access + refresh tokens grouped into named session families; this use-case
   issues such a session on success but does not restate the mechanics.
@@ -118,5 +132,5 @@ Passwort nicht von einem nicht existierenden Konto unterscheiden und verrät so 
 - Decisions: [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) (password-derived keypair
   + challenge-response), [ADR 0004](../../../decisions/0004-session-tokens.md) (session token form)
 - Related use-cases: [setup-server](../../admin/use-cases/uc.admin.setup-server.md) (registers
-  `authPublicKey`); unlock the Master Key — planned; log in with a passkey — planned; change password /
-  Secret Key — planned
+  `authPublicKey`); [unlock](uc.account.unlock.md) (opens the Master Key);
+  [change-password](uc.account.change-password.md); log in with a passkey — planned

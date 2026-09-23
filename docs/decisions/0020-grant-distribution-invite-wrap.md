@@ -39,7 +39,7 @@ key, wraps, or unwraps.** Concretely:
 1. **Wrap-to-foreign identity — the one new crypto move.** The granter seals `K_SC` to the target's hybrid
    public key under the `scope-grant` purpose — the *same* hybrid KEM, purpose, and wire shape as a
    self-grant, only the recipient pubkey is someone else's. The purpose is bound to the scope and epoch the grant
-   belongs to ([ADR 0069](0069-a-seal-binds-its-object.md)), and the grant carries its granter's signature
+   belongs to ([ADR 0072](0072-a-seal-binds-its-object.md)), and the grant carries its granter's signature
    ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 6). The result is posted as the target's
    `MembershipEntity.wrappedGrant`; the target opens it with their **own** identity private on next entry
    (the existing self-unwrap path). No new primitive. (On scope-key rotation the granter wraps the scope's
@@ -72,7 +72,7 @@ key, wraps, or unwraps.** Concretely:
    ADR 0007 already blesses and cr-0075 already renders — not a new state, just the first flow that produces it
    on purpose. **Delivery is realized as a `grant-delivery` job on the operator-blind background-task mechanism**
    ([ADR 0021](0021-operator-blind-background-tasks.md)) — this use-case is that mechanism's first, trivially-blind
-   consumer (a universal tag, no lease, idempotent). The "pending = grant-less membership, reconciled by any
+   consumer (a universal tag, a short lease held by the one worker that completes it, idempotent). The "pending = grant-less membership, reconciled by any
    key-holder" discovery is that mechanism's pull/reconcile. **Scope-key rotation re-grants existing members the
    same way** — only the reconcile predicate widens from *grant-less* to *grant-less **or** stale-epoch*
    ([ADR 0024](0024-scope-key-rotation.md) — a removed member's departure mints a new epoch the remaining members

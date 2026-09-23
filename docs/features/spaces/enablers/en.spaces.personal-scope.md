@@ -32,7 +32,7 @@ personal scope is a new `kind=PERSONAL` scope in the same tenant. (Realises the
 The server **cannot** create the scope — it has no key, and must stay blind. So the **client** mints it:
 generate the scope id and a random scope key, seal the key to the member's **own** identity public key (the
 hybrid KEM, under the `scope-grant` purpose bound to that scope id and epoch —
-[ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), sign the grant with its own identity key
+[ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), sign the grant with its own identity key
 ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6), and hand the server
 only the id and the **signed ciphertext grant**.
 The server creates the scope row + the self-membership. The client **auto-births** it after unlock if

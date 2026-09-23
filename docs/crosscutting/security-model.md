@@ -7,8 +7,7 @@
 >
 > Plain-language companion for end users: [wiki: Is my data safe?](../../wiki/en/is-my-data-safe.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
-> [scopes & tenancy model](scopes-and-tenancy.md), and the byte formats — the conformance vectors
-> (`contracts/crypto/vectors/v1.json`) and what every seal binds ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)).
+> [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
 This document is the **target model**. What ships in the first build is tracked via the inbox and
 change-requests, not here.
@@ -27,7 +26,7 @@ never sees. Confidentiality is therefore cryptographic, not a server-side access
 | Passive operator reading the database | Cannot recover content — every blob and sensitive metadata field is encrypted |
 | Offline brute-force of a weak password → **content** | **Secret Key (2SKD)**: the content key derivation folds in a high-entropy Secret Key the server never stores, so a cracked password alone unlocks nothing |
 | Offline brute-force of a weak password → **server login** | The server stores only an Ed25519 **auth public key** (not a credential); the raw password never reaches the server. Forging a login means brute-forcing the password through Argon2id — yielding a session + operational metadata, **never content** (see [ADR 0003](../decisions/0003-operator-blind-password-auth.md)). Holding because nothing a session can do leads to a key: admitting a member needs an admission tag only a key-holder computes ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6), and every request that replaces the identity or mints a cold credential needs a signature only the Secret Key derives ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2) |
-| The server swapping or replaying ciphertexts between objects | Every seal binds its purpose **and** the object it is stored as, so a ciphertext served for another object fails to open ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)). **Freshness is not covered:** the server still chooses which authentic version of an object, and which epoch's grant, a client receives |
+| The server swapping or replaying ciphertexts between objects | Every seal binds its purpose **and** the object it is stored as, so a ciphertext served for another object fails to open ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)). **Freshness is not covered:** the server still chooses which authentic version of an object, and which epoch's grant, a client receives |
 | **Online** brute-force / credential-stuffing / DoS on the public auth surface | **Per-IP rate limiting** of the public auth endpoints (`@RateLimit(key = IP)` → token-bucket `429`) — defense-in-depth, **honestly limited** (per-instance, resets on restart). Mechanism + verification: [cc.security.rate-limit](cc.security.rate-limit.md) |
 | Active operator doing key-substitution during key exchange | **Partly, and honestly limited** — see *Key-directory trust* below |
 
@@ -39,7 +38,8 @@ state that gap plainly. In a **self-hosted** deployment the operator is the user
 "Operator-blind" names one adversary: **the veyq server / operator.** It does **not** mean the client never
 talks to any external service. A feature may let the client reach a **third party directly** — today the
 opt-in **reverse-geocoding** lookup that turns a photo coordinate into a place name
-([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)), tomorrow map tiles for the tenant map. Such a
+([ADR 0016](../decisions/0016-geocoding-provider-neutrality.md)) and the opt-in **breached-password check**
+(below), tomorrow map tiles for the tenant map. Such a
 request is a **different trust boundary** the user consents to, and it is fenced so it can never widen the veyq
 operator's view:
 
@@ -56,6 +56,22 @@ operator's view:
 - **Results are sealed content.** Anything fetched (e.g. a resolved place name) is sealed under `K_mem` like any
   other content — so it is shareable to other members **without their device making a request**, and the veyq
   operator still sees only ciphertext.
+
+**The breached-password check is the second instance.** The four dialogs that choose a password (set up the
+server, join a tenant, change a password, recover access) can ask the Have I Been Pwned range API whether the
+password appears in known breaches. The fences apply like this:
+
+- **Only a 5-hex SHA-1 prefix leaves the device** (k-anonymity, padded response); the match against the returned
+  suffixes is computed locally.
+- **Only on submit, over the final password — never while typing.** A query at every typing pause sends the
+  prefix of each *partial* password. A short one, or a few keystrokes added to one already recovered, has so
+  few candidates that its 20-bit prefix all but identifies it, so the sequence hands over the password a few
+  keystrokes at a time.
+- **Consent is per dialog:** an unticked box with a one-sentence note saying what leaves the device. Nothing is
+  remembered — a password is chosen rarely, and a standing preference would consent to requests the user no
+  longer sees coming.
+- **It advises, never gates.** A hit, or a check that could not run, stops the first submit once with a message
+  saying which; submitting again goes ahead with the same password. The result is not stored.
 
 So the veyq operator stays blind by construction; the only thing that ever crosses is a consented, identity-free
 request the **user** turned on, straight to the chosen provider.
@@ -119,9 +135,8 @@ personal memory that is publicly shared becomes "shared" for these purposes.
 ## Key hierarchy (envelope encryption)
 
 Content is protected by layered envelopes so grants are cheap and shares are least-privilege. The
-byte-level detail is the conformance vectors and the code they pin, and every seal binds the object it belongs
-to ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)); account-level detail (unlock methods, recovery)
-lives in the account/key model. The shape:
+byte-level detail lives in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and every seal binds the object it belongs to ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)); account-level detail (unlock methods, recovery) in the account/key
+model. The shape:
 
 ```mermaid
 ---
@@ -313,8 +328,11 @@ same property that stops the operator reading data stops it rescuing data. Indep
 
 1. **Another enrolled device** still holds the keys.
 2. **Emergency Kit (Secret Key) + master password** on a fresh device.
-3. **Recovery code** — high-entropy, system-generated, single-use — independently unwraps the identity
-   private key (the only path that survives a forgotten password with no device).
+3. **Emergency Kit alone, after a mailed link** — a forgotten password with no device. The Secret Key opens the
+   account's `RECOVERY` wrap, which the server releases only against a one-time token mailed to the account
+   address ([uc.account.recover-access](../features/account/use-cases/uc.account.recover-access.md),
+   [ADR 0054](../decisions/0054-password-recovery-two-factor-release.md)). There is no separate recovery code:
+   the Secret Key *is* the recovery factor.
 
 Losing **all** paths is the documented, accepted residual loss.
 

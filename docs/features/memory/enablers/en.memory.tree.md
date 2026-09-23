@@ -35,7 +35,7 @@ A **node** has an opaque id, a `parentId` (or the scope root), a `kind`, an **en
 **Recursive `K_mem` (chapters — [ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).** Every
 content-bearing node (MEMORY *and* CHAPTER) carries its own random `K_mem`, wrapped under the **content key of
 its parent** — a top-level Memory under `K_SC`, a chapter under its parent Memory's `K_mem` (same `content-key`
-purpose, bound to the node the key belongs to — [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)).
+purpose, bound to the node the key belongs to — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
 A media's **`K_blob` is wrapped under the `K_mem` of its *direct* parent node** (chapter media
 under the chapter's key). Consequence of this layout: every content node is a **sharing unit**, and a move is a
 single **re-wrap, never a data re-encrypt** — the *decision + rationale* (why recursive, not "shares the

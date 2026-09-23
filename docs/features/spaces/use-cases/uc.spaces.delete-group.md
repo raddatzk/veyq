@@ -22,10 +22,13 @@
 2. The server marks the scope **pending-deletion** — sets `deletedAt = now`, `purgeAfter = now + retention`
    (**30 days**, `P30D`). Grants and memberships are **left untouched** (so restore is trivial).
 3. **During the grace window**, the group stays in every member's space list and is **enterable + viewable +
-   downloadable**, but **clearly marked** "*wird am &lt;date&gt; gelöscht*" and **read-only** — no new Memories,
-   uploads, renames, or key rotations (it is on its way out). Any **owner** additionally sees a **Restore** action.
-4. **Restore** (any owner, while `deletedAt` is set and before `purgeAfter`): clears `deletedAt`/`purgeAfter`; the
-   group is **fully active** again for everyone, exactly as before (nothing was moved).
+   downloadable**, but **clearly marked** "*wird am &lt;date&gt; gelöscht*" and **read-only** — no write of any
+   kind: no new Memories, uploads, renames, favorites, share or roster changes, key rotations or background-job
+   work (it is on its way out, [scope-access](uc.spaces.scope-access.md)). Its public links pause for the
+   window. Any **owner** additionally sees a **Restore** action.
+4. **Restore** (any owner who still belongs to the tenant, while `deletedAt` is set and before `purgeAfter`):
+   clears `deletedAt`/`purgeAfter`; the group is **fully active** again for everyone, exactly as before (nothing
+   was moved) — its links answer again and its waiting jobs resume.
 5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it reuses the existing blob-aware delete
    paths ([BlobStore.delete] + node-subtree erasure, cr-0073) to remove every node's **blob objects from the
    store**, then the media/node rows, memberships, epoch-chain links, favorites, queued background jobs, shares,
@@ -48,18 +51,28 @@
 - **A1 — restore after purge.** Once the scheduled job has run, the group is **gone** (`404 scope_not_found`); the
   grace window is the *only* recovery path. There is no post-purge undo (the point of erasure).
 - **A2 — a non-owner attempts delete or restore:** rejected — owner-gated (`403 not_scope_owner`, enforced by code,
-  [ADR 0008](../../../decisions/0008-centralized-http-auth.md)).
-- **A3 — delete via this path on a non-GROUP scope** (personal/tenant): rejected (`409` — group-only; the tenant
-  and personal scopes have their own lifecycles, not this owner-initiated delete).
-- **A4 — a content write while pending-deletion** (create a Memory/folder, rename, or delete a node): rejected
-  (`409 scope_deleting`) — the group is **read-only** while deleting. View + download stay open so members can still
-  see their pictures. (As built, cr-0090: the server guard covers the node mutations; media-upload-to-an-existing-
-  node + key rotation are left unguarded as a minor, documented exception — new Memories are already blocked.)
-- **A5 — delete an already-deleting group / restore an active one:** rejected (`409 scope_already_deleted` /
-  nothing to restore) — the state machine is idempotent-guarded.
+  [ADR 0008](../../../decisions/0008-centralized-http-auth.md)). An owner who has since been **removed from the
+  tenant** is not let through either: their own groups are in this same grace window
+  ([remove-tenant-member](uc.spaces.remove-tenant-member.md)), and restoring one would undo the removal — they
+  get the answer a non-member gets ([scope-access](uc.spaces.scope-access.md) A2).
+- **A3 — delete or restore via this path on a non-GROUP scope** (personal/tenant): rejected (`409` — group-only;
+  the tenant and personal scopes have their own lifecycles, not this owner-initiated one).
+- **A4 — any write while pending-deletion:** rejected (`409 scope_deleting`, the one code for this state) — the
+  group is **read-only** while deleting, for every write: content, media, buckets, favorites, shares, roster, icon,
+  key rotation and background-job work alike ([scope-access](uc.spaces.scope-access.md)). View + download stay open
+  so members can still see their pictures. Restore is the one write that passes — it is the only way out.
+- **A5 — delete an already-deleting group / restore an active one:** rejected (`409 scope_deleting` — the
+  deleting group refuses the delete like any other write / `409 not_deleted`, nothing to restore).
+- **A6 — a public link during the grace window:** answers the guest exactly as a revoked link does, and serves
+  again unchanged after a restore — a guest is not a member and learns nothing of the deletion
+  ([scope-access](uc.spaces.scope-access.md) A4).
 - **E1 — locally-saved copies.** A member who **downloads** content during the grace window keeps those local files
   — **not retractable** by any design (the stated limit). Purge erases the **shared** group from the server, not
   what already left it.
+- **E2 — a member who has no key yet.** Delivering a member's grant is a write too, so someone added just before
+  the deletion (or re-keying after an account key rotation) stays *awaiting access* for the window and can see
+  the group again only after a restore ([scope-access](uc.spaces.scope-access.md) A6). The window promises that
+  nothing changes; it cannot also promise a key that was not yet delivered.
 
 > **Sibling — the orphan rule (deferred).** [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6
 > also defines an **automatic** path: when a user is **removed from the tenant** and **solely** owns a group,
@@ -88,16 +101,16 @@
 
 **EN —** Deleting a group isn't instant destruction — it starts a 30-day countdown. Everyone can still open it and
 look through the pictures one last time, clearly told it's on its way out, and **any owner can undo the deletion**
-during that window. Nothing new can be added while it winds down. After 30 days it's gone for good: the memories and
-their files are **erased from the server**, not just hidden. Whatever someone saved to their own device in the
-meantime is theirs — but the shared group is truly gone.
+during that window. Nothing new can be added while it winds down, and its shared links are paused. After 30 days
+it's gone for good: the memories and their files are **erased from the server**, not just hidden. Whatever someone
+saved to their own device in the meantime is theirs — but the shared group is truly gone.
 
 **DE —** Eine Gruppe zu löschen ist keine sofortige Zerstörung — es startet ein 30-Tage-Countdown. Alle können sie
 noch öffnen und die Bilder ein letztes Mal durchsehen, klar gekennzeichnet, dass sie ausläuft, und **jede:r Owner
-kann die Löschung** in diesem Fenster rückgängig machen. Während sie ausläuft, kann nichts Neues hinzukommen. Nach
-30 Tagen ist sie endgültig weg: die Erinnerungen und ihre Dateien werden **vom Server gelöscht**, nicht nur
-versteckt. Was jemand in der Zwischenzeit auf dem eigenen Gerät gespeichert hat, gehört ihm — aber die geteilte
-Gruppe ist wirklich fort.
+kann die Löschung** in diesem Fenster rückgängig machen. Während sie ausläuft, kann nichts Neues hinzukommen, und
+ihre geteilten Links pausieren. Nach 30 Tagen ist sie endgültig weg: die Erinnerungen und ihre Dateien werden **vom
+Server gelöscht**, nicht nur versteckt. Was jemand in der Zwischenzeit auf dem eigenen Gerät gespeichert hat, gehört
+ihm — aber die geteilte Gruppe ist wirklich fort.
 
 ## Related
 
@@ -107,4 +120,5 @@ Gruppe ist wirklich fort.
   orphan rule), [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (why the orphan half waits
   for tenant removal), [ADR 0008](../../../decisions/0008-centralized-http-auth.md) (owner-gating)
 - Sibling use-cases: [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (roster — the other owner
-  power), [uc.spaces.add-group-member](uc.spaces.add-group-member.md)
+  power), [uc.spaces.add-group-member](uc.spaces.add-group-member.md), [uc.spaces.scope-access](uc.spaces.scope-access.md)
+  (what "read-only" means for every operation, and what non-members are told)

@@ -3,7 +3,7 @@ id: cr-seal-binds-its-object
 title: Every seal binds the object it is stored as — one typed seal, client-minted ids, a vector per purpose
 status: planned
 satisfies: [en.account.key-model, uc.memory.upload]
-adrs: ["0069", "0017", "0020", "0024", "0027"]
+adrs: ["0072", "0017", "0020", "0024", "0027"]
 invariants: [operator-blind E2EE, API-first, self-hostable by default]
 ---
 
@@ -13,19 +13,19 @@ Every AEAD seal in veyq authenticates only a static purpose string, so the blind
 ciphertext of that purpose for any object under the same key. The worst case is a confidentiality break: it
 serves shared Memory S's `K_mem` wrap on private Memory X's row, and every upload into X lands under S's key.
 This CR makes every seal bind the object it is stored as, per
-[ADR 0069](../docs/decisions/0069-a-seal-binds-its-object.md). The mechanism is a typed `seal(context, …)` in
+[ADR 0072](../docs/decisions/0072-a-seal-binds-its-object.md). The mechanism is a typed `seal(context, …)` in
 `@veyq/crypto` as the only way to seal, clients minting the ids of what they create, and one vector per
 purpose. It is a stored-format change, and it is being made before V1 because afterwards it would be a suite
 `v2` plus re-encryption.
 
 ## Context & constraints
 
-- **The rule:** [ADR 0069](../docs/decisions/0069-a-seal-binds-its-object.md). Its Decisions 1–6 are this
+- **The rule:** [ADR 0072](../docs/decisions/0072-a-seal-binds-its-object.md). Its Decisions 1–6 are this
   CR's specification. Decision 2 lists the unique-key seals that bind their purpose only, and Decision 4 is why
   parents are not bound.
 - **The byte definition comes first** ([ADR 0017](../docs/decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
   rule 4): a vector is added before the code that must match it.
-- **Freshness is out of scope** (ADR 0069 Decision 5, inbox #161): this CR binds epochs and versions but does
+- **Freshness is out of scope** (ADR 0072 Decision 5, inbox #161): this CR binds epochs and versions but does
   not make a client refuse an old one.
 - **Every existing ciphertext stops opening.** Nothing is migrated. The owner's development instance has to be
   reset after phase 4. **Say so, and do not wipe their database yourself**: their IntelliJ backend runs against
@@ -35,11 +35,12 @@ purpose. It is a stored-format change, and it is being made before V1 because af
     `cr-upload-windowed-presign`. All four reshape the upload schemas and `media.ts` that this CR also changes,
     and they were refined earlier against the current tree. The new id fields also land under
     `cr-request-bounds-enforced`'s guard.
+  - **After** `cr-scope-access-gate` (#157). It puts one gate in front of every scope-addressed handler,
+    including the eight creates this CR changes, so building on its handlers avoids rebasing both.
   - **Before** `cr-admission-is-a-key-holder-act`, which signs over the bound grant and reuses this CR's
     canonical encoding.
   - Independent of `cr-cold-credential-proves-the-secret-key`.
-- **Settles inbox #32** (ADR 0069 Decision 6). The stale `v1.ts` header, one of #165 (e)'s claims, goes when
-  the file is split; tick it off there.
+- **Settles inbox #32** (ADR 0072 Decision 6).
 - **Measured against `claude/happy-torvalds-321ddf` @ `5be8bfe` on 2026-09-23.** So spot-check one row — the
   purpose table's `content-key` row, since the goal leans on it hardest — rather than rebuilding the table.
 
@@ -47,7 +48,7 @@ purpose. It is a stored-format change, and it is being made before V1 because af
 
 - **The purposes and what each one binds.** This table is the union. Ids are the canonical lowercase UUID
   string; epochs and versions are unsigned integers. "Purpose only" means the key is unique to the object
-  (ADR 0069 Decision 2).
+  (ADR 0072 Decision 2).
 
   | Purpose | Sealed under | Binds |
   |---|---|---|
@@ -172,7 +173,7 @@ purpose. It is a stored-format change, and it is being made before V1 because af
 - Every vector's purpose is a live union member, and every member has a vector. The phase-1 test holds this;
   it is not a hand count.
 
-**Not proven:** freshness. A server can still serve an old but authentic ciphertext (ADR 0069 Decision 5), and
+**Not proven:** freshness. A server can still serve an old but authentic ciphertext (ADR 0072 Decision 5), and
 this CR adds no test that pretends otherwise.
 
 ## Retrospective

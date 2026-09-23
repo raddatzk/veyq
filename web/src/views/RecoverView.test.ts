@@ -148,13 +148,17 @@ describe('RecoverView', () => {
     expect(w.text()).not.toContain('If an account exists')
   })
 
-  it('strips the token from the address bar as soon as it is read', async () => {
-    withToken()
+  it('strips the token from the address bar as soon as it is read, keeping the router\'s history state', async () => {
+    // vue-router keeps its own position in history.state; a strip that replaces it with null is what the router
+    // warns about, and what loses its back/scroll bookkeeping.
+    const routerState = { back: '/', current: '/recover', forward: null, position: 3 }
+    window.history.replaceState(routerState, '', '/recover#tok-123')
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
     mountView()
     await flushPromises()
-    // A token left in the URL rides along into history and any shared screenshot.
+    // A token left in the URL rides along into any shared screenshot.
     expect(window.location.hash).toBe('')
+    expect(window.history.state).toEqual(routerState)
   })
 
   it('with a token it releases and shows whose account the link is for — without asking again', async () => {

@@ -1,7 +1,8 @@
 // uc.account.trust-device — platform glue: a per-account NON-EXTRACTABLE device key in IndexedDB, the
-// device factor it produces, and the local trust record. The key is generated with `extractable: false`, so
-// its bytes never exist in JS; only its HMAC output (the device factor) is ever read — an XSS payload can
-// compute the factor while it runs but cannot carry the key off-device for an offline attack. This is the
+// device factor it produces, and the local trust record. The key is generated with `extractable: false`, so no
+// script can export its bytes — and that is all it buys. The factor is an HMAC over a constant, so it never
+// changes: an injected script that runs once can copy the factor, which is as good as the key for an offline
+// attack on the DEVICE wrap. The password is what still protects the wrap then (ADR 0005 §5). This is the
 // platform half of the DEVICE wrap; the conformance-pinned crypto (the KEK) lives in v1.ts.
 import { idbRun } from '../../../shared/idb'
 

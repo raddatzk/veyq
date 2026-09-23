@@ -80,7 +80,7 @@ holds `K_SC`, `K_mem`, `K_blob`, or any name.
   Negligible vs. content size.
 - **Deferred to the implementation CR / vectors:** the exact wire formats (every seal purpose has one vector in
   `contracts/crypto/vectors/v1.json`, and every seal binds the object it belongs to —
-  [ADR 0069](0069-a-seal-binds-its-object.md)) and the share-record shape. (A chapter carries its **own
+  [ADR 0072](0072-a-seal-binds-its-object.md)) and the share-record shape. (A chapter carries its **own
   recursive `K_mem`**, not the parent's — see *Recursive `K_mem`* below.) Group/recipient key-directory trust
   is the active-operator gap already in the Security Model.
 - **Media dedup — decided in [ADR 0013](0013-blob-storage-presigned-direct-to-store.md): declined.** `K_blob`
@@ -96,7 +96,7 @@ no separate `K_chapter` type:
 - **Every content-bearing node (MEMORY *and* CHAPTER) has its own random `K_mem`,** wrapped under the
   **content key of its parent**: a top-level Memory's `K_mem` under `K_SC`; a chapter's `K_mem` under its
   **parent Memory's `K_mem`** (the same `content-key` purpose one level deeper, bound like every `K_mem` wrap to
-  the node it belongs to — [ADR 0069](0069-a-seal-binds-its-object.md)). **Folders still carry no
+  the node it belongs to — [ADR 0072](0072-a-seal-binds-its-object.md)). **Folders still carry no
   key.** This is *not* the "full per-subtree key tree" rejected above — only content nodes get a key, and the
   shape follows the existing Memory model unchanged.
 - **`K_blob` is wrapped under the `K_mem` of the media's *direct* parent node** — media on a chapter under the

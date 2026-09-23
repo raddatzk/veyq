@@ -148,7 +148,9 @@ itself from a declared store type, so the chart deploys `garage` and nothing bes
   the instance being *deployable* onto a cluster, and `helm install ./charts/veyq` is that. It stays the
   remaining sub-slice on [inbox #26](../inbox.md); until it lands, `Chart.yaml`'s `version`/`appVersion` are
   set by hand and must move with the `VERSION` file.
-- **The chart generates nothing and every pod passes `restricted`.** Every secret is the operator's to supply
+- **The chart generates nothing and every pod passes `restricted`**, to which
+  [ADR 0071](0071-runtime-hardening-on-both-targets.md) adds a read-only root and a NetworkPolicy set whose
+  ingress-controller peer the operator must name. Every secret is the operator's to supply
   (or to name in an existing `Secret`), enforced by `values.schema.json` — a value Helm generated would be
   re-rolled on any render where `lookup` is blind, and a chart that generates values cannot be asserted
   because no two renders agree. The config-secret KEK is the one exception and stays one: the app generates

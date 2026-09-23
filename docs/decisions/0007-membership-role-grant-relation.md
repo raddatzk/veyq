@@ -25,21 +25,27 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   have **multiple owners** and **must keep at least one**: removing or demoting the **last** owner is rejected (a
   "last-owner guard"). Orphaning is thus only possible when a sole owner *leaves* — handled by an automatic rule,
   not an admin power ([ADR 0014](0014-group-scopes-and-governance.md)).
-- **The relation is a *shared* primitive, not a feature's.** `MembershipEntity` and the read-only membership /
-  owner guards (`isScopeMember` · `isScopeOwner` · `ownerCount` · `isMember` · `memberRole` · `holdsGrant`) live
-  in **`shared/membership/`** — a query-only leaf module that every feature (content · media · sharing · spaces ·
-  admin) depends on, rather than each feature re-querying the table or importing the entity from another feature's
-  slice. Only the last-owner **policy** — the decision to *reject* a remove/demote and raise `LastOwner` — stays in
-  the feature handler that owns the action; the shared module never depends back on `ScopeEntity` / `TenantEntity`,
-  so `shared` stays a leaf and no cycle forms. (The tell that this belonged in `shared`: the guard was reimplemented
+- **The relation is a *shared* primitive, not a feature's.** `MembershipEntity`, the read-only membership /
+  owner guards (`isScopeOwner` · `ownerCount` · `memberRole` · `holdsGrant`) and the one access gate every
+  scope-addressed operation calls (`ScopeAccess`, [uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md))
+  live in **`shared/membership/`** — a query-only module that every feature (content · media · sharing · spaces ·
+  admin · tasks) depends on, rather than each feature re-querying the table or importing the entity from another
+  feature's slice. Only the last-owner **policy** — the decision to *reject* a remove/demote and raise `LastOwner` —
+  stays in the feature handler that owns the action. The gate reads a scope's `deletedAt` and a tenant's `status`,
+  so the scope and tenant rows are **query-only entities in `shared`** too (the same move, for the same reason);
+  `shared` never depends back on a feature, and no cycle forms. (The tell that this belonged in `shared`: the guard was reimplemented
   verbatim across 5 stores + 2 slice cycles — audit P3a.)
-- **`tenantId` expresses belonging; every role check keys on `scopeId`.** A membership row carries both `tenantId`
+- **`tenantId` groups; belonging and every role check key on `scopeId`.** A membership row carries both `tenantId`
   (which tenant it belongs to) and `scopeId` (which scope it grants a role on). Because every scope birth mints its
   creator an `OWNER` row, a role check filtered by `tenantId` **alone** answers true for any member who owns *any*
   scope in the tenant — it degrades to `isMember`. So **tenant-level authority keys on the tenant root scope**
   (`scopeId == tenantId`, cr-0026): `isTenantOwner(u, t) = isScopeOwner(u, t)`, mirroring `tenantOwnerCount =
-  ownerCount(t)`. The `tenantId` column is for *belonging* (`isMember`), never *authorization*. (cr-0163 fixed
-  three copies of a `tenantId`-only owner gate that were functionally `isMember` — a privilege escalation.)
+  ownerCount(t)`. **Belonging keys on the root scope too:** a caller belongs to a tenant when they hold an
+  *accepted* membership on its root scope, and tenant-addressed operations ask the same gate on that scope. The
+  `tenantId` column only **groups** a user's rows (the space list, the removal cascade) and never authorizes: a
+  member removed from the tenant keeps rows on their own spaces for the grace window, and a proposed member holds
+  an unaccepted row, so a `tenantId`-only belonging check counted both. (cr-0163 fixed three copies of a
+  `tenantId`-only owner gate that were functionally a belonging check — a privilege escalation.)
 - **Per scope kind:**
   - **Server role** is a single global column per user (`veyq_user.server_role`, `SERVER_OWNER` / `MEMBER`) — a user
     belongs to exactly one server. **Multiple `SERVER_OWNER`s are allowed** (subject to the guard above); a flow
