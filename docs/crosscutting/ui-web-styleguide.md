@@ -103,6 +103,10 @@ or a one-off `1rem` label sitting in them.
 - **Forms:** `.veyq-form`, `.veyq-form-grid`, `.veyq-form-copy`; full-width inputs; concise labels;
   muted helper text that explains *consequences*, not the label.
 - **Empty/loading:** `.veyq-empty`, `.veyq-loading` — concise and action-oriented, not marketing copy.
+- **Where a component lives:** one used by two features, or by a feature and the app shell, lives in
+  `shared/ui/`; `components/app/` is the shell alone. `shared/` imports no feature. The one known inversion,
+  `SecretKeyField` importing the Emergency Kit's read half out of `features/account/`, is left because undoing it
+  moves the kit import and its jsQR dependency, not a file — it is not a precedent.
 
 ## Buttons & dialog actions
 

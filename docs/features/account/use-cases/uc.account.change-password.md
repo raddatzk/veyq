@@ -17,8 +17,9 @@
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — this flow mints a cold
   credential, so it is gated exactly as rotation is).
 - **Postconditions (success):** the account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**;
-  every `DEVICE` and `DEVICE_KEY` wrap is gone and every *other* session is revoked (never the caller's own —
-  see Quality notes). The **Master Key, identity keypair, scope keys and all content are unchanged** — nothing
+  every wrap but `PASSWORD` and `RECOVERY` is gone (today every `DEVICE` and `DEVICE_KEY`; the survivor rule is
+  [en.account.key-model](../enablers/en.account.key-model.md)'s) and every *other* session is revoked (never the
+  caller's own — see Quality notes). The **Master Key, identity keypair, scope keys and all content are unchanged** — nothing
   is re-encrypted. The Emergency Kit is **still valid**, and that is now something the flow *checked* rather
   than something it assumed about what the actor typed: the new floor is built under the very Secret Key that
   just opened the old one. The session is marked **cold** — it has proven password + Secret Key, whatever wrap
@@ -49,7 +50,7 @@
 8. The server verifies the attestation against the account's **current** `auth_public_key` and the proof
    signature against the account's registered proof public key. If both verify, it applies, in a single
    transaction: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every
-   `DEVICE` and `DEVICE_KEY` wrap, and revoke every session **except the one the request arrived on**.
+   wrap but `PASSWORD` and `RECOVERY`, and revoke every session **except the one the request arrived on**.
 9. The actor's current device asks for the Secret Key once more (step 2 already did this) and may **re-enrol**
    its own `DEVICE`/`DEVICE_KEY` wrap in a follow-up call to the existing
    [uc.account.trust-device](uc.account.trust-device.md) endpoint, so it is not left signed out of its own

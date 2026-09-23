@@ -47,7 +47,8 @@ four places and one of them trusts the raw header. After this CR:
   inside the `ScopesHandler` methods whose signatures this CR changes. #152 (Admin surface: `SetupResource`,
   `TenantHandler`), #175 (`LoginHandler`), #172 (`RecoveryStore.applyReset`), #171 (`RecoverySliceTest`'s
   `seedUser`) and #173 (`shared/tenant` → `features` imports) overlap only textually. Whichever lands second
-  rebases. Add no *new* `shared → features` import. If #173 landed first, use its query-only `TenantEntity`.
+  rebases. Add no *new* `shared → features` import. If #173 (`cr-shared-imports-no-features`) landed first,
+  `TenantEntity` itself lives in `shared/tenant` — moved, not mapped twice.
 
 ## Decisions
 

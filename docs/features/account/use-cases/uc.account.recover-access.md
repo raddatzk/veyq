@@ -17,9 +17,10 @@
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). The actor holds the
   **Secret Key**. No session is required, and none helps.
 - **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
-  `DEVICE` and `DEVICE_KEY` wrap is gone and every session is revoked; the recovery token is spent. The **Master
-  Key, identity keypair, scope keys and all content are unchanged** — nothing was re-encrypted. The Emergency Kit
-  is **still valid**: the Secret Key did not change.
+  wrap but `PASSWORD` and `RECOVERY` is gone (today every `DEVICE` and `DEVICE_KEY`; the survivor rule is
+  [en.account.key-model](../enablers/en.account.key-model.md)'s) and every session is revoked; the recovery token
+  is spent. The **Master Key, identity keypair, scope keys and all content are unchanged** — nothing was
+  re-encrypted. The Emergency Kit is **still valid**: the Secret Key did not change.
 
 ## Main flow
 
@@ -52,7 +53,7 @@
    signature, the new wrap and the new auth public key in **one request**.
 10. The server verifies the signature against the account's registered proof public key. If it verifies, the
     server applies, **in a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`,
-    delete every `DEVICE` and `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
+    delete every wrap but `PASSWORD` and `RECOVERY`, revoke all sessions, and mark the token spent.
 11. The actor signs in with the new password. Because all device trust was dropped, this device asks for the
     Secret Key once more and then re-enrols ([uc.account.trust-device](uc.account.trust-device.md)).
 

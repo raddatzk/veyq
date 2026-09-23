@@ -158,6 +158,13 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 - **Slice tests** boot a fresh in-memory DB per suite. Cover **positive and negative** paths where
   behavior has real success/failure branches; prefer risk-based coverage over percentages.
 - **Conformance tests** pin cross-stack crypto (§9).
+- **Test data comes from one fixture per surface, not a local copy.** In the backend a single test-fixtures
+  object seeds users, tenants, member scopes and nodes and mints the `Bearer` header; a test keeps a local helper
+  only for data no other test needs. Measured cost of the copies it replaces: 50 `seedUser`s, so a new
+  `NOT NULL` column on `veyq_user` touched 60 files. In `web/` a test mounts with the **real** i18n catalog, where
+  a key the catalog lacks fails the test, and fakes an HTTP failure with the one shared `httpError`. Hand-written
+  stub catalogs kept 13 keys the app no longer has passing green, and ten local `httpError`s came in four shapes,
+  two of which cannot carry an error code.
 - The **coverage validators** (Python; added with the first feature slice, per start-light) check the
   trust chain: every behavior maps to its use-case coverage.
 
