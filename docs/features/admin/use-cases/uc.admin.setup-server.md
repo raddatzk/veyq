@@ -20,7 +20,7 @@
    No instance name either: the instance is identified by its host — see Quality notes.)
 3. The client generates, **cold** (no invite, no temp-wrap — this is the root of the owner's own key
    tree): the **identity keypair**, the **Master Key** with one wrap per chosen unlock method, and the
-   **Emergency Kit** (the Secret Key), then forces the owner to confirm they saved the kit.
+   **Emergency Kit** (email + Secret Key — its format is [en.account.key-model § The Emergency Kit](../../account/enablers/en.account.key-model.md#the-emergency-kit)), then forces the owner to confirm they saved the kit.
 4. The client uploads the **identity public key + wrapped blobs + a password-derived auth *public* key**
    (operator-blind password auth, [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md):
    the server never sees the password and stores no credential/verifier — login is challenge-response);
@@ -37,7 +37,7 @@ sequenceDiagram
   C->>S: GET setup status
   S-->>C: setupRequired = true
   O->>C: auth method, email
-  C->>C: generate cold —<br>identity keypair, Master Key + wraps,<br>Emergency Kit (the Secret Key)
+  C->>C: generate cold —<br>identity keypair, Master Key + wraps,<br>Emergency Kit (email + Secret Key)
   C->>O: show Emergency Kit
   O->>C: confirm saved
   C->>S: POST setup/owner<br>{ email, identityPublicKey, wrapped blobs,<br>authPublicKey, suiteId }
@@ -98,14 +98,15 @@ stateDiagram-v2
 
 **EN —** When you set up your own veyq server, the very first account — yours — is created with
 end-to-end encryption from the start. Your keys are generated **on your device**, never on the server,
-and during setup you save an **Emergency Kit** (your Secret Key). From that first moment, content can
-only be read with your keys — not by the server, not even by you acting as the operator. Setup runs **once**: after your account exists, the setup page closes for good.
+and during setup you save an **Emergency Kit** (your email and your Secret Key). From that first
+moment, content can only be read with your keys — not by the server, not even by you acting as the
+operator. Setup runs **once**: after your account exists, the setup page closes for good.
 
 **DE —** Wenn du deinen eigenen veyq-Server einrichtest, wird der allererste Account — deiner — von
 Anfang an Ende-zu-Ende-verschlüsselt angelegt. Deine Schlüssel entstehen **auf deinem Gerät**, nie auf
-dem Server, und beim Einrichten sicherst du ein **Notfall-Kit** (deinen Secret Key). Ab diesem Moment
-lassen sich Inhalte nur mit deinen Schlüsseln lesen — nicht durch den Server und auch nicht durch dich als
-Betreiber. Die Einrichtung läuft **einmal**: Sobald dein
+dem Server, und beim Einrichten sicherst du ein **Notfall-Kit** (deine E-Mail-Adresse und
+deinen Secret Key). Ab diesem Moment lassen sich Inhalte nur mit deinen Schlüsseln lesen — nicht
+durch den Server und auch nicht durch dich als Betreiber. Die Einrichtung läuft **einmal**: Sobald dein
 Account existiert, schließt sich die Setup-Seite endgültig.
 
 ## Related

@@ -159,6 +159,25 @@ content stays intact.
 no password — means the content is gone. The same property that blinds the operator stops
 it rescuing data.
 
+## The Emergency Kit
+
+The kit is the Secret Key made portable, and it is a **format with two writers and one reader**: `web` writes
+it when an account is born by joining a tenant, `admin-web` when the Server Owner's account is born at setup
+([ADR 0065](../../../decisions/0065-admin-ui-cli-separate-service.md)), and only `web` reads it, at unlock.
+Two round-trip tests in two packages cannot keep a writer and a reader in agreement, so the codec exists
+**once**, in `@veyq/crypto`, pinned by a fixed-literal vector.
+
+- **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of
+  `{"v":1,"email":…,"sk":…}` — `sk` being the Secret Key's 32 bytes as padded standard base64. `v` is the
+  version. A reader rejects any other `v`, an `email` that is not a string, and an `sk` that is not 32 bytes.
+  The password is never in it.
+- **It travels three ways, and each is part of the format:** as the **QR code**; as **printed** email +
+  Secret Key for typing; and as a literal string in the PDF's **document information** (`keywords`), because
+  a file import finds the kit by scanning the file's bytes for `veyqkit:`. The document information is not a
+  compressed stream, so PDF compression leaves it intact. A writer that stops putting the token there breaks
+  every import of the kits it writes, while its QR codes keep scanning.
+- **The printed text follows the writer's UI language; the token never does.**
+
 ## Registration (account creation) — high level
 
 On registration the **device** generates the identity keypair, the **auth keypair** (derived from the

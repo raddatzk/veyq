@@ -313,7 +313,7 @@ The words this project uses precisely. Where a term has a tempting synonym, the 
 | **Wrap** | any key sealed under another key. The Master Key has one wrap per unlock method; a share has its own. |
 | **Master Key** | the account root (32 bytes), in client memory only, opened by any unlock method's KEK. |
 | **Secret Key** | the user's high-entropy second factor, combined with the password to derive the unlock KEK. **Never reaches the server.** Lives in the Emergency Kit. |
-| **Emergency Kit** | the Secret Key, saved by the user at setup. With the password it opens the account on a new device; alone, after a mailed recovery link, it is the only path back after a forgotten password (there is no separate recovery code). |
+| **Emergency Kit** | the email + Secret Key, saved when the account is born (server setup or joining a tenant). With the password it opens the account on a new device; alone, after a mailed recovery link, it is the only path back after a forgotten password (there is no separate recovery code). Its format: [en.account.key-model](../features/account/enablers/en.account.key-model.md#the-emergency-kit). |
 | **Epoch** | a generation of a scope's content key. Removing a member rotates the scope forward one epoch. |
 | **K_SC / K_mem / K_blob** | scope content key / per-Memory key / per-media key. Each random, each wrapped by the level above — that is what makes every level an independent sharing grain. |
 | **Operator-blind** | the server stores and serves only ciphertext + opaque metadata, and *cannot* do otherwise — it holds no content key. The operator is modelled as the adversary. |
