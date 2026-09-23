@@ -45,11 +45,15 @@ interface BlobStore {
      * 0013 §4's no-CORS property on a server with more than one domain. `null` means the request resolved to no
      * tenant — the bootstrap domain, or a request that legitimately has none — and signs against the configured
      * default.
+     *
+     * The URL signs `content-type: application/octet-stream`, so the store refuses any other type (ADR 0013 §6).
      */
     fun presignPut(key: String, domain: String? = null): String?
 
     /** A short-TTL presigned GET URL for one chunk object, or null when the store cannot presign. [domain] as in
-     *  [presignPut]: the resolved tenant's own domain, or null for the bootstrap default. */
+     *  [presignPut]: the resolved tenant's own domain, or null for the bootstrap default. The URL signs the
+     *  response overrides `application/octet-stream` + `attachment`, so nothing it serves is renderable (ADR 0013
+     *  §6). */
     fun presignGet(key: String, domain: String? = null): String?
 
     /** Stored object size in bytes, or null if the object is absent (or the store has no transport). */
@@ -161,11 +165,21 @@ class S3BlobStore(
 
     private val presigners = ConcurrentHashMap<String, S3Presigner>()
 
+    /*
+     * ADR 0013 §6 — nothing the store serves is renderable, and THE SIGNER is what guarantees it: not the store,
+     * which on `type: s3` veyq never configures (ADR 0067), and not the proxy, which the Kubernetes target does not
+     * have in front of its store. Any member or share contributor can PUT plaintext through their own URL, and
+     * where the store shares the app's origin a `text/html` object is a page on it. So the PUT signs the one
+     * type the store may keep, and the GET signs the response overrides — which also neutralise an object stored
+     * before this rule. Both are inside the signature: measured against Garage v2.0.0, a PUT sent with another
+     * type and a GET with an override stripped are each a 403, so a URL holder can change neither.
+     */
+
     override fun presignPut(key: String, domain: String?): String {
         val presigned = presignerFor(domain).presignPutObject(
             PutObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(presignTtlSeconds.toLong()))
-                .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).build())
+                .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).contentType(INERT_TYPE).build())
                 .build(),
         )
         return presigned.url().toString()
@@ -175,7 +189,12 @@ class S3BlobStore(
         val presigned = presignerFor(domain).presignGetObject(
             GetObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(presignTtlSeconds.toLong()))
-                .getObjectRequest(GetObjectRequest.builder().bucket(bucket).key(key).build())
+                .getObjectRequest(
+                    GetObjectRequest.builder().bucket(bucket).key(key)
+                        .responseContentType(INERT_TYPE)
+                        .responseContentDisposition(INERT_DISPOSITION)
+                        .build(),
+                )
                 .build(),
         )
         return presigned.url().toString()
@@ -242,6 +261,12 @@ class S3BlobStore(
         keys.filter { key ->
             runCatching { s3.deleteObject(DeleteObjectRequest.builder().bucket(bucket).key(key).build()) }.isFailure
         }
+
+    private companion object {
+        /** The only type a presigned PUT lets the store keep and the type every presigned GET is served as. */
+        const val INERT_TYPE = "application/octet-stream"
+        const val INERT_DISPOSITION = "attachment"
+    }
 }
 
 /**

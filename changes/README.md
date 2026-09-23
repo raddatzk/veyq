@@ -886,6 +886,22 @@ is the one you will trust later. Note what made the gap findable at all: the CR 
 test, so there was something concrete to try. A CR that says only "test that it stays fixed" leaves nothing to
 falsify, and the inert control is never discovered.
 
+### Each layer of a defence in depth is tested with the other layers held off
+
+**Layers that overlap mask each other's tests, and the mask is the fix working.** `cr-inert-store-responses`
+built three layers for one property — a signed PUT type, a signed GET override, a proxy header — and each one,
+left on, makes the next one's assertion true by accident. Once every PUT is pinned, every new object is *stored*
+as `application/octet-stream`, so an e2e asserting the *served* type passes without the GET override at all:
+measured, dropping `responseContentType` from the signer left the freshly uploaded chunk green and reddened only
+a chunk the test had first planted as `text/html` through the old host-only signer. The proxy layer was measured
+the same way — an unsigned GET of that planted object, so the signer could not answer for the headers, with the
+same object read direct from the store as the control — and the playback shim's type gate is asserted in the SW
+itself, not only through the page that already filters.
+
+**So for every layer, recreate the state the other layers prevent** — there, an object stored before the rule —
+and bite each layer alone. A suite that only tests the stack whole proves the property holds while *any* layer
+does, which is exactly what a later cleanup of "the redundant one" will spend without a red.
+
 ### A "nothing moved" bite names the test that goes RED when it moves
 
 **The default's tests and the default's *detector* are usually not the same tests**, and a bite that lists the

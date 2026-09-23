@@ -871,11 +871,9 @@ export function hasDerivatives(item: MediaItem): boolean {
   return item.derivatives.length > 0
 }
 
-/** Whether a sealed `mediaType` names a video — the persisted signal for the tile play badge + the lightbox
- *  `<video>` branch (#104/#105). Pure; the caller unseals the tier ([unsealMeta]) and passes `meta.mediaType`. */
-export function isVideoMediaType(mediaType: string | undefined): boolean {
-  return typeof mediaType === 'string' && mediaType.startsWith('video/')
-}
+/** Whether a sealed `mediaType` names a video (#104/#105) — defined beside the playback shim, which applies the
+ *  same predicate. Pure; the caller unseals the tier ([unsealMeta]) and passes `meta.mediaType`. */
+export { isVideoMediaType } from '../../sw/protocol'
 
 /** Grid tier (small): the thumbnail derivative, or the original when a media has no derivatives. */
 export function gridRef(item: MediaItem): BlobRef {
@@ -1025,8 +1023,12 @@ function byIndex(urls: PresignedUrl[]): string[] {
   return [...urls].sort((a, b) => a.index - b.index).map((u) => u.url)
 }
 
+/** The one `Content-Type` a presigned PUT signs, so the store refuses any other (ADR 0013 §6). The uploader no
+ *  longer chooses the stored type: whatever the store later serves is never renderable. */
+const PUT_CONTENT_TYPE = 'application/octet-stream'
+
 async function putChunk(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<void> {
-  const res = await fetch(url, { method: 'PUT', body: frame as BodyInit, signal })
+  const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
   if (!res.ok) throw new Error(`chunk_put_failed:${res.status}`)
 }
 

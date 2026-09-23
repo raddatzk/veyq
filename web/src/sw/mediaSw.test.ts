@@ -48,6 +48,10 @@ function buildSession(chunks: Uint8Array[], contentType = 'video/mp4') {
 
 const drain = async (res: Response) => new Uint8Array(await res.arrayBuffer())
 
+/** A page load of `url`. The Fetch spec forbids constructing a `mode: 'navigate'` Request (it throws), so the SW's
+ *  FetchEvent.request is modelled by the three fields handleFetch reads. */
+const navigation = (url: string) => ({ url, mode: 'navigate', headers: new Headers() }) as unknown as Request
+
 describe('PlaintextCache — bounded in-memory LRU (never persisted)', () => {
   it('evicts the least-recently-used chunk when over the byte cap', () => {
     const cache = new PlaintextCache(250) // room for ~2 chunks of 100
@@ -174,6 +178,47 @@ describe('handleFetch — routing', () => {
     expect(res?.status).toBe(206)
     expect(Array.from(await drain(res!))).toEqual([9, 8])
   })
+
+  // A <video> fetch is the shim's only caller, so a page load of a handle ("open video in new tab") is by
+  // definition not one — and served, it would be decrypted bytes as a document on the app origin (ADR 0047 § The
+  // shim serves inert responses). The control is the same live handle fetched as a subresource, which must serve.
+  it('404s a navigation to a LIVE handle, while the same handle still serves a subresource fetch', async () => {
+    const reg = makeRegistry()
+    const { session } = buildSession([new Uint8Array([9, 8, 7])], 'video/mp4')
+    reg.register('h1', session)
+    const res = handleFetch(reg, origin, navigation(`${origin}/__media/h1`))
+    expect(res?.status).toBe(404)
+    expect(res?.headers.get('Content-Type')).toBeNull() // nothing of the medium's type leaks into the refusal
+    const control = handleFetch(reg, origin, new Request(`${origin}/__media/h1`))
+    expect(control?.status).toBe(200)
+  })
+
+  it('leaves a navigation outside /__media/ to the network', () => {
+    const reg = makeRegistry()
+    expect(handleFetch(reg, origin, navigation(`${origin}/memories`))).toBeNull()
+  })
+})
+
+describe('every shim response is inert (ADR 0047 / ADR 0013 §6)', () => {
+  const origin = 'https://veyq.localhost'
+  const inert = (res: Response | null) => {
+    expect(res).not.toBeNull()
+    expect(res!.headers.get('X-Content-Type-Options')).toBe('nosniff')
+    expect(res!.headers.get('Content-Security-Policy')).toBe("sandbox; default-src 'none'")
+  }
+  const live = () => {
+    const reg = makeRegistry()
+    reg.register('h1', buildSession([new Uint8Array([9, 8, 7])]).session)
+    return reg
+  }
+
+  it('on a 200', () => inert(handleFetch(live(), origin, new Request(`${origin}/__media/h1`))))
+  it('on a 206', () =>
+    inert(handleFetch(live(), origin, new Request(`${origin}/__media/h1`, { headers: { Range: 'bytes=0-1' } }))))
+  it('on a 416', () =>
+    inert(handleFetch(live(), origin, new Request(`${origin}/__media/h1`, { headers: { Range: 'bytes=99-100' } }))))
+  it('on an unknown handle', () => inert(handleFetch(makeRegistry(), origin, new Request(`${origin}/__media/nope`))))
+  it('on a refused navigation', () => inert(handleFetch(live(), origin, navigation(`${origin}/__media/h1`))))
 })
 
 describe('handleMessage — handshake / register / revoke', () => {
@@ -187,9 +232,23 @@ describe('handleMessage — handshake / register / revoke', () => {
   it('registers a playback from a port, then revokes it', () => {
     const reg = makeRegistry()
     const { a } = portPair()
-    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28 }, [a])
+    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28, mediaType: 'video/mp4' }, [a])
     expect(reg.get('h')).toBeDefined()
     handleMessage(reg, { type: 'veyq-revoke-playback', handle: 'h' }, [])
+    expect(reg.get('h')).toBeUndefined()
+  })
+
+  // The shim serves the registered mediaType as Content-Type, and that value was sealed by the uploader. Anything
+  // but one well-formed `video/<subtype>` never gets a handle — here, independently of the page's own gate.
+  it.each([
+    ['a listed type', 'video/mp4, text/html'],
+    ['a parameter', 'video/mp4; codecs="avc1"'],
+    ['a non-video type', 'text/html'],
+    ['no type at all', undefined],
+  ])('refuses to register %s', (_, mediaType) => {
+    const reg = makeRegistry()
+    const { a } = portPair()
+    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28, mediaType }, [a])
     expect(reg.get('h')).toBeUndefined()
   })
 

@@ -43,6 +43,7 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
 - **Ordering with `cr-inert-store-responses`.** Its phase 4 *defines* the store-header middleware as labels on
   Garage and references it from tenant routers `@docker`. That cannot survive this CR. Whichever of the two
   lands **second** makes the adjustment:
+  - **Resolved 2026-09-23: `cr-inert-store-responses` landed first**, so the *this CR second* case below applies. Its middleware is `veyq-blobs-inert` (`contentTypeNosniff` + CSP `sandbox; default-src 'none'`), defined as Garage labels in `infra/docker-compose.prod.yml` and in the dev mirror `infra/docker-compose.yml`, and referenced as `veyq-blobs-inert@docker` by every tenant blobs router `TraefikFileIngressSink` renders (locator: `grep -rn 'veyq-blobs-inert' infra backend/src`).
   - **This CR second:** move the middleware definition into the sink's render, attach it to every blobs router
     (the bootstrap one included), and delete the Garage labels. Also fix the dev mirror (phase 3 here).
   - **That CR second:** its phase 4 becomes a sink change only. Define the middleware once in the rendered

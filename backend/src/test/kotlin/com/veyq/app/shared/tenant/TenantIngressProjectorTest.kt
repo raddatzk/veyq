@@ -114,6 +114,24 @@ class TenantIngressProjectorTest {
     }
 
     @Test
+    fun aTenantsBlobsRouterMarksStoreResponsesInert() {
+        // ADR 0013 §6: where the store shares the app's origin — every projected tenant domain, not only the
+        // bootstrap one — the proxy sets `nosniff` + a `sandbox` CSP on store responses, a belt under the signer's
+        // overrides. The middleware is DEFINED once, as labels on the compose file's store service, and referenced
+        // here across providers. Asserted inside the blobs router's own block; the control is that block's own
+        // rule, which proves the slice is the blobs router and not the whole file.
+        val domain = seedTenant(TenantEntity.ACTIVE)
+
+        projector.regenerate()
+
+        val slug = "veyq-tenant-${domain.replace('.', '-')}"
+        val blobs = Files.readString(Path.of(CONFIG_PATH))
+            .substringAfter("    $slug-blobs:\n").substringBefore("\n    veyq-tenant-")
+        assertTrue(blobs.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "control: the blobs router's block")
+        assertTrue(blobs.contains("middlewares: [veyq-blobs-inert@docker]"), "the store-response middleware: $blobs")
+    }
+
+    @Test
     fun regenerateIsAFullRewriteNotAPatch() {
         // The invariant the whole design rests on (ADR 0063: "never an incremental patch"). A tenant that is gone
         // from the table must be gone from the file after any later regenerate — including one triggered by a

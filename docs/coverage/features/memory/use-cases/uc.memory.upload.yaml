@@ -46,6 +46,33 @@ acceptanceCriteria:
           - UploadSessionPurgeSliceTest.purgeLeavesBothHalvesOfASessionInsideTheRetentionWindow
           - UploadSessionPurgeSliceTest.purgeAlsoReclaimsTheRowLeftBehindByABudgetRejection
           - UploadSessionPurgeSliceTest.retentionDefaultsToTheMeasuredPresignBound
+  - id: store-responses-are-inert
+    text: >-
+      The store never serves an object as a renderable type, and refuses a PUT of any type but the pinned one
+      (ADR 0013 §6). The server cannot tell ciphertext from a planted page, so the SIGNER guarantees it on every
+      store, including one veyq never provisions: every presigned PUT signs `content-type:
+      application/octet-stream` — the client sends exactly that, and the store refuses anything else — and every
+      presigned GET signs `response-content-type=application/octet-stream` + `response-content-disposition=
+      attachment`, which also neutralises an object stored before the rule and cannot be stripped from the URL.
+      Where the store shares the app's origin (compose), the proxy also marks store responses `nosniff` + a
+      `sandbox` CSP, on the bootstrap route and on every projected tenant's blobs route.
+    coverage:
+      backend:
+        unit:
+          - S3BlobStorePresigningTest.everyPresignedGetSignsTheInertResponseOverrides
+          - S3BlobStorePresigningTest.everyPresignedPutSignsTheContentTypeHeader
+        integration: [TenantIngressProjectorTest.aTenantsBlobsRouterMarksStoreResponsesInert]
+      web:
+        unit: [src/features/memory/media.test.ts]
+    gaps:
+      - surface: backend
+        reason: >
+          The store half — a `text/html` PUT refused with 403, every GET served `application/octet-stream` +
+          `attachment` (a planted `text/html` object included), a GET with its override stripped refused — is
+          measured only by `BlobBatchE2ETest`, which needs a real Garage and runs when `VEYQ_S3_E2E=1`. No CI job
+          sets it, so it makes no coverage claim (ADR 0040) and is named here instead. The unit refs prove what is
+          SIGNED; that the store honours it is that opt-in run's evidence. The compose labels themselves are
+          measured by hand through the dev Traefik, not by any test.
   - id: transient-retry
     text: A transient upload failure is retried once automatically; a hard failure is marked failed and retried only on explicit request.
     coverage:
