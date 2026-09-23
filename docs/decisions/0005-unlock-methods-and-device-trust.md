@@ -40,9 +40,13 @@ Key, ideally passwordless on trusted devices); **reload ≠ session end**.
      hardware-bound. Wraps are **combinable** on the same Master Key.
 
 5. **"Non-extractable ≈ HSM *interface*, not HSM *grade*."** A non-extractable WebCrypto key is a
-   **software** boundary (browser-enforced) that beats XSS *exfiltration*, not a hardware root. Nothing in
-   the browser gives one; a passkey's authenticator would. This is stated so the guarantee is never
-   overclaimed — the wrap is as strong as the browser's key store, and that is a software promise.
+   **software** boundary (browser-enforced), not a hardware root. Nothing in the browser gives one; a passkey's
+   authenticator would. What it stops is a script **exporting the key's bytes**, and nothing more. It does not
+   stop a script copying what the key *computes*: where that output is fixed, as the DEVICE factor is (an HMAC
+   over a constant), one run of an injected script copies a permanent stand-in for the key, and from then on
+   the password's Argon2id cost is the only thing between that copy and the wrap. That is why the DEVICE wrap
+   keeps the password as a real factor. This is stated so the guarantee is never overclaimed — the wrap is as
+   strong as the browser's key store and the password, and the key store is a software promise.
 
 6. **Re-lock policy — two triggers, no periodic expiry.** The unlocked Master Key is cached for the
    session in a **worker** (survives reload, non-extractable, dies on real close). Re-lock on **(a) idle

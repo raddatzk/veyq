@@ -7,7 +7,7 @@
 >
 > Plain-language companion for end users: [wiki: Is my data safe?](../../wiki/en/is-my-data-safe.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
-> [scopes & tenancy model](scopes-and-tenancy.md), and the crypto wire-format spec (refined separately).
+> [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)).
 
 This document is the **target model**. What ships in the first build is tracked via the inbox and
 change-requests, not here.
@@ -134,8 +134,8 @@ personal memory that is publicly shared becomes "shared" for these purposes.
 ## Key hierarchy (envelope encryption)
 
 Content is protected by layered envelopes so grants are cheap and shares are least-privilege. The
-byte-level detail lives in the crypto wire-format spec; account-level detail (unlock methods, recovery)
-in the account/key model. The shape:
+byte-level detail lives in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)); account-level detail (unlock methods, recovery) in the account/key
+model. The shape:
 
 ```mermaid
 ---
@@ -319,8 +319,11 @@ same property that stops the operator reading data stops it rescuing data. Indep
 
 1. **Another enrolled device** still holds the keys.
 2. **Emergency Kit (Secret Key) + master password** on a fresh device.
-3. **Recovery code** — high-entropy, system-generated, single-use — independently unwraps the identity
-   private key (the only path that survives a forgotten password with no device).
+3. **Emergency Kit alone, after a mailed link** — a forgotten password with no device. The Secret Key opens the
+   account's `RECOVERY` wrap, which the server releases only against a one-time token mailed to the account
+   address ([uc.account.recover-access](../features/account/use-cases/uc.account.recover-access.md),
+   [ADR 0054](../decisions/0054-password-recovery-two-factor-release.md)). There is no separate recovery code:
+   the Secret Key *is* the recovery factor.
 
 Losing **all** paths is the documented, accepted residual loss.
 
