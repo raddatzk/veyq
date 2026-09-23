@@ -1001,7 +1001,12 @@ components:
         url:
           x-veyq-visibility: token
           type: string
-          description: A short-TTL, single-object, single-method presigned URL (GET for viewer downloads, PUT for contributor uploads) against the object store.
+          description: >
+            A short-TTL, single-object, single-method presigned URL (GET for viewer downloads, PUT for contributor
+            uploads) against the object store. A `PUT` must carry exactly `Content-Type: application/octet-stream`:
+            the header is signed, so the store refuses any other type. A `GET` is served as `application/octet-stream`
+            with `Content-Disposition: attachment`, whatever the object was stored as ([ADR 0013
+            §6](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#6-store-responses-are-inert--enforced-by-the-signer)).
           maxLength: 4096
           example: https://store.example.com/veyq/9b1d4a6e/0?X-Amz-Signature=...
 
