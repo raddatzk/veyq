@@ -27,8 +27,10 @@
    capture missed (ADR 0056 §2).
 3. The operator **mirrors the bucket** — the object namespace as the store serves it over S3, not the store's
    on-disk directories (ADR 0056 §3).
-4. The operator **copies the config-secret key file**. This is the leg that is forgotten, and the only one whose
-   absence lets a restore succeed and still be broken.
+4. The operator **copies the config-secret key file** to a destination of its own, **never into the capture
+   beside the dump**: together the two open every tenant's SMTP password (ADR 0056 §1). This is the leg that is
+   forgotten, and the only one whose absence lets a restore succeed and still be broken. Everything the capture
+   writes is readable by the operator alone.
 5. The operator **starts the application**. The downtime was the capture, and nothing else.
 
 **Restore — onto an instance that holds nothing.**
@@ -40,8 +42,8 @@
 8. The operator **recreates the store's configuration** — bucket, access key, layout. This is not restored
    because it was never state (ADR 0056 §4 of Context); the bundled store's init script does it idempotently.
 9. The operator **pushes the mirrored objects back** into that bucket.
-10. The operator **puts the config-secret key file** where the application expects it, on storage that survives
-    a container being recreated.
+10. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
+    it, on storage that survives a container being recreated.
 11. The operator **starts the application**.
 
 **Verify — the step that separates a restore from a hope.**
@@ -62,7 +64,9 @@
   `configSecretState: MISMATCH`. Member invites and password resets refuse with `503 mail_unavailable`
   ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md)). Content is unaffected — the
   key seals operator config, never content. Two ways out: restore the key file, or have each tenant owner
-  re-enter their SMTP password, which re-seals it under the new key.
+  re-enter their SMTP password, which re-seals it under the new key. A restore reaches this state only
+  knowingly: when the capture records its key as kept separately and none is supplied, the restore refuses
+  unless the operator explicitly accepts going on without it.
 - **A3 — The target serves a different domain.** Not supported in V1 (ADR 0056 §4). The instance comes up
   unreachable under the new name, and any outstanding invitation or recovery link still points at the old one.
   Restore onto the same domain, or treat it as a new instance.
@@ -98,10 +102,12 @@
   than unlikely, which is why there is no ordering rule to remember and no window to wait out. A procedure whose
   correctness depends on the operator recalling which artifact to capture first is a procedure that will
   eventually be run in the wrong order.
-- **The backup is ciphertext, end to end.** Every leg of it — rows, objects, and the sealed operator config — is
-  material the operator already could not read on the running instance. Backing up therefore grants no new
-  reading power, and neither does restoring. This is the operator-blindness invariant surviving contact with
-  the most privileged routine an operator has.
+- **Content is ciphertext, end to end.** Rows and objects are material the operator already could not read on
+  the running instance, so backing up grants no new power to read content, and neither does restoring. This is
+  the operator-blindness invariant surviving contact with the most privileged routine an operator has. The one
+  secret a backup *can* open is operator config: the dump plus the key yields the tenants' SMTP passwords.
+  That is why the two are never captured into one place, and why a capture is encrypted before it leaves the
+  host.
 - **A restore is proven by opening something, not by starting cleanly.** Two of the three legs produce an
   instance that boots, serves pages and answers requests while being incomplete. Only decrypting a Memory that
   has media touches all three.

@@ -21,7 +21,7 @@ Four properties of the built system constrain the answer.
 
 **1. There are three durable locations, and the third is a file on the app's filesystem.** The database and the
 object store are the two anyone names. The third is the config-secret key: [ADR 0050](0050-operator-config-secret-encryption.md)
-§ Amendment made the server generate and manage it as a `0600` file, defaulting to the process working
+makes the server generate and manage it as a `0600` file, defaulting to the process working
 directory, and it is the KEK under which every per-tenant SMTP password is sealed. Its loss is detected — the
 instance row carries an HKDF fingerprint — and detection is the whole of the remedy: a server that boots
 without its key reports `configSecretState: MISMATCH` and **refuses member invites and password resets**. A
@@ -56,6 +56,16 @@ idempotently by the **backend itself**, on every start, from the declared store 
 **contents**, meaning the objects and not the store's on-disk representation; (c) the **config-secret key
 file**. A procedure that captures fewer than three does not produce a restorable instance, and the third is
 named first in the runbook precisely because it is the one that gets forgotten.
+
+**Leg (c) is captured, but never beside legs (a) and (b).** ADR 0050's key file defends a leaked database
+backup only while the key is somewhere else. A capture directory that holds the dump *and* the key is
+precisely a leaked backup that opens every tenant's SMTP password. So the capture writes the key to a
+destination of its own and refuses one inside the capture directory. Putting it beside the dump takes an
+explicit flag, and the manifest records which of the two was done, or that leg (c) is absent. A restore reads
+the key from wherever the manifest says it went. If it was captured separately and is not supplied, the
+restore **refuses**, unless the operator explicitly accepts a restore without it. Everything a capture writes
+is owner-only (`0700` directories, `0600` files), and the runbook says to encrypt a capture before it leaves
+the host and to keep the key on a different medium.
 
 Three things inside the database are worth naming because losing them is not obviously recoverable: the
 instance salt, which every client folds into its auth salt — an instance that loses it can authenticate nobody;

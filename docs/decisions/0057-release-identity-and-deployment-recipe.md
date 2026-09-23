@@ -57,9 +57,15 @@ of that image** rather than fetching them from a URL. Two things follow that no 
 
 - **The recipe cannot drift from the image it describes.** Today the operator holds a copy taken once, by hand,
   and a version that adds a service or a required variable has no delivery path to them at all.
-- **It inherits the image's signature.** The publish already signs the manifest keylessly with cosign, so a
-  recipe extracted from a verified image is verified material — without inventing a second trust path for the
-  files beside the image.
+- **It inherits the image's signature.** The publish signs the manifest keylessly with cosign, so a recipe
+  extracted from a verified image is verified material, with no second trust path for the files beside the
+  image. **A verification is only as narrow as the identity it pins.** The operator's documented
+  `cosign verify` pins the certificate identity to `container.yml` in `raddatzk/veyq`, on `refs/heads/main`
+  or `refs/heads/release/<major>.x`, with GitHub's OIDC issuer. A regex over the repository accepts a
+  signature from any workflow on any ref. The upstream is written out literally, because a placeholder
+  would verify a fork just as well. The publish accepts exactly those two branch shapes, so what signs and
+  what verifies can agree. Both images are verified, and the recipe is extracted and deployed **by the
+  verified digest**, never by the tag, because a tag can move between the verify and the pull.
 
 **4. There are two version notions and they are never merged.**
 
@@ -82,6 +88,19 @@ of that image** rather than fetching them from a URL. Two things follow that no 
 instance being captured, or it is removed. A field that is structurally always `null` is a claim with nothing
 behind it, and it sits in the one artifact whose entire job is to still be trustworthy a year later.
 
+**6. A release pins what it runs and what it is built from.** A signed recipe that names a mutable tag signs
+nothing about what actually runs. So:
+
+- **At run time**, every third-party image is pinned by digest, written `repo:tag@sha256:…` so a human can
+  still read the version. That covers the compose recipe, the chart values, and the helper images the backup
+  tool starts.
+- **At build time**, the Dockerfile bases are pinned by their multi-arch index digest. The OpenAPI generator
+  JAR is checked against a pinned SHA-256 before it runs, because its npm wrapper checks nothing. The Gradle
+  distribution carries its `distributionSha256Sum`, and the backend's dependency graph is held by Gradle
+  dependency verification. The surfaces run one generator version.
+
+Bumping a pin is part of cutting a release, not something that happens on its own.
+
 ## Consequences
 
 - **A release becomes a deliberate act.** Bumping `VERSION` is the release; the publish is its mechanical
@@ -99,6 +118,13 @@ behind it, and it sits in the one artifact whose entire job is to still be trust
   being extractable from the built image, and that extracted recipe resolving under `docker compose config`.
   The publish path stays an explicitly stated gap, in the same shape as the coverage flip that
   [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) leaves owed.
+- **A pin trades silent patches for explicit ones.** A tag-pinned `mariadb:11.4` picked up patch releases on
+  the next pull; a digest-pinned one does not until the release bumps it. That is the intended trade: the
+  same silent path would deliver a compromised tag just as quietly. The bump needs an updater. Dependabot's
+  image ecosystems are the intended one, and which files each of them reaches is checked when it is
+  configured, not assumed. It is remembered, not measured, that Dependabot does not regenerate Gradle's
+  verification metadata, so a Gradle bump regenerates it by hand. The metadata holds checksums only, trusted
+  on first write, which is the same trust the generator JAR's pin has.
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own
   name, which is circular; it cannot be checked without the network; and its error path republishes silently
   (Context 3). A version that a `git checkout` cannot answer is not an identity.

@@ -23,8 +23,8 @@
    different domain, revokes a pending one, suspends or reactivates one
    ([create-tenant](uc.admin.create-tenant.md), [suspend-tenant](uc.admin.suspend-tenant.md)).
 2. After that change has committed, the backend regenerates the **complete** router description from the
-   `tenant` table — every tenant whose status is not `SUSPENDED`, minus the bootstrap domain, which the
-   deployment already routes statically. It is never a patch of the previous one
+   `tenant` table — every tenant whose status is not `SUSPENDED`. The bootstrap domain is routed from
+   configuration and only once, whichever tenant carries it. It is never a patch of the previous one
    ([ADR 0063](../../../decisions/0063-database-driven-tenant-ingress.md)).
 3. The reverse proxy picks the new description up without restarting and, for each domain that appears,
    obtains a certificate for it — on compose through Traefik's ACME resolver, on Kubernetes through the
@@ -65,8 +65,7 @@ flowchart LR
 
 - **A1 — no proxy to project into:** with no dynamic-config path configured (and the sink left at its
   default) the projection is a clean no-op, not a degraded mode. This is the `%dev`/`%test` default and what
-  lets a self-hoster run the backend directly; the deployment's own static route for the bootstrap domain is
-  unaffected either way. A Kubernetes sink whose TLS mode names a shared `Secret` that is not configured is
+  lets a self-hoster run the backend directly, with a proxy of their own in front if they want one. A Kubernetes sink whose TLS mode names a shared `Secret` that is not configured is
   refused the same way — loud, disabled, and never a failed boot — rather than projecting routes without TLS.
 - **A2 — the request's `Host` names no tenant** (the bootstrap domain, an unknown name, a direct container
   port): it resolves to no tenant and nothing narrows — the request proceeds as it always did, and its
@@ -120,9 +119,10 @@ flowchart LR
 - **A domain is operational metadata, and this changes nothing about that.** Host routing needs it in cleartext
   anyway; the projection and the signer hold no key material and derive none, so operator-blindness is exactly
   where it was.
-- **The bootstrap domain stays statically routed.** It is how an operator reaches `/api/setup` and creates the
-  *first* tenant, before any row exists to project — and it is excluded from the projection, because two
-  routers claiming one `Host` makes the proxy drop both.
+- **The bootstrap domain is routed from configuration, not from a row.** That is how it is reachable before
+  any row exists to project. It is routed **once**: on compose the sink renders it and skips a tenant row that
+  carries the same domain, and on Kubernetes the chart's own `Ingress` routes it and the sink leaves it out.
+  Two routers claiming one `Host` make the proxy drop both.
 - **The same projection serves Kubernetes, and that is why it is a projection.** ADR 0064's `Ingress` objects
   are a second sink for the identical table-derived description, and the chart that deploys it lives in
   `charts/veyq`; the wildcard-subdomain shortcut that would have avoided all of this was rejected precisely

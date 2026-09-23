@@ -149,9 +149,11 @@ Admin API — no new backend surface, no direct DB or KEK access.**
     just a security posture: first-run setup no longer needs `VEYQ_DOMAIN`'s DNS/TLS to be live at all
     (`docker compose up` + `http://localhost:PORT` is enough), where today it does, because setup lives in
     the main SPA served at that domain.
-  - **Own domain.** An optional static `ADMIN_DOMAIN` + router/TLS label, the same fixed-domain pattern
-    `VEYQ_DOMAIN` used before [ADR 0063](0063-database-driven-tenant-ingress.md) — the admin surface is 1:1
-    with the instance, not per-tenant, so it needs none of that ADR's dynamic multi-domain machinery.
+  - **Own domain.** An optional `ADMIN_DOMAIN` with its own router and certificate. The admin surface is 1:1
+    with the instance, not per-tenant, so its route comes from **configuration, never from the tenant
+    table**. On compose the ingress sink renders it next to the bootstrap domain's, because that file is the
+    only thing Traefik routes from ([ADR 0063](0063-database-driven-tenant-ingress.md)). On Kubernetes it is
+    the chart's own `Ingress`.
 - **Trust tier: unchanged, not new.** Per [ADR 0026](0026-client-trust-tiers.md), a self-hosted operator
   running the admin container themselves is the *Self-hosted* tier — moot, operator = user — exactly as the
   embedded admin pages are today. Extraction changes **reachability**, not **trust tier**; no new tier is

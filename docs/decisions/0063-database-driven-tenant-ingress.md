@@ -53,17 +53,26 @@ populated ([ADR 0067](0067-store-provisioning-from-a-declared-type.md) Decision 
 A sink **never throws**: a failed projection must not fail the tenant operation that triggered it, nor the
 startup regenerate.
 
-- **docker-compose sink.** The backend writes a Traefik **file-provider** dynamic config to a volume shared
-  with `traefik` (`--providers.file.directory=... --providers.file.watch=true`); Traefik hot-reloads it, no
-  restart. For every tenant domain **other than** `VEYQ_DOMAIN`, it emits the same router pair the static
-  labels already define for the bootstrap domain — an `app` router and a same-origin, prefix-preserved
-  `garage` blobs router ([ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)) — both referencing
-  the existing `letsencrypt` cert resolver, so ACME issues a per-domain certificate automatically as each
-  router appears.
-- **`VEYQ_DOMAIN` is unchanged.** It stays the static, always-present bootstrap router in
-  `infra/docker-compose.prod.yml`, which is what lets an operator reach `/api/setup` and create the first
-  tenant before any DB-driven router exists. The projector is strictly additive — it only ever adds routers
-  for domains the static config doesn't already cover.
+- **docker-compose sink — and it is the whole of compose's routing.** The backend writes a Traefik
+  **file-provider** dynamic config to a volume shared with `traefik` (`--providers.file.directory=...
+  --providers.file.watch=true`); Traefik hot-reloads it, no restart. **Traefik runs no other provider.** The
+  Docker provider would need the Docker socket, and a `:ro` mount of it restricts nothing about the API, so
+  the internet-facing proxy would hold root on the host. The file therefore carries everything compose
+  routes, in one atomic write by one author:
+  - the **services**: the app, the store and the admin surface, at upstreams the recipe passes as
+    configuration. The recipe still owns the topology; the sink only renders it.
+  - the **router pair** for every routable domain: an `app` router and a same-origin, prefix-preserved blobs
+    router ([ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)). Both reference the `letsencrypt`
+    cert resolver, so ACME issues each domain's certificate as its router appears.
+  - the **admin router**, when the recipe configures an admin domain
+    ([ADR 0065](0065-admin-ui-cli-separate-service.md)).
+  - the **middlewares** those routers reference. They sit in the same file, so a router can never name a
+    middleware Traefik has not loaded yet.
+- **`VEYQ_DOMAIN` is routed from configuration, not from the table.** The sink renders its pair from
+  `veyq.tenant.ingress.bootstrap-domain` on every regenerate, the startup one included, so it is present
+  before any tenant row exists. A tenant row that carries the same domain is **not rendered a second time**,
+  because two routers claiming one `Host` make Traefik drop both. On Kubernetes the chart's own `Ingress`
+  routes the bootstrap domain, so that sink keeps leaving it out.
 - **Presigning becomes per-request, not per-instance.** `S3BlobStore` signs against the **resolved tenant's
   own domain** (the request's `Host`), not a single `veyq.blob-store.public-endpoint` value — the config
   value remains the bootstrap-domain default, used only until a tenant row supplies its own.
@@ -112,6 +121,20 @@ startup regenerate.
     first-deploy path as the defect above. The empty branch now writes only its self-describing header, which
     is what still separates "no tenants" from "the projection never ran". `TenantIngressEmptyProjectionTest`
     holds the shape; Traefik's half is measured in that test's own table, not re-derivable from code.
+- **One author means one failure domain.** A projection that cannot be written now leaves the bootstrap
+  domain unrouted as well, not only the tenants. Two things bound that. The one cause ever observed, an
+  unowned mount point, is held by the guard above. And the admin surface's default mode is a localhost port
+  that bypasses Traefik, so the operator keeps a way in to a stack whose public routing is down.
+- **Rejected — a static routes file shipped with the recipe beside the projection.** Every layout was
+  measured on the pinned v3.6, and none of them works:
+  - a file bind-mounted into the `:ro` projection volume stops the container from starting, because runc
+    cannot create the mount point: `read-only file system`;
+  - the projection mounted as a **subdirectory** of a recipe directory loads at startup but never reloads,
+    because the file provider's watch is not recursive. A tenant created afterwards would stay unrouted until
+    a restart, which is the defect this ADR exists to remove. The same rename in the watched directory
+    itself reloads at once, and that is the control;
+  - the same bind into a **writable** volume runs, but it makes Traefik a second writer of the routing and
+    leaves a root-owned empty stub in the app's volume.
 - **ACME rate limits become an operator-visible concern** once domains can be added faster than by hand;
   `infra/.env.example`'s existing `VEYQ_ACME_CASERVER` staging-server advice is the same mitigation, now
   worth surfacing at tenant-creation time too.
@@ -137,6 +160,8 @@ startup regenerate.
 - [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) (blob transport, same-origin routing — amended
   by this decision).
 - [ADR 0064](0064-kubernetes-helm-deployment-target.md) (the Kubernetes sink).
+- [ADR 0070](0070-runtime-hardening-on-both-targets.md) (what the proxy and the other containers may do,
+  now that no container needs the Docker socket).
 - [ADR 0066](0066-tenant-suspension.md) (the "deactivate" trigger this projector reacts to — a request-level
   lockout, of which routing withdrawal is only a secondary effect).
 - [scopes-and-tenancy.md](../crosscutting/scopes-and-tenancy.md) (tenant carries a domain).
