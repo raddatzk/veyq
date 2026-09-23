@@ -56,6 +56,10 @@ services:
       # Same-origin bucket routing, over TLS. The prefix is NOT stripped and the Host header is preserved:
       # SigV4 signs host+path+query, so either rewrite breaks every presigned URL. The rule is longer than the
       # app's, and the explicit priority says so rather than relying on Traefik's length heuristic.
+      # `veyq-blobs-inert` marks every store response `nosniff` + a `sandbox` CSP (ADR 0013 §6): the store shares
+      # the app's origin here, so an object must never render as a page on it. The signer already pins the served
+      # type; this holds even for a presign path that forgets to. Every tenant's projected blobs router references
+      # it by this name (`TraefikFileIngressSink`), so renaming it means renaming it there.
       - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
       - "traefik.enable=true"
       - "traefik.http.routers.veyq-blobs.rule=Host(`${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}`) && PathPrefix(`/veyq`)"
@@ -64,6 +68,9 @@ services:
       - "traefik.http.routers.veyq-blobs.tls.certresolver=letsencrypt"
       - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
       - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
+      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentTypeNosniff=true"
+      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentSecurityPolicy=sandbox; default-src 'none'"
+      - "traefik.http.routers.veyq-blobs.middlewares=veyq-blobs-inert"
 
   app:
     image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/<owner>/veyq:1.0}

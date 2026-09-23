@@ -28,7 +28,9 @@ class TraefikFileIngressSink(private val target: Path) : TenantIngressSink {
      * byte-for-byte the same backends (and the blobs router's `passHostHeader`) as the bootstrap domain — which
      * is what keeps ADR 0013 §4's same-origin, prefix-preserved blob route true for every tenant, not just the
      * first. The blobs router carries the higher priority for the same reason its label does: its rule is the
-     * longer one and must win over the catch-all app router.
+     * longer one and must win over the catch-all app router. It also carries the store's `veyq-blobs-inert`
+     * headers middleware (ADR 0013 §6), referenced the same way — a name only the compose labels define, so the
+     * two ship together: a router naming a middleware Traefik does not know is rejected, with its route.
      *
      * `internal` rather than private so `TenantIngressEmptyProjectionTest` can call it with an explicit domain
      * list. The alternative — driving the empty case through [TenantIngressProjector.regenerate] — is not
@@ -81,6 +83,7 @@ class TraefikFileIngressSink(private val target: Path) : TenantIngressSink {
             append("      priority: 100\n")
             append("      entryPoints: [websecure]\n")
             append("      service: veyq-blobs@docker\n")
+            append("      middlewares: [veyq-blobs-inert@docker]\n")
             append("      tls:\n")
             append("        certResolver: letsencrypt\n")
         }
