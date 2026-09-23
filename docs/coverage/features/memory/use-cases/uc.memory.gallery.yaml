@@ -166,6 +166,19 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/components/MediaLightbox.test.ts
+  - id: sw-inert-responses
+    text: >-
+      The playback shim serves only a single well-formed video type, refuses page loads, and marks every
+      response inert (ADR 0047 § The shim serves inert responses). The sealed mediaType is the uploader's word
+      and becomes the shim's Content-Type on the app origin, so only ONE `video/<subtype>` essence — no list, no
+      parameters — counts as a video (for the badge, the lightbox branch and the Slice-1 blob type) and gets a
+      playback handle, which the SW refuses independently of the page; a navigation to a handle, live or not,
+      is a 404; and every shim response, refusals included, carries `nosniff` + `sandbox; default-src 'none'`.
+    coverage:
+      web:
+        unit:
+          - src/sw/mediaSw.test.ts
+          - src/features/memory/media.test.ts
   - id: item-marks-are-shared-and-attributed-to-nobody
     text: >
       A member marks an individual medium inside a Memory; the mark is SHARED with the scope, sealed under
