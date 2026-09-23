@@ -123,8 +123,12 @@ each has a canonical home — point there, don't try to build past it:
 1. **Oracle correctness** — a guard never proves a test's assertion proves anything (`fun seal(k,s)=s`
    passes coverage). [ADR 0045](../../../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md)
    closes this on the *unit layer* via mutation score; nowhere else.
-2. **Timing** — a test counts only when CI runs it; a ref to a skipped/gated test resolves but proves
-   nothing at green. [ADR 0040](../../../docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md) +
+2. **Timing** — a test counts only when CI runs it, and *whether it ran* is a fact about a run, not a file.
+   The **declared** half is checked: `validate_coverage.py` holds a backend ref's JUnit gates against the
+   Gradle runs the workflows declare (pinned by `validate_guard_gaps.py` 17/18). The **run-time** half is the
+   edge — a body that `assume`s itself away (pinned open, 21), a variable a script exports, a web `skipIf`, a
+   job that executed nothing: green there still means only that the ref resolves.
+   [ADR 0040](../../../docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md) +
    [`ai/README.md`](../../../docs/ai/README.md) § what counts as verified.
 3. **Cross-feature** — when a rule was *never written*, the doc↔code delta is empty and the defect is still
    real (trash × sharing served trashed media). [`ai/README.md`](../../../docs/ai/README.md) § the pipeline,
@@ -146,10 +150,10 @@ each has a canonical home — point there, don't try to build past it:
   `mutation_meta_check*.py` sit **outside** that glob (filename prefix) and run only from the mutation jobs.
   Run every guard locally the same way: `for f in scripts/validate_*.py; do python3 "$f"; done`.
 - **The one coupling that bites differently per surface:** **web coverage refs are path-bound, backend refs
-  are symbol-bound** (`validate_coverage.py`: web `(WEB/ref).exists()` :101-103; backend `ClassName.method`
-  via the `KOTLIN_FUN` regex + stem map :75,:86-99). The same move hits them differently — relocating a file
-  breaks web refs; renaming a symbol breaks backend refs. This is what broke in cr-0175; carry it into any
-  relocation's blast-radius grep.
+  are symbol-bound** (`validate_coverage.py`: web/crypto/admin-web `(root / ref).exists()` :666-673; backend
+  `ClassName.method` via the `KOTLIN_FUN` regex over masked source + stem map :223, :443-468). The same move
+  hits them differently — relocating a file breaks web refs; renaming a symbol breaks backend refs. This is
+  what broke in cr-0175; carry it into any relocation's blast-radius grep.
 
 ## Procedures — pointers, not restatements
 

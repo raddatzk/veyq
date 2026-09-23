@@ -88,6 +88,15 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
    rule carries itself: a ref only counts when a CI run executes it, and that is checked by the build, not by
    a field.
 
+   > **It did not carry itself (2026-09-23).** `BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes` — gated on
+   > `VEYQ_S3_E2E=1`, which no workflow sets — was cited under `uc.memory.gallery`'s `download-original` until
+   > 6f19923, and every build stayed green: Gradle skips a gated test cleanly and says nothing. The build checks
+   > nothing about a claim it never ran. So `validate_coverage.py` now reads the gate from the test source and
+   > holds it against the Gradle runs the workflows declare. The decision above still stands — no field, no
+   > manifest, no schema growth: the gate is already written on the test, the runs already in `.github/`, and
+   > the guard only compares the two. What only a run can know (a runtime `assume`, a variable a script
+   > exports) stays out of reach, and its docstring says so.
+
 ## Consequences
 
 - **#81 gets an enforceable guard for free.** Overlap-forbidden catches a gap left stale after a surface is
@@ -104,7 +113,10 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
     problem that removing `http` shrinks to a handful of criteria.
   - *Per-criterion `gaps`* — makes covered+gap an exact contradiction, but most gaps are genuinely use-case-wide
     ("the surface is not built at all" applies to every criterion), so per-criterion gaps are artificial and a heavy
-    migration.
+    migration. *(What a criterion now carries under `gaps` is a different thing and does not reopen this: a note
+    that a surface **covered** on that criterion has refs stopping short of its sentence — see
+    [the coverage README](../coverage/README.md) § Rules. The use-case `gaps` stay the only home for an
+    uncovered surface.)*
   - *Finer area keys* (`web-ui` vs `web-data`) — violates the documented "**stop at area × level**" rule
     and invents a taxonomy only to dodge the overlap check.
   - *Forbid all overlap naively* (the finding's first proposal) — breaks legitimate partial coverage; it is the

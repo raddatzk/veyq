@@ -251,7 +251,7 @@ no CI run executes makes no coverage claim.** It is not about which directories 
 it is about what a green build actually proves. Note the granularity, which cost a second pass to get right: the
 unit is the **test**, not the surface. `web` is built and tested on every run, and four of its refs still
 pointed at `*.e2e.test.ts` files gated behind `describe.skipIf(!process.env.VEYQ_E2E)` — real tests, genuinely
-valuable, that every CI run **skips**. A surface being built is no alibi for a test that isn't. Two cases have
+valuable, that every CI run **skips**. A surface being built is no alibi for a test that isn't. Three cases have
 failed this rule:
 
 - **`http/`** was IntelliJ requests fired by hand. ADR 0040 stopped counting it; it has since been **deleted**.
@@ -262,6 +262,10 @@ failed this rule:
   CI run whose log was read to confirm it had executed four suites. It is the worked example of the rule rather
   than a violation of it — and of the rule's sharp edge, since *"the job passed"* and *"the job ran nothing"*
   look identical from outside, which is what `scripts/validate_e2e_discovery.py` exists to tell apart.
+- **`backend`'s `BlobBatchE2ETest`** is gated on `VEYQ_S3_E2E=1`, which no workflow sets, and was cited as
+  coverage until 6f19923 — a real file, a real method, a real body, so every check that existed passed. That
+  one is now caught mechanically: `scripts/validate_coverage.py` holds each backend ref's JUnit gates against
+  the Gradle runs the workflows declare, and rejects what none of them would execute.
 
 **Nothing enters the coverage model before a CI run executes it.** The claim follows the build, never the
 intention — and "the test exists" is an intention.
