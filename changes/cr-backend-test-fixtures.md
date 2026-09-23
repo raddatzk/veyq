@@ -38,8 +38,8 @@ It is test-only: no production line changes.
     those CRs are in flight.
   - At refine the textual overlaps were `cr-request-tenant-and-tenant-bound-recovery`,
     `cr-recovery-commitment-stored-hashed` and `cr-wrap-methods-survivor-whitelist` (all in
-    `RecoverySliceTest`, `PasswordChangeSliceTest` or `RotationSliceTest`), and #157's scope-gate CR once it
-    exists.
+    `RecoverySliceTest`, `PasswordChangeSliceTest` or `RotationSliceTest`) and `cr-scope-access-gate`, which
+    adds gate tests across every backend feature and asks to land alone too. Land one, then start the other.
 - **Not a split into phases for its own sake.** The phases exist so that each commit stays reviewable and ends
   green.
 

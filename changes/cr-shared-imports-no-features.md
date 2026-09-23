@@ -49,15 +49,21 @@ The scope is deliberately lean.
   - `cr-request-tenant-and-tenant-bound-recovery` reworks `shared/tenant` (`RequestTenant`,
     `TenantHostResolver`). It already says *"if #173 landed first, use its `TenantEntity`"*, so landing this
     first is the cheaper order.
-  - #157 (the scope gate) touches `TenantSuspensionFilter`'s semantics, and `cr-app-shell-served-by-backend`
-    cites it. Both overlap textually only.
+  - **`cr-scope-access-gate` (#157) moves `TenantEntity` too**, in its phase 2 (its D11), the same way: a move,
+    on the `MembershipEntity` precedent, together with `ScopeEntity`. **Whichever lands first does the move, and
+    the other skips it.** If that phase landed first, Decision 1 is already done; verify it with
+    `grep -rn 'package com.veyq.app.shared.tenant' backend/src/main/kotlin/com/veyq/app/shared/tenant/TenantEntity.kt`.
+    Then this CR is Decisions 2–4 only, and the guard's untouched-tree red lists the `SessionService` import
+    alone. That CR also touches `TenantSuspensionFilter`'s surroundings, and `cr-app-shell-served-by-backend`
+    cites the filter. Both overlap textually only.
   - Before the first edit, `grep -ln 'TenantEntity\|TenantSuspensionFilter\|TenantHostResolver\|SessionService\|ImageCropper\|TenantAvatar' changes/cr-*.md`,
     and ask the owner if any of those CRs is `in-progress`.
 
 ## Decisions
 
 1. **Move `TenantEntity` into `shared/tenant`, keeping its class name and mapping; do not add a second
-   mapping.** This is the cr-0160 shape:
+   mapping.** Skip this if `cr-scope-access-gate` phase 2 already did it (see Context). This is the cr-0160
+   shape, and that CR's D11 chose the same one:
    - `MembershipEntity` lives in `shared/membership`, and features still write it through their own stores.
    - *"query-only"* in ADR 0007 and in `MembershipEntity`'s KDoc describes the **shared module's surface**, not
      the entity.
