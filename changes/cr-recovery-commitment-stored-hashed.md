@@ -31,8 +31,9 @@ rewritten by a migration, which before V1 means a rewrite of one column.
   description edit leaves that anchor untouched.
 - **Split out of `cr-request-tenant-and-tenant-bound-recovery`.** The two are independent and can land in
   either order. They overlap only in text: `RecoveryHandler` (`complete` here, `request` there), `AccountStore`
-  (the tag here, email normalization there) and `RecoverySliceTest`. So do #172 (`RecoveryStore.applyReset`) and
-  #171 (`RecoverySliceTest`'s `seedUser`). Whichever lands second rebases.
+  (the tag here, email normalization there) and `RecoverySliceTest`. So do #172 (`RecoveryStore.applyReset`),
+  #171 (`RecoverySliceTest`'s `seedUser`) and `cr-request-bounds-enforced`, which adds base64 annotations to the
+  same `RecoveryCompleteRequest` fields whose description phase 1 edits. Whichever lands second rebases.
 
 ## Decisions
 
