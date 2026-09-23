@@ -32,8 +32,9 @@ group's **canonical** name (not an owner-typed claim), and the **accept/decline*
    never any key or content. Default **off** → the direct-add of [uc.spaces.add-group-member](uc.spaces.add-group-member.md).
 2. **The owner adds (proposal, not admission).** The GroupOwner resolves the target by **username** exactly as in
    direct-add and picks them. The server sees the preference is **on**, so instead of a grant-less membership it
-   records a **soft, grant-less membership** (`pendingConsent`) — *proposed*, not yet a member. **grant-delivery
-   skips soft memberships**, so no key-holder ever wraps `K_SC` to a pending invitee.
+   records a **soft, grant-less membership** (`pendingConsent`) — *proposed*, not yet a member — carrying the
+   owner's admission tag exactly as a direct add does. **grant-delivery skips soft memberships**, so no
+   key-holder ever wraps `K_SC` to a pending invitee.
 3. **The wrapped name-key.** The owner's device — a key-holder — derives the group's **name-key**
    `K_name = HKDF(E_e, "group-name-key")` from the key of the epoch the name was sealed under, and wraps **the key
    bytes** (not a name copy) to the invitee's identity: `asymWrap(hybridPublic(invitee), K_name, "group-name-key")`,
@@ -73,7 +74,7 @@ sequenceDiagram
   I->>CI: open invitations → unwrap K_name → open CANONICAL encryptedName → see real name + who added
   alt Accept
   I->>S: accept → clear pendingConsent (now a normal grant-less member)
-  M->>M: (next online) grant = asymWrap(inviteePub, K_SC, "scope-grant") — first-online-wins
+  M->>M: (next online) tag ok → grant = seal K_SC to inviteePub (scope-grant, scope, epoch), signed — first-online-wins
   M->>S: POST grant (opaque) → awaiting access → Active
   else Decline
   I->>S: decline → delete soft membership (nothing was ever wrapped)
@@ -97,9 +98,10 @@ sequenceDiagram
   the server returns, consistent with direct-add E2 and the shared primitive. Consent gates the *human's*
   agreement, not key authenticity; that is governed by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)
   (**TOFU-pin** on first use, a **changed** key surfaced/refused, out-of-band **safety-number verification** via
-  [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), opt-in strict). Until that slice ships the wrap is
-  still Plain ([security-model](../../../crosscutting/security-model.md)). Note ADR 0027 closes a **different**
-  attack — a *modified-owner* private name-lie — orthogonal to this operator-key seam.
+  [uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md), opt-in strict); the
+  pinning runs at both wraps, strict mode is not built ([security-model](../../../crosscutting/security-model.md)).
+  Note ADR 0027 closes a **different** attack — a *modified-owner* private name-lie — orthogonal to this
+  operator-key seam.
 
 ## Quality notes
 

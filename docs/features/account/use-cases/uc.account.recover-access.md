@@ -10,7 +10,8 @@
   Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)).
 - **Preconditions:** The instance has a **working mail transport** — without it there is no recovery at all
   ([ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md)). The account was born with a
-  `RECOVERY` wrap and a `recovery_master_key_tag` (both written at account birth since V1). The actor holds the
+  `RECOVERY` wrap and with the public half of its **Secret-Key proof key** registered
+  ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). The actor holds the
   **Secret Key**. No session is required, and none helps.
 - **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
   `DEVICE` and `DEVICE_KEY` wrap is gone and every session is revoked; the recovery token is spent. The **Master
@@ -37,15 +38,16 @@
    account here — the recovery material carries the e-mail the reset is for.
 6. The client derives the recovery KEK `= Argon2id(Secret Key, wrap KDF params)` — **no password input** — and
    unwraps the **Master Key**. A wrong Secret Key fails here, on the device, with no server round trip.
-7. The client computes the commitment `recoveryAuthTag(Master Key)`. Only someone who actually opened the wrap
-   can produce it.
+7. The client derives the **Secret-Key proof key** from the Secret Key. Only a holder of the Secret Key can
+   sign with it.
 8. The actor chooses a **new password**. The client derives the new Ed25519 **auth keypair**
    ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)) and builds a fresh **`PASSWORD` wrap**
    over the *same* Master Key with a new salt and nonce.
-9. The client sends the token, the commitment, the new wrap and the new auth public key in **one request**.
-10. The server verifies the commitment against the stored `recovery_master_key_tag`. On a match it applies, **in
-    a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every `DEVICE` and
-    `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
+9. The client signs the new wrap and the new auth public key with the proof key, and sends the token, that
+   signature, the new wrap and the new auth public key in **one request**.
+10. The server verifies the signature against the account's registered proof public key. If it verifies, the
+    server applies, **in a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`,
+    delete every `DEVICE` and `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
 11. The actor signs in with the new password. Because all device trust was dropped, this device asks for the
     Secret Key once more and then re-enrols ([uc.account.trust-device](uc.account.trust-device.md)).
 
@@ -67,8 +69,8 @@
   live, and the actor may retry — the server cannot tell the difference between a typo and a walk-away.
 - **A5 — Correct token, no Secret Key.** The actor holds the wrap and cannot open it. Step 7 is unreachable, so
   step 10 never runs. This is the attacker-with-mailbox-access case, and it ends here.
-- **A6 — Commitment mismatch at step 10.** The server refuses. Either the client opened a wrap belonging to a
-  different Master Key, or something forged a commitment without opening anything. Nothing is written.
+- **A6 — The signature does not verify at step 10.** The server refuses. The request was not signed by the
+  Secret Key this account registered, or it carries something other than what was signed. Nothing is written.
 - **A7 — Password *and* Emergency Kit both lost.** Not recoverable, by design. There is no escrow and no
   operator override; the content stays encrypted forever. Stated openly rather than softened.
 

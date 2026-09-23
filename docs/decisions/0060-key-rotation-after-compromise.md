@@ -47,7 +47,23 @@ the two cold wraps needs the password and the Secret Key as *material* — no KE
 path through the screen supplies them anyway. Re-deriving the floor KEK from what was just typed, opening the
 stored `PASSWORD` wrap with it, and requiring the result to equal the Master Key the vault already holds is
 therefore free, and it proves possession **now** rather than at some earlier point in the session. That is the
-binding refusal.
+client's refusal.
+
+**The server enforces the half it can check, and that half is the Secret Key, which both attackers lack.** A
+client-side refusal binds only the client that runs it, and the attacker this gate exists for runs their own.
+A device-link holder has the Master Key and the identity key and can call `rotateAccountKeys` or
+`POST /api/account/password` directly. So can someone who holds only the password, because a session is all
+those endpoints used to ask for. Therefore every account carries a **Secret-Key proof key**: an Ed25519 keypair
+derived from the Secret Key alone, whose public half is registered at account birth. Every flow that mints a
+cold credential — rotation, change-password, and recovery completion ([ADR 0054](0054-password-recovery-two-factor-release.md))
+— carries a signature of that key over what the flow installs and the state it replaces. The server verifies
+the signature against the stored public key and refuses the request otherwise.
+- **The public key reveals nothing.** The Secret Key is 256 random bits.
+- **It never changes in these flows.** None of them rotates the Secret Key. Re-issuing an Emergency Kit, a
+  capability that does not exist yet (ADR 0054 § Consequences), would register a new proof key under a
+  signature of the old one.
+- **It does not replace the client's refusal.** That refusal proves the password half, now. The server's check
+  proves the half the attacker most plausibly lacks.
 
 *Which* `MasterKeyWrap` opened this vault is recorded too — new client state, three-valued, because the
 session-restore path opens no wrap at all and `none` is its only honest entry (a boolean would have to label it
@@ -110,8 +126,9 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 
 - **Rotation is a re-onboarding ceremony, not a button, and its cost is stated up front.** Every `DEVICE` and
   `DEVICE_KEY` wrap dies — their key material is device-held and cannot be rewritten — so every other device
-  needs the password (or a fresh link) again. The `recoveryMasterKeyTag` must be re-derived or recovery breaks.
-  The pin store and the device register are Master-Key-sealed and must be re-sealed.
+  needs the password (or a fresh link) again. The pin store and the device register are Master-Key-sealed and
+  must be re-sealed. The Secret-Key proof key survives unchanged (Decision 2), so recovery keeps working without
+  a re-registration.
 - **The Emergency Kit stays valid.** The Secret Key is not rotated: the `PASSWORD` and `RECOVERY` wraps are
   rewritten under the *same* KEK. Rotating the Secret Key is a separate operation
   ([ADR 0054](0054-password-recovery-two-factor-release.md)), and folding it in would make the one operation
@@ -127,9 +144,12 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 - **Operator-blindness is unchanged.** The server learns that an account published a new identity public key
   and that scopes rotated — both already-visible classes of metadata (a directory value, an epoch index). No
   key, no trust graph, no new correlation.
-- **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** The gate and the re-admission review are
-  client-enforced, so they are crypto-grade on a self-hosted or trusted client and honest-operator elsewhere —
-  the same tier as all veyq E2EE.
+- **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)), with one half lifted off the tiers.** The
+  Secret-Key half of the gate is server-enforced, and it holds against any caller that is not the operator. The
+  password half and the re-admission review are client-enforced, so they are crypto-grade on a self-hosted or
+  trusted client and honest-operator elsewhere — the same tier as all veyq E2EE. ADR 0026's tiers describe the
+  client the *victim* runs. They say nothing about an attacker who runs a client of their own, and that
+  attacker is the one this gate names.
 
 **Alternatives rejected.**
 
@@ -141,6 +161,12 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
   the transcribed code over a password; for an operation this destructive the two-secret floor is the right bar.
 - **(d) Letting the rotator drive their own scope re-grant** — Decision 4; it converts the exclusion into the
   attacker's finishing move.
+- **(h) A signature of the identity key as the server's gate.** It proves an unlocked vault, and the
+  device-link holder has one.
+- **(i) A proof key derived from the `PASSWORD` floor's KEK** (password + Secret Key). That puts two factors in
+  one signature. But it would have to be re-registered on every password change and every recovery. It also
+  cannot exist on the `RECOVERY` path, which has no password by design (ADR 0054 Decision 1). The factor both
+  attackers lack is the Secret Key, and a key derived from it alone is stable.
 - **(e) Leaving the tenant scope out and stating it as an honest limit** — the tenant scope holds sealed content
   and a browsable Memory tree, and is veyq's *primary* shared home
   ([ADR 0025](0025-forward-secrecy-policy-per-scope.md) § Context). A rotation that clears the groups and leaves

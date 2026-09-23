@@ -37,7 +37,9 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 ## Main flow — rotate on removal
 
 1. A remaining owner's device **mints** a fresh `E_{n+1}` and posts the chain-link `symWrap(E_{n+1}, E_n)`.
-2. It **re-grants** `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity); the
+2. It carries each remaining membership's **admission tag** forward — verified under `E_n`, re-tagged under
+   `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6) — and **re-grants**
+   `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity); the
    **grant-delivery** reconciler finishes the rest — its trigger widened from *grant-less* to *grant-less or
    stale-epoch*, first-online-wins, idempotent ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
 3. New content (names, `slug_token`s, `K_mem`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.
@@ -90,9 +92,9 @@ sequenceDiagram
 
 - **Forward-confidential, cheaply.** One random key + one chain-wrap + one `asymWrap` per remaining member — **no
   content re-seal, no media re-encryption** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)).
-- **Operator-blind.** The server stores only the opaque epoch-chain links, the per-member grants, a per-membership
-  granted-epoch marker, and a per-node epoch index — no key, no plaintext. The epoch index is operational metadata
-  the operator could infer from timing anyway.
+- **Operator-blind.** The server stores only the opaque epoch-chain links, the per-member grants and admission
+  tags, a per-membership granted-epoch marker, and a per-node epoch index — no key, no plaintext. The epoch
+  index is operational metadata the operator could infer from timing anyway.
 - **Honest limit.** Already-read + pre-rotation content is not retractable; rotation protects **future** content.
   Layer-1 (deleted membership → 403) is the instant defense for everything future against an honest server.
 

@@ -17,7 +17,8 @@ the check number device pairing compares ([ADR 0059](0059-device-linking.md) §5
 
 Three surfaces wrap to a **foreign** identity key, and all three were Plain when this was decided: (1) rotation
 re-grants, (2) the **automated grant-delivery worker** (no human in the loop), (3) the group invite name-key
-wrap. All three now run the gate below.
+wrap. All three now run the gate below. A fourth surface sits on the *receiving* side: opening a grant means
+trusting whoever sealed it (Decision 6).
 
 The identity keypair is **stable per `userId`** — the master key survives password changes / recovery / new
 devices, and it wraps the identity private key — **except** one legitimate case: **rotation after a compromise**
@@ -64,6 +65,27 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    **other members must rotate every shared `K_SC`** to exclude the old identity, and the rotator may **not**
    drive that re-grant themselves, or an attacker holding the old identity would re-admit only their new one.
 
+6. **Every grant is signed by its granter, and the recipient checks the signature before opening it.** The
+   decisions above protect the *wrapper*, who needs to know that the key it wraps to is the right one. They say
+   nothing to the *recipient*, who opens whatever grant the server lists, sealed to them by anyone. Because a
+   seal to a public key needs only that key, the server can plant a scope key of its own choosing, and the
+   recipient's next write goes under it. So a grant carries the granter's user id and an **Ed25519 signature of
+   the granter's identity key** over the scope id, the scope's kind, the epoch, the recipient's user id, a
+   digest of the recipient's identity public bundle, and a digest of the grant ciphertext.
+   - **Personal scope: only oneself.** A grant whose signed kind is `PERSONAL` opens only if the granter is the
+     recipient and the signature verifies under the recipient's own signing key, which comes from the vault and
+     never from the directory. The server can no longer plant a personal scope key, and it cannot present a
+     group grant as the personal scope, because the kind is signed.
+   - **Shared scope: the granter's key is pinned like any contact's.** The recipient runs the Decision 1–2 gate
+     on the granter: a first-seen key is pinned, a changed key is refused and surfaced. This is a **fourth pin
+     surface**, the first on the receiving side.
+   - **What it buys on a shared scope, honestly.** A brand-new member's first grant is a first-use pin of its
+     granter, so an operator that fabricates both the granter and the key is not detected on the spot. It is
+     detected by the next verification of that granter's safety number. What the signature does rule out is a
+     grant presented under the identity of someone the recipient has already pinned.
+   - The server stores and relays the signature and does not verify it. A blind server does not adjudicate a
+     crypto claim (§ Consequences), and the recipient is the party that needs the answer.
+
 ## Consequences
 
 - **Closes the silent-swap-after-first-contact hole** for anyone who has interacted with a contact before: their
@@ -71,7 +93,10 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
   who compare.
 - **The first-use gap remains (honest).** If the operator substitutes a key **before** a client ever pinned the
   real one — and re-wraps genuine content too — nothing looks wrong until **manual verification** or Key
-  Transparency. TOFU cannot detect a lie told before first sight.
+  Transparency. TOFU cannot detect a lie told before first sight. The gap is narrower since two later changes.
+  It no longer lets the operator *invent* a member: every wrap to someone else needs an admission tag that only
+  a key-holder can compute ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6). And it no longer reaches
+  the personal scope at all (Decision 6).
 - **Grant-delivery is first-online-wins across key-holders, so a worker block is per key-holder — keyed on the
   declining account, not on the browser it declined from — and not a global veto.**
   A key-holder who pinned the old key refuses + flags; a *different* key-holder who never saw the contact has no
@@ -106,7 +131,8 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
 all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the changed-key review. Decision 5 is
-settled by [ADR 0060](0060-key-rotation-after-compromise.md). Two things remain:
+settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is decided and not yet built
+(inbox #159). Two further things remain:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
   ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)

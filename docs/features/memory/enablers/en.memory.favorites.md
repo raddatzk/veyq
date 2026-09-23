@@ -111,9 +111,11 @@ blob for that Memory; the `PUT` writes only the caller's.
   because the client has just fetched that node's media list, so the server already observed the node id. A
   larger cap, per-item rows and keyed-hash buckets were all rejected; the reasoning is in
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §4.
-- **Two seals, two contexts.** `symWrap` / `symUnwrap` as everywhere else
-  ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)), with **distinct** context strings `favorites`
-  and `item-favorites` — so a blob authenticated for one can never be opened as the other.
+- **Two seals, two purposes.** The typed seal as everywhere else
+  ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), with **distinct** purposes `favorites`
+  and `item-favorites` — so a blob authenticated for one can never be opened as the other — each bound to the
+  slot it is stored at (the scope, and for an item mark also the member and the node), so the server cannot
+  serve one member's or one node's blob as another's.
 - **The pin rides the master-key rotation re-seal.** The master key rotates
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)), so the pin blob must be re-sealed from
   the old key to the new one alongside the identity-pin store and the device register — best-effort, like they

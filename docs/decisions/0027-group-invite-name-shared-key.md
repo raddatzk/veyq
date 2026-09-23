@@ -77,13 +77,13 @@ name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape
 
 - **Resolved (cr-0096).** The HKDF `salt`/`info` and the AAD contexts are pinned as conformance vectors
   ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md)): `K_name = HKDF-SHA256(E_e, salt="",
-  info=utf8("veyq/v1/group-name-key"), 32)`; the name seals with the existing **`node-name`** `symEncrypt` context
-  (a group name is a name — domain separation lives in the key derivation) and `K_name` wraps under the distinct
+  info=utf8("veyq/v1/group-name-key"), 32)`; the name seals under a purpose of its own, bound to the group
+  ([ADR 0069](0069-a-seal-binds-its-object.md)), and `K_name` wraps under the distinct
   **`group-name-key`** `asymWrap` context (`group_name_key` / `sym_group_name` / `asym_group_name_key` vectors).
 - **Resolved (refined → cr-0097).** The **rename** endpoint (re-seal under the **current** epoch + bump the
   name-epoch index) is its own feature — [uc.spaces.rename-group](../features/spaces/use-cases/uc.spaces.rename-group.md),
   owner-gated, name-only (no `K_SC` rotation), server rejects a stale `nameEpoch` (`409`). cr-0096 landed the
   epoch-indexed name at epoch 0 (FS-ready) + the invite-name change; cr-0097 lands rename.
-- **Still deferred.** The **fingerprint/TOFU** authenticity seam (ADR 0014 §5) stays out — orthogonal to the
-  name-binding (it closes an operator-key MITM, not the modified-owner name-lie), and cr-0094/0096 keep
-  authenticity Plain.
+- **Resolved elsewhere.** The **fingerprint/TOFU** authenticity seam (ADR 0014 §5) is orthogonal to the
+  name-binding (it closes an operator-key MITM, not the modified-owner name-lie); the name-key wrap runs
+  [ADR 0028](0028-identity-authenticity-tofu-verification.md)'s pin gate like every other foreign wrap.

@@ -132,10 +132,11 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
 
 - **One suite, byte-identical everywhere.** Any change to crypto suite `v1` (or a new suite) requires a
   **conformance vector in `contracts/crypto/vectors/`** and a **passing conformance test** (web, and the
-  backend where it verifies). Use domain-separated labels (`veyq/v1/<purpose>`),
-  length-prefixed encoding, and bind context into the AAD. Never roll your own primitive; never skip the
-  vector. (The contents of suite `v1` are decided in the first crypto change-request — see
-  [Security Model → Cryptographic stance](security-model.md).)
+  backend where it verifies). Use domain-separated labels (`veyq/v1/<purpose>`) and length-prefixed encoding,
+  and seal only through the typed `seal`/`open` of `@veyq/crypto`, whose context names the purpose **and** the
+  object the ciphertext belongs to ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)). Never roll your
+  own primitive; never skip the vector. (The contents of suite `v1` are decided in the first crypto
+  change-request — see [Security Model → Cryptographic stance](security-model.md).)
 - **Migrations are portable + Flyway-owned.** Use only column types valid on **both H2 and MariaDB** (the
   common subset); Flyway is the single schema authority.
 - **An applied migration is immutable — including its comments.** Fix a mistake with a *new* migration; never

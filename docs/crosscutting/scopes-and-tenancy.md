@@ -2,9 +2,10 @@
 
 > The structural layer: **where content lives and who may access it.** It defines the scope kinds, the
 > organizational structures (tenant / group / personal), how access is granted *cryptographically*
-> (scope keys, grants, shares), how a new member is onboarded (the invite-wrap), and the unified
+> (scope keys, grants, shares), how a new member is onboarded (admit, then deliver), and the unified
 > navigation contract. Engineering sibling to the [Security Model](security-model.md) and the
-> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats live in the crypto wire-format spec.
+> [Account & Key Model](../features/account/enablers/en.account.key-model.md); byte formats are the conformance vectors
+> (`contracts/crypto/vectors/v1.json`) and what every seal binds is [ADR 0069](../decisions/0069-a-seal-binds-its-object.md).
 
 This is the **target model**; first-build scope is tracked via the inbox and change-requests. The general
 **scope identity** (opaque `scopeId` + `kind`) and the per-tenant **personal scope** (client-birthed,
@@ -136,41 +137,21 @@ an operator-held key, so a stolen DB dump leaks nothing) is a **separate** defen
 is *not* operator-blindness (the server must still decrypt to send mail), and it must be decided
 crosscutting over **all** server-visible emails (including `veyq_user.email`), not per field.
 
-## Onboarding a new member — the invite-wrap
+## Onboarding a new member — admit, then deliver
 
-A new member has **no identity keypair yet**, so the scope key cannot be wrapped to them in advance.
-Access is **always an explicit, informed act by the granting owner** (the only way confidentiality is
-lowered). The mental model: **one passenger, two envelopes** — the *passenger* is the scope key `K_SC`;
-a throwaway *invite-wrapping keypair* is the envelope in between.
+A new member has **no identity keypair yet**, so the scope key cannot be wrapped to them in advance, and no
+invite link ever carries a key. Two moments, one human decision
+([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)):
 
-```mermaid
----
-title: Invite-wrap — one passenger (the scope key K_SC), two envelopes
----
-sequenceDiagram
-  actor O as Owner<br>(holds scope key)
-  participant S as Server<br>(blind)
-  actor I as Invitee<br>(no keypair yet)
-  O->>O: open scope key K_SC (the passenger)
-  O->>O: generate throwaway invite-wrapping keypair
-  O->>O: seal passenger to invite-wrapping public key
-  O->>S: POST invite { inviteWrappingPublicKey, wrappedScopeKey }
-  Note right of S: stores both, opens neither<br>(envelope key absent)
-  S-->>O: { inviteId, bootstrapSecret }
-  O-)I: link  ( #35;fragment = invite-wrapping private key, never sent )
-  I->>S: fetch material + bootstrapSecret (possession proof)
-  S-->>I: { inviteWrappingPublicKey, wrappedScopeKey }
-  I->>I: open envelope with fragment key -> passenger
-  I->>I: generate own identity#59; re-seal passenger to own identity key
-  I->>S: register/accept { wrappedGrant (persistent grant) }
-  Note right of S: throwaway material deleted -> window closes
-```
+1. **Admit.** An owner mints the invite from an unlocked vault, and it carries an **admission tag** that only a
+   holder of the scope's current epoch key can compute. The invitee registers and becomes a member **without a
+   grant**.
+2. **Deliver.** The next key-holder who is online checks the tag and wraps the scope key to the member's
+   identity key. The member's client opens that grant only if its granter's signature verifies
+   ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
 
-`bootstrapSecret` only **gates the material fetch** (it is not a key). The server is blind at both ends —
-it never holds the invite-wrapping private key (URL-fragment only). Variants (refined with the invites
-use-case): **single-use** (default), **shared link** (riskier, explicit opt-in, capped registrations +
-TTL + key rotation on close), and a **grant path** that carries no key in any channel and re-wraps on
-explicit approval.
+This is the only way confidentiality is lowered to a new person, and an owner's **session** alone cannot start
+it: a password without the vault has no epoch key to tag with.
 
 ## Revocation & rotation
 

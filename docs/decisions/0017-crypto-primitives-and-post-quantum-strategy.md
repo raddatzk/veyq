@@ -29,14 +29,17 @@ strategy; they do not choose it.
    what makes adopting, and later upgrading, post-quantum crypto safe without breaking the model or forcing a
    re-encryption migration.
 4. **The conformance vectors are a suite's byte definition, and they come first.**
-   `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire.
+   `contracts/crypto/vectors/v1.json` is the single source of truth for what a suite *is* on the wire, and every
+   seal purpose has exactly one vector ([ADR 0069](0069-a-seal-binds-its-object.md) Decision 6).
    `packages/crypto/src/v1.ts` is pinned to it by `packages/crypto/src/v1.conformance.test.ts`. Since the
-   native surfaces were dropped (commit `7a1c4e9f`), that web test is the **only** stack asserting against the
-   file, so it is now a single-implementation **regression pin** — it stops a refactor from silently moving a
-   suite's bytes, not a cross-stack parity proof. The backend is *not* a second asserting stack: it performs no
-   content crypto (`backend/CLAUDE.md`), and the Ed25519 login-auth signatures it does verify are checked
-   against the stored `authPublicKey` with the standard primitive, never against this file. Pinning a new
-   primitive still means **adding a vector first, then making the implementation green** — never the reverse.
+   native surfaces were dropped (commit `7a1c4e9f`), that web test is the **only** stack asserting the file's
+   seals, so for them it is a single-implementation **regression pin** — it stops a refactor from silently
+   moving a suite's bytes, not a cross-stack parity proof. The backend performs no content crypto
+   (`backend/CLAUDE.md`). Its Ed25519 login-auth check runs against the stored `authPublicKey` and never against
+   this file. The one statement it asserts too is the **Secret-Key proof** over a cold-credential request
+   ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2): both stacks build its signed bytes, so a
+   vector pins them. Pinning a new primitive still means **adding a vector first, then making the
+   implementation green** — never the reverse.
 
 ## Consequences
 
@@ -49,8 +52,9 @@ strategy; they do not choose it.
 - **The vectors are what makes rule 3 enforceable.** A versioned suite id only keeps old artifacts readable if
   the bytes behind a version cannot quietly move. The vector file is that pin: a refactor that shifts them
   fails a red test instead of silently orphaning stored ciphertext. It was also meant as the seam between two
-  stacks that must agree on those bytes; since the native drop only the web client asserts against it, so that
-  cross-stack-parity role is dormant until a second independent implementation exists.
+  stacks that must agree on those bytes; since the native drop the backend asserts against it only for the
+  Secret-Key proof statement (rule 4), so for everything else that cross-stack-parity role is dormant until a
+  second independent implementation exists.
 - **Rejected — home-grown crypto:** unreviewed constructions are a foot-gun; rejected outright.
 - **Rejected — classical-only / defer PQ entirely:** rejected for *encryption*, because decade-lived memories
   make HNDL a real present threat; accepted (for now) only for *signatures*, per the asymmetry above.

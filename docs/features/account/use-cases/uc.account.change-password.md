@@ -43,10 +43,12 @@
 6. The actor chooses a **new password**. The client derives the new Ed25519 auth keypair and builds a fresh
    `PASSWORD` wrap over the *same* Master Key (already open in the vault) with a new salt and nonce, exactly as
    [uc.account.recover-access](uc.account.recover-access.md) step 8 does.
-7. The client sends the new wrap, the new auth public key and the attestation signature in **one authenticated
-   request**.
-8. The server verifies the attestation against the account's **current** `auth_public_key`. On a match it
-   applies, in a single transaction: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every
+7. The client signs the change with the **Secret-Key proof key**, derived from the Secret Key typed in step 2
+   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). It sends the new wrap, the
+   new auth public key, the attestation and that signature in **one authenticated request**.
+8. The server verifies the attestation against the account's **current** `auth_public_key` and the proof
+   signature against the account's registered proof public key. If both verify, it applies, in a single
+   transaction: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every
    `DEVICE` and `DEVICE_KEY` wrap, and revoke every session **except the one the request arrived on**.
 9. The actor's current device asks for the Secret Key once more (step 2 already did this) and may **re-enrol**
    its own `DEVICE`/`DEVICE_KEY` wrap in a follow-up call to the existing
@@ -56,7 +58,7 @@
 ## Alternate / exception flows
 
 - **E1 — the current password and Secret Key do not open the account's floor (step 4):** refused **on the
-  device**, before any derivation and before any request. The actor may retry. This is the half of the proof a
+  device**, before any derivation and before any request. The actor may retry. This is the part of the proof a
   blind server cannot make: it holds only ciphertext there. It also refuses a *stale* proof — a floor rewritten
   underneath this session — because the opened Master Key is compared against the one the vault holds, not
   merely required to decrypt.
@@ -69,13 +71,14 @@
 
 ## Quality notes
 
-- **One entry point, and the proof has two halves checked in two places.** This screen mints a **cold
+- **One entry point, and the proof is checked in two places.** This screen mints a **cold
   credential** — a `PASSWORD` floor plus the `auth_public_key` derived from it — so
   [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2 applies to it exactly as it
-  applies to rotation: it may not be reachable without the material an attacker lacks. The attestation is the
-  half the server can check for itself (it holds `auth_public_key`); the Secret Key is the half only the device
-  can check (the server holds ciphertext), so the client opens the current floor with it first. **Neither half
-  is optional.** This flow once offered a second entry point — *"I don't remember my current password"* — which
+  applies to rotation: it may not be reachable without the material an attacker lacks. The server checks each
+  factor for itself: the attestation proves the current password (it holds `auth_public_key`), the proof
+  signature the Secret Key (it holds the proof public key). Only the device can check that the pair opens this
+  account's current floor (the server holds ciphertext there), so the client does that first. **No part is
+  optional.** This flow once offered a second entry point — *"I don't remember my current password"* — which
   sent no attestation and proved no Secret Key; a stolen unlocked phone could mint a credential for itself, and
   from there rotation's own gate passed for the attacker. It is deleted, not gated: what a forgotten password
   needs is [uc.account.recover-access](uc.account.recover-access.md), which proves control of the address
@@ -88,8 +91,9 @@
   person is already one sign-out from a permanent lockout — and the hatch was the attacker's ramp in the same
   breath. The alternative would make the Secret Key checkable **without** the current password, which needs
   either releasing the `RECOVERY` wrap to an authenticated session (dropping cold unlock from two factors to
-  one, amending [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)) or storing a
-  server-side commitment over the Secret Key. Each is its own decision; neither was taken here.
+  one, amending [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)) or a server-side
+  check of the Secret Key alone. The second now exists — the Secret-Key proof key — but reopening the hatch on
+  it is its own decision, and it has not been taken.
 - **The attestation is a signed statement, not a fresh server challenge.** It signs the **new** auth public key
   directly, not a server-minted nonce — there is nothing to replay it *into*: a captured signature only ever
   re-authorizes the exact new key it was made for, which the legitimate actor already approved. This is
@@ -112,7 +116,7 @@
   a password change needs. Its own request shape says so: `RotateAccountKeysRequest` carries **no**
   `authPublicKey`, because rotation is built to leave the password untouched. Reusing it here would rotate
   identity keys nobody asked to rotate.
-- **Operator-blind throughout.** The request carries only ciphertext, a public key and a signature — never a
+- **Operator-blind throughout.** The request carries only ciphertext, a public key and two signatures — never a
   password, the Secret Key, or the Master Key.
 
 ## What this means for you / Was das für dich bedeutet

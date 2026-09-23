@@ -52,11 +52,12 @@ Two properties make that field safe to keep inline:
    encode fits the pad target.
 4. **The client seals it under the current epoch.** `e = currentEpoch` (the write key, peeled from the grant);
    `K_icon_e = hkdfSha256(E_e, salt = "", info = "veyq/v1/space-icon-key", 32)`;
-   `sealedIcon = b64std(symWrap(K_icon_e, paddedIcon, "space-icon", randomBytes(12)))` — the `sealName` shape
-   over the repo's one symmetric seal (`0x02 || nonce(12) || aead`), with `space-icon` as the AAD context.
+   `sealedIcon = b64std(seal(K_icon_e, paddedIcon, space-icon ‖ scopeId ‖ e))` — the repo's one symmetric seal
+   (`0x02 || nonce(12) || aead`) through the typed seal of `@veyq/crypto`, which draws its own nonce, with the
+   `space-icon` purpose, the scope and the icon epoch as the AAD context
+   ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)).
    Sealing under the **current** epoch is what makes a replaced icon forward-secret — the same reason a rename
-   does it. (Note the sibling docs write this step as `symEncrypt(…)`; that is notation, not a symbol — the
-   primitive is `symWrap`.)
+   does it. (Note the sibling docs write this step as `symEncrypt(…)`; that is notation, not a symbol.)
 5. **POST the icon.** `POST /api/scopes/{scopeId}/icon { sealedIcon, iconEpoch: e }` — two opaque values.
 6. **The server writes the row (blind).** Owner-gated on the **scope row** (A3); it rejects a stale
    `iconEpoch` (A1) and a pending-deletion scope (A2). Otherwise it overwrites `sealed_icon` + `icon_epoch`

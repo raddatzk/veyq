@@ -7,7 +7,8 @@
 >
 > Plain-language companion for end users: [wiki: Is my data safe?](../../wiki/en/is-my-data-safe.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
-> [scopes & tenancy model](scopes-and-tenancy.md), and the crypto wire-format spec (refined separately).
+> [scopes & tenancy model](scopes-and-tenancy.md), and the byte formats — the conformance vectors
+> (`contracts/crypto/vectors/v1.json`) and what every seal binds ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)).
 
 This document is the **target model**. What ships in the first build is tracked via the inbox and
 change-requests, not here.
@@ -25,7 +26,8 @@ never sees. Confidentiality is therefore cryptographic, not a server-side access
 | Stolen disk / DB dump / subpoena of data at rest | All content E2E-encrypted; the server holds no content keys |
 | Passive operator reading the database | Cannot recover content — every blob and sensitive metadata field is encrypted |
 | Offline brute-force of a weak password → **content** | **Secret Key (2SKD)**: the content key derivation folds in a high-entropy Secret Key the server never stores, so a cracked password alone unlocks nothing |
-| Offline brute-force of a weak password → **server login** | The server stores only an Ed25519 **auth public key** (not a credential); the raw password never reaches the server. Forging a login means brute-forcing the password through Argon2id — yielding a session + operational metadata, **never content** (see [ADR 0003](../decisions/0003-operator-blind-password-auth.md)) |
+| Offline brute-force of a weak password → **server login** | The server stores only an Ed25519 **auth public key** (not a credential); the raw password never reaches the server. Forging a login means brute-forcing the password through Argon2id — yielding a session + operational metadata, **never content** (see [ADR 0003](../decisions/0003-operator-blind-password-auth.md)). Holding because nothing a session can do leads to a key: admitting a member needs an admission tag only a key-holder computes ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6), and every request that replaces the identity or mints a cold credential needs a signature only the Secret Key derives ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2) |
+| The server swapping or replaying ciphertexts between objects | Every seal binds its purpose **and** the object it is stored as, so a ciphertext served for another object fails to open ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)). **Freshness is not covered:** the server still chooses which authentic version of an object, and which epoch's grant, a client receives |
 | **Online** brute-force / credential-stuffing / DoS on the public auth surface | **Per-IP rate limiting** of the public auth endpoints (`@RateLimit(key = IP)` → token-bucket `429`) — defense-in-depth, **honestly limited** (per-instance, resets on restart). Mechanism + verification: [cc.security.rate-limit](cc.security.rate-limit.md) |
 | Active operator doing key-substitution during key exchange | **Partly, and honestly limited** — see *Key-directory trust* below |
 
@@ -117,8 +119,9 @@ personal memory that is publicly shared becomes "shared" for these purposes.
 ## Key hierarchy (envelope encryption)
 
 Content is protected by layered envelopes so grants are cheap and shares are least-privilege. The
-byte-level detail lives in the crypto wire-format spec; account-level detail (unlock methods, recovery)
-in the account/key model. The shape:
+byte-level detail is the conformance vectors and the code they pin, and every seal binds the object it belongs
+to ([ADR 0069](../decisions/0069-a-seal-binds-its-object.md)); account-level detail (unlock methods, recovery)
+lives in the account/key model. The shape:
 
 ```mermaid
 ---
@@ -258,12 +261,20 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   Deliberate — the blind server must not adjudicate a crypto claim, and a global quarantine on one worker's
   say-so would be a DoS. The value is raised detection.
 - **Trust anchors stay client-side:** a client verifies against its own sealed pin, never the server's copy.
+- **The receiving side is checked too.** Every grant carries its granter's signature, and a client opens it only
+  if the signature verifies — for the personal scope only under its **own** key, so the server cannot plant a
+  personal scope key; for a shared scope under the granter's pinned key
+  ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6).
+- **The operator cannot invent a member.** A wrap to anyone else needs an admission tag that only a holder of
+  the scope's current epoch key computes, so what TOFU leaves open is a substituted key on an admission the
+  owner really made — not a member made up by the server ([ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6).
 - **Rotation is how a compromise ends, and it is the only remedy that reaches key material.** A revoke takes
   server access and never keys ([ADR 0058](../decisions/0058-revoke-never-takes-key-material.md)); rotation
   replaces the Master Key and the identity together and re-keys every scope
   ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md)). It is **forward secrecy, not repair** —
-  what was already read stays read — it is gated on the **Secret Key** so the attacker it defends against
-  cannot rotate first, and re-admission to each shared scope runs through the human change-review above, which
+  what was already read stays read — it is gated on the **Secret Key**, checked by the server, so the attacker
+  it defends against cannot rotate first, and re-admission to each shared scope runs through the human
+  change-review above, which
   is what stops a stolen identity rotating its way back in.
 - **First consumer:** adding a member to a shared scope ([uc.spaces.add-member](../features/spaces/use-cases/uc.spaces.add-member.md),
   [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md)) is the first flow to wrap a scope key to

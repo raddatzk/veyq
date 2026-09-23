@@ -31,7 +31,8 @@ parts.
 
 1. **Recoverable share key (the enabler).** At `createShare`, in addition to the existing outer wrap
    `wrap = symWrap(K_share, K_mem)` (lets a link-holder unwrap `K_mem`), store a second, **inverse** wrap
-   **`sealed_share_key = symWrap(K_mem, K_share)`** (AAD context **`share-key-recovery`**) on the share row. The
+   **`sealed_share_key = symWrap(K_mem, K_share)`** (AAD context **`share-key-recovery`**, bound to the share's
+   id — [ADR 0069](0069-a-seal-binds-its-object.md)) on the share row. The
    **curator always holds `K_mem`** (they opened the Memory from their scope), so they can **recover `K_share`
    anytime** — `K_share = symUnwrap(K_mem, sealed_share_key, "share-key-recovery")` — and thereby read or re-seal
    **any `K_share`-sealed field** of a minted share. The server stores only this ciphertext; it never sees

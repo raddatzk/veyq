@@ -30,10 +30,12 @@ personal scope is a new `kind=PERSONAL` scope in the same tenant. (Realises the
 ## Birth is client-driven (the operator-blind crux)
 
 The server **cannot** create the scope — it has no key, and must stay blind. So the **client** mints it:
-generate a random scope key, seal it to the member's **own** identity public key
-(`asymWrap(ownIdentityPub, scopeKey, "scope-grant")` — the hybrid KEM), and hand the server
-only the **ciphertext grant**.
-The server mints the scope row + the self-membership. The client **auto-births** it after unlock if
+generate the scope id and a random scope key, seal the key to the member's **own** identity public key (the
+hybrid KEM, under the `scope-grant` purpose bound to that scope id and epoch —
+[ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), sign the grant with its own identity key
+([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6), and hand the server
+only the id and the **signed ciphertext grant**.
+The server creates the scope row + the self-membership. The client **auto-births** it after unlock if
 `GET /api/scopes` shows no personal scope in the active tenant — so it appears "at join"
 ([ADR 0002](../../../decisions/0002-personal-scope-per-tenant.md)) with no explicit user action, and the
 **existing tenant owner** is covered the same way (no server-side grant migration).
@@ -41,13 +43,15 @@ The server mints the scope row + the self-membership. The client **auto-births**
 ## Main flow — birth + open
 
 1. After unlock, the client lists scopes: `GET /api/scopes`.
-2. If no `PERSONAL` scope exists for the active tenant: the client **generates** a random scope key and
-   `asymWrap`s it to its **own** identity public key (context `scope-grant`).
-3. `POST /api/scopes { wrappedGrant }` → the server mints a `kind=PERSONAL` scope in the Host's tenant +
-   the caller's self-membership (`role=OWNER`), returns `{ scopeId, kind }`.
+2. If no `PERSONAL` scope exists for the active tenant: the client **generates** a scope id and a random scope
+   key, seals the key to its **own** identity public key (`scope-grant`, bound to that id and epoch 0), and
+   signs the grant with its own identity key.
+3. `POST /api/scopes` with the id and the signed grant → the server creates the `kind=PERSONAL` scope under
+   that id in the Host's tenant + the caller's self-membership (`role=OWNER`), returns `{ scopeId, kind }`.
 4. To **open** (now or on a later launch): from `GET /api/scopes` take the personal scope's `wrappedGrant`,
-   `asymUnwrap` it with the vaulted identity (hybrid secret + public derived from the identity private
-   bundle) → the **scope key**, held in memory (the `ScopeVault`).
+   check that it is signed by the member's **own** identity key — the key from the vault, never the
+   directory — and refuse it otherwise; then open it with the vaulted identity (hybrid secret + public derived
+   from the identity private bundle) → the **scope key**, held in memory (the `ScopeVault`).
 
 ```mermaid
 ---
@@ -59,15 +63,15 @@ sequenceDiagram
   participant S as Server<br>(blind)
   C->>S: GET /api/scopes
   S-->>C: [] (no personal scope yet)
-  C->>C: scopeKey = random(32)
-  C->>C: grant = asymWrap(ownIdentityPub, scopeKey, "scope-grant")
-  C->>S: POST /api/scopes { wrappedGrant: grant }
-  S->>S: mint scope(kind=PERSONAL, tenant=Host) + self-membership(role=OWNER)
+  C->>C: scopeId = uuid() #59; scopeKey = random(32)
+  C->>C: grant = seal scopeKey to ownIdentityPub (scope-grant, scopeId, epoch 0) + sign with own identity
+  C->>S: POST /api/scopes { scopeId, signed grant }
+  S->>S: create scope(scopeId, kind=PERSONAL, tenant=Host) + self-membership(role=OWNER)
   S-->>C: { scopeId, kind:PERSONAL }
   Note over U,S: open (now or next launch)
   C->>S: GET /api/scopes
   S-->>C: [{ id, kind:PERSONAL, tenantId, wrappedGrant }]
-  C->>C: scopeKey = asymUnwrap(identity, wrappedGrant, "scope-grant")  (in memory)
+  C->>C: signed by own identity? else refuse #59; scopeKey = open(identity, wrappedGrant)  (in memory)
   Note right of C: server only ever saw ciphertext + the scope row
 ```
 
@@ -77,7 +81,8 @@ sequenceDiagram
   `(user, tenant)`); the client just opens the existing one.
 - **E2 — not unlocked:** without the identity private bundle the client can neither seal nor open a grant →
   birth/open is deferred until after unlock. No partial state.
-- **E3 — grant unwrap fails** (corrupt/foreign grant, or identity rotated without re-wrap): the scope can't
+- **E3 — grant unwrap fails** (corrupt/foreign grant, a grant not signed by the member's own identity, or
+  identity rotated without re-wrap): the scope can't
   be opened → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not be able
   to force a wipe). Identity rotation re-wraps grants (its own use-case).
 - **E4 — no tenant context** (no Host / unknown tenant): `404` — every scope lives within a tenant

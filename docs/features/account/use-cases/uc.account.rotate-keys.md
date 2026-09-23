@@ -15,7 +15,7 @@
 - **Postconditions (success):** The account has a **new Master Key** and a **new published identity public
   key**. Every wrap that could not be rewritten (`DEVICE`, `DEVICE_KEY`, `PASSKEY`) is gone; the `PASSWORD` and
   `RECOVERY` wraps are rewritten under the **same** KEKs, so the **Emergency Kit stays valid**. Every
-  Master-Key-sealed blob is re-sealed and `recoveryMasterKeyTag` re-derived. Self-served scopes sit at a new
+  Master-Key-sealed blob is re-sealed; the Secret-Key proof key is unchanged. Self-served scopes sit at a new
   epoch granted to the new identity; every shared scope carries a queued rotation for another key-holder to
   complete. Every other session is revoked. **What the old identity already read is not retracted.**
 
@@ -28,15 +28,16 @@
    [uc.account.unlock](uc.account.unlock.md) § *One Secret-Key control*) — on **every** path, cold ones included,
    because rewriting the two cold wraps needs both as material and no KEK survives the unlock — re-derives the
    floor KEK, and requires it to open the stored `PASSWORD` wrap to the Master Key already held. That live
-   proof *is* the gate ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2): the
-   rotation runs from a cold credential proven **now**, or it does not run. *Which* wrap opened this vault is
-   read only to say why the Secret Key is being asked for here (E1).
+   proof is the client's half of the gate ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
+   Decision 2): the rotation runs from a cold credential proven **now**, or it does not run. The server
+   enforces the other half in step 4. *Which* wrap opened this vault is read only to say why the Secret Key is
+   being asked for here (E1).
 3. **Mint.** The device generates a fresh Master Key `MK'` and a fresh identity keypair, entirely on-device.
 4. **Re-wrap the account.** `symWrap(MK', identityPriv')` replaces `wrappedIdentityPrivateKey`; the `PASSWORD`
    and `RECOVERY` wraps are rewritten under their existing KEKs; every `DEVICE`, `DEVICE_KEY` and `PASSKEY`
-   wrap is **deleted**, because their key material is device-held and cannot be rewritten from here;
-   `recoveryMasterKeyTag` is re-derived from `MK'`; the identity-pin store and the device register are
-   re-sealed under `MK'`.
+   wrap is **deleted**, because their key material is device-held and cannot be rewritten from here; the
+   identity-pin store and the device register are re-sealed under `MK'`. The request carries a signature of
+   the **Secret-Key proof key** over what it installs, and the server refuses it without one that verifies.
 5. **Publish.** The new identity public bundle replaces the directory value. From this moment every contact
    who ever pinned this account sees **changed**, and every automated wrap to it declines
    ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)).
@@ -116,8 +117,9 @@ sequenceDiagram
   the same classes it already sees. It learns no key, and the re-admission decision never reaches it.
 - **The gate is the feature.** Everything else here is bookkeeping that the built scope-rotation machinery
   already performs; the decision that makes rotation safe to offer is *which credential may start it*.
-- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Gate and review are
-  client-enforced — crypto-grade self-hosted, honest-operator elsewhere.
+- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** The gate's Secret-Key half is
+  server-enforced. Its password half and the review are client-enforced — crypto-grade self-hosted,
+  honest-operator elsewhere.
 
 ## What this means for you / Was das für dich bedeutet
 

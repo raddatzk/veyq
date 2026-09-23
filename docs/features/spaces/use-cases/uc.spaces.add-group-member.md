@@ -7,15 +7,17 @@
 - **Goal:** give an **existing tenant member** access to a group — the GroupOwner picks them **by username**, and the
   group then hands over the key by itself: any group member's device wraps the group scope key `K_SC` to the
   newcomer's identity, operator-blind.
-- **Preconditions:** The caller is the group's **OWNER** (holds the group grant, so their device can wrap `K_SC`).
+- **Preconditions:** The caller is the group's **OWNER** (holds the group grant, so their unlocked device can
+  compute the membership's **admission tag** from the group's current epoch key —
+  [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6 — and can wrap `K_SC`).
   The target is **already a member of the active tenant** with a published identity public key
   ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), [ADR 0023](../../../decisions/0023-per-tenant-member-identity.md))
   — there is **no onboarding** to do. At least one group key-holder comes online after the membership is
   recorded, to deliver the key.
 - **Postconditions (success):** The target is a **member of the group** and, once **any** group key-holder's device
   has wrapped `K_SC` to them, holds a **group grant** — so the group opens for them like any space they hold.
-  The server saw only the new membership row, identity public keys, and opaque grant ciphertext — never `K_SC`,
-  and never the group's (sealed) name.
+  The server saw only the new membership row with its admission tag, identity public keys, and opaque, signed
+  grant ciphertext — never `K_SC`, and never the group's (sealed) name.
 
 This use-case is the **group** consumer of the grant-distribution primitive
 ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)) — the same wrap + auto-delivery as
@@ -31,18 +33,22 @@ Governance (who may add, the name stays sealed, no tenant-owner power) is [ADR 0
    username-reachable variant scoped to the tenant is the group case's concern). The username is a plaintext,
    unique-in-tenant handle every tenant member already sees, so this leaks nothing new
    ([ADR 0023](../../../decisions/0023-per-tenant-member-identity.md)).
-2. The GroupOwner picks the resolved member. The server records a **grant-less GROUP membership** (`role=MEMBER`)
-   for them — admission only; **no key crosses the wire**. Because the person already has an identity and is
+2. The GroupOwner picks the resolved member. Their client computes the membership's **admission tag**, bound to
+   the target's user id, and the server records a **grant-less GROUP membership** (`role=MEMBER`) carrying it —
+   admission only; **no key crosses the wire**. Because the person already has an identity and is
    already a tenant member, there is **no email, no cold-register** (unlike [uc.spaces.add-member](uc.spaces.add-member.md)).
 3. **Delivery is automatic — no second human action.** Every group member already holds `K_SC`, so **any** group
    member's client — the owner's or another's — that is online after the membership was recorded sees the pending
-   member in the group's **member directory** (with their identity public key) and **eagerly wraps** `K_SC` to
-   them. The **first** key-holder to do so wins; the rest see the grant already present and no-op. Delivery is a
+   member in the group's **member directory** (with their identity public key) and, once the admission tag
+   verifies under its own current epoch key, **eagerly wraps** `K_SC` to them. The **first** key-holder to do so
+   wins; the rest see the grant already present and no-op. Delivery is a
    `grant-delivery` job on the operator-blind background-task mechanism ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
    exactly as for the tenant scope.
-4. The wrap is `asymWrap(hybridPublic(member), K_SC, "scope-grant")` — the same hybrid KEM as a self-grant, only
-   the recipient differs — run **on the key-holder's device** and posted as the member's grant; the server stores
-   opaque ciphertext.
+4. The wrap seals `K_SC` to the member's hybrid public key under the `scope-grant` purpose, bound to the scope
+   and epoch ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — the same hybrid KEM as a
+   self-grant, only the recipient differs — and the key-holder signs it with its identity key
+   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). It runs **on the
+   key-holder's device** and is posted as the member's grant; the server stores opaque ciphertext.
 5. The member, on their **next entry**, opens their grant with their own identity private → `K_SC`, decrypts the
    group's sealed name for the switcher, and browses the group like any space
    ([uc.spaces.switch-spaces](uc.spaces.switch-spaces.md), [en.spaces.group-scope](../enablers/en.spaces.group-scope.md)).
@@ -59,12 +65,12 @@ sequenceDiagram
   participant CT as Client<br>(target)
   O->>S: resolve username → identity pubkey (scoped to the tenant)
   S-->>O: { userId, identityPublicKey }
-  O->>S: add member → record grant-less GROUP membership (role=MEMBER)
+  O->>S: add member + admission tag → record grant-less GROUP membership (role=MEMBER)
   Note right of S: admission only — no key,<br>no onboarding (already a tenant member)
   M->>S: (next online) group directory shows the pending member + pubkey
-  M->>M: grant = asymWrap(pubkey(member), K_SC, "scope-grant")  — first-online-wins
+  M->>M: tag ok → grant = seal K_SC to pubkey(member) (scope-grant, scope, epoch), signed — first-online-wins
   M->>S: POST grant for member (opaque ciphertext)
-  T->>CT: next entry → asymUnwrap own grant → K_SC → open name → browse group
+  T->>CT: next entry → verify granter signature → open own grant → K_SC → open name → browse group
   Note right of S: server saw the membership row,<br>pubkeys, opaque grant — never K_SC / the name
 ```
 
@@ -83,13 +89,14 @@ sequenceDiagram
 - **E1 — the username doesn't resolve in this tenant:** a generic *not-found*. The resolve is **tenant-scoped** —
   a non-member (or a handle in another tenant) is not reachable, and the server never runs a global search
   ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
-- **E2 — key-substitution by a malicious operator:** the wrapping key-holder trusts the identity pubkey the
-  server returns. The verification stance is settled by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md):
+- **E2 — key-substitution by a malicious operator:** the wrapping key-holder takes the identity pubkey from the
+  server. The verification stance is settled by [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md):
   **TOFU-pin on first use**, a **changed** key is a UI notice / a hard block for the grant-delivery worker, and
   out-of-band **safety-number verification** ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)) elevates a
-  contact to *verified*; an opt-in **strict mode** hard-gates on unverified. The pinning + ceremony are a pending
-  slice ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)) — **until it lands
-  the wrap is still Plain** (bounded, self-hosted makes it moot).
+  contact to *verified*; an opt-in **strict mode** hard-gates on unverified. The pinning is built
+  ([en.account.identity-pinning](../../account/enablers/en.account.identity-pinning.md)); strict mode and the
+  proactive ceremony are not. The operator cannot invent a member (no admission tag), so what remains is a
+  substituted key on a real add before anyone pinned the target (self-hosted makes it moot).
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open the
   group → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a wipe),
   matching [en.spaces.group-scope](../enablers/en.spaces.group-scope.md) E2.
@@ -102,7 +109,8 @@ sequenceDiagram
 - **Admission vs. delivery ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) §5).** The
   **GroupOwner** gates *who* joins (only an owner admits — the tenant owner has **no** say, [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4);
   **any** group key-holder delivers the *key* (automatic, first-online-wins), because every group member already
-  holds `K_SC`. Access isn't bottlenecked on the owner, and no one confirms the same person twice.
+  holds `K_SC`. Access isn't bottlenecked on the owner, and no one confirms the same person twice. Owner-only is
+  server policy; that admission needs a key-holder is cryptographic — delivery checks the admission tag.
 - **Username resolve is tenant-scoped, not a global directory.** The resolve returns a pubkey only for a handle
   **inside the caller's own tenant** — the bounded variant [ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)
   reserved for the group case. Usernames are already visible to every tenant member (cr-0083), so exposing them to
@@ -110,8 +118,9 @@ sequenceDiagram
 - **The active-operator gap — the closing stance.** The add wraps to the server-returned pubkey; **which** key is
   trusted is governed by **TOFU pinning + safety-number verification** ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md),
   [security-model](../../../crosscutting/security-model.md)) — a first-seen key is pinned, a changed key is
-  surfaced (UI) or refused (worker), and verification elevates to *verified*. Until that slice ships the wrap is
-  still Plain (self-hosted makes it moot); Key Transparency remains the end-state.
+  surfaced (UI) or refused (worker), and verification elevates to *verified*. The first sight of a key stays
+  unverified until someone compares safety numbers (self-hosted makes it moot); Key Transparency remains the
+  end-state.
 - **Additive only.** This use-case only **adds** a grant. **Consent** (the account-global "ask before adding me"
   opt-in, soft membership) is [uc.spaces.consent-group-add](uc.spaces.consent-group-add.md) (refined); **promote/
   demote a co-owner, remove a member, the last-owner guard, `K_SC` rotation, and the orphan rule** are the

@@ -7,12 +7,14 @@
   hands over the key by itself: any member's device wraps the tenant scope key to the newcomer's identity,
   operator-blind.
 - **Preconditions:** The owner holds the TENANT grant (born cold at activation, [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md))
-  to mint the invite; at least one key-holder (every member holds `K_SC`) comes online after the newcomer joins,
+  and mints the invite from an **unlocked vault**: the invite carries an **admission tag** that only a holder of
+  the tenant's current epoch key can compute ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)
+  move 6). At least one key-holder (every member holds `K_SC`) comes online after the newcomer joins,
   to deliver the key; a way to deliver the invite secret out-of-band (email, as the owner invite already does).
 - **Postconditions (success):** The invited person is a **member** of the tenant and, once **any** key-holder's
   device has wrapped the key to them, holds a **TENANT grant** — so they open the shared space instead of the
-  Personal fallback. The server saw only the invite metadata, identity public keys, and opaque grant
-  ciphertext — never the scope key.
+  Personal fallback. The server saw only the invite metadata with its admission tag, identity public keys, and
+  opaque, signed grant ciphertext — never the scope key.
 
 This use-case is the first consumer of the grant-distribution primitive
 ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)); groups reuse the same primitive later.
@@ -33,11 +35,14 @@ This use-case is the first consumer of the grant-distribution primitive
    and the Tenant entry reads *awaiting access*.
 3. **Delivery is automatic — no second human action.** Every tenant member already holds `K_SC`, so **any**
    member's client — the owner's or another member's — that is online after the newcomer joined sees them
-   *awaiting access* in the scope's **member directory** (with their identity public key) and **eagerly wraps**
-   the key to them. The **first** key-holder to do so wins; the rest see the grant already present and no-op.
-4. The wrap is `asymWrap(hybridPublic(member), K_SC, "scope-grant")` — the same hybrid KEM as a self-grant, only
-   the recipient differs — run **on the key-holder's device** and posted as the member's grant; the server
-   stores opaque ciphertext.
+   *awaiting access* in the scope's **member directory** (with their identity public key) and, once their
+   admission tag verifies under its own current epoch key, **eagerly wraps** the key to them. The **first**
+   key-holder to do so wins; the rest see the grant already present and no-op.
+4. The wrap seals `K_SC` to the member's hybrid public key under the `scope-grant` purpose, bound to the scope
+   and epoch ([ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)) — the same hybrid KEM as a
+   self-grant, only the recipient differs — and the key-holder signs it with its identity key
+   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). It runs **on the
+   key-holder's device** and is posted as the member's grant; the server stores opaque ciphertext.
 5. The member, on their **next entry**, opens their grant with their own identity private and reaches the
    shared **Tenant** space; the tree + favorites load for it ([uc.spaces.switch-spaces](uc.spaces.switch-spaces.md)).
 
@@ -51,15 +56,15 @@ sequenceDiagram
   participant S as Server<br>(blind)
   actor I as Invitee
   participant CI as Client<br>(invitee)
-  O->>S: mint member invite (email, role=MEMBER#59; secret hashed)
+  O->>S: mint member invite (email, role=MEMBER, admission tag#59; secret hashed)
   S-->>I: invite delivered out-of-band
   I->>CI: open invite → register
   CI->>S: cold-birth identity (publish pubkey) + accept → MEMBER, no grant
   Note right of CI: lands in the Personal fallback<br>until any key-holder wraps
   M->>S: (next online) directory shows the pending member + identity pubkey
-  M->>M: grant = asymWrap(pubkey(member), K_SC, "scope-grant")  — first-online-wins
+  M->>M: tag ok → grant = seal K_SC to pubkey(member) (scope-grant, scope, epoch), signed — first-online-wins
   M->>S: POST grant for member (opaque ciphertext)
-  I->>CI: next entry → asymUnwrap own grant → K_SC → shared space
+  I->>CI: next entry → verify granter signature → open own grant → K_SC → shared space
   Note right of S: server saw invite metadata,<br>pubkeys, opaque grants — never K_SC
 ```
 
@@ -74,13 +79,14 @@ sequenceDiagram
   *awaiting access* — **not** an error. Only a key-holder can wrap the key; the blind server cannot. Access
   completes as soon as **any** member (the owner or another) is next online (step 3) — not specifically the owner.
 - **E1 — the invite is expired / already consumed:** a generic failure; the secret is single-use.
-- **E2 — key-substitution by a malicious operator:** the wrapping key-holder trusts the identity pubkey the
-  server returns, so a malicious operator could substitute its own key. The stance is
+- **E2 — key-substitution by a malicious operator:** the wrapping key-holder takes the identity pubkey from the
+  server, so a malicious operator could substitute its own key. The stance is
   [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md): **TOFU-pin** the key on first
   use, **surface a change** (UI notice / worker block), and elevate via out-of-band **safety-number verification**
-  ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)); opt-in **strict mode** hard-gates. Until that slice
-  ships the wrap is still Plain — bounded, self-hosted makes it moot; broadening *who* wraps doesn't widen it (one
-  honest device would already have wrapped).
+  ([uc.spaces.enforce-verified-identities](uc.spaces.enforce-verified-identities.md)); opt-in **strict mode** hard-gates.
+  The operator cannot *invent* a member — it cannot compute an admission tag — but it can redeem a genuine
+  invite with a key of its own before anyone has pinned the invitee: the first-use gap
+  ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) § Consequences). Self-hosted makes it moot.
 - **E3 — the member's grant won't unwrap** (corrupt / identity rotated without re-wrap): the member can't open
   the tenant → surfaced as an error; the scope row is **not** self-deleted (a blind operator must not force a
   wipe), matching [en.spaces.tenant-scope](../enablers/en.spaces.tenant-scope.md) E3.
@@ -88,8 +94,8 @@ sequenceDiagram
 ## Quality notes
 
 - **Operator-blind.** The member directory returns only **operational metadata** the server already stores
-  (identity public keys, roles, grant-present flags); the wrap is **client-side**; the server stores the grant
-  as opaque ciphertext. No scope key ever crosses the wire.
+  (identity public keys, roles, grant-present flags, admission tags); the wrap is **client-side**; the server
+  stores the grant as opaque ciphertext. No scope key ever crosses the wire.
 - **Member identity ([en.spaces.member-identity](../enablers/en.spaces.member-identity.md), cr-0083).** Each
   member shows a per-tenant **`username`** (plaintext handle, chosen at join, unique in the tenant) and their
   **real name sealed under `K_tenant`** — decrypted on-device by any member, never seen by the server;
@@ -100,14 +106,15 @@ sequenceDiagram
   access* state.
 - **Admission vs. delivery.** The **owner** gates *who* joins (only the owner mints invites); **any** key-holder
   delivers the *key* (automatic, first-online-wins) — because every member already holds `K_SC`. A non-inviting
-  member can't admit anyone; they only help hand the key to someone the owner already admitted. So access isn't
+  member can't admit anyone; they only help hand the key to someone the owner already admitted. Owner-only is
+  server policy; that admission needs a key-holder is cryptographic — every delivering device checks the
+  invite's admission tag, so neither a stolen owner password nor the operator admits anyone. So access isn't
   bottlenecked on the owner, and no one is asked to confirm the same person twice (a second human checkpoint
   returns only under the opt-in **strict mode** of [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md), where an unverified member is not auto-delivered until verified).
-- **The active-operator gap, stated honestly.** v1 trusts the server-returned pubkey (no TOFU-pin, no
-  hard-gate). This matches the declared threat model — veyq does not defend an *actively malicious* operator
-  before key transparency, and self-hosted makes it moot ([security-model](../../../crosscutting/security-model.md)).
-  The identity **fingerprint / safety-number** derivation is left as an explicit seam for a later hardening
-  slice ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
+- **The active-operator gap, stated honestly.** Delivery pins the newcomer's key on first sight and refuses a
+  changed one ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)); what remains is
+  that first sight itself, closed only by out-of-band safety-number verification or, eventually, key
+  transparency (E2). Self-hosted makes it moot ([security-model](../../../crosscutting/security-model.md)).
 - **Delivery result, never silent (cr-email-invite-send-hardening).** The mint reports how the invite went. On
   a member invite only **SENT** is reachable: no sendable mailer is refused up front, and a send that errors is
   `503 mail_send_failed` with the invite **revoked again** — there is no copy-link to hand a survivor to, so a
@@ -121,8 +128,9 @@ sequenceDiagram
   one address are **rate-limited** — per-(tenant, recipient) as the primary guard and per-tenant as a volume cap
   (429 + `Retry-After`, no invite minted). It is enforced in the handler on the tenant-owner member paths (the
   per-IP auth limiter can't key on a recipient); the re-issue loop against one address is the sharpest vector.
-- **Additive only.** This use-case only **adds** a grant. Removing a member, rotating `K_SC` so a removed member
-  can't read future content, and re-inviting are a separate later slice.
+- **Additive only.** This use-case only **adds** a grant. Removal is
+  [uc.spaces.remove-tenant-member](uc.spaces.remove-tenant-member.md); a scope-key rotation
+  ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)) carries the admission tag forward.
 
 ## What this means for you / Was das für dich bedeutet
 

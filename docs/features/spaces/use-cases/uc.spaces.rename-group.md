@@ -26,7 +26,8 @@ every member already does. It is a **name-only** change: it does **not** rotate 
    are **not** unique — a duplicate is allowed ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md), same as create).
 2. **Re-seal under the current epoch.** The client takes the scope's **current epoch** `e = currentEpoch` (its
    write key, peeled from the grant), derives `K_name_e = HKDF(E_e, "group-name-key")`, and seals the new name:
-   `encryptedName = symEncrypt(K_name_e, newName)` (the same node-name seal). Sealing under the **current** (not the
+   `encryptedName = symEncrypt(K_name_e, newName)` (the group name's own seal purpose, bound to the group —
+   [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)). Sealing under the **current** (not the
    old name) epoch is what makes the new name forward-secret.
 3. **POST the rename.** `POST /api/scopes/{scopeId}/name { encryptedName, nameEpoch: e }` — two opaque values.
 4. **The server updates the row (blind).** Owner-gated ([ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §4).

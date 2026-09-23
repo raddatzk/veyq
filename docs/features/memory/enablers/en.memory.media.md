@@ -56,9 +56,11 @@
 > gallery later sends longer lists — same shape, no contract change.
 
 1. The client has the Memory open: `K_mem` is unwrapped (via `K_SC`, en.memory.tree).
-2. **Key:** generate a random **`K_blob`** and wrap it under `K_mem` (`symWrap(K_mem, K_blob)`). The blob's
-   `byteSize` and `chunkCount` are known from the plaintext length alone, before any frame is sealed.
-3. **Start:** POST a blob-start declaring `byteSize` + `chunkCount` (+ the `K_blob` wrap); the server checks
+2. **Key:** mint the media's and the blob's ids (UUIDv4 — the client names what it seals,
+   [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)), generate a random **`K_blob`** and seal it
+   under `K_mem` bound to the scope, the media, the blob and its role. The blob's `byteSize` and `chunkCount`
+   are known from the plaintext length alone, before any frame is sealed.
+3. **Start:** POST a blob-start declaring the ids, `byteSize` + `chunkCount` (+ the `K_blob` wrap); the server checks
    the pair against the frame size, opens an upload session **bound to the caller**, and returns presigned
    `PUT` URLs for the **first window** of chunks, each signed for its chunk's exact size.
 4. **Transfer, streaming:** the client reads the plaintext one chunk at a time, `sealFrame(K_blob, index,
@@ -67,8 +69,8 @@
    each request is authorized again, and a window that expired is simply asked for again.
 5. **Complete + attach:** POST complete-and-attach `{ uploadId, nodeId }` as the session's opener; the server
    **stats** each object to confirm presence + exact size, writes the chunk manifest, enforces the byte budget,
-   promotes the staged objects to a blob, and creates the **media** record linking it to the node. Returns the
-   blob/media ids.
+   promotes the staged objects to a blob, and creates the **media** record, under the id the client minted,
+   linking it to the node.
 6. **Read back:** to display, the client asks for **presigned `GET` URLs**, fetches the raw frames directly,
    unwraps `K_blob` (via `K_mem`), and `openFrame`s each (the AAD position check verifies order/count).
 
@@ -82,9 +84,9 @@ sequenceDiagram
   participant S as Server<br>(blind, control plane)
   participant O as Object store<br>(blind)
   U->>C: add photo
-  C->>C: K_blob = random(32)
-  C->>C: wrappedBlobKey = symWrap(K_mem, K_blob)
-  C->>S: start blob { chunkCount:n, byteSize, wrappedBlobKey }
+  C->>C: mediaId, blobId = random UUIDs#59; K_blob = random(32)
+  C->>C: wrappedBlobKey = seal(K_mem, blob-key of scope, mediaId, blobId, role, K_blob)
+  C->>S: start blob { mediaId, blobId, chunkCount:n, byteSize, wrappedBlobKey }
   S-->>C: { uploadId, presignedPut[first window] }
   loop each window
     C->>C: frame_i = sealFrame(K_blob, i, n, chunk_i, nonce_i)
@@ -95,7 +97,7 @@ sequenceDiagram
   C->>S: complete + attach { uploadId, nodeId }
   S->>O: stat each object (size/presence)
   S->>S: write manifest, enforce budget, create media record
-  S-->>C: { blobId, mediaId }
+  S-->>C: attached
   Note right of S: stores ciphertext chunks + manifest + K_blob wrap only —<br>no plaintext byte, no content key
 ```
 

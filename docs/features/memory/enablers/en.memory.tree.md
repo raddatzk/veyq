@@ -35,7 +35,8 @@ A **node** has an opaque id, a `parentId` (or the scope root), a `kind`, an **en
 **Recursive `K_mem` (chapters — [ADR 0012](../../../decisions/0012-content-key-hierarchy.md)).** Every
 content-bearing node (MEMORY *and* CHAPTER) carries its own random `K_mem`, wrapped under the **content key of
 its parent** — a top-level Memory under `K_SC`, a chapter under its parent Memory's `K_mem` (same `content-key`
-wrap context). A media's **`K_blob` is wrapped under the `K_mem` of its *direct* parent node** (chapter media
+purpose, bound to the node the key belongs to — [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md)).
+A media's **`K_blob` is wrapped under the `K_mem` of its *direct* parent node** (chapter media
 under the chapter's key). Consequence of this layout: every content node is a **sharing unit**, and a move is a
 single **re-wrap, never a data re-encrypt** — the *decision + rationale* (why recursive, not "shares the
 parent's key") is ADR 0012.
@@ -63,12 +64,12 @@ sequenceDiagram
   participant C as Client
   participant S as Server<br>(blind)
   U->>C: new Memory "Italien 2026"
-  C->>C: K_mem = random(32)
-  C->>C: wrappedContentKey = symWrap(K_SC, K_mem)
-  C->>C: encryptedName = seal(K_SC, name) #59; slugToken = HMAC(K_SC, parentId‖slug)
-  C->>S: POST node { kind:MEMORY, parentId, encryptedName, slugToken, wrappedContentKey }
-  S->>S: enforce UNIQUE(parentId, slugToken) + structural rules
-  S-->>C: { nodeId }
+  C->>C: nodeId = random UUID #59; K_mem = random(32)
+  C->>C: wrappedContentKey = seal(K_SC, content-key of scope, nodeId, epoch, K_mem)
+  C->>C: encryptedName = seal(K_SC, node-name of scope, nodeId, epoch, name) #59; slugToken = HMAC(K_SC, parentId‖slug)
+  C->>S: POST node { id:nodeId, kind:MEMORY, parentId, encryptedName, slugToken, wrappedContentKey }
+  S->>S: refuse a taken id, enforce UNIQUE(parentId, slugToken) + structural rules
+  S-->>C: created
   Note right of S: stores ciphertext + opaque tokens only — no name, no K_mem
 ```
 

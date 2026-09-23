@@ -17,7 +17,9 @@
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md)).
 - **Out of scope (by design):** **scope, content & share keys** + the invite/onboarding key transfer live in
   [scopes & tenancy](../../../crosscutting/scopes-and-tenancy.md); exact **byte formats** (suite layouts, KEM
-  combiner, wrap encodings) in the crypto wire-format spec. Whole-system security concern: the sibling
+  combiner, seal encodings) are the conformance vectors (`contracts/crypto/vectors/v1.json`) and the code they
+  pin (`packages/crypto`), and what every seal binds is
+  [ADR 0069](../../../decisions/0069-a-seal-binds-its-object.md). Whole-system security concern: the sibling
   [Security Model](../../../crosscutting/security-model.md).
 
 > **No end-user section** (enabler) — its value surfaces through the account use-cases it serves. Plain-language
@@ -64,10 +66,10 @@ always ciphertext the server stores but cannot open.
 | Secret Key | High-entropy user-held secret (Emergency Kit / enrolled devices) | **Never** stored server-side | Combined with the password for two-secret key derivation (2SKD); protects content unlock after a DB breach. See [Security Model → Secret Key (2SKD)](../../../crosscutting/security-model.md). |
 | Master Key | 32-byte symmetric account root | Only as `MasterKeyWrap.wrappedKey`, **one wrap per unlock method** (`PASSWORD`, `PASSKEY`, `RECOVERY`, `DEVICE`) | Opens `wrappedIdentityPrivateKey`. Stable across password changes; changing a method replaces only its wrap. |
 | Unlock KEK | Derived in-memory wrapping key | **Never** stored server-side | Opens exactly one Master Key wrap. Derived on the client, then discarded. |
-| Identity public key (`identityPublicKey`) | Hybrid KEM public bundle + signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; signature verification for key/device changes. |
-| Identity private key (`wrappedIdentityPrivateKey`) | Hybrid KEM private bundle + signing private key | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs account/key operations. |
+| Identity public key (`identityPublicKey`) | Hybrid KEM public bundle + signing public key | Published in the key directory | Grant address ("mailbox slot"); fingerprint/safety-number input; verifies the grants this user signs ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). |
+| Identity private key (`wrappedIdentityPrivateKey`) | Hybrid KEM private bundle + signing private key | Only wrapped under the Master Key | Opens scope grants wrapped to this user; signs every grant this user issues. |
 | `RECOVERY` wrap | A `MasterKeyWrap` opened by the **Secret Key alone** (`kekRecovery(secretKey, salt)` — no password) | `MasterKeyWrap.wrappedKey`, **withheld** server-side until a two-factor release | Opens the Master Key when the password is gone. There is **no separate recovery code**: the recovery factor *is* the Secret Key from the Emergency Kit ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)). |
-| Recovery master-key tag (`recoveryMasterKeyTag`) | Master-key commitment/tag, **not** an unlock key | A one-way tag derived from the Master Key | Proves during reset/recovery that the client recovered the **same** Master Key before replacing auth material. Not a login token; decrypts nothing. |
+| Secret-Key proof key | Ed25519 signing keypair derived from the **Secret Key alone** | Only the **public** key, registered at account birth | Signs every request that mints a cold credential — rotation, change-password, recovery completion — so the **server** can refuse a caller without the Secret Key ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). Stable while the Secret Key is. Decrypts nothing. |
 
 ## Auth vs. unlock — two separate layers
 
@@ -141,7 +143,7 @@ scopes at once:
 1. **Another enrolled device** — still holds the keys; set a new password from there.
 2. **Emergency Kit (Secret Key) + master password** — sign in on a fresh device.
 3. **The withheld `RECOVERY` wrap** — released against **two** factors, a mailed one-time token (address
-   control) and possession of the Secret Key, proven by reproducing `recoveryMasterKeyTag`
+   control) and possession of the Secret Key, proven by a signature of the Secret-Key proof key
    ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md),
    [uc.account.recover-access](../use-cases/uc.account.recover-access.md)).
 
@@ -149,8 +151,7 @@ Every path runs through the Secret Key or an already-enrolled device — there i
 losing the Emergency Kit narrows recovery to path 1. After recovery the user sets a new password, which
 re-derives the auth keypair and re-registers its public key; the Emergency Kit stays valid, because the
 Secret Key is unchanged. The Master Key itself is unchanged, so
-content stays intact. The `recoveryMasterKeyTag` lets the flow prove the same Master Key
-was recovered before any auth material is replaced.
+content stays intact.
 
 **The one unrecoverable case (stated up front):** losing *every* path — no device, no Emergency Kit,
 no password — means the content is gone. The same property that blinds the operator stops

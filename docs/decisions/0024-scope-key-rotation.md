@@ -30,8 +30,9 @@ members; new content seals under it. Nothing is re-encrypted.**
    32-byte keys. Each new epoch **wraps its predecessor**: `symWrap(E_{n+1}, E_n)` (stored server-side as an opaque
    epoch-chain link). So **holding the latest epoch derives every earlier one** (peel the chain); holding an old
    epoch can **never** derive a newer one. A member's grant wraps the **latest epoch they are entitled to**:
-   `asymWrap(memberIdentityPub, E_latest, "scope-grant")` — same primitive, context and wire shape as today
-   ([ADR 0020](0020-grant-distribution-invite-wrap.md)), only the plaintext is the latest epoch key.
+   `asymWrap(memberIdentityPub, E_latest, "scope-grant")` — same primitive, purpose and wire shape as
+   [ADR 0020](0020-grant-distribution-invite-wrap.md)'s, only the plaintext is the latest epoch key, and the seal
+   binds the scope and that epoch ([ADR 0069](0069-a-seal-binds-its-object.md)).
 
 2. **Content is tagged with the epoch it was sealed under.** Node **names**, `slug_token`s and each Memory's
    `K_mem`-wrap seal under the **current** epoch at creation time; every node carries a **server-visible epoch
@@ -50,7 +51,9 @@ members; new content seals under it. Nothing is re-encrypted.**
 
 4. **Remove a member = rotate forward.** The removing owner's device:
    (a) mints `E_{n+1}`, posts the chain-link `symWrap(E_{n+1}, E_n)`;
-   (b) re-grants `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity);
+   (b) re-grants `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity), carrying each
+   one's admission tag forward — verified under `E_n`, re-tagged under `E_{n+1}`
+   ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6);
    (c) the server **deletes the removed member's membership** (instant layer-1 access cut — a 403 on the scope).
    New content now seals under `E_{n+1}`. The removed member keeps ≤ `E_n` → reads pre-removal content, **never**
    post-removal content, even against a malicious operator.
@@ -68,8 +71,9 @@ membership → 403) is the instant first layer for everything future.
 
 ## Consequences
 
-- **Cheap rotation.** A removal costs **one random key + one chain-wrap + one `asymWrap` per remaining member** —
-  no content re-seal, **no media re-encryption**. Sequential removals just extend the chain.
+- **Cheap rotation.** A removal costs **one random key + one chain-wrap + one `asymWrap` and one re-tagged
+  admission per remaining member** — no content re-seal, **no media re-encryption**. Sequential removals just
+  extend the chain.
 - **Members carry a key-history**, realized as the chain (they hold one key, derive the rest); new server state is
   the per-scope **epoch counter**, the opaque **epoch-chain links**, a **granted-epoch** marker per membership, and
   a **epoch index** per node. All opaque/operational — no key, no plaintext.

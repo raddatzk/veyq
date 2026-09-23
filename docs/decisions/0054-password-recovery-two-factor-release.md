@@ -13,8 +13,8 @@ client. The account key model calls a forgotten password "must not mean lost mem
 a way back, so the gap is a promise outstanding, not merely a missing feature. Inbox #113 carries it; ADR 0053's
 sibling durability bar is stated in [architecture](../architecture/README.md) §10.
 
-Three facts constrain the design, and all three are already in the code — this ADR chooses very little that was
-not already implied.
+Three facts constrain the design. The first two are in the code; the third is the trap the first version of
+this record fell into.
 
 **1. The RECOVERY wrap is opened by the Secret Key alone.** `kekRecovery(secretKey, salt)` takes no password,
 where the `PASSWORD` floor takes both (`kekPasswordSecret`). So there is **no separate recovery code** in veyq
@@ -27,11 +27,16 @@ a live session plus the Secret Key would open the vault *without* the password, 
 content factor into a login-only one. So release cannot be authenticated by session — it must be gated on
 something the ordinary logged-in user does not have.
 
-**3. `recoveryAuthTag` already exists for exactly this.** `sha256("veyq/v1/recovery-auth" ‖ masterKey)` is
-written to `veyq_user.recovery_master_key_tag` at birth and read by nothing. Its own comment names the threat:
-*"a reset must reproduce it — which needs the master key, i.e. the Secret Key — so an email-token-only attacker
-cannot hijack the server account."* It is a commitment, not a secret: the master key is 32 random bytes and the
-hash is not invertible.
+**3. A hash of the Master Key is not a proof of the Secret Key — the trap this record first fell into.** It
+first gated the reset on reproducing `recoveryAuthTag = sha256("veyq/v1/recovery-auth" ‖ masterKey)` against
+the copy stored at birth, on the reasoning that it *"needs the master key, i.e. the Secret Key"*. Both halves
+of that fail.
+- **The Master Key is not the Secret Key.** A linked device holds the Master Key without ever having seen the
+  Secret Key ([ADR 0059](0059-device-linking.md) §10).
+- **The proof is the stored value itself.** A database dump carries the very tag a reset presents.
+
+A proof the server checks has to be one the server cannot itself produce: a signature under a key only the
+Secret Key derives ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2).
 
 The open question was what gates the release. The originally sketched answer was an email gate, recorded in
 code as "the (future) email-gated recovery flow (cr-0052)" — a CR that no longer exists. Email verification was
@@ -44,9 +49,9 @@ reasoning covers *registration*, not *recovery*, and it was reversed on 2026-08-
 
 - **Address control** — a one-time token mailed to the account's address, proving the requester reads that
   mailbox. This is the *authorization* to be handed the wrap.
-- **Possession of the Secret Key** — proven by reproducing `recoveryAuthTag(masterKey)`, which is only
-  computable after actually opening the RECOVERY wrap. This is the *authentication* that the requester is the
-  account holder.
+- **Possession of the Secret Key** — proven by a signature of the account's **Secret-Key proof key**
+  ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2), which only the Secret Key derives. This is the
+  *authentication* that the requester is the account holder.
 
 Neither alone suffices. An attacker with mailbox access gets a wrap they cannot open. An attacker with a stolen
 Emergency Kit gets no token. This is why the flow is safe even though the mailbox is, for most people, weaker
@@ -126,9 +131,8 @@ limiter so the two answers cannot be paired into an address-level oracle
 - **Email verification (#112) becomes load-bearing for V1**, and for a different reason than that row argues.
   Its semantics are now *recovery-gating* first: what matters is that the address is provably controlled at the
   time of release.
-- **`recovery_master_key_tag` stops being write-only.** A column carried since V1 for an unbuilt flow finally
-  has its reader, which also means it is now a correctness dependency: an account whose tag is missing or wrong
-  cannot recover.
+- **The Secret-Key proof key is a correctness dependency.** An account whose proof key is missing or wrong
+  cannot recover, cannot change its password, and cannot rotate.
 - **The invite-token lifecycle is the template**, not a new invention: `Tokens.random()` → store only
   `Tokens.hash()` with an expiry and a status → mail the raw token in a URL fragment → look up by hash, check
   liveness, flip status on consumption → scheduled expire-then-purge. Recovery wants a far shorter TTL than an
