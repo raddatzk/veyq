@@ -127,6 +127,11 @@ function fakeStore() {
 
   const fetchStub = vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
+      // A presigned PUT signs `content-type: application/octet-stream`, so the store refuses any other type —
+      // and a missing header too (ADR 0013 §6). Modelled here so every upload test in this file proves it.
+      if (new Headers(init.headers).get('Content-Type') !== 'application/octet-stream') {
+        return { ok: false, status: 403 } as Response
+      }
       objects.set(url, new Uint8Array(init.body as Uint8Array))
       return { ok: true, status: 200 } as Response
     }
@@ -708,10 +713,42 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   it('isVideoMediaType matches only video/* MIME types', () => {
     expect(isVideoMediaType('video/mp4')).toBe(true)
     expect(isVideoMediaType('video/webm')).toBe(true)
+    expect(isVideoMediaType('video/x-matroska')).toBe(true)
     expect(isVideoMediaType('image/jpeg')).toBe(false)
     expect(isVideoMediaType('application/pdf')).toBe(false)
     expect(isVideoMediaType(undefined)).toBe(false)
     expect(isVideoMediaType('')).toBe(false)
+  })
+
+  // The sealed mediaType is written by the UPLOADER's client, and the playback shim serves it back as the
+  // response's Content-Type on the app origin. A browser opening a listed type as a page resolves it to its last
+  // valid entry, so `video/mp4, text/html` would pass a prefix check and render as a document (ADR 0047 § The
+  // shim serves inert responses). Only ONE well-formed `video/<subtype>` essence counts as a video.
+  it('isVideoMediaType refuses anything but a single well-formed video essence', () => {
+    expect(isVideoMediaType('video/mp4, text/html')).toBe(false)
+    expect(isVideoMediaType('video/mp4,text/html')).toBe(false)
+    expect(isVideoMediaType('video/mp4; codecs="avc1"')).toBe(false)
+    expect(isVideoMediaType('video/mp4;charset=utf-8')).toBe(false)
+    expect(isVideoMediaType('video/mp4 ')).toBe(false)
+    expect(isVideoMediaType(' video/mp4')).toBe(false)
+    expect(isVideoMediaType('video/')).toBe(false)
+    expect(isVideoMediaType('video/mp4/html')).toBe(false)
+    expect(isVideoMediaType('video/mp4\ntext/html')).toBe(false)
+  })
+
+  it('every chunk PUT carries exactly the pinned Content-Type (ADR 0013 §6)', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'text/html' }, stubDeriver())
+
+    const puts = store.fetchStub.mock.calls.filter(([, init]) => init?.method === 'PUT')
+    expect(puts.length).toBeGreaterThan(0)
+    for (const [, init] of puts) {
+      expect(new Headers(init!.headers).get('Content-Type')).toBe('application/octet-stream') // never the file's type
+    }
   })
 
   it('seals the video mediaType at upload and round-trips it through unsealMeta', async () => {

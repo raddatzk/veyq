@@ -1,8 +1,8 @@
 // cr-inline-video-playback Slice 2 (ADR 0047) — the page↔Service-Worker wire protocol.
 //
-// Shared by the main-thread register.ts and the worker-side mediaSw.ts. Pure types + constants: NO globals, NO
-// key material. The SW is key-free by design — every message below carries handles, indices and plaintext, never
-// a key or an auth token.
+// Shared by the main-thread register.ts and the worker-side mediaSw.ts. Pure types, constants and one pure
+// predicate: NO globals, NO key material. The SW is key-free by design — every message below carries handles,
+// indices and plaintext, never a key or an auth token.
 
 /**
  * Protocol version. Bump on ANY breaking change to the messages below. register.ts sends it in the handshake; a
@@ -14,6 +14,20 @@ export const PROTOCOL_VERSION = 1
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
 
+/** One `video/<subtype>` MIME essence: no list, no parameters, no whitespace — the subtype is an RFC 9110 token. */
+const VIDEO_ESSENCE = /^video\/[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/
+
+/**
+ * Whether a sealed `mediaType` names a video — the signal for the tile play badge, the lightbox `<video>` branch
+ * and, in the SW, whether a playback may be registered at all. The value is sealed by the **uploader's** client
+ * and the shim serves it back as `Content-Type` on the app origin, so a prefix check is not enough: a browser that
+ * opens `video/mp4, text/html` as a page resolves the list to its last valid entry and renders a document. Only
+ * one well-formed video essence passes (ADR 0047 § The shim serves inert responses).
+ */
+export function isVideoMediaType(mediaType: string | undefined): boolean {
+  return typeof mediaType === 'string' && VIDEO_ESSENCE.test(mediaType)
+}
+
 // --- page → SW (via the SW's own postMessage) --------------------------------
 
 /** Handshake probe: the page asks a controlling SW for its protocol version (reply on the transferred port). */
@@ -23,7 +37,8 @@ export type HandshakeAck = { type: 'veyq-handshake-ack'; version: number }
 
 /** Register a playback: hand the SW its metadata + a MessagePort to pull plaintext chunks over. `mediaType` is
  *  the sealed MIME the page already holds — given to the SW only to set the response `Content-Type` so the demuxer
- *  picks the right container. It is on-device code; the SW never sends it (or anything) to the operator. */
+ *  picks the right container, and refused unless [isVideoMediaType]. It is on-device code; the SW never sends it
+ *  (or anything) to the operator. */
 export type RegisterMsg = {
   type: 'veyq-register-playback'
   handle: string

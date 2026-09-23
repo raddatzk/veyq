@@ -22,7 +22,7 @@ import {
   unsatisfiedRange,
   type ByteRange,
 } from './range'
-import { MEDIA_PATH_PREFIX, PROTOCOL_VERSION, type ChunkReply, type PageToSwMessage } from './protocol'
+import { MEDIA_PATH_PREFIX, PROTOCOL_VERSION, isVideoMediaType, type ChunkReply, type PageToSwMessage } from './protocol'
 
 /** Max decrypted plaintext held in the read-ahead cache, per playback. A UX/bandwidth dial, NOT a privacy control
  *  (the ADR 0047 seek-leak is accepted) — re-tune after live-verify. Two 256 KiB chunks of headroom over the
@@ -130,6 +130,15 @@ export class PlaybackSession {
 
 // --- response assembly ------------------------------------------------------
 
+/** On EVERY shim response: the shim serves uploader-chosen bytes on the app origin, so nothing it answers may be
+ *  sniffed into, or run as, a document (ADR 0047 § The shim serves inert responses). A `<video>` ignores both. */
+const INERT_HEADERS: Readonly<Record<string, string>> = {
+  'X-Content-Type-Options': 'nosniff',
+  'Content-Security-Policy': "sandbox; default-src 'none'",
+}
+
+const notFound = () => new Response(null, { status: 404, headers: INERT_HEADERS })
+
 /** A streaming body over `range`: pulls the covering chunks one at a time (backpressure caps over-fetch) and
  *  slices each to the window. `cancel` stops further page round-trips — an early demuxer abort (a seek) costs
  *  nothing beyond the chunk in flight. */
@@ -163,14 +172,15 @@ export function buildRangeResponse(session: PlaybackSession, rangeHeader: string
   if (parsed.kind === 'unsatisfiable') {
     return new Response(null, {
       status: 416,
-      headers: { 'Accept-Ranges': 'bytes', 'Content-Range': unsatisfiedRange(total) },
+      headers: { ...INERT_HEADERS, 'Accept-Ranges': 'bytes', 'Content-Range': unsatisfiedRange(total) },
     })
   }
   const range: ByteRange = parsed.kind === 'full' ? { start: 0, end: Math.max(0, total - 1) } : parsed.range
   const headers: Record<string, string> = {
+    ...INERT_HEADERS,
     'Accept-Ranges': 'bytes',
     'Content-Length': String(range.end - range.start + 1),
-    'Content-Type': session.contentType, // the sealed MIME the page passed at register — lets the demuxer pick the container
+    'Content-Type': session.contentType, // the sealed video essence the page registered — lets the demuxer pick the container
   }
   if (parsed.kind === 'range') headers['Content-Range'] = contentRange(range, total)
   return new Response(rangeBody(session, range), { status: parsed.kind === 'full' ? 200 : 206, headers })
@@ -206,7 +216,9 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
   if (msg.type === 'veyq-handshake') {
     ports[0]?.postMessage({ type: 'veyq-handshake-ack', version: PROTOCOL_VERSION })
   } else if (msg.type === 'veyq-register-playback') {
-    if (ports[0]) {
+    // The shim serves `mediaType` as Content-Type, and the uploader sealed it: anything but one video essence
+    // never gets a handle — whatever the page's own gate did.
+    if (ports[0] && isVideoMediaType(msg.mediaType)) {
       registry.register(msg.handle, new PlaybackSession(msg.chunkCount, msg.byteSize, ports[0], msg.mediaType))
     }
   } else if (msg.type === 'veyq-revoke-playback') {
@@ -218,9 +230,12 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
 export function handleFetch(registry: PlaybackRegistry, origin: string, request: Request): Response | null {
   const url = new URL(request.url)
   if (url.origin !== origin || !url.pathname.startsWith(MEDIA_PATH_PREFIX)) return null
+  // A `<video>` fetch is the only caller the shim has, so a page load of a handle ("open video in new tab") is
+  // by definition not one — served, it would be decrypted bytes as a document on the app origin.
+  if (request.mode === 'navigate') return notFound()
   const handle = decodeURIComponent(url.pathname.slice(MEDIA_PATH_PREFIX.length))
   const session = registry.get(handle)
-  if (!session) return new Response(null, { status: 404 })
+  if (!session) return notFound()
   return buildRangeResponse(session, request.headers.get('Range'))
 }
 
