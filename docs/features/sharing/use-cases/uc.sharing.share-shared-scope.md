@@ -45,7 +45,14 @@ create-gate (scope) and a member-removal hook are new.
 - **A2 — re-activate a deactivated share → ownership transfers.** Any **remaining member** may re-enable a
   deactivated share; doing so **transfers its ownership** (`owner_account`) to the re-activating member. An active
   share is thus always tied to a *current* member's responsibility, never orphaned to a removed one — and a
-  later removal of the new owner would deactivate it again.
+  later removal of the new owner would deactivate it again. Re-activating is a publication like creating, so it
+  passes the same checks: a current member (not an unaccepted invitee, not during the group's deletion grace,
+  [uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)) **and** the instance's sharing
+  capability for the share's role — `422 capability_disabled` when the operator has switched that kind of link
+  off ([ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md)).
+- **A3 — a creator who has left the scope** keeps nothing: editing or revoking their former share answers them
+  as a non-member (404). Ownership is a claim of a *current* member; the share's `owner_account` alone never
+  authorizes.
 - **E1 — non-member / lost grant:** a caller who is not a member of the scope (or cannot open `K_mem`) cannot
   create a share there — the same 404/authorization path as any non-member scope access (no reveal).
 

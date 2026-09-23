@@ -35,7 +35,9 @@
    **group they were the sole member of** are **soft-deleted** (the cr-0090 grace + read-only + scheduled purge) —
    but the target **keeps their grant** on them. So the removed member can still sign in to the tenant and
    **read + download** their own memories (read-only) for the grace window; then the scheduled purge erases them.
-   *Their own stuff isn't taken the moment they leave; shared stuff is.*
+   *Their own stuff isn't taken the moment they leave; shared stuff is.* Read-only means exactly that: no write,
+   **no restore** — un-deleting their own spaces would undo the removal — and every tenant route answers them as
+   a non-member ([uc.spaces.scope-access](uc.spaces.scope-access.md) A2).
 
 ## Alternate / exception flows
 

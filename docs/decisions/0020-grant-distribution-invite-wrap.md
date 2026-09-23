@@ -69,7 +69,7 @@ key, wraps, or unwraps.** Concretely:
    ADR 0007 already blesses and cr-0075 already renders — not a new state, just the first flow that produces it
    on purpose. **Delivery is realized as a `grant-delivery` job on the operator-blind background-task mechanism**
    ([ADR 0021](0021-operator-blind-background-tasks.md)) — this use-case is that mechanism's first, trivially-blind
-   consumer (a universal tag, no lease, idempotent). The "pending = grant-less membership, reconciled by any
+   consumer (a universal tag, a short lease held by the one worker that completes it, idempotent). The "pending = grant-less membership, reconciled by any
    key-holder" discovery is that mechanism's pull/reconcile. **Scope-key rotation re-grants existing members the
    same way** — only the reconcile predicate widens from *grant-less* to *grant-less **or** stale-epoch*
    ([ADR 0024](0024-scope-key-rotation.md) — a removed member's departure mints a new epoch the remaining members

@@ -56,7 +56,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    - **Member removal — deactivate the removed member's shares.** Removing a member **soft-revokes every share
      that member created** in that scope (`enabled = false`, §7). The share is **not** deleted: **any remaining
      member may re-activate it, which transfers its ownership** to the re-activating member — so an active share
-     is always tied to a *current* member's responsibility, never orphaned to a removed one. This deactivation is
+     is always tied to a *current* member's responsibility, never orphaned to a removed one. Re-activation is
+     gated like creation: the instance capability for the share's role still applies. This deactivation is
      the **honest-server forward-secrecy layer for a public link**: because `K_mem` is stable and never re-keyed
      (Consequences — *scope rotation does not revoke a share*), a link **cannot be rotated away**, so the
      server-side soft-revoke *is* the revocation. It composes with, and is independent of, the scope-key rotation

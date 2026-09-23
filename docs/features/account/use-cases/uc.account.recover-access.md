@@ -8,8 +8,11 @@
   `MasterKeyWrap`** with the Secret Key alone and re-wrapping the *same* Master Key under the new password. The
   server hands out ciphertext it cannot open and never learns the new password, the Secret Key, or the Master
   Key ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md)).
-- **Preconditions:** The instance has a **working mail transport** — without it there is no recovery at all
-  ([ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md)). The account was born with a
+- **Preconditions:** The tenant the request arrives on has a **working mail transport**
+  ([ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md)), and the account **is a member of
+  that tenant**. Without both there is no recovery: the link travels only through a relay of the account's own
+  tenant, so an account in no tenant (the Server Owner, as first-run setup leaves them) has none until it joins
+  one ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §4). The account was born with a
   `RECOVERY` wrap and a `recovery_master_key_tag` (both written at account birth since V1). The actor holds the
   **Secret Key**. No session is required, and none helps.
 - **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
@@ -20,10 +23,12 @@
 ## Main flow
 
 1. On the sign-in screen the actor chooses **"Forgot password"** and enters their email address.
-2. The server answers **identically whether or not the address is known** — no enumeration oracle
-   ([ADR 0004](../../../decisions/0004-session-tokens.md)). That promise covers the *address*; whether this
-   tenant can send mail at all is a property of the deployment and is answered plainly instead (A2). If it *is*
-   known, it mints a one-time token, stores
+2. The server answers **identically whether or not the address is known**, in content and in timing, so it is
+   not an enumeration oracle ([ADR 0004](../../../decisions/0004-session-tokens.md)). That promise covers the
+   *address*; whether this tenant can send mail at all is a property of the deployment and is answered plainly
+   instead (A2). The answer comes as soon as the transport and the rate limits are checked, and everything below
+   happens after it ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §6). If the
+   address belongs to an account that is a member of this tenant, the server mints a one-time token, stores
    only its SHA-256 hash with a short expiry, commits, and *then* mails the raw token in the link's **URL
    fragment**. The mail carries link, domain and expiry and nothing else
    ([ADR 0049](../../../decisions/0049-email-delivery-boundary.md)).
@@ -43,7 +48,9 @@
    ([ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)) and builds a fresh **`PASSWORD` wrap**
    over the *same* Master Key with a new salt and nonce.
 9. The client sends the token, the commitment, the new wrap and the new auth public key in **one request**.
-10. The server verifies the commitment against the stored `recovery_master_key_tag`. On a match it applies, **in
+10. The server hashes the commitment and compares the result with the stored `recovery_master_key_tag`, which
+    holds only the commitment's SHA-256, so a database read alone yields nothing this step accepts
+    ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) § Decision 1). On a match it applies, **in
     a single transaction**: replace the `PASSWORD` wrap, overwrite `auth_public_key`, delete every `DEVICE` and
     `DEVICE_KEY` wrap, revoke all sessions, and mark the token spent.
 11. The actor signs in with the new password. Because all device trust was dropped, this device asks for the
@@ -51,8 +58,10 @@
 
 ## Alternate / exception flows
 
-- **A1 — Address unknown.** Step 2 answers success anyway and no mail is sent. The actor learns nothing about
-  who is registered on the instance.
+- **A1 — Address unknown here.** The address has no account, or its account is not a member of this tenant.
+  Step 2 answers success anyway and no mail is sent. The actor learns nothing about who is registered on the
+  instance. Neither does this tenant's owner, whose relay would otherwise have carried another tenant's link
+  ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §4).
 - **A2 — No mail transport configured.** The request is refused with **`503 mail_unavailable`** and nothing is
   minted — the instance says so plainly instead of offering a control that silently fails. There is deliberately
   **no copy-link fallback**: passing a recovery link through the operator would make them a participant in a flow

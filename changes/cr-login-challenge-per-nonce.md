@@ -41,6 +41,9 @@ concurrent-replay guard (audit P2f) hold per nonce.
 - **Migrations are append-only** ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations): `V5__login_sessions.sql`
   and its *"One outstanding login challenge per email"* comment stay untouched. The live statement of the rule
   is the entity KDoc, which this CR corrects. Next free number: `ls backend/src/main/resources/db/migration | sort -V | tail -1`.
+- **Neighbour touching the same code:** `cr-request-tenant-and-tenant-bound-recovery` moves `LoginHandler`'s
+  `VeyqUser.find("email", …)` lookups to `AccountStore.findByEmail` and leaves `LoginChallengeEntity` lookups
+  alone. The overlap is textual; whichever CR lands second rebases.
 - **Out of scope:** `changePassword.ts` and `recovery.ts` request a challenge only for its `instanceSalt`. Today
   that silently burns any login in flight for the same account. After this CR it adds a row that expires unused,
   which is harmless, so those calls are left as they are.

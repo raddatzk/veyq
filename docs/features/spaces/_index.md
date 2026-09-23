@@ -91,6 +91,11 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
 - [Delete a group](use-cases/uc.spaces.delete-group.md) — **web done (cr-0090)** (owner soft-deletes into a
   **grace period** (clearly marked, still readable, any owner can restore); a scheduled operator-blind job then
   hard-purges the ciphertext + files; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4/§6)
+- [Act on a space — who is let in, and what everyone else is told](use-cases/uc.spaces.scope-access.md) —
+  **planned** (the one `ScopeAccess` gate every scope-, tenant-, share- and job-addressed operation calls first:
+  an unaccepted proposal is not a member, a deleting group refuses every write, a suspended tenant refuses its
+  members everything on any domain, and a non-member — share guests included — learns neither;
+  [ADR 0042](../../decisions/0042-http-failure-projection.md), [ADR 0066](../../decisions/0066-tenant-suspension.md))
 - [Trust-on-first-use, notice, and review a changed identity key](use-cases/uc.spaces.verify-identity.md) —
   **built (cr-0098/cr-0099)** (a client **pins** each contact's identity key on first wrap — operator-blind,
   cross-device; a **changed** key is never silently trusted: the grant-delivery worker **declines**, the UI

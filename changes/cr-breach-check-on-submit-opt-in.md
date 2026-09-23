@@ -34,8 +34,8 @@ run, stops that first submit with a message saying which; submitting again with 
   box is the PrimeVue `Checkbox` + label the apps already use (`grep -rln '<Checkbox' web/src admin-web/src`),
   placed where the `pwnedWarning` `<Message>` sits today. The stop messages reuse that `<Message severity="warn">`.
 - **The CSP needs no change:** `connect-src` still allows `https://api.pwnedpasswords.com`. The comments that
-  describe the call change wording only (`grep -rn -i 'pwned' web/src/shared/security/csp.ts admin-web/vite.config.ts docs/crosscutting/cc.security.csp.md`).
-  If `cr-client-hygiene` has already moved admin-web's policy into a module, the comment lives there.
+  describe the call change wording only (`grep -rn -i 'pwned' web/src/shared/security/csp.ts admin-web/src/shared/security/csp.ts docs/crosscutting/cc.security.csp.md`).
+  admin-web's policy lives in `admin-web/src/shared/security/csp.ts` (moved there by #165), so its comment is there.
 - **Out of scope:** the password-length policy (`passwordPolicy.ts`), which is untouched and not a third-party call.
 
 ## Decisions
