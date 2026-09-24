@@ -65,8 +65,9 @@ After this CR:
   The GET side itself is out of scope.
 - **Out of scope:**
   - resuming across a page reload (ADR 0013, deferred);
-  - a storage quota — per-blob `max-bytes` bounds a file, never a total, and there is no open-session cap
-    (ADR 0013 §3);
+  - the storage quota — per-blob `max-bytes` bounds a file, never a total; the total and the open-session bound
+    are [ADR 0073](../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)'s, built by
+    `cr-share-link-storage-limit` and `cr-tenant-storage-quota` after this CR;
   - the GET presign path.
 
 ## Decisions
@@ -92,8 +93,11 @@ After this CR:
     id.
   - Sessions from before the migration carry no opener. They match nobody and age out through the purge; there
     is no data migration.
-  - Two nullable references or one opaque key is the implementer's choice, under one constraint: the purge,
-    `ScopePurge` and the reclaim paths that delete sessions must not need to read it
+  - It is stored as **two nullable references** (the account, the share identity), not as one opaque key. The
+    storage quota sums a link's open sessions by share identity
+    ([ADR 0073](../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4,
+    `cr-share-link-storage-limit`), and an opaque key would leave that SUM nothing to join on. One constraint
+    remains: the purge, `ScopePurge` and the reclaim paths that delete sessions must not need to read it
     (`grep -rln 'UploadSession\|upload_session' backend/src/main`).
 - **Every window is authorized again** with the gate of its `start` — membership, or the share chain.
   - The contributor window does **not** draw from `allowUpload`. That bucket counts the writes that create
