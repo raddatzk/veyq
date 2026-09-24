@@ -120,6 +120,8 @@ dump contains.
         signature, not duplicated.
       - Sweep: `grep -rn 'recoveryAuthTag\|recoveryMasterKeyTag\|recovery_master_key_tag' docs wiki` returns
         nothing.
+      - Flip the row "installs an identity of its own on an account" in
+        [security-model § What holds today](../docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
 
       · Done when: `python3 scripts/validate_coverage.py` green, all `scripts/validate_*.py` green.
 

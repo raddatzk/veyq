@@ -158,6 +158,8 @@ purpose. It is a stored-format change, and it is being made before V1 because af
         under the other key"*, covered by the upload-chain bite.
       - Sweep the durable docs for a sentence this CR made false:
         `grep -rn "symWrap\|asymWrap\|'node-name'\|context string" docs/ --include=*.md`.
+      - Flip the row "serves a ciphertext as another object's" in
+        [security-model § What holds today](../docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve).
       - Tell the owner their development instance needs a reset.
 
       · Done when: `python3 scripts/validate_coverage.py` green, all `scripts/validate_*.py` green.
