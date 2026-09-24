@@ -10,7 +10,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { favoritesApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 
 const FAV_CTX = 'favorites'
 const encoder = new TextEncoder()
