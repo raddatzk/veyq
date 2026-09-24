@@ -7,7 +7,7 @@
 import { getSetupStatus } from '../features/account/instance/instance'
 import { useServerState } from '../shared/state/useServerState'
 import { setCapabilities, useCapabilities } from '../shared/state/useCapabilities'
-import { refreshSession } from '../features/account/login/login'
+import { refreshSession } from './sessionRefresh'
 import { restoreVaultFromCache } from '../features/account/unlock/unlock'
 import { clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../features/account/rememberMe/sessionVault'

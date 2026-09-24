@@ -3,7 +3,7 @@
 // Operator-blind: the server holds only invite metadata + already-stored operational metadata (pubkeys/roles/
 // grant-present) — never a scope key. The actual key DELIVERY runs as a grant-delivery job (cr-0076), not here.
 import { tenantsApi, scopesApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
 import type { MemberInviteState, PendingMemberInvite } from '../../api/generated/tenants'
 import { SetMemberRoleRequestRoleEnum, type ScopeMember, type ResolvedGroupCandidate, type GroupInvitation } from '../../api/generated/scopes'

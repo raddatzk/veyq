@@ -458,6 +458,13 @@ no file restates it, because a restated list drifts out of step with the one tha
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
 local green.)
 
+**In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
+that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24
+eight sessions each ran the whole glob at once, and `validate_guard_gaps.py` alone took over 20 minutes in one of
+them. So a wave session runs the guards its own Done-when names (a coverage edit runs `validate_coverage.py`), and
+the coordinating session runs the whole glob after merging the wave, before it calls the wave done. A red there
+goes back to the CR that caused it.
+
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
 session that cannot commit is a session holding that rule open across every phase it finishes.
