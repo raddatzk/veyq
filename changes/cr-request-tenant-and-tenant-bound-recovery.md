@@ -186,7 +186,7 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
         synchronous). Confirm that it still reds if the transport check is moved below the limiter.
 
       · Done when: both bites were recorded red and are now green, and the full `./gradlew check` is green.
-- [ ] 4 prose + coverage. ADR 0055 §4 and ADR 0066 name `RequestTenant` instead of the deleted symbols. That is
+- [x] 4 prose + coverage. ADR 0055 §4 and ADR 0066 name `RequestTenant` instead of the deleted symbols. That is
       an edit to the symbol only, and the decisions stand. Re-run the prose locator: phases 2–3 wrote KDocs and
       may have added sites. Coverage for `uc.account.recover-access`:
       - new criteria `request-reaches-only-this-tenants-accounts` and
