@@ -106,8 +106,8 @@ Inbox #164. ADR 0050 stays as it is, and becomes true again.
       a capture keeps the key out of the capture directory unless explicitly told otherwise, writes nothing
       another user can read, and a restore refuses a separately-kept key that is not supplied. Its observable is
       the operator tool's exit and message, like `a-populated-target-is-refused-rather-than-reconciled`, so it
-      rides in the same harness hook. The existing `web` gap text gains it, and the file stays
-      `status: planned` for the reason its header gives.
+      rides in the same harness hook and, like that one, carries no ref and says on itself how it is proven. The
+      file stays `status: planned` for the reason its header gives: criteria out of every surface's reach.
       · Done when: `python3 scripts/validate_coverage.py` green.
 - [ ] 5 stale pointers — ADR 0050 no longer has an amendment section (it was folded into the decision), yet
       code and docs still cite "ADR 0050 amendment". Rewrite those citations to plain "ADR 0050". The one other
@@ -124,8 +124,9 @@ Inbox #164. ADR 0050 stays as it is, and becomes true again.
 - `python3 scripts/validate_coverage.py` and the trust-chain guards are green; `./gradlew check` green after
   phase 5.
 
-**Not proven by the above, named:** the web-e2e job has never run in CI (no remote; the coverage file's header),
-so the new criterion is a gap for the same reason as its siblings. The encryption recommendation is prose. It
-is only as good as the operator who follows it.
+**Not proven by the above, named:** the new criterion's observable is an operator tool's exit, not a coverage
+surface, so it carries no ref, like its hook sibling; and no run has executed web-e2e in this repository (no
+remote) — its rehearsals count on the declared run of a row admitted before the import (ADR 0040's note). The
+encryption recommendation is prose. It is only as good as the operator who follows it.
 
 ## Retrospective

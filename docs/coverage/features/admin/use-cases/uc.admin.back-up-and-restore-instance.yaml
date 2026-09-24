@@ -2,17 +2,18 @@ useCase: uc.admin.back-up-and-restore-instance
 feature: admin
 title: Back up an instance and restore it onto an empty one
 # This use-case exists to make architecture §10's durability bar executable: its sentence is criterion
-# `restore-onto-empty-opens-every-memory` below, almost word for word. Until a CI-run test carries that
-# criterion, §10 keeps saying "half held" — the bar follows the build, never the intention (ADR 0040).
+# `restore-onto-empty-opens-every-memory` below, almost word for word, and a CI-run test now carries it: the
+# grouped web e2e rehearsal, on the `web-e2e` job — a row a run admitted before the 2026-08-06 import (ADR 0040's
+# note on which rows a run has admitted). So §10 reads "held"; the bar follows the build, never the intention.
 # The capture/restore machinery itself is a Python script and an orchestrator extension, neither of which is a
 # coverage surface; what is claimable here is what a test can observe about a restored instance.
 #
-# The suites now EXIST and pass locally. `status: planned` is nonetheless correct and not a formality: this
-# repository has no remote and no CI run has ever executed, so ADR 0040's rule — a test no CI run executes makes
-# no coverage claim — leaves every criterion uncovered. The gaps below therefore state the ONE remaining
-# condition, which is a CI run and not a missing test. `docs/coverage/README.md` § Rules forbids the
-# compromise ("a surface that is covered may not also be a gap"), so "refs plus a caveat" is not an expressible
-# state; the flip is a mechanical edit gated on that event, spelled out in docs/inbox.md #26.
+# `status: planned` stays, and it is not a formality: four criteria are out of every surface's reach — their
+# observable is a stopped app, the operator tool's exit, or a second store no harness stands up — the same
+# shape as uc.admin.identify-instance-release's manifest criterion. `docs/coverage/README.md` § Rules gives such
+# a criterion no other legal home, so each says on itself how it is proven instead. (Until 2026-09-24 this file
+# held the two rehearsals back too, on "no CI run has ever executed" — a stricter bar than the corpus set any
+# other ref, retired with that note.)
 status: planned
 acceptanceCriteria:
   - id: three-legs-or-it-is-not-a-backup
@@ -22,7 +23,29 @@ acceptanceCriteria:
       mismatch and refuses member invites and password resets with 503 mail_unavailable. Content is unaffected —
       the key seals operator config, never content — which is exactly why the failure is invisible until someone
       tries to invite or reset. Restoring the key file, or re-entering each tenant's SMTP password, resolves it.
+    coverage:
+      # `legthree.*` does the `restore.*` restore minus the key file — removed from the BACKUP after a full
+      # capture, not captured badly, so the two groups differ in exactly one artifact — and asserts MISMATCH plus
+      # a 503 `mail_unavailable` invite while the Memory still opens, with a pre-capture `OK` as its positive
+      # control. `restore.b-reopen` is the other remedy's half: with the key file restored, the state reads `OK`.
+      web:
+        e2e:
+          - src/features/instanceBackup/legthree.a-capture.e2e.test.ts
+          - src/features/instanceBackup/legthree.b-mismatch.e2e.test.ts
+          - src/features/instanceBackup/restore.b-reopen.e2e.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          Re-entering each tenant's SMTP password is not driven after a restore. That re-sealing clears a
+          MISMATCH is proven where the key's lifecycle lives: uc.admin.tenant-mail-settings,
+          `config-secret-key-loss-is-detected-and-degrades`, cites
+          `ConfigSecretKeyGuardTest.detectsAChangedKeyThenRecoversOnReseal`.
   - id: a-stopped-app-makes-the-dangerous-skew-impossible
+    # No coverage, and none to come: the property is "the app is stopped", which a backend test cannot observe
+    # because a backend test IS the app. Both rehearsals capture with the app already down, which is the whole
+    # consistency argument (ADR 0056 §2), but none asserts the window. It is proven instead by the operator
+    # tool's asymmetry — an object with no row is tolerated, a row with no object is fatal, naming the object —
+    # and by the CR's bite-proofing.
     text: >-
       With the application stopped, the database gains no rows even while a still-valid presigned URL lets a
       client complete an upload against the store. An object written in that window therefore never acquires a
@@ -39,7 +62,25 @@ acceptanceCriteria:
       provisioned — is the shape a restore targets, and is accepted (A5, ADR 0067). It is now the only shape an
       operator can produce, since the app is the only thing that makes the store usable and the same start
       migrates the schema.
+    coverage:
+      # `restore.*` births an instance with media, has the orchestrator capture it, DESTROYS the source, and
+      # restores onto a freshly INSTALLED target — a fresh database, bucket and key path plus one app boot, which
+      # migrates the schema and provisions the store (ADR 0067) and is therefore the operator's own step 1 — then
+      # signs in for real (`login` + `unlockMasterKey`: Argon2 over the password and the Emergency Kit's Secret
+      # Key, no injected vault) and compares the fetched plaintext byte for byte. The fixture is NOT
+      # `web/scripts/devSeed.mts`: every suite bootstraps through `birthInstance()`, and a `vaultFromSeed()`
+      # inject would bypass the password-derived unlock that "the keys their owners already hold" is about.
+      web:
+        e2e:
+          - src/features/instanceBackup/restore.a-capture.e2e.test.ts
+          - src/features/instanceBackup/restore.b-reopen.e2e.test.ts
   - id: a-populated-target-is-refused-rather-than-reconciled
+    # No coverage on a surface: the observable is the operator tool's exit and message, not anything a browser
+    # sees. It is asserted in the same `web-e2e` run nonetheless — `assert_populated_target_is_refused` in
+    # `scripts/run_web_e2e.py` re-runs the identical restore against the instance the line before just populated
+    # and requires it to fail naming the data it found ("already holds data"), never on a bare non-zero exit, so
+    # the accepted case and the refused one stand against one instance, one artifact apart. A red hook fails the
+    # job; it is simply not a test file this model can cite.
     text: >-
       A restore aimed at an instance that already holds data is refused before anything is written, naming the
       rows it found — including the rows a half-finished restore itself just wrote. This is the other half of
@@ -48,12 +89,20 @@ acceptanceCriteria:
       accepts. Nothing reconciles two populated instances (A5), and the refusal is asserted by its own message
       rather than by a non-zero exit, which a connection failure produces equally well.
   - id: the-store-leg-is-verifiable-before-the-restore
+    # No coverage, and none to come: the observable is the exit code of `scripts/instance_backup.py verify`, and a
+    # Python operator tool is not a coverage surface (ADR 0040). Proven by that tool's own asymmetry (stated on
+    # `a-stopped-app-makes-the-dangerous-skew-impossible`) and the CR's bite-proofing.
     text: >-
       Because the store leg is the S3 object namespace rather than the store's on-disk form, the captured object
       keys are comparable against the blob rows that reference them. A capture missing an object is detected
       against the database it was taken with, before anyone restores it — the check a volume copy cannot offer,
       and the reason this form was chosen.
   - id: the-store-leg-restores-onto-a-different-store
+    # No coverage: no harness stands up a second store. The rehearsal restores into a different BUCKET that the
+    # target's own first start provisioned (`restore_hook`: `veyq-e2e-dst-<n>`), which is the "recreated rather
+    # than restored" half — but on the same store, endpoint and credentials, so the portability this criterion
+    # claims across endpoint, credentials and implementation rests on ADR 0056 §3 (the leg is the S3 object
+    # namespace, moved by `rclone`), not on a run.
     text: >-
       The captured objects restore into a bucket that is not the source's — different endpoint, credentials,
       bucket name, and store implementation — with only configuration changing. The bucket, access key and
@@ -63,29 +112,8 @@ acceptanceCriteria:
       before a restore rather than merely created.
 gaps:
   backend: >-
-    No backend test, and none is planned. The two criteria that stay uncovered on every surface are
-    `a-stopped-app-makes-the-dangerous-skew-impossible` — whose property is "the app is stopped", which a
-    backend test cannot observe because a backend test IS the app — and
-    `the-store-leg-is-verifiable-before-the-restore`, whose observable is the exit code of
-    `scripts/instance_backup.py verify`, and a Python tool is not a coverage surface (ADR 0040). Both are
-    proven instead by that tool's own asymmetry (an object with no row is tolerated, a row with no object is
-    fatal, naming the object) and by the CR's bite-proofing. The config-secret MISMATCH verdict itself is
-    already covered under uc.admin.tenant-mail-settings; what this use-case adds is reaching it BY WAY OF a
-    restore, which is a live-instance property and therefore web's.
-  web: >-
-    The suites exist and pass locally; the only thing missing is a CI run to execute them (ADR 0040). Two
-    grouped e2e suites under `web/src/features/instanceBackup/` run through `scripts/run_web_e2e.py`: `restore.*`
-    births an instance with media, has the orchestrator capture it, DESTROY the source, and restore onto a
-    freshly INSTALLED target — a fresh database, bucket and key path plus one app boot, which is what migrates
-    the schema and provisions the store (ADR 0067) and is therefore the operator's own step 1 — then signs in
-    for real (`login` + `unlockMasterKey` — Argon2 over the password and the Emergency Kit's Secret Key, no
-    injected vault) and compares the fetched plaintext byte for byte; `legthree.*` does the same restore minus
-    the key file and asserts MISMATCH plus a 503 mail_unavailable invite, with a pre-capture `OK` as its
-    positive control. `a-populated-target-is-refused-rather-than-reconciled` rides in the same hook rather than
-    in a suite, because its observable is the operator tool's exit and message rather than anything a browser
-    sees: `assert_populated_target_is_refused` re-runs the identical restore against the instance the previous
-    line just populated and requires it to fail naming the data it found — so the accepted case and the refused
-    case are established against one instance, one artifact apart. Note what this corrects: the fixture is NOT
-    `web/scripts/devSeed.mts` — no e2e suite reads it, every suite bootstraps through `birthInstance()`, and a
-    `vaultFromSeed()` inject would have bypassed the password-derived unlock that "with the keys their owners
-    already hold" is actually about.
+    No backend test, and none is planned. What a backend test could observe here is either the app itself — and
+    "the app is stopped" is exactly what it cannot be — or an operator tool's output, which is not a coverage
+    surface (ADR 0040); the criteria no surface reaches say on themselves how they are proven instead. The
+    config-secret MISMATCH verdict itself is already covered under uc.admin.tenant-mail-settings; what this
+    use-case adds is reaching it BY WAY OF a restore, which is a live-instance property and therefore web's.
