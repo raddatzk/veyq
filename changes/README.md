@@ -458,6 +458,16 @@ no file restates it, because a restated list drifts out of step with the one tha
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
 local green.)
 
+**In a wave of parallel implement sessions, the full glob runs once, at the merge.** The coordinating session
+runs it over the merged tree before that tree lands on `main`; that is the green that closes each CR of the
+wave. An implement session runs only its surface's check and the guards whose inputs it touched
+(`validate_coverage.py` for a coverage YAML, `validate_changes.py` + `validate_doc_links.py` for a CR or inbox
+edit). Two reasons, and the first would suffice on its own: a green branch proves nothing about the merge, since
+two green branches can merge into a red tree, so the merged tree is the one the claim has to be about. And the
+per-session runs contend: in the 2026-09-24 wave, with several sessions running the glob at once,
+`validate_guard_gaps.py` took about 30 minutes instead of the whole chain's usual five, because each of its cases
+copies the working tree.
+
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
 session that cannot commit is a session holding that rule open across every phase it finishes.
