@@ -64,6 +64,9 @@ spec:
             # Behind an ingress controller the per-IP rate limiter must key on the real client.
             - name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
               value: "true"
+            # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
+            - name: VEYQ_HTTP_HSTS_ENABLED
+              value: {{ .Values.hsts.enabled | quote }}
             # The store is reached INTERNALLY; presigned URLs are signed for the store's OWN public host,
             # verbatim — the departure from compose's same-origin path route (ADR 0064, ADR 0067 Decision 5).
             - name: VEYQ_BLOB_STORE_ENDPOINT

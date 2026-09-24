@@ -1,0 +1,1 @@
+default-src 'self'; frame-ancestors 'none'; connect-src 'self' https://api.pwnedpasswords.com; form-action 'self'

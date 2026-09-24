@@ -11,8 +11,15 @@ import jakarta.ws.rs.core.Response
 import org.jboss.resteasy.reactive.server.ServerRequestFilter
 
 /**
- * The tenant-suspension lockout (uc.admin.suspend-tenant, ADR 0066): every request whose `Host` resolves to a
+ * The tenant-suspension lockout (uc.admin.suspend-tenant, ADR 0066): every API request whose `Host` resolves to a
  * `SUSPENDED` tenant is refused `403 tenant_suspended`, no exceptions — read or write, authenticated or not.
+ *
+ * **The API, and only the API.** JAX-RS sees every request the static handler did not answer, so without the
+ * path check this also refused the app shell's deep links (`/recover`, `/s/…`) while `/` itself — a real file,
+ * answered before JAX-RS — still loaded: the same client, reachable or not depending on the URL it was opened
+ * at. Nothing outside `/api` is a JAX-RS resource, so the check narrows nothing the lockout protects, and a
+ * suspended tenant's domain loads the (static, secret-free) client everywhere — which is what lets that client
+ * show the suspension at all. `AppShellSliceTest.aSuspendedTenantsDomainGetsTheShellWhileItsApiRefuses` pins it.
  *
  * **It is pre-matching, and that placement is the guarantee, not a detail.** Suspension had to block
  * *immediately* rather than eventually, and every access token already in the wild outlives the status flip by
@@ -60,6 +67,9 @@ class TenantSuspensionFilter(private val hosts: TenantHostResolver) {
 
     /** The `403 tenant_suspended` response, or null to let the request through untouched. */
     private fun refusalFor(ctx: ContainerRequestContext): Response? {
+        // The path RESTEasy matches against, so "is this an API request" is answered the way routing answers it.
+        val path = ctx.uriInfo.path.trimStart('/')
+        if (path != "api" && !path.startsWith("api/")) return null
         val tenant = hosts.tenantFor(hosts.hostOf { ctx.getHeaderString(it) }) ?: return null
         return if (tenant.status == TenantEntity.SUSPENDED) httpError(Failures.tenantSuspended) else null
     }

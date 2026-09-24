@@ -1,4 +1,4 @@
-// Content-Security-Policy for the web client (cr-0133 / audit P2e). veyq is operator-blind: the browser holds
+// Content-Security-Policy for the web client (cr-0133 / audit P2e, ADR 0069). veyq is operator-blind: the browser holds
 // decryption keys and renders decrypted content, so if hostile markup ever reached the page the real damage is
 // an injected script exfiltrating keys/plaintext to a foreign host. `connect-src 'self'` is the backstop that
 // forbids exactly that. The policy is GENERATED from the same map-provider config the app fetches from
@@ -13,8 +13,9 @@
 // - img-src data: + blob: — favicon SVG / QR data URLs, and decrypted media object URLs. media-src blob: — same.
 // - worker-src 'self': the Argon2 worker is a same-origin module worker (no blob: worker).
 // - object-src/frame-src 'none': the app embeds no <object>/<embed>/<iframe>.
-// - frame-ancestors is intentionally ABSENT: it is ignored in a <meta> CSP and only works as a real response
-//   header; it (plus HSTS) is deferred to the future production web-serving component. See cc.security.csp.md.
+// - frame-ancestors 'none': no page on any origin may frame the app (anti-clickjacking). It only works in a
+//   response header, which is one reason the policy is never a <meta>: the build emits it as a file the backend's
+//   app shell sends as a header, and the dev server sends it as one too. See cc.security.csp.md.
 
 export interface CspOptions {
   /** Basemap tile origin (Leaflet loads tiles as <img> → img-src), or null to allow no third-party tiles. */
@@ -24,6 +25,10 @@ export interface CspOptions {
   /** Dev only: also allow the Vite HMR websocket (`ws:`). Never set for a production build. */
   dev?: boolean
 }
+
+/** The emitted policy's file name inside `dist`. The backend's app shell reads it by the same name
+ *  (`AppShell.POLICY_FILE`) and refuses to boot without it, which is what catches the two drifting apart. */
+export const CSP_POLICY_FILE = 'content-security-policy.txt'
 
 // The HaveIBeenPwned range API — a fixed, privacy-preserving third-party the password-strength check calls
 // client-direct (only a 5-hex SHA-1 prefix leaves the device, k-anonymity). It must be in connect-src.
@@ -43,6 +48,7 @@ export function buildCsp({ tileOrigin, geocoderOrigin, dev = false }: CspOptions
     'base-uri': ["'self'"],
     'object-src': ["'none'"],
     'frame-src': ["'none'"],
+    'frame-ancestors': ["'none'"],
     'script-src': ["'self'"],
     'worker-src': ["'self'"],
     'style-src': ["'self'", "'unsafe-inline'"],

@@ -1105,6 +1105,16 @@ have caught it; only `node dist-cli/cli.js` did. So the "Done when" for any phas
 artifact (a bundle, a binary, a container) names **running it**, never just building it — and shell quoting
 inside a JSON string is a specific place to look first, because it fails silently in exactly this way.
 
+### A live proof that names a screen names the instance state that screen needs
+
+cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and
+specified a **throwaway** database for the run. A database with no account boots every route to "not set up", so
+the sign-in screen was unreachable without a first-run setup the CR never mentioned — and the Service Worker the
+same proof was meant to exercise registers on neither screen. The finding held (the app booted under the policy
+with zero violations), but on a different screen than the one written down, and the worker went unverified. So a
+done-when that names what the browser should show also names what the instance must hold for it (a seeded
+account, a tenant on the browsed host), or it names the screen a bare instance actually reaches.
+
 ### An ADR's cost premise expires separately from its decision — re-measure it at implement time
 
 **The decision can still be right while the reason it was cheap has gone stale.** ADR 0065 chose esbuild "already

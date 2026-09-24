@@ -40,6 +40,7 @@ interface VeyqConfig {
     fun ratelimit(): RateLimit
     fun share(): Share
     fun security(): Security
+    fun http(): Http
 
     /** A scheduled cleanup interval (`*.purge.every` / `*.reconcile.every`); read by the `@Scheduled` sibling. */
     interface Interval {
@@ -633,6 +634,27 @@ interface VeyqConfig {
          *  old env **value** `veyq.security.config-secret-key` is gone. */
         @WithDefault("config-secret.key")
         fun configSecretFile(): String
+    }
+
+    /** `veyq.http.*` — response headers the app shell sends on every response (ADR 0069 Decision 4). */
+    interface Http {
+        fun hsts(): Hsts
+
+        /**
+         * `Strict-Transport-Security` (cc.security.csp § *The other response headers*). On by default; the one
+         * reason to switch it off is a deployment whose host is also served over plain HTTP somewhere, or whose
+         * own proxy already sets the header. There is no `includeSubDomains` and no `preload` to configure:
+         * tenant domains are arbitrary hosts, and the ADR decides both away rather than leaving them to a knob.
+         */
+        interface Hsts {
+            @WithDefault("true")
+            fun enabled(): Boolean
+
+            /** Moderate on purpose: a browser keeps the entry for the whole `max-age` even after the header is
+             *  switched off, so this is also how long switching it off takes to reach every returning browser. */
+            @WithDefault("P180D")
+            fun maxAge(): Duration
+        }
     }
 
     /** `veyq.share.upload.rate.*` — the uploader-link rate limiter. */

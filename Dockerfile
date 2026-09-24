@@ -30,8 +30,10 @@ COPY web/package.json ./
 RUN npm ci
 COPY web/ ./
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
-# (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold.
-RUN npm run build && npm run verify:no-backdoor
+# (__dev/seed-credentials) never reaches dist/. A release image is exactly where that must hold. verify:csp is
+# its sibling for ADR 0069: the policy file exists and index.html has no CSP <meta> — the two things the
+# backend's app shell refuses to boot without, caught here rather than at a self-hoster's first start.
+RUN npm run build && npm run verify:no-backdoor && npm run verify:csp
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
 FROM eclipse-temurin:21-jdk-jammy AS backend-build-base

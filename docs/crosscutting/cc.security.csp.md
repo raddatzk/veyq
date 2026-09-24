@@ -5,15 +5,9 @@
   surface and for the response headers of the app origin, and for the `admin-web/` console and its origin's headers (§ *admin-web*). It has no standalone end-user goal, so it is not a
   use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
   rationale and verification are traceable from the threat model.
-- **Status:** **the header delivery described below is decided but not yet built**
-  ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). Until it is built:
-  - the build injects the same policy into `index.html` as a `<meta>` (without `frame-ancestors`, which a
-    `<meta>` ignores);
-  - the Vite dev server sends it as a header;
-  - the app origin sends none of the other headers.
-
-  Two consequences follow. A store on its own origin (the Kubernetes target) is blocked by `connect-src`, and a
-  `<meta>` cannot be widened from outside.
+- **Status:** built as described below, by the backend's app shell
+  ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). The one part not built is admin-web's HSTS
+  (§ *admin-web*).
 
 ## Protects against
 
@@ -147,9 +141,30 @@ every header of the admin origin.
   - `object-src 'none'`;
   - no third-party origin baked in when providers are unset;
   - `ws:` in dev only;
-  - no `frame-ancestors`, which is today's `<meta>`-era state.
-- Live-verified (cr-0133): the app boots under the `<meta>` policy with **zero CSP violations**, and styles,
-  fonts and HMR are intact.
+  - `frame-ancestors 'none'` in dev and production alike.
+- [`web/scripts/assert-csp-policy-in-dist.mjs`](../../web/scripts/assert-csp-policy-in-dist.mjs)
+  (`npm run verify:csp`, run by `npm run check` and by the `Dockerfile`'s frontend stage) fails a `dist` that
+  has no emitted policy or whose `index.html` carries a CSP `<meta>`.
+- The backend's app shell (`backend/src/main/kotlin/com/veyq/app/shared/appshell/`):
+  - `AppShellTest` compares the appended store origin, per signing mode, with the origin of a URL the signer
+    produced in that mode, and pins the fail-closed refusals (no policy, a CSP `<meta>`);
+  - `AppShellSliceTest` runs over a fixture shell. It covers the fallback, with a positive control for every
+    negative (not HTML, a missing chunk, `/api`, `/__media`), the `no-cache`/`immutable` split, the policy on
+    shell responses and `sw.js` but not on `/api`, and the plain headers on both;
+  - `AppShellStoreOriginSliceTest` shows the store origin reaching a real response in `store-origin` mode;
+    `AppShellHstsOffSliceTest` the HSTS switch; `AppShellAbsentSliceTest` the no-shell branch.
+- Live-verified on 2026-09-24 (cr-app-shell-served-by-backend), against a fast-jar built with `dist` in
+  `META-INF/resources` and run in `store-origin` mode with the store on another origin:
+  - `/recover`, `/tenant/accept`, `/s/<id>` and `/login` load the app, where they answered 404 before;
+  - the shell carries the policy with `frame-ancestors 'none'` and the store origin, plus `nosniff`,
+    `Referrer-Policy`, HSTS and `no-cache`, and `/api` carries the three plain headers;
+  - a page-context `fetch` to the store origin raises no `securitypolicyviolation`, while the same fetch to an
+    origin not in the policy raises one on `connect-src`;
+  - the app boots with zero CSP violations in the console. That instance had no account yet, so the screen
+    it booted to was "not set up" rather than sign-in.
+- **Not verified:** video playback through the Service Worker under its policy. The worker registered on none of
+  the screens reached, so only its script's response headers were checked. The Kubernetes path itself (a real
+  Ingress and a store on its own host) is shown only through the jar in `store-origin` mode, never on a cluster.
 - [`admin-web/src/shared/security/csp.test.ts`](../../admin-web/src/shared/security/csp.test.ts) pins admin-web's
   policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
   third-party origin anywhere, no `frame-ancestors`.

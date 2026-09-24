@@ -37,6 +37,18 @@ interface BlobStore {
     val canPresign: Boolean
 
     /**
+     * The origin a browser fetches this store's objects from **when that is not the page's own origin**, or null
+     * when it is (or when the store cannot presign at all). The app shell appends it to the policy's
+     * `connect-src` (ADR 0069 Decision 2, cc.security.csp § `<store-origin>`), which is the only reader.
+     *
+     * It is a property of the store rather than of the shell so that it is derived from the **same** endpoint
+     * resolution the presigned URLs come from: a second reading of `veyq.blob-store.*` could disagree with the
+     * signer, and the disagreement would surface only as a browser-blocked fetch on one deployment target.
+     * Abstract on purpose — a default `null` would let a delegating store silently hide its delegate's origin.
+     */
+    val storeOrigin: String?
+
+    /**
      * A short-TTL presigned PUT URL for one chunk object, or null when the store cannot presign.
      *
      * [domain] is the **resolved tenant's own registered domain** — the one the request arrived on, looked up in
@@ -87,6 +99,7 @@ interface BlobStore {
  */
 class InMemoryBlobStore : BlobStore {
     override val canPresign = false
+    override val storeOrigin: String? = null
     // The domain is ignored, and can be: this store has no endpoint to sign against in the first place.
     override fun presignPut(key: String, domain: String?): String? = null
     override fun presignGet(key: String, domain: String?): String? = null
@@ -164,6 +177,18 @@ class S3BlobStore(
         if (publicEndpoint.isBlank()) SigningMode.INTERNAL_ENDPOINT else signingMode
 
     private val presigners = ConcurrentHashMap<String, S3Presigner>()
+
+    /**
+     * Read off [endpointFor], never off the config, so it cannot name another origin than the URLs do. Only
+     * [SigningMode.TENANT_DOMAIN] answers null, and not because its endpoint is unknown: it signs for the
+     * tenant's own domain, which is the page's origin, so `'self'` already covers it. The other two ignore the
+     * domain, so `endpointFor(null)` is the one origin every URL they sign names. Signing is path-style, so the
+     * endpoint's origin is the fetched origin — a virtual-hosted bucket would put the bucket in the host.
+     */
+    override val storeOrigin: String? = when (mode) {
+        SigningMode.TENANT_DOMAIN -> null
+        SigningMode.STORE_ORIGIN, SigningMode.INTERNAL_ENDPOINT -> originOf(endpointFor(null))
+    }
 
     /*
      * ADR 0013 §6 — nothing the store serves is renderable, and THE SIGNER is what guarantees it: not the store,
@@ -266,6 +291,14 @@ class S3BlobStore(
         /** The only type a presigned PUT lets the store keep and the type every presigned GET is served as. */
         const val INERT_TYPE = "application/octet-stream"
         const val INERT_DISPOSITION = "attachment"
+
+        /** `scheme://host[:port]` — the form a CSP source expression and a browser's `origin` share. An explicit
+         *  port stays: it is part of the origin unless it is the scheme's default, which URI leaves as -1. */
+        fun originOf(endpoint: String): String {
+            val uri = URI.create(endpoint)
+            val port = if (uri.port == -1) "" else ":${uri.port}"
+            return "${uri.scheme.lowercase()}://${uri.host.lowercase()}$port"
+        }
     }
 }
 
