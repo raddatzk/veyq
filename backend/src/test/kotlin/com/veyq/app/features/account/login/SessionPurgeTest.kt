@@ -72,8 +72,8 @@ class SessionPurgeTest {
             assert(RefreshTokenEntity.count("familyId", FAM_SUPERSEDED) == 1L) { "unexpired SUPERSEDED purged" }
             assert(SessionFamilyEntity.findById(FAM_SUPERSEDED) != null) { "superseded family deleted" }
             // Challenges.
-            assert(LoginChallengeEntity.findById(CHALLENGE_EXPIRED) == null) { "expired challenge kept" }
-            assert(LoginChallengeEntity.findById(CHALLENGE_LIVE) != null) { "live challenge deleted" }
+            assert(LoginChallengeEntity.count("email", CHALLENGE_EXPIRED) == 0L) { "expired challenge kept" }
+            assert(LoginChallengeEntity.count("email", CHALLENGE_LIVE) == 1L) { "live challenge deleted" }
         }
     }
 

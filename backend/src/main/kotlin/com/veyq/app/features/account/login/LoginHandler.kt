@@ -38,31 +38,33 @@ class LoginHandler(
         val normalized = normalizeEmail(email)
         val nonce = randomNonce()
         if (accounts.findByEmail(normalized) != null) {
-            // Store in its own transaction and swallow a concurrent-insert race: the response must be
-            // identical (200 + nonce) whether or not the account exists — a PK conflict from a racing
-            // request for the same email must never surface as a different status (non-enumerability).
+            // Store in its own transaction and swallow a failure: the response must be identical (200 + nonce)
+            // whether or not the account exists — a failed insert for an existing account must never surface as
+            // a different status (non-enumerability).
             try {
-                challengeStore.replace(normalized, nonce, Instant.now().plus(CHALLENGE_TTL_MINUTES, ChronoUnit.MINUTES))
+                challengeStore.insert(normalized, nonce, Instant.now().plus(CHALLENGE_TTL_MINUTES, ChronoUnit.MINUTES))
             } catch (e: Exception) {
-                // a racing request already stored a challenge for this email — fine, ignore.
+                // the nonce is then simply unverifiable, exactly as for an unknown account — fine, ignore.
             }
         }
         return ChallengeResult(nonce = nonce, instanceSalt = instanceStore.instanceSalt())
     }
 
-    /** Verify a signed challenge and, on success, issue a session. The challenge is consumed (single-use)
-     *  whether or not verification succeeds. Returns null on any failure (→ generic 401). */
+    /** Verify a signed challenge and, on success, issue a session. Only the challenge the request names is
+     *  consumed (single-use per nonce), whether or not verification succeeds; any other challenge outstanding
+     *  for the same email is left alone. Returns null on any failure (→ generic 401). */
     @Transactional
-    fun verify(email: String, signatureB64: String): IssuedSession? {
+    fun verify(email: String, nonce: String, signatureB64: String): IssuedSession? {
         val normalized = normalizeEmail(email)
-        // Consume the single-use challenge atomically: a PESSIMISTIC_WRITE lock on the row (mirrors
+        // Consume the named challenge atomically, per nonce: a PESSIMISTIC_WRITE lock on that one row (mirrors
         // SessionService) serializes concurrent verifies of the SAME nonce — the first locks, deletes and
         // commits; a racing request then blocks, re-reads nothing, and fails. Without the lock both requests
         // read the row before either deletes it, so a captured signature could be replayed in parallel for two
-        // sessions off one challenge (audit P2f).
-        val challenge = LoginChallengeEntity.find("email", normalized)
+        // sessions off one challenge (audit P2f). The row must also belong to this email: a nonce named under
+        // another address finds nothing and consumes nothing.
+        val challenge = LoginChallengeEntity.find("nonce = ?1 and email = ?2", nonce, normalized)
             .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult()
-        if (challenge != null) LoginChallengeEntity.deleteById(normalized) // single-use, consumed under the lock
+        if (challenge != null) LoginChallengeEntity.deleteById(challenge.nonce) // single-use, consumed under the lock
         val user = accounts.findByEmail(normalized)
 
         val ok = verifySignature(challenge, user, signatureB64)
@@ -87,6 +89,8 @@ class LoginHandler(
         return verified && challenge != null && user != null && challenge.expiresAt.isAfter(Instant.now())
     }
 
+    // 32 bytes = 44 base64 chars, and the nonce is the key of a VARCHAR(64) column (V50). A longer nonce fails
+    // the insert, which `challenge` swallows for non-enumerability — so every login would 401, silently.
     private fun randomNonce(): String {
         val bytes = ByteArray(32)
         SecureRandom().nextBytes(bytes)
