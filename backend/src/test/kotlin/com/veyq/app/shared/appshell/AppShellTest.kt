@@ -6,6 +6,7 @@ import com.veyq.app.shared.config.VeyqConfig.SigningMode
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertSame
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.assertThrows
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
@@ -75,13 +76,39 @@ class AppShellTest {
     }
 
     @Test
-    fun aShellWithNoEmittedPolicySendsNoHeader() {
-        // Phase 1's contract: until the web build emits the policy, its `<meta>` governs and a header would only
-        // intersect with it. The control is the same call with a policy, which does produce one.
-        val bare = AppShell.from(INDEX, policy = null, storeOrigin = STORE) as AppShell.Present
-        val withPolicy = AppShell.from(INDEX, policy = POLICY, storeOrigin = STORE) as AppShell.Present
-        assertNull(bare.csp)
-        assertEquals("$POLICY_WITHOUT_STORE $STORE; form-action 'self'", withPolicy.csp)
+    fun aShellWithNoEmittedPolicyRefusesToStart() {
+        // ADR 0069 Decision 3: the CSP is the backstop of an operator-blind client, so a shell without one fails
+        // loudly instead of booting quietly. Blank counts as missing — an empty header is no policy either.
+        for (policy in listOf(null, "", " \n")) {
+            val refused = assertThrows<IllegalStateException>("policy=${policy?.let { "\"$it\"" }}") {
+                AppShell.from(INDEX, policy = policy, storeOrigin = STORE)
+            }
+            assertTrue(refused.message!!.contains(AppShell.POLICY_FILE), refused.message)
+        }
+        // Control: the same index with a policy boots, so the refusal above is about the policy.
+        assertEquals(
+            "$POLICY_WITHOUT_STORE $STORE; form-action 'self'",
+            (AppShell.from(INDEX, policy = POLICY, storeOrigin = STORE) as AppShell.Present).csp,
+        )
+    }
+
+    @Test
+    fun aShellWhoseIndexStillCarriesACspMetaRefusesToStart() {
+        // A returning `<meta>` intersects with the header and blocks every store fetch on Kubernetes again, and
+        // no CI run would notice — so the build's regression becomes a boot failure. Spelled the ways an HTML
+        // attribute may be: another case, single quotes, no quotes, other attributes first.
+        for (meta in listOf(
+            """<meta http-equiv="Content-Security-Policy" content="default-src 'self'">""",
+            """<META HTTP-EQUIV='content-security-policy' CONTENT="default-src 'self'">""",
+            """<meta content="default-src 'self'" http-equiv=Content-Security-Policy>""",
+        )) {
+            val index = "<!doctype html><html><head>$meta</head></html>".toByteArray()
+            assertThrows<IllegalStateException>(meta) { AppShell.from(index, policy = POLICY, storeOrigin = null) }
+        }
+        // Control: a head with other metas — the ones the real index.html carries — boots.
+        val ordinary = """<!doctype html><html><head><meta charset="UTF-8" />
+            <meta name="viewport" content="width=device-width, initial-scale=1.0" /></head></html>""".toByteArray()
+        assertEquals(POLICY, (AppShell.from(ordinary, policy = POLICY, storeOrigin = null) as AppShell.Present).csp)
     }
 
     @Test
@@ -100,7 +127,7 @@ class AppShellTest {
         assertEquals(POLICY, AppShell.withStoreOrigin("  $POLICY; \n", null))
     }
 
-    private fun cspOf(storeOrigin: String?): String? =
+    private fun cspOf(storeOrigin: String?): String =
         (AppShell.from(INDEX, POLICY, storeOrigin) as AppShell.Present).csp
 
     private fun originOf(url: String): String =

@@ -5,12 +5,12 @@ import { loadEnv, type Plugin } from 'vite'
 // Vite config for `npm run dev`/`build`.
 import { defineConfig } from 'vitest/config'
 import vue from '@vitejs/plugin-vue'
-import { buildCsp, providerOrigin } from './src/shared/security/csp'
+import { buildCsp, CSP_POLICY_FILE, providerOrigin } from './src/shared/security/csp'
 import { DEFAULT_GEOCODER_URL, DEFAULT_TILE_URL } from './src/shared/state/mapDefaults'
 
 // Vite dev-server config. `npm run dev` works with the defaults below; the env vars only matter for special
-// setups (the IntelliJ run configs, the media live-smoke). In production the built app is served elsewhere, so
-// the dev proxy does not apply there — but the CSP (below) is baked into the built index.html, so it does.
+// setups (the IntelliJ run configs, the media live-smoke). In production the backend's app shell serves the built
+// app (ADR 0069), so the dev proxy does not apply there — but the CSP (below) travels with the build, so it does.
 
 // `/api` is proxied to the backend. Override the backend URL with VEYQ_API_TARGET.
 const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8080'
@@ -21,12 +21,14 @@ const port = Number(process.env.VITE_PORT) || 5173
 // Force one fixed tenant Host regardless of the browser URL (used by the media live-smoke). Usually unset.
 const smokeHost = process.env.VEYQ_SMOKE_HOST
 
-// Content-Security-Policy (cr-0133 / audit P2e). Injected as a <meta http-equiv> so it ships inside the static
-// build with no server needed (self-hostable by default), and mirrored onto the dev server as a real header so
-// dev == prod and violations surface while developing. The allowed map-provider origins are derived from the
-// SAME config the app fetches from (VITE_VEYQ_MAP_* or the mapDefaults fallback), so a self-hosted tile/geocoder
-// deployment stays covered automatically. frame-ancestors/HSTS are header-only and deferred to the future prod
-// web-serving component — see docs/crosscutting/cc.security.csp.md.
+// Content-Security-Policy (cr-0133, ADR 0069). Always a response header, never a <meta>: the dev server sends it
+// directly, and the build emits it as `dist/content-security-policy.txt`, which the backend's app shell reads at
+// boot, extends with the store origin (only known at runtime) and sends on every shell response. A <meta> would
+// intersect with that header and block the store on its own origin again, so the build injects none — and the
+// backend refuses to boot a shell whose index.html carries one, or whose policy file is missing (the file name is
+// `AppShell.POLICY_FILE` there; `npm run verify:csp` checks both properties of dist before an image is built).
+// The allowed map-provider origins are derived from the SAME config the app fetches from (VITE_VEYQ_MAP_* or the
+// mapDefaults fallback), so a self-hosted tile/geocoder deployment stays covered automatically.
 function cspPlugin(env: Record<string, string>, dev: boolean): Plugin {
   const tileOrigin = providerOrigin(env.VITE_VEYQ_MAP_TILE_URL || DEFAULT_TILE_URL)
   const geocoderOrigin = providerOrigin(env.VITE_VEYQ_MAP_GEOCODER_URL || DEFAULT_GEOCODER_URL)
@@ -34,16 +36,10 @@ function cspPlugin(env: Record<string, string>, dev: boolean): Plugin {
   return {
     name: 'veyq-csp',
     config: () => (dev ? { server: { headers: { 'Content-Security-Policy': csp } } } : {}),
-    transformIndexHtml: (html) => ({
-      html,
-      tags: [
-        {
-          tag: 'meta',
-          attrs: { 'http-equiv': 'Content-Security-Policy', content: csp },
-          injectTo: 'head-prepend',
-        },
-      ],
-    }),
+    generateBundle() {
+      if (dev) return
+      this.emitFile({ type: 'asset', fileName: CSP_POLICY_FILE, source: `${csp}\n` })
+    },
   }
 }
 

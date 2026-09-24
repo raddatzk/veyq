@@ -49,7 +49,7 @@ class AppShellRoutes(
     fun register(@Observes router: Router) {
         when (shell) {
             AppShell.Absent -> log.info("app shell: no web client on the classpath — serving the API only")
-            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", shell.csp ?: "(none emitted — the build's <meta> governs)")
+            is AppShell.Present -> log.infof("app shell: serving the web client; policy %s", shell.csp)
         }
         // First, so the end handler is registered before anything can write a response — including a JAX-RS
         // error, a static file and Vert.x's own 404.
@@ -79,7 +79,7 @@ class AppShellRoutes(
         if (isUnder(path, API_PREFIX)) return
         // Every response the shell serves, sw.js included: a worker takes its policy from its own script's
         // response, so this is what puts the playback Service Worker under the policy.
-        shell.csp?.let { headers.set(CSP_HEADER, it) }
+        headers.set(CSP_HEADER, shell.csp)
         // Revalidate everything but the content-hashed chunks, whose name changes whenever their bytes do. An
         // `immutable` index.html or sw.js survives an upgrade by a day and asks for chunks the new image lacks.
         if (!path.startsWith(ASSETS_PREFIX)) headers.set(HttpHeaders.CACHE_CONTROL, "no-cache")

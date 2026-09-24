@@ -61,8 +61,9 @@ describe('buildCsp', () => {
     expect(bare).toContain("connect-src 'self' https://api.pwnedpasswords.com")
   })
 
-  it('omits frame-ancestors (header-only; deferred to the prod web server)', () => {
-    expect(csp).not.toContain('frame-ancestors')
+  it("forbids framing in dev and production alike (the policy is always a header, never a <meta>)", () => {
+    expect(csp).toContain("frame-ancestors 'none'")
+    expect(buildCsp({ ...OSM, dev: true })).toContain("frame-ancestors 'none'")
   })
 
   it('adds the Vite HMR websocket only in dev', () => {

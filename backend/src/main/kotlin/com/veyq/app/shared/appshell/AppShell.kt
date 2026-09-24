@@ -11,20 +11,33 @@ package com.veyq.app.shared.appshell
 sealed interface AppShell {
     data object Absent : AppShell
 
-    /**
-     * [csp] is the emitted policy with the store origin already appended, or null while no emitted policy
-     * exists — the web build still ships its `<meta>` then, and a header would only intersect with it.
-     */
-    class Present(val indexHtml: ByteArray, val csp: String?) : AppShell
+    /** [csp] is the emitted policy with the store origin already appended — never absent (see [from]). */
+    class Present(val indexHtml: ByteArray, val csp: String) : AppShell
 
     companion object {
         /** The emitted policy's name inside `dist`, next to `index.html`. `web/vite.config.ts` writes it. */
         const val POLICY_FILE = "content-security-policy.txt"
         const val INDEX_FILE = "index.html"
 
+        /**
+         * **Fails closed** (ADR 0069 Decision 3): a shell whose policy is missing, or whose `index.html` still
+         * carries a CSP `<meta>`, refuses to start rather than boot quietly. The first would serve an
+         * operator-blind client with no backstop at all; the second would intersect with the header and block
+         * every store fetch on its own origin again (the Kubernetes target), which no CI run would notice.
+         * `npm run verify:csp` checks the same two properties of `dist` before an image is built, so this is
+         * the last line, not the first.
+         */
         fun from(indexHtml: ByteArray?, policy: String?, storeOrigin: String?): AppShell {
             if (indexHtml == null) return Absent
-            return Present(indexHtml, policy?.let { withStoreOrigin(it, storeOrigin) })
+            check(!policy.isNullOrBlank()) {
+                "app shell: $INDEX_FILE is on the classpath but $POLICY_FILE is missing or empty — refusing to " +
+                    "serve the web client without its Content-Security-Policy (ADR 0069)"
+            }
+            check(!CSP_META.containsMatchIn(indexHtml.toString(Charsets.UTF_8))) {
+                "app shell: $INDEX_FILE carries a Content-Security-Policy <meta>, which would intersect with the " +
+                    "header and block the store — refusing to serve it (ADR 0069)"
+            }
+            return Present(indexHtml, withStoreOrigin(policy, storeOrigin))
         }
 
         /**
@@ -47,5 +60,8 @@ sealed interface AppShell {
         }
 
         private const val CONNECT_SRC = "connect-src"
+
+        /** The same shape `web/scripts/assert-csp-policy-in-dist.mjs` refuses. */
+        private val CSP_META = Regex("""<meta[^>]*http-equiv\s*=\s*["']?content-security-policy""", RegexOption.IGNORE_CASE)
     }
 }

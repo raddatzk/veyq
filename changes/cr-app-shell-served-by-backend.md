@@ -129,7 +129,7 @@ protection than the one before it:
       - The no-shell branch: no fallback, plain headers present.
 
       · Done when: `./gradlew check` green, and the deep-link test has been seen red before the fallback.
-- [ ] 2 web + backend — **switch the policy from `<meta>` to header, and fail closed.**
+- [x] 2 web + backend — **switch the policy from `<meta>` to header, and fail closed.**
       - In build mode, the Vite CSP plugin emits the policy as a file in `dist` and injects **no** `<meta>`. The
         dev-server header stays as it is.
       - `buildCsp` adds `frame-ancestors 'none'` unconditionally, so the dev header gets it too and dev still
