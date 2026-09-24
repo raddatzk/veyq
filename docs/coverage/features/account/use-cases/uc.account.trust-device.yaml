@@ -14,7 +14,7 @@ acceptanceCriteria:
   - id: device-kek-conformance
     text: The DEVICE-wrap KEK derivation (Argon2id(deviceFactor + password)) matches the pinned crypto vector.
     coverage:
-      crypto: { unit: [src/v1.conformance.test.ts] }
+      web: { unit: [src/features/account/trustDevice/trustDevice.conformance.test.ts] }
   - id: wrong-password-generic-failure
     text: A wrong password on a trusted device fails generically (AEAD tag mismatch) and holds no key material.
     coverage:
@@ -57,3 +57,13 @@ acceptanceCriteria:
       backend: { integration: [AccountWrapsSliceTest.unauthenticatedAddAndDeleteAre401, AccountWrapsSliceTest.nonDeviceMethodIsRejected] }
 # Note: the authed add (201 + id) / untrust (204) round-trip is covered by the backend slice and the web
 # round-trip (and the live preview smoke).
+gaps:
+  crypto: >-
+    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
+    which rows a run has admitted). `src/v1.conformance.test.ts` pins `kekDevicePassword` itself against the
+    `device_password_argon2id` vector for `device-kek-conformance`. The criterion's web ref pins the same vector
+    through web's own enrolment path — `trustThisDevice` with the vector's factor, password and salt, and only
+    the Argon2id cost swapped for the vector's — so the criterion stands on an admitted row while this suite
+    waits. On the first run whose log shows packages/crypto's suites executed, the suite goes back under that
+    criterion and this gap goes.
