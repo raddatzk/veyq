@@ -146,8 +146,10 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
   key, no trust graph, no new correlation.
 - **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)), with one half lifted off the tiers.** The
   Secret-Key half of the gate is server-enforced, and it holds against any caller that is not the operator. The
-  password half and the re-admission review are client-enforced, so they are crypto-grade on a self-hosted or
-  trusted client and honest-operator elsewhere — the same tier as all veyq E2EE. ADR 0026's tiers describe the
+  password half and the re-admission review are client-enforced, so against an active operator they hold only on
+  a client it does not serve — the review only once pins cannot be rolled back
+  ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7) — and honest-operator elsewhere, the
+  same tier as all veyq E2EE. ADR 0026's tiers describe the
   client the *victim* runs. They say nothing about an attacker who runs a client of their own, and that
   attacker is the one this gate names.
 

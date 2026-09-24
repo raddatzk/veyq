@@ -134,11 +134,12 @@ sequenceDiagram
   presentation surface does not need.
 - **Additive, reversible cheaply.** Accept flips one flag → the existing grant-delivery does the rest; Decline /
   Rescind is a single row delete. No rotation, no re-seal, no second standing key.
-- **Consent's strength tracks the client tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** The
-  gate is enforced by the key-holders' clients not wrapping `K_SC` to a soft member — so it is a real,
-  crypto-grade guarantee wherever the operator cannot alter the client (**self-hosted**, or a trusted/attested
-  origin: an active operator can't make it wrap), and **honest-operator-only** on someone else's instance (a
-  tampered client could wrap regardless) — the same tier as all veyq E2EE, no consent-specific weakness.
+- **Consent is an honest-operator gate on every tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).**
+  The key-holders' clients do not wrap `K_SC` to a soft member, but *soft* is the server's `pendingConsent`
+  flag, so an active operator clears it and the wrap proceeds — even on a client it does not serve. The one
+  thing a key-holder's client will check on its own is the admission tag
+  ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6), and a consent add carries a
+  valid one from the moment the owner makes it — so the tag does not make consent operator-proof either.
 
 ## What this means for you / Was das für dich bedeutet
 

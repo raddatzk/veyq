@@ -25,13 +25,12 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
    `canView = { VIEWER, CONTRIBUTOR }`, `canUpload = { CONTRIBUTOR, UPLOADER }`, and it is enforced on **both**
    guest read paths, not just the resolve:
    - The anonymous resolve (`GET /api/shares/{shareId}`, [ADR 0029](0029-public-viewer-share.md)) returns, for an
-     UPLOADER share, only `role` + `wrap` + `sealedName` — **`media: []`, `nodes: []`, `identities: []`**. The
-     client seals its uploads under `K_mem` (from `wrap`) and shows the title (from `sealedName`); it needs
-     nothing from the subtree, so not even the root node is served (returning it would hand the uploader that
-     node's `K_mem`-decryptable `wrappedMeta`).
+     UPLOADER share, only `role`, `sealedName` and the sealed drop public key (point 7) — **`media: []`,
+     `nodes: []`, `identities: []`**. The client seals its uploads to the drop key and shows the title (from
+     `sealedName`); it needs nothing from the subtree, so not even the root node is served.
    - The blob download (`GET /api/shares/{shareId}/blobs/{blobId}`) is **role-gated too** — an UPLOADER share
      `404`s **before** the subtree check, so even a leaked in-subtree blob id yields nothing. Write-only is thus a
-     **real server capability**, not merely id-secrecy.
+     **real server capability**, not merely id-secrecy — and point 7 makes it a cryptographic one.
 
    "Cannot see others" is therefore enforced by the server *not exposing*, on top of being structural (an uploader
    is never handed anyone else's ids; ids are unguessable — 256-bit `shareId`, 122-bit media/blob UUIDs).
@@ -67,11 +66,31 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
    uploads aren't shown here, for privacy; they arrived safely — you can add more"*; (d) a note that **delete
    works only in this session**. The plain-language "What this means for you" section states it too.
 
-6. **Everything else inherits ADR 0030.** Mandatory display name **sealed under `K_mem`** → an anonymous share
-   identity; the share-scoped, token-gated upload path; direct-append to the shared root (the curator sees the
-   contributions in *their* gallery); the byte budget + per-share rate limit; the client-integrity trust-tier
-   honesty (footer link, [ADR 0026](0026-client-trust-tiers.md)); personal-scope-only; the T&S
-   decryptable-on-report corollary.
+6. **Everything else inherits ADR 0030.** Mandatory display name → an anonymous share identity (sealed under
+   the identity's own key, point 7); the share-scoped, token-gated upload path; direct-append to the shared root
+   (the curator sees the contributions in *their* gallery); the byte budget + per-share rate limit; the
+   client-integrity trust-tier honesty (footer link, [ADR 0026](0026-client-trust-tiers.md)); personal-scope-only;
+   the T&S decryptable-on-report corollary.
+
+7. **The uploader never holds `K_mem`: uploads are sealed to the Memory's drop key.** Points 1–6 make write-only a
+   server capability. A capability the server enforces does not survive a dump, and an uploader link is the one
+   link handed to people who are *meant* not to see — so a leaked link plus a database and store dump must read
+   nothing beyond what that link-holder uploaded.
+   - **The drop keypair belongs to the Memory.** A hybrid (X25519 + ML-KEM-768) keypair, minted by the owner's
+     client when the Memory's first UPLOADER share is created. Its private half is sealed under `K_mem` on the
+     Memory, so everyone who reads the Memory — members, viewer and contributor links — opens what uploaders
+     sealed. Its public half is sealed under `K_share` on each UPLOADER share, so the server can neither read
+     nor substitute it. An UPLOADER share carries no `symWrap(K_share, K_mem)`.
+   - **Each uploader identity seals under a key of its own.** The guest's client mints a random identity key,
+     posts it `asymWrap`ped to the drop public key together with the identity, and seals everything of that
+     identity under it — every blob key, media metadata and EXIF, the display name — at today's field sizes: one
+     asymmetric wrap per identity, not per blob.
+   - **A media's key path is fixed by where it came from.** A reader opens an uploaded media through its
+     identity: drop private key (under `K_mem`) → identity key → the media's keys. A member who later edits that
+     media's metadata re-seals it under the same identity key, so no media ever changes path.
+   - **What the guest holds:** `K_share` (the title, the note, the drop public key) and its own identity key. The
+     sibling shares' `K_share` is out of reach as well, because `sealed_share_key` opens only under `K_mem`
+     ([ADR 0036](0036-editable-share-note-recoverable-share-key.md)).
 
 ## Consequences
 
@@ -87,7 +106,8 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
 - **Attribution self-asserted; direct-append; scope-rotation ≠ share-revoke; personal-scope-only** — all inherited
   unchanged from [ADR 0030](0030-contributor-public-share.md) / [ADR 0029](0029-public-viewer-share.md).
 - **New server surface (small):** the resolve gains a role branch (empty media for UPLOADER); one new endpoint
-  (`DELETE …/media/{id}`). No new table, no new crypto vector.
+  (`DELETE …/media/{id}`). No new table. Point 7 adds opaque fields (the sealed drop keypair halves, the wrapped
+  identity key) and new seal purposes, each with its vector ([ADR 0072](0072-a-seal-binds-its-object.md)).
 
 ## Alternatives considered
 
@@ -104,3 +124,17 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
   the product wants the familiar gallery look for *what you just added*; the session-local own-gallery (point 2)
   gives that at no server cost, and the warning (point 5) keeps the ephemerality honest. (This strict form is a
   trivial subset should we ever want it.)
+- **Write-only as access control alone, documented as such** (the share password's posture,
+  [ADR 0037](0037-password-protected-shares.md)). Honest, and free. Rejected because the one party this role
+  exists to keep out — the guest — would then hold the Memory's read key, and a leaked backup is not an active
+  attack: a link plus a dump would read the Memory on any tier.
+- **A drop key per share instead of per Memory.** Every reader would then need the private half of every
+  uploader share the Memory ever had, found through each media's identity and share. Per Memory, it travels with
+  the node, where every reader already looks.
+
+## What is still open
+
+Point 7 is decided and not built (inbox #161 (d)). Today every uploader resolves `symWrap(K_share, K_mem)` and
+holds `K_mem` in memory, and write-only is enforced by the server alone. A leaked uploader link plus a database
+and store dump therefore reads the whole shared Memory, and through `sealed_share_key` every sibling share's key
+and password.

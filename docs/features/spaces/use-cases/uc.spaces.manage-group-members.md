@@ -25,7 +25,8 @@
    - The group **rotates forward** ([en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md)): a
      remaining owner's device mints a new content-epoch, re-grants it to the remaining members (grant-delivery,
      first-online-wins), and new content seals under it. The removed member keeps the old epoch → reads
-     pre-removal content, **never** post-removal content, even against a malicious operator ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)).
+     pre-removal content, **never** post-removal content — against a malicious operator as far as
+     [ADR 0024](../../../decisions/0024-scope-key-rotation.md) § Guarantee states.
 
 ## Alternate / exception flows
 

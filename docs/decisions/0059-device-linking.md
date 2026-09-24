@@ -65,7 +65,8 @@ kept in script would satisfy every visible step of this ceremony and lose the se
 keypair; the trusted device `asymWrap`s **both** the Master Key and the refresh token to its public key and
 posts the result. **Pickup is unauthenticated on purpose**: the envelope is worthless without the ephemeral
 private key, so gating the fetch would add a check that proves nothing and would force the new device to
-identify an account before it has one. Nothing in the request names a user, so there is no oracle to build
+identify an account before it has one. What the envelope *is* authenticated by is the channel key of §11 — a
+property of the envelope, not of the fetch. Nothing in the request names a user, so there is no oracle to build
 ([ADR 0003](0003-operator-blind-password-auth.md) non-enumerability); the pairing key's entropy is what makes
 the row unfindable.
 
@@ -92,9 +93,9 @@ device being granted is one the user is holding.
   know the other screen is yours. Where you do not, the code must travel in the direction the attacker does
   not control.**
 
-**6. The proof of the transcribed code gates the sealing, never the release.** The new device commits to the
-code together with its public key; the trusted device checks that commitment against the code it displayed and
-only then seals. There is exactly **one** attempt, and that is structural rather than a policy: the commitment
+**6. The proof of the transcribed code gates the sealing, never the release.** The new device proves the code
+together with its public key, under the channel key (§11); the trusted device checks that proof against the code
+it displayed and only then seals. There is exactly **one** attempt, and that is structural rather than a policy: the commitment
 travels in the channel's single relayed answer, that slot is write-once, and the channel carries no status — so
 nothing can tell the new device its proof was refused, and a retry would need a field this relay must not have.
 The transcription is therefore editable on the new device until it is sent; a sent wrong proof abandons the
@@ -129,6 +130,32 @@ therefore born at the password-less tier, and the consequence belongs in the cop
 key — or another device removes it via [ADR 0058](0058-revoke-never-takes-key-material.md)'s escalation — it
 needs the password or the Emergency Kit, neither of which was ever typed on it.
 
+**11. The QR carries a secret the relay never sees, and that secret authenticates both messages the relay
+carries.** The code's payload is 32 random bytes instead of the routing handle. Both devices derive the handle
+and a **channel key** from it (two HKDF labels); the server only ever receives the handle. The answer carries a
+MAC under the channel key over the transport key — and, when *signing in with a QR code*, over the transcribed
+code too — and the envelope carries one over itself. The trusted device seals only to an answer whose MAC
+verifies; the new device opens only an envelope whose MAC verifies.
+
+- **Why.** Without it the relay is the one party that sees both halves of each binding step. When *signing in
+  with a QR code*, the proof `sha256(domain ‖ key ‖ code)` crosses the relay in the clear, so the relay tries all
+  10⁶ codes offline, learns the code, and proves it for a key of its own. When *adding a new device*, the
+  compared number is five digits of one hash over a bundle whose Ed25519 half the wrap never uses, so the relay
+  varies that half until its own bundle shows the same number — about 10⁵ hashes, well under a second. Either
+  way the trusted device seals the Master Key to the relay.
+- **The codes of §5 and the channel key defend against different parties, and neither replaces the other.**
+  The codes stop someone who is not the relay (a photographed QR, a phisher's QR); the channel key stops the
+  relay.
+- **The envelope's MAC matters beyond its seal.** Anyone can seal to the new device's public key, so an
+  unauthenticated envelope would let the relay hand the device a session and a Master Key of its own making —
+  an account that looks like the user's and takes their next uploads. The envelope also carries the linking
+  device's trust-state marks ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7), which only
+  an authenticated envelope may set.
+- **Unchanged:** the QR stays the same size and still names no server (§4), and a handle derived from a random
+  secret is as unfindable as a drawn one.
+- **What it does not cover:** an attacker who both reads the QR and runs the relay. They hold the channel key,
+  so they grind the transcribed code or the compared number again.
+
 ## Consequences
 
 **What it buys.** The E2EE-native answer to "sign in on my other device": one flow that solves auth *and*
@@ -143,8 +170,8 @@ rate-limit posture rather than the wraps resource's exemption, whose reasoning d
 **The obligation this feature created, and what discharging it does not buy.** A phished grant was
 unrecoverable until [ADR 0060](0060-key-rotation-after-compromise.md); with rotation it becomes *stoppable*.
 It never becomes reversible, and rotation depends on the **Secret Key** — which a device linked here has never
-seen (§10), and which the account holder may not have to hand. So §5–§7 carry the same weight after rotation
-exists as before: they are the only barrier that acts *before* the key leaves.
+seen (§10), and which the account holder may not have to hand. So §5–§7 and §11 carry the same weight after
+rotation exists as before: they are the only barrier that acts *before* the key leaves.
 
 **Rejected alternatives.**
 
@@ -158,6 +185,15 @@ exists as before: they are the only barrier that acts *before* the key leaves.
   cheap hardening if the tradeoff ever looks different; removing §5's code is not.
 - **Server-side release of the envelope on a correct code**, and **mixing the code into the envelope's
   encryption** — both defeated in §6.
+- **A PAKE (CPace, SPAKE2) over the transcribed code, in place of §11.** It would close the QR-sign-in direction
+  even against an attacker who also reads the QR — and it closes nothing in the *add a device* direction, where
+  no code is typed and the compared number is what the relay grinds. It also needs a construction the suite does
+  not have and no maintained library ships, which is home-grown crypto by
+  [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) rule 1. The QR secret closes both directions
+  with HKDF and HMAC, already pinned.
+- **Commit-then-reveal (a short-authentication-string protocol).** That is the answer when no secret channel
+  exists and only a few digits can be compared. Here the QR is such a channel, and it carries a full-strength
+  key rather than a few digits.
 - **[ADR 0021](0021-operator-blind-background-tasks.md)'s job queue as the transport** — §8.
 - **True push, or waking a trusted device to ask it for approval.** Not needed: in both directions the user
   picks up the second device themselves. It is also the shape worth *not* building — a remotely triggerable
@@ -165,6 +201,12 @@ exists as before: they are the only barrier that acts *before* the key leaves.
   deliberately have no inbound prompt at all.
 - **A partial grant** (link a device to some scopes only). The key model has one Master Key and one wrap per
   device; a partial grant would be a different key model, not a smaller ceremony.
+
+## What is still open
+
+§11 is decided and not built (inbox #161 (a)). Today the QR carries the handle itself and nothing is MAC'd, so
+the relay can substitute its own transport key in both directions, as §11 describes, and receive the Master Key
+and a live session. §5–§7 still hold against everyone who is not the relay.
 
 ## Related
 

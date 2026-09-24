@@ -27,7 +27,7 @@ with the account exactly like the other Master-Key-sealed material — the serve
 ciphertext** and never interprets it. The plaintext is a small map:
 
 ```
-{ version, pins: { <userId>: { key, state, firstSeenAt } } }
+{ pins: { <userId>: { key, state, firstSeenAt } } }
 ```
 
 - **`key`** — the contact's full identity public bundle (`lp(kemX) || lp(kemM) || lp(sign)`, base64), the exact
@@ -86,11 +86,18 @@ sequenceDiagram
 
 ## Sync & merge
 
-The blob carries a monotonic **`version`**. A write is optimistic-concurrency: if the server's stored version
-moved since the client opened it, the client **re-opens and union-merges** before re-sealing. Pins are
-**append-heavy** (a new contact), so real conflicts are rare; a same-contact conflict resolves to **`verified`
-wins**, else the later `firstSeenAt`. A **new device** pulls + opens the blob and inherits every pin — so the
-trust state is shared across the account, not re-TOFU'd per device.
+The blob carries a monotonic **`version`**, beside the ciphertext and bound into its seal
+([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) rather than stored inside it. A write is
+optimistic-concurrency: if the server's stored version moved since the client opened it, the client **re-opens and
+union-merges** before re-sealing. Pins are **append-heavy** (a new contact), so real conflicts are rare; a
+same-contact conflict resolves to **`verified` wins**, else the later `firstSeenAt`. A **new device** pulls + opens
+the blob and inherits every pin — so the trust state is shared across the account, not re-TOFU'd per device.
+
+**Which copy a device reads is the server's choice, so the device keeps its own mark**
+([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): the highest version
+it has opened, held locally and never synced. A served copy below the mark, a missing store after one was held,
+or a blob that does not open is refused — on read and before every write — never read as empty. Not yet built
+(inbox #161 (c)): today all three read as whatever was served, an unopenable blob as the empty store.
 
 ## Quality notes
 
@@ -107,8 +114,10 @@ trust state is shared across the account, not re-TOFU'd per device.
   claim (ADR 0028 § Consequences). [ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
   Decision 4 now rests on that granularity: the rotation exclusion is a decline row for the rotator, and a
   per-*device* one would be claimable from any other tab.
-- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Crypto-grade on a trusted
-  client, honest-operator on operator-served web — a tampered client could ignore its own pin.
+- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
+  operator only on a client it does not serve, and there only once the store cannot be rolled back
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
+  operator-served web — a tampered client could ignore its own pin.
 
 > **No end-user section.** As an enabler this has no standalone "what this means for you" story — its value reaches
 > the user through the verification use-case + the member-add flows it protects (their bilingual sections carry the

@@ -86,6 +86,25 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    - The server stores and relays the signature and does not verify it. A blind server does not adjudicate a
      crypto claim (§ Consequences), and the recipient is the party that needs the answer.
 
+7. **A device never accepts older trust state than it has held, and a store that does not open is an error,
+   not an empty store.** The pin store lives on the server, so the server decides which copy a device reads.
+   Binding the store's version into its seal ([ADR 0072](0072-a-seal-binds-its-object.md)) makes that version
+   authentic, not fresh. So each device keeps a **local high-water mark** — the highest pin-store version it has
+   opened — and refuses a served store below it, on every read **and before every write**, because a write
+   re-seals what it read and would otherwise make the rollback its own. It refuses a missing store once it has
+   held one, and it refuses a store that fails to open instead of reading it as empty: an empty store is exactly
+   what turns a detected key change back into a silent first use, and a rolled-back one can reinstate a retired
+   key as a match.
+   - **The same rule covers the other sealed account document**, the device register
+     ([en.account.device-register](../features/account/enablers/en.account.device-register.md)), and the
+     per-scope epoch floor of [ADR 0024](0024-scope-key-rotation.md) Decision 6 uses the same mechanism.
+   - **The marks are per device and local, never synced.** A synced mark is one more thing the server can roll
+     back. A device linked by another ([ADR 0059](0059-device-linking.md)) inherits that device's marks inside
+     the authenticated pairing envelope.
+   - **What it cannot see:** a device with no mark — one that signed in with the password and Secret Key, or
+     lost its local storage — trusts the first store it is served, which is the first-use gap applied to trust
+     state; and a newer store the server keeps from a device that never held it (a fork).
+
 ## Consequences
 
 - **Closes the silent-swap-after-first-contact hole** for anyone who has interacted with a contact before: their
@@ -110,8 +129,9 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 - **Operator-blindness preserved.** The pin store is sealed under the master key; the server never learns who
   pinned or verified whom. It gains only a small **grant-delivery decline** status (a worker refusing a job) —
   operational metadata, no trust graph.
-- **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** Enforcement is crypto-grade on a trusted client
-  (self-hosted / trusted-web) and honest-operator on someone else's instance (a tampered client could ignore its own pin) —
+- **Tier-consistent ([ADR 0026](0026-client-trust-tiers.md)).** Enforcement is client-side, so it holds against
+  an active operator only on a client that operator does not serve, and there only as far as the pin store is
+  fresh (Decision 7); on operator-served web it is honest-operator (a tampered client could ignore its own pin) —
   the same tier as all veyq E2EE, no authenticity-specific weakness.
 - **Alternatives rejected:** (a) *hard-block every change by default* — locks out a legitimate rotation and adds
   friction; the human path is advisory instead (strict mode keeps the hard gate opt-in). (b) *verify-before-first-wrap
@@ -132,7 +152,10 @@ Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
 all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the changed-key review. Decision 5 is
 settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is decided and not yet built
-(inbox #159). Two further things remain:
+(inbox #159). Decision 7 is decided and not yet built (inbox #161 (c)): today a device keeps no mark, reads a
+store that does not open as empty, and re-seals whatever copy it was served, so the server can wipe or roll
+back any account's pins — every detected key change becomes a first use again, and a rolled-back pin makes a
+retired key match. Two further things remain:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
   ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)

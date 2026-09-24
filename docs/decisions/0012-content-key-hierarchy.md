@@ -46,7 +46,8 @@ sharing **cryptographically** enforced:
 - **Sharing one Memory adds an *independent second wrap* of that same `K_mem`** — never `K_SC`:
   - **Public link share:** `symWrap(K_share, K_mem)` where `K_share` is a fresh per-share key whose secret
     rides the **URL fragment** (never the server); the shared Memory's name travels in the share record too,
-    re-sealed to `K_share`. A guest opens **only** that Memory.
+    re-sealed to `K_share`. A guest opens **only** that Memory — and an *uploader* link not even that: it
+    carries the Memory's drop public key instead of this wrap ([ADR 0031](0031-uploader-public-share.md) point 7).
   - **Member share** (a *registered* recipient gets ongoing access to one Memory):
     `asymWrap(recipientIdentityPub, K_mem)` — the **same identity-targeted grant as a scope grant (ADR 0020),
     but scoped to a single Memory's `K_mem`** instead of the whole scope's `K_SC`. Opened with the recipient's
