@@ -32,7 +32,7 @@ class LoginResource(private val handler: LoginHandler, private val cookie: Sessi
     }
 
     override fun verifyLogin(loginVerifyRequest: LoginVerifyRequest): Response {
-        val session = handler.verify(loginVerifyRequest.email, loginVerifyRequest.signature)
+        val session = handler.verify(loginVerifyRequest.email, loginVerifyRequest.nonce, loginVerifyRequest.signature)
             ?: return httpError(httpFailure("authentication_failed", UNAUTHORIZED))
         val family = SessionFamily(id = UUID.fromString(session.familyId))
         // Pick the refresh transport (ADR 0004 addendum / ADR 0005 §22). Web sends `sessionScope`; native omits

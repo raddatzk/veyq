@@ -84,6 +84,20 @@ class LoginSliceTest {
     }
 
     @Test
+    fun nobodyElseCanDisplaceOrBurnYourChallenge() {
+        // uc.account.login E4. The victim's device holds challenge A and is still running Argon2id. Someone who
+        // only knows the address asks for a challenge of their own (B), burns it with a garbage verify, sends one
+        // naming a nonce that was never issued, and one naming A under another email. None of it may touch A.
+        val a = requestChallenge(EMAIL)
+        val b = requestChallenge(EMAIL)
+        val garbage = b64(ByteArray(64))
+        verify(EMAIL, b, garbage).then().statusCode(401)
+        verify(EMAIL, b64(ByteArray(32) { 7 }), garbage).then().statusCode(401)
+        verify("ghost@example.com", a, garbage).then().statusCode(401)
+        verify(EMAIL, a, sign(KEYPAIR, a)).then().statusCode(200)
+    }
+
+    @Test
     fun concurrentVerifyConsumesTheChallengeOnce() {
         // Two requests race the SAME signed challenge. Single-use must be ATOMIC: exactly one issues a session,
         // the other loses the consume and gets a generic 401. Without the row-lock both reads see the nonce
@@ -114,7 +128,7 @@ class LoginSliceTest {
         // Force the stored challenge past its TTL (5 min) without waiting it out — a correctly-signed but
         // stale nonce must be rejected, not just a replayed one.
         QuarkusTransaction.requiringNew().run(Runnable {
-            val challenge = LoginChallengeEntity.find("email", EMAIL).firstResult()!!
+            val challenge = LoginChallengeEntity.find("nonce", nonce).firstResult()!!
             challenge.expiresAt = Instant.now().minus(1, ChronoUnit.MINUTES)
             challenge.persist()
         })
