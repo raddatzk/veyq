@@ -3,6 +3,9 @@ package com.veyq.app.features.account.recovery
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.identity.AccountStore
+import com.veyq.app.shared.identity.normalizeEmail
+import com.veyq.app.shared.tenant.ResolvedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
@@ -33,6 +36,7 @@ sealed interface ResetOutcome {
 @ApplicationScoped
 class RecoveryHandler(
     private val store: RecoveryStore,
+    private val accounts: AccountStore,
     private val mailer: RecoveryMailer,
     private val limiter: RecoveryRateLimiter,
     private val sessions: SessionService,
@@ -62,18 +66,19 @@ class RecoveryHandler(
      *
      * Every outcome except [RequestOutcome.NO_MAIL_TRANSPORT] is reported to the caller as the same 202.
      */
-    fun request(email: String, domain: String?): RequestOutcome {
-        if (domain == null || !mailer.canSend(domain)) return RequestOutcome.NO_MAIL_TRANSPORT
+    fun request(email: String, tenant: ResolvedTenant?): RequestOutcome {
+        if (tenant == null || !mailer.canSend(tenant.id)) return RequestOutcome.NO_MAIL_TRANSPORT
         if (limiter.check(email) != null) return RequestOutcome.RATE_LIMITED
 
-        val normalized = email.trim().lowercase()
-        val user = store.findUserByEmail(normalized) ?: return RequestOutcome.NO_ACCOUNT
+        val normalized = normalizeEmail(email)
+        val user = QuarkusTransaction.requiringNew().call { accounts.findByEmail(normalized) }
+            ?: return RequestOutcome.NO_ACCOUNT
 
         val token = Tokens.random()
         val expiresAt = Instant.now().plus(ttl)
         QuarkusTransaction.requiringNew().run { store.mint(user.id, normalized, Tokens.hash(token), expiresAt) }
 
-        return when (mailer.sendRecoveryLink(domain, normalized, token, expiresAt)) {
+        return when (mailer.sendRecoveryLink(tenant.id, tenant.domain, normalized, token, expiresAt)) {
             com.veyq.app.generated.model.DeliveryResult.SENT -> RequestOutcome.MAILED
             else -> RequestOutcome.SEND_FAILED
         }

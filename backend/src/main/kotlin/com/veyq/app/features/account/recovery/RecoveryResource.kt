@@ -12,9 +12,8 @@ import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.ratelimit.RateLimit
 import com.veyq.app.shared.ratelimit.RateLimitKey
+import com.veyq.app.shared.tenant.RequestTenant
 import jakarta.annotation.security.PermitAll
-import jakarta.ws.rs.core.Context
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 
 /**
@@ -28,10 +27,7 @@ import jakarta.ws.rs.core.Response
  */
 @PermitAll
 @RateLimit(key = RateLimitKey.IP)
-class RecoveryResource(private val handler: RecoveryHandler) : RecoveryApi {
-
-    @Context
-    lateinit var headers: HttpHeaders
+class RecoveryResource(private val handler: RecoveryHandler, private val tenant: RequestTenant) : RecoveryApi {
 
     /**
      * 202 for everything the *address* could explain — registered, unknown, or rate-limited are indistinguishable
@@ -43,7 +39,7 @@ class RecoveryResource(private val handler: RecoveryHandler) : RecoveryApi {
      * paired with the 202 into an address-level oracle.
      */
     override fun requestPasswordRecovery(recoveryRequest: RecoveryRequest): Response =
-        when (handler.request(recoveryRequest.email, activeHost())) {
+        when (handler.request(recoveryRequest.email, tenant.resolve())) {
             RequestOutcome.NO_MAIL_TRANSPORT -> httpError(Failures.mailUnavailable)
             else -> Response.accepted().build()
         }
@@ -76,11 +72,4 @@ class RecoveryResource(private val handler: RecoveryHandler) : RecoveryApi {
             ResetOutcome.TokenNotLive -> httpError(httpFailure("recovery_token_invalid", NOT_FOUND))
             ResetOutcome.NotProven -> httpError(httpFailure("recovery_proof_invalid", FORBIDDEN))
         }
-
-    /** The active tenant's host: the reverse-proxy `X-Forwarded-Host`, else `Host`; first value, port stripped.
-     *  It selects whose mail settings send the link and which domain the link points at — the same host-resolves-
-     *  the-tenant rule the rest of the API uses, so the mail arrives from where the person actually asked. */
-    private fun activeHost(): String? =
-        (headers.getHeaderString("X-Forwarded-Host") ?: headers.getHeaderString("Host"))
-            ?.substringBefore(',')?.substringBefore(':')?.trim()?.lowercase()?.ifEmpty { null }
 }

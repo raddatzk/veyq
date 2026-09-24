@@ -35,7 +35,7 @@ interface TenantInviteMailer {
      *    the one surviving copy-link (§3), and the returned `bootstrapSecret` is the channel on
      *    `FALLBACK_COPYLINK` / `FAILED`.
      */
-    fun sendInvite(domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult
+    fun sendInvite(tenantId: String, domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult
 
     /**
      * Whether this tenant can actually put mail on the wire — asked **before** anything is minted.
@@ -46,7 +46,7 @@ interface TenantInviteMailer {
      * handler keeps depending on the port alone; `RecoveryMailer.canSend` is the same question for the other
      * mail kind.
      */
-    fun canSend(domain: String): Boolean
+    fun canSend(tenantId: String): Boolean
 }
 
 /**
@@ -77,9 +77,9 @@ class LoggingTenantInviteMailer(
 
     /** This bean *is* the no-SMTP path, so it can never send. Only the owner-bootstrap invite may still use it
      *  (ADR 0055 §3); every other caller must refuse before it gets here. */
-    override fun canSend(domain: String): Boolean = false
+    override fun canSend(tenantId: String): Boolean = false
 
-    override fun sendInvite(domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult {
+    override fun sendInvite(tenantId: String, domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult {
         require(HOSTNAME.matches(domain)) { "invalid tenant domain" }
         if (LaunchMode.current() == LaunchMode.NORMAL) {
             // Production: never write the bootstrap secret to logs. A real SMTP-backed mailer must be wired.
