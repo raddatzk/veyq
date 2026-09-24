@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
  * The per-tenant SMTP transport, extracted from [SmtpTenantInviteMailer] (cr-account-recovery) so a second kind
  * of mail can reuse it instead of copying it.
  *
- * It knows how to resolve one tenant's mail settings, decide whether they are actually sendable, and put a
+ * It knows how to resolve one tenant's mail settings (by tenant id), decide whether they are actually sendable, and put a
  * message on the wire. It knows **nothing** about what the message says — subject and body arrive rendered, so
  * each mail kind keeps its own copy rules (an invite's is owner-authorable, a recovery mail's is not; ADR 0054
  * § Decision 5).
@@ -37,8 +37,9 @@ class TenantMailSender(
 ) {
     private val log = Logger.getLogger(TenantMailSender::class.java)
 
-    /** The tenant's settings, or null when that domain has none. */
-    fun settings(domain: String): MailSettingsRow? = store.mailSettingsByDomain(domain)
+    /** The tenant's settings, or null when it has none. Keyed by tenant **id**, never by a domain string: a domain
+     *  can arrive from a request header, and a header value must never be able to pick whose relay sends. */
+    fun settings(tenantId: String): MailSettingsRow? = store.mailSettingsFor(tenantId)
 
     /**
      * Whether [s] can actually put mail on the wire.

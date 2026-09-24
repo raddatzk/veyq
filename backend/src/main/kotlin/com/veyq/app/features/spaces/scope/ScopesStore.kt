@@ -6,7 +6,6 @@ import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
-import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -81,18 +80,13 @@ enum class ConsentState { PENDING, ACTIVE, NONE }
 
 /**
  * Persistence for a member's scopes (cr-0026). Operator-blind: stores only the opaque scope row + the
- * ciphertext grant on the membership; never a scope key. The active tenant is resolved by domain (Host).
+ * ciphertext grant on the membership; never a scope key. The active tenant arrives as an id (`RequestTenant`).
  */
 @ApplicationScoped
 class ScopesStore(
     private val profiles: TenantProfileStore,
     private val membership: MembershipStore,
-    private val hosts: TenantHostResolver,
 ) {
-
-    /** The tenant id for a Host/domain, or null if no tenant claims it — the shared resolver's lookup (ADR 0066),
-     *  so this and the suspension gate can never disagree about which tenant a domain names. */
-    fun findTenantIdByDomain(domain: String): String? = hosts.tenantFor(domain)?.id
 
     /** Whether the caller already holds a membership in this tenant (i.e. belongs to it). */
     fun isMember(userId: String, tenantId: String): Boolean = membership.isMember(userId, tenantId)

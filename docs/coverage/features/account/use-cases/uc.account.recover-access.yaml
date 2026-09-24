@@ -9,11 +9,25 @@ acceptanceCriteria:
   - id: request-is-non-enumerable
     # The test runs against a tenant that CAN send (a hermetic GreenMail server). That is load-bearing, not
     # setup: on the mailer-less default both addresses now answer the same 503 for an instance-level reason, so
-    # the comparison would pass while proving nothing about enumerability. The mail itself is the difference.
-    text: A recovery request answers identically for a registered and an unregistered address, and mail is sent only in the former case. The response is never an oracle for whether an address has an account on this instance.
+    # the comparison would pass while proving nothing about enumerability. The mail itself is the difference —
+    # awaited, since the answer no longer waits for it, with the negative asserted on the direct delivery call.
+    text: A recovery request answers identically for an address with an account in this tenant and one without, and mail is sent only in the former case. The response is never an oracle for whether an address has an account in this tenant.
     coverage:
       backend: { integration: [RecoverySliceTest.requestIsIndistinguishableForKnownAndUnknownAddress] }
       web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
+  - id: request-reaches-only-this-tenants-accounts
+    # Bitten live: before the fix the delivery for tenant A mailed an account that belongs only to tenant B,
+    # through A's relay (MAILED where NO_ACCOUNT was expected). The control is the same call for tenant B.
+    text: A recovery link is minted and mailed only for an account that is a member of the tenant the request's Host resolves to, and only through that tenant's own relay. An account in another tenant, or the tenantless Server Owner, is unknown here — no token, no mail — so no tenant owner's relay ever carries a link for an account that is not theirs.
+    coverage:
+      backend: { integration: [RecoverySliceTest.requestReachesOnlyThisTenantsAccounts] }
+  - id: request-answers-before-the-address-is-looked-up
+    # Bitten live: against a relay that accepts and never greets, the answer took ~11 s before the fix — the
+    # send's bound — which is exactly the timing a known address had and an unknown one did not. The control is
+    # the member's token being minted after the answer.
+    text: The request is answered once the transport check and the rate limiter have run, before anything that depends on the address — the account lookup, the membership check, the mint and the send happen afterwards. A slow or hung relay therefore cannot make a known address answer slower than an unknown one.
+    coverage:
+      backend: { integration: [RecoverySliceTest.requestAnswersBeforeTheAddressIsLookedUp] }
   - id: token-stored-hashed-and-short-lived
     text: Only the SHA-256 hash of the one-time token is stored, with an expiry far shorter than an invite's. The raw token exists only in the mail, carried in the link's URL fragment so it never reaches the server as part of a navigation. A new request supersedes any outstanding token for that address.
     coverage:

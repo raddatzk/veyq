@@ -29,11 +29,13 @@ import java.time.format.DateTimeFormatter
 @ApplicationScoped
 class RecoveryMailer(private val sender: TenantMailSender) {
 
-    /** Whether this domain can send at all — the handler asks before minting anything. */
-    fun canSend(domain: String): Boolean = sender.sendable(sender.settings(domain))
+    /** Whether this tenant can send at all — the handler asks before minting anything. */
+    fun canSend(tenantId: String): Boolean = sender.sendable(sender.settings(tenantId))
 
-    fun sendRecoveryLink(domain: String, email: String, token: String, expiresAt: Instant): DeliveryResult {
-        val settings = sender.settings(domain)
+    /** Mail the link through [tenantId]'s own relay. [domain] is that tenant's **registered** domain, and only shapes
+     *  the link and the From address — it never selects the relay. */
+    fun sendRecoveryLink(tenantId: String, domain: String, email: String, token: String, expiresAt: Instant): DeliveryResult {
+        val settings = sender.settings(tenantId)
         if (!sender.sendable(settings)) return DeliveryResult.FALLBACK_COPYLINK
         val s = settings!!
         // The secret rides the URL fragment, like every other veyq link (ADR 0020): a fragment is never sent to

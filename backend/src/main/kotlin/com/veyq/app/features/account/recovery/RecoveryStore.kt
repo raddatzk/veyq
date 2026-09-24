@@ -30,12 +30,6 @@ data class RecoveryMaterialRow(
 @ApplicationScoped
 class RecoveryStore {
 
-    /** Resolve an account by its login address. Returns null for an unknown address — the *caller* must make
-     *  that indistinguishable to the client (non-enumerability lives in the handler's response shape). */
-    @Transactional
-    fun findUserByEmail(email: String): VeyqUser? =
-        VeyqUser.find("email", email).firstResult()
-
     /** Mint a token, superseding any outstanding one for that account: one live recovery per user at a time,
      *  so an older mail cannot still be redeemed after the person asked again. */
     @Transactional

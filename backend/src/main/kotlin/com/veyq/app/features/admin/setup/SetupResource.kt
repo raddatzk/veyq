@@ -9,6 +9,7 @@ import com.veyq.app.generated.model.Version
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.identity.normalizeEmail
 import com.veyq.app.shared.ratelimit.RateLimit
 import com.veyq.app.shared.ratelimit.RateLimitKey
 import jakarta.annotation.security.PermitAll
@@ -58,7 +59,7 @@ class SetupResource(private val handler: SetupHandler) : SetupApi {
 }
 
 private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
-    email = email.lowercase(),
+    email = normalizeEmail(email),
     suiteId = suiteId.value,
     identityPublicKey = identityPublicKey,
     wrappedIdentityPrivateKey = wrappedIdentityPrivateKey,

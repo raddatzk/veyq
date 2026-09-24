@@ -1,6 +1,5 @@
 package com.veyq.app.features.account.profile
 
-import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
@@ -22,14 +21,14 @@ sealed interface ProfileOutcome {
 
 /**
  * The caller's per-tenant identity profile (username + sealed real name, ADR 0023) in the tenant resolved from
- * the Host. Operator-blind — the sealed name is ciphertext the server stores verbatim; only the plaintext
+ * the Host (`RequestTenant`), which arrives here as its id. Operator-blind — the sealed name is ciphertext the server stores verbatim; only the plaintext
  * `username` is read (to enforce per-tenant uniqueness). Auth is central (`@Authenticated` on the resource).
  */
 @ApplicationScoped
 class AccountProfileHandler(private val profiles: TenantProfileStore) {
 
-    fun get(userId: String, host: String?): ProfileOutcome {
-        val tenantId = host?.let(::tenantIdByDomain) ?: return ProfileOutcome.NoTenant
+    fun get(userId: String, tenantId: String?): ProfileOutcome {
+        tenantId ?: return ProfileOutcome.NoTenant
         val profile = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
         return ProfileOutcome.Found(profile.username, profile.sealedName, consent)
@@ -37,9 +36,9 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
 
     @Transactional
     fun update(
-        userId: String, host: String?, username: String?, sealedName: String?, requireGroupAddConsent: Boolean?,
+        userId: String, tenantId: String?, username: String?, sealedName: String?, requireGroupAddConsent: Boolean?,
     ): ProfileOutcome {
-        val tenantId = host?.let(::tenantIdByDomain) ?: return ProfileOutcome.NoTenant
+        tenantId ?: return ProfileOutcome.NoTenant
         val existing = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         // A username change to a handle another member already holds is rejected; keeping (or re-setting) your
         // own is fine.
@@ -54,7 +53,4 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         val consent = VeyqUser.findById(userId)?.requireGroupAddConsent ?: false
         return ProfileOutcome.Found(updated.username, updated.sealedName, consent)
     }
-
-    private fun tenantIdByDomain(host: String): String? =
-        TenantEntity.find("domain", host.lowercase()).firstResult()?.id
 }

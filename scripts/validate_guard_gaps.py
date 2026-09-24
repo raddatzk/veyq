@@ -74,13 +74,13 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      otherwise sound) — rejected: `validate_coverage` admits refs only on a surface in `ADMITTED`, one whose CI
      job some run has executed (ADR 0040, the note on what a row is). ADR 0040 said that rule carries itself;
      14 admin-web and 3 crypto refs went in green before anything read it (2026-09-24)
-  25 `BlobUploadRequestItem.wrappedBlobKey` loses its `@Size`, its `maxLength` left standing — rejected:
+  26 `BlobUploadRequestItem.wrappedBlobKey` loses its `@Size`, its `maxLength` left standing — rejected:
      `validate_request_bounds` requires every request-body bound to carry its annotation. Before it, nothing tied
      the two, and `BlobUploadsBatchRequest.items` carried `maxItems: 256` with no `@Size` at all (inbox #153)
-  26 `BlobUploadsBatchRequest.items` loses its `@field:jakarta.validation.Valid` — rejected: validation does not
+  27 `BlobUploadsBatchRequest.items` loses its `@field:jakarta.validation.Valid` — rejected: validation does not
      descend without it, so every item-level annotation below is dead, which is exactly how the `wrappedBlobKey`
      checks sat until #153
-  27 `MoveMediaRequest.mediaIds`' `@Size` says one more than its `maxItems` — rejected: the two are one rule
+  28 `MoveMediaRequest.mediaIds`' `@Size` says one more than its `maxItems` — rejected: the two are one rule
      written twice, value for value, and an annotation drifting from its schema is the same gap as a missing one
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
@@ -140,6 +140,11 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      feature (admin mixes web, admin-web and backend-only use-cases) without a declaration the coverage schema
      does not carry, the schema growth ADR 0040 declined. The `web` gap such a file must carry is where it says
      where its client went. Pinned so the limit in that guard's docstring is executable rather than a sentence.
+  25 a Host header read through an alias constant (`const val` holding the header name, then
+     `getHeaderString(<the constant>)`) in a resource passes `validate_lookup_single_home`, whose spellings are
+     literals at the call. **Left open on purpose** — following a constant to its use is data flow, which a
+     buildless grep does not have, and the realistic regression (a hand parse copied from an old resource) is a
+     literal and is caught. Pinned so the limit in that guard's docstring is executable rather than a sentence.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -211,6 +216,10 @@ TRASH_PURGE = "backend/src/main/kotlin/com/veyq/app/features/media/MediaTrashPur
 TENANT_HANDLER = "backend/src/main/kotlin/com/veyq/app/features/admin/tenant/TenantHandler.kt"
 TENANT_REPROJECT_CALL = "        if (outcome is SuspendOutcome.Done) reproject()\n"
 TRASH_PURGE_CTOR_ANCHOR = "    private val store: MediaStore,\n"
+# Where a Host read through an alias constant is forged: the recovery resource is where the hand parse that
+# bought validate_lookup_single_home used to live, so it is where a copy of it would plausibly come back.
+RECOVERY_RESOURCE = "backend/src/main/kotlin/com/veyq/app/features/account/recovery/RecoveryResource.kt"
+RECOVERY_RESOURCE_ANCHOR = "class RecoveryResource("
 TRASH_PURGE_BODY_ANCHOR = "        store.purgeTrashedBefore(Instant.now().minus(retention))\n"
 
 
@@ -556,6 +565,24 @@ def forge_run_config_env_path_into_the_void(root: pathlib.Path) -> str:
     raise ForgeError("no .run/*.xml carries a $PROJECT_DIR$-rooted env value — re-anchor this forgery")
 
 
+def forge_host_read_through_an_alias(root: pathlib.Path) -> str:
+    # validate_lookup_single_home matches the header name as a literal AT the call (or anywhere, for the forwarded
+    # header). Hold the plain header's name in a constant and read through it, and no spelling matches: the call
+    # carries no literal and the literal sits in no call. The name is assembled here, not written, so this file
+    # does not carry a copy of the shape it forges.
+    f = root / RECOVERY_RESOURCE
+    if not f.is_file():
+        raise ForgeError(f"{RECOVERY_RESOURCE} is missing — the recovery resource moved or was deleted")
+    header = "Ho" + "st"
+    probe = (
+        f'private const val HOST_ALIAS = "{header}"\n\n'
+        "/** A guard-gap probe: a Host read through an alias constant. */\n"
+        "private fun aliasedHost(req: io.vertx.core.http.HttpServerRequest): String? = req.getHeader(HOST_ALIAS)\n\n"
+    )
+    f.write_text(_sub(f.read_text(), RECOVERY_RESOURCE_ANCHOR, probe + RECOVERY_RESOURCE_ANCHOR))
+    return "a Host header read through an alias constant (the data-flow open gap)"
+
+
 def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
     # validate_stylesheet_anchors judges a selector's ANCHOR compound and nothing deeper, so a class no markup
     # applies is green wherever it sits behind a combinator. The live anchor is read out of the sheet rather
@@ -599,9 +626,10 @@ CASES = [
     ("22", "validate_coverage.py", forge_owed_surface_silent,            False),
     ("23", "validate_coverage.py", forge_admin_use_case_silent_on_admin_web, True),
     ("24", "validate_coverage.py", forge_unadmitted_surface_ref,         False),
-    ("25", "validate_request_bounds.py", forge_request_bound_unannotated, False),
-    ("26", "validate_request_bounds.py", forge_request_cascade_dropped,   False),
-    ("27", "validate_request_bounds.py", forge_request_annotation_drifts, False),
+    ("25", "validate_lookup_single_home.py", forge_host_read_through_an_alias, True),
+    ("26", "validate_request_bounds.py", forge_request_bound_unannotated, False),
+    ("27", "validate_request_bounds.py", forge_request_cascade_dropped,   False),
+    ("28", "validate_request_bounds.py", forge_request_annotation_drifts, False),
 ]
 
 
