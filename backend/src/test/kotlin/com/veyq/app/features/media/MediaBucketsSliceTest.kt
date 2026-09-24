@@ -235,7 +235,7 @@ class MediaBucketsSliceTest {
 
     private fun startOne(userId: String, scopeId: String, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"$wrap"}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")

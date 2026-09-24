@@ -58,9 +58,11 @@ interface BlobStore {
      * tenant — the bootstrap domain, or a request that legitimately has none — and signs against the configured
      * default.
      *
-     * The URL signs `content-type: application/octet-stream`, so the store refuses any other type (ADR 0013 §6).
+     * The URL signs `content-type: application/octet-stream`, so the store refuses any other type (ADR 0013 §6),
+     * and `content-length: `[contentLength] — the chunk's exact derived length — so it refuses a body of any other
+     * size (ADR 0013 §3). Where a store ignores the signed length, `complete`'s exact check still holds.
      */
-    fun presignPut(key: String, domain: String? = null): String?
+    fun presignPut(key: String, contentLength: Long, domain: String? = null): String?
 
     /** A short-TTL presigned GET URL for one chunk object, or null when the store cannot presign. [domain] as in
      *  [presignPut]: the resolved tenant's own domain, or null for the bootstrap default. The URL signs the
@@ -101,7 +103,7 @@ class InMemoryBlobStore : BlobStore {
     override val canPresign = false
     override val storeOrigin: String? = null
     // The domain is ignored, and can be: this store has no endpoint to sign against in the first place.
-    override fun presignPut(key: String, domain: String?): String? = null
+    override fun presignPut(key: String, contentLength: Long, domain: String?): String? = null
     override fun presignGet(key: String, domain: String?): String? = null
     override fun stat(key: String): Long? = null
 
@@ -200,11 +202,13 @@ class S3BlobStore(
      * type and a GET with an override stripped are each a 403, so a URL holder can change neither.
      */
 
-    override fun presignPut(key: String, domain: String?): String {
+    override fun presignPut(key: String, contentLength: Long, domain: String?): String {
         val presigned = presignerFor(domain).presignPutObject(
             PutObjectPresignRequest.builder()
                 .signatureDuration(Duration.ofSeconds(presignTtlSeconds.toLong()))
-                .putObjectRequest(PutObjectRequest.builder().bucket(bucket).key(key).contentType(INERT_TYPE).build())
+                .putObjectRequest(
+                    PutObjectRequest.builder().bucket(bucket).key(key).contentType(INERT_TYPE).contentLength(contentLength).build(),
+                )
                 .build(),
         )
         return presigned.url().toString()

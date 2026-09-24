@@ -68,8 +68,8 @@ class MediaBudgetBranchSliceTest {
     fun completeWithOneSessionOverBudgetPurgesTheWholeItemAtomically() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val original = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "b3JpZw==")
-        val thumb = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "dGh1bWI=")
+        val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=")
 
         // original: the store never got the declared byte — stat comes back short of nothing at all (missing)
         scriptSession(original) { _, _ -> null }
@@ -109,10 +109,45 @@ class MediaBudgetBranchSliceTest {
     }
 
     @Test
+    fun aChunkShortOfItsDerivedLengthFailsTheItemEvenWithTheTotalUnderTheDeclaration() {
+        // ADR 0013 §3: complete wants every chunk at EXACTLY its derived length — "the total does not exceed
+        // byteSize" lets a short chunk through, and a short frame is one no client sealed. The control is the same
+        // shape staged exactly, in the same batch, so the refusal is the one byte and not the endpoint.
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val blob = TestBlob.ofChunks(2)
+        val short = startOne(userId, scopeId, blob, wrap = "c2hvcnQ=")
+        val exact = startOne(userId, scopeId, blob, wrap = "ZXhhY3Q=")
+        val (shortKey, exactKey) = QuarkusTransaction.requiringNew().call {
+            UploadSessionEntity.findById(short)!!.storageKey to UploadSessionEntity.findById(exact)!!.storageKey
+        }
+        blob.stage(fakeStore, shortKey)
+        fakeStore.statOf(chunkKey(shortKey, 0), blob.chunkLength(0) - 1) // every chunk present, total one byte under
+        blob.stage(fakeStore, exactKey)
+
+        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            .body(
+                """{"items":[{"nodeId":"$memory","originalUploadId":"$short"},""" +
+                    """{"nodeId":"$memory","originalUploadId":"$exact"}]}""",
+            )
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200)
+            .body("results[0].error", equalTo("budget_exceeded"))
+            .body("results[0].blobId", nullValue())
+            .body("results[1].error", nullValue())
+            .body("results[1].blobId", notNullValue())
+
+        QuarkusTransaction.requiringNew().run {
+            assert(StoreReclaimEntity.count("storageKey", shortKey) == 1L) { "the short item's chunks must be reclaimed" }
+            assert(StoreReclaimEntity.count("storageKey", exactKey) == 0L) { "the exact item attached; nothing to reclaim" }
+        }
+    }
+
+    @Test
     fun commitCoverOverBudgetPurgesAndReportsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "Y292ZXI=")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "Y292ZXI=")
 
         // the store reports more bytes than were declared — exactly the mismatch verifyBlob's Budget case checks
         scriptSession(uploadId) { _, declared -> declared + 1 }
@@ -133,9 +168,9 @@ class MediaBudgetBranchSliceTest {
 
     // --- helpers ---
 
-    private fun startOne(userId: String, scopeId: String, chunkCount: Int, byteSize: Long, wrap: String): String =
+    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}]}""")
+            .body("""{"items":[${blob.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())

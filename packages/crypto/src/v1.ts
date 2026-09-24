@@ -219,8 +219,19 @@ export function sealFrame(contentKey: Uint8Array, index: number, total: number, 
   return concat(nonce, aeadSeal(contentKey, nonce, plaintext, frameAad(index, total)))
 }
 export function openFrame(contentKey: Uint8Array, index: number, total: number, frame: Uint8Array): Uint8Array {
-  return aeadOpen(contentKey, frame.slice(0, 12), frame.slice(12), frameAad(index, total))
+  const n = CHUNK_FRAME_SIZE.nonceBytes
+  return aeadOpen(contentKey, frame.slice(0, n), frame.slice(n), frameAad(index, total))
 }
+
+/**
+ * The frame size — a contract constant (vector `chunk_frame_size`, ADR 0013 §3), pinned by the conformance test.
+ * Every frame but the last carries exactly `plaintextBytes`; the last carries the remainder, and an empty blob is
+ * one frame carrying nothing. The backend derives `chunkCount` from `byteSize` on exactly this, and range
+ * streaming (ADR 0047) seeks on it, so a client that chunked differently would be refused at upload.
+ */
+export const CHUNK_FRAME_SIZE = { plaintextBytes: 262144, nonceBytes: 12, tagBytes: 16 } as const
+/** What sealing adds to a frame's plaintext: its nonce in front, its tag behind. */
+export const FRAME_OVERHEAD = CHUNK_FRAME_SIZE.nonceBytes + CHUNK_FRAME_SIZE.tagBytes
 
 export const kekPasswordSecret = (
   secretKey: Uint8Array,

@@ -38,8 +38,9 @@ const MEDIA_META_CTX = 'media-meta'
 /** AAD context binding the sealed heavy EXIF tier to its purpose (cr-0064) — distinct from the listed tier's. */
 const MEDIA_EXIF_CTX = 'media-exif'
 
-/** Plaintext bytes per chunk before sealing (each frame is this + a 12-byte nonce + a 16-byte tag). */
-export const CHUNK_SIZE = 256 * 1024
+/** Plaintext bytes per full chunk before sealing — the contract's frame size (ADR 0013 §3), not a choice made here:
+ *  the server derives `chunkCount` from `byteSize` on exactly this and refuses any other. */
+export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 // --- read-back model -------------------------------------------------------
 
@@ -215,12 +216,12 @@ export function unsealMeta(memoryKey: Uint8Array, item: MediaItem): MediaMeta | 
 
 /**
  * The original's **plaintext** size in bytes, recovered from what the server stores. Every chunk is framed with
- * a 12-byte nonce + a 16-byte AEAD tag, so the ciphertext carries exactly 28 bytes per chunk that the file
+ * a 12-byte nonce + a 16-byte AEAD tag, so the ciphertext carries exactly `FRAME_OVERHEAD` bytes per chunk that the file
  * never had. Showing `byteSize` raw would report a size the user's own file does not have — and would drift
  * with the chunking, not with the photo.
  */
 export function plaintextSize(ref: { byteSize: number; chunkCount: number }): number {
-  return Math.max(0, ref.byteSize - 28 * ref.chunkCount)
+  return Math.max(0, ref.byteSize - v1.FRAME_OVERHEAD * ref.chunkCount)
 }
 
 /** The effective capture time of a media's metadata tier: the user's correction if set, else the derived original. */

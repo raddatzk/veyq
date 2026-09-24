@@ -33,10 +33,10 @@ It extends the unit and the lock this CR builds.
   - ADR 0030 §6 and ADR 0031 §6;
   - ADR 0013 §3.
 - **Order — hard:**
-  - **After `cr-upload-frame-size-contract`.** Today the presigned `PUT` signs only the content type, not the
-    length (`grep -n 'fun presignPut' -B6 backend/src/main/kotlin/com/veyq/app/shared/blobstore/BlobStore.kt`,
-    and the builder in `S3BlobStore`). So a chunk can be overwritten larger after `complete` has checked it, and
-    a quota on the declared size would be evadable. After that CR, the declared size is the stored size.
+  - **After `cr-upload-frame-size-contract` (done).** The presigned `PUT` now signs each chunk's exact
+    `Content-Length` and `complete` checks every chunk at exactly that length, so the declared size is the stored
+    size — a chunk can no longer be overwritten larger after `complete` has checked it, which is what makes a
+    quota on the declared size hold.
   - **After `cr-upload-windowed-presign`.** Today an open contributor session names nobody, so it cannot be
     charged to its link. That CR records the opener as a nullable **share-identity** reference; the refine
     constrained it to that shape for this CR.

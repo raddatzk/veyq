@@ -73,6 +73,33 @@ acceptanceCriteria:
           sets it, so it makes no coverage claim (ADR 0040) and is named here instead. The unit refs prove what is
           SIGNED; that the store honours it is that opt-in run's evidence. The compose labels themselves are
           measured by hand through the dev Traefik, not by any test.
+  - id: declared-shape-follows-from-size
+    text: >-
+      The declared shape of a blob follows from its size (ADR 0013 §3) — the frame size is the crypto vectors'
+      `chunk_frame_size`, which the backend and every client read — so the server refuses any other chunk count, or
+      a size no frame sequence has (`shape_invalid`, distinct from `budget_exceeded` for a file over the cap), signs
+      each chunk's presigned PUT for its exact `Content-Length`, and attaches a blob only when every chunk is present
+      at exactly that length; anything else fails the item `budget_exceeded` and purges its staged objects.
+    coverage:
+      backend:
+        unit:
+          - ChunkFramesTest.theFrameSizeIsTheContractConstant
+          - ChunkFramesTest.theChunkCountIsTheCeilingOverTheSealedFrame
+          - ChunkFramesTest.everyChunkButTheLastIsFullAndTheLastCarriesTheRemainder
+          - ChunkFramesTest.aSizeNoFrameSequenceHasIsImpossible
+          - S3BlobStorePresigningTest.everyPresignedPutSignsItsChunksExactLength
+        integration:
+          - MediaSliceTest.aDeclarationWhoseShapeTheSizeDoesNotFixIsShapeInvalid
+          - MediaBudgetBranchSliceTest.aChunkShortOfItsDerivedLengthFailsTheItemEvenWithTheTotalUnderTheDeclaration
+      web:
+        unit: [src/features/memory/media.test.ts, src/sw/range.test.ts]
+    gaps:
+      - surface: backend
+        reason: >
+          That the store REFUSES a body of another length than the one signed — ADR 0013 §3's table: a wrong-length
+          PUT 403, a same-length re-PUT 200 — is measured only by `BlobBatchE2ETest`, which needs a real Garage and
+          runs when `VEYQ_S3_E2E=1`. No CI job sets it, so it makes no coverage claim (ADR 0040). The unit ref proves
+          the length is SIGNED; `complete`'s exact check, covered above, is what holds on a store that ignores it.
   - id: transient-retry
     text: A transient upload failure is retried once automatically; a hard failure is marked failed and retried only on explicit request.
     coverage:

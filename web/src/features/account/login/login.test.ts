@@ -22,11 +22,13 @@ beforeEach(() => {
 describe('login (uc.account.login)', () => {
   it('signs the nonce so the server can verify, and stores the issued session', async () => {
     let captured = ''
+    let capturedNonce = ''
     vi.mocked(loginApi).mockReturnValue({
       requestLoginChallenge: () =>
         Promise.resolve({ nonce: b64std(NONCE), instanceSalt: b64std(INSTANCE_SALT) }),
-      verifyLogin: (req: { loginVerifyRequest: { signature: string } }) => {
+      verifyLogin: (req: { loginVerifyRequest: { nonce: string; signature: string } }) => {
         captured = req.loginVerifyRequest.signature
+        capturedNonce = req.loginVerifyRequest.nonce
         return Promise.resolve({ accessToken: 'access', refreshToken: 'refresh', family: { id: 'fam-1' } })
       },
     } as unknown as ReturnType<typeof loginApi>)
@@ -37,6 +39,10 @@ describe('login (uc.account.login)', () => {
     expect(session.accessToken).toBe('access')
     expect(session.refreshToken).toBe('refresh')
     expect(session.familyId).toBe('fam-1')
+
+    // the verify names the very challenge it signed — the server consumes only that one (per-nonce
+    // challenges, E4), so any other string would find no challenge and fail
+    expect(capturedNonce).toBe(b64std(NONCE))
 
     // the signature is a valid Ed25519 signature over the nonce for the auth key derived from this
     // password + the challenge's instance salt — exactly what the backend verifies (wire-correct, and the

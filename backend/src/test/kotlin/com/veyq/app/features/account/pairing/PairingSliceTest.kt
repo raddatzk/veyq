@@ -436,7 +436,7 @@ class PairingSliceTest {
             .`when`().post("/api/login/challenge")
             .then().statusCode(200).extract().path<String>("nonce")
         val res = given().contentType(ContentType.JSON)
-            .body("""{"email":"$email","signature":"${sign(keyPair, nonce)}"}""")
+            .body("""{"email":"$email","nonce":"$nonce","signature":"${sign(keyPair, nonce)}"}""")
             .`when`().post("/api/login/verify")
             .then().statusCode(200).extract()
         return Session(res.path("family.id"), res.path("accessToken"), res.path("refreshToken"))

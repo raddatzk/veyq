@@ -213,6 +213,12 @@
     "total": 4,
     "frame": "a0a1a2a3a4a5a6a7a8a9aaab6f48326a48c118b5729a770476c35c0c21d1600ebcc93105"
   },
+  "chunk_frame_size": {
+    "note": "The frame size of a blob's chunk_frame sequence (ADR 0013 §3). Every frame but the last carries exactly plaintextBytes of plaintext, sealed to nonceBytes + plaintextBytes + tagBytes; the last carries 1..plaintextBytes, and an empty blob is one frame carrying 0. So a blob's sealed byteSize fixes its chunkCount = ceil(byteSize / (nonceBytes + plaintextBytes + tagBytes)), and a byteSize under nonceBytes + tagBytes, or one whose last frame of several would carry no plaintext, is no frame sequence at all. The backend and every client read the size from here.",
+    "plaintextBytes": 262144,
+    "nonceBytes": 12,
+    "tagBytes": 16
+  },
   "dedup_token": {
     "note": "AD-09 media dedup token: dedupKey = HKDF(contentKey, \"veyq/v1/media-dedup\"); token = HMAC-SHA256(dedupKey, SHA256(content)).",
     "contentKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",

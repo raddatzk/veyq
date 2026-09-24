@@ -5,6 +5,7 @@ import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.shared.identity.VeyqUser
@@ -128,7 +129,7 @@ class SharePresignDomainSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
-                chunkCount = 1; byteSize = 4096; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId

@@ -119,7 +119,7 @@ class StoreOriginPresignSliceTest {
     private fun startUpload(userId: String, scopeId: String, host: String): String =
         given().header("Authorization", token(userId)).header("X-Forwarded-Host", host)
             .contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"d3JhcA=="}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .extract().path("results[0].presignedPuts[0].url")

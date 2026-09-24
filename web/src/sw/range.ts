@@ -4,14 +4,16 @@
 // plaintext byte-range request into the covering ciphertext chunk indices and back into the exact window of bytes
 // to answer. Kept pure so it unit-tests directly; mediaSw.ts is the thin self-based wrapper that drives it.
 
+/**
+ * The frame size, as local literals: the SW bundle stays free of the crypto package and of the data layer (media.ts
+ * would pull exifr + the API client into the worker). They are the contract's `chunk_frame_size` (ADR 0013 §3) all
+ * the same — range.test.ts pins both to the `@veyq/crypto` export, so they cannot drift from what uploads seal.
+ */
+
 /** Per-frame ciphertext overhead: nonce(12) + AES-GCM tag(16). A plaintext chunk of size s ships as s+28 bytes. */
 export const FRAME_OVERHEAD = 28
 
-/**
- * Plaintext bytes per chunk (every chunk but the last is full). MUST equal media.ts `CHUNK_SIZE`; a unit test
- * pins the two equal so they cannot drift (the SW bundle must not import media.ts, which would pull the whole
- * data layer + exifr + the API client into the worker).
- */
+/** Plaintext bytes per chunk (every chunk but the last is full). */
 export const PLAINTEXT_CHUNK_SIZE = 256 * 1024
 
 /** Total plaintext size of a blob from its opaque ciphertext size + chunk count (each frame adds FRAME_OVERHEAD). */

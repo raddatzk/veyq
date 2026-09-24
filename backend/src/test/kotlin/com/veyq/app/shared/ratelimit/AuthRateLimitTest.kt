@@ -75,7 +75,7 @@ class AuthRateLimitTest {
 
     private fun verify(ip: String): Response =
         given().header("X-Forwarded-For", ip).contentType(ContentType.JSON)
-            .body("""{"email":"ratelimit@example.com","signature":"AA=="}""")
+            .body("""{"email":"ratelimit@example.com","nonce":"AA==","signature":"AA=="}""")
             .`when`().post("/api/login/verify")
 
     private fun refresh(ip: String): Response =

@@ -1,6 +1,7 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -98,7 +99,7 @@ class ShareUploaderSliceTest {
         val contributorToken = idResp.path<String>("contributorToken")
 
         val uploadId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
 
@@ -208,7 +209,7 @@ class ShareUploaderSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = blobId; this.scopeId = scopeId; storageKey = UUID.randomUUID().toString()
-                chunkCount = 1; byteSize = 16; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
             }.persist()
             MediaEntity().apply {
                 id = mediaId; this.scopeId = scopeId; this.nodeId = nodeId; this.blobId = blobId

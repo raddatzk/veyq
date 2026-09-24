@@ -48,6 +48,8 @@ class PasswordChangeSliceTest {
         val user = seedAccount()
         seedWrap(user, "DEVICE", "ZGV2aWNlLXdyYXA=")
         seedWrap(user, "DEVICE_KEY", "ZGV2aWNlLWtleS13cmFw")
+        seedWrap(user, "PASSKEY", "cGFzc2tleS13cmFw")
+        seedWrap(user, "RECOVERY", REC_WRAP)
         val otherToken = sessions.issue(user).accessToken
         val otherFamily = familyIdOf(user, otherToken)
         val ownToken = sessions.issue(user).accessToken
@@ -60,6 +62,10 @@ class PasswordChangeSliceTest {
         assertEquals(NEW_AUTH_PUB, field(user) { it.authPublicKey }, "login and unlock must never disagree")
         assertEquals(null, wrapOf(user, "DEVICE"), "a device-held KEK cannot be rewritten from here, so it goes")
         assertEquals(null, wrapOf(user, "DEVICE_KEY"), "the password-less one especially needs no password at all")
+        // The control on the same predicate: a whitelist that over-reaches and takes the recovery path with it
+        // would lock the person out of the one route that works without the password.
+        assertEquals(REC_WRAP to KDF, wrapRowOf(user, "RECOVERY"), "the Emergency Kit's wrap survives byte-for-byte")
+        assertEquals(null, wrapOf(user, "PASSKEY"), "every method not declared a survivor goes — a whitelist, not a blacklist")
 
         assertEquals(SessionFamilyEntity.REVOKED, familyStatus(otherFamily), "every other session is cut")
         assertEquals(SessionFamilyEntity.ACTIVE, familyStatus(ownFamily), "changing a password must not strand the session doing it")
@@ -144,6 +150,12 @@ class PasswordChangeSliceTest {
         MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()?.wrappedKey
     }
 
+    private fun wrapRowOf(userId: String, method: String): Pair<String, String?>? =
+        QuarkusTransaction.requiringNew().call<Pair<String, String?>?> {
+            MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()
+                ?.let { it.wrappedKey to it.kdfParams }
+        }
+
     private fun familyStatus(familyId: String): String? =
         QuarkusTransaction.requiringNew().call<String?> { SessionFamilyEntity.findById(familyId)?.status }
 
@@ -155,6 +167,7 @@ class PasswordChangeSliceTest {
         const val KDF = "a2RmLXBhcmFtcw=="
         const val OLD_PW_WRAP = "b2xkLXBhc3N3b3JkLXdyYXA="
         const val NEW_PW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
+        const val REC_WRAP = "cmVjb3Zlcnktd3JhcA=="
         const val NEW_AUTH_PUB = "bmV3LWF1dGgtcHVibGljLWtleQ=="
 
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()

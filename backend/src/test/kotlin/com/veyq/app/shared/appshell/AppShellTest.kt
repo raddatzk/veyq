@@ -32,7 +32,7 @@ class AppShellTest {
         val signed = originOf(store.presignGet(KEY, "tenant.example.com"))
 
         assertEquals("https://store.example.net:8443", signed, "control: the signer's own answer in this mode")
-        assertEquals(originOf(store.presignPut(KEY, null)), signed, "PUT and GET must name one origin")
+        assertEquals(originOf(store.presignPut(KEY, 1L, null)), signed, "PUT and GET must name one origin")
         assertEquals("$POLICY_WITHOUT_STORE $signed; form-action 'self'", cspOf(store.storeOrigin))
     }
 
@@ -45,7 +45,7 @@ class AppShellTest {
             internalEndpoint = "https://s3.eu-central-1.amazonaws.com",
             publicEndpoint = "https://ignored.example.net",
         )
-        val signed = originOf(store.presignPut(KEY, "tenant.example.com"))
+        val signed = originOf(store.presignPut(KEY, 1L, "tenant.example.com"))
 
         assertEquals("https://s3.eu-central-1.amazonaws.com", signed)
         assertEquals("$POLICY_WITHOUT_STORE $signed; form-action 'self'", cspOf(store.storeOrigin))

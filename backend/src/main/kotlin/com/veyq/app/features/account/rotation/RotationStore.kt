@@ -2,6 +2,7 @@ package com.veyq.app.features.account.rotation
 
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
@@ -31,10 +32,8 @@ class RotationStore {
      *    has, and refuses;
      *  - the deletion of every **other** wrap.
      *
-     * That deletion is a **whitelist of survivors**, not a blacklist of `DEVICE`/`DEVICE_KEY`/`PASSKEY`, and the
-     * direction is the point: a wrap method added later is device-held until proven otherwise, so defaulting it
-     * to *deleted* fails safe. A blacklist would silently leave a new method holding the old Master Key — which
-     * is precisely the compromise this operation exists to end.
+     * That deletion keeps [WrapMethod.SURVIVORS] and nothing else — a whitelist, shared with password change and
+     * reset, and why it must be one is on [WrapMethod].
      *
      * Returns false when the account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite. Neither can
      * happen through any HTTP surface (`deleteWrap` whitelists the device methods, and every account is born
@@ -51,8 +50,8 @@ class RotationStore {
         recoveryMasterKeyTag: String,
     ): Boolean {
         val user = VeyqUser.findById(userId) ?: return false
-        val floor = wrapOf(userId, PASSWORD_METHOD) ?: return false
-        val recovery = wrapOf(userId, RECOVERY_METHOD) ?: return false
+        val floor = wrapOf(userId, WrapMethod.PASSWORD) ?: return false
+        val recovery = wrapOf(userId, WrapMethod.RECOVERY) ?: return false
 
         floor.wrappedKey = passwordWrap.wrappedKey
         floor.kdfParams = passwordWrap.kdfParams
@@ -63,20 +62,10 @@ class RotationStore {
         user.wrappedIdentityPrivateKey = wrappedIdentityPrivateKey
         user.recoveryMasterKeyTag = recoveryMasterKeyTag
 
-        MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, COLD_METHODS)
+        MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
         return true
     }
 
-    private fun wrapOf(userId: String, method: String): MasterKeyWrapEntity? =
-        MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method).firstResult()
-
-    private companion object {
-        private const val PASSWORD_METHOD = "PASSWORD"
-        private const val RECOVERY_METHOD = "RECOVERY"
-
-        /** The two wraps a rotation can rewrite, because their KEKs are derived from secrets the human holds
-         *  rather than from key material a device holds. Everything else cannot be rewritten from here and is
-         *  therefore deleted — see [applyRotation] on why this is a whitelist. */
-        private val COLD_METHODS = listOf(PASSWORD_METHOD, RECOVERY_METHOD)
-    }
+    private fun wrapOf(userId: String, method: WrapMethod): MasterKeyWrapEntity? =
+        MasterKeyWrapEntity.find("userId = ?1 and method = ?2", userId, method.name).firstResult()
 }
