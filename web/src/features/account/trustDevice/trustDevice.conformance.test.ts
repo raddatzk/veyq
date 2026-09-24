@@ -63,7 +63,7 @@ describe('trustThisDevice derives the DEVICE-wrap KEK of the shared crypto vecto
     // different draw than the one uploaded as kdfParams fails here instead of passing on a repeated salt.
     vi.mocked(v1.randomBytes).mockImplementationOnce(() => unhex(K.salt))
     // Web derives at the production default (v1.ARGON), the vector at its own cheaper params; only the cost is
-    // swapped, and the production params are pinned by packages/crypto's `kdf_params` test.
+    // swapped, and the production params are pinned by ../argonParams.conformance.test.ts.
     vi.mocked(v1.kekDevicePassword).mockImplementation((factor, password, salt) =>
       real.kekDevicePassword(factor, password, salt, K.params),
     )
