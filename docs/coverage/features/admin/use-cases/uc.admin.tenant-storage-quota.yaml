@@ -1,0 +1,19 @@
+useCase: uc.admin.tenant-storage-quota
+feature: admin
+title: A tenant's storage quota — the ceiling is set by whoever pays for the store
+status: planned
+# Refined 2026-09-24 (inbox #155) into ADR 0073; built by cr-tenant-storage-quota, after
+# cr-share-link-storage-limit, whose usage query and lock it extends. Nothing is built yet.
+acceptanceCriteria:
+  - id: tenant-usage-counts-everything-stored
+    text: A tenant's usage is the declared size of every blob in its scopes — originals, derivatives and covers, including trashed media, trashed nodes and scopes in their deletion grace until purged — plus every open upload session in them. Reclaim tombstones and database-held material (icons, share notes, job results) are not counted.
+  - id: the-server-owner-sets-the-quota
+    text: The Server Owner sets, changes and clears a tenant's quota (none by default) and sees each tenant's usage and quota, only on the admin channel (the operation carries the admin-channel marker); no tenant-owner operation writes it. Lowering it below usage deletes nothing.
+  - id: every-start-into-the-tenant-checks-the-quota
+    text: Every start into the tenant's scopes — member, cover, link — whose admissible items would take the tenant over its quota is refused whole with `quota_exceeded`; concurrent starts into one tenant cannot overshoot it; a link start checks the quota and the per-link limit independently.
+  - id: the-member-is-told-there-is-no-space
+    text: A member's refused upload is marked failed in the uploads tray with a no-space reason and is not retried automatically; the tenant owner sees the quota beside the tenant's usage in the tenant settings.
+gaps:
+  backend: "Not built: the tenant row carries no quota, and member starts check nothing but the per-blob ceiling (cr-tenant-storage-quota)."
+  web: "Not built: the uploads tray shows no failure reason and retries every error once (cr-tenant-storage-quota)."
+  admin-web: "Not built: the tenant list and detail show neither usage nor quota, and the CLI has no quota command (cr-tenant-storage-quota)."

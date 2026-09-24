@@ -114,8 +114,10 @@ The backend cannot see bytes mid-`PUT`, so it bounds them before and after:
   A rejected item's staged objects are purged.
 - **`veyq.blob.max-bytes` is a sanity ceiling, not a limit anyone plans around** (default 20 GiB). With the TTL
   no longer bounding an upload (§2), it is what keeps one declaration from being absurd. It bounds a file,
-  never a total: **nothing bounds how much one account or one share link stores** — that is a quota, and it is
-  not decided here. There is no open-session cap either.
+  never a total. A total is the **storage quota** ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):
+  a tenant's quota and a per-link limit, checked at `start`, where an open session's declared size is reserved
+  against them — which is also what bounds the open sessions of a link, or of a tenant with a quota. A member of a
+  tenant without one is bounded per file only.
 - **Abandoned uploads are reclaimed by the stale-session GC**, which keys on a session's **last issued window**,
   not on its start. A `PUT` can only begin within the TTL of the window that signed it (S3 honours a signature
   valid at request start, so one frame may still be streaming), which is why a session with no new window for

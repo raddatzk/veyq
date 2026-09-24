@@ -69,7 +69,8 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
 
 6. **Everything else inherits ADR 0030.** Mandatory display name **sealed under `K_mem`** → an anonymous share
    identity; the share-scoped, token-gated upload path; direct-append to the shared root (the curator sees the
-   contributions in *their* gallery); the byte budget + per-share rate limit; the client-integrity trust-tier
+   contributions in *their* gallery); the byte budget, the per-link storage limit
+   ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)) + per-share rate limit; the client-integrity trust-tier
    honesty (footer link, [ADR 0026](0026-client-trust-tiers.md)); personal-scope-only; the T&S
    decryptable-on-report corollary.
 

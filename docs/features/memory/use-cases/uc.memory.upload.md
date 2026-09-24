@@ -52,6 +52,10 @@
   gallery shows an icon).
 - **E4 — underivable media:** if on-device derivation fails (codec the browser can't decode), the original is
   uploaded without derivatives rather than failing the upload.
+- **E5 — no space left:** a file that would take the tenant over its storage quota is refused at `start`, before a
+  byte is sent — original and derivatives together. It is marked **failed** with that reason and is not retried
+  automatically, since a retry cannot help; trash counts until it is emptied
+  ([uc.admin.tenant-storage-quota](../../admin/use-cases/uc.admin.tenant-storage-quota.md)).
 
 ## Quality notes
 

@@ -87,8 +87,11 @@ sequenceDiagram
   write-only promise is never flipped in place (a `422 invalid_role_change` rejects setting UPLOADER or editing an
   UPLOADER share's role). Owner-gated via `updateShare` ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered (mandatory).
-- **E2 — over budget / rate-limited:** an oversized upload fails the per-blob byte budget; too many uploads in a
-  window are rate-limited (per-share, best-effort) — defense against an abusive link holder.
+- **E2 — over budget / full / rate-limited:** an oversized upload fails the per-blob byte budget; an upload that
+  would take the link over its storage limit, or the tenant over its quota, is refused whole with the visitor told
+  only that the link takes no more uploads right now
+  ([uc.sharing.share-link-storage-limit](uc.sharing.share-link-storage-limit.md)); too many uploads in a window are
+  rate-limited (per-share, best-effort) — defense against an abusive link holder.
 - **E3 — link without the fragment key:** inert — without `K_share` nothing decrypts and nothing can be sealed
   under `K_mem`, so neither viewing nor contributing is possible (both halves required).
 
