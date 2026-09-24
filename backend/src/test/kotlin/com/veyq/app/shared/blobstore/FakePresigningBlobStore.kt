@@ -39,6 +39,8 @@ import java.util.Collections
 @ApplicationScoped
 class FakePresigningBlobStore : BlobStore {
     override val canPresign = true
+    // Mode-blind like the rest of this store (KDoc): the echo below is tenant-domain signing, which is same-origin.
+    override val storeOrigin: String? = null
 
     private val stats = Collections.synchronizedMap(HashMap<String, Long?>())
 

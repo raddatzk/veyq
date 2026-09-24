@@ -1,7 +1,7 @@
 ---
 id: cr-app-shell-served-by-backend
 title: The backend serves the app shell — SPA fallback, the CSP as a header, security headers, a revalidated shell
-status: planned
+status: in-progress
 satisfies: [cc.security.csp]
 adrs: ["0069", "0013", "0015", "0016", "0064"]
 invariants: [operator-blind E2EE, self-hostable by default]
@@ -93,7 +93,7 @@ protection than the one before it:
 
 ## Phases
 
-- [ ] 1 backend — **the app shell**, with the header sent only when an emitted policy is present. Measure the
+- [x] 1 backend — **the app shell**, with the header sent only when an emitted policy is present. Measure the
       trust-chain baseline before the first edit:
       `for f in scripts/validate_*.py; do python3 "$f" >/dev/null 2>&1 || echo "RED $f"; done`.
       - **Fallback.** A `GET` or `HEAD` naming `text/html` in `Accept`, outside `/api/` and `/__media/`, that no
