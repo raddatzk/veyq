@@ -1,15 +1,20 @@
 package com.veyq.app.shared.appshell
 
+import com.veyq.app.features.admin.tenant.TenantEntity
+import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.response.Response
 import org.hamcrest.Matchers.containsString
 import org.hamcrest.Matchers.emptyString
+import org.hamcrest.Matchers.equalTo
 import org.hamcrest.Matchers.not
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import java.time.Instant
+import java.util.UUID
 
 /**
  * The app shell over a real request (ADR 0069), against the fixture shell in `src/test/resources/META-INF/resources`
@@ -102,6 +107,33 @@ class AppShellSliceTest {
         // 180 days. Switched off by AppShellHstsOffSliceTest, which is this case's control.
         assertEquals("max-age=15552000", html("/recover").header("Strict-Transport-Security"))
         assertEquals("max-age=15552000", given().`when`().get("/api/setup").header("Strict-Transport-Security"))
+    }
+
+    @Test
+    fun aSuspendedTenantsDomainGetsTheShellWhileItsApiRefuses() {
+        // `/` is a real file, answered before JAX-RS; `/recover` is the fallback, answered after it — so a
+        // pre-matching JAX-RS filter reaches the second and not the first. Both must load the same client, which
+        // is what lets it show the suspension (ADR 0066: what `TenantSuspensionFilter` refuses is the API).
+        // Control: the API on the same Host is refused by that filter, so the 200s are not a Host nobody resolved.
+        val suspended = seedTenant(TenantEntity.SUSPENDED)
+        for (path in listOf("/", "/recover")) {
+            given().header("Accept", HTML).header("X-Forwarded-Host", suspended).`when`().get(path)
+                .then().statusCode(200).body(containsString(FIXTURE_MARKER))
+        }
+        given().header("X-Forwarded-Host", suspended).`when`().get("/api/scopes")
+            .then().statusCode(403).body("code", equalTo("tenant_suspended"))
+    }
+
+    /** A bare tenant row whose only job is to claim a domain; returns that domain. */
+    private fun seedTenant(status: String): String {
+        val domain = "shell-${UUID.randomUUID()}.example.com"
+        QuarkusTransaction.requiringNew().run {
+            TenantEntity().apply {
+                id = UUID.randomUUID().toString(); name = "Fam"; this.domain = domain
+                ownerEmail = "o-${UUID.randomUUID()}@example.com"; this.status = status; createdAt = Instant.now()
+            }.persist()
+        }
+        return domain
     }
 
     private fun html(path: String): Response = given().header("Accept", HTML).`when`().get(path)

@@ -76,12 +76,13 @@ sign-in included. Neither needs any session state.**
   switcher can show it offline.
 - **The `Host` filter stays, for what a `Host` can decide.** A **pre-matching** request filter
   (`TenantSuspensionFilter`) resolves the tenant from the `Host` the same way `ScopesResource.activeHost()`
-  already does and refuses every request on a `SUSPENDED` tenant's own domain with `403 tenant_suspended` —
-  unauthenticated or not, before the request reaches a handler or an authentication check. That covers what
-  no scope is addressed by — signing in on that domain. It is a RESTEasy filter, so what it refuses is the
-  API; whether the app shell ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) passes through it does not
-  matter, because nothing the shell does works without the API. It is **not** the enforcement — a request on
-  any other domain never meets it (Forces above).
+  already does and refuses every **API** request on a `SUSPENDED` tenant's own domain with
+  `403 tenant_suspended` — unauthenticated or not, before the request reaches a handler or an authentication
+  check. That covers what no scope is addressed by — signing in on that domain. What it refuses is the API and
+  only the API: the app shell ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) loads on that domain at
+  every URL, so the client can say the tenant is suspended, and nothing it does works without the API. The
+  filter checks the path itself because JAX-RS sees the shell's deep links, though not `/`. It is **not** the
+  enforcement — a request on any other domain never meets it (Forces above).
 - **No session revoke.** The gate already delivers "blocks immediately, no exceptions": it decides by the
   tenant an operation acts on, independent of which account presents a token, so it refuses every operation
   the moment the status flips, full stop. A session-revoke was considered as extra hardening and **rejected**:

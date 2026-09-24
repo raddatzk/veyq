@@ -272,8 +272,10 @@ Each decision names the line that settles it.
     again, with its output quoted in the retrospective.
 - [ ] **5 web** (D12).
   - **Measure first:** load the app on a suspended tenant's own domain and confirm the shell arrives while
-    `/api` answers `403 tenant_suspended`. `cr-app-shell-served-by-backend` expects exactly that and marks it
-    *not measured*. If the shell itself is refused, the card cannot render: stop and ask.
+    `/api` answers `403 tenant_suspended`. Pinned at the HTTP level since 2026-09-24
+    (`AppShellSliceTest.aSuspendedTenantsDomainGetsTheShellWhileItsApiRefuses`, after `TenantSuspensionFilter`
+    was confined to `/api`); this step confirms it in a browser. If the shell itself is refused, the card cannot
+    render: stop and ask.
   - The switcher and home render `status`.
   - `403 tenant_suspended` handling:
     - for another tenant: leave the space and refresh the list;

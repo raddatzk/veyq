@@ -29,8 +29,9 @@ class AppShellFiles {
  * It hooks in at the Vert.x router, not as a JAX-RS catch-all, for two reasons: a catch-all resource would compete
  * with the API's own path matching, and under `deny-unannotated-endpoints` it would need a `@PermitAll`. A route
  * also sees what JAX-RS never does — static files and Vert.x's own 404 — which is exactly where these headers
- * must go. `TenantSuspensionFilter` is a RESTEasy filter and so never sees the shell: a suspended tenant keeps
- * getting the (static, secret-free) client, and its API refuses as before.
+ * must go. The fallback does sit **behind** JAX-RS, though (the static handler sits in front of it), so a
+ * pre-matching JAX-RS filter sees a deep link and never `/`. `TenantSuspensionFilter` confines itself to `/api`
+ * for exactly that reason; a new pre-matching filter has to as well, or deep links and `/` part ways.
  */
 @ApplicationScoped
 class AppShellRoutes(
