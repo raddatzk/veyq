@@ -32,8 +32,8 @@
    every projected `Ingress` carries **by a named mode** (`none`, `per-domain`, `shared`; [ADR 0064](../../../decisions/0064-kubernetes-helm-deployment-target.md)).
    A custom domain that is nobody's subdomain gets its certificate the same way; only the operator's own
    choice of a shared wildcard certificate excludes it, knowingly. On compose each domain gets the **same
-   pair** of routes the bootstrap domain has: the app, and the blob path on that same origin with its prefix
-   and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)); on
+   pair** of routes the bootstrap domain has: the app, and the configured bucket's path on that same origin with
+   its prefix and `Host` preserved ([ADR 0013 §4](../../../decisions/0013-blob-storage-presigned-direct-to-store.md)); on
    Kubernetes the store has a host of its own and each domain gets the app route alone (A5).
 4. A member or guest opens that domain. The request resolves to its tenant by the `Host` it arrived on —
    the one canonical resolution every gate and handler shares.

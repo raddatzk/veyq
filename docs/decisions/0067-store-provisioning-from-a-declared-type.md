@@ -177,6 +177,14 @@ customer's infrastructure, never their data.
   wholesale (*"a Kubernetes-native backup story … is deferred to its own future decision"*). Compose merely had
   a sidecar in front of it. Redefining the gate fixes both targets with one change, where a compose-shaped
   remedy would have fixed neither.
+- **The bucket's default name is fixed once an instance is installed.** Neither recipe sets
+  `veyq.blob-store.bucket`, so every install runs on the default, and `GarageStoreProvisioner.ensureBucket`
+  creates whatever the setting names when no bucket answers to it. A changed default would therefore hand every
+  upgraded install a new, empty bucket: its media stays in the old one, every presigned read fails, and the
+  reclaim sweep deletes against a bucket that never held the objects — S3 answers a delete of a missing key with
+  success, so the old bytes are never reclaimed either. An install that must change the name pins the old one in
+  its configuration instead, which every route follows ([ADR 0013 §4](0013-blob-storage-presigned-direct-to-store.md)).
+  The default in `application.properties` carries the same warning, where the next person to change it looks.
 - **Runtime-editable store settings stay out of reach for a specific reason.** `S3BlobStore` caches presigners
   in a `ConcurrentHashMap` keyed by resolved endpoint and never invalidates it — correct while the connection
   is fixed at boot, and the first thing that must change if it ever is not.
