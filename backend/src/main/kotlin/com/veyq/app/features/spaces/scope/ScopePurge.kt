@@ -27,9 +27,10 @@ import java.time.Instant
  * Scheduled hard-purge of soft-deleted groups (uc.spaces.delete-group, cr-0090, ADR 0014 §6). A group the owner
  * soft-deleted enters a grace period; once its `deletedAt` is older than the retention window, this erases it for
  * good — every row that references the scope, plus a reclaim entry for each blob's store objects (originals +
- * derivatives + covers all live in `veyq_blob`, which carries the scope). Operator-blind-safe: erasure only, no
- * key/plaintext (unlike a removal's key rotation). Mirrors the soft-then-hard purge pattern
- * (`TenantInvitePurge`/`SessionPurge`, cr-0011).
+ * derivatives + covers all live in `veyq_blob`, which carries the scope) and for each upload session still open in
+ * it (`veyq_upload_session`, the other table whose row is the only pointer to a `storage_key`).
+ * Operator-blind-safe: erasure only, no key/plaintext (unlike a removal's key rotation). Mirrors the
+ * soft-then-hard purge pattern (`TenantInvitePurge`/`SessionPurge`, cr-0011).
  *
  * **This job no longer deletes store objects, and that removed a hazard rather than adding latency** (ADR 0062
  * Decision 4). It used to delete them *first, inside* the per-scope transaction — so a rollback restored rows
@@ -75,10 +76,11 @@ class ScopePurge(
     fun purge(scopeId: String) = eraseScope(scopeId)
 
     /**
-     * Erase one scope and everything under it, FK-safe: each blob's store objects are recorded for reclaim while
-     * their rows still name the storage keys, then the DB rows go child-first — epoch links before the scope row
-     * that owns the FK. Most child tables carry `scope_id`; `veyq_media_derivative` is deleted by its media ids,
-     * `veyq_job_decline` by its job ids and `veyq_share_identity` by its share ids.
+     * Erase one scope and everything under it, FK-safe: each blob's and each open upload session's store objects
+     * are recorded for reclaim while their rows still name the storage keys, then the DB rows go child-first —
+     * epoch links before the scope row that owns the FK. Most child tables carry `scope_id`;
+     * `veyq_media_derivative` is deleted by its media ids, `veyq_job_decline` by its job ids and
+     * `veyq_share_identity` by its share ids.
      *
      * The read-before-delete order survives; only what it feeds changed. The objects themselves are
      * `StoreReclaimSweep`'s, which is why nothing here can leave a row pointing at bytes that are already gone.
@@ -92,6 +94,12 @@ class ScopePurge(
     private fun eraseScope(scopeId: String) {
         val blobs = BlobEntity.find("scopeId", scopeId).list()
         reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
+        // An upload still OPEN in the scope — started inside `veyq.media.upload.retention`, so its own sweep has
+        // not reached it — may already have chunks in the store, and its row is their only pointer. Recorded
+        // exactly as `MediaStore.purgeSessionsStartedBefore` does; a session a budget rejection already recorded
+        // is recorded twice, which the reclaim list tolerates (no unique key, idempotent object delete).
+        val sessions = UploadSessionEntity.find("scopeId", scopeId).list()
+        reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
 
         val mediaIds = MediaEntity.find("scopeId", scopeId).list().map { it.id }
         if (mediaIds.isNotEmpty()) MediaDerivativeEntity.delete("mediaId in ?1", mediaIds)

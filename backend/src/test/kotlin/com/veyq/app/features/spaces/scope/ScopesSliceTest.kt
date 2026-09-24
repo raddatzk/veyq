@@ -5,6 +5,8 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.media.MediaStore
+import com.veyq.app.features.media.UploadSessionEntity
 import com.veyq.app.features.sharing.ShareEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.features.tasks.CapabilityTags
@@ -56,6 +58,9 @@ class ScopesSliceTest {
 
     @Inject
     lateinit var reclaimStore: StoreReclaimStore
+
+    @Inject
+    lateinit var mediaStore: MediaStore
 
     private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ=" // "personal-scope-grant"
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
@@ -1070,6 +1075,53 @@ class ScopesSliceTest {
                 ShareEntity.delete("scopeId", scopeId)
             }
             purge.purge(scopeId)
+        }
+    }
+
+    /**
+     * BITE-TEST for the upload arm of the same erasure — a **live defect**: `eraseScope` deleted the scope's OPEN
+     * upload sessions without recording the chunks their clients may already have PUT straight into the store,
+     * and the session row is the only pointer to that `storage_key` (ADR 0062 § Context), so those bytes were
+     * orphaned for the life of the bucket. The `veyq.media.upload.retention` sweep does not close it: a session
+     * younger than that window when the purge tick lands is still open. Refusing uploads during the grace
+     * narrows it to an operator whose scope retention is shorter than the upload one — erasure must not depend on
+     * how two independent windows compare.
+     *
+     * The session goes through [MediaStore.createSession], the persistence half of the real upload `start`. The
+     * reclaim row must carry the session's declared `chunkCount`, not only its key: the sweep deletes indices
+     * `0 until chunkCount`, so a row recording one chunk reclaims the first and orphans the rest.
+     *
+     * `fresh` is the control on the same predicate: a purge that recorded every open session it could see would
+     * satisfy the positive half perfectly — and hand another group's live upload to the deleter.
+     */
+    @Test
+    fun purgeReclaimsTheStagedObjectsOfAnUploadStillOpenInTheScope() {
+        val (owner, domain) = seedMember()
+        val expired = createGroupAs(owner, domain)
+        val fresh = createGroupAs(owner, domain)
+        val expiredKey = UUID.randomUUID().toString()
+        val freshKey = UUID.randomUUID().toString()
+        val expiredSession = mediaStore.createSession(expired, expiredKey, chunkCount = 3, byteSize = 900, wrappedBlobKey = "d3JhcA==")
+        val freshSession = mediaStore.createSession(fresh, freshKey, chunkCount = 2, byteSize = 600, wrappedBlobKey = "d3JhcA==")
+
+        listOf(expired, fresh).forEach {
+            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+        }
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(expired)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+        }
+
+        purge.run()
+
+        QuarkusTransaction.requiringNew().run {
+            assertNull(ScopeEntity.findById(expired), "the group with an open upload is hard-purged")
+            assertNull(UploadSessionEntity.findById(expiredSession), "its open session row is erased with it")
+            assertEquals(
+                listOf(3), StoreReclaimEntity.list("storageKey", expiredKey).map { it.chunkCount },
+                "an erased session's staged objects go on the reclaim list — one row, every declared chunk",
+            )
+            assertNotNull(UploadSessionEntity.findById(freshSession), "an upload in a group still in its grace is left alone")
+            assertEquals(0, StoreReclaimEntity.count("storageKey", freshKey), "and none of its objects is reclaimed")
         }
     }
 
