@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { baseCompile } from '@intlify/message-compiler'
+import { VERSION } from 'vue-i18n'
+import { createRequire } from 'node:module'
 import {
   i18n,
   setLocalePreference,
@@ -131,5 +133,13 @@ describe('message syntax', () => {
       expect(compiled, locale).toBeGreaterThan(100) // a walk that compiled almost nothing proves nothing
     }
     expect(errors, 'messages that do not compile').toEqual([])
+  })
+
+  // The proof is only as good as the compiler it runs: a devDependency left behind on a vue-i18n bump would
+  // install a second, older compiler for this test alone, and it would go on passing against syntax the app no
+  // longer parses. vue-i18n's core pins its compiler to its own exact version, so the two must match.
+  it('compiles with the compiler vue-i18n itself runs', () => {
+    const compiler = createRequire(import.meta.url)('@intlify/message-compiler/package.json') as { version: string }
+    expect(compiler.version).toBe(VERSION)
   })
 })

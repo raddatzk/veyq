@@ -21,6 +21,8 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { baseCompile } from '@intlify/message-compiler'
+import { VERSION } from 'vue-i18n'
+import { createRequire } from 'node:module'
 import { i18n, SUPPORTED_LOCALES } from './index'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 
@@ -117,5 +119,13 @@ describe('admin-web message syntax', () => {
       expect(compiled, locale).toBeGreaterThan(50) // a walk that compiled almost nothing proves nothing
     }
     expect(errors, 'messages that do not compile').toEqual([])
+  })
+
+  // The proof is only as good as the compiler it runs: a devDependency left behind on a vue-i18n bump would
+  // install a second, older compiler for this test alone, and it would go on passing against syntax the app no
+  // longer parses. vue-i18n's core pins its compiler to its own exact version, so the two must match.
+  it('compiles with the compiler vue-i18n itself runs', () => {
+    const compiler = createRequire(import.meta.url)('@intlify/message-compiler/package.json') as { version: string }
+    expect(compiler.version).toBe(VERSION)
   })
 })
