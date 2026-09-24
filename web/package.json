@@ -32,6 +32,7 @@
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
+    "@intlify/message-compiler": "^10.0.8",
     "@openapitools/openapi-generator-cli": "^2.34.0",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",

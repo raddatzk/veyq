@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { baseCompile } from '@intlify/message-compiler'
 import {
   i18n,
   setLocalePreference,
@@ -102,5 +103,33 @@ describe('uploader drop-box ephemerality warnings (cr-0102)', () => {
       }
       expect(new Set(texts).size).toBe(KEYS.length) // four distinct messages, not one copy reused
     }
+  })
+})
+
+// Every message must compile under vue-i18n's own message compiler. One that does not still renders — vue-i18n
+// falls back to its source text — so neither the screen nor any other test notices: that is how
+// `invitations.addedBy` shipped as the literal "Invited by @{user}", since a bare `@` opens a linked message
+// (`{'@'}` is the literal). The compiler's own `onError` is the mechanism, deliberately not a spy on
+// `console.warn`, which would pass the day vue-i18n changes how it reports.
+describe('message syntax', () => {
+  function compileErrors(node: unknown, key: string, errors: string[]): number {
+    if (typeof node === 'string') {
+      baseCompile(node, { onError: (e) => errors.push(`${key}: ${e.message}`) })
+      return 1
+    }
+    if (node && typeof node === 'object') {
+      return Object.entries(node).reduce((n, [k, v]) => n + compileErrors(v, key ? `${key}.${k}` : k, errors), 0)
+    }
+    errors.push(`${key}: not a string message`)
+    return 0
+  }
+
+  it('every message of every locale compiles', () => {
+    const errors: string[] = [] // across all locales, so one red names every broken message at once
+    for (const locale of SUPPORTED_LOCALES) {
+      const compiled = compileErrors(i18n.global.messages.value[locale], locale, errors)
+      expect(compiled, locale).toBeGreaterThan(100) // a walk that compiled almost nothing proves nothing
+    }
+    expect(errors, 'messages that do not compile').toEqual([])
   })
 })

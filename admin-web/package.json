@@ -27,6 +27,7 @@
     "vue-router": "^5.1.0"
   },
   "devDependencies": {
+    "@intlify/message-compiler": "^10.0.8",
     "@openapitools/openapi-generator-cli": "^2.34.0",
     "@types/node": "^22.0.0",
     "@types/qrcode": "^1.5.6",
