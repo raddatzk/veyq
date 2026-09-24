@@ -22,7 +22,8 @@
    not a per-screen affordance — see *One Secret-Key control* under Quality notes.
 2. The client retrieves its **PASSWORD `MasterKeyWrap`** (the wrapped key + its KDF parameters/salt) from
    the server.
-3. The client derives the **Unlock KEK** `= Argon2id(password + Secret Key, wrap KDF params)` — **domain-
+3. The client checks the wrap's KDF profile is the one it writes (E3), then derives the **Unlock KEK**
+   `= Argon2id(password + Secret Key, wrap KDF params)` — **domain-
    separated** from the auth-keypair derivation, so the same password yields unrelated values for the two
    jobs.
 4. The client **unwraps** (AEAD-decrypts) the **Master Key** with the KEK.
@@ -61,6 +62,11 @@ sequenceDiagram
   unlock failure**; the server is **uninvolved** and learns nothing; the user retries locally.
 - **E2 — no PASSWORD wrap / not authenticated:** the wrap cannot be fetched or does not exist; the user
   must (re-)login or use a recovery/alternate method.
+- **E3 — a served key-derivation profile the client does not write:** the client derives only with the
+  Argon2id profile it writes itself, so any other served profile is **refused before deriving** — on this path
+  and on every other that derives from a served wrap. It is the server's fault, not the person's: the screen
+  fails the unlock without saying the password or Secret Key was wrong
+  ([ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5).
 
 ## Unlock state
 

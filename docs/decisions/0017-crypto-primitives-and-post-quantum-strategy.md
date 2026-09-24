@@ -47,8 +47,9 @@ strategy; they do not choose it.
    design. Why: a served profile accepted as sent lets a server make every unlock run near-unbounded Argon2id
    (gigabytes, billions of passes). A downgrade is not open — the password-derived auth key uses no served
    parameters, and every served KEK mixes in the Secret Key or a device factor — so a ceiling alone would do; an
-   exact profile is simpler and closes both. **Decided, not yet built** (inbox #161 (e)): today
-   `decodeKdfParams` bounds nothing but the header length.
+   exact profile is simpler and closes both. The check is the one decode every served profile passes through,
+   `decodeKdfParams` in `packages/crypto/src/v1.ts`, and its refusal is not a wrong password: a screen says the
+   unlock failed without blaming the credential.
 
 ## Consequences
 

@@ -336,7 +336,7 @@ edits that row in its docs phase.
 | has a member seal new content under an epoch the removed member holds | **Can** — a stale grant writes under the old epoch, and no client remembers an epoch | ADR 0024 Decision 6 — inbox #161 (b) |
 | wipes or rolls back the pin store, so a detected key change becomes a silent first use | **Can** — a store that does not open even counts as empty | ADR 0028 Decision 7 — inbox #161 (c) |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Can** | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 — inbox #161 (d) |
-| makes every unlock derive near-forever | **Can** | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 — inbox #161 (e) |
+| makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:
 - a key substituted before anyone pinned it (TOFU's first-use gap, ADR 0028), which also covers a device with
