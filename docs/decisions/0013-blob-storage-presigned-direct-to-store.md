@@ -139,6 +139,25 @@ and the `Content-Type` request header every `PUT` carries (§6), exposing `ETag`
 Traefik, route the bucket path **without** stripping the prefix and with the Host header preserved (SigV4 signs
 host+path+query).
 
+**That prefix is the bucket, so every route takes it from `veyq.blob-store.bucket` and none spells it.**
+Path-style signing makes an object's path `/<bucket>/<key>`, so a route that names the bucket itself serves the
+default and nothing else — changing the setting, as a restore onto another store may
+([uc.admin.back-up-and-restore-instance](../features/admin/use-cases/uc.admin.back-up-and-restore-instance.md)
+A6), would 404 every object with nothing reporting it. `TraefikFileIngressSink` renders every blobs router from
+the setting, and because the value lands in the routing file of every tenant, `BlobStoreStartupCheck` refuses a
+name that breaks S3's bucket-naming rules rather than trusting it. The rule is `` PathPrefix(`/<bucket>/`) `` **with**
+the trailing slash: Traefik's `PathPrefix` is a raw string prefix (`strings.HasPrefix` in v3.6's
+`pkg/muxer/http/matcher.go`), so without it the store also claims every app path that merely begins with the
+bucket's name. A browser only fetches object URLs, which always carry the slash.
+
+**The bundled bucket is `blobs`.** It shares the app's origin, whose pages are top-level paths
+(`web/src/router.ts`), so the name is a page the app can never have. `blobs` is the store's own vocabulary
+(`BlobStore`, `veyq.blob-store.*`, the `veyq-blobs` router), never product language; a page-like word reserves a
+page — `storage` is the one file storage (inbox #52) would want. Nothing a user controls reaches that segment, since
+a Memory's location lives in the URL fragment (`web/src/features/memory/location.ts`), so there is no
+reserved-name list and none is needed. Once an instance is installed the name is fixed:
+[ADR 0067](0067-store-provisioning-from-a-declared-type.md) § Consequences.
+
 **Two same-origin strategies, chosen per deployment target.** The bundled-store-behind-Traefik path route
 above is the **docker-compose** answer, and depends on that specific proxy's prefix/Host-preservation
 behavior. The **Kubernetes** target ([ADR 0064](0064-kubernetes-helm-deployment-target.md)) cannot assume an
