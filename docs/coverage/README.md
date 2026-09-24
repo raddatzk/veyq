@@ -15,7 +15,9 @@ ref or is declared under `gaps` with a reason — never left silent. `crypto` an
 > The surfaces are **`backend`**, **`web`**, **`crypto`** (`packages/crypto/`) and **`admin-web`**, each run
 > by a CI job. `http/` was hand-fired IDE tooling and has been deleted — real
 > requests that proved nothing, because nobody fired them. A surface enters this model when its CI job is
-> green, not when its code exists.
+> green, not when its code exists — and "green" means a run executed it, not that a workflow declares it:
+> `crypto`'s and `admin-web`'s jobs have never run, so their suites wait under `gaps` (ADR 0040's note on
+> which rows a run has admitted).
 
 `scripts/validate_coverage.py` enforces the chain (run it after changing a use-case, a coverage file,
 or the tests they point to).

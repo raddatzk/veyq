@@ -56,6 +56,21 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
 > confirm it had executed four suites rather than discovered none — `total: 4  passed: 4  failed: 0`. Reading that
 > log is the step, not the green tick: "the job passed" and "the job ran nothing" render identically in the UI,
 > which is why `scripts/validate_e2e_discovery.py` now guards the difference.
+>
+> **What a row is, and which rows a run has admitted (2026-09-24).** A row is a *job* — the runner that executes
+> one surface's tests — never a single ref. Once a run has executed a job, a new test inside it counts as soon as
+> a workflow declares that run; for a backend ref, that declaration is what `validate_coverage.py` checks. A job
+> no run has executed admits nothing, however green its suites are locally: until its first log is read, a job
+> that runs everything and a job that runs nothing are indistinguishable, which is the incident above one level
+> up. veyq was imported into a fresh repository on 2026-08-06 (`64283ca`) and has had no remote since, so every
+> run that admitted a row predates that import: backend `gradlew check`, web `npm run check`, and web-e2e (the
+> log above). **Not admitted:** `admin-web`'s and `packages/crypto`'s `npm run check` — both packages were born
+> on 2026-09-08 ([ADR 0065](0065-admin-ui-cli-separate-service.md)), so neither job has run anywhere. Their
+> suites wait under the use-case `gaps`, named, and flip on the first run whose log shows that package's suites
+> executed. The corpus still owes this rule two corrections: `crypto` carries three refs written before it
+> (`uc.memory.gallery`, `uc.spaces.set-space-icon`, `uc.account.trust-device`), and some use-cases withhold
+> backend or web refs on "no CI run has ever executed in this repository" — a stricter bar than this one, and
+> than every other backend ref.
 
 ## Decision
 
