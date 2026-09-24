@@ -32,8 +32,11 @@ email lookups outside their homes.
       which a buildless grep does not have. `validate_guard_gaps.py` pins this gap, so closing it turns that
       guard red instead of landing silently.
   (b) **It reads text, not code.** A comment or KDoc that spells a forbidden call is red too: describe the call
-      instead of writing it. The converse also holds: a query assembled at runtime (`find(column, value)`),
-      HQL outside Panache's shorthand (`"from VeyqUser where email = ?1"`), or a native query is invisible.
+      instead of writing it. (Masking comments was considered and dropped: `validate_coverage.py`'s Kotlin
+      masker blanks string literals as well — the very thing rules A–C read — and that module runs its whole
+      check on import, so it cannot be reused as a library.) The converse also holds: a query assembled at
+      runtime (`find(column, value)`), HQL outside Panache's shorthand (`"from VeyqUser where email = ?1"`), or a
+      native query is invisible.
   (c) **It proves where a lookup lives, not that its callers agree.** One home for the email lookup does not make
       every caller normalize before calling; `AccountStore` normalizes for itself, which is what closes that.
       And one home for Host resolution does not say which tenant a handler then acts on — whether recovery mails

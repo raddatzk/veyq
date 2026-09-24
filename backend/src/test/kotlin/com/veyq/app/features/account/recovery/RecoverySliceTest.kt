@@ -42,6 +42,11 @@ import java.time.temporal.ChronoUnit
  *
  * Tokens are minted through the store rather than the request endpoint, because the endpoint deliberately never
  * returns one — it only mails it. That is the flow working as designed, not a testability gap.
+ *
+ * **A test that POSTs a request for a member must await what the answer handed off** (the mail, or the PENDING
+ * row) before it returns. The endpoint answers before it mints (ADR 0054 §6), so an un-awaited mint can land
+ * after the next test's [seed] and supersede the token that test minted for itself — a red in a test that never
+ * touched the endpoint. Negatives go through [RecoveryHandler.deliver] directly, which returns synchronously.
  */
 @QuarkusTest
 class RecoverySliceTest {

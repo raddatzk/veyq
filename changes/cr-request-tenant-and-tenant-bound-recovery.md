@@ -211,4 +211,24 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
 
 ## Retrospective
 
-_(filled at implement)_
+- **Execution — I measured a tree I was editing.** The pre-phase-1 guard baseline ran over the live worktree while
+  phase-2 edits landed in it, so its result described no tree at all. Re-measured in detached `git worktree`s of the
+  baseline and phase-1 commits (35 guards each, 0 red). Root cause: § the pipeline's substrate rule was known and
+  still not applied to my *own* concurrent writes. Next time: take any long measurement from a detached worktree of
+  a commit, never from the tree the session is editing.
+- **Planning — the phase-3 cross-tenant bite named a lever only the fix creates** ("the direct delivery call"). On
+  the phase-2 tree the red had to go through `request` (still inline), the test was re-pointed to `deliver` after
+  the split and re-bitten by injection. Harvested into `changes/README.md` (§ live defect). Relatedly, "no new outcome
+  is added" (Decision 4) collided with the hand-off needing one for the synchronous half (`ACCEPTED`); a refine that
+  had traced the enum through Decision 5 would have decided that, or two types.
+- **Execution — a port list in a comment was stale.** `RecoverySliceTest`'s list of taken SMTP ports missed
+  `TenantOwnerGateTest`'s 13938, and my first pick collided. Harvested into `TestMailbox`'s KDoc as a grep.
+- **Process — the wave rules moved under the session.** Main gained "branch sessions run only their Done-when guards;
+  the coordinator runs the glob on the merged tree" mid-session; I learned it from main's log while preparing the
+  e2e run, after two full-glob runs. The e2e run itself was done from the main checkout's orchestrator with this
+  worktree's jar, because started from the worktree it would have recreated the user's compose containers onto
+  worktree mounts (a machine fact, now in memory). Next time: a wave brief that says "re-read main's
+  `changes/README.md` before the first long measurement" costs one line.
+- **Measured:** `./gradlew check` green on phase 2 (695 tests) and phase 3 (697); `npm run check` (web) green on
+  phase 1; the recovery e2e suite ran once locally, 1 file / 2 tests passed with its wire assertions, against this
+  branch's jar (schema v49). No remote, so no CI run (inbox #26).
