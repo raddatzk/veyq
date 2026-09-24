@@ -99,12 +99,13 @@ client "sending repeatedly the same query may be classified as faulty and blocke
   the raw coordinate. There is no retry loop, because a retry against a blocked client is what turns a refusal
   into a ban.
 
-**One requirement is currently met by accident, and a plausible hardening pass would break it.** The policy also
-wants "a valid HTTP Referer or User-Agent identifying the application". We send neither deliberately: the browser
-default puts our origin in `Referer`, and measured 2026-09-20 the repository sets **no** `Referrer-Policy`
-anywhere. Adding `Referrer-Policy: no-referrer` — an ordinary, otherwise-desirable hardening — would silently
-put every instance outside the provider's policy. Whoever adds one owes this seam an explicit identifying header
-instead; the trap is also written on the fetch itself, where someone editing it will see it.
+**One requirement is met by the `Referer` alone, and a plausible hardening pass would break it.** The policy also
+wants "a valid HTTP Referer or User-Agent identifying the application". We send neither deliberately: the app
+shell's `Referrer-Policy: strict-origin-when-cross-origin` ([ADR 0069](0069-backend-serves-the-web-app-shell.md))
+keeps our origin in `Referer` cross-origin, and never a path. Tightening it to `no-referrer` — an ordinary,
+otherwise-desirable hardening — would silently put every instance outside the provider's policy. Whoever
+tightens it owes this seam an explicit identifying header instead; the trap is also written on the fetch itself,
+where someone editing it will see it.
 
 **What this does not reopen.** [uc.memory.place](../features/memory/use-cases/uc.memory.place.md) rejected
 per-item geocoding for a Memory's medoid — N fetches for one answer, on every open. That rejection stands

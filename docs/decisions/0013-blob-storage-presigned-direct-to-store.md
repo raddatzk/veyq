@@ -223,8 +223,9 @@ media path. Rationale (decided as a sparring trade-off):
 intended — so any member or share contributor can `PUT` arbitrary plaintext through their own presigned URL,
 and `complete` verifies only the size (§3). The store then serves it back with whatever `Content-Type` the
 uploader sent. Where the store shares the app's origin (the compose path route, §4), a planted `text/html`
-object opened from a link is a **document on the app origin without a CSP** (the web CSP is a `<meta>` in
-`index.html` and covers that document only), holding every capability the app holds — its storage, its
+object opened from a link is a **document on the app origin without a CSP** (the app's policy is a header on
+the app shell's own responses, [ADR 0069](0069-backend-serves-the-web-app-shell.md), and a store response is
+not one of them), holding every capability the app holds — its storage, its
 refresh cookie, a remember-me key it can *use* though not export, and the genuine domain to draw a fake unlock
 screen on.
 

@@ -1,7 +1,7 @@
 ---
 id: cr-app-shell-served-by-backend
 title: The backend serves the app shell — SPA fallback, the CSP as a header, security headers, a revalidated shell
-status: in-progress
+status: done
 satisfies: [cc.security.csp]
 adrs: ["0069", "0013", "0015", "0016", "0064"]
 invariants: [operator-blind E2EE, self-hostable by default]
@@ -161,7 +161,7 @@ protection than the one before it:
       · Done when: `helm lint charts/veyq -f charts/veyq/ci/lint-values.yaml` and a `helm template` with the
         value flipped both render the env; trust-chain guards green (the ones that read the compose and chart
         files: `grep -ln "charts/veyq\|docker-compose.prod\|\.env\.example" scripts/validate_*.py`).
-- [ ] 4 docs — **what is built stops reading as decided.**
+- [x] 4 docs — **what is built stops reading as decided.**
       - `cc.security.csp` updates its Status line (the header delivery is built) and its Verification (the new
         backend tests, the dist check, the live proof below).
       - ADR 0016's and `geocode.ts`'s *"the repository sets no `Referrer-Policy`"* now reads: it sets
@@ -207,3 +207,26 @@ protection than the one before it:
   `cc.security.csp` § Verification (phase 4).
 
 ## Retrospective
+
+- **Planning — the live proof named a screen but not the state it needs.** "Boots to sign-in" against a
+  throwaway database cannot happen: an instance with no account routes everything to "not set up", and the
+  playback Service Worker registers on neither screen, so the SW-under-policy check the DoD hoped for stayed
+  unverified. Root cause: the refine measured the defect on a bare jar and wrote the proof's target screen from
+  the product, not from that jar. Harvested as a rule in `changes/README.md`.
+- **Execution — the trust-chain baseline read a moving tree.** I started it and began editing Kotlin while it ran,
+  so "green at baseline" is green over a partly-edited tree (harmless here, since the guards read docs, contracts
+  and infra and none of that had moved yet, but not what "baseline" claims). Next time: let the baseline finish
+  before the first edit, or run it from a second worktree at the base commit.
+- **Execution — I wrote an unmeasured claim down as fact.** The CR said `TenantSuspensionFilter` "is expected
+  not to see static responses (not measured)", and I put it into `AppShellRoutes`' KDoc without the hedge. A test
+  written late, only because `cr-scope-access-gate` cites the claim, found it half wrong: `/` (a real file,
+  answered before JAX-RS) loaded, and the fallback (answered after it) got `403`. The owner chose to confine the
+  filter to `/api`. Root cause: a "(not measured)" in a CR is an open question for the implementer, and I read it
+  as background. Next time: every "(not measured)" a CR hands over becomes a test in the phase that touches it.
+- **Collaboration — one question asked two things.** The live-jar question offered port choices while the real
+  unknown was which database to use; the answer ("clean up the existing instance") addressed the second and left
+  the first to me. Nothing needed wiping in the end (Flyway was up to date), but asking about the database
+  directly would have saved the interpretation step.
+- **Next time:** before a live proof, write down the instance state it needs (account, tenant for the browsed
+  host, media to play) and put that step into the phase, instead of finding the gap at the browser.
+
