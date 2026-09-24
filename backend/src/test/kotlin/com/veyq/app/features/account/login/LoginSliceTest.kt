@@ -51,7 +51,7 @@ class LoginSliceTest {
     @Test
     fun validLoginIssuesSession() {
         val nonce = requestChallenge(EMAIL)
-        verify(EMAIL, sign(KEYPAIR, nonce))
+        verify(EMAIL, nonce, sign(KEYPAIR, nonce))
             .then().statusCode(200)
             .body("accessToken", notNullValue())
             .body("refreshToken", notNullValue())
@@ -61,7 +61,7 @@ class LoginSliceTest {
     @Test
     fun wrongSignatureIsGenericFailure() {
         val nonce = requestChallenge(EMAIL)
-        verify(EMAIL, sign(OTHER_KEYPAIR, nonce)) // signed by the wrong key
+        verify(EMAIL, nonce, sign(OTHER_KEYPAIR, nonce)) // signed by the wrong key
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
 
@@ -71,7 +71,7 @@ class LoginSliceTest {
         val nonce = requestChallenge("ghost@example.com")
         assertTrue(nonce.isNotEmpty())
         // ...and verify fails with the SAME generic code as a wrong signature.
-        verify("ghost@example.com", sign(KEYPAIR, nonce))
+        verify("ghost@example.com", nonce, sign(KEYPAIR, nonce))
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
 
@@ -79,8 +79,8 @@ class LoginSliceTest {
     fun replayedNonceIsRejected() {
         val nonce = requestChallenge(EMAIL)
         val sig = sign(KEYPAIR, nonce)
-        verify(EMAIL, sig).then().statusCode(200) // single use consumes the challenge
-        verify(EMAIL, sig).then().statusCode(401) // replay → no outstanding nonce
+        verify(EMAIL, nonce, sig).then().statusCode(200) // single use consumes the challenge
+        verify(EMAIL, nonce, sig).then().statusCode(401) // replay → no outstanding nonce
     }
 
     @Test
@@ -97,7 +97,7 @@ class LoginSliceTest {
                 (0 until 2).map {
                     java.util.concurrent.Callable {
                         barrier.await() // release both requests as tightly together as possible
-                        verify(EMAIL, sig).then().extract().statusCode()
+                        verify(EMAIL, nonce, sig).then().extract().statusCode()
                     }
                 },
             ).map { it.get() }
@@ -118,7 +118,7 @@ class LoginSliceTest {
             challenge.expiresAt = Instant.now().minus(1, ChronoUnit.MINUTES)
             challenge.persist()
         })
-        verify(EMAIL, sign(KEYPAIR, nonce)) // valid signature, expired challenge
+        verify(EMAIL, nonce, sign(KEYPAIR, nonce)) // valid signature, expired challenge
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
 
@@ -138,7 +138,16 @@ class LoginSliceTest {
             .`when`().post("/api/login/challenge")
             .then().statusCode(400)
         // Non-base64 signature on verify → @Pattern, rejected before any nonce lookup.
-        given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","signature":"not base64!!"}""")
+        given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","nonce":"AA==","signature":"not base64!!"}""")
+            .`when`().post("/api/login/verify")
+            .then().statusCode(400)
+        // A verify that names no nonce → @NotBlank. There is no "take the newest challenge" fallback: that
+        // would keep a challenge displaceable for every client that omits the field (uc.account.login E4).
+        given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","signature":"AA=="}""")
+            .`when`().post("/api/login/verify")
+            .then().statusCode(400)
+        // Non-base64 nonce on verify → @Pattern.
+        given().contentType(ContentType.JSON).body("""{"email":"$EMAIL","nonce":"not base64!!","signature":"AA=="}""")
             .`when`().post("/api/login/verify")
             .then().statusCode(400)
     }
@@ -253,7 +262,7 @@ class LoginSliceTest {
     @Test
     fun rememberLoginSetsHttpOnlyRefreshCookieAndOmitsBodyToken() {
         val nonce = requestChallenge(EMAIL)
-        val res = verifyRemember(EMAIL, sign(KEYPAIR, nonce)).then().statusCode(200)
+        val res = verifyRemember(EMAIL, nonce, sign(KEYPAIR, nonce)).then().statusCode(200)
             .body("accessToken", notNullValue())
             .body("refreshToken", nullValue()) // omitted from the body — it rides the cookie instead
             .cookie("veyq_refresh", notNullValue())
@@ -266,7 +275,7 @@ class LoginSliceTest {
         // Web default "off" (cr-0055): SESSION → a session cookie (no Max-Age, name veyq_refresh_session) so it
         // survives reloads but is dropped on browser close; the token still rides the cookie, not the body.
         val nonce = requestChallenge(EMAIL)
-        val res = verifyScope(EMAIL, sign(KEYPAIR, nonce), "SESSION").then().statusCode(200)
+        val res = verifyScope(EMAIL, nonce, sign(KEYPAIR, nonce), "SESSION").then().statusCode(200)
             .body("accessToken", notNullValue())
             .body("refreshToken", nullValue())
             .cookie("veyq_refresh_session", notNullValue())
@@ -294,7 +303,7 @@ class LoginSliceTest {
     @Test
     fun persistentScopeSetsPersistentCookieWithMaxAge() {
         val nonce = requestChallenge(EMAIL)
-        val res = verifyScope(EMAIL, sign(KEYPAIR, nonce), "PERSISTENT").then().statusCode(200)
+        val res = verifyScope(EMAIL, nonce, sign(KEYPAIR, nonce), "PERSISTENT").then().statusCode(200)
             .body("refreshToken", nullValue())
             .cookie("veyq_refresh", notNullValue())
             .cookie("veyq_refresh_session", equalTo("")) // clears any prior session cookie (one tier per device)
@@ -357,7 +366,7 @@ class LoginSliceTest {
 
     private fun login(): Session {
         val nonce = requestChallenge(EMAIL)
-        val res = verify(EMAIL, sign(KEYPAIR, nonce)).then().statusCode(200).extract()
+        val res = verify(EMAIL, nonce, sign(KEYPAIR, nonce)).then().statusCode(200).extract()
         return Session(res.path("accessToken"), res.path("refreshToken"))
     }
 
@@ -366,29 +375,30 @@ class LoginSliceTest {
             .`when`().post("/api/login/challenge")
             .then().statusCode(200).extract().path("nonce")
 
-    private fun verify(email: String, signatureB64: String) =
-        given().contentType(ContentType.JSON).body("""{"email":"$email","signature":"$signatureB64"}""")
+    private fun verify(email: String, nonce: String, signatureB64: String) =
+        given().contentType(ContentType.JSON)
+            .body("""{"email":"$email","nonce":"$nonce","signature":"$signatureB64"}""")
             .`when`().post("/api/login/verify")
 
-    private fun verifyRemember(email: String, signatureB64: String) =
+    private fun verifyRemember(email: String, nonce: String, signatureB64: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"email":"$email","signature":"$signatureB64","remember":true}""")
+            .body("""{"email":"$email","nonce":"$nonce","signature":"$signatureB64","remember":true}""")
             .`when`().post("/api/login/verify")
 
-    private fun verifyScope(email: String, signatureB64: String, scope: String) =
+    private fun verifyScope(email: String, nonce: String, signatureB64: String, scope: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"email":"$email","signature":"$signatureB64","sessionScope":"$scope"}""")
+            .body("""{"email":"$email","nonce":"$nonce","signature":"$signatureB64","sessionScope":"$scope"}""")
             .`when`().post("/api/login/verify")
 
     private fun rememberLoginCookie(): String {
         val nonce = requestChallenge(EMAIL)
-        return verifyRemember(EMAIL, sign(KEYPAIR, nonce)).then().statusCode(200)
+        return verifyRemember(EMAIL, nonce, sign(KEYPAIR, nonce)).then().statusCode(200)
             .extract().cookie("veyq_refresh")
     }
 
     private fun sessionLoginCookie(): String {
         val nonce = requestChallenge(EMAIL)
-        return verifyScope(EMAIL, sign(KEYPAIR, nonce), "SESSION").then().statusCode(200)
+        return verifyScope(EMAIL, nonce, sign(KEYPAIR, nonce), "SESSION").then().statusCode(200)
             .extract().cookie("veyq_refresh_session")
     }
 

@@ -31,7 +31,7 @@ export async function login(
   const auth = await deriveAuthKeypairAsync(password, authSalt)
   const signature = v1.authSign(auth.privateKey, fromB64std(challenge.nonce))
   const result = await loginApi().verifyLogin({
-    loginVerifyRequest: { email, signature: b64std(signature), sessionScope: scope },
+    loginVerifyRequest: { email, nonce: challenge.nonce, signature: b64std(signature), sessionScope: scope },
   })
   setTokens(result.accessToken, result.refreshToken ?? null, result.family.id)
   setAccount(email)

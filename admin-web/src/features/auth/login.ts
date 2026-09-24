@@ -33,7 +33,7 @@ export async function login(email: string, password: string): Promise<void> {
   const auth = await deriveAuthKeypairAsync(password, authSalt)
   const signature = v1.authSign(auth.privateKey, fromB64std(challenge.nonce))
   const result = await loginApi().verifyLogin({
-    loginVerifyRequest: { email, signature: b64std(signature) },
+    loginVerifyRequest: { email, nonce: challenge.nonce, signature: b64std(signature) },
   })
   setTokens(result.accessToken, result.refreshToken ?? null, result.family.id)
   resetServerRole()
