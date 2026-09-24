@@ -160,11 +160,11 @@ ADMITTED = {"backend", "web"}
 # Refs on an unadmitted surface written before the rule was enforced, named one by one as
 # (use-case, criterion, surface, ref). Debt, not permission: an entry that matches no ref fails, so this only
 # shrinks — moving a ref to its surface's gap, or admitting the surface, both demand deleting its entry here.
-# Of the three crypto refs it was born with, two moved to their use-cases' `crypto` gaps on 2026-09-24. The one
-# left cannot move yet: trust-device would become `planned`, which validate_capabilities.py reads as not built.
-UNADMITTED_BASELINE = {
-    ("uc.account.trust-device", "device-kek-conformance", "crypto", "src/v1.conformance.test.ts"),
-}
+# It was born with three crypto refs, and all three moved to their use-cases' `crypto` gaps on 2026-09-24.
+# Trust-device's went last: it was its criterion's only ref, and a gap alone would have made the use-case
+# `planned`, which validate_capabilities.py reads as not built — until a web test pinned the same vector.
+# Empty now, and kept so the rule reads the same: an entry added here would be new debt, not old.
+UNADMITTED_BASELINE: set[tuple[str, str, str, str]] = set()
 
 # Surfaces resolved as "a test-file path relative to this root". They differ only in the root they hang off,
 # so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.

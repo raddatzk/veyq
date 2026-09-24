@@ -67,11 +67,12 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
 > log above). **Not admitted:** `admin-web`'s and `packages/crypto`'s `npm run check` — both packages were born
 > on 2026-09-08 ([ADR 0065](0065-admin-ui-cli-separate-service.md)), so neither job has run anywhere. Their
 > suites wait under the use-case `gaps`, named, and flip on the first run whose log shows that package's suites
-> executed. One ref still predates this and stays, named in `validate_coverage.py`'s baseline:
-> `uc.account.trust-device`'s `device-kek-conformance` cites `crypto` alone, and moving it to a gap would make
-> that use-case `planned`, which `validate_capabilities.py` reads as not built — `account.device-trust` could
-> then no longer be advertised ([ADR 0032](0032-capability-discovery-version-gating.md) §6). It moves when a
-> web test pins that vector on an admitted row, or when crypto's job first runs.
+> executed. The last ref that predated this, `uc.account.trust-device`'s `device-kek-conformance`, cited
+> `crypto` alone, so a gap in its place would have made that use-case `planned`, which
+> `validate_capabilities.py` reads as not built — `account.device-trust` could then no longer be advertised
+> ([ADR 0032](0032-capability-discovery-version-gating.md) §6). It moved the same day, once a web test
+> (`trustDevice.conformance.test.ts`) pinned that vector through web's own trust path on an admitted row, and
+> `validate_coverage.py`'s baseline has been empty since.
 
 ## Decision
 
