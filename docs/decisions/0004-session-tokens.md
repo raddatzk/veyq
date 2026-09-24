@@ -159,8 +159,8 @@ supersedes before it mints.
 
 **No schema change.** The distance is `CURRENT.generation - presented.generation`, read via
 `family_id + status`, an index that already exists. This is also the first time `generation` is **read**:
-it is written at mint and rotation and compared nowhere, which is why the drift corrected above could sit
-in the ADR unnoticed.
+before the grace it was written at mint and rotation and compared nowhere, which is why the drift corrected
+above could sit in the ADR unnoticed.
 
 **It reaches `POST /api/token/adopt` too, because adoption *is* a rotation.** A device whose adopt response
 is lost is in precisely the position this rule exists for, and recovers by the same distance-1 path. What
