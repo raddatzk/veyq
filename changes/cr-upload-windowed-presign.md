@@ -35,8 +35,8 @@ After this CR:
   [uc.sharing.share-uploader](../docs/features/sharing/use-cases/uc.sharing.share-uploader.md) A2 — all written
   in the refine.
 - **Builds on `cr-upload-frame-size-contract`:** a window signs each chunk's exact length, which that CR's
-  frame-arithmetic unit supplies. This CR implements after it, after `cr-request-bounds-enforced` (so the new
-  schemas land under its guard), and after `cr-inert-store-responses` (the same `BlobStore` presign sites and
+  frame-arithmetic unit supplies. This CR implements after it, after `cr-request-bounds-enforced` (done — the new
+  schemas land under its guard, `scripts/validate_request_bounds.py`), and after `cr-inert-store-responses` (the same `BlobStore` presign sites and
   the client `putChunk`). Both this CR and `cr-cold-credential-proves-the-secret-key` add a Flyway migration, and at planning time each would take `V50`
   (the highest was `V49__item_favorites.sql`); whichever merges second renumbers its file.
 - **What the sessions are today** (measured at refine; re-check the row this CR leans on hardest, the missing

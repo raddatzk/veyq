@@ -36,8 +36,7 @@ concurrent-replay guard (audit P2f) hold per nonce.
 - **The request-body rule** ([developer-styleguide](../docs/crosscutting/developer-styleguide.md), *the schema
   bound and its annotation are one rule*): the new field declares `maxLength` + `contentEncoding: base64` and
   carries the matching `x-field-extra-annotation`, value for value. Copy the shape of its sibling `signature`.
-  `cr-request-bounds-enforced` (open) adds a guard for this rule; whichever lands first, the field must already
-  satisfy it.
+  `scripts/validate_request_bounds.py` enforces this rule, so the field cannot land without it.
 - **Migrations are append-only** ([backend/CLAUDE.md](../backend/CLAUDE.md) § Migrations): `V5__login_sessions.sql`
   and its *"One outstanding login challenge per email"* comment stay untouched. The live statement of the rule
   is the entity KDoc, which this CR corrects. Next free number: `ls backend/src/main/resources/db/migration | sort -V | tail -1`.
