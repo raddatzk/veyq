@@ -115,15 +115,22 @@ describe('ProfileMenu language quick-picker', () => {
 describe('the shell offers exactly one door into the settings hub', () => {
   const SRC = join(__dirname, '..', '..')
   const DOOR = /push\(['"]\/settings['"]\)|to=["']\/settings["']/
+  // The typescript-fetch output of `npm run generate:api`: ~40 directories, and a generator that emits no .vue,
+  // so walking it is half the scan's readdirs for nothing.
+  const GENERATED_CLIENT = join(SRC, 'api', 'generated')
 
   const vueFilesUnder = (dir: string): string[] =>
     readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
       const full = join(dir, e.name)
-      if (e.isDirectory()) return vueFilesUnder(full)
+      if (e.isDirectory()) return full === GENERATED_CLIENT ? [] : vueFilesUnder(full)
       return e.isFile() && e.name.endsWith('.vue') ? [full] : []
     })
 
-  it('only ProfileMenu navigates to /settings', () => {
+  // Why a timeout of its own: the scan is synchronous disk I/O over every .vue in src/ — ~15 ms warm, but on a
+  // cold page cache under heavy load a single run measured 3 s of readdir + 8 s of reads, past vitest's 5 s
+  // default. Nothing is lost by raising it: vitest can only judge a synchronous body AFTER it returns, so the
+  // default never caught a hang here — it only turned a slow correct run red.
+  it('only ProfileMenu navigates to /settings', { timeout: 30_000 }, () => {
     const doors = vueFilesUnder(SRC)
       .filter((f) => !f.endsWith('SettingsHubView.vue'))
       .filter((f) => DOOR.test(readFileSync(f, 'utf8')))
