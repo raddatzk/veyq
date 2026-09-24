@@ -9,14 +9,14 @@ import {
   contentRange,
   unsatisfiedRange,
 } from './range'
-import { CHUNK_SIZE } from '../features/memory/media'
+import * as v1 from '@veyq/crypto/v1'
 
 describe('range.ts — pure range↔chunk arithmetic (Slice 2)', () => {
-  it('PLAINTEXT_CHUNK_SIZE is pinned equal to media.ts CHUNK_SIZE (the SW must not import the data layer)', () => {
-    // The SW bundle cannot import media.ts (it would drag in exifr + the API client); this test is the anti-drift
-    // guard that keeps the two constants in lockstep instead.
-    expect(PLAINTEXT_CHUNK_SIZE).toBe(CHUNK_SIZE)
-    expect(FRAME_OVERHEAD).toBe(28) // nonce(12) + AES-GCM tag(16)
+  it('the SW\'s frame size is the contract\'s (the SW bundle imports neither the data layer nor the crypto package)', () => {
+    // range.ts keeps local literals so the worker stays small; this test is the anti-drift guard that holds them to
+    // the one export uploads seal with — which the crypto conformance test in turn pins to the vector file.
+    expect(PLAINTEXT_CHUNK_SIZE).toBe(v1.CHUNK_FRAME_SIZE.plaintextBytes)
+    expect(FRAME_OVERHEAD).toBe(v1.FRAME_OVERHEAD)
   })
 
   it('plaintextTotal subtracts one frame overhead per chunk', () => {
