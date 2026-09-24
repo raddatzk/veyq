@@ -28,6 +28,8 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
   (triggers, main flow, the ending, E1–E4, what stays on the device) and ADR 0070 (why a new document, and
   what was rejected). This CR builds both. It invents nothing.
 - **Order:** after `cr-session-refresh-into-app`, which moves `refreshSession` into `web/src/app/sessionRefresh.ts`.
+  It also edits the head of `signOut.ts`, whose `resetServerRole` call `cr-admin-api-only-through-the-admin-container`
+  deletes — text overlap only; whichever lands second rebases.
   Phase 3 edits it there.
 - **The ending imports no feature and not the router** (ADR 0070 § Decision 1). That is what lets the refresh
   path call it without a cycle. Take the sign-in path as a literal or a parameter.

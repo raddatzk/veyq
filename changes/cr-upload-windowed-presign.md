@@ -37,7 +37,8 @@ After this CR:
 - **Builds on `cr-upload-frame-size-contract`:** a window signs each chunk's exact length, which that CR's
   frame-arithmetic unit supplies. This CR implements after it, after `cr-request-bounds-enforced` (so the new
   schemas land under its guard), and after `cr-inert-store-responses` (the same `BlobStore` presign sites and
-  the client `putChunk`).
+  the client `putChunk`). Both this CR and `cr-cold-credential-proves-the-secret-key` add a Flyway migration, and at planning time each would take `V50`
+  (the highest was `V49__item_favorites.sql`); whichever merges second renumbers its file.
 - **What the sessions are today** (measured at refine; re-check the row this CR leans on hardest, the missing
   opener):
   - `veyq_upload_session` has no status and no opener column. A row existing means open.

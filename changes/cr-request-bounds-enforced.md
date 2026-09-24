@@ -49,6 +49,8 @@ enforced are fixed as well, so enforcing it breaks nothing.
     descriptions; the overlap is textual only.
   - It implements **before** `cr-upload-frame-size-contract` and `cr-upload-windowed-presign`, so their
     contract changes land under this guard.
+  - `cr-cold-credential-proves-the-secret-key` also lands after this CR while both are open, so its new request
+    fields arrive under this guard.
 - **Out of scope:**
   - Response schemas.
   - Presence constraints: `@NotBlank`/`@NotNull`/`@NotEmpty` are not bounds, and the schema says presence with

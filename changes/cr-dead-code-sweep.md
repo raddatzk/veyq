@@ -11,7 +11,7 @@ invariants: [API-first]
 
 Inbox #170. Each surface carries code that no production path reaches:
 - **admin-web:** an HTML sanitiser, 104 of its 198 i18n keys (copies of web flows that ADR 0065 keeps in web),
-  `parseKit`, and the undo half of `useToast`.
+  and the undo half of `useToast`. (Its `parseKit` is `cr-emergency-kit-codec-in-crypto`'s, see Decision 4.)
 - **web:** the instance API client, `inviteLink`, the Setup→login prefill, `startDayOf`, `mediaSwReady`, and
   about 36 i18n keys.
 - **backend:** `NodesStore.scopeExists` and `TenantStore.tenantOwnerCount`.
@@ -51,16 +51,11 @@ somewhere. A lift of a whole group then cannot come back silently.
      stays.
    - So `web/src/app/authPrefill.ts` goes, along with `LoginView`'s prefill block in `onMounted` (and its
      comment) and `LoginView.test.ts`'s `vi.mock('../app/authPrefill', …)`.
-4. **`parseKit` leaves admin-web, but `kitPayload` keeps a test.**
-   - The kit token is a contract between the packages: admin-web writes it at setup, and web's `parseKit` reads
-     it when the owner next signs in on a new device.
-   - Today admin-web's only test of `kitPayload` round-trips it through the local `parseKit` copy.
-   - Replace that round trip with **one golden token**: a fixed `KitData` must produce a fixed `veyqkit:`
-     string. Assert it against `kitPayload` in admin-web's `emergencyKit.test.ts`, and against `parseKit` in
-     web's `emergencyKit.test.ts`.
-   - That is two literals and no shared code, so ADR 0065 holds, and a format drift turns one of the two red.
-   - This also makes `admin-web/CLAUDE.md`'s *"the kit module is the write half only"* true, along with the
-     header of `emergencyKit.ts`.
+4. **`parseKit` is not this CR's.** `cr-emergency-kit-codec-in-crypto` moves the kit codec into `@veyq/crypto`
+   with a fixed-literal test vector and deletes admin-web's copy — the owner's call on #169 (2026-09-23), which
+   supersedes the two-literal golden token this decision first carried. This CR lands **after** that one and has
+   nothing left to do for the kit.
+
 5. **The reverse catalog assertion is the i18n locator and, afterwards, the guard.**
    - **Predicate.** A key is referenced when either:
      - its full dotted path appears as a quoted literal (`'…'`, `"…"`, `` `…` ``) in a non-test, non-generated
@@ -94,7 +89,6 @@ dead `vi.mock` in `TenantMembersPanel.test.ts`, which goes too.
 | Surface | Item | Locator |
 |---|---|---|
 | admin-web | `src/shared/markdown.ts` (importers, not mentions — the word `markdown` is also a catalog key) | `grep -rn "shared/markdown\|/markdown'" admin-web/src` |
-| admin-web | `parseKit` | `grep -rn parseKit admin-web/src` |
 | admin-web | undo half of `useToast` (`showUndo`, `dismissUndo`, `UNDO_GROUP`, `ShowUndoOptions`, header lines) | `grep -rn "showUndo\|dismissUndo\|UNDO_GROUP\|ShowUndoOptions" admin-web/src \| grep -v shared/state/useToast.ts` |
 | admin-web | dead i18n keys | Decision 5's assertion, run on the untouched tree |
 | web | `instanceApi` + the instance generate step | `grep -rn "instanceApi\|InstanceApi\|generated/instance" web/src web/scripts \| grep -v '/api/generated/'` |
@@ -111,10 +105,10 @@ site found was ADR 0007 (Decision 6); `docs/inbox.md` #170 names them all and ge
 
 ## Phases
 
-- [ ] 1 admin-web: Decisions 4 and 5, plus the markdown sanitiser and the undo half. · Done when: `npm run
+- [ ] 1 admin-web: Decision 5, plus the markdown sanitiser and the undo half. · Done when: `npm run
       check` in `admin-web/` is green, and the new assertion was red on the untouched tree with its list
       recorded in the retrospective.
-- [ ] 2 web: Decisions 2, 3, 4 (the web-side golden token) and 5, plus `inviteLink`, `startDayOf` and
+- [ ] 2 web: Decisions 2, 3 and 5, plus `inviteLink`, `startDayOf` and
       `mediaSwReady`. · Done when: `npm run generate:api` + `npm run check` in `web/` are green over a
       `src/api/generated/` holding no `instance/`, and the new assertion was red on the untouched tree with its
       list recorded.
@@ -128,8 +122,8 @@ site found was ADR 0007 (Decision 6); `docs/inbox.md` #170 names them all and ge
   - `for f in scripts/validate_*.py; do python3 "$f"; done`
   - `grep -rc '@Test' backend/src/test --include='*.kt' | awk -F: '{s+=$2} END {print s}'`
   - `npx vitest run` in `web/` and `admin-web/`, recording each "Tests N passed" line.
-- **The counts may only fall by the tests deleted with their subject**: `inviteLink.test.ts` and the four
-  admin-web `parseKit` cases. The golden-token cases add tests. Say which is which.
+- **The counts may only fall by the tests deleted with their subject**: `inviteLink.test.ts`. Say which
+  tests went with which subject.
 - All three gates are green, and so are all trust-chain guards.
 - **Guards.** The two reverse catalog assertions are the permanent guard, for the one kind of dead code here
   that grows by whole groups. The code deletions are a one-shot proof, and that suffices: a dead function has

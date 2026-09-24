@@ -53,7 +53,7 @@ this file is only the work order.
     Context, *Neighbours*): it changes the signatures of the `ScopesHandler` methods this CR gates, and
     Host-resolved handlers then take a `tenantId` instead of a host. Re-run D10's locator after it.
   - Rows **#152** (the admin API surface, `TenantsResource`) and **#173** land either wholly before this CR or
-    after it. If #173 or #156 already moved `TenantEntity` into `shared/tenant`, phase 2 moves only
+    after it. If #173 already moved `TenantEntity` into `shared/tenant`, phase 2 moves only
     `ScopeEntity`.
   - This CR **takes #173's `TenantEntity` half** (phase 2), so #173 keeps only the `SessionService` interface
     and `ImageCropper`. Narrow that row when phase 2 lands.
