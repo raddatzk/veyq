@@ -17,10 +17,17 @@ acceptanceCriteria:
       backend: { integration: [LoginSliceTest.wrongSignatureIsGenericFailure, LoginSliceTest.unknownAccountIsIdenticalGenericFailure] }
       web: { unit: [src/features/account/login/login.test.ts] }
   - id: nonce-single-use
-    text: A replayed nonce is rejected (the challenge is consumed on verify) — both sequentially and under
-      concurrent verifies of the same nonce, which the atomic (row-locked) consume serializes so only one wins.
+    text: A replayed nonce is rejected (the challenge is consumed on verify) — per nonce, both sequentially and
+      under concurrent verifies of the same nonce, which the atomic consume (a row lock on that one challenge)
+      serializes so only one wins.
     coverage:
       backend: { integration: [LoginSliceTest.replayedNonceIsRejected, LoginSliceTest.concurrentVerifyConsumesTheChallengeOnce] }
+  - id: challenge-not-displaceable
+    text: A challenge requested, or a verify sent, by someone else for the same email never invalidates an
+      outstanding one (E4) — including a verify naming a nonce that was never issued, or naming yours under
+      another email.
+    coverage:
+      backend: { integration: [LoginSliceTest.nobodyElseCanDisplaceOrBurnYourChallenge] }
   - id: refresh-rotates
     text: Refreshing rotates the access+refresh pair and the chain keeps rotating.
     coverage:
@@ -65,7 +72,8 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [LoginSliceTest.logoutRevokesFamily] }
   - id: boundary-validation
-    text: Malformed requests (missing/invalid email, non-base64 signature, missing refresh token) are rejected at the boundary (400).
+    text: Malformed requests (missing/invalid email, non-base64 signature, missing or non-base64 nonce on verify,
+      missing refresh token) are rejected at the boundary (400).
     coverage:
       backend: { integration: [LoginSliceTest.malformedRequestsRejectedAtTheBoundary, LoginSliceTest.refreshWithNeitherCookieNorBodyTokenIs400] }
   - id: instance-salt-stable

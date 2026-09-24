@@ -8,16 +8,21 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
 
-/** One outstanding login challenge per email (single-use, time-bounded). The nonce is opaque. */
+/**
+ * An outstanding login challenge (single-use, time-bounded), keyed by its opaque nonce. An email may hold
+ * several at once, and a verify consumes only the one it names: keyed by email, anyone who knew the address
+ * could replace or burn the challenge a device was still signing (uc.account.login E4). There is deliberately
+ * no cap per email — evicting the oldest or refusing the newest is the same displacement lever again.
+ */
 @Entity
 @Table(name = "veyq_login_challenge")
 class LoginChallengeEntity : PanacheEntityBase {
     @Id
-    @Column(name = "email", length = 254)
-    lateinit var email: String
-
-    @Column(name = "nonce", nullable = false)
+    @Column(name = "nonce", length = 64)
     lateinit var nonce: String
+
+    @Column(name = "email", nullable = false, length = 254)
+    lateinit var email: String
 
     @Column(name = "expires_at", nullable = false)
     lateinit var expiresAt: Instant

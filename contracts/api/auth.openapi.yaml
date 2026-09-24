@@ -85,16 +85,19 @@ paths:
       operationId: verifyLogin
       summary: Verify a signed challenge and issue a session.
       description: >
-        Verifies the Ed25519 signature over the outstanding nonce against the stored `authPublicKey`. On
+        Verifies the Ed25519 signature over the nonce the request **names** against the stored
+        `authPublicKey`. An email may have several outstanding challenges; a verify consumes only the one it
+        names, whether or not it succeeds, and every other challenge for the same email stays outstanding —
+        so nobody who merely knows the address can displace or burn the challenge a device is signing. On
         success it issues an opaque access + refresh token pair in a new session family. Any failure —
-        wrong signature, unknown account, or an expired/replayed nonce — returns a single generic 401,
-        identical in every case.
+        wrong signature, unknown account, or an unknown/expired/replayed nonce — returns a single generic
+        401, identical in every case.
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/LoginVerifyRequest" }
-            example: { email: kevin@example.com, signature: c2lnbmF0dXJlLW92ZXItbm9uY2U= }
+            example: { email: kevin@example.com, nonce: bm9uY2UtZXhhbXBsZS0zMmJ5dGVz, signature: c2lnbmF0dXJlLW92ZXItbm9uY2U= }
       responses:
         "200":
           description: >
@@ -732,7 +735,7 @@ components:
 
     LoginVerifyRequest:
       type: object
-      required: [email, signature]
+      required: [email, nonce, signature]
       properties:
         email:
           x-veyq-visibility: pii
@@ -745,9 +748,18 @@ components:
           maxLength: 254
           example: kevin@example.com
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        nonce:
+          type: string
+          description: >
+            The nonce of the challenge this request signed, echoed from `LoginChallenge.nonce` (opaque base64).
+            It selects which outstanding challenge the verify consumes.
+          contentEncoding: base64
+          maxLength: 256
+          example: bm9uY2UtZXhhbXBsZS0zMmJ5dGVz
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         signature:
           type: string
-          description: Ed25519 signature over the issued nonce (opaque base64).
+          description: Ed25519 signature over the named nonce (opaque base64).
           contentEncoding: base64
           maxLength: 256
           example: c2lnbmF0dXJlLW92ZXItbm9uY2U=
