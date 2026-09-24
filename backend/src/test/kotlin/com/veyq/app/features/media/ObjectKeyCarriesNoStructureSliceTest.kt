@@ -57,7 +57,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
         val seed = seedEverything()
 
         val uploadId = given().header("Authorization", token(seed.userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":2,"byteSize":1024,"wrappedBlobKey":"d3JhcHBlZA=="}]}""")
+            .body("""{"items":[${TestBlob.ofChunks(2).declare("d3JhcHBlZA==")}]}""")
             .`when`().post("/api/scopes/${seed.scopeId}/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())

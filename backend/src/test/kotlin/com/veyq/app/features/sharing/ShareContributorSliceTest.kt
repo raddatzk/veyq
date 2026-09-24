@@ -1,6 +1,7 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -59,7 +60,7 @@ class ShareContributorSliceTest {
 
         // start a share-scoped upload (no bearer, token-gated) → an upload session id (in-memory store: no PUTs)
         val uploadId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path<String>("results[0].uploadId")
@@ -98,7 +99,7 @@ class ShareContributorSliceTest {
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         // a well-formed but never-issued token
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"bm90LWEtcmVhbC10b2tlbg","items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}]}""")
+            .body("""{"contributorToken":"bm90LWEtcmVhbC10b2tlbg","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
     }
@@ -120,7 +121,7 @@ class ShareContributorSliceTest {
         given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(404)
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads").then().statusCode(404)
     }
 
@@ -143,7 +144,7 @@ class ShareContributorSliceTest {
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun start(n: Int) = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":${(1..n).joinToString(",", "[", "]") { """{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}""" }}}""")
+            .body("""{"contributorToken":"$contributorToken","items":${(1..n).joinToString(",", "[", "]") { TestBlob.SMALL.declare("Ymxvyi13cmFw") }}}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
 
         // control: exactly `maxItems` (256) is accepted — so the negative is the bound, not the share

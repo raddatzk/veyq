@@ -62,7 +62,8 @@ class UploadSessionPurgeSliceTest {
     fun purgeReclaimsBothTheRowAndTheStagedChunkObjectsOfAnAbandonedSession() {
         val scopeId = seedScope()
         val storageKey = UUID.randomUUID().toString()
-        val sessionId = store.createSession(scopeId, storageKey, chunkCount = 3, byteSize = 900, wrappedBlobKey = "d3JhcA==")
+        val blob3 = TestBlob.ofChunks(3)
+        val sessionId = store.createSession(scopeId, storageKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
         // the client PUT its chunks, then went away: backdate past the retention window
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
@@ -85,7 +86,8 @@ class UploadSessionPurgeSliceTest {
         val scopeId = seedScope()
         val storageKey = UUID.randomUUID().toString()
         // a live upload: started just now, still well inside the window
-        val sessionId = store.createSession(scopeId, storageKey, chunkCount = 2, byteSize = 600, wrappedBlobKey = "d3JhcA==")
+        val blob2 = TestBlob.ofChunks(2)
+        val sessionId = store.createSession(scopeId, storageKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
 
         clearReclaim()
         recorder.reset()
@@ -110,7 +112,8 @@ class UploadSessionPurgeSliceTest {
         // row standing; nothing else deletes it. Same age predicate, so this sweep is what reclaims it.
         val scopeId = seedScope()
         val storageKey = UUID.randomUUID().toString()
-        val sessionId = store.createSession(scopeId, storageKey, chunkCount = 1, byteSize = 300, wrappedBlobKey = "d3JhcA==")
+        val blob1 = TestBlob.ofChunks(1)
+        val sessionId = store.createSession(scopeId, storageKey, chunkCount = blob1.chunkCount, byteSize = blob1.byteSize, wrappedBlobKey = "d3JhcA==")
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
         clearReclaim()

@@ -32,7 +32,9 @@ import java.util.UUID
  * presigned direct-to-store transfer against a **real S3-compatible store** (the bundled Garage). Gated on
  * `VEYQ_S3_E2E=1` (default `gradle test` skips it cleanly); the [S3Profile] points the backend at the store on
  * `:19000`. Flow: start → PUT each sealed chunk to its presigned URL → complete (the backend stats the objects,
- * declare-then-verify) → list → presign GET → fetch each chunk back → assert byte-identical. Bytes here are
+ * declare-then-verify) → list → presign GET → fetch each chunk back → assert byte-identical. The chunks are at the
+ * lengths the frame size derives, and it reproduces ADR 0013 §3's table: a wrong-length PUT is refused, a
+ * same-length re-PUT is not. Bytes here are
  * opaque (the crypto round-trip is the client suites' job); this proves transport + stat + manifest.
  *
  * It also reproduces the ADR 0013 §6 matrix — **store responses are inert, enforced by the signer** — against
@@ -69,13 +71,14 @@ class BlobBatchE2ETest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
 
-        // two arbitrary "sealed chunk" payloads (opaque ciphertext bytes as far as the store is concerned)
-        val chunks = listOf("chunk-zero-bytes".toByteArray(), "chunk-one-bytes!!".toByteArray())
-        val byteSize = chunks.sumOf { it.size }.toLong()
+        // a two-frame blob at its derived sizes — one full frame, then a short last one (ADR 0013 §3). The bytes are
+        // opaque ciphertext as far as the store is concerned; only their lengths are the contract's.
+        val blob = TestBlob.ofChunks(2)
+        val chunks = (0 until blob.chunkCount).map { i -> ByteArray(blob.chunkLength(i).toInt()) { b -> (b * 31 + i).toByte() } }
 
-        // start → presigned PUT per chunk
+        // start → presigned PUT per chunk, each signed for its chunk's exact length
         val start = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":${chunks.size},"byteSize":$byteSize,"wrappedBlobKey":"d3JhcA=="}]}""")
+            .body("""{"items":[${blob.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())
@@ -88,14 +91,19 @@ class BlobBatchE2ETest {
         // control is the SAME URL with the pinned type, which must succeed — a 403 from an expired or mis-signed
         // URL would satisfy the negative alone.
         assertEquals(403, put(putUrls[1], chunks[1], "text/html"), "a text/html PUT must be refused")
+        // §3: the PUT signs `content-length`, so a body one byte short is refused. The control is the same URL at
+        // the exact length just below, which must succeed.
+        assertEquals(403, put(putUrls[0], chunks[0].copyOf(chunks[0].size - 1), PINNED), "a wrong-length PUT must be refused")
         chunks.forEachIndexed { i, bytes -> assertEquals(200, put(putUrls[i], bytes, PINNED), "PUT chunk $i") }
+        // §3's last row: the same URL re-sent at the same length rewrites the uploader's own object at its size.
+        assertEquals(200, put(putUrls[0], chunks[0], PINNED), "a same-length re-PUT is the same object again")
 
         // An object stored BEFORE the rule, with a renderable type — written over chunk 1 through the signer as it
         // was. Without it every object here is stored as `application/octet-stream` and the served type below
         // would be right by accident rather than by the GET override.
         plantLegacyHtml(URI.create(putUrls[1]), chunks[1])
 
-        // complete → backend stats the objects (declare-then-verify), attaches the media
+        // complete → backend stats every object at its exact derived length (declare-then-verify), attaches the media
         val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")

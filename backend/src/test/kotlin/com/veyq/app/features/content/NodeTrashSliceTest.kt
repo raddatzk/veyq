@@ -1,6 +1,7 @@
 package com.veyq.app.features.content
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
@@ -315,14 +316,14 @@ class NodeTrashSliceTest {
         val memory = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"cHVyZ2Utcw==","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val survivor = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"cw==","slugToken":"cHVyZ2Utdg==","orderIndex":1,"wrappedContentKey":"aw=="}""")
 
-        val original = startOne(userId, scopeId, 2, 2048, "b3JpZw==")
-        val thumb = startOne(userId, scopeId, 1, 128, "dGh1bWI=")
+        val original = startOne(userId, scopeId, TestBlob.ofChunks(2), "b3JpZw==")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, "dGh1bWI=")
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$memory","originalUploadId":"$original","derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
-        val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 64, "Y292ZXI="))
+        val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI="))
         val subBucket = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
@@ -398,15 +399,15 @@ class NodeTrashSliceTest {
             .then().statusCode(201).body("nodeId", notNullValue())
             .extract().path("nodeId")
 
-    private fun startOne(userId: String, scopeId: String, chunkCount: Int, byteSize: Long, wrap: String): String =
+    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}]}""")
+            .body("""{"items":[${blob.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")
 
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
-        val uploadId = startOne(userId, scopeId, 1, 16, wrap)
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap)
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")

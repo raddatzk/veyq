@@ -44,7 +44,8 @@ class MediaSliceTest {
     fun startCompleteListRoundTrip() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 2, byteSize = 1024, wrap = "d3JhcHBlZA==")
+        val blob = TestBlob.ofChunks(2)
+        val uploadId = startOne(userId, scopeId, blob, wrap = "d3JhcHBlZA==")
 
         // complete + attach to the Memory; the merged listed-metadata tier is listed, EXIF is lazy (cr-0068)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -63,7 +64,7 @@ class MediaSliceTest {
             .then().statusCode(200)
             .body("media[0].wrappedBlobKey", equalTo("d3JhcHBlZA=="))
             .body("media[0].chunkCount", equalTo(2))
-            .body("media[0].byteSize", equalTo(1024))
+            .body("media[0].byteSize", equalTo(blob.byteSize.toInt()))
             .body("media[0].wrappedMeta", equalTo("bWV0YQ==")) // the listed-metadata tier is listed (geometry + date + GPS)
             .body("media[0].wrappedExif", nullValue()) // the list never carries EXIF
             .body("media[0].updatedAt", notNullValue()) // cr-0107: the keyset cursor's sort key
@@ -80,7 +81,7 @@ class MediaSliceTest {
     fun mediaExifWithoutExifIsNull() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "b25seQ==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with no EXIF sealed (source carried no readable EXIF)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -108,7 +109,7 @@ class MediaSliceTest {
     fun updateMetaOverwritesSealedTierAndLists() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "b25seQ==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with an initial listed-metadata tier (cr-0068)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -149,9 +150,9 @@ class MediaSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         // three independent uploads: original + thumbnail + preview, each its own K_blob wrap
-        val original = startOne(userId, scopeId, chunkCount = 3, byteSize = 3000, wrap = "b3JpZw==")
-        val thumb = startOne(userId, scopeId, chunkCount = 1, byteSize = 100, wrap = "dGh1bWI=")
-        val preview = startOne(userId, scopeId, chunkCount = 2, byteSize = 900, wrap = "cHJldg==")
+        val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=")
+        val preview = startOne(userId, scopeId, TestBlob.ofChunks(2), wrap = "cHJldg==")
 
         // complete: one logical media = original + two role-tagged derivatives
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -182,7 +183,7 @@ class MediaSliceTest {
     fun mediaWithoutDerivativesListsEmptyTiers() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val original = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "b25seQ==")
+        val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // a media with no derivable frame attaches the original only
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -203,7 +204,7 @@ class MediaSliceTest {
     fun derivativeUploadNotFoundFailsWholeItem() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val original = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "b3JpZw==")
+        val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
         val bogus = UUID.randomUUID()
 
         // a missing derivative session fails the whole item atomically — nothing is attached
@@ -227,7 +228,7 @@ class MediaSliceTest {
     fun partialBatchPerItemResult() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "aw==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
         val bogus = UUID.randomUUID()
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -243,7 +244,7 @@ class MediaSliceTest {
     fun mediaOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = "aw==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
@@ -256,9 +257,9 @@ class MediaSliceTest {
     @Test
     fun overCapDeclarationIsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
-        // byteSize beyond the default per-blob cap (2 GiB) — declare-then-verify rejects at start
+        // a well-formed declaration beyond the per-blob cap (`veyq.blob.max-bytes`) — declare-then-verify rejects at start
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":9999999999,"wrappedBlobKey":"aw=="}]}""")
+            .body("""{"items":[${TestBlob.ofChunks(100_000).declare("aw==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].error", equalTo("budget_exceeded"))
@@ -266,11 +267,36 @@ class MediaSliceTest {
     }
 
     @Test
+    fun aDeclarationWhoseShapeTheSizeDoesNotFixIsShapeInvalid() {
+        // ADR 0013 §3: the frame size fixes chunkCount from byteSize, so any other count is a client bug — and a
+        // byteSize no frame sequence has (here: a last frame of two carrying no plaintext) is one too. Per item,
+        // beside a derived control in the SAME batch, so the refusals are the shape and not the endpoint.
+        val (userId, scopeId) = seedMemberScope()
+        val blob = TestBlob.ofChunks(2)
+        val impossible = ChunkFrames.SEALED_BYTES + ChunkFrames.OVERHEAD
+        val items = listOf(
+            blob.declare("aw=="),
+            """{"chunkCount":${blob.chunkCount + 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
+            """{"chunkCount":${blob.chunkCount - 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
+            """{"chunkCount":2,"byteSize":$impossible,"wrappedBlobKey":"aw=="}""",
+        )
+        startBatch(userId, scopeId, items.joinToString(",", "[", "]")).then().statusCode(200)
+            .body("results[0].uploadId", notNullValue())
+            .body("results[0].error", nullValue())
+            .body("results[1].error", equalTo("shape_invalid"))
+            .body("results[1].uploadId", nullValue())
+            .body("results[2].error", equalTo("shape_invalid"))
+            .body("results[2].uploadId", nullValue())
+            .body("results[3].error", equalTo("shape_invalid"))
+            .body("results[3].uploadId", nullValue())
+    }
+
+    @Test
     fun nonMemberIs404() {
         val (_, scopeId) = seedMemberScope()
         val outsider = seedUser()
         given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"aw=="}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare("aw==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }
@@ -278,7 +304,7 @@ class MediaSliceTest {
     @Test
     fun unauthenticatedIs401() {
         given().contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"aw=="}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare("aw==")}]}""")
             .`when`().post("/api/scopes/${UUID.randomUUID()}/blob-uploads-batch")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -410,7 +436,7 @@ class MediaSliceTest {
 
     /** Start + complete one media on [nodeId] (in-memory store); returns its mediaId. Optionally seals a listed-metadata tier. */
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String, meta: String? = null): String {
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 16, wrap = wrap)
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = wrap)
         val metaField = if (meta != null) ""","wrappedMeta":"$meta"""" else ""
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
@@ -449,21 +475,21 @@ class MediaSliceTest {
         val (userId, scopeId) = seedMemberScope()
         // control: the same one-item batch with a well-formed wrap is accepted
         startBatch(userId, scopeId, uploadItems(1)).then().statusCode(200)
-        startBatch(userId, scopeId, """[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":""}]""").then().statusCode(400)
+        startBatch(userId, scopeId, """[${TestBlob.SMALL.declare("")}]""").then().statusCode(400)
             .body("title", equalTo("Constraint Violation"))
             .body("violations.field", hasItem(endsWith("wrappedBlobKey")))
     }
 
-    private fun uploadItems(n: Int) = (1..n).joinToString(",", "[", "]") { """{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"d3JhcA=="}""" }
+    private fun uploadItems(n: Int) = (1..n).joinToString(",", "[", "]") { TestBlob.SMALL.declare("d3JhcA==") }
 
     private fun startBatch(userId: String, scopeId: String, items: String) =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":$items}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
 
-    private fun startOne(userId: String, scopeId: String, chunkCount: Int, byteSize: Long, wrap: String): String =
+    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}]}""")
+            .body("""{"items":[${blob.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())
