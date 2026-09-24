@@ -86,6 +86,10 @@ services:
       QUARKUS_DATASOURCE_PASSWORD: ${MARIADB_PASSWORD:?set MARIADB_PASSWORD in infra/.env}
       # Behind a reverse proxy the per-IP rate limiter must key on the real client, not on Traefik.
       QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING: "true"
+      # HSTS on the app's responses (ADR 0069). The switch is the DEPLOYMENT's, named for it rather than for
+      # this service, so every origin this stack serves answers to the one value — infra/README.md says when to
+      # turn it off. Traefik adds nothing: the app sends its own headers.
+      VEYQ_HTTP_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
       # The store is reached INTERNALLY; presigned URLs are SIGNED for the public origin so a browser fetches
       # them same-origin, with no CORS (ADR 0013 §4). Both must be set — signing for the internal name would
       # produce URLs no client can reach.

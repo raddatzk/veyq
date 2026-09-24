@@ -25,6 +25,11 @@
   "properties": {
     "domain": { "$ref": "#/$defs/hostname" },
     "storeDomain": { "$ref": "#/$defs/hostname" },
+    "hsts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "enabled": { "type": "boolean" } }
+    },
     "image": { "$ref": "#/$defs/imageRef" },
     "admin": {
       "type": "object",

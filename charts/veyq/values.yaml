@@ -23,6 +23,13 @@ domain: ""
 # for a multi-tenant instance — so the chart templates no origin list.
 storeDomain: ""
 
+# Strict-Transport-Security on this deployment's responses (ADR 0069; 180 days, no includeSubDomains, no
+# preload). A top-level value and not one under `app:`, because it is the deployment's switch rather than one
+# container's. Turn it off only if a host of this release is also served over plain HTTP somewhere, or the
+# ingress controller already sets the header; a browser that saw it keeps it for the full 180 days anyway.
+hsts:
+  enabled: true
+
 image:
   # e.g. ghcr.io/<owner>/veyq. The app image, cosign-signed by the same publish as the admin image below.
   repository: ""

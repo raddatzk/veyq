@@ -148,7 +148,7 @@ protection than the one before it:
       - Drop the policy from the fixture. Fail-closed refuses.
 
       · Done when: `npm run check` (web) and `./gradlew check` green, both bites seen red.
-- [ ] 3 infra — **the HSTS switch on both targets**, without editing a template:
+- [x] 3 infra — **the HSTS switch on both targets**, without editing a template:
       - compose: an `infra/.env.example` entry, passed through with default `true` in
         `infra/docker-compose.prod.yml`;
       - Helm: a value, with its `values.schema.json` entry, rendered into the app's env in `app-deployment.yaml`.
