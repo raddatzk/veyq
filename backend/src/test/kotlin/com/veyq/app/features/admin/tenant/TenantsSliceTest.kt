@@ -6,6 +6,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import io.restassured.response.Response
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
@@ -20,6 +21,10 @@ import java.util.UUID
  * PENDING tenant, reject a duplicate domain, list, resend/reassign (soft-supersede the old invite), revoke,
  * the Server-Owner gate (401/403), and the scheduled invite purge. Each test uses a distinct domain so the
  * JVM-lived H2 mem DB does not bleed state across tests.
+ *
+ * The `…ReturnsTheRawSecret…` tests are the out-of-band handoff (cr-0080): create/resend/reassign hand the
+ * Server Owner the raw bootstrap secret, and the proof that it is the *minted* one — not merely a non-null
+ * string — is the invitee's side of the link: it previews to this tenant and its accept activates it.
  */
 @QuarkusTest
 class TenantsSliceTest {
@@ -78,14 +83,57 @@ class TenantsSliceTest {
     fun reassignRebindsEmailAndSupersedes() {
         val id = createTenant(ownerToken(), domain = "fam-reassign.example.com", email = "first@example.com")
             .then().statusCode(201).extract().path<String>("tenantId")
-        given().header("Authorization", "Bearer ${ownerToken()}").contentType(ContentType.JSON)
-            .body("""{"ownerEmail":"second@example.com"}""")
-            .`when`().post("/api/tenants/$id/invite/reassign")
+        reassign(ownerToken(), id, "second@example.com")
             .then().statusCode(200)
             .body("ownerEmail", equalTo("second@example.com"))
             .body("inviteStatus", equalTo("ACTIVE"))
         assert(store.findTenant(id)?.ownerEmail == "second@example.com")
         assert(inviteCount(id, TenantInviteEntity.SUPERSEDED) == 1L)
+    }
+
+    @Test
+    fun createReturnsTheRawSecretThatActivatesTheTenant() {
+        val created = createTenant(ownerToken(), domain = "fam-handoff-create.example.com", email = "handoff-create@example.com")
+            .then().statusCode(201).extract()
+        val id = created.path<String>("tenantId")
+        val secret = created.path<String>("bootstrapSecret")
+        preview(secret).then().statusCode(200)
+            .body("tenantId", equalTo(id))
+            .body("ownerEmail", equalTo("handoff-create@example.com"))
+        accept(secret, invitedEmail = "handoff-create@example.com").then().statusCode(200).body("status", equalTo("ACTIVE"))
+        assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
+    }
+
+    @Test
+    fun resendReturnsTheRawSecretThatActivatesTheTenant() {
+        val created = createTenant(ownerToken(), domain = "fam-handoff-resend.example.com", email = "handoff-resend@example.com")
+            .then().statusCode(201).extract()
+        val id = created.path<String>("tenantId")
+        val first = created.path<String>("bootstrapSecret")
+        val fresh = resend(ownerToken(), id).then().statusCode(200).extract().path<String>("bootstrapSecret")
+        assert(fresh != first)
+        // The link the Server Owner handed out before the resend is dead; only the fresh one works.
+        preview(first).then().statusCode(410).body("code", equalTo("invite_no_longer_valid"))
+        preview(fresh).then().statusCode(200).body("tenantId", equalTo(id))
+        accept(fresh, invitedEmail = "handoff-resend@example.com").then().statusCode(200).body("status", equalTo("ACTIVE"))
+        assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
+    }
+
+    @Test
+    fun reassignReturnsTheRawSecretThatActivatesTheTenant() {
+        val created = createTenant(ownerToken(), domain = "fam-handoff-reassign.example.com", email = "handoff-first@example.com")
+            .then().statusCode(201).extract()
+        val id = created.path<String>("tenantId")
+        val first = created.path<String>("bootstrapSecret")
+        val fresh = reassign(ownerToken(), id, "handoff-second@example.com")
+            .then().statusCode(200).extract().path<String>("bootstrapSecret")
+        preview(first).then().statusCode(410).body("code", equalTo("invite_no_longer_valid"))
+        // The fresh secret is bound to the re-bound email: it previews for, and is accepted by, the new owner.
+        preview(fresh).then().statusCode(200)
+            .body("tenantId", equalTo(id))
+            .body("ownerEmail", equalTo("handoff-second@example.com"))
+        accept(fresh, invitedEmail = "handoff-second@example.com").then().statusCode(200).body("status", equalTo("ACTIVE"))
+        assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
     }
 
     @Test
@@ -173,6 +221,25 @@ class TenantsSliceTest {
 
     private fun resend(token: String, tenantId: String) =
         given().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/invite/resend")
+
+    private fun reassign(token: String, tenantId: String, ownerEmail: String) =
+        given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
+            .body("""{"ownerEmail":"$ownerEmail"}""")
+            .`when`().post("/api/tenants/$tenantId/invite/reassign")
+
+    // The invitee's side of the link (TenantAcceptSliceTest owns its own criteria): public preview, and the
+    // existing-account accept by a user seeded with the invited email.
+    private fun preview(secret: String) =
+        given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret"}""")
+            .`when`().post("/api/tenants/accept/preview")
+
+    private fun accept(secret: String, invitedEmail: String): Response {
+        val userId = UUID.randomUUID().toString()
+        seedUser(userId, invitedEmail, "MEMBER")
+        return given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ=="}""")
+            .`when`().post("/api/tenants/accept")
+    }
 
     private fun inviteCount(tenantId: String, status: String): Long =
         QuarkusTransaction.requiringNew().call {
