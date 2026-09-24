@@ -95,9 +95,11 @@ purpose. It is a stored-format change, and it is being made before V1 because af
 - **A grant states its epoch.** Today the delivery worker does not say which epoch it wrapped, and the server
   records the scope's current epoch as `grantedEpoch` (`grep -n 'grantedEpoch' backend/src/main/kotlin/com/veyq/app/features/tasks/TasksStore.kt`).
   With the epoch bound, a rotation between claim and completion would record an epoch the grant does not open
-  under. So a grant-delivery completion (`completeTask`) and a `rotateScope` request both **state the epoch
-  they sealed**. The server refuses a completion whose epoch is not the scope's current one (the job re-runs)
-  and a rotation whose new epoch is not `current + 1`.
+  under. So a grant-delivery completion (`completeTask`) **states the epoch it sealed**, and the server refuses
+  one that is not the scope's current epoch (the job re-runs). A `rotateScope` request already states the epoch
+  it creates, and the server refuses it unless that is `current + 1`. That is
+  [`cr-rotation-states-its-epoch`](cr-rotation-states-its-epoch.md), which lands first. This CR binds that
+  stated epoch into the link's and the grants' seals and adds no field of its own to `rotateScope`.
 - **The package's public surface.** Split `packages/crypto/src/v1.ts`:
   - The primitives move to a module that `package.json` `exports` does not list: `symWrap`, `asymWrap`, their
     unwraps, `aeadSeal`/`aeadOpen`, `wrapAad`. The conformance test imports them by relative path.
@@ -116,10 +118,11 @@ purpose. It is a stored-format change, and it is being made before V1 because af
       **Bite, by injection** (snapshot-and-restore): a purpose added to the union without a vector turns the
       test red, and so does a vector with no purpose. Read which direction reddens.
       · Done when: `npm run check` in `packages/crypto` green, all `scripts/validate_*.py` green.
-- [ ] 2 contracts (api) — the eight client-minted ids, the stated epoch on the grant-delivery completion and on
-      `rotateScope`, and any binding field a read schema lacks. The ops are on existing tags, so the backend
-      will not compile until phase 3; that is expected (`changes/README.md` § Phases).
-      Locator: `grep -n 'operationId: \(createNode\|startBlobUploads\|completeMedia\|createBucket\|createShare\|createShareIdentity\|createGroup\|createPersonalScope\|completeTask\|rotateScope\)' contracts/api/*.yaml`.
+- [ ] 2 contracts (api) — the eight client-minted ids, the stated epoch on the grant-delivery completion, and any
+      binding field a read schema lacks. `rotateScope` already states its epoch (`cr-rotation-states-its-epoch`).
+      The ops are on existing tags, so the backend will not compile until phase 3; that is expected
+      (`changes/README.md` § Phases).
+      Locator: `grep -n 'operationId: \(createNode\|startBlobUploads\|completeMedia\|createBucket\|createShare\|createShareIdentity\|createGroup\|createPersonalScope\|completeTask\)' contracts/api/*.yaml`.
       · Done when: `npm run generate:api` + `npm run check` (web) green, all `scripts/validate_*.py` green.
 - [ ] 3 backend — take the ids, refuse taken ones, store the stated epochs and refuse stale ones.
       **Bites, written before the fix:**
@@ -127,7 +130,6 @@ purpose. It is a stored-format change, and it is being made before V1 because af
         a fresh id → `201`.
       - A grant-delivery completion stating an epoch below current → refused, no grant written. Control:
         current epoch → written.
-      - A `rotateScope` stating `current + 2` → refused. Control: `current + 1` → applied.
       · Done when: `./gradlew check` green.
 - [ ] 4 web — every seal and open through the union; ids minted at the create sites; openers bind from the
       address; the WebCrypto `additionalData`. Then remove the raw primitives from the package's `exports`.
