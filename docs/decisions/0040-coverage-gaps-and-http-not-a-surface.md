@@ -67,10 +67,11 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
 > log above). **Not admitted:** `admin-web`'s and `packages/crypto`'s `npm run check` — both packages were born
 > on 2026-09-08 ([ADR 0065](0065-admin-ui-cli-separate-service.md)), so neither job has run anywhere. Their
 > suites wait under the use-case `gaps`, named, and flip on the first run whose log shows that package's suites
-> executed. The corpus still owes this rule two corrections: `crypto` carries three refs written before it
-> (`uc.memory.gallery`, `uc.spaces.set-space-icon`, `uc.account.trust-device`), and some use-cases withhold
-> backend or web refs on "no CI run has ever executed in this repository" — a stricter bar than this one, and
-> than every other backend ref.
+> executed. One ref still predates this and stays, named in `validate_coverage.py`'s baseline:
+> `uc.account.trust-device`'s `device-kek-conformance` cites `crypto` alone, and moving it to a gap would make
+> that use-case `planned`, which `validate_capabilities.py` reads as not built — `account.device-trust` could
+> then no longer be advertised ([ADR 0032](0032-capability-discovery-version-gating.md) §6). It moves when a
+> web test pins that vector on an admitted row, or when crypto's job first runs.
 
 ## Decision
 

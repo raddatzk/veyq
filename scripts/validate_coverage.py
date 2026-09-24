@@ -160,9 +160,9 @@ ADMITTED = {"backend", "web"}
 # Refs on an unadmitted surface written before the rule was enforced, named one by one as
 # (use-case, criterion, surface, ref). Debt, not permission: an entry that matches no ref fails, so this only
 # shrinks — moving a ref to its surface's gap, or admitting the surface, both demand deleting its entry here.
+# Of the three crypto refs it was born with, two moved to their use-cases' `crypto` gaps on 2026-09-24. The one
+# left cannot move yet: trust-device would become `planned`, which validate_capabilities.py reads as not built.
 UNADMITTED_BASELINE = {
-    ("uc.memory.gallery", "item-marks-are-shared-and-attributed-to-nobody", "crypto", "src/v1.conformance.test.ts"),
-    ("uc.spaces.set-space-icon", "icon-sealed-under-current-epoch", "crypto", "src/v1.conformance.test.ts"),
     ("uc.account.trust-device", "device-kek-conformance", "crypto", "src/v1.conformance.test.ts"),
 }
 

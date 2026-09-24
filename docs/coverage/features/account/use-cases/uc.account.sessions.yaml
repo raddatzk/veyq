@@ -6,11 +6,10 @@ title: Manage active sessions — see every login, sign out remotely
 # timestamps + the server-set current marker, the three endpoints over the existing session families, and the
 # Settings → Personal → Sessions panel with per-row revoke and sign-out-everywhere-else.
 #
-# `status: planned` is nonetheless correct, and it is the same call uc.admin.identify-instance-release makes,
-# for the same single reason: **no CI run has ever executed here.** This repository has no remote, so ADR 0040's
-# rule — a test no CI run executes makes no coverage claim — leaves every criterion uncovered however green the
-# suites are locally. They DO exist and pass; naming them below keeps the later flip mechanical (docs/inbox.md
-# #26). The one remaining condition is an event, not a missing test.
+# Until 2026-09-24 this file was `planned` and held every suite under `gaps`, on "no CI run has ever executed
+# here" — a stricter bar than the corpus set any other backend or web ref. ADR 0040's note on which rows a run
+# has admitted retired it: backend's and web's jobs were executed before the 2026-08-06 import, so their suites
+# count on the declared run like every other ref. The crypto half waits under `gaps`, because that job has not.
 #
 # cr-device-wrap-join-and-remote-cutoff adds the second half of the same use-case: the device↔wrap join in the
 # sealed register, ADR 0058's named escalation (sign out AND remove that device's saved key), § Devices with a
@@ -31,17 +30,16 @@ title: Manage active sessions — see every login, sign out remotely
 # that the device-local status read is resolved BESIDE this view's loader rather than inside it — see the
 # criterion below.
 #
-# What will NOT become claimable here even then: that a revoked family's refresh token is dead *forever* rather
-# than until the next purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by
-# the login slice tests, not by this use-case's own suites — citing it here would be reaching past what these
-# tests exercise. E3 used to be listed beside it as "not provable end to end on this surface" because the
-# settings hub route is `requiresUnlock` and a locked caller could not REACH the panel. That is now half false
+# What is NOT claimable here: that a revoked family's refresh token is dead *forever* rather than until the next
+# purge. That is a property of the existing rotation/reuse machinery (ADR 0004), proven by the login slice tests,
+# not by this use-case's own suites — citing it here would be reaching past what these tests exercise. E3 used
+# to be listed beside it as "not provable end to end on this surface" because the settings hub route is
+# `requiresUnlock` and a locked caller could not REACH the panel. That is now half false
 # and corrected rather than left: the entry point is not the panel, so what the web suite proves is the whole
 # flow at unit altitude — the entry is offered, forces SESSION, attempts no unlock, persists nothing on the way
 # back, and runs revoke-then-logout in that order. What stays unprovable here is only the LIVE end-to-end shape:
 # it needs two live sessions of one account, which the current e2e harness does not stand up (the same reason
 # the panel's own e2e was not extended).
-status: planned
 acceptanceCriteria:
   - id: list-shows-every-active-family
     text: >-
@@ -50,17 +48,56 @@ acceptanceCriteria:
       on. Revoked and expired families never appear, and no other account's family ever does. The current-marker
       is the positive control for sign-out-everywhere-else: without it, a response that marks nothing satisfies
       "the caller stayed signed in" for the wrong reason.
+    coverage:
+      # A second account is live throughout the slice, which turns "scoped to the caller" from a claim about the
+      # SQL into an observation at the boundary; exactly one family carries the server-set current marker.
+      backend:
+        integration:
+          - SessionManagerSliceTest.listShowsEveryActiveFamilyOfTheCallerAndMarksExactlyOneAsCurrent
+          - SessionManagerSliceTest.revokedFamiliesLeaveTheList
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
+    gaps:
+      - surface: backend
+        reason: >-
+          No test lists an EXPIRED family. The list filters on `status = ACTIVE` alone
+          (`SessionService.listActiveFamilies`), and a family has no expired status: one whose tokens have all
+          expired stays ACTIVE, and listed, until `SessionPurge` deletes its tokens and then the family
+          (`purgeEmptyFamilies`). "Expired families never appear" therefore holds from the next purge on, and no
+          ref here asserts even that.
   - id: revoke-one-family-remotely
     text: >-
       Revoking another family by its id ends it — a refresh presented from that family is refused afterwards —
       while the caller's own session keeps working. The call is idempotent, and an unknown or another account's
       id produces the same response as a real one, so the endpoint cannot be used to probe which ids exist. The
       negative anchors on the specific observable (the refused refresh, by its status code), never on "it threw".
+    coverage:
+      # Every negative carries a live control on the same predicate: the targeted revoke asserts the caller still
+      # refreshes (200) beside the target's refusal (401 `refresh_rejected`), and the foreign-id case asserts the
+      # other account's family still refreshes — the half a status code cannot show. On web the declined
+      # confirmation guards the call site (deleting the `ask` line in `revoke()` reddens exactly that case), and
+      # the row asks with its own sentence; the confirm channel itself is covered where it lives
+      # (`src/shared/state/useConfirm.test.ts`, `src/shared/ui/ConfirmDialog.test.ts`).
+      backend:
+        integration:
+          - SessionManagerSliceTest.revokingAnotherFamilyEndsItAndLeavesTheCallerSignedIn
+          - SessionManagerSliceTest.revokingIsIdempotent
+          - SessionManagerSliceTest.anUnknownIdAnswersLikeARealOneAndRevokesNothing
+          - SessionManagerSliceTest.anotherAccountsFamilyAnswersLikeARealOneAndSurvives
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: sign-out-everywhere-else
     text: >-
       One call revokes every family of the account EXCEPT the caller's own, and the caller is still able to
       refresh afterwards. This is the criterion that must not be satisfied by revoking everything: the surviving
       caller session is the assertion, not a side note.
+    coverage:
+      # The surviving caller session is asserted beside every other family's refusal, with a second account that
+      # must keep refreshing. Web asserts the ONE endpoint that spares the caller is called, never a per-family
+      # fan-out, which would include the caller's own.
+      backend:
+        integration:
+          - SessionManagerSliceTest.signOutEverywhereElseEndsEveryOtherFamilyAndKeepsTheCallers
+          - SessionManagerSliceTest.signOutEverywhereElseIsIdempotentWithNothingElseToEnd
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: works-locked-names-never-reach-the-server
     text: >-
       Listing and revoking require only a session, never an unlocked vault, so a locked device can still cut off
@@ -69,6 +106,21 @@ acceptanceCriteria:
       holds exactly what it held before (opaque id, coarse timestamps, count). A locked panel therefore also
       offers neither wrap action — both joins are sealed, so the locked ceiling does not rise with the
       escalation increment either (E3); their absence there is by construction, not by omission.
+    coverage:
+      # Structural, so the assertion is over SHAPE: a family exposes exactly id/createdAt/lastUsedAt/current, a
+      # register response exactly blob/version, and the whole backend suite unlocks nothing. The contract half is
+      # the permanent guard `scripts/validate_session_family_shape.py` (SessionFamily grows no field, and no
+      # base64 one). The web locked render has the unlocked mount as its control: with the vault locked the list
+      # renders, every revoke stays enabled, the register is never touched, and neither wrap action is offered.
+      # One trap sits beside these: the resource mixes `@PermitAll` (logout) with `@Authenticated` (the manager),
+      # and the tidier arrangement makes logout answer 401 to an invalid token — `SessionManagerSliceTest`
+      # asserts both directions (`logoutStillAnswers204ForATokenThatIsNotOne` beside the refusal cited here).
+      backend:
+        integration:
+          - SessionManagerSliceTest.aFamilyCarriesNothingButItsIdTimestampsAndTheCurrentMarker
+          - SessionManagerSliceTest.theSessionManagerNeedsASessionAndRefusesWithoutOne
+          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsVersion
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: the-locked-state-is-reachable-without-a-secret-key
     text: >-
       The device this flow exists for — fresh or foreign, no Emergency Kit — can REACH the locked state at all:
@@ -84,6 +136,19 @@ acceptanceCriteria:
       is session-gated but not unlock-gated — is a permanent guard rather than a claim, because the two obvious
       shortcuts (drop `requiresUnlock` from the settings hub, or mint a locked-reachable shell route) both look
       cheaper than this shape and were refused twice.
+    coverage:
+      # Web-only: no contract and no backend changed (`POST /api/sessions/revoke-others` was already
+      # `@Authenticated` and needs no unlock). `LoginView.test.ts` carries the entry, the forced SESSION scope with
+      # the ordinary submit's PERSISTENT as its control, the way back persisting nothing at either toggle position
+      # with the ordinary first sign-in as its positive control, and both ends of the sign-out tail;
+      # `LockedSignOut.test.ts` records revoke-then-logout as a sequence. Three were bite-tested (drop the
+      # no-persist guard, swap revoke and logout, pass the remember toggle through), each reddening its own case.
+      # The structural half is `scripts/validate_shell_route_gate.py`. Not claimed: the LIVE shape, which needs
+      # two live sessions of one account, and the e2e harness does not stand that up.
+      web:
+        unit:
+          - src/views/LoginView.test.ts
+          - src/features/account/sessions/LockedSignOut.test.ts
   - id: names-come-from-the-sealed-register
     text: >-
       An unlocked client labels each family the Master-Key-sealed device register can join to a device, and a
@@ -91,6 +156,19 @@ acceptanceCriteria:
       are the criterion, not one: a panel that dropped unnamed rows would satisfy the naming half perfectly
       while hiding the very device this screen exists to find (E4). The register itself round-trips through real
       crypto, and a blob sealed under a different key degrades to an empty register rather than throwing.
+    coverage:
+      # The server only relays the sealed blob — born empty, round-tripped verbatim. `deviceRegister.test.ts` runs
+      # real crypto against a mocked API and vault; the panel asserts the named row WITH the unnamed row as its
+      # control, and that a throwing register leaves the list revocable.
+      backend:
+        integration:
+          - DeviceRegisterSliceTest.bornEmptyRegisterReadsNullBlobVersionZero
+          - DeviceRegisterSliceTest.firstWriteRoundTripsAndBumpsToVersionOne
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/deviceIdentity.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
   - id: the-register-is-repaired-never-queued
     text: >-
       The sessions view reconciles the register against the authoritative family list it is holding — pruning
@@ -101,12 +179,34 @@ acceptanceCriteria:
       a family created by another device BETWEEN this client's read and its write must survive the stale-version
       retry (a frozen id-delta), while eviction must be recomputed on the merged map. Every other assertion
       passes under both formulations.
+    coverage:
+      # Each 409 case also asserts the stored blob is UNTOUCHED — a status alone does not show that, and the
+      # client's merge argument rests on being genuinely forced through the re-read. The web fake server
+      # reimplements the optimistic concurrency, so the 409 path is exercised rather than stubbed. The frozen
+      # id-delta (a family, and a wrap, created between read and write survives the retry) and eviction recomputed
+      # on the merged map were bite-tested: injecting "keep only what I saw", or freezing eviction to the first
+      # attempt, reddens exactly its own case.
+      backend:
+        integration:
+          - DeviceRegisterSliceTest.staleVersionOnFirstWriteIsConflict
+          - DeviceRegisterSliceTest.staleVersionAfterAWriteIsConflictAndLeavesTheStoredBlobIntact
+          - DeviceRegisterSliceTest.aWriteAtAFutureVersionIsAlsoRejected
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
   - id: rename-the-device-not-the-session
     text: >-
       A user renames the device behind a row, and the new name reaches every session of that device — a device
       is one-to-many with its sessions, and the copy says so. A rename survives a concurrent write (later write
       wins, because renaming is deliberate), a sign-in never reverts one, an empty rename is not written, and a
       family the register cannot name offers no rename at all — while still offering its revoke.
+    coverage:
+      # Client-side: a rename is a register write, which the server relays like any other.
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
   - id: removing-a-device-key-is-a-named-escalation
     text: >-
       A revoke on its own never touches key material; removing a device's convenience wrap is a second,
@@ -120,6 +220,21 @@ acceptanceCriteria:
       in the row, not only in its accessible name: the button carries a short visible label, keeps the full
       sentence as its accessible name and as the confirmation's subject, and the panel's own hint quotes the
       visible one — a label a reader cannot see is a name the copy around it cannot honestly refer to.
+    coverage:
+      # No backend code was added: `DELETE /api/account/wraps/{id}` was already account-scoped and already
+      # deletes both device methods — the escalation is two calls the account could always make, newly joined on
+      # the client. "Never on the caller's OWN row" is decided in the register view (`deviceRegister.test.ts`: it
+      # never offers this device's own wrap), not in the panel, which renders whatever the view joins; the panel's
+      # two-actions case feeds it a view that joins the current row on purpose. The visible label is pinned
+      # against its accessible name, and the panel hint quotes it in BOTH locales (editing one alone reddens it).
+      backend:
+        integration:
+          - AccountWrapsSliceTest.deleteByIdRemovesTheWrap
+          - AccountWrapsSliceTest.deleteRemovesDeviceKeyWrap
+      web:
+        unit:
+          - src/features/account/sessions/SessionsPanel.test.ts
+          - src/features/account/deviceRegister.test.ts
   - id: escalation-cuts-the-family-first-and-tells-the-truth-on-a-half-success
     text: >-
       The escalation runs family-first, wrap-second, and the ORDER is the assertion — the revoke stops an
@@ -129,6 +244,15 @@ acceptanceCriteria:
       removed (E5) — rather than a message that reads as total success or total failure; the retry surface is §
       Devices with a saved key, which the join row still feeds because a join row is pruned only from a later
       read of the server's wrap list, never from a delete this client merely attempted.
+    coverage:
+      # Client-side ordering over two existing calls. The order is recorded as a sequence, not as two independent
+      # call assertions (swapping the halves reddens three cases by name); a failed revoke never touches the wrap;
+      # the half-success message is E5's. The register prunes a join row only from a later read of the served
+      # list, which is what keeps the retry surface fed.
+      web:
+        unit:
+          - src/features/account/sessions/SessionsPanel.test.ts
+          - src/features/account/deviceRegister.test.ts
   - id: devices-with-a-saved-key-is-derived-not-invented
     text: >-
       Below the session list, a device the register knows that holds a served wrap and has NO live family is
@@ -138,6 +262,14 @@ acceptanceCriteria:
       fetched at all, that is carried as "unknown" and not as "there are none": no wrap-shaped action is
       offered, and no join row is pruned — the difference is what keeps a transport error from emptying the
       register's third map.
+    coverage:
+      # A failed served-list fetch reaches the register as `null`, never `[]`: unknown prunes nothing and offers
+      # no wrap action, a measured empty list does prune. The section is absent when the only saved key is this
+      # device's own, with a foreign key as its live control.
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
   - id: reaching-an-unnameable-wrap-is-defined-by-exclusion
     text: >-
       The only handle on a wrap the register never knew is "remove every saved key except this device's",
@@ -147,6 +279,21 @@ acceptanceCriteria:
       that has not signed in yet (ADR 0058 §5). The caller's own saved key survives it; a caller holding none
       removes all of them and is unharmed by that. The client filters to the two device methods for honesty, but
       the server's DELETE whitelist is the guarantee.
+    coverage:
+      # The server's DELETE whitelist is the guarantee, and `AccountWrapsSliceTest` pins it: the PASSWORD floor, a
+      # non-device wrap and another account's wrap all survive a delete. The client's own-wrap answer comes from
+      # the LOCAL trust/remember record, never the register or the server (`localWrap.test.ts`, including an
+      # unusable store answering "none"); dropping the exclusion filter reddens two panel cases by name. The
+      # client's filter to the two device methods (`savedKeys.ts`) has no suite of its own — the panel mocks it.
+      backend:
+        integration:
+          - AccountWrapsSliceTest.deletingPasswordWrapIsNoOp
+          - AccountWrapsSliceTest.deletingNonDeviceWrapIsNoOp
+          - AccountWrapsSliceTest.anotherUsersDeleteIsNoOp
+      web:
+        unit:
+          - src/features/account/sessions/SessionsPanel.test.ts
+          - src/features/account/localWrap.test.ts
   - id: the-current-row-says-how-this-device-unlocks
     text: >-
       The current device's row states this device's own unlock tier (remembered / trusted / none, or "this
@@ -161,6 +308,13 @@ acceptanceCriteria:
       the escalation ends a session and can only ever reach the server's wrap — the server cannot reach a remote
       device's local key, and that asymmetry is what forbids collapsing the two into one "remove this device"
       button (ADR 0058). Two labels, two confirms, two severities.
+    coverage:
+      # The status read resolves BESIDE the loader, never inside it: a read that hangs forever still leaves every
+      # row rendered and revocable, and a failed read offers nothing, with a succeeding read as its live control.
+      # Both were bite-tested by moving the read into `useAsyncData`, which reddens exactly those two cases. Forget
+      # and escalation stay two actions — two labels, two confirms, two mechanisms (the shared `ask()` against the
+      # forget's own dialog, which carries the busy state and inline error it needs).
+      web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
   - id: the-device-wrap-join-never-reaches-the-server
     text: >-
       The join lives only inside the Master-Key-sealed register: the PUT body is exactly a sealed blob and a
@@ -170,113 +324,27 @@ acceptanceCriteria:
       no test would catch either. The register also stays off every unlock path in both directions: a device
       finds its own wrap by the id in its local record, so a pruned or withheld join row can never cost anyone
       access.
+    coverage:
+      # The PUT body is exactly `blob` + `version`, and neither the wrap id nor the device label is legible in it.
+      # The wire shapes that would leak the correlation while everything kept working are the permanent guard
+      # `scripts/validate_device_shapes.py`, since no test would catch them. A sealed ROUND-TRIP that supplies
+      # neither map a second time was bite-tested in both directions (drop the map from the seal, then from the
+      # unseal), because `sealRegister`/`unsealRegister` enumerate the maps by name. Of "off every unlock path",
+      # what is tested is where a device finds its own wrap — its local record (`localWrap.test.ts`); no unlock
+      # suite asserts the register's absence.
+      backend:
+        integration:
+          - DeviceRegisterSliceTest.theRegisterCarriesNothingButTheSealedBlobAndItsVersion
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/localWrap.test.ts
 gaps:
-  backend: >-
-    The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
-    `DeviceRegisterSliceTest` (cr-account-sealed-device-register) covers the register's own endpoints: born-empty,
-    round-trip, bump, and four conflict cases — each of which also asserts the store is UNTOUCHED, because a 409
-    status alone does not show that, and the client's whole merge argument rests on being genuinely forced
-    through the re-read path. Its shape assertion (a register response is exactly `blob` + `version`) is the
-    server-side half of "no name ever reaches the server"; the contract-side half is now a permanent guard,
-    `scripts/validate_session_family_shape.py`, which fails if `SessionFamily` grows any field or any base64 one.
-    `SessionManagerSliceTest` covers all four criteria over the full HTTP stack, with a second account live
-    throughout — which is what turns "scoped to the caller" from a claim about the SQL into an observation at
-    the boundary. Every negative carries a live control on the same predicate, because each is trivially
-    satisfied by an over-broad implementation: a targeted revoke asserts the caller still refreshes (200) beside
-    the target's refusal (401 `refresh_rejected`), "everywhere else" asserts the same, and the two
-    same-answer-for-a-foreign-id cases assert that the foreign family still refreshes — the half a status code
-    cannot show. The operator-blind criterion is structural, so the assertion is over the response SHAPE (a
-    family exposes exactly id/createdAt/lastUsedAt/current, and no name-shaped field), plus the fact that the
-    whole suite unlocks nothing. One further trap is pinned there rather than left to review: the resource
-    mixes `@PermitAll` (logout) with `@Authenticated` (the manager), and the tidier-looking arrangement — an
-    authenticated class with `@PermitAll` on logout — makes logout answer 401 to an invalid token. Both
-    directions are asserted, so neither can be "fixed" into the other silently. The wrap-join increment adds no
-    backend test because it adds no backend code: `DELETE /api/account/wraps/{id}` is already account-scoped and
-    already whitelists DEVICE + DEVICE_KEY, and `AccountWrapsSliceTest` / `AccountKeyMaterialSliceTest` already
-    pin that whitelist — the escalation is two calls the account could always make, newly joined on the client.
-  web: >-
-    Same condition, same one event. The device register (cr-account-sealed-device-register) adds
-    `src/features/account/deviceRegister.test.ts` — real crypto, mocked API + vault, with a fake server that
-    reimplements the optimistic concurrency so the 409 path is exercised rather than stubbed — plus
-    `src/features/account/deviceIdentity.test.ts` for the stable id and the label guess, and six new cases in
-    `SessionsPanel.test.ts` (named row WITH the unnamed row as its control, the reconcile arguments incl. the
-    server-set current family, the locked case asserting the register is never touched, a throwing register that
-    leaves the list revocable, the rename, and the empty rename). Two of those tests were bite-tested rather
-    than trusted: injecting "keep only what I saw" in place of the frozen id-delta, and freezing eviction to the
-    first attempt, each reddens exactly its own case by name and nothing else — which is what makes them a
-    guard on the merge discipline rather than a description of it. The register's own AAD context is
-    vector-pinned (`sym_device_register`) and its domain separation from `identity-pins` is asserted in
-    `v1.conformance.test.ts`. `web/src/features/account/sessions/SessionsPanel.test.ts` covers the list
-    (both dates, exactly one server-set "this device" marker, the short id as the handle an unnamed row goes
-    by), the targeted revoke, the revoke-self path (treated as a logout, back to the sign-in screen), and the
-    everywhere-else action — asserting it calls the ONE endpoint that spares the caller rather than fanning out
-    per-family revokes, which would include the caller's own. The locked render is its own case with the
-    unlocked mount as its control: with `vaultState.unlocked = false` the list still renders and every revoke
-    button is still enabled, which is the trap this panel exists not to fall into. E2E is deliberately not
-    extended here — the flow needs two live sessions of one account, which the current harness does not stand up.
-    cr-device-wrap-join-and-remote-cutoff extends the same two files rather than adding a surface. In
-    `deviceRegister.test.ts`: the wrap map's own frozen id-delta (a wrap another device minted between our read
-    and our write survives the 409 retry — the mirror of the family case, and the one that would otherwise
-    silently un-escalate the device it just named), eviction taking wrap rows with their device, the
-    null-vs-empty served list (unknown prunes nothing, a measured empty list does), and a sealed ROUND-TRIP that
-    supplies neither the family nor the wrap a second time — because `sealRegister`/`unsealRegister` enumerate
-    the maps by name, so a third map wired everywhere except those two is dropped on write while every
-    in-memory assertion stays green. That round-trip case was bite-tested in both directions (drop the map from
-    the seal, then from the unseal) and reddens by name each time. In `SessionsPanel.test.ts`: the escalation's
-    ordering (recorded as a sequence, not as two independent call assertions), the never-touch-the-wrap-on-a-
-    failed-revoke case, the E5 half-success message, the offered/not-offered pair, § Devices with a saved key and
-    its per-device removal, the exclusion-shaped bulk action with its own-wrap-survives assertion plus the
-    holds-no-wrap case, the section's absence when the only saved key is this device's own (with a foreign key
-    as its live control), the locked panel offering neither action while still revoking, and the failed
-    key-material fetch passing `null` rather than `[]`. The ordering and the exclusion were bite-tested too:
-    swapping the two halves reddens three cases by name, and dropping the exclusion filter reddens two.
-    `localWrap.test.ts` pins where the "which wrap is mine" answer comes from — the local trust/remember record,
-    never the register and never the server's list — including that an unusable local store answers "none"
-    rather than throwing, which is the safe direction for both of its callers.
-    cr-locked-sign-out-entry-point adds E3's two files. `src/views/LoginView.test.ts` is that view's FIRST
-    harness — it had none at all, and E3 is a 100 % LoginView change, so standing it up was the largest single
-    cost of the increment. It covers the entry being offered exactly where the Secret-Key field is (with the
-    trusted device as its live control), the forced `SESSION` scope with the remember toggle ON (with the
-    ordinary submit's `PERSISTENT` as the control that keeps the forcing from being a constant), the way back
-    persisting nothing at either toggle position (with the ordinary first sign-in's `cacheSessionVault` /
-    `trustThisDevice` / `enrolDeviceKey` as the positive control on the same predicate), and both ends of the
-    sign-out tail — the success case leaving no session behind, the failed logout leaving the card's own
-    sign-out button reachable. `src/features/account/sessions/LockedSignOut.test.ts` owns the component: the
-    revoke-then-logout ORDER recorded as a sequence, the never-touch-the-session-on-a-failed-revoke case, the
-    half-success boolean, the declined confirmation, and the way-back emit touching neither call. Three of these
-    were bite-tested rather than trusted — dropping the no-persist guard, swapping revoke and logout, and passing
-    the remember toggle through each redden exactly their own case by name while their controls stay green.
-    The route-gate guard was bite-tested in the same way and its FIRST shape was wrong: blanking string bodies to
-    keep brace matching honest also blanked `'app'`, so it reported zero shell routes and passed everything. Its
-    bite is four cases — green untouched (three shell routes), red with `requiresUnlock` stripped from
-    `/settings/:section?`, red on a NEW shell route with no gate (so it is not merely pinned to the routes that
-    happen to exist), and GREEN on a comment carrying the phrase, which is the false positive the line-based
-    first probe produced.
-    cr-web-own-confirm-dialog adds two cases to `SessionsPanel.test.ts` for the visibility half of
-    `removing-a-device-key-is-a-named-escalation`: the escalation's rendered TEXT carries the short label while
-    its `aria-label` keeps the full sentence (reverting to icon-only reddens it), and the panel's hint quotes
-    exactly that label in BOTH locale blocks (editing the label in one locale alone reddens it) — the drift
-    that a later copy edit would otherwise make invisible. A third case pins that the row asks with the sentence
-    belonging to it, your own device's against another's, which the one-variable `window.confirm` call used to
-    encode implicitly. The confirmation channel itself is covered where it lives, not here:
-    `src/shared/state/useConfirm.test.ts` (accept, decline, single-flight, reuse) and
-    `src/shared/ui/ConfirmDialog.test.ts` (each way out of the dialog reaching the same answer), both bite-tested
-    — forcing every settle to `true` reddens four cases, and letting a second ask overwrite the pending resolver
-    hangs the first promise until the timeout. The declined-confirmation cases on this panel are the guard on the
-    call sites themselves: deleting the `if (!(await ask(…))) return` line in `revoke()` reddens exactly the
-    declined case while every accepted one stays green.
-    cr-devices-and-sessions-one-rubric folds the device-trust half into `SessionsPanel.test.ts` and DELETES the
-    device panel's own suite: the component is still its own (`DeviceTrustControl.vue`, a control rather than a
-    settings-hub panel), but every assertion about it is now made from
-    the mount point, because a row that lost its action to the parent's data would lose it silently. Seven cases
-    — the tier stated on the current row only (with a second row as the control that says it is a fact about THIS
-    device), the password-less tier winning when both are present, a plain device offering nothing, forgetting
-    dropping both tiers while calling no revoke, the failed status read offering nothing (with a SUCCEEDING read
-    as its live control, so the assertion is about the catch path and not about a button that never renders from
-    the new mount point at all), the unsupported browser, and the two actions staying two — two labels, two confirm texts and two
-    MECHANISMS, the escalation through the shared `ask()` and the forget through its own dialog, which is the
-    half that keeps a later tidy-up from folding the forget into `ask()` and losing the busy state and inline
-    error it needs. Two of the three were
-    bite-tested against a deliberately-awaited variant before the wiring landed: putting the device-local read
-    inside `useAsyncData` reddens the hanging-read case (zero rows) and the failed-read case by name, which is
-    exactly the defect the merge makes possible and nothing could catch while the two panels were separate.
+  crypto: >-
+    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
+    which rows a run has admitted). `src/v1.conformance.test.ts` pins the register's own AAD context against the
+    `sym_device_register` vector and asserts its domain separation from `identity-pins`, so a register blob can
+    never be read as a pin store. On the first run whose log shows packages/crypto's suites executed, the suite
+    goes under `the-device-wrap-join-never-reaches-the-server`, the criterion that rests on the register being
+    sealed, and this gap goes.

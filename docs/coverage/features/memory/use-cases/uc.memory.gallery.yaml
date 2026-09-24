@@ -207,9 +207,6 @@ acceptanceCriteria:
         unit:
           - src/app/itemFavoritesStore.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
-      crypto:
-        unit:
-          - src/v1.conformance.test.ts
   - id: item-marks-are-partitioned-per-memory
     text: >
       Marks are stored per node, not per scope: the partition keeps the 65 536-char ciphertext cap out of
@@ -250,3 +247,14 @@ acceptanceCriteria:
         integration:
           - NodeTrashSliceTest.purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects
           - ItemFavoritesSliceTest.removingAMemberDropsTheirItemFavorites
+gaps:
+  crypto: >-
+    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
+    which rows a run has admitted). `src/v1.conformance.test.ts` pins the clause of
+    `item-marks-are-shared-and-attributed-to-nobody` that says the marks carry their OWN `item-favorites`
+    context: the `sym_item_favorites` vector, and its domain separation from `favorites` (same key, nonce and
+    plaintext, only the context varied — without it a private pin blob opens in the shared slot). Until that
+    job runs, no admitted ref proves that clause: `src/app/itemFavoritesStore.test.ts` mocks the sealing module,
+    and the backend relays ciphertext it cannot open. On the first run whose log shows packages/crypto's suites
+    executed, the suite goes back under that criterion and this gap goes.

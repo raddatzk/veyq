@@ -90,8 +90,10 @@ The defect is live, so the order is guard → red → fix → green.
       The phase-1 tests go green. Add the same held-request test to `pairingAnswerPolling.test.ts`, which shares
       the collect endpoint.
       · Done when: `npm run check` is green, with all five existing suites unchanged and green.
-- [ ] 4 coverage — `uc.account.onboard-device.yaml` stays `status: planned` (no CI run yet, as its header
-      says). Its web gap text names the phase-1 tests under `a-pairing-is-single-use-short-lived-and-not-probeable`.
+- [ ] 4 coverage — `uc.account.onboard-device.yaml` is no longer `planned` (2026-09-24, ADR 0040's note on
+      which rows a run has admitted): its web refs are per criterion, and both suites the phase-1 tests extend
+      (`grantEnvelopePolling.test.ts`, `pairingAnswerPolling.test.ts`) are already cited under
+      `a-pairing-is-single-use-short-lived-and-not-probeable`, so nothing is added there unless a new file is.
       `uc.memory.live-updates` cites the helper's tests wherever it cites a poller suite for the foreground/E3
       criteria (`grep -n "Polling.test" docs/coverage/features/memory/use-cases/uc.memory.live-updates.yaml`).
       · Done when: `python3 scripts/validate_coverage.py` and the trust-chain are green.

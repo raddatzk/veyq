@@ -5,25 +5,22 @@ title: Onboard a device from one you are already signed in on
 # five `pairing` endpoints on the auth spec, `account/pairing/` behind them, the session delegation on
 # `SessionService`, and `POST /api/token/adopt`, which gives the delegated session the cookie transport every
 # other web session has (ADR 0004 § Transport). The web half is both devices of *add a device* and both of
-# *sign in with a QR code*, plus the tail they share — see the two gaps for what each suite pins.
+# *sign in with a QR code*, plus the tail they share — each criterion says what its suites pin.
 #
-# `status: planned` is nonetheless correct, and for the same single reason uc.account.sessions gives:
-# **no CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
-# executes makes no coverage claim — leaves every criterion uncovered however green the suites are locally.
-# They DO exist and pass; the backend gap names them so the later flip is mechanical. Nothing here waits on a
-# missing test on that surface; the remaining condition is an event.
+# Until 2026-09-24 this file was `planned` and held every suite under `gaps`, on "no CI run has ever executed
+# here" — a stricter bar than the corpus set any other backend or web ref. ADR 0040's note on which rows a run
+# has admitted retired it: backend's and web's jobs were executed before the 2026-08-06 import, so their suites
+# count on the declared run like every other ref.
 #
-# Two criteria below are **structural** and are carried by permanent guards rather than by tests:
-#   - `no-code-ever-names-a-server` — ADR 0059 §4, and **no longer owed**: `scripts/validate_pairing_shapes.py`
-#     pins the seven pairing schemas as exact property sets, so a URL-shaped field cannot be added to any of
-#     them quietly. It is the same shape as `scripts/validate_device_shapes.py`, one flow over, and it was
-#     bite-tested with a `serverUrl` on `PairingOpenRequest`, which it fails naming the field.
-#   - `the-locked-entry-adds-no-shell-route` — **structurally** guarded, and only structurally:
-#     `scripts/validate_shell_route_gate.py` refuses the shortcut (a locked-reachable shell route) for both
-#     directions' entries, since neither adds a route at all. The behavioural half — the entry is offered, it
-#     attempts no unlock, and the paths already on that card are unchanged — is still a test's job, and is owed
-#     by whichever slice adds each entry.
-status: planned
+# Two criteria below rest first on permanent guards, and their refs are the guards' twins:
+#   - `no-code-ever-names-a-server` — ADR 0059 §4: `scripts/validate_pairing_shapes.py` pins the seven pairing
+#     schemas as exact property sets, so a URL-shaped field cannot be added to any of them quietly. It is the
+#     same shape as `scripts/validate_device_shapes.py`, one flow over, and it was bite-tested with a
+#     `serverUrl` on `PairingOpenRequest`, which it fails naming the field.
+#   - `the-locked-entry-adds-no-shell-route` — `scripts/validate_shell_route_gate.py` refuses the shortcut (a
+#     locked-reachable shell route) for both directions' entries, since neither adds a route at all. The
+#     behavioural half — each entry offered, attempting no unlock, the card's existing paths unchanged — is
+#     `LoginView.test.ts`'s, for both entries.
 acceptanceCriteria:
   - id: the-grant-carries-key-and-session
     text: >-
@@ -33,6 +30,25 @@ acceptanceCriteria:
       only the key would leave a device that can open a vault it cannot reach a server with, and a family that
       behaved specially would be a second class of session nobody audits. The granting session's own family is
       the live control — it must still refresh afterwards.
+    coverage:
+      # The two halves are proven on the surface that can see each. The backend proves the session half: the
+      # delegated family lists, rotates and revokes like any other, and revoking it leaves the granting session
+      # refreshing — the control the criterion names (`SessionManagerSliceTest` mints it with `issueDelegated`;
+      # the pairing slice does it through a real channel, in both directions). The Master-Key half is client-side
+      # by construction — the server relays one sealed envelope it cannot open — so web carries it: the grant
+      # opens to the key, and the tail installs the adopted family id beside the unlocked vault. Not claimed: one
+      # live device holding both at once, which needs two live sessions of one account that the e2e harness does
+      # not stand up.
+      backend:
+        integration:
+          - SessionManagerSliceTest.aDelegatedFamilyListsRotatesAndRevokesLikeAnyOtherAndTakesNothingWithIt
+          - PairingSliceTest.addingADeviceRelaysTheAnswerAndTheGrantAndHandsTheNewDeviceAWorkingSession
+          - PairingSliceTest.aChannelOpenedWithNoSessionBecomesWhicheverAccountDelegates
+      web:
+        unit:
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/onboardTail.test.ts
   - id: the-onboarded-device-keeps-the-session-it-was-granted
     text: >-
       The onboarded device survives a reload. The handed-over refresh token reaches it in the envelope, is spent
@@ -44,11 +60,52 @@ acceptanceCriteria:
       appear named in uc.account.sessions at all; and re-presenting the spent grant token is ADR 0004's clone
       case and takes the family down. The live control on that last one is the adopted session refreshing
       normally beforehand, since "everything is refused" satisfies a bare negative just as well.
+    coverage:
+      # `POST /api/token/adopt` converts the handed-over grant token into the cookie transport every web session
+      # uses (ADR 0004 § Transport). Per scope, the response names the family the rotation produced and omits the
+      # body token while setting exactly one refresh cookie (the other lifetime's clearing cookie beside it),
+      # `httpOnly` asserted on the attribute and SESSION carrying no `Max-Age`. The adopted session rotates through
+      # the cookie alone BEFORE the replay, because afterwards the family is dead and every later assertion is
+      # vacuum; the replay is anchored on the family reaching `REVOKED`, with a second family of the same account
+      # as the control that the revoke was targeted. A request already bearing a refresh cookie is refused under
+      # both cookie names, which also proves the refusal precedes the rotation. On web, adoption is presented
+      # exactly once, and the control on that count is that the rest of the tail DOES refresh-and-retry on a 401;
+      # adopt's 400 and 401 reach different messages, because their remedies differ. "Survives a reload" is the
+      # cookie transport's property, not booted here. Inbox #123 (a lost or racing refresh revoking the family)
+      # was closed for every web session at once (ADR 0004 § the one-generation grace) — not this flow's to claim.
+      backend:
+        integration:
+          - TokenAdoptSliceTest.adoptingWithSessionScopeReturnsTheFamilyAndSetsOnlyTheSessionCookie
+          - TokenAdoptSliceTest.adoptingWithPersistentScopeSetsOnlyThePersistentCookie
+          - TokenAdoptSliceTest.theScopeIsRequiredAndAMissingOneIsRefusedAtTheBoundary
+          - TokenAdoptSliceTest.theAdoptedSessionRefreshesThroughTheCookieAlone
+          - TokenAdoptSliceTest.rePresentingTheSpentGrantTokenRevokesTheFamily
+          - TokenAdoptSliceTest.aRequestBearingARefreshCookieIsRefusedAndSpendsNothing
+      web:
+        unit:
+          - src/features/account/pairing/onboardTail.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
+          - src/features/account/pairing/SignInWithCodeCard.test.ts
   - id: no-password-and-no-secret-key-reaches-the-new-device
     text: >-
       Neither the password nor the Secret Key is typed on, sent to, or derivable by the onboarded device, at any
       step of either direction. The positive control on the same predicate is the ordinary first sign-in, which
       must still demand both — a bare "nothing was entered" is satisfied equally well by a broken form.
+    coverage:
+      # The shared tail (both directions feed it) completes on a grant whose only fields are email, label,
+      # masterKey and refreshToken, with no password-derived enrolment; choosing either entry on the sign-in form
+      # calls no login and no unlock.
+      web:
+        unit:
+          - src/features/account/pairing/onboardTail.test.ts
+          - src/views/LoginView.test.ts
+    gaps:
+      - surface: web
+        reason: >-
+          The positive control is only half there. `onboardTail.test.ts` defers it to the sign-in form, and
+          `LoginView.test.ts` shows the Secret-Key field rendered on an untrusted device (a trusted one as its
+          control) and a first sign-in that enters both — but no case refuses a submit that lacks the password or
+          the Secret Key, so "must still demand both" rests on the `required` attributes, which nothing asserts.
   - id: the-envelope-is-sealed-to-the-ephemeral-key-and-nothing-else-leaks
     text: >-
       The Master Key and the refresh token travel only inside one envelope sealed to the new device's
@@ -57,6 +114,23 @@ acceptanceCriteria:
       open, never on "it threw", which a transport or boot failure produces just as well. The new device sends
       no account identifier at any point before the grant: which account it becomes is decided by the device
       that scans.
+    coverage:
+      # The backend covers the relay half: collection is unauthenticated on purpose, the granting half is not,
+      # and what comes out is byte for byte what went in. Web anchors the negative on a real second key failing
+      # to open the grant, with the intended key as its control — never on "it threw". That the new device sends
+      # no account identifier before the grant is the permanent guard `scripts/validate_pairing_shapes.py` (no
+      # pairing request may grow a `userId` or an `email`), not a test.
+      backend:
+        integration:
+          - PairingSliceTest.addingADeviceRelaysTheAnswerAndTheGrantAndHandsTheNewDeviceAWorkingSession
+          - PairingSliceTest.theRelayIsPublicAndTheGrantingHalfIsNot
+          - PairingSliceTest.nothingOnThisWireCarriesAnythingButTheHandleAndTheTwoOpaqueValues
+      web:
+        unit:
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
+          - src/features/account/pairing/SignInWithCodeCard.test.ts
   - id: add-a-device-is-gated-on-a-matching-check-number
     text: >-
       In the *add a device* direction both devices derive the same short check number from the answering
@@ -64,6 +138,19 @@ acceptanceCriteria:
       is the pair: the matching case grants, and a second device answering the same channel (the photographed-QR
       race this step exists for) produces a number that does not match the one on the intended device, is
       declined, and abandons the channel rather than offering a retry in place.
+    coverage:
+      # Checked on the trusted device, never by the server: `/api/pairing/seal` takes no code and verifies none
+      # (ADR 0059 §6, ADR 0026), which `scripts/validate_pairing_shapes.py` pins as the exact seal request shape.
+      # The check number is the already-pinned safety-number digest's first group; declining reaches NEITHER
+      # `delegate` nor `seal`, and the restart mints a different handle, each with its completing ceremony as the
+      # live control. The photographed-QR race is modelled as a different answering key giving a different
+      # number, plus the declined comparison — no suite drives two devices answering one channel.
+      web:
+        unit:
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
+          - src/shared/ui/SlideToConfirm.test.ts
   - id: qr-sign-in-seals-only-after-the-returned-code-is-proven
     text: >-
       In the *sign in with a QR code* direction the trusted device seals nothing until the new device has proven
@@ -73,6 +160,20 @@ acceptanceCriteria:
       handing the operator the only barrier (ADR 0059 §6). There is exactly one committed proof per ceremony —
       the answer slot is write-once and the channel carries no status to refuse through — so a wrong proof
       abandons the pairing rather than retrying in place, and the valid proof is the live control.
+    coverage:
+      # The two gates are driven separately, one bite each, because either alone satisfies the negative: a wrong
+      # proof does not so much as offer the slide and reaches neither `delegate` nor `seal`, and a VERIFIED proof
+      # whose slide is left untouched still reaches neither — the completed ceremony calling each exactly once is
+      # the live control on both. The commitment binds ONE key to ONE code (wrong key, wrong code, wrong length
+      # each refused against the matching triple); the answer reader refuses a buffer it does not consume
+      # exactly, anchored on its own message; the new device sends exactly ONE answer, driven by clicks inside a
+      # single tick. The write-once answer slot is the backend's (`PairingStore.recordAnswer` updates only a
+      # PENDING row), and no backend test answers a channel twice.
+      web:
+        unit:
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/SignInWithCodeCard.test.ts
   - id: no-code-ever-names-a-server
     text: >-
       Nothing carried by a scanned code can name an endpoint, and no client follows one out of a scan — each
@@ -80,6 +181,23 @@ acceptanceCriteria:
       guard rather than a test: a URL-shaped field on the pairing payload would redirect a trusted device's
       seal to an attacker's server with no password and no session, and every visible behaviour would stay
       correct.
+    coverage:
+      # Structural first: `scripts/validate_pairing_shapes.py` pins the seven pairing schemas as exact property
+      # sets (bite-tested with a `serverUrl` on `PairingOpenRequest`). The refs are its twins: the channel read
+      # exposes exactly `answer` and `envelope`, the displayed payloads are marker plus handle and can never read
+      # as a URL (bitten under both markers by forcing the draw whose base64 begins with a slash), a payload
+      # carrying a URL is refused, neither marker parses as the other's, and a foreign `https` QR is scanned past.
+      # "Each side talks only to the instance it already has open" holds by construction — a parser returns the
+      # handle and nothing else — and no test asserts the API base after a scan.
+      backend:
+        integration:
+          - PairingSliceTest.nothingOnThisWireCarriesAnythingButTheHandleAndTheTwoOpaqueValues
+      web:
+        unit:
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/SignInWithCodeCard.test.ts
+          - src/views/LoginView.test.ts
+          - src/features/account/emergencyKit/KitScanner.test.ts
   - id: a-pairing-is-single-use-short-lived-and-not-probeable
     text: >-
       A pairing channel expires, is spent by one successful grant, and only one is outstanding per account.
@@ -87,6 +205,36 @@ acceptanceCriteria:
       which pairings exist — the same non-enumerability posture the wrap and session endpoints already take.
       The live control is a fresh channel, which must still work; without it the sameness is satisfied by an
       endpoint that refuses everything.
+    coverage:
+      # Each dead-channel case (unknown, expired, spent) runs a FRESH channel through the same verbs as its live
+      # control, because "they all answer 404" is satisfied by an endpoint that refuses everything; a fourth case
+      # compares the three answers byte for byte, which is E1's actual claim. Single use is the pair "polling for
+      # the answer spends nothing, taking the grant spends the channel", and one-outstanding (§8) is supersession
+      # WITH the revoke of the family that ceremony left behind, against a second account's pairing that must
+      # survive. The sweep expires before it deletes and revokes the uncollected family, each with a COLLECTED
+      # channel as the control — a sweep that revoked on "overdue" alone would sign out the device that arrived.
+      # Expiry is simulated by moving `expiresAt`; the TTL value itself is not asserted. Rate-limit posture is not
+      # asserted by hand: `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if
+      # an endpoint loses its `@RateLimit` (bite-tested: it names the endpoint).
+      backend:
+        integration:
+          - PairingSliceTest.anUnknownChannelIsRefusedWhileAFreshOneAnswers
+          - PairingSliceTest.anExpiredChannelIsRefusedWhileAFreshOneAnswers
+          - PairingSliceTest.aSpentChannelIsRefusedWhileAFreshOneAnswers
+          - PairingSliceTest.theThreeDeadChannelsAreIndistinguishableFromOneAnother
+          - PairingSliceTest.readingTheAnswerSpendsNothingButTakingTheGrantSpendsTheChannel
+          - PairingSliceTest.aChannelIsDelegatedOnceAndTheSecondAttemptMintsNothing
+          - PairingSliceTest.anotherAccountCannotSealToAChannelItDidNotDelegate
+          - PairingSliceTest.delegatingSupersedesTheAccountsOtherPairingAndRevokesTheFamilyItLeftBehind
+          - PairingPurgeTest.anExpiringChannelRevokesTheFamilyItDelegatedAndLeavesTheCollectedOneAlone
+          - PairingPurgeTest.overdueChannelsAreExpiredBeforeTheyAreDeletedSoAReplayReadsAsSpent
+          - PairingPurgeTest.terminalRowsAreDeletedOnceTheyAreOlderThanTheRetentionWindow
+      web:
+        unit:
+          - src/features/account/pairing/pairingAnswerPolling.test.ts
+          - src/features/account/pairing/grantEnvelopePolling.test.ts
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
   - id: the-onboarded-device-writes-its-own-register-entry
     text: >-
       The label chosen during the ceremony travels inside the sealed envelope and is written to the device
@@ -94,12 +242,32 @@ acceptanceCriteria:
       and the granting device never writes another device's entry. This is what keeps
       en.account.device-register's single-writer rule intact; a grant that wrote the entry from the trusted
       side would work perfectly and quietly re-open the merge hazard that rule exists to close.
+    coverage:
+      # Client writes onto endpoints that already existed. The device writes its own entry under the label it was
+      # handed, not the user-agent guess — an ordinary unlock still writing the guess is the live control — and
+      # the trusted panel writes no entry for it at all. The order ADR 0059 §2 forces is asserted as an ORDER:
+      # the key-material fetch and write moment 1 are anchored on an access token and a family id only the
+      # adoption could have installed, because a wrong-order build calls every one of those steps too.
+      web:
+        unit:
+          - src/features/account/pairing/onboardTail.test.ts
+          - src/features/account/pairing/AddDevicePanel.test.ts
   - id: a-linked-device-is-born-at-the-password-less-tier
     text: >-
       An onboarded device that stays signed in enrols a `DEVICE_KEY` wrap and never a `DEVICE` one — it has no
       password to key the latter — and one that declines enrols no wrap at all and holds the Master Key for the
       session only. Both cases are the criterion, with the ordinary remembered device as the control that the
       enrolment path itself still works.
+    coverage:
+      # The declined tier enrols no wrap of EITHER kind — never the password `DEVICE` wrap the ordinary Off tier
+      # keeps, which this device has no password to key — against an accepted tier that enrols a `DEVICE_KEY`;
+      # the ordinary remembered device enrolling on the sign-in form is the control that the path still works.
+      web:
+        unit:
+          - src/features/account/pairing/onboardTail.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
+          - src/features/account/pairing/SignInWithCodeCard.test.ts
+          - src/views/LoginView.test.ts
   - id: the-locked-entry-adds-no-shell-route
     text: >-
       **Both** routeless entries this feature puts on the sign-in form — *sign in with a QR code*, beside
@@ -116,122 +284,11 @@ acceptanceCriteria:
       exactly the hardware the direction exists for (ADR 0059 §1 — no direction is the camera one). It is
       asserted against the camera-gated scan control in that same state as the control, because "the button is
       there" is satisfied equally well by a button that is always there and by one that is correctly ungated.
-gaps:
-  backend: >-
-    The suite exists and passes locally; the only missing thing is a CI run to execute it (ADR 0040).
-    `PairingSliceTest` drives all five endpoints over the full HTTP stack, with a second account live throughout
-    — which is what turns "the grant is scoped to the account that delegated" from a claim about the SQL into an
-    observation at the boundary. It covers `a-pairing-is-single-use-short-lived-and-not-probeable` end to end:
-    the three dead-channel cases (unknown, expired, spent) each run a FRESH channel through the same verbs as
-    their live control, because "they all answer 404" is satisfied perfectly by an endpoint that refuses
-    everything; a fourth case compares the three answers byte for byte, which is E1's actual claim; the single-use
-    rule is asserted as the pair "polling for the answer spends nothing, taking the grant spends the channel";
-    and §8's one-outstanding rule is asserted as supersession WITH the revoke of the family that ceremony left
-    behind, against a second account's pairing that must survive it. `PairingPurgeTest` owns the sweep —
-    expire-then-delete in that order, and the uncollected family revoked — each with a COLLECTED channel beside
-    it as the live control, since a sweep that revoked on "overdue" alone would sign out the device that did
-    arrive. For `the-grant-carries-key-and-session` the backend proves the session half only: the delegated
-    family lists, rotates and revokes like any other, and revoking it leaves the granting session refreshing
-    (`SessionManagerSliceTest`, with the granting family as the control the criterion names). The Master-Key half
-    is client-side by construction — the server relays one sealed envelope it cannot open — and so is every
-    binding step: `add-a-device-is-gated-on-a-matching-check-number` and
-    `qr-sign-in-seals-only-after-the-returned-code-is-proven` are checked on the trusted device, and what the
-    backend contributes to them is an ABSENCE that is asserted rather than assumed — `/api/pairing/seal` takes no
-    code and verifies none, because a server that could release on a correct code would be past the only barrier
-    there is (ADR 0059 §6, ADR 0026). Of
-    `the-envelope-is-sealed-to-the-ephemeral-key-and-nothing-else-leaks` the backend covers the relay half:
-    collection is unauthenticated on purpose, the request names no account, and what comes out is byte for byte
-    what went in. `no-code-ever-names-a-server` is now carried by `scripts/validate_pairing_shapes.py` rather
-    than owed, with the slice test's response-shape assertion (the channel read exposes exactly `answer` and
-    `envelope`) as its server-side twin. Rate-limit posture is not asserted by hand: the three public endpoints
-    declare `@RateLimit(IP)` and the two authenticated ones `@RateLimit(USER)`, and
-    `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if one loses it — bite-
-    tested here, it names the endpoint. The wraps resource's `@RateLimitExempt` reasoning ("bounded by the
-    caller's own session") deliberately does not transfer: these endpoints have no caller.
-    **`the-onboarded-device-keeps-the-session-it-was-granted` now has its backend half, and it is in the same
-    state as everything else here** — the suite exists and passes locally, and the only missing thing is a CI
-    run to execute it (ADR 0040). `POST /api/token/adopt` is the verb that converts the handed-over grant token
-    into the cookie transport every web session uses (ADR 0004 § Transport), and `TokenAdoptSliceTest` drives it
-    over the full HTTP stack: per scope, that the response names the **family the rotation produced** and omits
-    the body token while setting exactly one refresh cookie — the other lifetime's clearing cookie beside it —
-    with `httpOnly` asserted on the attribute and `SESSION` asserted to carry no `Max-Age` at all; that the
-    required `sessionScope` is refused at the boundary when absent, with the same request carrying one as its
-    control; that the adopted session then rotates **through the cookie alone**, which runs *before* the replay
-    because afterwards the family is dead and every later assertion is vacuum; and that re-presenting the spent
-    grant token is ADR 0004's clone case — anchored on the family's own status reaching `REVOKED`, not on "the
-    call failed", with a second family of the same account as the control that the revoke was targeted rather
-    than a blanket refusal. A request already bearing a refresh cookie is refused under **both** cookie names,
-    with the same request minus the cookie succeeding — which is also what proves the refusal precedes the
-    rotation, so the endpoint cannot be used to burn someone else's grant. Rate-limit posture is not asserted by
-    hand here either: the method inherits the class-level `@RateLimit(IP)` and
-    `RateLimitPostureSweepTest.everyEndpointDeclaresARateLimitPosture` reddens by itself if it loses it. The
-    web half is still owed and is slice 3's — see the web gap. Three criteria have no
-    backend half at all — `the-onboarded-device-writes-its-own-register-entry` and
-    `a-linked-device-is-born-at-the-password-less-tier` are client writes onto endpoints that already existed, and
-    `the-locked-entry-adds-no-shell-route` is a route-gate property of the web surface.
-  web: >-
-    **The trusted half of *add a device* is built** (slice 2, `web/src/features/account/pairing/` plus the
-    shared `SlideToConfirm` primitive): open a channel, show the code, wait for the answer, compare the number,
-    take the deliberate confirmation, delegate then seal. Its suites pass locally and the only thing missing is
-    a CI run to execute them (ADR 0040) — the same single condition the backend gap names. They pin what no
-    `scripts/` validator can see without parsing TypeScript: the displayed payload is the marker and the handle
-    and can never read as a URL (§4, bitten by forcing the one draw whose base64 begins with a slash); the grant
-    round-trips only through the key whose number was compared, and not through any other; the check number is
-    the already-pinned safety-number digest's first group; declining the comparison reaches **neither**
-    `delegate` nor `seal` and the restart mints a different handle, each with its completing ceremony as the
-    live control; and the channel is never read again after the answer, at both altitudes (the loop's own suite
-    and the whole screen after a real seal), with "it polled before" as the control that stopping is not
-    vacuous. The scanner's first-ever harness came with the decoder refactor that made it serve both flows.
-    **The onboarded device's half and the shared tail are built too** — the join card the sign-in form's scan
-    entry dispatches to, the grant poll, and `onboardTail.ts`, which the QR direction will reuse rather than
-    rebuild. Same state, same single missing condition: the suites pass locally and no CI run has executed them
-    (ADR 0040). What they pin is the set of things a happy path cannot see. The order ADR 0059 §2 forces is
-    asserted as an ORDER, not a set — the key-material fetch and write moment 1 are anchored on an access token
-    and a family id that only the adoption could have installed, because a wrong-order build calls every one of
-    those steps too. Adoption is presented **exactly once**, and the control that makes the count mean anything
-    is on the same predicate: the rest of the tail *does* refresh-and-retry on a 401, so "once" is about the
-    absent `withRefresh` around adopt and not about a client with no retry anywhere. Adopt's `400` reaches a
-    different message than its `401` — the remedies differ, so they may not collapse. The device writes its own
-    register entry under the label it was handed and not the user-agent guess, with an ordinary unlock still
-    writing the guess as the live control and the trusted panel writing no entry for it at all. The declined
-    tier enrols no wrap of **either** kind — never the password `DEVICE` wrap the ordinary Off tier keeps, which
-    this device has no password to key — against an accepted tier that does enrol a `DEVICE_KEY`. And the
-    widened scan entry accepts both of this app's codes while scanning past a foreign QR, with the
-    Emergency-Kit path asserted unchanged, which is the regression a shared dispatching control most plausibly
-    causes.
-
-    **The *sign in with a QR code* direction is built too**, and it is in the same state as everything above:
-    the suites pass locally and the only missing thing is a CI run to execute them (ADR 0040). What they pin is
-    what a happy path cannot see. `pairing.test.ts` carries the wire form: the displayed payload is the second
-    marker and the handle and can never read as a URL (bitten under this marker too, by forcing the one draw
-    whose base64 begins with a slash — the re-mint lives in `mintHandle` and carries over only while this
-    direction mints there); neither marker parses as the other's, in both directions, with each parser's own
-    payload as the control, because a sign-in code read as a pairing one would burn the write-once answer slot
-    before any screen looked wrong; the commitment binds ONE key to ONE code, with a wrong key, a wrong code and
-    a wrong-length commitment each refused against the matching triple as control; the answer reader rejects a
-    buffer it does not consume exactly, **anchored on its own refusal message** rather than on "it threw", which
-    the inherited reader produces just as well several layers down; and the pairing code rejects a draw past its
-    uniform ceiling instead of folding it, which a shape assertion cannot see — both are six digits.
-    `SignInWithCodeCard.test.ts` owns the new device: the code carries the handle and never the transport key,
-    the answer carries key AND proof, the *stay signed in* answer is taken before any call and reaches the tail
-    both ways, and there is exactly ONE send — driven by clicks landing inside a single tick, because `disabled`
-    is patched on the next one and a test that awaits between clicks passes with no guard at all. A refused
-    proof ends in the ordinary expiry told to start again, against an accepted one reaching the tail as the
-    control, since "the tail never ran" is satisfied by a card that never works.
-    `AddDevicePanel.test.ts` owns the trusted device's scan arm and
-    `qr-sign-in-seals-only-after-the-returned-code-is-proven` with it. **The two gates are driven separately,
-    one bite each**, because either alone satisfies the criterion's negative and a suite that only drove a wrong
-    code could not say which held: a wrong proof does not so much as offer the slide and reaches neither
-    `delegate` nor `seal`, and a **verified** proof whose slide is left untouched still reaches neither — with
-    the completed ceremony calling each exactly once as the live control on both. The envelope opens with the
-    private half of the bundle that carried the proof and with no other key, the scanner refuses the code this
-    device shows itself, and the channel is never read again after the seal. `LoginView.test.ts` covers that
-    entry's behavioural half, including the camera gate the criterion names.
-
-    **One thing this surface inherits rather than owns, and one that was fixed under it.** Inbox #123 — a
-    refresh the client never receives, or two that race, revoking the family — was closed on 2026-09-21 for
-    every web session at once (ADR 0004 § the one-generation grace, plus a shared in-flight refresh in
-    `web/`), so the adopted session no longer carries it. It was never this flow's to fix and it is not this
-    flow's to claim. And E2E stays out of reach for the reason
-    the sessions panel's did — the flow needs two live sessions of one account, which the current harness does
-    not stand up — which is stated here rather than left as a silently missing ref.
+    coverage:
+      # The structural half is `scripts/validate_shell_route_gate.py` (neither entry adds a route). The
+      # behavioural half is the sign-in form's suite, per entry: each is offered on the locked card, choosing it
+      # attempts no login or unlock, and the card's existing paths still behave — the Emergency-Kit scan through
+      # the widened dispatch, and E3's ways out. The QR entry is asserted with and without a camera against the
+      # camera-gated scan control in the same state, so an always-there button and a correctly ungated one are
+      # told apart.
+      web: { unit: [src/views/LoginView.test.ts] }

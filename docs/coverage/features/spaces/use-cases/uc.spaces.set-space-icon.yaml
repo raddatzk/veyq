@@ -64,11 +64,6 @@ acceptanceCriteria:
         unit:
           - src/features/spaces/spaceIcon.test.ts
           - src/features/spaces/scopes.test.ts
-      # The KAT battery moved with the suite into the shared crypto package (ADR 0065) — same test, new
-      # surface, because it is now run by `packages/crypto`'s own check rather than web's.
-      crypto:
-        unit:
-          - src/v1.conformance.test.ts
   - id: initial-fallback-without-grant
     text: A reader who holds no grant for the space — the awaiting-access window before grant-delivery wraps K_SC to a newly admitted member — sees the initial, not an error, a blank, or a broken image. The same holds for a malformed or wrong-key sealed_icon, and for a space with no icon set. The initial is never a failure state.
     coverage:
@@ -90,3 +85,14 @@ acceptanceCriteria:
           - ScopesSliceTest.clearScopeIconIsIdempotentAndOwnerGated
           - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
           - ScopesSliceTest.clearScopeIconOnAGroupIsIdempotentAndAllowedDuringGrace
+gaps:
+  crypto: >-
+    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
+    which rows a run has admitted). `src/v1.conformance.test.ts` carries the `space_icon_key` KAT for
+    `icon-sealed-under-current-epoch`: K_icon = HKDF(E_e, "veyq/v1/space-icon-key") against the pinned okm, with
+    an info string distinct from `group_name_key`'s. It was admitted while it lived in web; the move into the
+    shared package (ADR 0065) put it on a job no run has executed, so it waits here. Until then the criterion's
+    web refs prove the derivation round-trips and re-keys (`spaceIcon.test.ts`: a different epoch key derives a
+    different K_icon) but not that it is the pinned one. On the first run whose log shows packages/crypto's
+    suites executed, the suite goes back under that criterion and this gap goes.
