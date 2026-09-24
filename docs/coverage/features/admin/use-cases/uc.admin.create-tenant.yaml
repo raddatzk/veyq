@@ -4,14 +4,6 @@ title: Create a tenant & invite its owner
 # Slice A (cr-0009) — structural tenant creation + invite lifecycle + Server-Owner management.
 # Slice B (cr-0010) — invite acceptance: cold TENANT-scope birth + first OWNER membership/grant → ACTIVE,
 # via register-and-accept (new owner) or sign-in accept (existing owner).
-#
-# `status: planned` although both slices are BUILT, and only because of one criterion: `invite-link-handoff` is
-# proven on `admin-web` alone, and `admin-web`'s job has never executed — so ADR 0040 admits none of its refs
-# (see its note on which rows a run has admitted). Every other criterion keeps a backend ref. The admin-web
-# suites are named under `gaps` so the flip is mechanical; `planned` goes with them. (The other way out is a
-# backend assertion that create/resend/reassign return the raw secret: no backend test reads it today —
-# `TenantAcceptSliceTest` seeds its own secret rather than taking one from a create response.)
-status: planned
 acceptanceCriteria:
   - id: create-pending-tenant
     # cr-email-invite-send-hardening: create/resend/reassign responses also carry the delivery result field. A
@@ -27,7 +19,13 @@ acceptanceCriteria:
       backend: { integration: [TenantsSliceTest.duplicateDomainIs409] }
   - id: invite-link-handoff
     text: The owner invite is delivered out-of-band by the Server Owner copying the invite link (the bootstrap secret in the URL fragment) — create/resend/reassign responses return the raw secret to the Server-Owner-gated caller, so tenant onboarding works without any email/SMTP infrastructure (self-hostable by default). (cr-0080.)
-    # No coverage on an admitted surface — the one criterion that makes this file `planned` (header).
+    coverage:
+      backend:
+        # Round-tripped, not merely non-null: each takes `bootstrapSecret` from the Server Owner's response and
+        # hands it to the invitee's side — it previews to this tenant (and, after resend/reassign, the link handed
+        # out before is 410) and its accept activates the tenant. Handed the secret's hash instead, preview is 404
+        # (bite-tested).
+        integration: [TenantsSliceTest.createReturnsTheRawSecretThatActivatesTheTenant, TenantsSliceTest.resendReturnsTheRawSecretThatActivatesTheTenant, TenantsSliceTest.reassignReturnsTheRawSecretThatActivatesTheTenant]
   - id: list-tenants
     text: A Server Owner lists all tenants with each one's current invite status.
     coverage:
@@ -123,7 +121,7 @@ gaps:
     create/resend/reassign prints the response carrying the raw secret as JSON on stdout); `list-tenants` ←
     `src/views/AdminConsoleView.test.ts`, `cli.test.ts` (the console's root gate is the Server-Owner probe over
     the same backend 403; `web`'s `SettingsHubView.test.ts` no longer touches tenants); `change-domain` ←
-    `TenantDetailPanel.test.ts`, `cli.test.ts`. That flip also drops this file's `status: planned`.
+    `TenantDetailPanel.test.ts`, `cli.test.ts`.
   web: >-
     Not "not applicable": web carries Act 2 — the invited owner accepts at `/tenant/accept` (`TenantJoinView`,
     through `src/features/tenant/tenantInvite.ts`) — while Act 1 is the Server Owner's and lives on `admin-web`
