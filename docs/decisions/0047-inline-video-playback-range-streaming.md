@@ -82,7 +82,7 @@ sequenceDiagram
   participant O as object store (blind)
   Note over P,SW: before play — page registers {handle, chunkCount, byteSize, MessagePort}
   V->>SW: GET /__media/&lt;handle&gt;  Range bytes=A-B
-  SW->>SW: chunks = overlap(A..B, CHUNK_SIZE)
+  SW->>SW: chunks = overlap(A..B, chunk_frame_size) — the vector's frame size
   SW->>P: (port) need plaintext for chunk indices
   P->>B: presign GET (bearer / share-token) — whole blob, cached
   B-->>P: presigned URLs
