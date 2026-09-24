@@ -15,6 +15,7 @@ import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.Base64
 import java.util.UUID
 
@@ -97,6 +98,43 @@ class SessionManagerSliceTest {
 
         val families = listSessions(keep.accessToken)
         assertEquals(listOf(keep.familyId), families.map { it["id"] }, "a revoked family is no longer listed")
+    }
+
+    @Test
+    fun anExpiredFamilyLeavesTheListBeforeAnyPurgeRemovesIt() {
+        val caller = login()
+        // The live control shares the predicate: it too carries an expired refresh token — the generation its
+        // rotation superseded — and differs only in that its CURRENT one is still live. A filter keyed on "has an
+        // expired token" rather than "can still refresh" drops this family, and the list assertion says so.
+        val live = login()
+        refresh(live.refreshToken).then().statusCode(200)
+        val lapsed = login()
+
+        QuarkusTransaction.requiringNew().run(Runnable {
+            val past = Instant.now().minus(1, ChronoUnit.MINUTES)
+            RefreshTokenEntity.update(
+                "expiresAt = ?1 where familyId = ?2 and status = ?3",
+                past, live.familyId, RefreshTokenEntity.SUPERSEDED,
+            )
+            RefreshTokenEntity.update("expiresAt = ?1 where familyId = ?2", past, lapsed.familyId)
+            AccessTokenEntity.update("expiresAt = ?1 where familyId = ?2", past, lapsed.familyId)
+        })
+
+        // The lapsed family is ended — refresh expiry means a full re-login (ADR 0004)...
+        refresh(lapsed.refreshToken).then().statusCode(401).body("code", equalTo("refresh_rejected"))
+        // ...and yet it is still an ACTIVE row: a family has no expired status, and only the next purge deletes
+        // it. So what the list below proves is the read-time filter, not the purge having got there first.
+        assertEquals(
+            SessionFamilyEntity.ACTIVE,
+            QuarkusTransaction.requiringNew().call { SessionFamilyEntity.findById(lapsed.familyId)?.status },
+            "the lapsed family must still be an unpurged ACTIVE row, or this test proves nothing about the list",
+        )
+
+        assertEquals(
+            setOf(caller.familyId, live.familyId),
+            listSessions(caller.accessToken).map { it["id"] }.toSet(),
+            "a family that can no longer refresh is not an active session, whatever its status column says",
+        )
     }
 
     // --- revoke-one-family-remotely -------------------------------------------------------------------------

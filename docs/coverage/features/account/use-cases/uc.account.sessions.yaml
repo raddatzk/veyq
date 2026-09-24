@@ -50,20 +50,16 @@ acceptanceCriteria:
       "the caller stayed signed in" for the wrong reason.
     coverage:
       # A second account is live throughout the slice, which turns "scoped to the caller" from a claim about the
-      # SQL into an observation at the boundary; exactly one family carries the server-set current marker.
+      # SQL into an observation at the boundary; exactly one family carries the server-set current marker. A
+      # family has no expired status, so an expired one is an ACTIVE row until the purge deletes it: the expired
+      # case asserts that row is still there, and still unlisted — the read-time filter, not the purge — beside a
+      # live family that also carries an expired (superseded) token, so "has an expired token" fails it.
       backend:
         integration:
           - SessionManagerSliceTest.listShowsEveryActiveFamilyOfTheCallerAndMarksExactlyOneAsCurrent
           - SessionManagerSliceTest.revokedFamiliesLeaveTheList
+          - SessionManagerSliceTest.anExpiredFamilyLeavesTheListBeforeAnyPurgeRemovesIt
       web: { unit: [src/features/account/sessions/SessionsPanel.test.ts] }
-    gaps:
-      - surface: backend
-        reason: >-
-          No test lists an EXPIRED family. The list filters on `status = ACTIVE` alone
-          (`SessionService.listActiveFamilies`), and a family has no expired status: one whose tokens have all
-          expired stays ACTIVE, and listed, until `SessionPurge` deletes its tokens and then the family
-          (`purgeEmptyFamilies`). "Expired families never appear" therefore holds from the next purge on, and no
-          ref here asserts even that.
   - id: revoke-one-family-remotely
     text: >-
       Revoking another family by its id ends it — a refresh presented from that family is refused afterwards —
