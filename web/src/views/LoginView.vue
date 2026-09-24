@@ -10,6 +10,7 @@ import Message from 'primevue/message'
 import Password from 'primevue/password'
 import { login, logout } from '../features/account/login/login'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
+import { KdfProfileRefused } from '@veyq/crypto/v1'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
 import { enrolDeviceKey, clearDeviceKey, isRememberSupported } from '../features/account/rememberMe/deviceKeyWrap'
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
@@ -173,8 +174,14 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
   },
   {
     // Before login: wrong password / unknown account → one generic failure. After: wrong Secret Key (keep the
-    // session + inputs for a retry). Both non-enumerable.
-    onError: () => { error.value = sessionReady.value ? t('unlock.failed') : t('login.failed') },
+    // session + inputs for a retry). Both non-enumerable. A served key-derivation profile this client does not
+    // write (ADR 0017 rule 5) is the server's fault — say so, rather than send them to retype a right password.
+    onError: (e) => {
+      error.value =
+        e instanceof KdfProfileRefused
+          ? t('common.unreachable')
+          : sessionReady.value ? t('unlock.failed') : t('login.failed')
+    },
   },
 )
 

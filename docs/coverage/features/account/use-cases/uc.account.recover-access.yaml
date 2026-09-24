@@ -38,7 +38,7 @@ acceptanceCriteria:
       backend: { integration: [RecoverySliceTest.liveTokenReleasesTheRecoveryWrap] }
       web: { e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
   - id: secret-key-opens-the-wrap-client-side
-    text: The client derives the recovery KEK from the Secret Key alone (no password input) using the wrap's own carried KDF params, and unwraps the Master Key on the device. A wrong Secret Key fails locally as an AEAD error, with no server round trip and without spending the token.
+    text: The client derives the recovery KEK from the Secret Key alone (no password input) using the salt the wrap carries, under the one KDF profile the client writes (any other is refused before deriving, uc.account.unlock E3), and unwraps the Master Key on the device. A wrong Secret Key fails locally as an AEAD error, with no server round trip and without spending the token.
     coverage:
       backend: { integration: [RecoverySliceTest.releaseDoesNotSpendTheToken] }
       web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }

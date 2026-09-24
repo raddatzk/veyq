@@ -30,22 +30,43 @@ const u32be = (n: number): Uint8Array => {
 export const lp = (x: Uint8Array): Uint8Array => concat(u32be(x.length), x)
 
 export type ArgonParams = { t: number; m: number; p: number; dkLen: number }
-/** auth-path default: m in KiB = 32 MiB. Model B has no server-side verifier (ADR 0003); these params are
- * carried in each wrap's kdfParams so login can re-derive the same KEK/keypair (vectors carry their own params). */
+/** auth-path default: m in KiB = 32 MiB. Model B has no server-side verifier (ADR 0003). The one profile this
+ * client writes into a wrap's kdfParams — and so the one `decodeKdfParams` accepts back (vectors carry their own). */
 export const ARGON: ArgonParams = { t: 3, m: 32768, p: 1, dkLen: 32 }
 
 /**
- * kdfParams wire format (crypto agility, AD-25): the unlock cost params travel WITH the wrap so a future
- * cost bump never strands an account minted under lighter params. Layout: u32be t || m || p || dkLen || salt.
+ * kdfParams wire format (crypto agility, AD-25): the unlock cost params travel WITH the wrap, so a later profile
+ * stays readable once the client knows it. Layout: u32be t || m || p || dkLen || salt.
  */
 export const encodeKdfParams = (p: ArgonParams, salt: Uint8Array): Uint8Array =>
   concat(u32be(p.t), u32be(p.m), u32be(p.p), u32be(p.dkLen), salt)
+
+/** A served key-derivation profile this client does not write (ADR 0017 rule 5). Not a wrong password. */
+export class KdfProfileRefused extends Error {
+  constructor() {
+    super('kdf_profile_refused')
+    this.name = 'KdfProfileRefused'
+  }
+}
+
+/**
+ * The ONE gate between a served profile and Argon2id: every served kdfParams reaches a derivation only through
+ * here. The server never chooses a cost parameter (ADR 0017 rule 5) — a profile is accepted only if it is the one
+ * this client writes, `ARGON` field for field with a 16-byte salt, and anything else throws BEFORE any derivation,
+ * because a served `t = 2³¹` or `m = 4 GiB` would run in a worker with no timeout and then again on the main
+ * thread. A new profile is added here first and written only after every client knows it.
+ */
 export const decodeKdfParams = (b: Uint8Array): { params: ArgonParams; salt: Uint8Array } => {
   // The kdfParams come from the untrusted, operator-blind server; a short blob must fail cleanly rather
   // than throw an opaque DataView RangeError (which a malicious operator could use to crash the client).
   if (b.length < 16) throw new Error('malformed_kdf_params')
   const dv = new DataView(b.buffer, b.byteOffset, b.byteLength)
-  return { params: { t: dv.getUint32(0), m: dv.getUint32(4), p: dv.getUint32(8), dkLen: dv.getUint32(12) }, salt: b.slice(16) }
+  const params = { t: dv.getUint32(0), m: dv.getUint32(4), p: dv.getUint32(8), dkLen: dv.getUint32(12) }
+  const salt = b.slice(16)
+  const written =
+    params.t === ARGON.t && params.m === ARGON.m && params.p === ARGON.p && params.dkLen === ARGON.dkLen
+  if (!written || salt.length !== 16) throw new KdfProfileRefused()
+  return { params, salt }
 }
 
 /** HKDF-SHA256 as every v1 derivation uses it — exposed so the conformance suite can pin the RFC 5869 KAT. */

@@ -368,6 +368,13 @@ slip one size down, in the phase text: *"the four test files that stub `window.c
 and the fifth stubbed it because it **mounts** a component that calls it, which is exactly the class a prose
 count cannot see and `grep -rln` answers in one line.
 
+**A CR that NARROWS what a function accepts has a class it never names: the fixtures that feed it the input
+now refused.** A grep for callers finds production call sites; it cannot see a test that builds the refused
+input and hands it through the real path. `cr-kdf-params-client-chosen` listed every caller of
+`decodeKdfParams` and none of the five suites that served it a cheap Argon2id profile — three via the named
+`TEST_ARGON`, two via local literals a grep for that name also misses. Key that locator on the input's
+**producer** in the test trees (there: `encodeKdfParams(`), never on the constant you expect them to use.
+
 So: **a classification is an inventory, and every class in it ships with the command that produces its
 members** — the one being removed, the ones being kept, and the surfaces explicitly excluded. Cheap (the
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification

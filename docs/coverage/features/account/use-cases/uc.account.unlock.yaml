@@ -35,6 +35,17 @@ acceptanceCriteria:
     text: An account with no PASSWORD wrap surfaces the same generic failure rather than a distinct error (E2).
     coverage:
       web: { unit: [src/features/account/unlock/unlock.test.ts] }
+  - id: served-kdf-profile-refused
+    text: >
+      An unlock refuses a served key-derivation profile other than the one the client writes, before deriving —
+      on every path that derives from a served wrap (PASSWORD, DEVICE, the cold-credential proof, the recovery
+      release) — and the screen does not tell the person their password or Secret Key was wrong.
+    coverage:
+      web:
+        unit:
+          - src/features/account/kdfProfile.test.ts
+          - src/views/LoginView.test.ts
+          - src/views/RecoverView.test.ts
   - id: key-material-authed-only
     text: Key material is served only to an authenticated caller — a missing, malformed, expired, or revoked access token is a generic 401 (no anonymous read).
     coverage:
@@ -48,3 +59,11 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [AccountKeyMaterialSliceTest.validTokenReturnsCallersMaterial] }
       web: { unit: [src/features/account/unlock/unlock.test.ts] }
+gaps:
+  crypto: >-
+    `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
+    admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
+    which rows a run has admitted). `src/v1.conformance.test.ts` pins the one check itself — `decodeKdfParams`
+    refuses every field one step off `ARGON` and every salt but 16 bytes, on the refusal's own message. On the
+    first run whose log shows packages/crypto's suites executed, the suite goes under `served-kdf-profile-refused`,
+    and this gap goes.
