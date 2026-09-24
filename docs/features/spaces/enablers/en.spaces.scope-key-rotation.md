@@ -36,7 +36,9 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 
 ## Main flow — rotate on removal
 
-1. A remaining owner's device **mints** a fresh `E_{n+1}` and posts the chain-link `symWrap(E_{n+1}, E_n)`.
+1. A remaining owner's device **mints** a fresh `E_{n+1}` and posts the chain-link `symWrap(E_{n+1}, E_n)`, stating
+   the epoch `n+1` it creates. `E_n` is the device's own grant, so the server commits only if that is the scope's
+   current epoch + 1 (E3).
 2. It carries each remaining membership's **admission tag** forward — verified under `E_n`, re-tagged under
    `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6) — and **re-grants**
    `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity); the
@@ -71,7 +73,8 @@ sequenceDiagram
   mint + re-grant on-device, and closes the job. One live job per scope coalesces multiple removals; idempotent +
   first-online-wins. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
   co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4); when the
-  remover *is* a key-holder the rotation runs synchronously (cr-0088/0089). Not a hole.
+  remover *is* a key-holder the rotation runs synchronously (cr-0088/0089), and no job stands behind it: if that
+  rotation fails after the cut, nothing rotates the scope until the next removal (inbox #178).
 - **E2 — a remaining member's grant can't be re-wrapped:** that member's grant stays stale (they hold `E_n`
   while the scope is at `E_{n+1}`) → they fall to *awaiting access*. **Two cases that must not be confused,
   because only one self-heals.**
@@ -87,6 +90,14 @@ sequenceDiagram
     behaviour and the reason an attacker cannot rotate their way back into a scope
     ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)); it is also why an accept must clear
     the declining worker's exclusion, or the re-admission it authorises is never delivered.
+- **E3 — the rotation was built on a superseded epoch:** another rotation committed first (two owners, two tabs,
+  a job reclaimed after its lease lapsed, or a panel removal meeting a queued job), or the rotating device's
+  grant lags the scope (E2's skipped member). The server answers `409 stale_epoch` and stores nothing: no link and
+  no grant. The device re-opens its grant and rebuilds the rotation **once**, from a fresh key
+  ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) §4 says why the key must be fresh). After a race the
+  re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
+  synchronous remove reports it (and, per E1, nothing queues it again), and a queued job is **declined** rather than failed, so it waits for a key-holder
+  who is current instead of burning its attempts.
 
 ## Quality notes
 
