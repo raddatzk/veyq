@@ -157,7 +157,7 @@ at a door that is closed or does not exist yet.
         - *peer rule* — make "globally routable" always false → the global-peer unit case goes red.
         - *refusal shape* — give the refusal a body of its own → the unknown-route comparison goes red.
       · Done when: `./gradlew check` green, and every red above recorded in this file before it goes.
-- [ ] 5 docs — the prose that describes the old reachability.
+- [x] 5 docs — the prose that describes the old reachability.
       - `docs/crosscutting/cc.security.authorization.md`: layer 1 gains the admin channel in front of the
         Server-Owner role (reachability, one sentence and a pointer); § Known limits' *authorization is not in the
         contract* gains the marker's distinction; § Verified by gains the sweep.
@@ -173,7 +173,7 @@ at a door that is closed or does not exist yet.
         and `grep -rn 'serverRole' docs web`. `admin-web`'s own `serverRole` is not stale: it stays, and makes its
         probe through the admin channel.
       · Done when: trust-chain guards green.
-- [ ] 6 coverage — `uc.admin.admin-channel.yaml` drops `status: planned`, every criterion gets its refs, and the
+- [x] 6 coverage — `uc.admin.admin-channel.yaml` drops `status: planned`, every criterion gets its refs, and the
       backend gap goes. The web gap stays, with its reason.
       · Done when: `python3 scripts/validate_coverage.py` green.
 
@@ -230,4 +230,18 @@ at a door that is closed or does not exist yet.
 
 ## Retrospective
 
-To be filled at implement close.
+- **Planning — the suggested hook could not carry the CR's own E2.** Phase 2 suggested `HttpServerStart` ("believed,
+  not measured") beside a requirement that a bind failure fail startup; that event is fired asynchronously after the
+  main bind and not again after a dev hot reload, so neither property could hold. Found by reading the Quarkus
+  build-step order, not by a run. Root cause: § eighth tell — a property and an exemplar mechanism in two clauses.
+  *Next time:* a hook a CR suggests for a lifecycle property carries one line on WHEN it fires.
+- **Planning — "the same 404 an unmatched path gets" was demanded, never measured.** The filter's first shape (an
+  empty 404) differed from Vert.x's page; the property-level test caught it in minutes, as designed.
+- **Execution — two misses of my own.** (a) I started `run_web_e2e.py` from the worktree although my memory index
+  names the trap; it recreated the user's `veyq-garage` onto worktree mounts (restored from the main checkout; now
+  a comment at the line). (b) I chained `git commit … && git commit --amend` without checking the first succeeded;
+  it failed on an untracked path and the amend folded phase 4 into phase 3 — split back by hash, nothing lost.
+  *Next time:* read the "run X from a worktree" recipe before any shared-infra run, and never chain an amend.
+- **Process — the machine, not the code, set the pace.** Load 30–60 from parallel sessions made one `./gradlew
+  check` take 40 min and one web test time out twice (passes alone; spun off as its own task). Phase 3's e2e was
+  run once on the final tree (agreed with the owner), where it proves more.
