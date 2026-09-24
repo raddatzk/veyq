@@ -94,8 +94,9 @@ separate guard ADR 0044 promised it.
   everything it should have, and not that an unswept surface is clean.
 - **It cannot join the buildless `validate_*` glob.** Like the orchestrator it needs Docker and a booted backend,
   so its enforcement is the `web-e2e` CI job — a red job is the guard. That is the same trade
-  [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) governs, and the same obligation applies: it makes a
-  coverage claim only once a CI run has executed it.
+  [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) governs, and the same obligation applies at the grain
+  that ADR's note fixes, the job: `web-e2e` is a row a run admitted before the 2026-08-06 import, so the sweep
+  counts on that job's declared run like any suite it gates, and a job no run has executed would admit nothing.
 - **Rejected — asserting on ciphertext entropy instead of plaintext absence.** Tempting because it needs no
   canaries at all, but ciphertext and random garbage are indistinguishable by construction, so it cannot tell a
   correct seal from a broken one. It answers a question nobody asked while leaving the one that matters open.
