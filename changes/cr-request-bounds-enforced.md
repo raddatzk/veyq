@@ -1,7 +1,7 @@
 ---
 id: cr-request-bounds-enforced
 title: Every request-body bound reaches the server, and a guard keeps it so
-status: planned
+status: done
 satisfies: [uc.memory.upload, uc.memory.buckets]
 adrs: []
 invariants: [API-first, operator-blind E2EE]
@@ -180,3 +180,80 @@ schema, never either to the column or the client (`validate_maxlength_storage.py
 `TEXT`). And parameters: the generator derives those, and no test sends an out-of-range one.
 
 ## Retrospective
+
+- **Planning — a pasted locator that was never run.** Context said *"`LoginSliceTest` already asserts that shape"*
+  with a grep; the file does not exist at that path and `grep -rl 'Constraint' backend/src/test` returned
+  nothing — no test anywhere asserted the mapper's answer. The mapper's body is also not the bare string the CR
+  quoted but a JSON `ViolationReport` (`title` "Constraint Violation", the failing path in `violations[].field`),
+  which is the better anchor: the negatives now name the field that failed. Root cause: an existing rule
+  (*run the locator here*, `docs/ai/README.md`) skipped for a context line. **Next time:** a refine runs every
+  command it pastes, including the ones in Context, not only the inventory's.
+- **Planning — the seam for the move slicing** was named as `MemoryBuckets.vue`; the call lives in the data layer
+  (`mediaBuckets.ts`), which is where the slice went and where its test already sat. Harmless here, because the
+  CR fixed decisions rather than keystrokes.
+- **Execution — found beyond the orientation list:** `TenantMailSettingsUpdate.from` carried `@Email` with no
+  `format: email`; and Hibernate Validator logs `HV000271` for every container-level `@Valid` (the only form the
+  `kotlin` generator can emit) — placed in the styleguide bullet next to the rule, with the test that reddens if a
+  later HV stops honouring it. Running `npm run check`, the guard chain and `./gradlew check` at once stretched
+  the backend check to 22 min; they are cheaper in sequence on this machine.
+
+The guard's first run (on the tree phase 1 left), 59 entries:
+- account.openapi.yaml:ProfileUpdateRequest.username [annotation→bound]
+- account.openapi.yaml:RotateAccountKeysRequest.passwordWrap [cascade]
+- account.openapi.yaml:RotateAccountKeysRequest.recoveryWrap [cascade]
+- account.openapi.yaml:ChangePasswordRequest.passwordWrap [cascade]
+- auth.openapi.yaml:RecoveryCompleteRequest.recoveryAuthTag [bound→annotation]
+- auth.openapi.yaml:RecoveryCompleteRequest.wrappedKey [bound→annotation]
+- auth.openapi.yaml:RecoveryCompleteRequest.kdfParams [bound→annotation]
+- auth.openapi.yaml:RecoveryCompleteRequest.authPublicKey [bound→annotation]
+- content.openapi.yaml:CreateNodeRequest.epoch [bound→annotation]
+- media.openapi.yaml:BlobUploadsBatchRequest.items [bound→annotation]
+- media.openapi.yaml:BlobUploadsBatchRequest.items [bound→annotation]
+- media.openapi.yaml:BlobUploadsBatchRequest.items [cascade]
+- media.openapi.yaml:BlobUploadRequestItem.chunkCount [bound→annotation]
+- media.openapi.yaml:BlobUploadRequestItem.chunkCount [bound→annotation]
+- media.openapi.yaml:BlobUploadRequestItem.byteSize [bound→annotation]
+- media.openapi.yaml:MediaBatchRequest.items [bound→annotation]
+- media.openapi.yaml:MediaBatchRequest.items [bound→annotation]
+- media.openapi.yaml:MediaBatchRequest.items [cascade]
+- media.openapi.yaml:MediaRequestItem.derivatives [bound→annotation]
+- media.openapi.yaml:MediaRequestItem.wrappedMeta [bound→annotation]
+- media.openapi.yaml:MediaRequestItem.wrappedMeta [bound→annotation]
+- media.openapi.yaml:MediaRequestItem.wrappedExif [bound→annotation]
+- media.openapi.yaml:MediaRequestItem.wrappedExif [bound→annotation]
+- media.openapi.yaml:MoveMediaRequest.mediaIds [bound→annotation]
+- media.openapi.yaml:MoveMediaRequest.mediaIds [bound→annotation]
+- media.openapi.yaml:MediaMetaUpdate.wrappedMeta [bound→annotation]
+- media.openapi.yaml:MediaMetaUpdate.wrappedMeta [bound→annotation]
+- media.openapi.yaml:BlobDownloadsBatchRequest.items [bound→annotation]
+- media.openapi.yaml:BlobDownloadsBatchRequest.items [bound→annotation]
+- scopes.openapi.yaml:AddGroupMemberRequest.username [annotation→bound]
+- scopes.openapi.yaml:RotateScopeRequest.grants [cascade]
+- scopes.openapi.yaml:ScopeGrantEntry.wrappedGrant [bound→annotation]
+- scopes.openapi.yaml:ScopeGrantEntry.wrappedGrant [bound→annotation]
+- scopes.openapi.yaml:RenameGroupRequest.nameEpoch [bound→annotation]
+- scopes.openapi.yaml:SetScopeIconRequest.iconEpoch [bound→annotation]
+- setup.openapi.yaml:MasterKeyWrap.id [bound→annotation]
+- sharing.openapi.yaml:ShareBlobUploadsRequest.items [bound→annotation]
+- sharing.openapi.yaml:ShareBlobUploadsRequest.items [bound→annotation]
+- sharing.openapi.yaml:ShareBlobUploadsRequest.items [cascade]
+- sharing.openapi.yaml:ShareBlobUploadRequestItem.chunkCount [bound→annotation]
+- sharing.openapi.yaml:ShareBlobUploadRequestItem.chunkCount [bound→annotation]
+- sharing.openapi.yaml:ShareBlobUploadRequestItem.byteSize [bound→annotation]
+- sharing.openapi.yaml:ShareMediaBatchRequest.items [bound→annotation]
+- sharing.openapi.yaml:ShareMediaBatchRequest.items [bound→annotation]
+- sharing.openapi.yaml:ShareMediaBatchRequest.items [cascade]
+- sharing.openapi.yaml:ShareMediaRequestItem.derivatives [bound→annotation]
+- sharing.openapi.yaml:ShareMediaRequestItem.wrappedMeta [bound→annotation]
+- sharing.openapi.yaml:ShareMediaRequestItem.wrappedMeta [bound→annotation]
+- sharing.openapi.yaml:ShareMediaRequestItem.wrappedExif [bound→annotation]
+- sharing.openapi.yaml:ShareMediaRequestItem.wrappedExif [bound→annotation]
+- tenants.openapi.yaml:CreateTenantRequest.domain [annotation→bound]
+- tenants.openapi.yaml:ChangeDomainRequest.domain [annotation→bound]
+- tenants.openapi.yaml:TenantMailSettingsUpdate.host [annotation→bound]
+- tenants.openapi.yaml:TenantMailSettingsUpdate.port [annotation→bound]
+- tenants.openapi.yaml:TenantMailSettingsUpdate.port [annotation→bound]
+- tenants.openapi.yaml:TenantMailSettingsUpdate.from [annotation→bound]
+- tenants.openapi.yaml:AcceptInviteRequest.username [annotation→bound]
+- tenants.openapi.yaml:RegisterAndAcceptRequest.username [annotation→bound]
+- tenants.openapi.yaml:MasterKeyWrap.id [bound→annotation]
