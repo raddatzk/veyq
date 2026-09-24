@@ -2,6 +2,7 @@ package com.veyq.app.features.account.keymaterial
 
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.UUID
@@ -56,11 +57,7 @@ class KeyMaterialStore {
     @Transactional
     fun deleteWrap(userId: String, id: String) {
         val wrap = MasterKeyWrapEntity.findById(id) ?: return
-        if (wrap.userId != userId || wrap.method !in DEVICE_METHODS) return
+        if (wrap.userId != userId || wrap.method !in WrapMethod.DEVICE_LOCAL) return
         wrap.delete()
-    }
-
-    private companion object {
-        private val DEVICE_METHODS = setOf("DEVICE", "DEVICE_KEY")
     }
 }
