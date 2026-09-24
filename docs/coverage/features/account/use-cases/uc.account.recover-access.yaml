@@ -48,7 +48,7 @@ acceptanceCriteria:
       backend: { integration: [RecoverySliceTest.validTokenWithWrongSecretKeyDoesNotReset] }
       web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
   - id: reset-is-atomic-and-drops-device-trust
-    text: In one transaction the reset replaces the PASSWORD wrap, overwrites auth_public_key, deletes every DEVICE and DEVICE_KEY wrap, revokes all sessions, and marks the token spent. A partial apply is impossible; DEVICE_KEY wraps in particular must not survive, since they carry no password input and would keep granting password-less entry.
+    text: In one transaction the reset replaces the PASSWORD wrap, overwrites auth_public_key, deletes every wrap but PASSWORD and RECOVERY, revokes all sessions, and marks the token spent. A partial apply is impossible; DEVICE_KEY wraps in particular must not survive, since they carry no password input and would keep granting password-less entry, and neither does a PASSKEY wrap or any method not declared a survivor — while the RECOVERY wrap survives byte-for-byte.
     coverage:
       backend: { integration: [RecoverySliceTest.resetDropsDeviceKeyWrapsToo] }
       web: { e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
