@@ -5,7 +5,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { bucketsApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { type BucketSummary } from '../../api/generated/media'
 
 // AAD contexts for bucket names sealed under K_mem (cr-0113): a contributor primary's name is the identity's
@@ -74,7 +74,21 @@ export async function deleteBucket(scopeId: string, nodeId: string, bucketId: st
   await withRefresh(() => bucketsApi().deleteBucket({ scopeId, nodeId, bucketId }))
 }
 
-/** Move the caller's own media into a target bucket (null = the caller's primary) — a later slice's UI. */
+/**
+ * The most ids one move request carries — `MoveMediaRequest.mediaIds.maxItems` in `media.openapi.yaml`. The
+ * generated client carries no bounds, so this is the one place the contract's value lives on the web side;
+ * keep the two equal. The server rejects a longer list with a 400.
+ */
+export const MOVE_MEDIA_MAX_IDS = 256
+
+/**
+ * Move the caller's own media into a target bucket (null = the caller's primary). A selection larger than one
+ * request carries goes out as consecutive requests of ≤ [MOVE_MEDIA_MAX_IDS] ids. The slices are **not atomic
+ * together**: a failing slice throws after the earlier ones have moved, and the caller's error path reports it.
+ */
 export async function moveBucketMedia(scopeId: string, nodeId: string, mediaIds: string[], targetBucketId: string | null): Promise<void> {
-  await withRefresh(() => bucketsApi().moveBucketMedia({ scopeId, nodeId, moveMediaRequest: { mediaIds, targetBucketId } }))
+  for (let i = 0; i < mediaIds.length; i += MOVE_MEDIA_MAX_IDS) {
+    const slice = mediaIds.slice(i, i + MOVE_MEDIA_MAX_IDS)
+    await withRefresh(() => bucketsApi().moveBucketMedia({ scopeId, nodeId, moveMediaRequest: { mediaIds: slice, targetBucketId } }))
+  }
 }

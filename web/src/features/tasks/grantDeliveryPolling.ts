@@ -6,42 +6,28 @@
 // tabs/members polling is harmless. This is the interim; an SSE push from the same backend is the eventual
 // zero-latency answer (ADR 0021, deferred).
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
+import { createVisibilityPoller } from '../../shared/state/visibilityPoller'
 
 const POLL_INTERVAL_MS = 45_000
 
-let timer: ReturnType<typeof setInterval> | null = null
-let onVisible: (() => void) | null = null
-
-const documentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible'
+const poller = createVisibilityPoller(POLL_INTERVAL_MS)
 
 /**
  * Start polling grant-delivery for `scopeId` while it is the open scope. `currentKey` is read at each tick (not
  * captured) so the poll always wraps with the live `K_SC` and no-ops once the scope is gone. Runs once
  * immediately, then every {@link POLL_INTERVAL_MS} (skipping ticks while the tab is hidden), and once more the
- * moment the tab becomes visible again. Restarts cleanly if called for a new scope.
+ * moment the tab becomes visible again — never while the previous run is still in flight, since the worker's
+ * effects land on the server. Restarts cleanly if called for a new scope.
  */
 export function startGrantDeliveryPolling(scopeId: string, currentKey: () => Uint8Array | null): void {
-  stopGrantDeliveryPolling()
   const tick = () => {
     const key = currentKey()
-    if (key) void runGrantDeliveryWorker({ scopeId, key }).catch(() => {})
+    return key ? runGrantDeliveryWorker({ scopeId, key }).catch(() => {}) : undefined
   }
-  timer = setInterval(() => {
-    if (documentVisible()) tick()
-  }, POLL_INTERVAL_MS)
-  onVisible = () => {
-    if (documentVisible()) tick()
-  }
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
-  tick() // deliver immediately on entry, then keep polling
+  poller.start(tick, { immediate: true }) // deliver immediately on entry, then keep polling
 }
 
 /** Stop polling + detach the visibility listener (scope switch / logout). Safe to call when not running. */
 export function stopGrantDeliveryPolling(): void {
-  if (timer !== null) {
-    clearInterval(timer)
-    timer = null
-  }
-  if (onVisible && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
-  onVisible = null
+  poller.stop()
 }

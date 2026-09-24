@@ -58,7 +58,7 @@ mail"* is a property of the deployment, so answering it plainly leaks nothing ab
 sign-in screen may keep offering the reset link and let the request fail honestly.
 
 The answer is scoped to **the tenant addressed by the request's `Host`**, not to the instance — mail settings
-are per-tenant (Context 1), and `RecoveryResource.activeHost()` is what selects them. The precise claim is "this
+are per-tenant (Context 1), and the tenant `RequestTenant` resolves from the `Host` is what selects them. The precise claim is "this
 tenant cannot send mail". Which hosts map to tenants is public by construction, so that is not a disclosure.
 
 **5. The transport check runs *before* the rate limiter.** `RecoveryHandler.request` charges the per-address

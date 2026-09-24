@@ -2,12 +2,17 @@ package com.veyq.app.features.account.recovery
 
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.admin.tenant.MailSettingsRow
 import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.features.admin.tenant.TenantMailSender
 import com.veyq.app.features.admin.tenant.TenantStore
 import com.veyq.app.features.admin.tenant.TestMailbox
+import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.tenant.ResolvedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -21,6 +26,9 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 
@@ -34,6 +42,11 @@ import java.time.temporal.ChronoUnit
  *
  * Tokens are minted through the store rather than the request endpoint, because the endpoint deliberately never
  * returns one — it only mails it. That is the flow working as designed, not a testability gap.
+ *
+ * **A test that POSTs a request for a member must await what the answer handed off** (the mail, or the PENDING
+ * row) before it returns. The endpoint answers before it mints (ADR 0054 §6), so an un-awaited mint can land
+ * after the next test's [seed] and supersede the token that test minted for itself — a red in a test that never
+ * touched the endpoint. Negatives go through [RecoveryHandler.deliver] directly, which returns synchronously.
  */
 @QuarkusTest
 class RecoverySliceTest {
@@ -63,16 +76,21 @@ class RecoverySliceTest {
         // addresses answer 503 for the same instance-level reason: the assertions stay green while proving
         // nothing about enumerability (ADR 0055 §4 narrowed the 202, and this is where that narrowing could have
         // quietly eaten the guarantee). So: a real SMTP server, and a real mail as the difference.
-        seedTenant(SENDABLE_DOMAIN, mail)
-        val unknown = requestFor("nobody-at-all@example.com", SENDABLE_DOMAIN)
+        val tenant = seedTenant(SENDABLE_DOMAIN, mail)
+        grantMembership(USER, tenant.id) // "known" means known HERE: a member of the tenant being asked
+        val unknown = requestFor(UNKNOWN, SENDABLE_DOMAIN)
         val known = requestFor(EMAIL, SENDABLE_DOMAIN)
         assertEquals(known.statusCode, unknown.statusCode, "status must not depend on whether the account exists")
         assertEquals(known.body.asString(), unknown.body.asString(), "body must not depend on it either")
         assertEquals(202, known.statusCode)
 
-        // The wire is identical; what differs is invisible to the caller — only the registered address gets mail.
-        assertTrue(mail.deliveredTo(EMAIL), "a registered address is mailed")
-        assertFalse(mail.deliveredTo("nobody-at-all@example.com"), "an unknown address is not")
+        // The wire is identical; what differs happens after the answer and is invisible to the caller. The mail
+        // is awaited rather than read at once: the answer no longer waits for it, which is the point.
+        mail.awaitBody(EMAIL)
+        // The negative on the part the answer did not wait for, called directly so it is not a race: an unknown
+        // address is mailed nothing.
+        assertEquals(RequestOutcome.NO_ACCOUNT, handler.deliver(UNKNOWN, tenant))
+        assertFalse(mail.deliveredTo(UNKNOWN), "an unknown address is not mailed")
     }
 
     @Test
@@ -102,6 +120,43 @@ class RecoverySliceTest {
         repeat(PER_ADDRESS_MAX + 1) { requestFor(victim, ORDER_SENDABLE_DOMAIN) } // spend the bucket
 
         requestFor(victim, ORDER_SILENT_DOMAIN).then().statusCode(503).body("code", equalTo("mail_unavailable"))
+    }
+
+    // --- recovery reaches only this tenant's accounts (ADR 0054 §4) ---
+
+    @Test
+    fun requestReachesOnlyThisTenantsAccounts(): Unit = TestMailbox(CROSS_SMTP_PORT).start().use { mail ->
+        val a = seedTenant(CROSS_A_DOMAIN, mail)
+        val b = seedTenant(CROSS_B_DOMAIN, mail)
+        grantMembership(USER, b.id)
+
+        assertEquals(RequestOutcome.NO_ACCOUNT, handler.deliver(EMAIL, a), "tenant A's relay must not carry B's account")
+        assertFalse(mail.deliveredTo(EMAIL), "no mail through A's relay")
+        assertEquals(0L, pendingRows(), "no account_recovery row for a non-member")
+
+        // Control on the same predicate: the tenant the account belongs to does reach it.
+        assertEquals(RequestOutcome.MAILED, handler.deliver(EMAIL, b))
+        mail.awaitBody(EMAIL)
+    }
+
+    // --- the answer does not wait for anything keyed by the address (ADR 0054 §6) ---
+
+    @Test
+    fun requestAnswersBeforeTheAddressIsLookedUp(): Unit = HungSmtp(HUNG_SMTP_PORT).use {
+        val t = seedTenant(HUNG_DOMAIN, mailbox = null)
+        saveSettingsPointingAt(t, HUNG_SMTP_PORT)
+        grantMembership(USER, t.id)
+
+        val started = System.nanoTime()
+        val answer = requestFor(EMAIL, HUNG_DOMAIN)
+        val elapsedMs = (System.nanoTime() - started) / 1_000_000
+        assertEquals(202, answer.statusCode)
+        assertTrue(
+            elapsedMs < TenantMailSender.SEND_TIMEOUT_SECONDS * 1000 / 2,
+            "a hung relay must not hold the answer (took ${elapsedMs}ms)",
+        )
+        // Control: the background part ran — the member's token was minted, the send is what hangs.
+        awaitPendingRow()
     }
 
     // --- release ---
@@ -218,8 +273,8 @@ class RecoverySliceTest {
 
     // --- helpers ---
 
-    /** `X-Forwarded-Host` is what `RecoveryResource.activeHost()` reads first, and it selects whose mail settings
-     *  send the link — so it is how a test says "ask this tenant". */
+    /** `X-Forwarded-Host` is what `RequestTenant` resolves the tenant from first, and that tenant's relay is the only
+     *  one that may send the link — so it is how a test says "ask this tenant". */
     private fun requestFor(email: String, host: String) = given()
         .contentType(ContentType.JSON)
         .header("X-Forwarded-Host", host)
@@ -228,7 +283,7 @@ class RecoverySliceTest {
         .then().extract().response()
 
     /** An ACTIVE tenant on [domain]; with a [mailbox] it can send, without one it deliberately cannot. */
-    private fun seedTenant(domain: String, mailbox: TestMailbox?) {
+    private fun seedTenant(domain: String, mailbox: TestMailbox?): ResolvedTenant {
         val tenantId = QuarkusTransaction.requiringNew().call {
             TenantEntity.find("domain", domain).firstResult()?.id ?: java.util.UUID.randomUUID().toString().also { id ->
                 TenantEntity().apply {
@@ -238,6 +293,66 @@ class RecoverySliceTest {
             }
         }
         mailbox?.receiveFor(tenantStore, tenantId, domain)
+        return ResolvedTenant(tenantId, domain)
+    }
+
+    /** Make [userId] belong to [tenantId]: a membership on its TENANT root scope, the row an accepted invite writes.
+     *  Idempotent, because memberships outlive [seed] (it resets the account, not what it belongs to). */
+    private fun grantMembership(userId: String, tenantId: String) = QuarkusTransaction.requiringNew().run {
+        if (ScopeEntity.findById(tenantId) == null) {
+            ScopeEntity().apply {
+                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
+            }.persist()
+        }
+        if (MembershipEntity.count("userId = ?1 and tenantId = ?2", userId, tenantId) == 0L) {
+            MembershipEntity().apply {
+                id = java.util.UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
+                scopeId = tenantId; role = MembershipEntity.MEMBER; createdAt = Instant.now()
+            }.persist()
+        }
+    }
+
+    /** Point [tenant]'s relay at [port] — for a server that is not a [TestMailbox] (the hung one). */
+    private fun saveSettingsPointingAt(tenant: ResolvedTenant, port: Int) = QuarkusTransaction.requiringNew().run {
+        tenantStore.saveMailSettings(
+            tenant.id,
+            MailSettingsRow(
+                host = "127.0.0.1", port = port, from = "noreply@${tenant.domain}",
+                username = null, passwordCiphertext = null, passwordNonce = null,
+                tls = false, enabled = true, subjectTemplate = null, bodyTemplate = null,
+            ),
+        )
+    }
+
+    private fun pendingRows(): Long = QuarkusTransaction.requiringNew().call<Long> {
+        AccountRecoveryEntity.count("userId = ?1 and status = ?2", USER, AccountRecoveryEntity.PENDING)
+    }
+
+    /** Wait, bounded, for [USER]'s token to be minted — the proof that the part after the answer ran. */
+    private fun awaitPendingRow(timeoutMs: Long = 10_000) {
+        val deadline = System.nanoTime() + timeoutMs * 1_000_000
+        while (pendingRows() == 0L) {
+            check(System.nanoTime() < deadline) { "no PENDING recovery row for $USER within ${timeoutMs}ms" }
+            Thread.sleep(50)
+        }
+    }
+
+    /**
+     * An SMTP server that accepts and never greets — the relay that holds a sender for its whole timeout. The
+     * lever for "the answer does not wait for the send": nothing this CR changes can make a hung relay answer.
+     */
+    private class HungSmtp(port: Int) : AutoCloseable {
+        private val server = ServerSocket(port, 50, InetAddress.getByName("127.0.0.1"))
+        private val accepted = java.util.concurrent.CopyOnWriteArrayList<Socket>()
+        private val acceptor = Thread {
+            while (!server.isClosed) runCatching { accepted += server.accept() }
+        }.apply { isDaemon = true; start() }
+
+        override fun close() {
+            server.close()
+            accepted.forEach { runCatching { it.close() } }
+            acceptor.join(1_000)
+        }
     }
 
     private fun mintToken(expiresAt: Instant = Instant.now().plus(1, ChronoUnit.HOURS)): String {
@@ -299,6 +414,7 @@ class RecoverySliceTest {
     private companion object {
         const val USER = "11111111-2222-3333-4444-555555555555"
         const val EMAIL = "recover-me@example.com"
+        const val UNKNOWN = "nobody-at-all@example.com"
         const val PRIV = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRl"
         const val PW_WRAP = "cGFzc3dvcmQtd3JhcA=="
         const val REC_WRAP = "cmVjb3Zlcnktd3JhcA=="
@@ -320,8 +436,14 @@ class RecoverySliceTest {
         const val ORDER_SILENT_DOMAIN = "recover-order-silent.example.com"
 
         // One JVM for the whole suite ⇒ distinct ports (SmtpInviteMailSendTest 13925-13929,
-        // MemberAddSliceTest 13930-13933, MemberInviteManagementSliceTest 13934-13935).
+        // MemberAddSliceTest 13930-13933, MemberInviteManagementSliceTest 13934-13935, TenantOwnerGateTest 13938).
         const val RECOVERY_SMTP_PORT = 13936
         const val ORDER_SMTP_PORT = 13937
+        const val CROSS_SMTP_PORT = 13940
+        const val HUNG_SMTP_PORT = 13941
+
+        const val CROSS_A_DOMAIN = "recover-cross-a.example.com"
+        const val CROSS_B_DOMAIN = "recover-cross-b.example.com"
+        const val HUNG_DOMAIN = "recover-hung.example.com"
     }
 }

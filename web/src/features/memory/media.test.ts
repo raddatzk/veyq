@@ -33,6 +33,8 @@ import {
   readCaptureTime,
   backfillPlaceName,
   PLACE_NAME_MAX_BYTES,
+  EXIF_TIER_MAX_B64,
+  EXIF_TEXT_MAX_BYTES,
   CHUNK_SIZE,
   COVER_SPEC,
   TIER_SPECS,
@@ -521,6 +523,53 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     )
     expect(maximal.wrappedMeta!.length).toBeLessThanOrEqual(512)
     expect(new TextEncoder().encode(maximal.tier!.placeName!).length).toBeLessThanOrEqual(PLACE_NAME_MAX_BYTES)
+  })
+
+  // The EXIF tier is capped at `wrappedExif.maxLength` (16384 base64) and the server rejects a longer one, so
+  // free text an editor wrote must be shortened on the client — the upload never fails for its metadata.
+  // Lever: seal `meta.exif` as-is in `sealMetadata`.
+  it('fits a tier with a 20 000-character description under the contract cap and keeps every number', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', FNumber: 1.8, ISO: 200, FocalLength: 50, Rating: 4,
+      description: { lang: 'x-default', value: 'ä'.repeat(20_000) },
+    } as never)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg' }, stubDeriver())
+
+    const sealed = store.captured.completeItem.wrappedExif as string
+    expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
+    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-exif')))
+    expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200, focalLength: 50, rating: 4 })
+    // shortened, not dropped, and never split inside a two-byte character
+    expect(exif.description).toBe('ä'.repeat(EXIF_TEXT_MAX_BYTES / 2))
+  })
+
+  // Clamping alone cannot bound the tier: JSON escapes a control character to six bytes, so two clamped fields
+  // of them overflow it. The tier then sheds free text, longest first, and keeps its numbers.
+  // Lever: remove the drop loop in `sealExifTier`.
+  it('drops free text, never numbers, when clamped fields still overflow the cap', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const escaped = '\u0001'.repeat(5_000)
+    vi.mocked(exifr.parse).mockResolvedValue({
+      Make: 'Canon', FNumber: 1.8, ISO: 200,
+      Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
+    } as never)
+    const memoryKey = v1.randomBytes(32)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg' }, stubDeriver())
+
+    const sealed = store.captured.completeItem.wrappedExif as string
+    expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
+    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-exif')))
+    expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200 })
+    // the two longest escaped fields went; the one a character shorter then fits and stays
+    expect(exif.artist).toBeUndefined()
+    expect(exif.copyright).toBeUndefined()
+    expect(exif.title).toMatch(/^x\u0001+$/)
   })
 
   it('falls back to the file creation date when the source carries no EXIF date', async () => {

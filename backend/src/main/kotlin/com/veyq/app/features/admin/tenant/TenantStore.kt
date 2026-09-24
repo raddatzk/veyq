@@ -1,9 +1,9 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.features.spaces.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -59,9 +59,11 @@ data class MailSettingsRow(
  * EXPIRED) — nothing is hard-deleted inline; a scheduled purge removes terminal rows later.
  */
 @ApplicationScoped
-class TenantStore(private val membership: MembershipStore) {
+class TenantStore(private val membership: MembershipStore, private val hosts: TenantHostResolver) {
 
-    fun domainExists(domain: String): Boolean = TenantEntity.count("domain", domain) > 0
+    /** Whether some tenant already claims [domain] — through the one Host→tenant lookup, so "taken" and "resolves"
+     *  can never disagree about what a domain names. */
+    fun domainExists(domain: String): Boolean = hosts.tenantFor(domain) != null
 
     fun findTenant(id: String): TenantEntity? = TenantEntity.findById(id)
 
@@ -132,12 +134,6 @@ class TenantStore(private val membership: MembershipStore) {
     /** The number of OWNER memberships on the tenant root scope (`scopeId == tenantId`) — the tenant last-owner
      *  guard (ADR 0007): the last tenant OWNER may not be removed (cr-0091). Delegates to the shared owner-count. */
     fun tenantOwnerCount(tenantId: String): Long = membership.ownerCount(tenantId)
-
-    /** Whether some account with this email is already a member of the tenant (dedup on member invite). */
-    fun isEmailMember(tenantId: String, email: String): Boolean {
-        val userId = VeyqUser.find("email", email).firstResult()?.id ?: return false
-        return hasMembership(userId, tenantId)
-    }
 
     /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email. */
     @Transactional
@@ -332,13 +328,6 @@ class TenantStore(private val membership: MembershipStore) {
     /** The tenant's mail settings (sealed password included), or null if it never configured any. */
     fun mailSettingsFor(tenantId: String): MailSettingsRow? =
         TenantMailSettingsEntity.findById(tenantId)?.toRow()
-
-    /** The mail settings of the tenant owning [domain] (the mailer resolves by the domain it is handed), or null
-     *  if there is no such tenant or it configured none. Domain is unique per tenant (`veyq_tenant.domain`). */
-    fun mailSettingsByDomain(domain: String): MailSettingsRow? {
-        val tenant = TenantEntity.find("domain", domain).firstResult() ?: return null
-        return TenantMailSettingsEntity.findById(tenant.id)?.toRow()
-    }
 
     /** Upsert a tenant's mail settings verbatim. The caller has already sealed (or preserved) the password and
      *  validated the templates — this only persists the given row. */

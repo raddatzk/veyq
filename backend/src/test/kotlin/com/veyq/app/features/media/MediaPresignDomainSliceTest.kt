@@ -64,7 +64,7 @@ class MediaPresignDomainSliceTest {
 
     @Test
     fun aHostNoTenantClaimsFallsBackToTheDefault() {
-        // The security property, and the reason `TenantHostResolver.domainFor` exists instead of a header read.
+        // The security property, and the reason `RequestTenant` hands over the tenant row's domain, never a header.
         // `X-Forwarded-Host` is caller-controlled on any deployment whose proxy does not strip it; a server that
         // signed for whatever it was handed would mint URLs for an attacker-named origin. Resolving through the
         // `tenant` table means an unclaimed name resolves to nothing and signs against the bootstrap default.

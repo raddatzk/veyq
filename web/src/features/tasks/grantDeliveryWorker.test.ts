@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
-vi.mock('../account/login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 // The TOFU pin store is exercised in its own test; here we drive checkAndPin's outcome directly.
 vi.mock('../account/identityPins', () => ({ checkAndPin: vi.fn() }))
 

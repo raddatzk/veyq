@@ -482,6 +482,7 @@ components:
           minimum: 0
           default: 0
           example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedContentKey:
           type: [string, "null"]
           description: For a MEMORY or CHAPTER — its random `K_mem` wrapped under the parent's content key (`K_SC` for a top-level Memory, the parent Memory's `K_mem` for a chapter; opaque base64). Absent for folders.

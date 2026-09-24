@@ -1,6 +1,7 @@
 package com.veyq.app.features.account.recovery
 
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.identity.normalizeEmail
 import com.veyq.app.shared.ratelimit.TokenBucketCounter
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
@@ -47,7 +48,7 @@ class RecoveryRateLimiter(
      */
     fun check(email: String): Long? {
         val nowNanos = System.nanoTime()
-        addressBuckets.consume(email.lowercase(), nowNanos, perAddressMax.toLong(), windowSeconds)
+        addressBuckets.consume(normalizeEmail(email), nowNanos, perAddressMax.toLong(), windowSeconds)
             ?.let { return it }
         return instanceBucket.consume(INSTANCE_KEY, nowNanos, perInstanceMax.toLong(), windowSeconds)
     }

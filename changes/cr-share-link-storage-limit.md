@@ -48,7 +48,7 @@ It extends the unit and the lock this CR builds.
     query-only `TenantEntity` into `shared/tenant` (the half it takes from #173), which is the lock's handle. The
     media feature must not import `features/admin/tenant`. The quota check runs after its gate, never instead of
     it.
-  - **After `cr-request-bounds-enforced`**, so the new schemas land under its guard.
+  - **After `cr-request-bounds-enforced`** (done), so the new schemas land under its guard, `scripts/validate_request_bounds.py`.
 - **What exists** (measured at refine, `main` @ `a494436`; do not rebuild it — spot-check one row):
   - **The start sites.** One `startForScope` serves both paths, and the contributor path reaches it after its
     gate chain:

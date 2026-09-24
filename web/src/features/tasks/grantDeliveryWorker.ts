@@ -5,7 +5,7 @@
 // and completes; the backend writes the opaque ciphertext onto the target membership, idempotently. Delivery
 // is automatic and first-online-wins — the wrap runs on-device, the server only ever relays ciphertext.
 import { tasksApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { checkAndPin } from '../account/identityPins'
 import { wrapScopeKeyToMember } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'

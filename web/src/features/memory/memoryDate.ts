@@ -8,7 +8,7 @@
 // swaps in only the `date`, and re-seals — so writing a date never clobbers a sibling `location` (and vice-versa,
 // via `setMemoryLocation`). The shared envelope lives in `nodeMeta.ts`.
 import { contentApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
 import { openContentKey, type TreeNode } from './tree'

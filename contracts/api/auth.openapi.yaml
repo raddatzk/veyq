@@ -371,10 +371,13 @@ paths:
       operationId: requestPasswordRecovery
       summary: Request a password-recovery link (non-enumerable).
       description: >
-        Mints a one-time recovery token and mails its link to the address, if an account exists under it.
-        The response is identical either way, so it never reveals which addresses have accounts — the same
-        posture as the login challenge (ADR 0004). A new request supersedes any outstanding token for that
-        address. Rate-limited per address and per source.
+        Mints a one-time recovery token and mails its link to the address, if an account under it is a
+        member of the tenant this request's `Host` resolves to. Only that tenant's relay ever carries the
+        link, so a tenant owner never receives mail for an account that is not theirs (ADR 0054 §4). The
+        request is answered before the address is looked up — the lookup, the mint and the send happen after
+        the answer — so the response is identical in status, body and timing whether the address is a member
+        here, belongs elsewhere or is unknown, the same posture as the login challenge (ADR 0004). A new
+        request supersedes any outstanding token for that account. Rate-limited per address and per source.
 
         Non-enumerability covers the **address** and nothing more. Whether the tenant addressed by this
         request's `Host` can send mail at all is a property of the deployment, not of any account, so it is
@@ -999,21 +1002,21 @@ components:
           contentEncoding: base64
           maxLength: 128
           example: cmVjb3ZlcnktYXV0aC10YWc=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedKey:
           type: string
           description: The **same** Master Key, re-wrapped under the new password's KEK (fresh salt and nonce).
           contentEncoding: base64
           maxLength: 8192
           example: bmV3LXBhc3N3b3JkLXdyYXBwZWQtbWFzdGVyLWtleQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         kdfParams:
           type: string
           description: Argon2id parameters + fresh salt for the new PASSWORD wrap.
           contentEncoding: base64
           maxLength: 1024
           example: a2RmLXBhcmFtcy1uZXc=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         authPublicKey:
           type: string
           description: >
@@ -1022,7 +1025,7 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: bmV3LWF1dGgtcHVibGljLWtleQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     PairingOpenRequest:
       type: object

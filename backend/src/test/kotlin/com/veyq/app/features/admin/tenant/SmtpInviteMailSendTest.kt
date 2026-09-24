@@ -56,7 +56,7 @@ class SmtpInviteMailSendTest {
                 )
             }
 
-            val delivery = mailer.sendInvite(domain, "invitee@elsewhere.example", "TOKEN-abc123", Instant.parse("2026-07-31T12:00:00Z"))
+            val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "invitee@elsewhere.example", "TOKEN-abc123", Instant.parse("2026-07-31T12:00:00Z"))
 
             assertEquals(DeliveryResult.SENT, delivery, "a configured tenant that sends OK reports SENT")
             assertTrue(greenMail.waitForIncomingEmail(5_000, 1), "the invite mail should be delivered")
@@ -86,7 +86,7 @@ class SmtpInviteMailSendTest {
             // §3); a member invite is refused with 503 before it ever reaches this port (§2).
             seedTenant(domain)
 
-            val delivery = mailer.sendInvite(domain, "x@elsewhere.example", "TOKEN-xyz", Instant.parse("2026-07-31T12:00:00Z"))
+            val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "x@elsewhere.example", "TOKEN-xyz", Instant.parse("2026-07-31T12:00:00Z"))
 
             assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "an unconfigured tenant reports cannot-send")
             assertFalse(greenMail.waitForIncomingEmail(1_000, 1), "an unconfigured tenant must not send SMTP")
@@ -118,7 +118,7 @@ class SmtpInviteMailSendTest {
                 )
             }
 
-            val delivery = mailer.sendInvite(domain, "invitee@elsewhere.example", "TOKEN-authless", Instant.parse("2026-07-31T12:00:00Z"))
+            val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "invitee@elsewhere.example", "TOKEN-authless", Instant.parse("2026-07-31T12:00:00Z"))
 
             assertEquals(DeliveryResult.SENT, delivery, "an auth-less host (no username/password) still sends — no copy-link fallback")
             assertTrue(greenMail.waitForIncomingEmail(5_000, 1), "the invite mail should be delivered over the anonymous MTA")
@@ -148,7 +148,7 @@ class SmtpInviteMailSendTest {
             )
         }
 
-        val delivery = mailer.sendInvite(domain, "invitee@elsewhere.example", "TOKEN-dead", Instant.parse("2026-07-31T12:00:00Z"))
+        val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "invitee@elsewhere.example", "TOKEN-dead", Instant.parse("2026-07-31T12:00:00Z"))
 
         assertEquals(DeliveryResult.FAILED, delivery, "a configured tenant whose SMTP send errors reports FAILED")
     }
@@ -183,7 +183,7 @@ class SmtpInviteMailSendTest {
             // Simulate the running key no longer matching what the DB fingerprint recorded ⇒ state() = MISMATCH.
             QuarkusTransaction.requiringNew().run { instance.setConfigSecretFingerprint("not-the-current-key") }
 
-            val delivery = mailer.sendInvite(domain, "x@elsewhere.example", "TOKEN-k", Instant.parse("2026-07-31T12:00:00Z"))
+            val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "x@elsewhere.example", "TOKEN-k", Instant.parse("2026-07-31T12:00:00Z"))
 
             assertEquals(DeliveryResult.FALLBACK_COPYLINK, delivery, "a MISMATCH key ⇒ cannot-send, not a send")
             assertFalse(greenMail.waitForIncomingEmail(1_000, 1), "a MISMATCH key must not send SMTP")

@@ -9,7 +9,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../api/client'
-import { withRefresh } from './login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
 import { MasterKeyWrapMethodEnum } from '../../api/generated/account'
 

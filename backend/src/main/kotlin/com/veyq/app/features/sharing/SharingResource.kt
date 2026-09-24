@@ -31,7 +31,7 @@ import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.annotation.security.PermitAll
-import com.veyq.app.shared.tenant.RequestTenantDomain
+import com.veyq.app.shared.tenant.RequestTenant
 import jakarta.ws.rs.core.Response
 import java.time.ZoneOffset
 import java.util.UUID
@@ -55,13 +55,13 @@ import com.veyq.app.shared.ratelimit.RateLimitKey
 class SharingResource(
     private val handler: SharingHandler,
     private val identity: SecurityIdentity,
-    private val tenantDomain: RequestTenantDomain,
+    private val tenant: RequestTenant,
 ) : SharingApi {
 
     /** As in `MediaResource`: the resolved tenant's own domain (ADR 0063), never the raw `Host` header. A share
      *  is opened by an accountless guest on the tenant's domain, so its bytes must be signed for that origin too
      *  — the same-origin blob route (ADR 0013 §4) is what a public share depends on for having no CORS policy. */
-    private fun signingDomain(): String? = tenantDomain.resolve()
+    private fun signingDomain(): String? = tenant.resolve()?.domain
 
     override fun createShare(createShareRequest: CreateShareRequest): Response =
         when (val o = handler.create(

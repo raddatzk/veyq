@@ -465,6 +465,13 @@ no file restates it, because a restated list drifts out of step with the one tha
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
 local green.)
 
+**In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
+that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24
+eight sessions each ran the whole glob at once, and `validate_guard_gaps.py` alone took over 20 minutes in one of
+them. So a wave session runs the guards its own Done-when names (a coverage edit runs `validate_coverage.py`), and
+the coordinating session runs the whole glob after merging the wave, before it calls the wave done. A red there
+goes back to the CR that caused it.
+
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
 session that cannot commit is a session holding that rule open across every phase it finishes.
@@ -723,6 +730,12 @@ red**; reaching for the fix first destroys the evidence and leaves you injecting
 does not replace snapshot-and-restore — that is what you fall back to when the defect is already fixed, when the
 guard must also reject shapes that never occurred here, or when the case belongs in
 `validate_guard_gaps.py`'s repeated harness.
+
+**And the red is taken through a seam the UNFIXED tree has.** A CR that names its bite's lever in the fix's own
+terms — `cr-request-tenant-and-tenant-bound-recovery` said "the direct delivery call", a method the fix splits out —
+names something that does not exist where the red must be recorded. Record the red through the old seam (there, the
+request method that still ran the delivery inline), re-point the test once the fix creates the new one, and re-bite
+it by injection on the fixed tree; a CR can save that detour by naming the lever for both trees.
 
 **But a live-defect red can land on the wrong STEP, and then it is not a bite either.** § *a bite test must tell
 "the guard held" apart from "nothing ran"* catches an injection that breaks compilation instead of the assertion;

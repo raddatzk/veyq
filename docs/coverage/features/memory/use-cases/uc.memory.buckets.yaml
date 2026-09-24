@@ -34,6 +34,11 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
+  - id: move-beyond-one-request
+    text: Moving more media than one request carries moves all of them — the selection goes out as consecutive requests inside the contract's `MoveMediaRequest.mediaIds` bound, which the server enforces. The slices are not atomic together; a failing one surfaces through the move dialog's error after the earlier ones have moved.
+    coverage:
+      web:
+        unit: [src/features/memory/media.buckets.test.ts]
   - id: operator-blind-buckets
     text: Grouping and ownership run over the opaque owner_key + the bucket structure (node, parentage, is_primary, counts) the operator already relays; names are unsealed client-side and a wrong AAD context can never open one. The operator never learns a cleartext bucket/uploader name nor any content, and a personal Memory with no share exposes only the account owner's owner_key.
     coverage:

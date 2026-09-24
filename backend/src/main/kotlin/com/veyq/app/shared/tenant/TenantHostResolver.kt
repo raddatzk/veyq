@@ -7,8 +7,10 @@ import jakarta.enterprise.context.ApplicationScoped
  * The one canonical Host→tenant resolution (ADR 0066). veyq addresses a tenant by the domain a request arrives
  * on, so *how* that domain is read off the request is a security-relevant decision — a gate that normalized the
  * Host even slightly differently from the handlers it guards would protect a different tenant than it thinks.
- * Hence a single home for it, used by both `ScopesResource` (which resolves the caller's active tenant) and
+ * Hence a single home for it, used by both [RequestTenant] (which hands every resource its tenant) and
  * `TenantSuspensionFilter` (which refuses a suspended one), rather than a copy per call site.
+ * `scripts/validate_lookup_single_home.py` keeps it the only one: no other file reads the Host header or looks a
+ * tenant up by domain.
  *
  * Header precedence is the reverse-proxy convention `X-Forwarded-Host` before `Host`, and it inherits that
  * header's trust model exactly: `X-Forwarded-Host` is only meaningful behind a proxy that sets it and strips a
@@ -22,18 +24,6 @@ class TenantHostResolver {
     fun hostOf(header: (String) -> String?): String? =
         (header(FORWARDED_HOST) ?: header(HOST))
             ?.substringBefore(',')?.substringBefore(':')?.trim()?.lowercase()?.ifEmpty { null }
-
-    /**
-     * The **registered domain** of the tenant this request resolved to, or null — the value a presigned blob URL
-     * is signed against (ADR 0063 / ADR 0013 §4).
-     *
-     * It goes through the table rather than handing back the header it just read, and the difference is the
-     * point: a spoofed or simply unknown `Host` resolves to no tenant and signs against the bootstrap default,
-     * where echoing the header would let a caller name any origin they liked and have the server sign for it.
-     * The two spellings look identical on the happy path — which is exactly why the safe one lives here instead
-     * of at each call site.
-     */
-    fun domainFor(header: (String) -> String?): String? = tenantFor(hostOf(header))?.domain
 
     /** The tenant claiming [host], or null — an unknown or absent host claims no tenant. */
     fun tenantFor(host: String?): TenantEntity? =

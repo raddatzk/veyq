@@ -126,13 +126,18 @@ class PairingStore {
         )
     }
 
-    /** Spend the channel. Only handing the grant over does this — reading the answer spends nothing. */
+    /**
+     * Spend the channel. Only handing the grant over does this — reading the answer spends nothing.
+     *
+     * A compare-and-set like its two siblings, and unlike them its result is load-bearing: two collects that both
+     * read `SEALED` both reach this line, and the one that changed nothing must not hand the grant over.
+     */
     @Transactional
-    fun markCollected(id: String) {
+    fun markCollected(id: String): Boolean =
         DevicePairingEntity.update(
-            "status = ?1 where id = ?2", DevicePairingEntity.COLLECTED, id,
-        )
-    }
+            "status = ?1 where id = ?2 and status = ?3",
+            DevicePairingEntity.COLLECTED, id, DevicePairingEntity.SEALED,
+        ) == 1
 
     // --- scheduled sweep (see PairingPurge) ---
 
