@@ -68,6 +68,7 @@ import { cacheSessionVault, clearSessionVault } from '../features/account/rememb
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { i18n } from '../i18n'
+import { KdfProfileRefused } from '@veyq/crypto/v1'
 
 const stubs = {
   Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
@@ -446,5 +447,24 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     // The other devices are gone; this one is still signed in and must not be told otherwise.
     expect(wrapper.text()).toContain(t('sessions.lockedDoneStillHere'))
     expect(buttonLabelled(wrapper, t('login.signOut'))).toBeDefined()
+  })
+
+  it('a served key-derivation profile the client refused does not blame the password or Secret Key', async () => {
+    // ADR 0017 rule 5: the refusal is the server's doing, so "check your password and Secret Key" would send
+    // someone to retype a right credential. Control on the same submit: any other unlock failure still says it.
+    for (const [failure, shown, notShown] of [
+      [new KdfProfileRefused(), t('common.unreachable'), t('unlock.failed')],
+      [new Error('aead'), t('unlock.failed'), t('common.unreachable')],
+    ] as const) {
+      vi.mocked(unlockMasterKey).mockRejectedValueOnce(failure)
+      const wrapper = mountView()
+      await fillCredentials(wrapper)
+      await wrapper.find('input[name="secret-key"]').setValue('the-secret-key')
+      await wrapper.find('form').trigger('submit')
+      await flushPromises()
+
+      expect(wrapper.text()).toContain(shown)
+      expect(wrapper.text()).not.toContain(notShown)
+    }
   })
 })

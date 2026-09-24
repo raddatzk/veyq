@@ -24,6 +24,7 @@ import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRe
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { HttpStatus, isHttpStatus } from '../shared/httpError'
+import { KdfProfileRefused } from '@veyq/crypto/v1'
 import type { RecoveryMaterial } from '../api/generated/auth'
 
 const { t } = useI18n()
@@ -118,9 +119,10 @@ async function openAccount() {
   error.value = ''
   try {
     opened.value = await openWithSecretKey(material.value!, secretKey.value.trim())
-  } catch {
+  } catch (e) {
     // A wrong Secret Key fails on the device. The token is untouched, so say so rather than sending them back.
-    error.value = t('recovery.keyFailed')
+    // A served key-derivation profile this client does not write (ADR 0017 rule 5) is not the Kit's fault.
+    error.value = e instanceof KdfProfileRefused ? t('common.unreachable') : t('recovery.keyFailed')
   } finally {
     busy.value = false
   }

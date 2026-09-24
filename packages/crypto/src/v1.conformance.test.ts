@@ -87,6 +87,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const d = v1.decodeKdfParams(unhex(k.encoded))
     expect(d.params).toEqual(k.params)
     expect(hex(d.salt)).toBe(k.salt)
+    // The one profile the refusal below admits — the vector's, which the ARGON pin above makes the client's own.
+    expect(d.params).toEqual(v1.ARGON)
   })
 
   it('kdfParams length guard (the blob comes from the blind server — reject it cleanly)', () => {
@@ -96,10 +98,38 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     // opaque DataView RangeError that decodeKdfParams exists to pre-empt. A bare .toThrow() passes either
     // way, so relaxing this assertion silently retires the guard it is here to prove.
     expect(() => v1.decodeKdfParams(encoded.slice(0, 15))).toThrow(/malformed_kdf_params/)
-    // 16 bytes is exactly the four u32be reads, so the header alone is well-formed: params, empty salt.
-    const d = v1.decodeKdfParams(encoded.slice(0, 16))
-    expect(d.params).toEqual(k.params)
-    expect(d.salt.length).toBe(0)
+    // 16 bytes is exactly the four u32be reads, so the header alone is well-formed — and still refused: an
+    // empty salt is not a profile this client writes (ADR 0017 rule 5, below).
+    expect(() => v1.decodeKdfParams(encoded.slice(0, 16))).toThrow(/^kdf_profile_refused$/)
+  })
+
+  // ADR 0017 rule 5: the server never chooses a cost parameter. A served profile is accepted only if it is the
+  // one this client writes — `ARGON` field for field, and a 16-byte salt — and refused BEFORE any Argon2id runs,
+  // because a served `t = 2³¹` or `m = 4 GiB` would otherwise make every unlock derive near-forever. One negative
+  // per field, each one step off the accepted profile in each direction, each anchored on its own name: the
+  // positive control is the round-trip case above, the same encoder one field apart.
+  describe('a served kdf profile other than the one the client writes is refused (ADR 0017 rule 5)', () => {
+    const k = vectors.kdf_params
+    const salt = unhex(k.salt)
+    const off = (field: keyof v1.ArgonParams, delta: number) => ({ ...v1.ARGON, [field]: v1.ARGON[field] + delta })
+    it.each([
+      ['t', 1], ['t', -1], ['t', 2 ** 31 - 3],
+      ['m', 1], ['m', -1],
+      ['p', 1], ['p', -1],
+      ['dkLen', 1], ['dkLen', -1],
+    ] as const)('%s %+d', (field, delta) => {
+      expect(() => v1.decodeKdfParams(v1.encodeKdfParams(off(field, delta), salt))).toThrow(
+        new v1.KdfProfileRefused(),
+      )
+    })
+    it.each([15, 17, 32])('a %d-byte salt', (n) => {
+      expect(() => v1.decodeKdfParams(v1.encodeKdfParams(v1.ARGON, new Uint8Array(n)))).toThrow(/^kdf_profile_refused$/)
+    })
+    it('the refusal is its own class, so a caller can tell it from a wrong password', () => {
+      expect(new v1.KdfProfileRefused()).toBeInstanceOf(Error)
+      expect(new v1.KdfProfileRefused().message).toBe('kdf_profile_refused')
+      expect(new v1.KdfProfileRefused().name).toBe('KdfProfileRefused')
+    })
   })
 
   it('KEM-v1 decap (hybrid X25519 + ML-KEM-768)', () => {

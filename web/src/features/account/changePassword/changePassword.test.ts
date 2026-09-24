@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -38,27 +38,31 @@ const MK = v1.randomBytes(32)
 const OLD_PASSWORD = 'the old password'
 const NEW_PASSWORD = 'a brand new password'
 
-// The stored PASSWORD floor, built exactly as account birth builds it — but at a LIGHT Argon cost, which the
-// proof then inherits: it derives from the wrap's own `kdfParams`, so the refusal below costs nothing even
-// though this file deliberately runs production ARGON for everything changePassword itself derives.
-const LIGHT = { t: 1, m: 64, p: 1, dkLen: 32 }
+// The stored PASSWORD floor, built exactly as account birth builds it — at production ARGON too, because the
+// proof refuses any served profile other than the one the client writes (ADR 0017 rule 5). The default floor is
+// built once for the file; nothing here mutates it.
 function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = OLD_PASSWORD) {
   const salt = v1.randomBytes(16)
-  const kek = v1.kekPasswordSecret(secret, password, salt, LIGHT)
+  const kek = v1.kekPasswordSecret(secret, password, salt, v1.ARGON)
   return {
     id: 'w1',
     method: 'PASSWORD',
     wrappedKey: b64std(v1.symWrap(kek, masterKeyBytes, 'master-key', v1.randomBytes(12))),
-    kdfParams: b64std(v1.encodeKdfParams(LIGHT, salt)),
+    kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, salt)),
   }
 }
+
+let floor: ReturnType<typeof storedFloor>
+beforeAll(() => {
+  floor = storedFloor()
+}, PRODUCTION_ARGON_TIMEOUT_MS)
 
 describe('changePassword', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     held.mk = MK.slice()
     requestLoginChallenge.mockResolvedValue({ instanceSalt: b64std(INSTANCE_SALT), nonce: b64std(new Uint8Array(32)) })
-    getAccountKeyMaterial.mockResolvedValue({ suiteId: 'v1', wraps: [storedFloor()], wrappedIdentityPrivateKey: 'aWdub3JlZA==' })
+    getAccountKeyMaterial.mockResolvedValue({ suiteId: 'v1', wraps: [floor], wrappedIdentityPrivateKey: 'aWdub3JlZA==' })
   })
 
   it('the deliberate path signs the NEW auth key with the OLD keypair', async () => {

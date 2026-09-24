@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, it, vi, beforeEach } from 'vitest'
-import { PRODUCTION_ARGON_TIMEOUT_MS, TEST_ARGON } from '@veyq/crypto/testArgon'
+import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
@@ -99,23 +99,6 @@ describe('recovery — opening the withheld wrap', () => {
 
   it('another account\'s Secret Key does not open this wrap', async () => {
     await expect(openWithSecretKey(mine.material, theirs.secretKey)).rejects.toThrow()
-  }, PRODUCTION_ARGON_TIMEOUT_MS)
-
-  it('honours the KDF params carried by the wrap, not the current constant', async () => {
-    const { secretKey } = mine
-    const raw = fromB64std(secretKey)
-    const masterKey = v1.randomBytes(32)
-    const salt = v1.randomBytes(16)
-    // A wrap minted under DIFFERENT params — an account born before a parameter bump must still open.
-    const legacy: RecoveryMaterial = {
-      email: EMAIL,
-      suiteId: 'v1',
-      wrappedKey: b64std(v1.symWrap(v1.kekRecovery(raw, salt, TEST_ARGON), masterKey, 'master-key', v1.randomBytes(12))),
-      kdfParams: b64std(v1.encodeKdfParams(TEST_ARGON, salt)),
-      wrappedIdentityPrivateKey: b64std(new Uint8Array(8)),
-    }
-    const opened = await openWithSecretKey(legacy, secretKey)
-    expect(b64std(opened.masterKey)).toBe(b64std(masterKey))
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 })
 

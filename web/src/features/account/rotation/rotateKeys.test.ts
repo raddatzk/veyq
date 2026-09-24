@@ -58,7 +58,9 @@ const SECRET_KEY = v1.randomBytes(32)
 const SECRET_KEY_B64 = b64std(SECRET_KEY)
 /** The account's *current* Master Key — what the stored PASSWORD wrap opens and what the vault is holding. */
 const MK = v1.randomBytes(32)
-/** The light cost the mocked worker above uses; the stored floor must be built with the same. */
+/** The light cost the mocked worker above uses; the stored floor's KEK must be built with the same. Its WIRE
+ *  profile stays `v1.ARGON` — the client refuses any other before deriving (ADR 0017 rule 5), and the mock above
+ *  ignores the params it is handed. */
 const KDF = { t: 1, m: 64, p: 1, dkLen: 32 }
 
 /** The stored PASSWORD wrap, produced exactly as account birth produces it. */
@@ -69,7 +71,7 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
     id: 'w1',
     method: 'PASSWORD',
     wrappedKey: b64std(v1.symWrap(kek, masterKeyBytes, 'master-key', v1.randomBytes(12))),
-    kdfParams: b64std(v1.encodeKdfParams(KDF, salt)),
+    kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, salt)),
   }
 }
 
