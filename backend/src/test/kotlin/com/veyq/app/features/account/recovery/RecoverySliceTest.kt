@@ -246,8 +246,11 @@ class RecoverySliceTest {
         QuarkusTransaction.requiringNew().run {
             persistWrap(USER, "DEVICE", "ZGV2aWNl")
             persistWrap(USER, "DEVICE_KEY", "ZGV2aWNlLWtleQ==")
+            persistWrap(USER, "PASSKEY", "cGFzc2tleQ==")
         }
         assertTrue(hasWrap("DEVICE_KEY"), "precondition")
+        val recoveryBefore = wrapRowOf("RECOVERY")
+        assertNotNull(recoveryBefore, "precondition")
 
         handler.complete(mintToken(), REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
 
@@ -256,6 +259,10 @@ class RecoverySliceTest {
             hasWrap("DEVICE_KEY"),
             "a DEVICE_KEY wrap takes NO password, so surviving the reset would keep granting password-less entry",
         )
+        // The control on the same predicate: a whitelist that over-reaches and takes the recovery path with it
+        // would lock the person out of the route they just used.
+        assertEquals(recoveryBefore, wrapRowOf("RECOVERY"), "the Emergency Kit's wrap survives byte-for-byte")
+        assertFalse(hasWrap("PASSKEY"), "every method not declared a survivor goes — a whitelist, not a blacklist")
     }
 
     @Test
@@ -366,6 +373,10 @@ class RecoverySliceTest {
     }
 
     private fun hasWrap(method: String): Boolean = wrapOf(method) != null
+
+    private fun wrapRowOf(method: String): Pair<String, String?>? = QuarkusTransaction.requiringNew().call<Pair<String, String?>?> {
+        MasterKeyWrapEntity.find("userId = ?1 and method = ?2", USER, method).firstResult()?.let { it.wrappedKey to it.kdfParams }
+    }
 
     private fun authKeyOf(): String? =
         QuarkusTransaction.requiringNew().call<String?> { VeyqUser.findById(USER)?.authPublicKey }

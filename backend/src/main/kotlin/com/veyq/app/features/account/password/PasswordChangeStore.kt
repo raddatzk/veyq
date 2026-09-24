@@ -2,6 +2,7 @@ package com.veyq.app.features.account.password
 
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
@@ -19,9 +20,9 @@ class PasswordChangeStore {
     /**
      * Apply the change. **One transaction, both writes or none.**
      *
-     * Deleting `DEVICE_KEY` alongside `DEVICE` matters here exactly as it does for recovery: a `DEVICE_KEY`
-     * wrap takes no password at all, so leaving it would keep granting password-less entry to a device under
-     * the very account whose password just changed.
+     * Every wrap but the survivors ([WrapMethod.SURVIVORS]) goes, exactly as for recovery: a `DEVICE_KEY` wrap
+     * takes no password at all, so leaving it would keep granting password-less entry to a device under the
+     * very account whose password just changed — and a method nobody declared a survivor is deleted too.
      *
      * Returns false if there is no `PASSWORD` floor row to update — nothing is written.
      */
@@ -29,19 +30,14 @@ class PasswordChangeStore {
     fun applyChange(userId: String, wrappedKey: String, kdfParams: String, authPublicKey: String): Boolean {
         val user = VeyqUser.findById(userId) ?: return false
         val floor = MasterKeyWrapEntity
-            .find("userId = ?1 and method = ?2", userId, PASSWORD_METHOD)
+            .find("userId = ?1 and method = ?2", userId, WrapMethod.PASSWORD.name)
             .firstResult() ?: return false
 
         floor.wrappedKey = wrappedKey
         floor.kdfParams = kdfParams
         user.authPublicKey = authPublicKey
 
-        MasterKeyWrapEntity.delete("userId = ?1 and method in ?2", userId, DEVICE_METHODS)
+        MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
         return true
-    }
-
-    private companion object {
-        private const val PASSWORD_METHOD = "PASSWORD"
-        private val DEVICE_METHODS = listOf("DEVICE", "DEVICE_KEY")
     }
 }
