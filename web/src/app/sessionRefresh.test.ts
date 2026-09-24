@@ -88,4 +88,25 @@ describe('session refresh (uc.account.login)', () => {
     expect(session.accessToken).toBe('a2')
     expect(session.refreshToken).toBe('r2')
   })
+
+  it('rotates a remembered session through the cookie, never inventing a body token', async () => {
+    // "Remember me" keeps no refresh token in memory: the httpOnly cookie carries it. The request must go out
+    // with an empty body, and a response without a body token must leave it null — a stale body token sent
+    // alongside the cookie would be presented as a second, older credential.
+    session.accessToken = 'a1'
+    session.refreshToken = null
+    let sent: { refreshToken?: string } | undefined
+    vi.mocked(tokenApi).mockReturnValue({
+      refreshSession: (req: { refreshRequest: { refreshToken?: string } }) => {
+        sent = req.refreshRequest
+        return Promise.resolve({ accessToken: 'a2' })
+      },
+    } as unknown as ReturnType<typeof tokenApi>)
+
+    await refreshSession()
+
+    expect(sent).toEqual({ refreshToken: undefined })
+    expect(session.accessToken).toBe('a2')
+    expect(session.refreshToken).toBeNull()
+  })
 })
