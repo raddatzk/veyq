@@ -683,6 +683,7 @@ components:
             The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
             uniqueness within the tenant and to serve the directory.
           type: string
+          pattern: '^[A-Za-z0-9_.-]+$'
           description: >
             The new per-tenant handle (plaintext; trimmed + lowercased server-side; unique in the tenant →
             `409 username_taken`). Omit to keep the current one.
@@ -883,8 +884,10 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         passwordWrap:
           $ref: "#/components/schemas/RotatedWrap"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         recoveryWrap:
           $ref: "#/components/schemas/RotatedWrap"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         recoveryMasterKeyTag:
           type: string
           description: >
@@ -943,6 +946,7 @@ components:
       properties:
         passwordWrap:
           $ref: "#/components/schemas/RotatedWrap"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
         authPublicKey:
           type: string
           description: >

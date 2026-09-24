@@ -999,21 +999,21 @@ components:
           contentEncoding: base64
           maxLength: 128
           example: cmVjb3ZlcnktYXV0aC10YWc=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedKey:
           type: string
           description: The **same** Master Key, re-wrapped under the new password's KEK (fresh salt and nonce).
           contentEncoding: base64
           maxLength: 8192
           example: bmV3LXBhc3N3b3JkLXdyYXBwZWQtbWFzdGVyLWtleQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         kdfParams:
           type: string
           description: Argon2id parameters + fresh salt for the new PASSWORD wrap.
           contentEncoding: base64
           maxLength: 1024
           example: a2RmLXBhcmFtcy1uZXc=
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 1024) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         authPublicKey:
           type: string
           description: >
@@ -1022,7 +1022,7 @@ components:
           contentEncoding: base64
           maxLength: 256
           example: bmV3LWF1dGgtcHVibGljLWtleQ==
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     PairingOpenRequest:
       type: object

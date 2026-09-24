@@ -1064,6 +1064,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/ShareBlobUploadRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
 
     ShareBlobUploadRequestItem:
       type: object
@@ -1077,6 +1078,7 @@ components:
           minimum: 1
           maximum: 100000
           example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(100000)'
         byteSize:
           x-veyq-visibility: measure
           type: integer
@@ -1084,6 +1086,7 @@ components:
           description: Total ciphertext byte size declared up front (verified against the stored objects on complete).
           minimum: 0
           example: 131072
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedBlobKey:
           type: string
           description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
@@ -1136,6 +1139,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/ShareMediaRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
 
     ShareMediaRequestItem:
       type: object
@@ -1153,18 +1157,21 @@ components:
           description: Role-tagged derivative uploads (THUMBNAIL, PREVIEW), each its own blob. At most one of each kind.
           maxItems: 2
           items: { $ref: "#/components/schemas/ShareMediaDerivativeUpload" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2)'
         wrappedMeta:
           type: [string, "null"]
           description: The original's listed-metadata tier sealed under `K_mem` (opaque base64).
           contentEncoding: base64
           maxLength: 512
           example: bWV0YS1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedExif:
           type: [string, "null"]
           description: The original's heavy EXIF bundle sealed under `K_mem` (opaque base64).
           contentEncoding: base64
           maxLength: 16384
           example: ZXhpZi1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareMediaDerivativeUpload:
       type: object

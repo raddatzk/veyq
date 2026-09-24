@@ -1224,6 +1224,7 @@ components:
         domain:
           x-veyq-visibility: public
           type: string
+          pattern: '^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$'
           description: >
             The tenant's domain (its Host) — the backend resolves the tenant from this. Operational
             cleartext, unique across the instance. Lowercase hostname; trimmed on input.
@@ -1249,6 +1250,7 @@ components:
         domain:
           x-veyq-visibility: public
           type: string
+          pattern: '^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$'
           description: >
             The tenant's new domain (its Host) — same rules as at creation: operational cleartext, unique
             across the instance, lowercase hostname, trimmed on input.
@@ -1630,6 +1632,7 @@ components:
         host:
           x-veyq-visibility: public
           type: [string, "null"]
+          pattern: '^([a-z0-9](-?[a-z0-9])*\.)+[a-z]{2,}$'
           description: SMTP server host (a bare hostname). Null ⇒ clear (unconfigured).
           maxLength: 253
           example: smtp.example.com
@@ -1637,6 +1640,8 @@ components:
         port:
           x-veyq-visibility: public
           type: [integer, "null"]
+          minimum: 1
+          maximum: 65535
           format: int32
           description: SMTP server port.
           example: 587
@@ -1644,6 +1649,7 @@ components:
         from:
           x-veyq-visibility: public
           type: [string, "null"]
+          format: email
           description: The From address (null ⇒ noreply@<tenant.domain>).
           maxLength: 254
           example: noreply@family.example.com
@@ -1763,6 +1769,7 @@ components:
             The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
             uniqueness within the tenant and to serve the directory.
           type: string
+          pattern: '^[A-Za-z0-9_.-]+$'
           description: >
             The caller's chosen handle **in the tenant they are joining** — per-tenant, unique within it,
             plaintext (not a login credential; email is, ADR 0023). Trimmed + lowercased server-side; a clash in
@@ -1842,6 +1849,7 @@ components:
             The handle the caller chooses in the tenant they are joining (ADR 0023) — held in plaintext to enforce
             uniqueness within the tenant and to serve the directory.
           type: string
+          pattern: '^[A-Za-z0-9_.-]+$'
           description: >
             The new account's chosen handle **in the tenant it is joining** — per-tenant, unique within it,
             plaintext (not a login credential; email is, ADR 0023). Trimmed + lowercased server-side; a clash in
@@ -1943,6 +1951,7 @@ components:
             it); ignored on input (setup assigns ids server-side).
           maxLength: 64
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64)'
         method:
           x-veyq-visibility: enum
           type: string

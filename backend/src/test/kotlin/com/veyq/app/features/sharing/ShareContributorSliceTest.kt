@@ -11,7 +11,9 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
+import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -127,6 +129,28 @@ class ShareContributorSliceTest {
         given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/identities")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
+    }
+
+    // The contributor path is anonymous, so its item bound is the one that must not be left open: the 400 is the
+    // built-in bean-validation mapper's (see `MediaSliceTest.startBlobUploadsOverItsItemBoundIs400`).
+    @Test
+    fun shareUploadOverItsItemBoundIs400() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parent = scopeId)
+        val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
+        val contributorToken = given().contentType(ContentType.JSON)
+            .body("""{"sealedDisplayName":"$sealedContributorName"}""")
+            .`when`().post("/api/shares/$shareId/identities")
+            .then().statusCode(201).extract().path<String>("contributorToken")
+        fun start(n: Int) = given().contentType(ContentType.JSON)
+            .body("""{"contributorToken":"$contributorToken","items":${(1..n).joinToString(",", "[", "]") { """{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}""" }}}""")
+            .`when`().post("/api/shares/$shareId/blob-uploads")
+
+        // control: exactly `maxItems` (256) is accepted — so the negative is the bound, not the share
+        start(256).then().statusCode(200).body("results.size()", equalTo(256))
+        start(257).then().statusCode(400)
+            .body("title", equalTo("Constraint Violation"))
+            .body("violations.field", hasItem(endsWith(".items")))
     }
 
     // --- helpers ---
