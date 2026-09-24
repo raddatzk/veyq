@@ -1,6 +1,7 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -119,7 +120,7 @@ class TenantChangeDomainSliceTest {
     // --- helpers ---
 
     private fun changeDomain(token: String, tenantId: String, domain: String): Response =
-        given().header("Authorization", "Bearer $token").contentType("application/json")
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .body("""{"domain":"$domain"}""")
             .`when`().post("/api/tenants/$tenantId/change-domain")
 

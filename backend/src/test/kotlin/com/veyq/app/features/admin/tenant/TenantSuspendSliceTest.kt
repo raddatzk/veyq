@@ -2,6 +2,7 @@ package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -54,7 +55,7 @@ class TenantSuspendSliceTest {
     @Test
     fun suspendingANonActiveTenantIs409() {
         // A1: suspension is defined only from ACTIVE — a PENDING tenant is withdrawn with revokeTenant instead.
-        val tenantId = given().header("Authorization", "Bearer ${ownerToken()}")
+        val tenantId = givenAdminChannel().header("Authorization", "Bearer ${ownerToken()}")
             .contentType("application/json")
             .body("""{"tenantName":"Fam","domain":"pending-${UUID.randomUUID()}.example.com","ownerEmail":"o@example.com"}""")
             .`when`().post("/api/tenants").then().statusCode(201).extract().path<String>("tenantId")
@@ -181,10 +182,10 @@ class TenantSuspendSliceTest {
     private fun memberToken() = sessions.issue(seedUser()).accessToken
 
     private fun suspend(token: String, tenantId: String) =
-        given().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/suspend")
+        givenAdminChannel().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/suspend")
 
     private fun reactivate(token: String, tenantId: String) =
-        given().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/reactivate")
+        givenAdminChannel().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/reactivate")
 
     private fun statusOf(tenantId: String): String =
         QuarkusTransaction.requiringNew().call { store.findTenant(tenantId)!!.status }

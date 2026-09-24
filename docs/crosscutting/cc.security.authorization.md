@@ -37,6 +37,12 @@ which **server** role does it carry* — never anything scope-specific. It is **
 denies any endpoint without an annotation, so a new endpoint **fails closed**, and `DefaultDenyTest` pins that
 with a deliberately unannotated probe. This layer has never been the site of a defect.
 
+**In front of layer 1, for the Server-Owner operations alone: the admin channel.** Reachability, not a role — an
+operation marked `x-veyq-channel: admin` answers only on the backend's admin listener, which nothing but the admin
+container is pointed at, and 404s on the public port; the Server-Owner role behind it is still required
+([uc.admin.admin-channel](../features/admin/use-cases/uc.admin.admin-channel.md),
+[ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)).
+
 **Layer 2 — the fine, fachlich guard, inside the `…Handler`.** Everything scope-specific: membership, the scope
 key, the scope role, the share role, the share password. It is **never** in the `…Resource` — resources hold zero
 guard calls — and it does not throw: a refusal is a sealed-outcome variant carrying its own `code` and status
@@ -144,7 +150,9 @@ have given — and unlike a table they cannot go stale.
   *bearer or not* — and even that is **not authoritative**: `logout` is `security: bearerAuth` in
   `contracts/api/auth.openapi.yaml` but `@PermitAll` in code. That is deliberate (lazy authentication keeps logout
   a lenient 204 no-op for any token, [ADR 0008](../decisions/0008-centralized-http-auth.md)) and unguarded. **Read
-  the annotation, not the spec.**
+  the annotation, not the spec.** The one per-operation marker the specs do carry, `x-veyq-channel: admin`, is
+  not an exception: it names which door answers, never a role, and the backend derives its channel set from it —
+  while the sweep below reads the *annotation* to hold that set to the Server-Owner gate.
 
 ## Verified by
 
@@ -159,6 +167,10 @@ Nothing is verified by this doc. It points at the guards that already exist:
   operation **set** is derived from the contract — every operation is probed or named on a reasoned exclusion
   list — while its **assertions** stay behavioural, which is what keeps it from being the generated matrix the
   limits above reject.
+- `AdminChannelPostureSweepTest` — every operation whose effective gate is `@RolesAllowed(SERVER_OWNER)` carries
+  `x-veyq-channel: admin`, and every marker names a resource method that exists, so a Server-Owner operation added
+  without it fails the build instead of answering on the public origin. `AdminChannelGateSliceTest` proves the
+  refusal itself.
 - `SessionTokenIdentityProviderTest` — the token → `SecurityIdentity` resolution (principal + server role) that
   layer 1 rests on.
 - Per-feature slice tests carry the layer-2 cases (owner-only, key-holder-only, share role, share password); the

@@ -1,6 +1,7 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -64,7 +65,7 @@ class TenantsSliceTest {
     fun listIncludesCreatedTenantWithActiveInvite() {
         val id = createTenant(ownerToken(), domain = "fam-list.example.com")
             .then().statusCode(201).extract().path<String>("tenantId")
-        given().header("Authorization", "Bearer ${ownerToken()}").`when`().get("/api/tenants")
+        givenAdminChannel().header("Authorization", "Bearer ${ownerToken()}").`when`().get("/api/tenants")
             .then().statusCode(200)
             .body("find { it.tenantId == '$id' }.status", equalTo("PENDING"))
             .body("find { it.tenantId == '$id' }.inviteStatus", equalTo("ACTIVE"))
@@ -140,7 +141,7 @@ class TenantsSliceTest {
     fun revokePendingTenantDeletesIt() {
         val id = createTenant(ownerToken(), domain = "fam-revoke.example.com")
             .then().statusCode(201).extract().path<String>("tenantId")
-        given().header("Authorization", "Bearer ${ownerToken()}").`when`().delete("/api/tenants/$id")
+        givenAdminChannel().header("Authorization", "Bearer ${ownerToken()}").`when`().delete("/api/tenants/$id")
             .then().statusCode(204)
         assert(store.findTenant(id) == null)
         resend(ownerToken(), id).then().statusCode(404).body("code", equalTo("tenant_not_found"))
@@ -150,13 +151,13 @@ class TenantsSliceTest {
     fun nonOwnerIsForbidden() {
         createTenant(memberToken(), domain = "fam-forbidden.example.com")
             .then().statusCode(403).body("code", equalTo("not_server_owner"))
-        given().header("Authorization", "Bearer ${memberToken()}").`when`().get("/api/tenants")
+        givenAdminChannel().header("Authorization", "Bearer ${memberToken()}").`when`().get("/api/tenants")
             .then().statusCode(403).body("code", equalTo("not_server_owner"))
     }
 
     @Test
     fun unauthenticatedIs401() {
-        given().contentType(ContentType.JSON)
+        givenAdminChannel().contentType(ContentType.JSON)
             .body("""{"tenantName":"X","domain":"fam-401.example.com","ownerEmail":"x@example.com"}""")
             .`when`().post("/api/tenants")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
@@ -185,7 +186,7 @@ class TenantsSliceTest {
 
     @Test
     fun malformedOwnerEmailIs400() {
-        given().header("Authorization", "Bearer ${ownerToken()}").contentType(ContentType.JSON)
+        givenAdminChannel().header("Authorization", "Bearer ${ownerToken()}").contentType(ContentType.JSON)
             .body("""{"tenantName":"Fam","domain":"fam-bad-email.example.com","ownerEmail":"not-an-email"}""")
             .`when`().post("/api/tenants")
             .then().statusCode(400)
@@ -215,15 +216,15 @@ class TenantsSliceTest {
     private fun memberToken() = sessions.issue(MEMBER_ID).accessToken
 
     private fun createTenant(token: String, name: String = "Fam", domain: String, email: String = "owner-x@example.com") =
-        given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
             .body("""{"tenantName":"$name","domain":"$domain","ownerEmail":"$email"}""")
             .`when`().post("/api/tenants")
 
     private fun resend(token: String, tenantId: String) =
-        given().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/invite/resend")
+        givenAdminChannel().header("Authorization", "Bearer $token").`when`().post("/api/tenants/$tenantId/invite/resend")
 
     private fun reassign(token: String, tenantId: String, ownerEmail: String) =
-        given().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType(ContentType.JSON)
             .body("""{"ownerEmail":"$ownerEmail"}""")
             .`when`().post("/api/tenants/$tenantId/invite/reassign")
 

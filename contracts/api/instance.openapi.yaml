@@ -23,11 +23,16 @@ tags:
       Server-Owner reads about the running instance (release identity, store provisioning). One tag = one
       resource interface owning the whole `/api/instance` subtree.
 
+# x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
+# request that came through the admin container; the public port 404s it. Reachability, not a role: the role
+# stays in code (ADR 0008). The backend derives its set from this marker at build time, and a posture sweep
+# holds every Server-Owner-gated operation to it — docs/decisions/0065-admin-ui-cli-separate-service.md.
 paths:
   /api/instance/release:
     get:
       tags: [instance]
       operationId: getInstanceRelease
+      x-veyq-channel: admin
       summary: Report the release version the running image was stamped with.
       description: >
         Returns the release the running image was published under — the rollback target an upgrade needs to be
@@ -72,6 +77,7 @@ paths:
     get:
       tags: [instance]
       operationId: getInstanceStoreProvisioning
+      x-veyq-channel: admin
       summary: Report whether the object store has been brought from running to usable.
       description: >
         Returns how far veyq has got with provisioning the configured object store

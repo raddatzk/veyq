@@ -41,6 +41,21 @@ interface VeyqConfig {
     fun share(): Share
     fun security(): Security
     fun http(): Http
+    fun adminChannel(): AdminChannel
+
+    /**
+     * `veyq.admin-channel.*` — the backend's second, internal listener: the only door the Server-Owner operations
+     * answer on (ADR 0065, uc.admin.admin-channel). Only the admin container is ever pointed at it.
+     */
+    interface AdminChannel {
+        /**
+         * Not 9000 (Quarkus' management-interface default) and not 8081 (compose's `ADMIN_PORT` host default), so
+         * neither can be mistaken for it. `0` binds a free port — the `%test` value, read back through
+         * `AdminListener.port()`.
+         */
+        @WithDefault("8090")
+        fun port(): Int
+    }
 
     /** A scheduled cleanup interval (`*.purge.every` / `*.reconcile.every`); read by the `@Scheduled` sibling. */
     interface Interval {

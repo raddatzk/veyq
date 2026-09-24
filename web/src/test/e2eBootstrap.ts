@@ -20,25 +20,45 @@ import { session } from '../app/session'
 import { setUnlocked } from '../app/vault'
 import { login } from '../features/account/login/login'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
-import { setupApi, tenantsApi } from '../api/client'
+import { setupApi } from '../api/client'
+import { Configuration as SetupConfiguration, SetupApi } from '../api/generated'
+import { Configuration as TenantsConfiguration, TenantsApi } from '../api/generated/tenants'
 import { updateTenantMailSettings } from '../features/tenant/tenantMailSettings'
 import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
 import { inviteMember } from '../features/spaces/members'
 import { clearMailbox, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
 
-/**
- * Create a PENDING tenant + owner invite — the ONE Server-Owner call this harness makes. It is spelled against
- * the generated client rather than a facade because `web/` no longer has one: tenant CRUD moved to `admin-web`
- * with the rest of the Server-Owner surface (ADR 0065). A test harness birthing a whole instance legitimately
- * needs it; product code in `web/` does not, and reintroducing a facade here would give it one to reach for.
- */
-function createTenant(tenantName: string, domain: string, ownerEmail: string) {
-  return tenantsApi().createTenant({ createTenantRequest: { tenantName, domain, ownerEmail } })
-}
-
 /** Tenant domain and API base — see the module header for why this exact host. */
 export const HOST = process.env.VEYQ_HOST ?? 'veyq.localhost'
 export const BASE = process.env.VEYQ_BASE ?? `http://${HOST}:8080`
+
+/**
+ * The backend's admin listener — the only door the Server-Owner operations answer on; the public `BASE` 404s them
+ * (ADR 0065). Addressed by loopback IP rather than by `HOST`, the way the admin container reaches it: a
+ * Server-Owner call is tenant-independent, and a tenant's own `Host` would put it under that tenant's suspension.
+ */
+export const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
+
+/**
+ * The two Server-Owner calls this harness makes — first-run setup and a PENDING tenant with its owner invite —
+ * through the admin listener. They are spelled against the generated clients rather than a facade because `web/`
+ * has none: that surface lives in `admin-web` (ADR 0065). A test harness birthing a whole instance legitimately
+ * needs them; product code in `web/` does not, and a facade here would give it one to reach for.
+ */
+function createServerOwner(m: BuiltAccount['material'], email: string) {
+  return new SetupApi(new SetupConfiguration({ basePath: ADMIN_BASE })).createServerOwner({
+    createServerOwnerRequest: {
+      email, suiteId: m.suiteId, identityPublicKey: m.identityPublicKey,
+      wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey, authPublicKey: m.authPublicKey,
+      masterKeyWraps: m.masterKeyWraps, recoveryMasterKeyTag: m.recoveryMasterKeyTag,
+    },
+  })
+}
+
+function createTenant(tenantName: string, domain: string, ownerEmail: string) {
+  const config = new TenantsConfiguration({ basePath: ADMIN_BASE, accessToken: () => session.accessToken ?? '' })
+  return new TenantsApi(config).createTenant({ createTenantRequest: { tenantName, domain, ownerEmail } })
+}
 
 /**
  * Varies emails/usernames per run so a re-run against a non-fresh DB does not collide — and, just as important,
@@ -117,14 +137,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
   const owner = mkActor('a')
   owner.built = buildAccount(owner.email, owner.password, salt)
 
-  const m = owner.built.material
-  await setupApi().createServerOwner({
-    createServerOwnerRequest: {
-      email: owner.email, suiteId: m.suiteId, identityPublicKey: m.identityPublicKey,
-      wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey, authPublicKey: m.authPublicKey,
-      masterKeyWraps: m.masterKeyWraps, recoveryMasterKeyTag: m.recoveryMasterKeyTag,
-    },
-  })
+  await createServerOwner(owner.built.material, owner.email)
   await become(owner)
   const tenant = await createTenant(tenantName, HOST, owner.email)
   await acceptInvite(tenant.bootstrapSecret, owner.username, scopeGrant(v1.hybridPublic(owner.built.identity.priv)))

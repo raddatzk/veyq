@@ -136,6 +136,15 @@ the `admin` service reverse-proxies the backend from **its own** origin, so firs
 resolve yet. Before this, setup lived in the app SPA served at `VEYQ_DOMAIN` — which quietly made a working
 public hostname a precondition for creating the first account.
 
+**And the Server-Owner operations answer nowhere else.** The backend runs a second, internal **admin listener**
+(`8090`, `veyq.admin-channel.port`); setup, tenant administration and the instance reads answer only for a request
+that arrived there from a non-public peer, and the public port 404s them
+([uc.admin.admin-channel](../docs/features/admin/use-cases/uc.admin.admin-channel.md)). So until you have created
+the owner, nobody who finds `VEYQ_DOMAIN` in a certificate log can claim the instance first. The compose file
+points the admin container at that listener and routes nothing else to it; the image does not `EXPOSE` it. **If
+you put your own reverse proxy in front of the app, route the public port `8080` only** — nothing but the admin
+container may ever be pointed at `8090`.
+
 So the order is: bring the stack up, create the owner over the tunnel, and *then* worry about DNS and TLS.
 
 ```sh
@@ -158,10 +167,12 @@ operator-side recovery — the server holds no key material by construction.
   surface is 1:1 with the instance, so none of that ADR's per-tenant machinery applies). Point the name's DNS
   at this host **first**, or the ACME order fails against the rate limit. Choose a name you publish nowhere:
   the app never links to this surface, and an unlisted name is one more layer between a stranger and it.
+  **Set it only after the Server Owner exists.** This mode puts the admin container — and with it the admin
+  listener — on the internet, so before setup it reopens exactly the first-caller window the listener closes on
+  the public origin (uc.admin.admin-channel A5). Nothing enforces the order; it is yours.
 
-The app itself never links to the admin surface and is never told where it is — an operator's deployment
-choice is not something the user-facing app can know, and a guessed URL that 404s is worse than the settings
-page simply saying that administration lives elsewhere.
+The app itself never links to the admin surface, is never told where it is, and carries no hint that it exists
+— an operator's deployment choice is not something the user-facing app can know.
 
 **The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
@@ -279,7 +290,15 @@ kubectl -n veyq port-forward svc/veyq-admin 8081:8080
 ```
 
 Save the Emergency Kit on that screen. Set `admin.domain` to expose the surface on a hostname of its own
-afterwards, or never. Every pod passes the `restricted` PodSecurity standard — the admin image runs
+afterwards — never before the owner exists, for the reason given under compose — or never.
+
+**The admin listener has a `Service` of its own, `veyq-app-admin`, and a `NetworkPolicy` keeps every other pod off
+it.** It is deliberately not a second port on `veyq-app`: that Service is what the chart's `Ingress`, every
+projected tenant `Ingress` and any `Ingress` of yours aim at, so a port on it would sit behind all of them. The
+`veyq-app` policy admits the public port from anywhere and the admin port from the admin pod alone. **A CNI that
+does not enforce NetworkPolicy leaves the admin port reachable from any pod in the cluster** — the Service
+separation still keeps every Ingress off it, but in-cluster reachability is then only as narrow as your cluster
+([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md) residual (ii)). Every pod passes the `restricted` PodSecurity standard — the admin image runs
 unprivileged for exactly this — so the namespace can carry that label from the start.
 
 **Three hosts, two of them mandatory.** `domain` is the instance (the compose file's `VEYQ_DOMAIN`);
@@ -609,6 +628,10 @@ docker compose -f infra/docker-compose.yml down -v && docker compose -f infra/do
 VEYQ_TENANT_INVITE_DEV_FILE=$PWD/backend/build/dev-invites.jsonl ./gradlew -p backend quarkusDev
 cd web && npm run seed:dev
 ```
+
+The seeders talk to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8080`) for everything a
+member does, and `VEYQ_ADMIN_BASE` (the admin listener, default `http://127.0.0.1:8090`) for setup and tenant
+creation — which the public port 404s. `npm run bootstrap:user` reads the same two.
 
 `veyq.tenant.invite.dev-file` (dev/test only, never written in production) is the second sink of the invite
 line the logging mailer already emits — no console-log scraping. `seed:dev` creates the tenant under a hostname

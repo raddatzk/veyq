@@ -14,7 +14,7 @@ handling of reported shares.
 ## Use-cases
 
 - ★ [First-run server setup](use-cases/uc.admin.setup-server.md) — **refined**
-- ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **refined**
+- ★ [Administer only through the admin container](use-cases/uc.admin.admin-channel.md) — **built**
   ([ADR 0065](../../decisions/0065-admin-ui-cli-separate-service.md); the backend answers every Server-Owner
   operation, first-run setup included, only on an internal listener the admin container reaches — classified by
   the socket, never by a header — and 404s it on the public origin)

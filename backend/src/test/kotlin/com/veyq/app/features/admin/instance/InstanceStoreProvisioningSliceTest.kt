@@ -2,6 +2,7 @@ package com.veyq.app.features.admin.instance
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.instance.InstanceReleaseSliceTest.Companion.seedUser
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import jakarta.inject.Inject
@@ -36,7 +37,7 @@ class InstanceStoreProvisioningSliceTest {
 
     @Test
     fun serverOwnerReadsThatNothingIsProvisionedOnAnS3Instance() {
-        given().header("Authorization", ownerToken())
+        givenAdminChannel().header("Authorization", ownerToken())
             .`when`().get("/api/instance/store-provisioning")
             .then().statusCode(200)
             .body("state", equalTo("NOT_ATTEMPTED"))
@@ -54,7 +55,7 @@ class InstanceStoreProvisioningSliceTest {
 
     @Test
     fun aMemberIsNotTheServerOwnerAndIsRefused() {
-        given().header("Authorization", memberToken())
+        givenAdminChannel().header("Authorization", memberToken())
             .`when`().get("/api/instance/store-provisioning")
             .then().statusCode(403)
             .body("code", equalTo("not_server_owner"))
@@ -62,7 +63,7 @@ class InstanceStoreProvisioningSliceTest {
 
     @Test
     fun anUnauthenticatedCallerIsRefused() {
-        given().`when`().get("/api/instance/store-provisioning")
+        givenAdminChannel().`when`().get("/api/instance/store-provisioning")
             .then().statusCode(401)
             .body("code", equalTo("authentication_failed"))
     }

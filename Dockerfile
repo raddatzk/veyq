@@ -138,6 +138,9 @@ COPY --from=backend-build-jvm --chown=10001:10001 /code/backend/build/quarkus-ap
 COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
 COPY infra/.env.example /opt/veyq/deploy/.env.example
 USER 10001
+# The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
+# exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin
+# container, which compose and the chart point at it by name.
 EXPOSE 8080
 # MaxRAMPercentage is a percentage of the CONTAINER memory limit (set via compose mem_limit) — without that
 # limit the JVM would size the heap off host RAM. ExitOnOutOfMemoryError lets the orchestrator restart a
@@ -167,5 +170,8 @@ RUN chmod 0755 /work/application \
 COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
 COPY infra/.env.example /opt/veyq/deploy/.env.example
 USER 10001
+# The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
+# exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin
+# container, which compose and the chart point at it by name.
 EXPOSE 8080
 ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]

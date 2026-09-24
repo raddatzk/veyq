@@ -184,9 +184,11 @@ services:
       app:
         condition: service_started
     environment:
-      # Where nginx proxies /api/* — the app on the compose network, never the public domain. Resolved at
-      # REQUEST time, so this container starts and stays useful even while the app is still migrating.
-      BACKEND_URL: http://app:8080
+      # Where nginx proxies /api/* — the app's ADMIN LISTENER on the compose network, never the public domain
+      # and never its public port 8080, which 404s every Server-Owner operation (ADR 0065). Nothing else in this
+      # file routes to 8090: Traefik's app router pins port 8080 below, and the listener is not EXPOSEd. Resolved
+      # at REQUEST time, so this container starts and stays useful even while the app is still migrating.
+      BACKEND_URL: http://app:8090
     ports:
       - "127.0.0.1:${ADMIN_PORT:-8081}:8080"
     labels:

@@ -12,6 +12,7 @@ buildscript {
 
 val generatedApiDir = layout.buildDirectory.dir("generated/openapi-api")
 val generatedModelsDir = layout.buildDirectory.dir("generated/openapi-models")
+val generatedChannelDir = layout.buildDirectory.dir("generated/admin-channel")
 
 val apiPackageName = "com.veyq.app.generated.api"
 val modelPackageName = "com.veyq.app.generated.model"
@@ -84,6 +85,52 @@ tasks.register("openApiGenerateSpecs") {
     }
 }
 
+// The admin channel's operation set (ADR 0065, uc.admin.admin-channel): every operation a spec marks
+// `x-veyq-channel: admin`, emitted as Kotlin so the backend's channel filter reads the CONTRACT and nobody lists the
+// set by hand. `admin` is the extension's only value; any other — or the marker on a path item instead of an
+// operation, where it would silently mark nothing — fails the build. `AdminChannelPostureSweepTest` then holds the
+// set to the backend's Server-Owner gate in both directions.
+tasks.register("generateAdminChannelOperations") {
+    group = "openapi tools"
+    description = "Derive the admin-channel operationIds from the x-veyq-channel markers in contracts/api."
+    inputs.files(specFiles)
+    outputs.dir(generatedChannelDir)
+    doLast {
+        val marker = "x-veyq-channel"
+        val options = io.swagger.v3.parser.core.models.ParseOptions().apply { isResolve = false }
+        val marked = sortedSetOf<String>()
+        val problems = mutableListOf<String>()
+        specFiles.forEach { spec ->
+            val api = io.swagger.v3.parser.OpenAPIV3Parser().readLocation(spec.absolutePath, null, options).openAPI
+                ?: throw GradleException("${spec.name}: not parseable as OpenAPI")
+            api.paths.orEmpty().forEach { (path, item) ->
+                if (item.extensions?.containsKey(marker) == true) problems += "${spec.name} $path: $marker on the path item marks nothing — put it on the operation"
+                item.readOperationsMap().forEach { (method, op) ->
+                    val value = op.extensions?.get(marker) ?: return@forEach
+                    val id = op.operationId ?: "$method $path"
+                    if (value != "admin") problems += "${spec.name} $id: $marker must be `admin`, was `$value`"
+                    else if (op.operationId == null) problems += "${spec.name} $method $path: a marked operation needs an operationId"
+                    else marked += id
+                }
+            }
+        }
+        if (problems.isNotEmpty()) throw GradleException(problems.joinToString("\n"))
+        val out = generatedChannelDir.get().file("src/main/kotlin/com/veyq/app/generated/AdminChannelOperations.kt").asFile
+        out.parentFile.mkdirs()
+        out.writeText(
+            """
+            |package com.veyq.app.generated
+            |
+            |/** Generated from `x-veyq-channel: admin` in contracts/api (ADR 0065) — never edited, never listed by hand. */
+            |object AdminChannelOperations {
+            |    val operationIds: Set<String> = setOf(
+            |${marked.joinToString("") { "        \"$it\",\n" }}    )
+            |}
+            |""".trimMargin(),
+        )
+    }
+}
+
 extensions.configure<org.gradle.api.tasks.SourceSetContainer>("sourceSets") {
     named("main") { java { srcDir(generatedApiDir.map { it.dir("src/gen/java") }) } }
 }
@@ -99,7 +146,8 @@ kotlinSourceSets.named("main") {
     val srcDir = kotlinSourceDirectorySet.javaClass.methods
         .first { it.name == "srcDir" && it.parameterCount == 1 }
     srcDir.invoke(kotlinSourceDirectorySet, generatedModelsDir.map { it.dir("src/main/kotlin") })
+    srcDir.invoke(kotlinSourceDirectorySet, generatedChannelDir.map { it.dir("src/main/kotlin") })
 }
 
-tasks.named("compileKotlin") { dependsOn(tasks.named("openApiGenerateSpecs")) }
+tasks.named("compileKotlin") { dependsOn(tasks.named("openApiGenerateSpecs"), tasks.named("generateAdminChannelOperations")) }
 tasks.named("compileJava") { dependsOn(tasks.named("openApiGenerateSpecs")) }

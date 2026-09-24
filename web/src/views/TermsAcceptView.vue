@@ -14,7 +14,6 @@ import { tenantError } from '../features/tenant/tenantError'
 import { activeSpace, markTermsAccepted, clearActiveSpace } from '../app/activeSpace'
 import { takeRoute } from '../app/pendingRoute'
 import { logout } from '../features/account/login/login'
-import { resetServerRole } from '../app/serverRole'
 import { renderMarkdown } from '../shared/markdown'
 import { handle401 } from '../shared/handle401'
 import { isUnauthorized } from '../shared/httpError'
@@ -95,7 +94,6 @@ async function signOut() {
   try {
     await logout()
   } finally {
-    resetServerRole()
     clearActiveSpace()
     await router.push({ name: 'login' })
   }

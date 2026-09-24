@@ -25,7 +25,7 @@ export function usage(): string {
     'Environment:',
     '  VEYQ_ADMIN_EMAIL     Server-Owner account (required)',
     '  VEYQ_ADMIN_PASSWORD  its password (required) — used once per invocation, never stored',
-    '  BACKEND_URL          backend base URL (default http://app:8080)',
+    '  BACKEND_URL          the backend\'s admin listener (default http://app:8090)',
   ].join('\n')
 }
 

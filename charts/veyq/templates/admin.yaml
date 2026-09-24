@@ -34,10 +34,11 @@ spec:
             - name: http
               containerPort: 8080
           env:
-            # Where nginx proxies /api/* — the app Service, never the public domain. The image's entrypoint hook
-            # defaults this to the compose service name (`app:8080`), which does not exist here.
+            # Where nginx proxies /api/* — the app's admin listener through its own Service, never the public
+            # domain and never `veyq-app`, whose port 404s every Server-Owner operation (ADR 0065). The image's
+            # entrypoint hook defaults this to the compose service name (`app:8090`), which does not exist here.
             - name: BACKEND_URL
-              value: http://veyq-app:8080
+              value: http://veyq-app-admin:8090
           readinessProbe:
             httpGet:
               path: /

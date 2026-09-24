@@ -33,6 +33,9 @@ import { MAILPIT, MAILPIT_SMTP_PORT, clearMailbox, waitForMail } from '../src/te
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
+// The backend's admin listener: the only door the Server-Owner operations answer on — the public port 404s them
+// (ADR 0065). 8090 is its dev default (veyq.admin-channel.port).
+const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
 const DB_CONTAINER = process.env.VEYQ_DB_CONTAINER ?? 'veyq-mariadb'
 const INVITE_FILE = process.env.VEYQ_INVITE_FILE ?? fileURLToPath(new URL('../../backend/build/dev-invites.jsonl', import.meta.url))
 /** Where the backend reaches Mailpit's SMTP. Dotted on purpose: `TenantMailSettingsUpdate.host` is pinned to
@@ -59,8 +62,8 @@ function writeEnv(fields: Record<string, string>): void {
 
 // --- HTTP: plain fetch for non-tenant calls; node:http for tenant-scoped (fetch drops a manual Host header) -
 const json = (r: Response) => r.json() as Promise<any>
-const post = (path: string, b: unknown, token?: string) =>
-  fetch(`${BASE}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(b) })
+const post = (path: string, b: unknown, token?: string, base = BASE) =>
+  fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(b) })
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const backendPort = new URL(BASE).port || '80'
 
@@ -140,7 +143,7 @@ const ownerRes = await post('/api/setup/owner', {
   email,
   suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
   authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, recoveryMasterKeyTag: m.recoveryMasterKeyTag,
-})
+}, undefined, ADMIN_BASE)
 if (!ownerRes.ok) fail(`setup/owner failed: ${ownerRes.status} ${await ownerRes.text()}`)
 console.log(`owner: created ${email}`)
 
@@ -152,7 +155,7 @@ if (!verify.ok) fail(`login failed: ${verify.status} ${await verify.text()}`)
 const token = (await json(verify)).accessToken as string
 
 // 3 — the configured-domain tenant, accepted as the existing user (TENANT grant sealed to our own identity)
-const created = await post('/api/tenants', { tenantName, domain: createDomain, ownerEmail: email }, token)
+const created = await post('/api/tenants', { tenantName, domain: createDomain, ownerEmail: email }, token, ADMIN_BASE)
 if (!created.ok) fail(`createTenant failed: ${created.status} ${await created.text()}`)
 const { tenantId } = await json(created)
 const bootstrapSecret = await awaitInvite(INVITE_FILE, email)

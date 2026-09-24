@@ -3,7 +3,7 @@
 // `updateTenantTerms` with `403 not_tenant_owner`, and a tenant owner is an ordinary user who accepted an
 // invite (uc.admin.create-tenant is two-party). ADR 0065's "what moves" list named terms authoring for
 // `admin-web`; measured against the code that was wrong — `TenantTermsPanel` hangs off `activeSpace.tenantId`
-// in the tenant settings category, not behind `serverRole.canManage` — and moving it would have taken
+// in the tenant settings category, not behind any Server-Owner check — and moving it would have taken
 // per-tenant terms away from every owner who is not also the Server Owner. Terms are public operational
 // content and acceptance is coarse metadata — no crypto.
 import { tenantsApi } from '../../api/client'

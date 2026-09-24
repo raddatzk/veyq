@@ -42,7 +42,7 @@ server {
     add_header X-Robots-Tag "noindex, nofollow" always;
 
     location /api/ {
-        # Resolve the upstream at REQUEST time, not at config-parse time. A literal `proxy_pass http://app:8080`
+        # Resolve the upstream at REQUEST time, not at config-parse time. A literal `proxy_pass http://app:8090`
         # makes nginx resolve `app` while reading the config, so the container refuses to start at all when the
         # backend is not up or not resolvable yet — measured: `nginx: [emerg] host not found in upstream`, exit
         # before serving a byte. That is the wrong failure for this surface in particular: the admin container

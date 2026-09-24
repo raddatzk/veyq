@@ -36,11 +36,16 @@ tags:
       resource interface owning the whole `/api/tenants` subtree (avoids the greedy class-level @Path that
       a second tag rooted at the same prefix would cause).
 
+# x-veyq-channel: admin marks an operation that answers only on the backend's admin listener, i.e. only for a
+# request that came through the admin container; the public port 404s it. Reachability, not a role: the role
+# stays in code (ADR 0008). The backend derives its set from this marker at build time, and a posture sweep
+# holds every Server-Owner-gated operation to it — docs/decisions/0065-admin-ui-cli-separate-service.md.
 paths:
   /api/tenants:
     post:
       tags: [tenants]
       operationId: createTenant
+      x-veyq-channel: admin
       summary: Create a PENDING tenant and mint an owner invite.
       description: >
         Creates a tenant in PENDING with a domain↔tenant mapping and a single-use, time-limited invite
@@ -94,6 +99,7 @@ paths:
     get:
       tags: [tenants]
       operationId: listTenants
+      x-veyq-channel: admin
       summary: List all tenants (active and pending).
       description: >
         Returns every tenant with its operational metadata and the state of its current invite. Server-Owner
@@ -133,6 +139,7 @@ paths:
     post:
       tags: [tenants]
       operationId: resendTenantInvite
+      x-veyq-channel: admin
       summary: Re-mint and resend the invite for a pending tenant.
       description: >
         Soft-supersedes the current ACTIVE invite (→ SUPERSEDED) and mints a fresh ACTIVE one with a new
@@ -181,6 +188,7 @@ paths:
     post:
       tags: [tenants]
       operationId: reassignTenantInvite
+      x-veyq-channel: admin
       summary: Re-bind a pending tenant's invite to a different owner email.
       description: >
         Changes the intended owner email, soft-supersedes the current ACTIVE invite, mints a fresh ACTIVE
@@ -242,6 +250,7 @@ paths:
     post:
       tags: [tenants]
       operationId: changeTenantDomain
+      x-veyq-channel: admin
       summary: Move a tenant to a different domain.
       description: >
         Re-points the tenant's domain↔tenant mapping, and — via the ingress projector
@@ -584,6 +593,7 @@ paths:
     delete:
       tags: [tenants]
       operationId: revokeTenant
+      x-veyq-channel: admin
       summary: Revoke a pending tenant.
       description: >
         Deletes a PENDING tenant that was never accepted (reserved domain + outstanding invite). ACTIVE
@@ -625,6 +635,7 @@ paths:
     post:
       tags: [tenants]
       operationId: suspendTenant
+      x-veyq-channel: admin
       summary: Suspend an active tenant.
       description: >
         Takes an ACTIVE tenant offline: flips its status to SUSPENDED, after which **every** request resolving
@@ -671,6 +682,7 @@ paths:
     post:
       tags: [tenants]
       operationId: reactivateTenant
+      x-veyq-channel: admin
       summary: Reactivate a suspended tenant.
       description: >
         Brings a SUSPENDED tenant back: flips its status to ACTIVE and the request-boundary gate stops firing

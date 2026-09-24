@@ -3,6 +3,7 @@ package com.veyq.app.shared.tenant
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -196,13 +197,13 @@ class TenantIngressProjectorTest {
         val moved = "moved-${UUID.randomUUID()}.example.com"
 
         // 1 — create
-        val tenantId = given().header("Authorization", "Bearer $token").contentType("application/json")
+        val tenantId = givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .body("""{"tenantName":"Fam","domain":"$domain","ownerEmail":"o@example.com"}""")
             .`when`().post("/api/tenants").then().statusCode(201).extract().path<String>("tenantId")
         assertTrue(projectedHosts().contains(domain), "create must reproject")
 
         // 2 — change-domain (from PENDING)
-        given().header("Authorization", "Bearer $token").contentType("application/json")
+        givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .body("""{"domain":"$moved"}""")
             .`when`().post("/api/tenants/$tenantId/change-domain").then().statusCode(204)
         assertTrue(projectedHosts().contains(moved), "change-domain must reproject the new domain")
@@ -213,12 +214,12 @@ class TenantIngressProjectorTest {
         QuarkusTransaction.requiringNew().run {
             TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
         }
-        given().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token")
             .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(204)
         assertFalse(projectedHosts().contains(moved), "suspend must reproject without the tenant")
 
         // 4 — reactivate
-        given().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token")
             .`when`().post("/api/tenants/$tenantId/reactivate").then().statusCode(204)
         assertTrue(projectedHosts().contains(moved), "reactivate must put the routers back")
 
@@ -226,7 +227,7 @@ class TenantIngressProjectorTest {
         QuarkusTransaction.requiringNew().run {
             TenantEntity.update("status = ?1 where id = ?2", TenantEntity.PENDING, tenantId)
         }
-        given().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token")
             .`when`().delete("/api/tenants/$tenantId").then().statusCode(204)
         assertFalse(projectedHosts().contains(moved), "revoke must reproject without the tenant")
     }
@@ -237,12 +238,12 @@ class TenantIngressProjectorTest {
         // not to the endpoint being called. A 409 leaves the table alone, so it must leave the file alone too.
         val token = ownerToken()
         val domain = "refused-${UUID.randomUUID()}.example.com"
-        val tenantId = given().header("Authorization", "Bearer $token").contentType("application/json")
+        val tenantId = givenAdminChannel().header("Authorization", "Bearer $token").contentType("application/json")
             .body("""{"tenantName":"Fam","domain":"$domain","ownerEmail":"o@example.com"}""")
             .`when`().post("/api/tenants").then().statusCode(201).extract().path<String>("tenantId")
 
         // PENDING cannot be suspended (409) — and the tenant must still route afterwards.
-        given().header("Authorization", "Bearer $token")
+        givenAdminChannel().header("Authorization", "Bearer $token")
             .`when`().post("/api/tenants/$tenantId/suspend").then().statusCode(409)
             .body("code", equalTo("tenant_not_active"))
         assertTrue(projectedHosts().contains(domain))

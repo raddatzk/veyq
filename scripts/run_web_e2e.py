@@ -72,6 +72,7 @@ CI throws the runner away.
 Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
     VEYQ_PORT             Backend HTTP port. Default: 8080
+    VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
     VEYQ_BOOT_SECS        Readiness timeout per boot. Default: 120
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
@@ -133,6 +134,11 @@ PORT = int(os.environ.get("VEYQ_PORT", "8080"))
 # spoofed header — tenant resolution is server-side from `Host`, and fetch/undici strips a manually set one.
 HOST = os.environ.get("VEYQ_HOST", "veyq.localhost")
 BASE = f"http://{HOST}:{PORT}"
+# The backend's admin listener: the only door the Server-Owner operations answer on, so every suite births its
+# instance and tenant through it (ADR 0065) and the public BASE 404s those calls. Loopback by IP, never HOST — a
+# Server-Owner call is tenant-independent, and the listener's peer rule admits a loopback caller.
+ADMIN_PORT = int(os.environ.get("VEYQ_ADMIN_PORT", "8090"))
+ADMIN_BASE = f"http://127.0.0.1:{ADMIN_PORT}"
 JAR = Path(os.environ.get("VEYQ_JAR", REPO / "backend/build/quarkus-app/quarkus-run.jar"))
 BOOT_SECS = int(os.environ.get("VEYQ_BOOT_SECS", "120"))
 TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
@@ -230,6 +236,11 @@ def compose_up(workdir: Path) -> None:
     a snappier poll of our own.
     """
     log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE.relative_to(REPO)}")
+    # Run from a git WORKTREE, this is the same compose project (`infra`) from a different directory: bind mounts
+    # resolve against THIS checkout, so every service with one gets a new config hash and is recreated onto the
+    # worktree's files — the developer's own dev containers, left mounting a directory that is deleted with the
+    # worktree (measured 2026-09-24: `veyq-garage` rebound to the worktree's `garage.toml`). From a worktree, run
+    # the MAIN checkout's copy of this script with `VEYQ_JAR=<worktree>/backend/build/quarkus-app/quarkus-run.jar`.
     run(COMPOSE + ["up", "-d"])
     log("waiting for mariadb to report healthy")
     run(COMPOSE + ["up", "-d", "--wait", "mariadb"])
@@ -370,10 +381,10 @@ def fresh_database(name: str) -> None:
     )
 
 
-def port_is_taken() -> bool:
+def port_is_taken(url: str = READY_URL) -> bool:
     """Something already answering on our port would be readiness-polled as if it were ours."""
     try:
-        with urllib.request.urlopen(READY_URL, timeout=2):
+        with urllib.request.urlopen(url, timeout=2):
             return True
     except urllib.error.HTTPError:
         return True  # answering, just not 200 — still not ours to use
@@ -422,6 +433,7 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
         **os.environ,
         "QUARKUS_DATASOURCE_JDBC_URL": f"jdbc:mariadb://127.0.0.1:3306/{database}",
         "QUARKUS_HTTP_PORT": str(PORT),
+        "VEYQ_ADMIN_CHANNEL_PORT": str(ADMIN_PORT),
         "VEYQ_SECURITY_CONFIG_SECRET_FILE": str(secret_file),
     }
     if bucket:
@@ -1211,7 +1223,7 @@ def run_member(index: int, position: int, test_path: Path, inst: Instance, group
         # exercise that leg, run the file by hand with the variable set.
         env = {k: v for k, v in os.environ.items() if k != "VEYQ_GEOCODER"}
         env.update({
-            "VEYQ_E2E": "1", "VEYQ_BASE": BASE, "VEYQ_HOST": HOST, "VEYQ_STAMP": stamp,
+            "VEYQ_E2E": "1", "VEYQ_BASE": BASE, "VEYQ_ADMIN_BASE": ADMIN_BASE, "VEYQ_HOST": HOST, "VEYQ_STAMP": stamp,
             "VEYQ_MAILPIT": MAILPIT,
             # The wire-assertion seam (ADR 0053): the suite writes here what it recovered by unsealing; this
             # side reads it back and sweeps. Absolute, because vitest runs with cwd=web/.
@@ -1255,11 +1267,12 @@ def main(argv: list[str]) -> int:
 
     files = [normalize(a) for a in argv] if argv else discover()
     groups = into_groups(files)
-    if port_is_taken():
-        raise SystemExit(
-            f"[e2e] port {PORT} is already serving — another backend (an IntelliJ quarkusDev?) is running. "
-            f"Stop it, or set VEYQ_PORT to a free port."
-        )
+    for port, variable, url in ((PORT, "VEYQ_PORT", READY_URL), (ADMIN_PORT, "VEYQ_ADMIN_PORT", f"{ADMIN_BASE}/api/setup")):
+        if port_is_taken(url):
+            raise SystemExit(
+                f"[e2e] port {port} is already serving — another backend (an IntelliJ quarkusDev?) is running. "
+                f"Stop it, or set {variable} to a free port."
+            )
 
     # One stamp for the whole run: it varies emails/usernames so a re-run against a warm limiter sees a new
     # invite recipient, and the per-file database makes cross-file collisions impossible anyway. Digits only —
