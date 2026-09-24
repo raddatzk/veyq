@@ -29,18 +29,21 @@
 4. **Restore** (any owner who still belongs to the tenant, while `deletedAt` is set and before `purgeAfter`):
    clears `deletedAt`/`purgeAfter`; the group is **fully active** again for everyone, exactly as before (nothing
    was moved) — its links answer again and its waiting jobs resume.
-5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it reuses the existing blob-aware delete
-   paths ([BlobStore.delete] + node-subtree erasure, cr-0073) to remove every node's **blob objects from the
-   store**, then the media/node rows, memberships, epoch-chain links, favorites, queued background jobs, shares,
+5. **At `purgeAfter`**, a scheduled server job **hard-purges** the scope: it puts the store objects of every blob
+   **and of every upload still open in the group** on the reclaim list, which `StoreReclaimSweep` drains
+   ([ADR 0062](../../../decisions/0062-store-object-reclaim-is-a-durable-work-list.md)), then erases the
+   media/node rows, upload sessions, memberships, epoch-chain links, favorites, queued background jobs, shares,
    and finally the scope row. **Irreversible** — nothing is recoverable after this.
 
    **Erasure is total, and that is a schema-level rule rather than a list to keep in step:** every table that
    references `veyq_scope` is either named by the purge or carries `ON DELETE CASCADE`; a table that is neither
    holds the scope row hostage on its foreign key and the purge can never complete. The list above is therefore
    the *consequence* and not the requirement — `scripts/validate_scope_erasure_arity.py` is what binds it, and a
-   new table referencing the scope must satisfy the guard before it lands. **A share is erased, not retained:**
-   it is a capability record for a scope that no longer exists, so there is nothing left to revoke, and its row
-   holds the owner, the node and a sealed name belonging to a group whose erasure the owner asked for.
+   new table referencing the scope must satisfy the guard before it lands. That guard counts rows, not bytes: the
+   other half is that a row which is the only pointer to a `storage_key` — `veyq_blob`, `veyq_upload_session` —
+   is recorded for reclaim before it is deleted, or its objects outlive the group unnamed. **A share is erased, not
+   retained:** it is a capability record for a scope that no longer exists, so there is nothing left to revoke,
+   and its row holds the owner, the node and a sealed name belonging to a group whose erasure the owner asked for.
 
    **One scope that cannot be erased must not stop the others.** The sweep isolates each scope in its own
    transaction, so a failure is confined to that scope and the rest of the tick still completes; a tick-wide
