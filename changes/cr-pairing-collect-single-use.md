@@ -66,9 +66,10 @@ answers exactly as a spent channel does.
       channel does, which is `null` → the same 404. The answer-only branch is unchanged.
       · Done when: `./gradlew check` is green, including the phase-1 tests and every existing `PairingSliceTest`
       case.
-- [ ] 3 coverage — `uc.account.onboard-device.yaml` stays `status: planned` (no CI run yet, as its header says).
-      Its backend gap text, which names the suites so that the later flip is mechanical, gains the new test
-      under `a-pairing-is-single-use-short-lived-and-not-probeable`.
+- [ ] 3 coverage — `uc.account.onboard-device.yaml` is no longer `planned` (2026-09-24, ADR 0040's note on
+      which rows a run has admitted): the new test is cited as a backend ref under
+      `a-pairing-is-single-use-short-lived-and-not-probeable`, beside that criterion's other `PairingSliceTest`
+      refs.
       · Done when: `python3 scripts/validate_coverage.py` and the trust-chain are green.
 
 ## Definition of done
