@@ -16,7 +16,7 @@ vi.mock('../../../api/client', () => ({
   accountPasswordApi: () => ({ changePassword: changePasswordCall }),
   accountApi: () => ({ getAccountKeyMaterial }),
 }))
-vi.mock('../login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 
 const EMAIL = 'change-pw@example.com'
 const held: { mk: Uint8Array | null } = vi.hoisted(() => ({ mk: null }))

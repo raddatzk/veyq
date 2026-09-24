@@ -5,7 +5,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { bucketsApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { type BucketSummary } from '../../api/generated/media'
 
 // AAD contexts for bucket names sealed under K_mem (cr-0113): a contributor primary's name is the identity's

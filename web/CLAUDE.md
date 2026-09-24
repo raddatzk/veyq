@@ -19,6 +19,10 @@ here; the server is blind.
   spec behind. (Unlike the backend, where `./gradlew check` generates as part of the
   build — the asymmetry is the trap.) cr-0171 nearly shipped "the markers are inert to both generators" on a
   check that had never seen them.
+- **`vi.mock` resolves by path, so moving a module silently disarms every mock of it.** A mock left on the old
+  path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
+  either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
+  (make the export throw): every suite that mocks it must stay green, and the module's own test must go red.
 - **Dev credentials come from a seeder — never hardcode or guess them. Two paths, and they are NOT
   interchangeable:**
   - **`npm run bootstrap:user` (the primary local principal).** Inputs live in **`<repo-root>/.run/.env`**

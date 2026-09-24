@@ -6,41 +6,25 @@
 // becomes visible again. Idempotent + first-online-wins, so multiple tabs/key-holders polling is harmless. This
 // is the interim; an SSE push from the same backend is the eventual zero-latency answer (ADR 0021, deferred).
 import { runScopeRotationWorker } from './scopeRotationWorker'
+import { createVisibilityPoller } from '../../shared/state/visibilityPoller'
 
 const POLL_INTERVAL_MS = 45_000
 
-let timer: ReturnType<typeof setInterval> | null = null
-let onVisible: (() => void) | null = null
-
-const documentVisible = () => typeof document === 'undefined' || document.visibilityState === 'visible'
+const poller = createVisibilityPoller(POLL_INTERVAL_MS)
 
 /**
  * Start polling scope-rotation for the signed-in session. `unlocked` is read at each tick (not captured) so the
  * poll no-ops while the vault is locked — the rotation opens the caller's own grant on-device, so it needs an
  * unlocked identity. Runs once immediately, then every {@link POLL_INTERVAL_MS} (skipping ticks while the tab is
- * hidden), and once more the moment the tab becomes visible again. Restarts cleanly if called again.
+ * hidden), and once more the moment the tab becomes visible again — never while the previous drain is still in
+ * flight, since a rotation lands on the server. Restarts cleanly if called again.
  */
 export function startScopeRotationPolling(unlocked: () => boolean): void {
-  stopScopeRotationPolling()
-  const tick = () => {
-    if (unlocked()) void runScopeRotationWorker().catch(() => {})
-  }
-  timer = setInterval(() => {
-    if (documentVisible()) tick()
-  }, POLL_INTERVAL_MS)
-  onVisible = () => {
-    if (documentVisible()) tick()
-  }
-  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
-  tick() // drain any queued rotations immediately on entry, then keep polling
+  const tick = () => (unlocked() ? runScopeRotationWorker().catch(() => {}) : undefined)
+  poller.start(tick, { immediate: true }) // drain any queued rotations immediately on entry, then keep polling
 }
 
 /** Stop polling + detach the visibility listener (logout / re-lock). Safe to call when not running. */
 export function stopScopeRotationPolling(): void {
-  if (timer !== null) {
-    clearInterval(timer)
-    timer = null
-  }
-  if (onVisible && typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
-  onVisible = null
+  poller.stop()
 }

@@ -195,6 +195,39 @@ class PairingSliceTest {
     }
 
     @Test
+    fun concurrentCollectsHandOverTheGrantOnce() {
+        // Two collects race one sealed channel. Spending it must be ATOMIC: exactly one gets the envelope, the
+        // other answers as a spent channel does. Without the compare-and-set both read SEALED before either flip
+        // lands, and the joining device runs its onboarding tail twice (ADR 0059 §8).
+        val trusted = login()
+        val raced = fullyPairedChannel(trusted)
+        val barrier = java.util.concurrent.CyclicBarrier(2)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val outcomes = try {
+            pool.invokeAll(
+                (0 until 2).map {
+                    java.util.concurrent.Callable {
+                        barrier.await() // release both collects as tightly together as possible
+                        collect(raced).then().extract().let { it.statusCode() to it.body().asString() }
+                    }
+                },
+            ).map { it.get() }
+        } finally {
+            pool.shutdownNow()
+        }
+        assertEquals(1, outcomes.count { it.first == 200 && it.second.contains(ENVELOPE) },
+            "exactly one concurrent collect may take the grant, got $outcomes")
+        assertEquals(1, outcomes.count { it.first == 404 && it.second.contains("\"$INVALID\"") },
+            "the losing collect must answer as a spent channel does, got $outcomes")
+
+        // The control: a fresh channel's single collect still hands the grant over, so the refusal above is about
+        // the race and not about sealed channels being uncollectable. Opened after the race on purpose — a second
+        // delegation supersedes the account's other live channels (§8).
+        val control = fullyPairedChannel(trusted)
+        collect(control).then().statusCode(200).body("envelope", equalTo(ENVELOPE))
+    }
+
+    @Test
     fun theThreeDeadChannelsAreIndistinguishableFromOneAnother() {
         val trusted = login()
         val unknown = handle()

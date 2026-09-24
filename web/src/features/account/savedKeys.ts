@@ -18,7 +18,7 @@
 // subtracts this device's own wrap from.
 import { accountApi, accountWrapsApi } from '../../api/client'
 import { MasterKeyWrapMethodEnum } from '../../api/generated/account'
-import { withRefresh } from './login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 
 /** A device-local convenience wrap the server still serves. `method` is kept for copy, never for authorisation. */
 export interface SavedKeyWrap {

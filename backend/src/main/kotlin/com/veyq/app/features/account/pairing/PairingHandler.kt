@@ -101,10 +101,13 @@ class PairingHandler(
      * ceremony single-use. Deliberately unauthenticated — the grant is worthless without the ephemeral private
      * key only the answering device holds, so a gate here would prove nothing and would force that device to
      * name an account before it has one (§3).
+     *
+     * The grant goes only to the collect that wins the spend: the row was read without a lock, so a concurrent
+     * collect may have read `SEALED` too, and the loser answers as the spent channel it now is.
      */
     fun collect(handle: String): CollectedChannel? = QuarkusTransaction.requiringNew().call<CollectedChannel?> {
         val row = liveChannel(handle) ?: return@call null
-        if (row.envelope != null) store.markCollected(row.id)
+        if (row.envelope != null && !store.markCollected(row.id)) return@call null
         CollectedChannel(row.answer, row.envelope)
     }
 

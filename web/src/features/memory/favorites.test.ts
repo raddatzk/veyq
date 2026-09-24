@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ favoritesApi: vi.fn() }))
-vi.mock('../account/login/login', () => ({ withRefresh: (fn: () => unknown) => fn() }))
+vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (fn: () => unknown) => fn() }))
 
 import { loadFavorites, saveFavorites } from './favorites'
 import { favoritesApi } from '../../api/client'

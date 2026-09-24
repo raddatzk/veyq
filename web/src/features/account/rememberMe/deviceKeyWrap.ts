@@ -12,7 +12,7 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { idbRun } from '../../../shared/idb'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum, MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/generated/account'
-import { withRefresh } from '../login/login'
+import { withRefresh } from '../../../app/sessionRefresh'
 
 const DB_NAME = 'veyq-remember'
 const STORE = 'device-key'

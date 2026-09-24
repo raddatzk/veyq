@@ -8,7 +8,7 @@
 // backend leases each job to one worker and coalesces multiple removals into one rotation, so a second
 // key-holder simply finds nothing to claim.
 import { tasksApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { rotateGroupForRemoval } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'

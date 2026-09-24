@@ -15,7 +15,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
 

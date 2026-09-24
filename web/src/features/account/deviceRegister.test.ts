@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // The register's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so these tests
 // prove a genuine round-trip and the version-guarded merge, not a stub.
 vi.mock('../../api/client', () => ({ accountDeviceRegisterApi: vi.fn() }))
-vi.mock('./login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn() }))
 
 import {

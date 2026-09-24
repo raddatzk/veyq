@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 vi.mock('./pairingChannel', () => ({ collectPairingChannel: vi.fn() }))
 
 import { startGrantEnvelopePolling, stopGrantEnvelopePolling } from './grantEnvelopePolling'
-import { collectPairingChannel } from './pairingChannel'
+import { collectPairingChannel, type PairingChannel } from './pairingChannel'
 
 const HANDLE = 'aGFuZGxl'
 const ANSWER = 'YW5zd2Vy'
@@ -41,6 +41,13 @@ afterEach(() => {
 })
 
 const start = () => startGrantEnvelopePolling(HANDLE, onEnvelope, onGone)
+
+/** The next collect stays open until the test resolves it by hand — a collect slower than the interval. */
+const holdNextCollect = () => {
+  let release!: (channel: PairingChannel) => void
+  collect.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+  return (channel: PairingChannel) => release(channel)
+}
 
 describe('the onboarded device’s wait for the grant (ADR 0059, phase 3)', () => {
   it('reads once immediately, then once per interval while nothing is sealed yet', async () => {
@@ -148,6 +155,59 @@ describe('the onboarded device’s wait for the grant (ADR 0059, phase 3)', () =
     await vi.advanceTimersByTimeAsync(0)
 
     expect(collect).toHaveBeenCalledTimes(1) // the immediate one, and nothing else
+  })
+
+  // A collect slower than the interval. Two collects in flight at once is the defect: if the server serializes
+  // them, the loser's 404 flips the card to "gone" while the winner's onboarding tail runs; if it doesn't, the
+  // tail runs twice. So a tick during a held collect is skipped — not queued behind it.
+  it('starts no second collect while one is still in flight', async () => {
+    const release = holdNextCollect()
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(collect).toHaveBeenCalledTimes(1)
+
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(collect).toHaveBeenCalledTimes(1)
+
+    // The control: the held collect is a real one — released with an envelope, it ends the wait exactly once.
+    release({ envelope: ENVELOPE })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onEnvelope).toHaveBeenCalledExactlyOnceWith(ENVELOPE)
+    await vi.advanceTimersByTimeAsync(10_000)
+    expect(collect).toHaveBeenCalledTimes(1)
+  })
+
+  it('applies nothing from a collect that was still in flight when it was stopped', async () => {
+    const release = holdNextCollect()
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(collect).toHaveBeenCalledTimes(1) // the control: the held collect really started
+
+    stopGrantEnvelopePolling()
+    release({ envelope: ENVELOPE })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(onEnvelope).not.toHaveBeenCalled()
+  })
+
+  it('applies nothing from the old run’s collect after a restart — and it does not stop the new run', async () => {
+    const release = holdNextCollect()
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+
+    const onEnvelopeAgain = vi.fn()
+    startGrantEnvelopePolling(HANDLE, onEnvelopeAgain, onGone)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(collect).toHaveBeenCalledTimes(2) // the restart reads at once, regardless of the old run
+
+    release({ envelope: ENVELOPE })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onEnvelope).not.toHaveBeenCalled()
+    expect(onEnvelopeAgain).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(collect).toHaveBeenCalledTimes(3) // the new run is still going
   })
 
   // The two loops keep separate module state on purpose: in the QR-sign-in direction they will run on the same
