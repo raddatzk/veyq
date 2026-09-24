@@ -10,19 +10,14 @@ acceptanceCriteria:
     text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      # The status flip itself is the backend ref's claim. The two admin-web refs are the two callers that can
-      # ask for it — the detail panel and, since cr-admin-cli, `veyq-admin tenant suspend|reactivate`
-      # (ADR 0065) — each pinned to the operation and tenant id it sends, and neither to the flip.
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   - id: reactivate-suspended-tenant
     text: A Server Owner reactivates a SUSPENDED tenant back to ACTIVE.
     coverage:
       backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   - id: suspend-non-active-rejected
     text: Suspending a non-ACTIVE tenant (e.g. PENDING) is rejected (409).
     coverage:
-      # Backend-only on purpose. The web test that a PENDING tenant is offered no lever proves the 409 is
+      # Backend-only on purpose. The admin-web test that a PENDING tenant is offered no lever proves the 409 is
       # unreachable from the UI — a *different* sentence from this one, and listing it here would be the guard's
       # own named blind spot (a ref is bound to an AC by nothing but being listed under it).
       backend: { integration: [TenantSuspendSliceTest.suspendingANonActiveTenantIs409] }
@@ -75,9 +70,17 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [TenantSuspendSliceTest.aHostClaimingNoTenantPassesThroughUnchanged] }
 gaps:
+  admin-web: >-
+    The suspend/reactivate controls live here (ADR 0065), and their suites exist and pass locally, but
+    `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits
+    none of them: a declared run is enough only on a job a run has already executed. There are two callers —
+    the detail panel and `veyq-admin tenant suspend|reactivate` (cr-admin-cli) — each pinned to the operation
+    and tenant id it sends, and neither to the flip itself, which is the backend ref's sentence. On the first
+    run whose log shows admin-web's suites executed, `suspend-active-tenant` and `reactivate-suspended-tenant`
+    each gain `src/features/tenants/TenantDetailPanel.test.ts` and `src/cli/cli.test.ts`, and this gap goes.
   web: >-
     No web part. The lockout is the backend's pre-matching `TenantSuspensionFilter`, refusing every request on
     the tenant's own domain before authentication, and the suspend/reactivate controls are the Server Owner's
-    on `admin-web` (ADR 0065), covered above. A tab already open meets `403 tenant_suspended` on its next call,
+    on `admin-web` (ADR 0065), the gap above. A tab already open meets `403 tenant_suspended` on its next call,
     and web has no code that names that refusal (`grep -rli suspend web/src` finds only the lightbox's
     unrelated `suspendKeys` prop and the view passing it), so there is nothing web-side to test.

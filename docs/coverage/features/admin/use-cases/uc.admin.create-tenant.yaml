@@ -4,6 +4,14 @@ title: Create a tenant & invite its owner
 # Slice A (cr-0009) — structural tenant creation + invite lifecycle + Server-Owner management.
 # Slice B (cr-0010) — invite acceptance: cold TENANT-scope birth + first OWNER membership/grant → ACTIVE,
 # via register-and-accept (new owner) or sign-in accept (existing owner).
+#
+# `status: planned` although both slices are BUILT, and only because of one criterion: `invite-link-handoff` is
+# proven on `admin-web` alone, and `admin-web`'s job has never executed — so ADR 0040 admits none of its refs
+# (see its note on which rows a run has admitted). Every other criterion keeps a backend ref. The admin-web
+# suites are named under `gaps` so the flip is mechanical; `planned` goes with them. (The other way out is a
+# backend assertion that create/resend/reassign return the raw secret: no backend test reads it today —
+# `TenantAcceptSliceTest` seeds its own secret rather than taking one from a create response.)
+status: planned
 acceptanceCriteria:
   - id: create-pending-tenant
     # cr-email-invite-send-hardening: create/resend/reassign responses also carry the delivery result field. A
@@ -13,32 +21,17 @@ acceptanceCriteria:
     text: A Server Owner creates a PENDING tenant (201) with an owner invite; the response reports the delivery result, which for a bootstrap invite is always FALLBACK_COPYLINK (no SMTP for a PENDING tenant).
     coverage:
       backend: { integration: [TenantsSliceTest.createReturns201Pending] }
-      # Two callers on this surface, not two tests of one caller: the dialog is the Server Owner doing it by
-      # hand, `cli.test.ts` is the same operation reached from a script (ADR 0065's CLI, cr-admin-cli). Both
-      # are mocked-client unit tests and neither claims the 201 — that is the backend ref's sentence; what
-      # they claim is that this surface issues the create with the tenant name, domain and owner email.
-      admin-web: { unit: [src/features/tenants/CreateTenantDialog.test.ts, src/cli/cli.test.ts] }
   - id: reject-duplicate-domain
     text: A domain already mapped to a tenant is rejected (409 domain_taken).
     coverage:
       backend: { integration: [TenantsSliceTest.duplicateDomainIs409] }
   - id: invite-link-handoff
     text: The owner invite is delivered out-of-band by the Server Owner copying the invite link (the bootstrap secret in the URL fragment) — create/resend/reassign responses return the raw secret to the Server-Owner-gated caller, so tenant onboarding works without any email/SMTP infrastructure (self-hostable by default). (cr-0080.)
-    coverage:
-      admin-web:
-        # `cli.test.ts` is the out-of-band handoff without a browser at all: create/resend/reassign each print
-        # the API result — the response carrying the raw bootstrap secret — as JSON on stdout, which is how a
-        # scripted onboarding gets the invite link on an instance with no SMTP.
-        unit: [src/features/tenants/CreateTenantDialog.test.ts, src/features/tenants/TenantDetailPanel.test.ts, src/shared/inviteLink.test.ts, src/cli/cli.test.ts]
+    # No coverage on an admitted surface — the one criterion that makes this file `planned` (header).
   - id: list-tenants
     text: A Server Owner lists all tenants with each one's current invite status.
     coverage:
       backend: { integration: [TenantsSliceTest.listIncludesCreatedTenantWithActiveInvite] }
-      # cr-0050/cr-0087 put the Server → Tenants collection in web/'s settings hub; cr-admin-web-extraction
-      # (ADR 0065) moved it to `admin-web`'s console, whose root gate is the same Server-Owner probe over the
-      # same backend 403. The ref follows the list — `SettingsHubView.test.ts` no longer exercises tenants at
-      # all, so leaving it here would have been a green ref proving nothing.
-      admin-web: { unit: [src/views/AdminConsoleView.test.ts, src/cli/cli.test.ts] }
   - id: resend-supersedes-invite
     text: Resend soft-supersedes the current ACTIVE invite and mints a fresh ACTIVE one (one ACTIVE kept).
     coverage:
@@ -82,9 +75,6 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [TenantChangeDomainSliceTest.aPendingTenantMoves, TenantChangeDomainSliceTest.anActiveTenantMovesToo, TenantChangeDomainSliceTest.aDomainAlreadyMappedIsRefused, TenantChangeDomainSliceTest.aSuspendedTenantIsRefusedAndKeepsItsDomain, TenantChangeDomainSliceTest.aMalformedDomainIsRejectedAtTheBoundary]
-      # The CLI reaches the same move from a script; like the panel test it pins the call and its arguments,
-      # not the 204/409/400 outcomes, which are the backend refs' sentences.
-      admin-web: { unit: [src/features/tenants/TenantDetailPanel.test.ts, src/cli/cli.test.ts] }
   # --- Slice B (cr-0010): invite acceptance / activation ---
   - id: activate-by-register
     text: A new owner registers cold and accepts — a MEMBER account is born, the OWNER membership + grant stored, the tenant ACTIVE, the invite CONSUMED.
@@ -120,10 +110,24 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [TenantAcceptSliceTest.unauthenticatedAcceptIs401] }
 gaps:
+  admin-web: >-
+    Act 1 — the Server Owner's — lives here (ADR 0065), and its suites exist and pass locally, but `admin-web`'s
+    job (`container.yml` → `test` → "Admin surface checks") has never executed, so ADR 0040 admits none of them:
+    a declared run is enough only on a job a run has already executed. They are mocked-client unit tests on two
+    callers — the console by hand, `veyq-admin` from a script (cr-admin-cli) — and each pins the call and its
+    arguments, never the server's answer (201/204/409/400 stay the backend refs' sentences). On the first run
+    whose log shows admin-web's suites executed, they flip to: `create-pending-tenant` ←
+    `src/features/tenants/CreateTenantDialog.test.ts`, `src/cli/cli.test.ts` (the create carries name, domain,
+    owner email); `invite-link-handoff` ← `CreateTenantDialog.test.ts`, `src/features/tenants/TenantDetailPanel.test.ts`,
+    `src/shared/inviteLink.test.ts`, `cli.test.ts` (the CLI is the handoff with no browser at all: each of
+    create/resend/reassign prints the response carrying the raw secret as JSON on stdout); `list-tenants` ←
+    `src/views/AdminConsoleView.test.ts`, `cli.test.ts` (the console's root gate is the Server-Owner probe over
+    the same backend 403; `web`'s `SettingsHubView.test.ts` no longer touches tenants); `change-domain` ←
+    `TenantDetailPanel.test.ts`, `cli.test.ts`. That flip also drops this file's `status: planned`.
   web: >-
     Not "not applicable": web carries Act 2 — the invited owner accepts at `/tenant/accept` (`TenantJoinView`,
     through `src/features/tenant/tenantInvite.ts`) — while Act 1 is the Server Owner's and lives on `admin-web`
-    (ADR 0065), covered above. No web suite proves any sentence here. Every criterion is a server observable
+    (ADR 0065), the gap above. No web suite proves any sentence here. Every criterion is a server observable
     (activation with the cold-born grant, 404/401/403/409/410), and the view's suites mock the facade and stop
     before accept — the password-floor suite says so in as many words: `TenantJoinView.fragment.test.ts` pins
     the fragment strip and missing-vs-invalid, `TenantJoinView.passwordPolicy.test.ts` the floor's
