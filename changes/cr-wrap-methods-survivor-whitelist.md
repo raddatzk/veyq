@@ -1,7 +1,7 @@
 ---
 id: cr-wrap-methods-survivor-whitelist
 title: Password change and reset keep only the cold wraps, via one wrap-method classification
-status: planned
+status: done
 satisfies: [uc.account.change-password, uc.account.recover-access, en.account.key-model]
 adrs: ["0054", "0060", "0005"]
 invariants: [operator-blind E2EE]
@@ -119,9 +119,9 @@ no store spells a wrap method of its own. For today's methods, nothing observabl
 
 ## Phases
 
-- [ ] 1 contracts: Decision 4, descriptions only. · Done when: `npm run generate:api` + `npm run check` in
+- [x] 1 contracts: Decision 4, descriptions only. · Done when: `npm run generate:api` + `npm run check` in
       `web/` are green, the generated Kotlin is unchanged, and the trust-chain guards are green.
-- [ ] 2 backend: **guard → red → fix → green.**
+- [x] 2 backend: **guard → red → fix → green.**
       1. Extend both slice tests first. Each seeds a `PASSKEY` wrap and asserts it is gone after the change or
          the reset.
       2. Confirm both are **red** on today's blacklist, and red on that assertion, not on anything else.
@@ -134,7 +134,7 @@ no store spells a wrap method of its own. For today's methods, nothing observabl
 
       · Done when: the full `./gradlew check` is green, and the retrospective holds the red output of step 2
       and of the guard bite.
-- [ ] 3 coverage + prose:
+- [x] 3 coverage + prose:
       - Edit both criterion texts to the survivor rule. Refs stay on the same test methods, which now carry the
         `PASSKEY` assertion.
       - Move the *why* from `RotationStore`'s KDoc to `WrapMethods.kt` and leave a pointer behind.
@@ -156,4 +156,26 @@ no store spells a wrap method of its own. For today's methods, nothing observabl
 
 ## Retrospective
 
-_(filled at implement)_
+- **Evidence (measured).** Red of phase 2 step 2, `./gradlew test --tests PasswordChangeSliceTest --tests
+  RecoverySliceTest` on the blacklist: `PasswordChangeSliceTest.kt:68` *"every method not declared a survivor
+  goes — a whitelist, not a blacklist ==> expected: <null> but was: <cGFzc2tleS13cmFw>"* and
+  `RecoverySliceTest.kt:265` *"… expected: <false> but was: <true>"* — both on the `PASSKEY` line, with the
+  `RECOVERY` control on the line above green. Guard on a `git archive HEAD` export: red on exactly the 12
+  inventory literals in 5 files. Guard bite (snapshot-and-restore on `PasswordChangeStore.kt`): re-adding
+  `listOf("DEVICE", "DEVICE_KEY")` → red naming `PasswordChangeStore.kt:44`; an inline JPQL
+  `method in ('DEVICE', 'DEVICE_KEY')` → red naming line 40; restore byte-equal, `git status` unchanged.
+  `WrapMethodTest` bite (drop `PASSKEY`, flip `DEVICE` to not device-local): both tests red on their named sets.
+- **Two additions beyond the CR, both mine.** The guard also reads single-quoted query literals — the likelier
+  hiding place for a local method list than a Kotlin `listOf` — and `WrapMethodTest` also pins `DEVICE_LOCAL` to
+  `AddWrapRequest.method`, so `deviceLocal`'s "addWrap may create it" is checked rather than asserted.
+- **Execution misses.** (1) The baseline loop printed `tail`'s exit code, not the guard's — the trap
+  `changes/README.md` § *An exit code from a chain* already names; I read verdicts from the output instead and
+  wrote the final loop with `|| echo RED`. (2) I backgrounded the baseline and made the phase-1 edit a minute
+  later, so it was not "before the first edit" for most guards; `validate_guard_gaps.py` then copied a tree
+  that kept moving under it for 30 min and was stopped — the baseline is 15 of 37 guards, green. A baseline is
+  a baseline only if nothing is edited until it ends, or if it runs on an export.
+- **Process.** The CR's done-when and this session's brief say "all guards green" per branch, while
+  `changes/README.md` § *In a wave of parallel CRs* gives the full glob to the coordinator. Two parallel
+  `validate_guard_gaps.py` runs and a web test timing out at 5 s under the load were the cost. Next time: a wave
+  CR's done-when names the guards it touches (here `validate_wrap_method_vocabulary.py`,
+  `validate_coverage.py`) and leaves the glob to the coordinator.
