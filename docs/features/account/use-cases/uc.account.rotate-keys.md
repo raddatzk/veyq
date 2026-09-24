@@ -118,8 +118,10 @@ sequenceDiagram
 - **The gate is the feature.** Everything else here is bookkeeping that the built scope-rotation machinery
   already performs; the decision that makes rotation safe to offer is *which credential may start it*.
 - **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** The gate's Secret-Key half is
-  server-enforced. Its password half and the review are client-enforced — crypto-grade self-hosted,
-  honest-operator elsewhere.
+  server-enforced. Its password half and the review are client-enforced — against an active operator they hold
+  only on a client it does not serve, and the review only once pins cannot be rolled back
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator
+  elsewhere.
 
 ## What this means for you / Was das für dich bedeutet
 

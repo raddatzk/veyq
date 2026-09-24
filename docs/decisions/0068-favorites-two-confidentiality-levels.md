@@ -127,7 +127,11 @@ alive — the precise path §1 closes, and the one a regression would fall back 
   different places, so the icon is not what is ambiguous.
 - **The base-epoch special case survives only on the shared side.** Item favorites keep `K_SC@E_0`, so a
   rotation cannot strand a set. Memory favorites no longer need it at all — the master key does not rotate
-  with scope epochs, so that whole class of concern leaves with the seal.
+  with scope epochs, so that whole class of concern leaves with the seal. **The price of `E_0`:** every member
+  the scope ever had holds it, so a set written after a removal is readable by the removed member if they get
+  its ciphertext — from a dump, or from a colluding operator. What leaks is each member's marked media ids per
+  Memory. Item favorites are therefore outside [ADR 0024](0024-scope-key-rotation.md)'s post-rotation
+  guarantee, by this choice, and that ADR names them as such.
 - **The pin blob acquires a rotation obligation it did not have before.** The master key **rotates**
   ([ADR 0060](0060-key-rotation-after-compromise.md)), and `rotateKeys` already carries a best-effort re-seal
   for the two objects sealed under it (the identity-pin store and the device register). A master-key-sealed pin

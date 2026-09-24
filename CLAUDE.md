@@ -9,9 +9,10 @@ it stores and serves only ciphertext. The product center is the **Memory** (nest
   is confidential even from the operator. No path may break this.
 - **Product language: Memory / Chapter.** Folders organize only. Never "Album" / "Explorer".
 - **Self-hostable by default**; central infrastructure always optional. This is **also the security
-  guarantee**, not only a sovereignty one: confidentiality holds against an *actively* malicious operator
-  exactly where the user serves their own client ([ADR 0026](docs/decisions/0026-client-trust-tiers.md)). So
-  anything that erodes self-hostability is a security regression.
+  guarantee**, not only a sovereignty one: confidentiality is designed to hold against an *actively* malicious
+  operator exactly where the user serves their own client ([ADR 0026](docs/decisions/0026-client-trust-tiers.md));
+  how much of that is built is [security-model § What holds today](docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve),
+  and no doc claims more. So anything that erodes self-hostability is a security regression.
 - **API-first:** contracts under `contracts/` are the source of truth; never hand-write DTOs.
 - **All docs in English.**
 

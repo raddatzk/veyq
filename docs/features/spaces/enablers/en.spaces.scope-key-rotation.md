@@ -7,7 +7,8 @@
   [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md).
 - **Provides:** the ability to **rotate a scope's content key forward into a new epoch** — granting the new epoch
   only to the **remaining** members — so a removed member can read pre-removal content but **never** post-removal
-  content, **even against a malicious operator**, and **without re-encrypting anything** ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)).
+  content — against a malicious operator as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md)
+  § Guarantee states — and **without re-encrypting anything**.
 - **Serves (use-cases/enablers):** [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
   (member removal triggers a rotation) and [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
   (a compromise re-keys **every** scope the holder is in). The two are different triggers on one mechanism, and

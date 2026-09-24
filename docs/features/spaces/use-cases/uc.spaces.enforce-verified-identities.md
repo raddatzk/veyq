@@ -72,8 +72,10 @@ sequenceDiagram
 - **Advisory noise until strict mode exists.** A per-member "verified" badge with nothing reading it is why the
   ceremony UI was deliberately not shipped alongside the pin-store primitives that back it (cr-0099) — it only
   pays for itself once something *acts* on the distinction.
-- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Crypto-grade on a trusted
-  client, honest-operator on operator-served web.
+- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
+  operator only on a client it does not serve, once the pin store cannot be rolled back
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
+  operator-served web.
 
 ## What this means for you / Was das für dich bedeutet
 

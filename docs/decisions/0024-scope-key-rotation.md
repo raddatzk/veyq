@@ -49,12 +49,16 @@ members; new content seals under it. Nothing is re-encrypted.**
    *test-for-existence* of a blob they can supply (the same equality leak ADR 0013 already weighs for convergent
    dedup) — not a content leak. This is a forward-compatibility rule, not live code.
 
-4. **Remove a member = rotate forward.** The removing owner's device:
+4. **Remove a member = rotate forward, in one act.** The removing owner's device:
    (a) mints `E_{n+1}`, posts the chain-link `symWrap(E_{n+1}, E_n)`;
-   (b) re-grants `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity), carrying each
-   one's admission tag forward — verified under `E_n`, re-tagged under `E_{n+1}`
-   ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6);
-   (c) the server **deletes the removed member's membership** (instant layer-1 access cut — a 403 on the scope).
+   (b) re-grants `E_{n+1}` to the remaining members — the members it read **before** the removal, minus the one
+   it removes (`asymWrap` to each identity) — carrying each one's admission tag forward, verified under `E_n` and
+   re-tagged under `E_{n+1}` ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6);
+   (c) names the removed member **in the same request**, and the server deletes that membership and commits the
+   new epoch in one transaction (instant layer-1 access cut — a 403 on the scope).
+   The removed member is excluded by the remover's own choice, never by a member list read afterwards: a server
+   that re-lists them would otherwise receive `E_{n+1}` wrapped to their genuine key, because their admission tag
+   verifies under `E_n`. One request also means a closed tab can no longer leave a removal without its rotation.
 
    **The commit states the epoch it creates, and the server takes it only as the scope's current epoch + 1**;
    anything else is `409 stale_epoch` and nothing lands. The device builds the link from **its own grant**, not
@@ -65,7 +69,7 @@ members; new content seals under it. Nothing is re-encrypted.**
    the meantime, so reusing that key would give the server a grant it could hand them.
 
    New content now seals under `E_{n+1}`. The removed member keeps ≤ `E_n` → reads pre-removal content, **never**
-   post-removal content, even against a malicious operator.
+   post-removal content — against whom, § Guarantee states.
 
 5. **Re-granting existing members reuses grant-delivery, generalized.** Today grant-delivery reconciles
    **grant-less** memberships ([ADR 0020](0020-grant-distribution-invite-wrap.md)/[ADR 0021](0021-operator-blind-background-tasks.md)).
@@ -74,9 +78,41 @@ members; new content seals under it. Nothing is re-encrypted.**
    epoch"*; any online key-holder re-wraps the current epoch to a stale/absent member, **first-online-wins,
    idempotent** — unchanged discovery, one widened predicate. No server-side wrapping (operator stays blind).
 
-**Guarantee.** *Forward-confidential for post-rotation content, even against a malicious operator.* Already-read
-and pre-rotation content is not retractable (the stated limit); honest-server access-control (the deleted
-membership → 403) is the instant first layer for everything future.
+6. **No client writes under an epoch it knows is stale.** A rotation only protects what is sealed *after* it, so
+   the writer's epoch is the whole guarantee. Two sources of knowledge, each against its own operator:
+   - **The scope's current epoch, as the server reports it.** A member whose grant is older (skipped for a
+     changed key, or still awaiting re-grant) does not write; the scope reads as *awaiting the current key*. The
+     server refuses an epoch-tagged write below the current epoch. Both are layer 1 — they are what an honest
+     operator needs, and without them a stale member's new content sits under an epoch the removed member holds.
+   - **A per-device floor.** Each device remembers the highest epoch it has held for each scope and never seals
+     under a lower one, whatever it is served. This is what an active operator cannot argue with; the mechanism
+     is the device-local high-water mark of [ADR 0028](0028-identity-authenticity-tofu-verification.md)
+     Decision 7. The epoch it compares is authentic because every grant binds its epoch
+     ([ADR 0072](0072-a-seal-binds-its-object.md) Decision 5: binding makes a label authentic, the floor makes
+     it fresh).
+
+**Guarantee.** *Forward-confidential for post-rotation content* — against an honest operator and a database or
+store dump once every writer holds the new epoch, which Decision 6 makes the condition for writing. Against an
+**active** operator, on a client it does not serve ([ADR 0026](0026-client-trust-tiers.md)), it holds for content
+sealed by any client that has received the new epoch: the removal's own rotation cannot be redirected to the
+removed member (Decision 4), and no client goes back below an epoch it has held (Decision 6). Three things it
+does not cover, stated rather than hidden:
+
+- **A withheld rotation (a fork).** An operator can keep a member from ever learning of the new epoch. That
+  member's client keeps writing under the old one, and nothing on the wire tells it otherwise; a floor only stops
+  a client going *back* from what it has seen. Detecting a fork needs a transparency mechanism.
+- **Rotations queued to another key-holder.** A tenant-member removal that cuts a co-shared group, and an
+  account rotation after a compromise ([ADR 0060](0060-key-rotation-after-compromise.md)), are completed by
+  whichever key-holder is next online, and that client knows only the member list the server returns. There is
+  nothing of its own to exclude by, so these hold against an honest operator only.
+- **A departing member colluding with the operator** — a sockpuppet admission tagged under `E_n` before the
+  removal ([ADR 0020](0020-grant-distribution-invite-wrap.md) § Consequences). Closing it needs a member roster
+  the client holds itself, a key-tree-sized change not taken.
+
+One object sits outside the guarantee by choice: item favorites seal under `E_0`
+([ADR 0068](0068-favorites-two-confidentiality-levels.md)). Already-read and pre-rotation content is not
+retractable (the stated limit); honest-server access-control (the deleted membership → 403) is the instant first
+layer for everything future.
 
 ## Consequences
 
@@ -101,3 +137,13 @@ membership → 403) is the instant first layer for everything future.
   model. **Rejected — a flat key-set** (hold every epoch key independently): `O(epochs)` wraps to onboard each new
   member; the backward chain makes onboarding one wrap. **Rejected — single-key rotation without epochs**: to keep
   existing content readable it must re-seal it under the new key — the same re-encryption cost.
+
+## What is still open
+
+Decision 4's single request and Decision 6 are decided and not built (inbox #161 (b)). Until they are, the
+guarantee holds against an honest operator only, and not fully even there. Today the owner's client removes the
+member, then reads the member list, then rotates to whatever that list contains, so a server that re-lists the
+removed member gets the new epoch wrapped to them, and a tab closed between the two calls leaves the group
+unrotated. A member with a stale grant writes under the old epoch, and the server accepts any epoch on a create.
+No client remembers an epoch: the write key is the `grantedEpoch` the server serves, so a server can hand a
+member an older grant and have new content sealed under it.

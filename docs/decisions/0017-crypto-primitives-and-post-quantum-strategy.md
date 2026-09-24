@@ -40,6 +40,15 @@ strategy; they do not choose it.
    ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 2): both stacks build its signed bytes, so a
    vector pins them. Pinning a new primitive still means **adding a vector first, then making the
    implementation green** — never the reverse.
+5. **The server never chooses a cost parameter.** A key-derivation profile travels with each wrap so that a
+   later profile stays readable (rule 3), but a client derives only with a profile it would itself write — today
+   exactly one Argon2id profile, the one the vectors pin — and refuses any other before deriving. A new profile
+   reaches the client first and is written only after that. A salt is not a cost parameter; it is per wrap by
+   design. Why: a served profile accepted as sent lets a server make every unlock run near-unbounded Argon2id
+   (gigabytes, billions of passes). A downgrade is not open — the password-derived auth key uses no served
+   parameters, and every served KEK mixes in the Secret Key or a device factor — so a ceiling alone would do; an
+   exact profile is simpler and closes both. **Decided, not yet built** (inbox #161 (e)): today
+   `decodeKdfParams` bounds nothing but the header length.
 
 ## Consequences
 

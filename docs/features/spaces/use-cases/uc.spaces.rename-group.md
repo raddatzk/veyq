@@ -87,8 +87,8 @@ sequenceDiagram
   intended power (and visible to all on next list); it is **not** the private per-invitee deception ADR 0027 closes
   (that was the one-off name-seal). A strictly weaker, legitimate action.
 - **Consent's / rename's strength tracks the client tier ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).**
-  The forward-secrecy holds crypto-grade on a trusted client and honest-operator on served web — the same tier as
-  all veyq E2EE, no rename-specific weakness.
+  The forward-secrecy holds as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md) § Guarantee states
+  for a rotation, and honest-operator on served web — the same tier as all veyq E2EE, no rename-specific weakness.
 
 ## What this means for you / Was das für dich bedeutet
 

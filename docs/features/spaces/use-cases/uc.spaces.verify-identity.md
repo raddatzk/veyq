@@ -79,8 +79,10 @@ sequenceDiagram
 - **Advisory by default.** Nothing here is *enforced* — a caller who never opens a `changed` review still has the
   wrap/delivery gated, but nothing stops them from ignoring the badge indefinitely. Enforcing verification
   account-wide is strict mode, on the follow-up use-case.
-- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Crypto-grade on a trusted
-  client, honest-operator on operator-served web.
+- **Tier-consistent ([ADR 0026](../../../decisions/0026-client-trust-tiers.md)).** Holds against an active
+  operator only on a client it does not serve, once the pin store cannot be rolled back
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7); honest-operator on
+  operator-served web.
 
 ## What this means for you / Was das für dich bedeutet
 

@@ -10,7 +10,8 @@
 > [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 
 This document is the **target model**. What ships in the first build is tracked via the inbox and
-change-requests, not here.
+change-requests, not here — with one exception: [§ What holds today](#what-holds-today-on-a-client-the-operator-does-not-serve)
+states, per attack, which parts of the model are built against an active operator.
 
 ## The one guarantee
 
@@ -315,6 +316,36 @@ operational metadata, can deny/alter access, and can *attempt* key-substitution 
 above). **The honest boundary: passive operator → protected everywhere; active operator → protected when you
 host it yourself, passive-only on someone else's instance.** Stating this precisely is a trust asset, as it is
 for Signal and Proton.
+
+### What holds today on a client the operator does not serve
+
+A web client you serve yourself against someone else's server, a trusted/attested origin, and later the native
+apps: there, confidentiality is **designed** to hold against an actively malicious operator. This table is the
+one place that says how much of that design is **built**. Self-hosted, none of it is live (the operator is you);
+on operator-served web, the answer is "passive only" whatever the table says. A change-request that closes a row
+edits that row in its docs phase.
+
+| An active operator … | Today | Closed by |
+|---|---|---|
+| reads content already stored | **Cannot** — it holds no key | — |
+| gets a scope's key through an owner's session alone: admits an account of its own, or plants a grant | **Can** | [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6, [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 — inbox #159 |
+| installs an identity of its own on an account through a session or a password | **Can** | [ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2 — inbox #159 |
+| serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Can** | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) — inbox #160 |
+| links a device of its own while the user links theirs | **Can** — the relay grinds either binding step in under a second | [ADR 0059](../decisions/0059-device-linking.md) §11 — inbox #161 (a) |
+| gets a removed group member re-granted by the removal's own rotation | **Can** — the rotation trusts the member list it reads afterwards | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 — inbox #161 (b) |
+| has a member seal new content under an epoch the removed member holds | **Can** — a stale grant writes under the old epoch, and no client remembers an epoch | ADR 0024 Decision 6 — inbox #161 (b) |
+| wipes or rolls back the pin store, so a detected key change becomes a silent first use | **Can** — a store that does not open even counts as empty | ADR 0028 Decision 7 — inbox #161 (c) |
+| reads an uploader link's Memory — with the link and a dump; no activity needed | **Can** | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 — inbox #161 (d) |
+| makes every unlock derive near-forever | **Can** | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 — inbox #161 (e) |
+
+**What stays open once every row reads *Cannot*** — each named where it is decided:
+- a key substituted before anyone pinned it (TOFU's first-use gap, ADR 0028), which also covers a device with
+  no trust-state mark yet (Decision 7);
+- a rotation withheld from members who never saw it (a fork), and rotations queued to another key-holder, which
+  know only the server's member list (ADR 0024 § Guarantee);
+- a departing member who tagged a sockpuppet with the operator's help before the removal (ADR 0020);
+- an attacker who both reads a pairing QR and runs the relay (ADR 0059 §11);
+- item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)).
 
 **A stronger unlock method does not move this boundary** ([ADR 0026](../decisions/0026-client-trust-tiers.md)
 records why): the operator ships the code that consumes whatever the unlock produces. Unlock convenience and
