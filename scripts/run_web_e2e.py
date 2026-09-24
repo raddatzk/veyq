@@ -236,6 +236,11 @@ def compose_up(workdir: Path) -> None:
     a snappier poll of our own.
     """
     log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE.relative_to(REPO)}")
+    # Run from a git WORKTREE, this is the same compose project (`infra`) from a different directory: bind mounts
+    # resolve against THIS checkout, so every service with one gets a new config hash and is recreated onto the
+    # worktree's files — the developer's own dev containers, left mounting a directory that is deleted with the
+    # worktree (measured 2026-09-24: `veyq-garage` rebound to the worktree's `garage.toml`). From a worktree, run
+    # the MAIN checkout's copy of this script with `VEYQ_JAR=<worktree>/backend/build/quarkus-app/quarkus-run.jar`.
     run(COMPOSE + ["up", "-d"])
     log("waiting for mariadb to report healthy")
     run(COMPOSE + ["up", "-d", "--wait", "mariadb"])
