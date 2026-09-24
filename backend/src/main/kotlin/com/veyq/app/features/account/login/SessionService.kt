@@ -226,16 +226,27 @@ class SessionService {
     }
 
     /**
-     * Every ACTIVE family of one account, most recently used first, with the one the presented access token
-     * belongs to marked `current`. The marker is the server's own knowledge of which family the request arrived
-     * on — self-knowledge about the caller, not a new fact about the account — and it is what keeps the client's
-     * "this device" and "sign out everywhere else" honest against each other.
+     * Every family of one account that can still refresh — ACTIVE, with a CURRENT refresh token that has not
+     * expired — most recently used first, with the one the presented access token belongs to marked `current`.
+     * The marker is the server's own knowledge of which family the request arrived on — self-knowledge about the
+     * caller, not a new fact about the account — and it is what keeps the client's "this device" and "sign out
+     * everywhere else" honest against each other.
+     *
+     * The status column alone is not enough, because a family has no expired status: one whose refresh token
+     * has lapsed is already ended (refresh expiry means a full re-login, ADR 0004), yet stays an ACTIVE row until
+     * [SessionPurge] deletes it. Listing on status would leave the list's truth to a purge cadence the operator
+     * configures, where [rotate] and [resolveUserId] check expiry at read time — so this does too, on the same
+     * boundary as [rotate] (a token expiring exactly now is still live).
      */
     @Transactional
     fun listActiveFamilies(userId: String, presentedAccessToken: String?): List<SessionFamilyView> {
         val currentFamilyId = presentedAccessToken?.let { familyIdOf(it) }
         return SessionFamilyEntity
-            .find("userId = ?1 and status = ?2", userId, SessionFamilyEntity.ACTIVE)
+            .find(
+                "userId = ?1 and status = ?2 and id in " +
+                    "(select r.familyId from RefreshTokenEntity r where r.status = ?3 and r.expiresAt >= ?4)",
+                userId, SessionFamilyEntity.ACTIVE, RefreshTokenEntity.CURRENT, Instant.now(),
+            )
             .list()
             .sortedByDescending { it.lastUsedAt }
             .map { SessionFamilyView(it.id, it.createdAt, it.lastUsedAt, it.id == currentFamilyId) }
