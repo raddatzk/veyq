@@ -95,6 +95,11 @@ acceptanceCriteria:
           - src/features/memory/uploadQueue.test.ts
           - src/features/memory/components/MemoryDetail.optimistic.test.ts
           - src/views/ShareView.picker.test.ts
+  - id: exif-tier-fits-its-bound
+    text: The sealed EXIF tier always fits its contract bound (`wrappedExif.maxLength`, which the server enforces) — each free-text field is shortened to a byte cap without splitting a character, a tier that still overflows sheds free text before any number, and the upload never fails for its metadata.
+    coverage:
+      web:
+        unit: [src/features/memory/media.test.ts]
   - id: best-effort-derivation
     text: Underivable media (a codec the browser can't decode, or an empty MIME type) uploads original-only instead of failing the whole upload.
     coverage:
