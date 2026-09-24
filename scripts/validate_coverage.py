@@ -97,6 +97,24 @@ any other, and silence is legal.
   And it owes only the two surfaces every use-case crosses, so a Server-Owner use-case may stay silent on
   `admin-web`, where its client actually lives (pinned open in `validate_guard_gaps.py`); the `web` gap such a
   use-case must carry is where its author says where the client went.
+
+A ref must sit on a surface a run has ADMITTED (`ADMITTED`; ADR 0040, the note on what a row is).
+  What it asserts. A coverage row is a job, the runner that executes one surface's tests, and a declared run
+  counts only on a job some run has already executed. A ref on a surface outside `ADMITTED` is rejected
+  wherever it sits; the surface may still carry gaps, which is where its suites wait, named. `ADMITTED` is an
+  allow-list, so a surface added to `SURFACES` starts unadmitted: gaps from day one, refs after its first run.
+  The refs that predate the rule are named one by one in `UNADMITTED_BASELINE`, and an entry that matches no
+  ref any more is itself an error, so that list only shrinks — including when its surface is admitted.
+  The defect that bought it. ADR 0040 Decision 3 said the rule carries itself, and it did not. `admin-web` and
+  `packages/crypto` were born on 2026-09-08, after the repository's last run; 14 admin-web refs
+  (`uc.admin.create-tenant`, `uc.admin.suspend-tenant`) and 3 crypto refs went in green, while
+  `uc.admin.setup-server` and `uc.admin.identify-instance-release` held their admin-web suites back "for the
+  same reason the sibling admin use-cases are not" — a sibling claim that was false. Four files contradicted
+  each other over one rule that nothing read (2026-09-24).
+  Its limit. Admission is a hand edit. Whether a job ran is a fact about a run, not about a file, so the set
+  cannot be derived from the tree, and the guard trusts whoever adds a surface to `ADMITTED` to have read a log
+  showing that surface's suites executed. It also sees surfaces, not jobs: `web` is admitted as a whole, so a
+  web suite moved into a second, never-run job would stay admitted.
 """
 from __future__ import annotations
 
@@ -122,15 +140,31 @@ CRYPTO = ROOT / "packages" / "crypto"
 ADMIN_WEB = ROOT / "admin-web"
 WORKFLOWS = ROOT / ".github" / "workflows"
 
-# The surface set, and the whole of it: a surface counts when a CI job actually runs its tests — the ADR 0040
-# principle, applied by rule rather than by name (the claim follows the build). Adding one only ever *permits*
-# refs and gaps, so a new surface is one line plus its resolution rule — owing it is a separate decision (OWED).
+# The surface set, and the whole of it: every surface a CI job is written to run. Adding one permits gaps on it
+# at once and refs only once a run has admitted it (ADMITTED), so a new surface is one line plus its resolution
+# rule — owing it is a separate decision (OWED).
 SURFACES = {"backend", "web", "crypto", "admin-web"}
 
 # The surfaces every use-case OWES — covered, or under `gaps` with a reason, never silent: the two user-facing
 # surfaces every use-case crosses. `crypto` is a library proven beneath web and `admin-web` the Server-Owner
 # surface only admin use-cases touch, so owing them would demand a "not applicable" gap almost everywhere.
 OWED = {"backend", "web"}
+
+# The surfaces whose CI job some run has EXECUTED — the only ones whose refs make a claim (ADR 0040, the note on
+# what a row is). An allow-list on purpose: a surface missing here is unadmitted, so forgetting to decide fails
+# closed. Every run that admitted one predates the 2026-08-06 import into this repository, which has had no
+# remote since. Admitting a surface is adding it here after reading a log that shows its suites executed —
+# "the job passed" and "the job ran nothing" look the same until then.
+ADMITTED = {"backend", "web"}
+
+# Refs on an unadmitted surface written before the rule was enforced, named one by one as
+# (use-case, criterion, surface, ref). Debt, not permission: an entry that matches no ref fails, so this only
+# shrinks — moving a ref to its surface's gap, or admitting the surface, both demand deleting its entry here.
+UNADMITTED_BASELINE = {
+    ("uc.memory.gallery", "item-marks-are-shared-and-attributed-to-nobody", "crypto", "src/v1.conformance.test.ts"),
+    ("uc.spaces.set-space-icon", "icon-sealed-under-current-epoch", "crypto", "src/v1.conformance.test.ts"),
+    ("uc.account.trust-device", "device-kek-conformance", "crypto", "src/v1.conformance.test.ts"),
+}
 
 # Surfaces resolved as "a test-file path relative to this root". They differ only in the root they hang off,
 # so the rule is a table rather than a branch per surface — adding the next one is one entry, not a branch.
@@ -692,6 +726,22 @@ def check_ref(area: str, ref: str, where: str) -> None:
                           f"(expected *.test|*.spec .ts/.tsx/.js/.jsx): {ref}")
 
 
+baseline_matched: set[tuple[str, str, str, str]] = set()
+
+
+def check_admitted(use_case: str, criterion: str, area: str, ref: str, where: str) -> None:
+    """A ref on a surface no run has admitted makes no claim, unless the baseline names it as old debt."""
+    if area not in SURFACES or area in ADMITTED:
+        return  # an unknown area is already reported; an admitted one is what every other check is for
+    key = (use_case, criterion, area, ref)
+    if key in UNADMITTED_BASELINE:
+        baseline_matched.add(key)
+        return
+    errors.append(f"{where}: {area} ref {ref} makes no claim — no run has executed {area}'s CI job, so "
+                  f"'{area}' is not in ADMITTED (ADR 0040, the note on what a row is). Name the suite under "
+                  f"the use-case `gaps: {area}:` until a run's log shows it executed")
+
+
 def check_criterion_gaps(cgaps, covered_here: set, where: str) -> None:
     """A criterion's `gaps` list: where its refs on a surface it DOES cover stop short of its sentence."""
     if not isinstance(cgaps, list) or not cgaps:
@@ -772,6 +822,7 @@ for uc in usecases:
                 for ref in refs:
                     ref_count += 1
                     check_ref(area, ref, where)
+                    check_admitted(stem, acid, area, ref, where)
         if ref_count == 0 and not planned:
             errors.append(f"{where}: no tests (needs at least one on {sorted(SURFACES)})")
         if "gaps" in ac:
@@ -798,6 +849,14 @@ for uc in usecases:
         errors.append(f"{where0}: surface '{area}' is silent — no coverage ref and no gap (every use-case owes "
                       f"{sorted(OWED)}: cite a test, or name it under `gaps` with why it has none)")
 
+if stray := sorted(ADMITTED - SURFACES):
+    errors.append(f"{rel(pathlib.Path(__file__))}: ADMITTED names unknown surface(s) {stray} "
+                  f"(expected a subset of {sorted(SURFACES)})")
+for key in sorted(UNADMITTED_BASELINE - baseline_matched):
+    errors.append(f"{rel(pathlib.Path(__file__))}: UNADMITTED_BASELINE entry {key} matches no ref on an "
+                  f"unadmitted surface any more — delete it (the debt it recorded is paid, or its surface was "
+                  f"admitted)")
+
 if backend_refs and not CI_RUNS:
     errors.append(f"{rel(WORKFLOWS)}: no CI run executes the backend's Gradle tests (an unconditional "
                   f"`gradlew test|check|build` step in a push/pull_request workflow), so none of the "
@@ -817,4 +876,6 @@ if errors:
     sys.exit(1)
 
 print(f"coverage OK: {len(usecases)} use-case(s) mapped, all acceptance criteria covered; "
-      f"{backend_refs} backend ref(s) run in CI ({', '.join(r.where for r in CI_RUNS) or 'no run'})")
+      f"{backend_refs} backend ref(s) run in CI ({', '.join(r.where for r in CI_RUNS) or 'no run'}); "
+      f"awaiting a first run: {', '.join(sorted(SURFACES - ADMITTED)) or 'none'} "
+      f"({len(baseline_matched)} baseline ref(s) owed)")

@@ -111,6 +111,16 @@ proven, whatever colour its column is. **The unit is the test, not the surface.*
    > manifest, no schema growth: the gate is already written on the test, the runs already in `.github/`, and
    > the guard only compares the two. What only a run can know (a runtime `assume`, a variable a script
    > exports) stays out of reach, and its docstring says so.
+   >
+   > **Nor did the row rule (2026-09-24).** The note above on what a row is was written the day after 14
+   > `admin-web` and 3 `crypto` refs had gone in green on two jobs no run had ever executed, while two sibling
+   > use-cases held their suites back — four files contradicting each other over a rule nothing read. So
+   > `validate_coverage.py` now carries `ADMITTED`, an allow-list of the surfaces a run has admitted, and
+   > rejects a ref on any other; the refs that predate it are named one by one in a baseline that may only
+   > shrink. This is not the manifest rejected below. It is one line per admitted surface, no field on any
+   > ref, no schema growth, and it records the one fact the tree cannot derive: that someone read a log. That
+   > edit is the admission, and nothing checks it, which the guard's docstring says. The set is the live list;
+   > the note above records the state the day it was written.
 
 ## Consequences
 
