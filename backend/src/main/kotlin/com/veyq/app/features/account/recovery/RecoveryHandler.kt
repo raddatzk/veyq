@@ -5,15 +5,21 @@ import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.normalizeEmail
+import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.tenant.ResolvedTenant
+import io.quarkus.arc.Arc
 import io.quarkus.narayana.jta.QuarkusTransaction
+import io.smallrye.mutiny.infrastructure.Infrastructure
 import jakarta.enterprise.context.ApplicationScoped
+import org.jboss.logging.Logger
 import java.security.MessageDigest
 import java.time.Instant
 
-/** What a recovery request produced. The caller answers identically for all of them — this is for logging and
- *  tests, never for the wire (ADR 0054 § Decision 6). */
-enum class RequestOutcome { MAILED, NO_ACCOUNT, NO_MAIL_TRANSPORT, SEND_FAILED, RATE_LIMITED }
+/** What a recovery request produced. The caller answers identically for all but [NO_MAIL_TRANSPORT] — this is for
+ *  logging and tests, never for the wire (ADR 0054 § Decision 6). [RecoveryHandler.request] answers
+ *  [NO_MAIL_TRANSPORT], [RATE_LIMITED] or [ACCEPTED]; the part it hands off, [RecoveryHandler.deliver], answers
+ *  [MAILED], [NO_ACCOUNT] (unknown *in this tenant*) or [SEND_FAILED]. */
+enum class RequestOutcome { ACCEPTED, MAILED, NO_ACCOUNT, NO_MAIL_TRANSPORT, SEND_FAILED, RATE_LIMITED }
 
 /** The outcome of a completing reset. */
 sealed interface ResetOutcome {
@@ -37,32 +43,34 @@ sealed interface ResetOutcome {
 class RecoveryHandler(
     private val store: RecoveryStore,
     private val accounts: AccountStore,
+    private val membership: MembershipStore,
     private val mailer: RecoveryMailer,
     private val limiter: RecoveryRateLimiter,
     private val sessions: SessionService,
     config: VeyqConfig,
 ) {
     private val ttl = config.recovery().token().ttl()
+    private val log = Logger.getLogger(RecoveryHandler::class.java)
 
     /**
-     * Mint and mail a recovery link, if there is an account under [email].
+     * Accept a recovery request, and hand everything that depends on the address to the background.
      *
-     * The **order is load-bearing, in two steps**.
+     * The **order is load-bearing, in three steps**.
      *
      * *Transport first.* Whether this tenant can send mail is a property of the deployment, so it is answered
      * plainly as `503` (ADR 0055 §4) — and it must be answered **before** the limiter, or the pair becomes an
      * address-level oracle: on a tenant that cannot send, a limited request would answer 202 and a fresh one
      * 503, which is exactly "was this address asked about recently" (ADR 0055 §5). Asking first also stops a
-     * tenant that cannot send from burning limiter budget.
+     * tenant that cannot send from burning limiter budget. A request whose Host names no tenant has no relay at
+     * all and answers the same way.
      *
-     * *Then limiter, then resolve.* Charging the limiter before the account lookup keeps a known and an unknown
-     * address indistinguishable in both response *and* timing, and stops a scraper from walking a list for free.
-     * That is the rule ADR 0054 § Decision 6 states, and it is untouched by the hoist above: the transport check
-     * reads nothing about the address.
+     * *Then the limiter.* Charged before anything reads the address, so a scraper cannot walk a list for free,
+     * and it stays on this side of the hand-off because it is what bounds the queued work (ADR 0054 §6).
      *
-     * The mint commits before the send (the cr-email-invite-send-hardening discipline), so a hung SMTP server
-     * never holds a DB connection and a send failure leaves a usable token rather than rolling back a mint the
-     * person is already waiting on.
+     * *Then answer, and do the rest after.* The lookup, the membership check, the mint and the send run in
+     * [deliver] on the worker pool, and this returns [RequestOutcome.ACCEPTED] without waiting for it. Doing them
+     * inline made the answer's *timing* the oracle §6 forbids: a known address waited for a mint and an SMTP round
+     * trip (up to `TenantMailSender.SEND_TIMEOUT_SECONDS` against a slow relay), an unknown one for neither.
      *
      * Every outcome except [RequestOutcome.NO_MAIL_TRANSPORT] is reported to the caller as the same 202.
      */
@@ -71,8 +79,43 @@ class RecoveryHandler(
         if (limiter.check(email) != null) return RequestOutcome.RATE_LIMITED
 
         val normalized = normalizeEmail(email)
-        val user = QuarkusTransaction.requiringNew().call { accounts.findByEmail(normalized) }
-            ?: return RequestOutcome.NO_ACCOUNT
+        Infrastructure.getDefaultWorkerPool().execute {
+            // A worker thread carries no request, and the mailer's settings read wants the context a request
+            // would have had — so give it one, for exactly this task.
+            val context = Arc.container().requestContext()
+            context.activate()
+            try {
+                deliver(normalized, tenant)
+            } catch (e: Exception) {
+                // deliver() logs its own send failures secret-free; this is what it cannot catch (a DB error).
+                // The tenant and the cause only — never the address, its outcome, or a token.
+                log.warnf("recovery delivery for tenant %s failed: %s", tenant.id, e.message)
+            } finally {
+                context.terminate()
+            }
+        }
+        return RequestOutcome.ACCEPTED
+    }
+
+    /**
+     * The part of a request that depends on the address: mint and mail a link if [email] belongs to an account that
+     * is a **member of [tenant]** (ADR 0054 §4). Runs after the caller was answered; returns its outcome
+     * synchronously so a test can call it directly and assert the negative cases deterministically.
+     *
+     * "Member" is any membership row in that tenant ([MembershipStore.isMember]). That is safe to trust here because
+     * a tenant owner cannot make an outsider belong: a group add refuses a non-member, so a membership comes only
+     * from the person accepting an invite. An account elsewhere — or the tenantless Server Owner — is
+     * [RequestOutcome.NO_ACCOUNT]: unknown *here*, which is all this tenant's relay may learn.
+     *
+     * It must not inherit a transaction, and it runs on a worker thread with no request, so it opens its own: one
+     * short read, then the mint, committed before the send (the cr-email-invite-send-hardening discipline) so a
+     * hung SMTP server never holds a DB connection and a failed send leaves a usable token.
+     */
+    fun deliver(email: String, tenant: ResolvedTenant): RequestOutcome {
+        val normalized = normalizeEmail(email)
+        val user = QuarkusTransaction.requiringNew().call {
+            accounts.findByEmail(normalized)?.takeIf { membership.isMember(it.id, tenant.id) }
+        } ?: return RequestOutcome.NO_ACCOUNT
 
         val token = Tokens.random()
         val expiresAt = Instant.now().plus(ttl)

@@ -165,7 +165,7 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
       · Done when: the guard is green, each rule has been bitten once by snapshot-and-restore (a hand parse back
       in `RecoveryResource`, a `find("domain"…)` in a handler, `VeyqUser.find("email"…)` in `LoginHandler`), and
       the **full** `./gradlew check` is green with the suites in the "pinning" row unedited.
-- [ ] 3 backend: recovery behaviour (Decisions 4 + 5). Both bites are **live defects**: write them on the phase-2
+- [x] 3 backend: recovery behaviour (Decisions 4 + 5). Both bites are **live defects**: write them on the phase-2
       tree, see them red, then fix.
       - *Cross-tenant.* `USER` is a member of tenant B only. The direct delivery call for tenant A →
         `NO_ACCOUNT`, no mail, no `account_recovery` row. **Control** on the same predicate: the call for tenant B
