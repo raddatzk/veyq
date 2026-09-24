@@ -41,8 +41,9 @@ both receiving cards, so it also merges their duplicated grant-receiver logic in
   inside `v1.ts` (`slugToken`, `dedupToken`).
 - **Order:**
   - **After** `cr-pairing-collect-single-use` and `cr-visibility-poller`. Both reshape the pairing pollers and
-    the two cards this CR merges. After the second, `grantEnvelopePolling` is a factory rather than a module
-    singleton.
+    the two cards this CR merges. After the second, both pairing pollers are instances of
+    `createVisibilityPoller` (`web/src/shared/state/visibilityPoller.ts`); each module still holds its one
+    instance, and every tick checks its `AbortSignal` before applying anything.
   - **After** `cr-seal-binds-its-object`. `pairing-grant` becomes a typed-seal purpose there, and the envelope's
     MAC sits beside that seal.
   - **Before** `cr-trust-state-never-goes-backwards`, whose trust-state marks ride this CR's authenticated

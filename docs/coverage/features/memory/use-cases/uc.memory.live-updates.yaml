@@ -48,6 +48,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/memory/mediaRevisionPolling.test.ts
+          - src/shared/state/visibilityPoller.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
   - id: operator-blind-live
     text: The server sees only an opaque revision counter, opaque mediaIds, coarse timestamps, and the poll access-pattern it already sees on reads — never content, never a key. No new operator-visible signal; K_mem/K_share never touch the server.
