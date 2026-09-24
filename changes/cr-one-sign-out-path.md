@@ -27,17 +27,16 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
 - **The behaviour is written down:** [uc.account.sign-out](../docs/features/account/use-cases/uc.account.sign-out.md)
   (triggers, main flow, the ending, E1–E4, what stays on the device) and ADR 0070 (why a new document, and
   what was rejected). This CR builds both. It invents nothing.
-- **Order:** after `cr-session-refresh-into-app`, which moves `refreshSession` into `web/src/app/sessionRefresh.ts`.
+- **Order:** `refreshSession` already lives in `web/src/app/sessionRefresh.ts` (moved out of the login feature by
+  `cr-session-refresh-into-app`); phase 3 edits it there.
   It also edits the head of `signOut.ts`, whose `resetServerRole` call `cr-admin-api-only-through-the-admin-container`
   deletes — text overlap only; whichever lands second rebases.
-  Phase 3 edits it there.
 - **The ending imports no feature and not the router** (ADR 0070 § Decision 1). That is what lets the refresh
   path call it without a cycle. Take the sign-in path as a literal or a parameter.
 - **Measured at refine, so no phase re-derives it. Spot-check the first bullet**, because the whole argument
   rests on it:
   - A rejected refresh drops only the tokens: the `catch` of the rotation calls `clearTokens()` and rethrows.
-    `grep -n -A4 "} catch (e)" web/src/app/sessionRefresh.ts` (or `features/account/login/login.ts` if the
-    previous CR has not landed).
+    `grep -n -A4 "} catch (e)" web/src/app/sessionRefresh.ts`.
   - No `BroadcastChannel` exists: `grep -rn BroadcastChannel web/src` finds nothing.
   - The service worker keeps a decrypted read-ahead per playback, in its own memory
     (`grep -n "class PlaintextCache" web/src/sw/mediaSw.ts`), and today revokes only one handle at a time
