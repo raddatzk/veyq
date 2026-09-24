@@ -60,7 +60,8 @@
   reconcile ([uc.memory.date](uc.memory.date.md) E5) see others' additions sooner — the same `media_revision` the
   date use-case foreshadowed as the blind-safe upgrade.
 - **Reuse the grid — never invent.** Auto-insert reuses the optimistic-tile grid + `mergeItems` reconcile
-  (cr-0074); the poll loop mirrors `grantDeliveryPolling` / `scopeRotationPolling` (interval + visibility gate).
+  (cr-0074); the poll loop is the client's one `createVisibilityPoller` (`web/src/shared/state/`: interval +
+  visibility gate, no overlapping ticks, nothing applied after a stop).
 - **Deferred (out of scope):** long-poll / push for sub-second latency (shared later with the live journal, #6);
   a **subtree** (Memory + chapters) aggregated revision (the gallery is own-node); a keyset delta is add/edit-only
   by design, deletes ride the id-set.

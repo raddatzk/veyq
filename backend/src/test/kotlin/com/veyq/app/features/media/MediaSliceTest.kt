@@ -12,6 +12,7 @@ import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import jakarta.inject.Inject
+import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
@@ -428,6 +429,38 @@ class MediaSliceTest {
     }
 
     /** Start one blob upload (in-memory store: presignedPuts come back null) and return its uploadId. */
+    // The request-body bounds are enforced at the boundary, not in the handler: a violation is Quarkus's own
+    // `ResteasyReactiveViolationExceptionMapper` answer (400, `title` "Constraint Violation", the failing path in
+    // `violations[].field`), never a veyq `code`. `validate_request_bounds.py` proves each annotation is PRESENT;
+    // these prove the two mechanisms it relies on have an EFFECT — a top-level bound, and the `@Valid` cascade.
+
+    @Test
+    fun startBlobUploadsOverItsItemBoundIs400() {
+        val (userId, scopeId) = seedMemberScope()
+        // control: exactly `maxItems` (256) is accepted — so the negative below is the bound, not the endpoint
+        startBatch(userId, scopeId, uploadItems(256)).then().statusCode(200).body("results.size()", equalTo(256))
+        startBatch(userId, scopeId, uploadItems(257)).then().statusCode(400)
+            .body("title", equalTo("Constraint Violation"))
+            .body("violations.field", hasItem(endsWith(".items")))
+    }
+
+    @Test
+    fun startBlobUploadsValidatesInsideEachItem() {
+        val (userId, scopeId) = seedMemberScope()
+        // control: the same one-item batch with a well-formed wrap is accepted
+        startBatch(userId, scopeId, uploadItems(1)).then().statusCode(200)
+        startBatch(userId, scopeId, """[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":""}]""").then().statusCode(400)
+            .body("title", equalTo("Constraint Violation"))
+            .body("violations.field", hasItem(endsWith("wrappedBlobKey")))
+    }
+
+    private fun uploadItems(n: Int) = (1..n).joinToString(",", "[", "]") { """{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"d3JhcA=="}""" }
+
+    private fun startBatch(userId: String, scopeId: String, items: String) =
+        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            .body("""{"items":$items}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+
     private fun startOne(userId: String, scopeId: String, chunkCount: Int, byteSize: Long, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}]}""")

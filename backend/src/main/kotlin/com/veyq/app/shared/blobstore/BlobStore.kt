@@ -146,8 +146,8 @@ class InMemoryBlobStore : BlobStore {
  * says, since nothing else is left to sign against.
  *
  * In the latter two the domain is ignored **entirely** rather than substituted, which would invent a bucket host
- * that does not exist. That is [endpointFor]'s doing and nobody else's — `TenantHostResolver.domainFor`, which
- * this once named, is a different method in a different package that ignores nothing.
+ * that does not exist. That is [endpointFor]'s doing and nobody else's — `RequestTenant`, which only hands over
+ * the resolved tenant's registered domain, is a different class in a different package that ignores nothing.
  */
 class S3BlobStore(
     private val s3: S3Client,

@@ -34,7 +34,7 @@ acceptanceCriteria:
       web:
         unit:
           - src/features/account/rememberMe/deviceKeyWrap.test.ts
-          - src/features/account/login/login.test.ts
+          - src/app/sessionRefresh.test.ts
   - id: secret-key-once-per-device
     text: The Secret Key is read only on the first unlock per device (to create the wrap) and never stored.
     coverage:

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // The pin store's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so the tests
 // prove a genuine round-trip and the version-guarded union-merge, not a stub.
 vi.mock('../../api/client', () => ({ accountIdentityPinsApi: vi.fn(), tasksApi: vi.fn() }))
-vi.mock('./login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: vi.fn(), identityPrivate: vi.fn() }))
 
 import {

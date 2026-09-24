@@ -742,6 +742,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/BlobUploadRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
 
     BlobUploadRequestItem:
       type: object
@@ -755,6 +756,7 @@ components:
           minimum: 1
           maximum: 100000
           example: 2
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(100000)'
         byteSize:
           x-veyq-visibility: measure
           type: integer
@@ -762,6 +764,7 @@ components:
           description: Total ciphertext byte size declared up front (verified against the stored objects on complete).
           minimum: 0
           example: 131072
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         wrappedBlobKey:
           type: string
           description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
@@ -809,6 +812,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/MediaRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
 
     MediaRequestItem:
       type: object
@@ -845,6 +849,7 @@ components:
             type with no derivable frame (the gallery falls back to an icon). At most one of each kind.
           maxItems: 2
           items: { $ref: "#/components/schemas/MediaDerivativeUpload" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2)'
         wrappedMeta:
           type: [string, "null"]
           description: >
@@ -858,6 +863,7 @@ components:
           contentEncoding: base64
           maxLength: 512
           example: bWV0YS1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedExif:
           type: [string, "null"]
           description: >
@@ -869,6 +875,7 @@ components:
           contentEncoding: base64
           maxLength: 16384
           example: ZXhpZi1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MediaDerivativeUpload:
       type: object
@@ -1109,6 +1116,7 @@ components:
           contentEncoding: base64
           maxLength: 512
           example: bWV0YS1jaXBoZXJ0ZXh0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     MediaMetaResponse:
       type: object
@@ -1220,6 +1228,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256)'
         targetBucketId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -1283,6 +1292,7 @@ components:
           minItems: 1
           maxItems: 256
           items: { $ref: "#/components/schemas/BlobDownloadRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256)'
 
     BlobDownloadRequestItem:
       type: object

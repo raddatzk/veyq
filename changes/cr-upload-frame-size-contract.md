@@ -36,8 +36,8 @@ only sign per-chunk lengths once every chunk's length is known.
 - **The SW must not import the data layer** (`range.test.ts`'s own pin says so). Whether it may import
   `@veyq/crypto` is a bundle question this CR does not open. See Decisions.
 - **Order:** after `cr-inert-store-responses` (it changes the same `S3BlobStore.presignPut` builder to sign
-  `content-type`; this CR adds `content-length` to the same builder) and after `cr-request-bounds-enforced` (so
-  the changed `byteSize`/`chunkCount` bounds land under its guard). Before `cr-upload-windowed-presign`.
+  `content-type`; this CR adds `content-length` to the same builder) and after `cr-request-bounds-enforced` (done —
+  the changed `byteSize`/`chunkCount` bounds land under its guard, `scripts/validate_request_bounds.py`). Before `cr-upload-windowed-presign`.
 - **Out of scope:** windows, the session's opener, the purge, streaming, `max-bytes`'s new default — all in
   `cr-upload-windowed-presign`.
 
@@ -97,7 +97,7 @@ only sign per-chunk lengths once every chunk's length is known.
       4. **Write the two bite-tests below.** They are live defects on the tree step 3 leaves; read which
          assertion reddens.
       5. **The contract, together with the code that obeys it.** Make the schema bounds and descriptions
-         above in both specs. `cr-request-bounds-enforced`'s guard holds the annotations to them. Locator:
+         above in both specs. `scripts/validate_request_bounds.py` holds the annotations to them. Locator:
          `grep -n 'chunkCount\|byteSize\|budget_exceeded\|presignedPuts' contracts/api/media.openapi.yaml contracts/api/sharing.openapi.yaml`.
          In the same step, `start` derives and refuses (`shape_invalid`), and `max-chunks` goes. The bounds and
          the derivation land together: a `byteSize` of 16 is refused by both, so one without the other is a red

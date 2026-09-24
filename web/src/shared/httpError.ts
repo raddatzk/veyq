@@ -3,7 +3,7 @@
  *
  * Each generated package (`generated/auth`, `generated/account`, `generated/scopes`, …) ships its OWN
  * `ResponseError` class, so `err instanceof ResponseError` from one package is `false` for an error thrown by
- * another (see the note on `withRefresh` in `features/account/login/login.ts`). Every decoder in the app worked
+ * another (see the note on `withRefresh` in `app/sessionRefresh.ts`). Every decoder in the app worked
  * around this by duck-typing the shared shape (`.response: Response`) by hand — the same ~12 lines copied ~8×.
  * These helpers are that shape, once.
  *

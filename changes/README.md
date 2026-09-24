@@ -368,6 +368,13 @@ slip one size down, in the phase text: *"the four test files that stub `window.c
 and the fifth stubbed it because it **mounts** a component that calls it, which is exactly the class a prose
 count cannot see and `grep -rln` answers in one line.
 
+**A CR that NARROWS what a function accepts has a class it never names: the fixtures that feed it the input
+now refused.** A grep for callers finds production call sites; it cannot see a test that builds the refused
+input and hands it through the real path. `cr-kdf-params-client-chosen` listed every caller of
+`decodeKdfParams` and none of the five suites that served it a cheap Argon2id profile — three via the named
+`TEST_ARGON`, two via local literals a grep for that name also misses. Key that locator on the input's
+**producer** in the test trees (there: `encodeKdfParams(`), never on the constant you expect them to use.
+
 So: **a classification is an inventory, and every class in it ships with the command that produces its
 members** — the one being removed, the ones being kept, and the surfaces explicitly excluded. Cheap (the
 locators are variations of one another) and self-checking: if two classes' commands overlap, the classification
@@ -457,6 +464,13 @@ no file restates it, because a restated list drifts out of step with the one tha
 (The glob sees files, not commits: CI runs it over the **committed** tree, so an *untracked* guard — or an
 untracked file a guard would have rejected — is green locally and unchecked in CI. Commit before believing a
 local green.)
+
+**In a wave of parallel CRs the glob gates the MERGED tree, once — not each branch.** A branch is not the tree
+that lands, so its green says nothing about the merge, and the price of running it anyway is real: on 2026-09-24
+eight sessions each ran the whole glob at once, and `validate_guard_gaps.py` alone took over 20 minutes in one of
+them. So a wave session runs the guards its own Done-when names (a coverage edit runs `validate_coverage.py`), and
+the coordinating session runs the whole glob after merging the wave, before it calls the wave done. A red there
+goes back to the CR that caused it.
 
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
@@ -716,6 +730,12 @@ red**; reaching for the fix first destroys the evidence and leaves you injecting
 does not replace snapshot-and-restore — that is what you fall back to when the defect is already fixed, when the
 guard must also reject shapes that never occurred here, or when the case belongs in
 `validate_guard_gaps.py`'s repeated harness.
+
+**And the red is taken through a seam the UNFIXED tree has.** A CR that names its bite's lever in the fix's own
+terms — `cr-request-tenant-and-tenant-bound-recovery` said "the direct delivery call", a method the fix splits out —
+names something that does not exist where the red must be recorded. Record the red through the old seam (there, the
+request method that still ran the delivery inline), re-point the test once the fix creates the new one, and re-bite
+it by injection on the fixed tree; a CR can save that detour by naming the lever for both trees.
 
 **But a live-defect red can land on the wrong STEP, and then it is not a bite either.** § *a bite test must tell
 "the guard held" apart from "nothing ran"* catches an injection that breaks compilation instead of the assertion;

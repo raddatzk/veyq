@@ -22,10 +22,8 @@ vi.mock('../features/tenant/tenantInvite', () => ({
   bornTenantScope: vi.fn().mockReturnValue({ grant: 'AQ==', scopeRootKey: new Uint8Array(32) }),
   tenantError: vi.fn().mockResolvedValue({ status: 0, code: null }),
 }))
-vi.mock('../features/account/login/login', () => ({
-  login: vi.fn().mockResolvedValue(undefined),
-  withRefresh: vi.fn((call: () => unknown) => call()),
-}))
+vi.mock('../features/account/login/login', () => ({ login: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../app/sessionRefresh', () => ({ withRefresh: vi.fn((call: () => unknown) => call()) }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../features/account/profile/profile', () => ({ sealName: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({

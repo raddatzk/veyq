@@ -9,7 +9,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { fromB64std } from '@veyq/crypto/base64'
 import { accountApi } from '../../api/client'
-import { withRefresh } from './login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
 import { MasterKeyWrapMethodEnum } from '../../api/generated/account'
 
@@ -61,6 +61,9 @@ export async function proveColdCredential(password: string, secretKeyB64: string
   }
 
   const secretKey = fromB64std(secretKeyB64.trim())
+  // A served profile this client does not write throws `v1.KdfProfileRefused` here (ADR 0017 rule 5). It is the
+  // server's fault, not the credential's, so it stays OUTSIDE the refusals above: both screens then say "nothing
+  // was changed, try again", never "that password or Secret Key didn't match".
   const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   let opened: Uint8Array

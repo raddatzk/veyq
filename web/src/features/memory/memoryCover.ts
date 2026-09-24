@@ -18,7 +18,7 @@
 // seal + display math + the on-device cover-thumbnail load (`loadNodeCover`); the media picker and the 16:9
 // pan/zoom crop editor live in the UI layer (cr-0072 phase 3).
 import { contentApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { hasDerivatives, listMedia, openBlob, openGrid, type BlobRef } from './media'
 import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
 

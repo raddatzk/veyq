@@ -243,8 +243,9 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   /** One live poll (uc.memory.live-updates, cr-0107): a conditional GET keyed on the cached `mediaRevision`. A 304
    *  is a no-op; a change upserts the keyset delta (new tiles auto-insert), reconciles removals via the id-set, and
    *  decrypts just the delta's tiles. Errors are swallowed — the last grid stays and the next poll re-syncs in one
-   *  round-trip (E6). Node-race-guarded so a mid-poll navigation can't write into the wrong gallery. */
-  async function pollMedia() {
+   *  round-trip (E6). Node-race-guarded so a mid-poll navigation can't write into the wrong gallery, and fenced by
+   *  the live poll's `signal` so a poll still in flight when the loop stops (close, lock) writes nothing. */
+  async function pollMedia(signal?: AbortSignal) {
     const key = ctx.memoryKey()
     const nodeId = ctx.node().id
     if (!key || mediaRevision.value === null) return // not an open, loaded gallery
@@ -254,12 +255,12 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
         since: newestCursor(items.value),
         sinceDelete: deleteRevision.value,
       })
-      if (ctx.node().id !== nodeId || page.notModified) return // navigated away / nothing changed (304)
+      if (signal?.aborted || ctx.node().id !== nodeId || page.notModified) return // stopped / navigated away / nothing changed (304)
       upsertItems(page.items, page.mediaIds)
       mediaRevision.value = page.mediaRevision
       deleteRevision.value = page.deleteRevision
       await pipeline.decrypt(page.items, () => ctx.node().id === nodeId) // decrypt only the delta's new/changed tiles
-      if (ctx.node().id === nodeId) await ctx.onSettle()
+      if (!signal?.aborted && ctx.node().id === nodeId) await ctx.onSettle()
     } catch {
       // offline/transient: keep the current grid; the revision compare makes the next successful poll a single round-trip
     }
@@ -304,7 +305,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       toast.dismissUndo()
       stopMediaRevisionPolling()
       void load({ reset: true }).then(() => {
-        if (ctx.memoryKey()) startMediaRevisionPolling(() => void pollMedia())
+        if (ctx.memoryKey()) startMediaRevisionPolling((signal) => pollMedia(signal))
       })
     },
     { immediate: true },

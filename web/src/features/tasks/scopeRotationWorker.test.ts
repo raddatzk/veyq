@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
-vi.mock('../account/login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 // The rotation crypto + directory fetch are covered by their own suites (scopes.test.ts / members.test.ts); the
 // worker just orchestrates claim → rotate → complete, so stub them and assert the wiring + arguments.
 vi.mock('../spaces/scopes', () => ({ rotateGroupForRemoval: vi.fn().mockResolvedValue(2) }))

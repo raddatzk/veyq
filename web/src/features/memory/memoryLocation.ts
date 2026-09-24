@@ -11,7 +11,7 @@
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
 // UI layer (cr-0069 phase 2), reusing `computeMedoid` here.
 import { contentApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { unsealMeta, type MediaItem } from './media'
 import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
 import type { GeoLevel } from './geocode'

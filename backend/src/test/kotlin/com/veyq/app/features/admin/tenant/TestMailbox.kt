@@ -18,8 +18,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction
  * keys SMTP auth on the username, so an auth-less relay needs neither a stored password nor an openable config
  * KEK. That keeps a test that only wants a *sendable* tenant from dragging in the whole ADR 0050 key setup.
  *
- * **Ports are per-instance and must not collide.** The suite shares one JVM, so allocate a fresh constant here
- * rather than reusing another test's — [SmtpInviteMailSendTest] holds 13925-13929.
+ * **Ports are per-instance and must not collide.** The suite shares one JVM, so allocate a fresh constant rather
+ * than reusing another test's. Find the taken ones with `grep -rhoE '139[0-9]{2}' backend/src/test | sort -u`, not
+ * from a comment's list: the list `RecoverySliceTest` kept had already missed `TenantOwnerGateTest`'s 13938.
  *
  * **Trap — declare `: Unit` when a test's whole body is `use { … }`.** `use` returns its block's last value, so
  * `@Test fun x() = TestMailbox(p).start().use { … }` infers a non-`Unit` return type, and JUnit then **silently

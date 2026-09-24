@@ -11,7 +11,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { sharesApi, publicSharesApi } from '../../api/client'
-import { withRefresh } from '../account/login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import type { LocaleMap } from '../../shared/ui/localeMap'
 import { openName, sealName } from './tree'

@@ -44,9 +44,9 @@ export async function releaseRecoveryMaterial(token: string): Promise<RecoveryMa
 /**
  * Open the released wrap with the Secret Key alone — no password, which is the whole point of this wrap.
  *
- * Honours the KDF params **carried by the wrap**, not today's `ARGON` constant: an account born under older
- * parameters must still open (that is what `encodeKdfParams` is for). A wrong Secret Key fails here, on the
- * device, as an AEAD error — nothing is sent and the token stays live.
+ * Derives with the salt **carried by the wrap**, and only under a profile this client writes: a served cost
+ * profile is refused before deriving (`v1.KdfProfileRefused`, ADR 0017 rule 5). A wrong Secret Key fails here, on
+ * the device, as an AEAD error — nothing is sent and the token stays live.
  */
 export async function openWithSecretKey(material: RecoveryMaterial, secretKeyB64: string): Promise<OpenedRecovery> {
   const secretKey = fromB64std(secretKeyB64)

@@ -10,12 +10,12 @@
 //    derivation (`kekPasswordSecret(sk, pw, salt, params)`, `deriveAuthKeypair(pw, salt, params)`) and travel on
 //    the wire in each wrap's `kdfParams` — that is crypto agility (AD-25), not a test affordance. A test that
 //    both builds the fixture and computes the expected value can pick cheap params on both sides and still run
-//    REAL Argon2id over the real code path: 0.8ms instead of 823ms, with the assertion unchanged. Where the
-//    params ride in `kdfParams` it is also strictly STRONGER — a production path that ignored the wrap's params
-//    and hardcoded `v1.ARGON` passes at production params and fails here.
+//    REAL Argon2id over the real code path: 0.8ms instead of 823ms, with the assertion unchanged.
 //  - **Production owns the derivation → `PRODUCTION_ARGON_TIMEOUT_MS`.** Where the code under test mints the
 //    wrap itself (`login`, `createShare(…, password)`, `buildCreateServerOwnerRequest`, `trustThisDevice`), the
-//    test cannot choose the params without production growing a params argument for a test's benefit. The cost
+//    test cannot choose the params without production growing a params argument for a test's benefit. Nor where
+//    it READS a served wrap (unlock, recovery, the cold-credential proof): `decodeKdfParams` refuses any profile
+//    but `v1.ARGON` before deriving (ADR 0017 rule 5), so a TEST_ARGON wrap is — correctly — never opened. The cost
 //    is inherent, so the honest fix is to state the real ceiling on exactly those tests — and NOT globally in
 //    `vite.config.ts`: the other ~770 tests run in under 5ms each, and their 5000ms default is a live canary for
 //    a hung promise or a missing mock. A global bump buys these few tests headroom by spending every other

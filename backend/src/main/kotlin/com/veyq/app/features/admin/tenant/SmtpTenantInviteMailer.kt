@@ -10,9 +10,9 @@ import java.time.format.DateTimeFormatter
 
 /**
  * The real, SMTP-backed [TenantInviteMailer] (cr-email-smtp-transport, ADR 0048/0049/0050). A per-tenant transport:
- * it resolves the tenant's own mail settings by the `domain` it is handed, and when that tenant has **enabled +
- * fully configured** SMTP (and the KEK is present so the password can be unsealed), it renders the invite over
- * the closed variable set ([InviteMailRenderer]) and sends it from the tenant's own address. Otherwise it
+ * it resolves the tenant's own mail settings by the tenant **id** it is handed (the domain only shapes the link
+ * and the From address), and when that tenant has **enabled + fully configured** SMTP (and the KEK is present so
+ * the password can be unsealed), it renders the invite over the closed variable set ([InviteMailRenderer]) and sends it from the tenant's own address. Otherwise it
  * **delegates to [LoggingTenantInviteMailer]** (copy-link + the cr-0046 dev-file). Since ADR 0055 §2 that
  * delegation is reachable **only for the Server-Owner's tenant-bootstrap invite** — a PENDING tenant has no mail
  * settings by construction, which is exactly what bounds the surviving copy-link (§3) — and for the dev/seed loop
@@ -43,11 +43,11 @@ class SmtpTenantInviteMailer(
     private val fallback: LoggingTenantInviteMailer,
 ) : TenantInviteMailer {
 
-    override fun canSend(domain: String): Boolean = sender.sendable(sender.settings(domain))
+    override fun canSend(tenantId: String): Boolean = sender.sendable(sender.settings(tenantId))
 
-    override fun sendInvite(domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult {
-        val settings = sender.settings(domain)
-        if (!sender.sendable(settings)) return fallback.sendInvite(domain, ownerEmail, token, expiresAt)
+    override fun sendInvite(tenantId: String, domain: String, ownerEmail: String, token: String, expiresAt: Instant): DeliveryResult {
+        val settings = sender.settings(tenantId)
+        if (!sender.sendable(settings)) return fallback.sendInvite(tenantId, domain, ownerEmail, token, expiresAt)
         val s = settings!!
         // The accept link mirrors web/src/shared/inviteLink.ts: the secret rides the URL fragment (ADR 0020). The
         // domain is a bare hostname validated at tenant creation (CreateTenantRequest pattern), so it is safe here.

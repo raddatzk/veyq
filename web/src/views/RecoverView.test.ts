@@ -18,6 +18,7 @@ const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
 import RecoverView from './RecoverView.vue'
+import { KdfProfileRefused } from '@veyq/crypto/v1'
 import {
   requestRecovery,
   releaseRecoveryMaterial,
@@ -43,6 +44,7 @@ const i18n = createI18n({
         mailUnavailable: 'This server cannot send email yet', requestFailed: 'The request did not go through',
       },
       unlock: { secretKey: 'Secret Key', secretKeyHint: 'hint' },
+      common: { unreachable: 'This instance can’t be reached right now' },
       password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count} breaches.' },
     },
   },
@@ -221,6 +223,24 @@ describe('RecoverView', () => {
 
     expect(w.text()).toContain('That Secret Key did not open your account')
     expect(w.text()).toContain('Secret Key')
+    expect(completeRecovery).not.toHaveBeenCalled()
+  })
+
+  it('a served key-derivation profile the client refused does not blame the Secret Key', async () => {
+    // ADR 0017 rule 5: the server sent a profile this client does not write — the Kit is fine. The test above is
+    // this one's control: same step, same submit, a wrong key still says so.
+    withToken()
+    vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
+    vi.mocked(openWithSecretKey).mockRejectedValue(new KdfProfileRefused())
+    const w = mountView()
+    await flushPromises()
+
+    await w.find('input').setValue('the-right-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    expect(w.text()).toContain('This instance can’t be reached right now')
+    expect(w.text()).not.toContain('That Secret Key did not open your account')
     expect(completeRecovery).not.toHaveBeenCalled()
   })
 

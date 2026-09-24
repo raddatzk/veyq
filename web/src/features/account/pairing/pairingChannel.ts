@@ -6,7 +6,7 @@
 // — the envelope is worthless without the ephemeral private key. `delegate` and `seal` are the two verbs that
 // reach an account, and only the trusted, unlocked device makes them.
 import { pairingApi, publicPairingApi } from '../../../api/client'
-import { withRefresh } from '../login/login'
+import { withRefresh } from '../../../app/sessionRefresh'
 import type { PairingChannel } from '../../../api/generated/auth'
 
 export type { PairingChannel } from '../../../api/generated/auth'

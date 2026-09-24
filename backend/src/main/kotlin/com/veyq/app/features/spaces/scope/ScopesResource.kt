@@ -20,11 +20,9 @@ import com.veyq.app.generated.model.SetScopeIconRequest
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
-import com.veyq.app.shared.tenant.TenantHostResolver
+import com.veyq.app.shared.tenant.RequestTenant
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
-import jakarta.ws.rs.core.Context
-import jakarta.ws.rs.core.HttpHeaders
 import jakarta.ws.rs.core.Response
 import java.time.Duration
 import java.time.OffsetDateTime
@@ -36,7 +34,7 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
  * HTTP adapter for a member's scopes (en.spaces.personal-scope, cr-0026). Implements the generated
  * [ScopesApi]; thin (ADR 0001) — delegates to [ScopesHandler]. Authentication is central (`@Authenticated`):
  * a missing/invalid token is a generic 401 before this runs. The active tenant is resolved from the request
- * Host (the reverse-proxy `X-Forwarded-Host`, else `Host`). Operator-blind: both endpoints handle only the
+ * Host by [RequestTenant]. Operator-blind: both endpoints handle only the
  * **caller's own** scopes (userId from the `SecurityIdentity` principal) and the server stores/returns only
  * ciphertext grants, never a scope key.
  */
@@ -49,18 +47,15 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 class ScopesResource(
     private val handler: ScopesHandler,
     private val identity: SecurityIdentity,
-    private val hosts: TenantHostResolver,
+    private val tenant: RequestTenant,
     config: VeyqConfig,
 ) : ScopesApi {
     // The grace window (cr-0090) — used to derive `purgeAfter = deletedAt + retention` for a pending-deletion group.
     private val deleteRetention: Duration = config.scope().delete().retention()
 
-    @Context
-    lateinit var headers: HttpHeaders
-
     override fun createPersonalScope(createPersonalScopeRequest: CreatePersonalScopeRequest): Response =
         when (val outcome = handler.createPersonal(
-            identity.principal.name, activeHost(), createPersonalScopeRequest.wrappedGrant,
+            identity.principal.name, activeTenantId(), createPersonalScopeRequest.wrappedGrant,
         )) {
             is CreatePersonalOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -70,7 +65,7 @@ class ScopesResource(
 
     override fun createGroup(createGroupRequest: CreateGroupRequest): Response =
         when (val outcome = handler.createGroup(
-            identity.principal.name, activeHost(), createGroupRequest.encryptedName, createGroupRequest.wrappedGrant,
+            identity.principal.name, activeTenantId(), createGroupRequest.encryptedName, createGroupRequest.wrappedGrant,
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -79,7 +74,7 @@ class ScopesResource(
         }
 
     override fun listMyScopes(): Response =
-        when (val outcome = handler.listMine(identity.principal.name, activeHost())) {
+        when (val outcome = handler.listMine(identity.principal.name, activeTenantId())) {
             is ListScopesOutcome.Scopes ->
                 Response.ok(outcome.rows.map {
                     ScopeSummary(
@@ -126,7 +121,7 @@ class ScopesResource(
     }
 
     override fun listMyGroupInvitations(): Response =
-        when (val outcome = handler.listInvitations(identity.principal.name, activeHost())) {
+        when (val outcome = handler.listInvitations(identity.principal.name, activeTenantId())) {
             is ListInvitationsOutcome.Invitations -> Response.ok(
                 outcome.rows.map {
                     GroupInvitation(
@@ -222,8 +217,8 @@ class ScopesResource(
         hasGrant = row.hasGrant, pendingConsent = row.pendingConsent,
     )
 
-    /** The active tenant's host — read through the one canonical resolver, which `TenantSuspensionFilter` also
-     *  uses: a gate that normalized the Host differently from the handlers it guards would guard a different
-     *  tenant than it thinks (ADR 0066). */
-    private fun activeHost(): String? = hosts.hostOf { headers.getHeaderString(it) }
+    /** The active tenant's id — resolved by [RequestTenant] through the one canonical resolver, which
+     *  `TenantSuspensionFilter` also uses: a gate that normalized the Host differently from the handlers it guards
+     *  would guard a different tenant than it thinks (ADR 0066). */
+    private fun activeTenantId(): String? = tenant.resolve()?.id
 }

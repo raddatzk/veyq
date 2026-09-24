@@ -1,6 +1,7 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.identity.normalizeEmail
 import com.veyq.app.shared.ratelimit.TokenBucketCounter
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.inject.Inject
@@ -53,9 +54,9 @@ class InviteMailRateLimiter(
      */
     fun check(tenantId: String, recipientEmail: String): Long? {
         val nowNanos = System.nanoTime()
-        // Key on the same lowercase normalization the mint uses (idempotent — callers already normalize).
+        // Key on the same normalization the mint uses (idempotent — callers already normalize).
         // NUL joins the two key parts unambiguously — it cannot occur in a UUID tenantId or an email.
-        val recipientKey = "$tenantId\u0000${recipientEmail.lowercase()}"
+        val recipientKey = "$tenantId\u0000${normalizeEmail(recipientEmail)}"
         recipientBuckets.consume(recipientKey, nowNanos, perRecipientMax.toLong(), windowSeconds)
             ?.let { return it }
         return tenantBuckets.consume(tenantId, nowNanos, perTenantMax.toLong(), windowSeconds)

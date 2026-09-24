@@ -75,9 +75,9 @@ sign-in included. Neither needs any session state.**
   or completed, and `my-tenants` still lists it — with its status and without its grant or icon, so the
   switcher can show it offline.
 - **The `Host` filter stays, for what a `Host` can decide.** A **pre-matching** request filter
-  (`TenantSuspensionFilter`) resolves the tenant from the `Host` the same way `ScopesResource.activeHost()`
-  already does and refuses every **API** request on a `SUSPENDED` tenant's own domain with
-  `403 tenant_suspended` — unauthenticated or not, before the request reaches a handler or an authentication
+  (`TenantSuspensionFilter`) resolves the tenant from the `Host` through the same resolver that `RequestTenant`
+  uses to hand every resource its tenant, and refuses every **API** request on a `SUSPENDED` tenant's own domain
+  with `403 tenant_suspended` — unauthenticated or not, before the request reaches a handler or an authentication
   check. That covers what no scope is addressed by — signing in on that domain. What it refuses is the API and
   only the API: the app shell ([ADR 0069](0069-backend-serves-the-web-app-shell.md)) loads on that domain at
   every URL, so the client can say the tenant is suspended, and nothing it does works without the API. The

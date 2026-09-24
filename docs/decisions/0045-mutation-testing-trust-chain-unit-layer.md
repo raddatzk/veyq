@@ -171,4 +171,6 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   The one rejection **veyq makes itself** — `decodeKdfParams`'s length guard, a plain `if` with no primitive
   behind it — was the gate's only gap, and its test is what took `v1.ts` to 100%. That test pins the error
   *message*, and must keep doing so: unguarded, a short blob still throws (the `DataView` `RangeError` the guard
-  exists to pre-empt), so a bare `.toThrow()` passes with the guard deleted and proves nothing.
+  exists to pre-empt), so a bare `.toThrow()` passes with the guard deleted and proves nothing. Its second
+  rejection, the served-profile check ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md) rule 5),
+  is the same kind and pinned the same way: one negative per field, each on the refusal's own message.

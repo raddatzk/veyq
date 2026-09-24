@@ -17,7 +17,10 @@ data class WrapData(val method: String, val wrappedKey: String, val kdfParams: S
 @ApplicationScoped
 class AccountStore {
 
-    fun findByEmail(email: String): VeyqUser? = VeyqUser.find("email", email).firstResult()
+    /** The account under [email], or null. The **only** user-by-email lookup (`validate_lookup_single_home.py`
+     *  rule C), and it normalizes for itself ([normalizeEmail]) so no caller can look up a different spelling of
+     *  the address than the one [createAccount] stored. */
+    fun findByEmail(email: String): VeyqUser? = VeyqUser.find("email", normalizeEmail(email)).firstResult()
 
     /** Persist a new account (identity + wraps) with the given server role. Returns the new user id. */
     @Transactional
@@ -34,7 +37,7 @@ class AccountStore {
         val userId = UUID.randomUUID().toString()
         VeyqUser().apply {
             id = userId
-            this.email = email
+            this.email = normalizeEmail(email)
             this.serverRole = serverRole
             this.suiteId = suiteId
             this.identityPublicKey = identityPublicKey

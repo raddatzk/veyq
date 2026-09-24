@@ -22,7 +22,7 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountDeviceRegisterApi } from '../../api/client'
-import { withRefresh } from './login/login'
+import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
 
