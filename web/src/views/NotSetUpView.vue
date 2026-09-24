@@ -4,8 +4,8 @@
 // resolving public hostname a precondition for bootstrapping the instance at all. Setup moved to `admin-web`,
 // reachable on localhost with no DNS and no TLS, so this app's honest answer is now: not yet, and not by you.
 //
-// It names no URL for the same reason `ServerAdminPanel` does not: where the admin surface is reachable is the
-// operator's deploy-time choice, and this app is never told it.
+// It names no URL: where the admin surface is reachable is the operator's deploy-time choice, and this app is
+// never told it.
 import { useI18n } from 'vue-i18n'
 import Card from 'primevue/card'
 

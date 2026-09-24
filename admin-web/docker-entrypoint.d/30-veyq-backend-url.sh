@@ -8,10 +8,11 @@
 # template therefore lives OUTSIDE /etc/nginx/templates so the built-in script never sees it.
 set -eu
 
-# `app:8080` is the service name in infra/docker-compose.prod.yml. A default, not a fallback to something
+# `app:8090` is the backend's ADMIN LISTENER under its service name in infra/docker-compose.prod.yml — never its
+# public port, which 404s every Server-Owner operation (ADR 0065). A default, not a fallback to something
 # wrong: the overwhelmingly common case is the bundled stack, and an operator running the container by hand
 # sets BACKEND_URL.
-: "${BACKEND_URL:=http://app:8080}"
+: "${BACKEND_URL:=http://app:8090}"
 export BACKEND_URL
 
 # The nameservers the config's `resolver` directive needs, taken from the container's own /etc/resolv.conf

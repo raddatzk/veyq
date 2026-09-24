@@ -19,12 +19,10 @@ import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
 import TenantTermsPanel from '../features/tenant/TenantTermsPanel.vue'
 import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
-import ServerAdminPanel from '../features/settings/ServerAdminPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import { activeSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
 import { listMyGroups, type GroupSpace } from '../features/spaces/scopes'
-import { serverRole, probeServerRole } from '../app/serverRole'
 import { useCapabilities } from '../shared/state/useCapabilities'
 import { SPACES_GROUPS } from '../features/platform/capabilities'
 
@@ -42,7 +40,6 @@ const ownedGroups = ref<GroupSpace[]>([])
 const createGroupOpen = ref(false)
 
 onMounted(async () => {
-  await probeServerRole()
   await loadGroups()
 })
 
@@ -114,17 +111,6 @@ const categories = computed<NavCategory[]>(() => {
       items: ownedGroups.value.map((g) => ({ id: `group-${g.scopeId}`, label: g.name, icon: g.deletedAt ? 'pi pi-trash' : 'pi pi-users' })),
     })
   }
-  // Server → a single signpost. Tenant administration, the release panel and first-run setup are no longer
-  // pages of this app: they are `admin-web`, a separate deployable an operator can firewall off the public
-  // origin entirely (ADR 0065). This app cannot link to it — the operator chooses where it is reachable
-  // (localhost-only by default, or an optional ADMIN_DOMAIN), and a wrong guess is worse than no link — so the
-  // entry explains rather than navigates. It stays gated on the Server-Owner probe: telling every member that
-  // an admin surface exists would be noise, and to a stranger, a hint.
-  if (serverRole.canManage) {
-    cats.push({ key: 'instance', label: t('settings.server'), collapsible: false, items: [
-      { id: 'server-admin', label: t('serverAdmin.navTitle'), icon: 'pi pi-server' },
-    ] })
-  }
   return cats
 })
 
@@ -161,7 +147,6 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
     const scopeId = id.slice('group-'.length)
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }
   }
-  if (id === 'server-admin') return { component: ServerAdminPanel, props: {} }
   if (id === 'profile') return { component: ProfilePanel, props: {} }
   if (id === 'sessions') return { component: SessionsPanel, props: {} }
   if (id === 'password') return { component: ChangePasswordPanel, props: {} }

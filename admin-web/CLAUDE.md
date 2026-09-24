@@ -49,10 +49,10 @@ the CLI signs in through the app's own `login()` and that reaches `app/session.t
 
 ## Run it locally
 IntelliJ **`Run Admin`** (`.run/Run Admin.run.xml`), or `npm run dev` here: Vite on `VITE_ADMIN_PORT` (5174)
-with `/api` proxied to `VEYQ_API_TARGET` (`http://127.0.0.1:8080`) — the same single-origin shape nginx gives
-the container, so the refresh cookie behaves identically either way. **On a fresh instance this is the surface
-you open first**: first-run setup lives here, so the app at `veyq.localhost` has no Server Owner to log in as
-yet (ADR 0065). `Bootstrap Admin (generate OpenAPI)` regenerates this package's untracked client after a
+with `/api` proxied to `VEYQ_API_TARGET` (`http://127.0.0.1:8090`, the backend's **admin listener** — its public
+port 404s every Server-Owner operation) — the same single-origin shape nginx gives the container, so the refresh
+cookie behaves identically either way. **On a fresh instance this is the surface you open first**: first-run
+setup lives here, so the app at `veyq.localhost` has no Server Owner to log in as yet (ADR 0065). `Bootstrap Admin (generate OpenAPI)` regenerates this package's untracked client after a
 contracts change.
 
 ## Prove your work

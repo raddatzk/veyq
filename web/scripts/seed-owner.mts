@@ -5,12 +5,15 @@
 //
 //   cd web && npx tsx scripts/seed-owner.mts        # against http://localhost:8080 by default
 //
-// Override via env: VEYQ_BASE / VEYQ_EMAIL / VEYQ_NAME / VEYQ_PASSWORD. Requires a not-yet-set-up instance.
+// Override via env: VEYQ_BASE / VEYQ_ADMIN_BASE / VEYQ_EMAIL / VEYQ_NAME / VEYQ_PASSWORD. Requires a not-yet-set-up instance.
 import { fromB64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { writeOwner, materializeKeys } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
+// The backend's admin listener: the only door the Server-Owner operations answer on — the public port 404s them
+// (ADR 0065). 8090 is its dev default (veyq.admin-channel.port).
+const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
 const email = process.env.VEYQ_EMAIL ?? 'kevin@veyq.test'
 const password = process.env.VEYQ_PASSWORD ?? 'correct horse battery staple'
 
@@ -33,7 +36,7 @@ const body = {
   recoveryMasterKeyTag: material.recoveryMasterKeyTag,
 }
 
-const res = await fetch(`${BASE}/api/setup/owner`, {
+const res = await fetch(`${ADMIN_BASE}/api/setup/owner`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),

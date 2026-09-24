@@ -45,6 +45,11 @@ spec:
           ports:
             - name: http
               containerPort: 8080
+            # The admin listener (veyq.admin-channel.port, ADR 0065): the only door the Server-Owner operations
+            # answer on. Reached through `veyq-app-admin` alone, and by policy from the admin pod alone
+            # (app-networkpolicy.yaml) — never through `veyq-app`, which every Ingress may aim at.
+            - name: admin
+              containerPort: 8090
           env:
             # Mirrors infra/docker-compose.prod.yml's app service, name for name, so the two recipes can be read
             # against each other. What differs is said where it differs.

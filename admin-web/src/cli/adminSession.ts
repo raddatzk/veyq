@@ -16,9 +16,10 @@ import { session } from '../app/session'
 import { login } from '../features/auth/login'
 import { CliError } from './output'
 
-/** The service name in `infra/docker-compose.prod.yml` — the same default `docker-entrypoint.d/30-veyq-backend-url.sh`
- *  gives nginx, read from the same variable so the two can never drift into disagreeing about one instance. */
-export const DEFAULT_BACKEND_URL = 'http://app:8080'
+/** The backend's admin listener under its service name in `infra/docker-compose.prod.yml` — the same default
+ *  `docker-entrypoint.d/30-veyq-backend-url.sh` gives nginx, read from the same variable so the two can never drift
+ *  into disagreeing about one instance. Never the public port: it 404s every Server-Owner operation (ADR 0065). */
+export const DEFAULT_BACKEND_URL = 'http://app:8090'
 
 /**
  * Where the backend is. The CLI is a server-side process inside the admin container, so it calls the backend

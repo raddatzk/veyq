@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { readFileSync } from 'node:fs'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../features/auth/login', () => ({ login: vi.fn().mockResolvedValue(undefined) }))
@@ -15,6 +16,11 @@ beforeEach(() => {
 
 describe('veyq-admin session — the credential comes from the environment and nowhere else', () => {
   it('reads BACKEND_URL, defaulting to the same address the nginx entrypoint defaults to', () => {
+    // Read from the entrypoint itself, so the two defaults are compared rather than one restated: both must name
+    // the backend's admin listener, and a drift in either one reddens here (ADR 0065).
+    const entrypoint = readFileSync(new URL('../../docker-entrypoint.d/30-veyq-backend-url.sh', import.meta.url), 'utf8')
+    expect(entrypoint.match(/\$\{BACKEND_URL:=([^}]+)\}/)?.[1]).toBe(DEFAULT_BACKEND_URL)
+    expect(DEFAULT_BACKEND_URL).toBe('http://app:8090')
     expect(backendUrl({})).toBe(DEFAULT_BACKEND_URL)
     expect(backendUrl({ BACKEND_URL: 'http://backend:9000' })).toBe('http://backend:9000')
   })

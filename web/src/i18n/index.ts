@@ -11,13 +11,6 @@ const en = {
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
     operator: 'Setting a server up is done by the person who runs it, on the server’s own administration surface — not from this page. If that is you, open it on the machine the server runs on.',
   },
-  serverAdmin: {
-    navTitle: 'Server administration',
-    title: 'Server administration',
-    sub: 'Tenants, the running release and first-run setup are administered on their own surface.',
-    where: 'The administration surface is a separate part of this installation. By default it is reachable only from the server itself (for example http://localhost on the machine, or through an SSH tunnel); the person running this instance may also have given it its own address.',
-    whyMoved: 'It was separated so the person running this server can keep it off the public internet entirely, without changing anything about the app you are using now. Nothing about your access changed: the server checks who you are on every request either way.',
-  },
   incompatible: {
     title: 'This app and this server don’t match',
     updateApp: 'Your app is older than this server. Update the app to a newer version to continue.',
@@ -101,7 +94,6 @@ const en = {
     personal: 'Personal',
     tenant: 'Shared space',
     group: 'Group',
-    server: 'Server',
     appearance: 'Appearance and language',
     appearanceTitle: 'Appearance and language',
     appearanceSub: 'How this app looks and speaks on this device.',
@@ -948,13 +940,6 @@ const de: typeof en = {
     sub: 'Auf diesem Server wurde noch kein erstes Konto angelegt — es gibt hier also noch nichts, wo du dich anmelden könntest.',
     operator: 'Die Einrichtung übernimmt, wer den Server betreibt, auf dessen eigener Verwaltungsoberfläche — nicht auf dieser Seite. Falls du das bist: Öffne sie auf der Maschine, auf der der Server läuft.',
   },
-  serverAdmin: {
-    navTitle: 'Serververwaltung',
-    title: 'Serververwaltung',
-    sub: 'Tenants, die laufende Version und die Ersteinrichtung werden auf einer eigenen Oberfläche verwaltet.',
-    where: 'Die Verwaltungsoberfläche ist ein eigener Teil dieser Installation. Standardmäßig ist sie nur vom Server selbst aus erreichbar (etwa über http://localhost auf der Maschine oder einen SSH-Tunnel); wer diese Instanz betreibt, kann ihr zusätzlich eine eigene Adresse gegeben haben.',
-    whyMoved: 'Sie wurde getrennt, damit der Betreiber sie vollständig aus dem öffentlichen Internet heraushalten kann — ohne dass sich an der App, die du gerade benutzt, etwas ändert. An deinem Zugang ändert sich nichts: Der Server prüft ohnehin bei jeder Anfrage, wer du bist.',
-  },
   incompatible: {
     title: 'Diese App und dieser Server passen nicht zusammen',
     updateApp: 'Deine App ist älter als dieser Server. Aktualisiere die App auf eine neuere Version, um fortzufahren.',
@@ -1038,7 +1023,6 @@ const de: typeof en = {
     personal: 'Persönlich',
     tenant: 'Geteilter Bereich',
     group: 'Gruppe',
-    server: 'Server',
     appearance: 'Darstellung und Sprache',
     appearanceTitle: 'Darstellung und Sprache',
     appearanceSub: 'Wie diese App auf diesem Gerät aussieht und spricht.',

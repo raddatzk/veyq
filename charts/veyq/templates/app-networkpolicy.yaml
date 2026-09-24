@@ -1,0 +1,27 @@
+# Who may reach the app pods (ADR 0065): the public port from anywhere — the ingress controller, and whatever an
+# operator routes — and the admin listener's port from the admin pod ALONE. A Service of its own keeps every
+# Ingress off the admin port; this is what keeps every other pod off it.
+#
+# Only as strong as the cluster's CNI: one that does not enforce NetworkPolicy leaves the admin port reachable from
+# any pod in the cluster (ADR 0065 residual (ii)). Egress is not restricted here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 6 }}
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - port: http
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "admin") | nindent 14 }}
+      ports:
+        - port: admin

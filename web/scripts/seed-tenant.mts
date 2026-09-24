@@ -14,7 +14,7 @@
 //
 //   cd web && npx tsx scripts/seed-tenant.mts   # backend must run with veyq.tenant.invite.dev-file set
 //
-// Env: VEYQ_BASE (http://localhost:8080), VEYQ_OWNER_EMAIL/PASSWORD (the Server Owner, default the
+// Env: VEYQ_BASE (http://localhost:8080), VEYQ_ADMIN_BASE (http://127.0.0.1:8090), VEYQ_OWNER_EMAIL/PASSWORD (the Server Owner, default the
 // seed-owner values), VEYQ_DOMAIN (127.0.0.1 — must be a dotted hostname; `localhost` is rejected by the
 // backend's mailer hostname guard), VEYQ_TENANT_OWNER_EMAIL/PASSWORD/NAME (the new tenant owner),
 // VEYQ_INVITE_FILE (the mailer's dev-invite file; default ../backend/build/dev-invites.jsonl).
@@ -25,6 +25,9 @@ import * as v1 from '@veyq/crypto/v1'
 import { writeTenant, materializeKeys, awaitInvite } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
+// The backend's admin listener: the only door the Server-Owner operations answer on — the public port 404s them
+// (ADR 0065). 8090 is its dev default (veyq.admin-channel.port).
+const ADMIN_BASE = process.env.VEYQ_ADMIN_BASE ?? 'http://127.0.0.1:8090'
 const ownerEmail = process.env.VEYQ_OWNER_EMAIL ?? 'kevin@veyq.test'
 const ownerPassword = process.env.VEYQ_OWNER_PASSWORD ?? 'correct horse battery staple'
 const domain = process.env.VEYQ_DOMAIN ?? '127.0.0.1'
@@ -35,8 +38,8 @@ const tenantName = process.env.VEYQ_TENANT_NAME ?? 'local'
 const inviteFile = process.env.VEYQ_INVITE_FILE ?? fileURLToPath(new URL('../../backend/build/dev-invites.jsonl', import.meta.url))
 
 const json = (r: Response) => r.json() as Promise<any>
-const post = (path: string, body: unknown, token?: string) =>
-  fetch(`${BASE}${path}`, {
+const post = (path: string, body: unknown, token?: string, base = BASE) =>
+  fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
     body: JSON.stringify(body),
@@ -52,7 +55,7 @@ if (!verify.ok) { console.error('server-owner login failed', verify.status, awai
 const token = (await json(verify)).accessToken as string
 
 // 2 — create a PENDING tenant for the Host domain, inviting the new owner.
-const created = await post('/api/tenants', { tenantName, domain, ownerEmail: tenantOwnerEmail }, token)
+const created = await post('/api/tenants', { tenantName, domain, ownerEmail: tenantOwnerEmail }, token, ADMIN_BASE)
 if (!created.ok) { console.error('createTenant failed', created.status, await created.text()); process.exit(1) }
 const { tenantId } = await json(created)
 

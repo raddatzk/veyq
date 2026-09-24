@@ -50,6 +50,22 @@ render, asserts — deriving every anchor from the source rather than listing it
        it is asserted SEPARATELY from (ix): the annotation map has two consumers in the chart (the chart's own
        `Ingress` metadata and this file), and a helper wired into one of them is a render where (ix) is green
        and every tenant domain silently gets no certificate.
+  xii. **The admin listener has a Service of its own, no Ingress names it, and the admin surface points at it.**
+       The listener's port is the app container's `VEYQ_ADMIN_CHANNEL_PORT` if set, else `VeyqConfig.kt`'s
+       `@WithDefault` on `AdminChannel.port()`; the app container must declare it. Every Service targeting that
+       port selects the app pods and exposes that port ALONE — a second port on the public app Service would put
+       it behind every Ingress aimed at that Service, the chart's, a projected tenant one or an operator's
+       (ADR 0065). No Ingress in any render routes to such a Service, `admin.domain` set or not. The admin
+       container's `BACKEND_URL` names one of them at its Service port — the public port 404s every Server-Owner
+       operation, so an admin surface pointed there works for nothing.
+  xiii.**A NetworkPolicy admits the public port from anywhere and the admin port from the admin pod alone.** Every
+       ingress rule of every NetworkPolicy selecting the app pods that reaches the admin port — a rule listing
+       it by name or number, or a rule with no `ports` at all, which reaches every port — has a `from` whose
+       every peer is a `podSelector.matchLabels` selecting the admin pod and no other pod in the render: no
+       `ipBlock`, no `namespaceSelector`, no empty selector, no `matchExpressions` this cannot evaluate.
+       Policies are a union, so one permissive rule anywhere opens the port; that is why every rule is read.
+       The positive control on the same predicate: some rule admits the public port with no `from`, or the
+       policy has cut the ingress controller off from the app.
   xi.  **The schema refuses the three contradictions of the opt-in, naming the key** — `acme.enabled` with a
        mode other than `per-domain`, with an empty `email`, and beside an operator's own
        `cert-manager.io/cluster-issuer` annotation — each a `helm lint` that must exit non-zero AND whose output
@@ -72,7 +88,8 @@ inbox #26 finding (g), found at refine by measuring that a PVC does not seed own
 a constraint so the day it is decided the constraint is findable. (iv) and (v) were measured at refine and are
 pinned so they cannot be re-argued into the chart. (vii)–(xi) came with the ACME opt-in, each written red
 against the chart before the opt-in existed; (x) apart from (ix) because removing the helper from the
-ConfigMap alone was the injection that turned only one of them red.
+ConfigMap alone was the injection that turned only one of them red. (xii) and (xiii) came with the admin
+channel (uc.admin.admin-channel), both run red against the chart before its admin Service and policy existed.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -82,7 +99,9 @@ all outside), not that the images exist to be pulled, not that a `restricted` na
 (the standard has fields this does not enumerate — it checks the four the chart sets, and a future field the
 standard adds is out of reach). It renders only the values files in `ci/`, so a value path none of them sets is
 checked at its default alone — `admin.domain` set, `mariadb.enabled` false, `ingress.tls.mode: shared` and
-`per-domain` without the opt-in are rendered by nobody here. (ii) checks the app container's mount and the pod's
+`per-domain` without the opt-in are rendered by nobody here. (xiii) proves the policy is written, not that a CNI
+enforces it — on a cluster whose CNI ignores NetworkPolicy, any pod reaches the admin port (ADR 0065 residual
+(ii)). (ii) checks the app container's mount and the pod's
 `fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
 checks three contradictions, not the schema's completeness. And it says nothing about the compose recipe, which
 its two siblings own.
@@ -124,6 +143,8 @@ WORKDIR = re.compile(r"^\s*WORKDIR\s+(\S+)\s*$", re.IGNORECASE)
 USER = re.compile(r"^\s*USER\s+(\S+)\s*$", re.IGNORECASE)
 KT_DEFAULT = re.compile(r'@WithDefault\("([^"]*)"\)\s*\n\s*fun\s+configSecretFile\s*\(\s*\)')
 # `const val OWNER_LABEL = "…"` / `const val OWNER_VALUE = "…"` — the sink's own constants, read not retyped.
+KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+)"\)\s*\n\s*fun\s+port\s*\(\s*\)', re.DOTALL)
+ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
 KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE)\s*=\s*"([^"]+)"')
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
@@ -253,6 +274,110 @@ def covers(path: str, mount_point: str) -> bool:
     return path == mount_point or path.startswith(mount_point + "/")
 
 
+def selects(match_labels: dict, labels: dict) -> bool:
+    return all(labels.get(k) == v for k, v in match_labels.items())
+
+
+def port_hits(entry, port_name: str | None, port_number: int) -> bool:
+    """Whether a Service targetPort or a NetworkPolicy port entry reaches the given container port."""
+    if isinstance(entry, dict):
+        port, end = entry.get("port"), entry.get("endPort")
+        if port is None:
+            return True  # a NetworkPolicy port entry with no port matches every port of its protocol
+        if isinstance(port, int) and isinstance(end, int):
+            return port <= port_number <= end
+        return port_hits(port, port_name, port_number)
+    return entry == port_number or (port_name is not None and entry == port_name)
+
+
+def check_admin_channel(tag: str, rendered: list[dict]) -> None:
+    """(xii) and (xiii): the admin listener's Service, the Ingresses that must not name it, and the policy."""
+    workloads = [(o, s) for o in rendered if (s := pod_spec(o))]
+    pod_labels = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {} for o, _ in workloads}
+    app = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if is_app_container(c)), None)
+    admin = next(((o, c) for o, s in workloads for c in s.get("containers") or [] if ADMIN_IMAGE.search(str(c.get("image") or ""))), None)
+    if app is None or admin is None or default_admin_port is None:
+        return  # reported elsewhere: no app container, no admin container, or no port anchor
+    app_labels, admin_labels = pod_labels[name_of(app[0])], pod_labels[name_of(admin[0])]
+    env = {e.get("name"): e.get("value") for e in app[1].get("env") or []}
+    admin_port = int(env.get(ADMIN_PORT_ENV) or default_admin_port)
+    declared = next((p for p in app[1].get("ports") or [] if p.get("containerPort") == admin_port), None)
+    if declared is None:
+        errors.append(f"(xii) {tag}: the app container declares no containerPort {admin_port} — the admin listener has no port a Service or a policy can name")
+        return
+    port_name = declared.get("name")
+    public = [p for p in app[1].get("ports") or [] if p is not declared]
+
+    # (xii) the listener's own Service
+    listener_services: dict[str, int] = {}
+    for obj in rendered:
+        if obj.get("kind") != "Service":
+            continue
+        spec = obj.get("spec") or {}
+        ports = spec.get("ports") or []
+        hits = [p for p in ports if port_hits(p.get("targetPort", p.get("port")), port_name, admin_port)]
+        if not hits or not selects(spec.get("selector") or {}, app_labels) or not spec.get("selector"):
+            continue
+        name = (obj.get("metadata") or {}).get("name")
+        listener_services[name] = hits[0].get("port")
+        if len(hits) != len(ports):
+            errors.append(
+                f"(xii) {tag}: {name_of(obj)} exposes the admin listener beside another port — every Ingress aimed at "
+                f"that Service could then reach it. The listener gets a Service of its own (ADR 0065)."
+            )
+    if not listener_services:
+        errors.append(f"(xii) {tag}: no Service selects the app pods on the admin listener's port {admin_port} — the admin surface has nothing to reach")
+    for obj in rendered:
+        if obj.get("kind") != "Ingress":
+            continue
+        spec = obj.get("spec") or {}
+        backends = [((spec.get("defaultBackend") or {}).get("service") or {}).get("name")]
+        backends += [((p.get("backend") or {}).get("service") or {}).get("name")
+                     for r in spec.get("rules") or [] for p in ((r.get("http") or {}).get("paths") or [])]
+        for backend in backends:
+            if backend in listener_services:
+                errors.append(f"(xii) {tag}: {name_of(obj)} routes to {backend}, the admin listener's Service — no Ingress may, admin.domain set or not (ADR 0065)")
+    backend_url = next((e.get("value") for e in admin[1].get("env") or [] if e.get("name") == "BACKEND_URL"), None)
+    target = re.fullmatch(r"https?://([^:/]+):(\d+)/?", str(backend_url or ""))
+    if target is None or listener_services.get(target.group(1)) != int(target.group(2)):
+        errors.append(
+            f"(xii) {tag}: the admin container's BACKEND_URL is {backend_url!r}, not the admin listener's Service "
+            f"({', '.join(f'{n}:{p}' for n, p in listener_services.items()) or 'none'}) — the public port 404s every Server-Owner operation"
+        )
+
+    # (xiii) the policy
+    others = [labels for n, labels in pod_labels.items() if n != name_of(admin[0])]
+    policies = [o for o in rendered if o.get("kind") == "NetworkPolicy"
+                and selects(((o.get("spec") or {}).get("podSelector") or {}).get("matchLabels") or {}, app_labels)
+                and "Ingress" in ((o.get("spec") or {}).get("policyTypes") or ["Ingress"])]
+    if not policies:
+        errors.append(f"(xiii) {tag}: no NetworkPolicy selects the app pods — any pod in the cluster reaches the admin listener")
+        return
+    public_open = False
+    for policy in policies:
+        for rule in (policy.get("spec") or {}).get("ingress") or []:
+            ports = rule.get("ports")
+            peers = rule.get("from")
+            if not peers and (ports is None or any(port_hits(p, q.get("name"), q.get("containerPort")) for p in ports for q in public)):
+                public_open = True
+            if ports is not None and not any(port_hits(p, port_name, admin_port) for p in ports):
+                continue
+            ok = bool(peers) and all(
+                set(peer) == {"podSelector"} and set(peer["podSelector"] or {}) == {"matchLabels"}
+                and peer["podSelector"]["matchLabels"]
+                and selects(peer["podSelector"]["matchLabels"], admin_labels)
+                and not any(selects(peer["podSelector"]["matchLabels"], labels) for labels in others)
+                for peer in peers
+            )
+            if not ok:
+                errors.append(
+                    f"(xiii) {tag}: {name_of(policy)} admits the admin listener's port from {peers!r} — only a podSelector "
+                    f"matching the admin pod and no other pod may reach it (ADR 0065)"
+                )
+    if not public_open:
+        errors.append(f"(xiii) {tag}: no NetworkPolicy rule admits the app's public port from anywhere — the ingress controller could not reach the app")
+
+
 def app_properties(rendered: list[dict]) -> str | None:
     for obj in rendered:
         if obj.get("kind") == "ConfigMap" and APP_PROPERTIES in (obj.get("data") or {}):
@@ -282,6 +407,10 @@ kt_match = KT_DEFAULT.search(CONFIG_KT.read_text())
 default_path = kt_match.group(1) if kt_match else None
 if default_path is None:
     errors.append(f"no `@WithDefault(...)` on configSecretFile() in {CONFIG_KT.relative_to(ROOT)}")
+admin_port_match = KT_ADMIN_PORT.search(CONFIG_KT.read_text())
+default_admin_port = int(admin_port_match.group(1)) if admin_port_match else None
+if default_admin_port is None:
+    errors.append(f"no `@WithDefault(...)` on AdminChannel.port() in {CONFIG_KT.relative_to(ROOT)} — the admin listener's port anchor has moved")
 
 
 # --- one render per values file ---
@@ -425,6 +554,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
                             f"default it is reachable through port-forward alone."
                         )
 
+    check_admin_channel(tag, rendered)
+
     if not first:
         return rendered
     issuers = [o for o in rendered if o.get("kind") == "Issuer"]
@@ -514,7 +645,9 @@ summary = "; ".join(f"{name}: {len(objs)} objects" for name, objs in renders.ite
 print(
     f"chart meta check OK ({summary}): no object carries the sink's ownership value or is cluster-scoped; the app's "
     f"config-secret path is on a claim with fsGroup={runtime_user}; strategy Recreate; every render byte-identical "
-    f"twice; every container restricted-compliant; the admin surface on a ClusterIP Service and no Ingress; the ACME "
+    f"twice; every container restricted-compliant; the admin surface on a ClusterIP Service and no Ingress; the admin "
+    f"listener on a Service of its own that no Ingress names and the admin surface points at, admitted by policy from "
+    f"the admin pod alone; the ACME "
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on every Ingress and in the properties file, "
     f"its contradictions refused by the schema"
 )
