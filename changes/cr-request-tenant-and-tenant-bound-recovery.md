@@ -152,7 +152,7 @@ spot-checks the entry this CR leans on hardest, the rule-C list.
 
 ## Phases
 
-- [ ] 1 contracts: description only. `requestPasswordRecovery` mails only an account that is a member of the
+- [x] 1 contracts: description only. `requestPasswordRecovery` mails only an account that is a member of the
       tenant this request's Host resolves to, and answers before the address is looked up. · Done when: `npm run generate:api` + `npm run check` (web) green, the generated Kotlin is
       unchanged, and the trust-chain guards are green.
 - [ ] 2 backend: one resolution, one lookup (behaviour-preserving). **Guard first:**
