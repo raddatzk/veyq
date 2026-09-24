@@ -10,6 +10,10 @@ package com.veyq.app.features.media
  *
  * Frame arithmetic lives here and not in `BlobStore`: storage knows keys, not frames. `start`, `complete` and the
  * test fixtures all ask this one unit.
+ *
+ * The size is a literal once per runtime — here, `@veyq/crypto`'s `CHUNK_FRAME_SIZE`, and the service worker's
+ * `range.ts` — each pinned to the vector by its own test. No guard counts the copies: a client that chunked by any
+ * other size is refused at `start` (`shape_invalid`), so a drifted copy fails the first upload, loudly.
  */
 object ChunkFrames {
     const val PLAINTEXT_BYTES = 262_144L
