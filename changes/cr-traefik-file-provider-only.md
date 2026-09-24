@@ -58,8 +58,9 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
   this CR the same pin is the sink's `veyq-app` service URL. The rule: **the sink never renders a service at
   the admin listener** (ADR 0063 § services), and a projector test asserts that no rendered URL names its port.
   Whichever of the two lands second checks that the rendered `veyq-app` URL is the public port.
-- **Neighbour on the same lines, not in scope:** the `/veyq` path prefix (#151) will edit the sink's render
-  after this. That is where compose's routing now lives, and the inventory command below finds it.
+- **Neighbour on the same lines, not in scope:** the `/veyq` path prefix (#151, `cr-store-prefix-from-bucket`)
+  implements after this and derives every blobs router's prefix from the bucket setting in the sink's render.
+  Keep `/veyq` in the router shape here; that CR changes it.
 - **Out of scope:** container options, networks and anything on Helm. That is
   `cr-runtime-hardening-both-targets`, which depends on this CR because a non-root Traefik could not read the
   socket anyway.
