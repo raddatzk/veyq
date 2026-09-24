@@ -854,6 +854,7 @@ components:
             `name_epoch` so members peel to it and derive `K_name` (cr-0097/ADR 0027).
           minimum: 0
           example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     SetScopeIconRequest:
       type: object
@@ -883,6 +884,7 @@ components:
             `icon_epoch` so members peel to it and derive `K_icon` (uc.spaces.set-space-icon).
           minimum: 0
           example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     AddGroupMemberRequest:
       type: object
@@ -894,6 +896,7 @@ components:
             The lookup key a group-add resolves to an identity (ADR 0023) — a sealed handle could not be resolved
             server-side.
           type: string
+          pattern: '^[A-Za-z0-9_.-]+$'
           description: >
             The **per-tenant username** of the member to admit (ADR 0023) — resolved within the scope's own
             tenant to their identity; trimmed + lowercased server-side. Not an email, not a global handle.
@@ -965,6 +968,7 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotateScopeRequest:
       type: object
@@ -983,6 +987,7 @@ components:
           type: array
           description: The remaining members re-granted the new epoch (any not listed are re-granted later by grant-delivery).
           items: { $ref: "#/components/schemas/ScopeGrantEntry" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     ScopeRotated:
       type: object

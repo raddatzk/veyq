@@ -34,7 +34,7 @@ purpose. It is a stored-format change, and it is being made before V1 because af
   - **After** `cr-inert-store-responses`, `cr-request-bounds-enforced`, `cr-upload-frame-size-contract` and
     `cr-upload-windowed-presign`. All four reshape the upload schemas and `media.ts` that this CR also changes,
     and they were refined earlier against the current tree. The new id fields also land under
-    `cr-request-bounds-enforced`'s guard.
+    `scripts/validate_request_bounds.py`.
   - **After** `cr-scope-access-gate` (#157). It puts one gate in front of every scope-addressed handler,
     including the eight creates this CR changes, so building on its handlers avoids rebasing both.
   - **Before** `cr-admission-is-a-key-holder-act`, which signs over the bound grant and reuses this CR's

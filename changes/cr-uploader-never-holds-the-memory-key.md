@@ -46,7 +46,7 @@ The guest ends up holding `K_share` and its own identity key, nothing more.
 - **Order:**
   - **After** `cr-seal-binds-its-object`. The new purposes join the typed union with a vector each, and
     `createShareIdentity` takes a client-minted id there, which the identity key's binding needs.
-  - **After** `cr-request-bounds-enforced`, so the new fields land under its guard.
+  - **After** `cr-request-bounds-enforced` (done), so the new fields land under its guard, `scripts/validate_request_bounds.py`.
   - Independent of the other #161 CRs.
 - **A stored-format change, before V1.** Nothing is migrated. The owner's development instance needs a reset;
   tell them, and do not wipe their database yourself.

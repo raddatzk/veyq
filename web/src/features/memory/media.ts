@@ -432,8 +432,44 @@ async function sealMetadata(
     metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
     metaTier.gpsLng !== undefined || metaTier.mediaType !== undefined
   const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), MEDIA_META_CTX) : null
-  const wrappedExif = meta.exif ? sealJson(memoryKey, meta.exif, MEDIA_EXIF_CTX) : null
+  const wrappedExif = meta.exif ? sealExifTier(memoryKey, meta.exif) : null
   return { wrappedMeta, wrappedExif }
+}
+
+/**
+ * The sealed EXIF tier's cap in base64 characters — `wrappedExif.maxLength` in `media.openapi.yaml`, which the
+ * server enforces with a 400. The generated client carries no bounds, so the contract's value lives here too.
+ */
+export const EXIF_TIER_MAX_B64 = 16384
+
+/**
+ * Each free-text EXIF field's cap in UTF-8 bytes. Camera and editor strings are short; the fields a person
+ * types (`description`, `title`, `copyright`) are where an unbounded value comes from. Ten fields at this cap
+ * plus every number still seal under [EXIF_TIER_MAX_B64] — unless JSON escaping inflates them, which is what
+ * the drop step in [sealExifTier] is for.
+ */
+export const EXIF_TEXT_MAX_BYTES = 1024
+
+/**
+ * Seal the EXIF tier so it always fits [EXIF_TIER_MAX_B64] — the upload never fails for its metadata. Every
+ * string field is clamped to [EXIF_TEXT_MAX_BYTES]; a tier that still does not fit drops its longest free-text
+ * field, one at a time, until it does. Numbers are never dropped: they are bounded by their type, so a tier of
+ * numbers alone is a few hundred bytes. The string set is read off the value, not listed, so a text field added
+ * to [MediaExif] later is clamped without anyone remembering to add it here.
+ */
+function sealExifTier(memoryKey: Uint8Array, exif: MediaExif): string {
+  const tier: Record<string, unknown> = { ...exif }
+  const textKeys = () => Object.keys(tier).filter((k) => typeof tier[k] === 'string')
+  for (const k of textKeys()) tier[k] = clampUtf8(tier[k] as string, EXIF_TEXT_MAX_BYTES)
+  let sealed = sealJson(memoryKey, tier, MEDIA_EXIF_CTX)
+  while (sealed.length > EXIF_TIER_MAX_B64) {
+    const keys = textKeys()
+    if (!keys.length) break // unreachable: see the doc above — numbers alone cannot reach the cap
+    const longest = keys.reduce((a, b) => (JSON.stringify(tier[b]).length > JSON.stringify(tier[a]).length ? b : a))
+    delete tier[longest]
+    sealed = sealJson(memoryKey, tier, MEDIA_EXIF_CTX)
+  }
+  return sealed
 }
 
 /** Drop `undefined` fields so a sealed blob carries only what's present (keeps it small + JSON tidy). */
@@ -783,11 +819,20 @@ export const PLACE_NAME_MAX_BYTES = 96
 
 /** Clamp to [PLACE_NAME_MAX_BYTES] without splitting a multi-byte character in half. */
 export function clampPlaceName(name: string): string {
-  const enc = new TextEncoder()
-  if (enc.encode(name).length <= PLACE_NAME_MAX_BYTES) return name
-  let out = name
-  while (out.length > 0 && enc.encode(out).length > PLACE_NAME_MAX_BYTES) out = out.slice(0, -1)
-  return out
+  return clampUtf8(name, PLACE_NAME_MAX_BYTES)
+}
+
+/**
+ * The longest prefix of `s` that fits `maxBytes` of UTF-8, never splitting a character. Cut on the bytes, then
+ * step back over continuation bytes (`10xxxxxx`) to the character's lead byte — one encode, not one per
+ * character, which matters for a 20 000-character EXIF description.
+ */
+function clampUtf8(s: string, maxBytes: number): string {
+  const bytes = new TextEncoder().encode(s)
+  if (bytes.length <= maxBytes) return s
+  let end = maxBytes
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--
+  return new TextDecoder().decode(bytes.subarray(0, end))
 }
 
 /**

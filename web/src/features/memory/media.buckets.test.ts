@@ -79,5 +79,19 @@ describe('media buckets (cr-0113)', () => {
       await moveBucketMedia(SCOPE, NODE, ['m1', 'm2'], null)
       expect(move).toHaveBeenCalledWith({ scopeId: SCOPE, nodeId: NODE, moveMediaRequest: { mediaIds: ['m1', 'm2'], targetBucketId: null } })
     })
+
+    // The contract caps one request at `MoveMediaRequest.mediaIds.maxItems` (256), and the server enforces it —
+    // so a larger selection must still move every id, in slices that each stay inside the bound.
+    it('moves a selection larger than one request carries in slices of at most 256, every id exactly once', async () => {
+      const move = vi.fn().mockResolvedValue(undefined)
+      vi.mocked(bucketsApi).mockReturnValue({ moveBucketMedia: move } as unknown as ReturnType<typeof bucketsApi>)
+      const ids = Array.from({ length: 300 }, (_, i) => `m${i}`)
+      await moveBucketMedia(SCOPE, NODE, ids, 'b1')
+      expect(move).toHaveBeenCalledTimes(2)
+      const sent = move.mock.calls.map(([req]) => (req as { moveMediaRequest: { mediaIds: string[]; targetBucketId: string } }).moveMediaRequest)
+      expect(sent.map((r) => r.mediaIds.length)).toEqual([256, 44])
+      expect(sent.flatMap((r) => r.mediaIds)).toEqual(ids)
+      expect(sent.every((r) => r.targetBucketId === 'b1')).toBe(true)
+    })
   })
 })
