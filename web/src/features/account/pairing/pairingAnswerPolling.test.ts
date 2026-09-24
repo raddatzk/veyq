@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vite
 vi.mock('./pairingChannel', () => ({ collectPairingChannel: vi.fn() }))
 
 import { startPairingAnswerPolling, stopPairingAnswerPolling } from './pairingAnswerPolling'
-import { collectPairingChannel } from './pairingChannel'
+import { collectPairingChannel, type PairingChannel } from './pairingChannel'
 
 const HANDLE = 'aGFuZGxl'
 const ANSWER = 'YW5zd2Vy'
@@ -40,6 +40,13 @@ afterEach(() => {
 })
 
 const start = () => startPairingAnswerPolling(HANDLE, onAnswer, onGone)
+
+/** The next collect stays open until the test resolves it by hand — a collect slower than the interval. */
+const holdNextCollect = () => {
+  let release!: (channel: PairingChannel) => void
+  collect.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
+  return (channel: PairingChannel) => release(channel)
+}
 
 describe('the trusted device’s wait for an answer (ADR 0059, D7)', () => {
   it('reads once immediately, then once per interval while the channel is still empty', async () => {
@@ -119,6 +126,35 @@ describe('the trusted device’s wait for an answer (ADR 0059, D7)', () => {
     collect.mockResolvedValue({ answer: ANSWER })
     await vi.advanceTimersByTimeAsync(2_000)
     expect(onAnswer).toHaveBeenCalledExactlyOnceWith(ANSWER)
+  })
+
+  // The collect endpoint is shared with the onboarded device's loop, and so is its overlap: a tick during a held
+  // collect is skipped, and nothing from a collect that outlived its run is applied.
+  it('starts no second collect while one is still in flight', async () => {
+    const release = holdNextCollect()
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.advanceTimersByTimeAsync(2_000)
+    expect(collect).toHaveBeenCalledTimes(1)
+
+    // The control: the held collect is a real one — released with an answer, it ends the wait exactly once.
+    release({ answer: ANSWER })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(onAnswer).toHaveBeenCalledExactlyOnceWith(ANSWER)
+  })
+
+  it('applies nothing from a collect that was still in flight when it was stopped', async () => {
+    const release = holdNextCollect()
+    start()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(collect).toHaveBeenCalledTimes(1) // the control: the held collect really started
+
+    stopPairingAnswerPolling()
+    release({ answer: ANSWER })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(onAnswer).not.toHaveBeenCalled()
   })
 
   it('drops its timer and its listener on stop', async () => {

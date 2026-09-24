@@ -56,9 +56,9 @@ on a change the client pulls a keyset delta + reconciles deletes against the ret
    the same `veyq_node` row, so a single read returns a **consistent pair** — no torn read can strand a delete.
 
 5. **Short-poll transport for v1.** A client with a Memory open polls on an interval, **gated on tab visibility**
-   (mirrors `grantDeliveryPolling` / `scopeRotationPolling`: a `visibilitychange` listener ticks immediately on
-   foreground, the interval pauses when hidden — a background poll is pure waste). Stops when the Memory
-   closes. With the delta, even an active upload is cheap per poll. A few seconds of latency is fine for a photo
+   (the client's one `createVisibilityPoller`, shared by every poll loop: a `visibilitychange` listener ticks
+   immediately on foreground, the interval pauses when hidden — a background poll is pure waste). Stops when the
+   Memory closes; a poll still in flight then writes nothing, and a tick never overlaps the previous one. With the delta, even an active upload is cheap per poll. A few seconds of latency is fine for a photo
    grid; **long-poll / a push channel** (sub-second, shared later with #6 live journal) is a deferred upgrade.
 
 How the server computes one `listNodeMedia` poll response — the **O(1) revision compare short-circuits the idle
