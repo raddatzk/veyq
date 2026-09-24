@@ -65,7 +65,8 @@ direct-append, personal scope.**
 
 6. **Abuse controls.** An unauthenticated upload endpoint is an abuse surface. Defense: the curator opt-in
    (role CONTRIBUTOR), the per-identity **contributor token**, the share `enabled` gate (**revoke stops uploads**),
-   the existing per-blob **byte budget** ([ADR 0013 §3](0013-blob-storage-presigned-direct-to-store.md)), and a
+   the existing per-blob **byte budget** ([ADR 0013 §3](0013-blob-storage-presigned-direct-to-store.md)), the
+   **per-link storage limit** ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)), and a
    **per-share rate limit** (in-memory, best-effort defense-in-depth, mirroring the auth rate limiter). Soft (L1)
    revocation stops *new* uploads + reads; already-uploaded media (like already-read content) is not retracted.
 

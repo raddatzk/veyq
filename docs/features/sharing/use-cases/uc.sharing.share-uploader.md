@@ -72,7 +72,9 @@ sequenceDiagram
 - **E1 — blank name:** the pre-screen blocks submission until a non-blank name is entered.
 - **E2 — delete after reload:** not possible — the client no longer holds the id (session-only); the photo remains
   (the curator can still delete it from their own gallery).
-- **E3 — over budget / rate-limited:** oversized uploads fail the byte budget; too many in a window are
+- **E3 — over budget / full / rate-limited:** oversized uploads fail the byte budget; an upload that does not fit
+  the link's storage limit or the tenant's quota is refused whole, as for a contributor
+  ([uc.sharing.share-link-storage-limit](uc.sharing.share-link-storage-limit.md)); too many in a window are
   rate-limited (per share).
 
 ## Quality notes

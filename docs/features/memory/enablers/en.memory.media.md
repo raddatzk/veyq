@@ -110,6 +110,9 @@ sequenceDiagram
 - **E2 — declared shape refused** (a `chunkCount` that does not follow from `byteSize`, or a size over the
   ceiling), **or actual objects that do not match it at complete** (a chunk missing, or not at its exact size):
   the server rejects and **purges** the staged objects (declare-then-verify, ADR 0013 §3).
+- **E2a — the request does not fit the storage quota** (the tenant's, or a link's per-link limit): every
+  admissible item of the `start` is refused `quota_exceeded` and no session exists — the declared size is what
+  a session reserves ([ADR 0073](../../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)).
 - **E3 — abandoned upload:** a session that has not asked for a window within the retention → reclaimed by the
   stale-session GC, row and staged objects both.
 - **E3a — the upload right is gone mid-upload** (membership removed, share revoked or expired): the next window

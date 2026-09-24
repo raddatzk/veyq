@@ -39,6 +39,10 @@ handling of reported shares.
 - Manage server users & roles — planned
 - ★ [Set tenant terms (versioned)](use-cases/uc.admin.tenant-terms.md) — **built (web, cr-0114)** (ADR 0035; per-locale markdown + `terms_version`; the member accept-gate consumes the version)
 - ★ [Configure per-tenant mail (SMTP + invite template)](use-cases/uc.admin.tenant-mail-settings.md) — **planned** (cr-email-smtp-transport; ADR 0048/0049/0050; per-tenant SMTP, password sealed at rest, invite templates over a closed variable set)
+- ★ [A tenant's storage quota](use-cases/uc.admin.tenant-storage-quota.md) — **refined**
+  ([ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md); the ceiling belongs to
+  whoever pays for the store — for the instance's store the Server Owner, on the admin channel; none by default;
+  everything the tenant holds in the store counts, trash until purged, and a `start` reserves its size)
 - Set tenant branding — planned
 - ★ [Back up & restore the instance](use-cases/uc.admin.back-up-and-restore-instance.md) — **refined**
   ([ADR 0056](../../decisions/0056-instance-durable-state-and-cold-logical-backup.md); three legs not two, a cold
