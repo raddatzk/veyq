@@ -6,18 +6,20 @@ title: Know which release an instance runs, and which release a backup came from
 # runtime targets, an owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a
 # backup manifest that reads the release off the app CONTAINER instead of off the capture process's environment.
 #
-# `status: planned` is nonetheless correct, and it is not a formality — it is the same call the sibling
-# uc.admin.back-up-and-restore-instance makes, for the same reason. Two independent conditions each keep this
-# file from carrying refs, and the second one does not go away:
+# `status: planned` is nonetheless correct, and it is not a formality. It rests on two conditions, and the
+# second one does not go away:
 #
-#  1. **No CI run has ever executed here.** This repository has no remote, so ADR 0040's rule — a test no CI run
-#     executes makes no coverage claim — leaves every criterion uncovered no matter how green the suites are
-#     locally. The suites DO exist and pass; naming them below keeps the later flip mechanical (docs/inbox.md
-#     #26). The one remaining condition is an event, not a missing test.
+#  1. **`admin-web`'s job has never executed.** ADR 0040 counts a declared run only on a job a run has already
+#     executed (its note on which rows a run has admitted). The backend's job has, so criteria 1-3 carry backend
+#     refs by the same standard as every other backend ref here; the admin-web suites wait under `gaps`, named,
+#     so their flip is mechanical. (Until 2026-09-24 this file held the backend back too, on "no CI run has ever
+#     executed in this repository" — a stricter bar than the corpus set any other backend ref, retired with
+#     that note.)
 #  2. **`a-backup-names-the-release-it-came-from` has no coverage surface at all**, and never will: its
 #     observable is a manifest written by `scripts/instance_backup.py`, and a Python operator tool is not a
-#     coverage surface (ADR 0040) — the same shape as that sibling's store-leg criterion. It is proven instead
-#     by the tool's own bite-proofing, recorded in the gap below.
+#     coverage surface (ADR 0040) — the same shape as uc.admin.back-up-and-restore-instance's store-leg
+#     criterion. It keeps this file `planned` after admin-web flips, too: a criterion no surface reaches has no
+#     other legal home (docs/coverage/README.md § Rules). How it is proven instead is on the criterion.
 #
 # And what is NOT claimable here even after a CI run: the publish half of ADR 0057 — a tree-derived version, a
 # `v<major>.<minor>` ref, a refusal to republish — is a GitHub Actions workflow, and a workflow is not a
@@ -31,56 +33,64 @@ acceptanceCriteria:
       value that names a rollback target, not the pre-auth protocol version. This is also the positive control
       for `the-release-version-never-appears-pre-auth`: without it, a response that carries the field for nobody
       satisfies that negative perfectly.
+    coverage:
+      backend: { integration: [InstanceReleaseSliceTest.serverOwnerReadsTheRunningRelease] }
   - id: an-unstamped-build-reports-absence-not-a-number
     text: >-
       An image built locally, or a quarkusDev run, was never published and therefore has no release version. The
       read reports that absence explicitly rather than synthesising a placeholder, because every consumer of the
       value uses it to choose an image to start — a fabricated version is the one an operator would try to roll
       back to.
+    coverage:
+      # Declared in `InstanceReleaseUnstampedSliceTest`, the second class in `InstanceReleaseSliceTest.kt`, on the
+      # opposite profile (an empty stamp): the field is PRESENT and null. A backend ref resolves on the file
+      # stem, so the ref names the file's class, not the declaring one.
+      backend: { integration: [InstanceReleaseSliceTest.anUnstampedBuildReportsAbsenceNotANumber] }
   - id: the-release-version-never-appears-pre-auth
     text: >-
       GET /api/setup's response is unchanged: it still advertises version.major and version.build and carries no
       release version, and no unauthenticated or non-owner caller obtains one from any surface. This is the
       assertion that keeps ADR 0057 §4's separation true rather than merely intended, and it anchors on the
       specific observable (the absent field plus the refused call), never on "it failed".
+    coverage:
+      # The slice runs on a profile that sets a distinctive release version, so the pre-auth negative asserts
+      # that exact string is absent from the whole `GET /api/setup` body while the owner read returns it — a
+      # positive control on the same predicate. The refusals anchor on their specific observables (403
+      # `not_server_owner`, 401 `authentication_failed`), never on "it threw".
+      backend:
+        integration:
+          - InstanceReleaseSliceTest.releaseVersionNeverAppearsOnThePreAuthSurface
+          - InstanceReleaseSliceTest.aMemberIsNotTheServerOwnerAndIsRefused
+          - InstanceReleaseSliceTest.anUnauthenticatedCallerIsRefused
   - id: a-backup-names-the-release-it-came-from
+    # No coverage, and none to come: the observable is `scripts/instance_backup.py`'s manifest (header,
+    # condition 2). It is proven by that tool's own bite-proofing — `app_release()` was run against a real,
+    # STOPPED container built from this Dockerfile (the cold-capture state) and returned the stamped `1.0`;
+    # against the dev compose, which declares no app service, it returned an explicit `no-app-service`; and a
+    # real capture against the dev stack wrote `{"version": null, "versionSource": "no-app-service"}`, a measured
+    # absence rather than the structural null it replaces. That probe also earned its keep: the first version of
+    # the function reported "no app service" as "docker unavailable", which the run caught.
     text: >-
       A capture records the release of the instance it was taken from in the backup manifest, beside the schema
       version it already records — or records its absence, when the source was an unstamped build. The field is
       never structurally null while looking like data, which is the defect this replaces.
 gaps:
-  backend: >-
-    The suites exist and pass locally; the only missing thing for the first three criteria is a CI run to
-    execute them (ADR 0040). `InstanceReleaseSliceTest` runs on a profile that sets a distinctive release
-    version, so its pre-auth negative asserts that exact string is absent from the whole `GET /api/setup` body
-    while the owner read returns it — a positive control on the same predicate, without which the negative is
-    satisfied by there being no value to leak. Its siblings anchor the refusals on their specific observables
-    (403 `not_server_owner`, 401 `authentication_failed`), never on "it threw".
-    `InstanceReleaseUnstampedSliceTest` is the A1 half on the opposite profile: the field is PRESENT and null.
-    `a-backup-names-the-release-it-came-from` is not on this list and will not be: its observable is
-    `scripts/instance_backup.py`'s manifest, and a Python operator tool is not a coverage surface. It is proven
-    by that tool's own bite-proofing — `app_release()` was run against a real, STOPPED container built from
-    this Dockerfile (the cold-capture state) and returned the stamped `1.0`; against the dev compose, which
-    declares no app service, it returned an explicit `no-app-service`; and a real capture against the dev stack
-    wrote `{"version": null, "versionSource": "no-app-service"}`, a measured absence rather than the structural
-    null it replaces. That probe also earned its keep: the first version of the function reported "no app
-    service" as "docker unavailable", which the run caught.
   admin-web: >-
-    Same condition, same one event — and a new surface: the release panel moved to `admin-web` with the rest of
-    the Server-Owner administration (ADR 0065), so when this flips it flips on that surface, not on `web`.
-    `admin-web/src/features/instance/ReleaseVersionPanel.test.ts` covers the
-    first three criteria on this surface: the stamped render (the version verbatim), the unstamped render (the
-    absence stated, and the value element absent entirely so there is no empty box that reads as a failed
-    load), and the 403 render (the owner-only notice, no version). It also pins the trap those two share — a
-    load ERROR and an unstamped build must not render the same, because one means "there is no version" and the
-    other means "we do not know", and an operator choosing an image needs them apart.
-    Since cr-admin-cli there is a **second caller** on this surface: `veyq-admin release`, covered by
-    `admin-web/src/cli/cli.test.ts`, which pins that the command reaches `getInstanceRelease()` and prints its
-    result as JSON on stdout. It is named here rather than under a criterion for the reason the whole file is
-    named here: no CI run has executed it either, so it makes no coverage claim yet — and a ref would
-    additionally contradict `admin-web` being declared a gap. When the one remaining event happens, this
-    surface flips with both refs at once; the CLI is not a third condition to wait for.
+    The release panel lives here with the rest of the Server-Owner administration (ADR 0065), and its suites
+    exist and pass locally, but `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never
+    executed, so ADR 0040 admits none of them: a declared run is enough only on a job a run has already
+    executed. `src/features/instance/ReleaseVersionPanel.test.ts` covers the first three criteria on this
+    surface: the stamped render (the version verbatim), the unstamped render (the absence stated, and the value
+    element absent entirely so there is no empty box that reads as a failed load), and the 403 render (the
+    owner-only notice, no version). It also pins the trap those two share — a load ERROR and an unstamped build
+    must not render the same, because one means "there is no version" and the other means "we do not know", and
+    an operator choosing an image needs them apart. Since cr-admin-cli there is a **second caller**:
+    `veyq-admin release`, covered by `src/cli/cli.test.ts`, which pins that the command reaches
+    `getInstanceRelease()` and prints its result as JSON on stdout. On the first run whose log shows admin-web's
+    suites executed, the panel suite goes under criteria 1-3 and the CLI suite under
+    `server-owner-reads-the-running-release`, both at once; the CLI is not a separate condition to wait for.
+    `planned` stays after that flip (header, condition 2).
   web: >-
     Not a target. The release panel moved to `admin-web` with the rest of the Server-Owner administration
     (ADR 0065, the gap above), and nothing in web reads the release (`grep -rn InstanceRelease web/src` finds
-    nothing). When this use-case flips, it flips on `backend` and `admin-web`; this gap stays.
+    nothing). The use-case is carried by `backend` and, once its job has run, `admin-web`; this gap stays.
