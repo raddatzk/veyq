@@ -5,10 +5,14 @@
 - Implementation: the **opaque two-token rotating scheme** (access + refresh, families, reuse
   detection ⇒ family revocation) is **built** (`features/account/login/*`, `V5__login_sessions.sql`). The
   **management half** — listing the account's families and revoking one remotely
-  ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **not yet built**: the
-  contract reserves the family id, and today only the caller's own family can be ended, by logout. This ADR
-  records the agreed design for that half. The **one-generation grace** below (refined 2026-09-21 from inbox
-  #123) is likewise **decided, not built**: rotation today revokes on any superseded generation.
+  ([uc.account.sessions](../features/account/use-cases/uc.account.sessions.md)) — is **built**:
+  `SessionService.listActiveFamilies` / `revokeFamilyForUser` / `revokeOtherFamilies` behind `SessionResource`
+  (`GET /api/sessions`, `DELETE /api/sessions/{id}`, `POST /api/sessions/revoke-others`, contract
+  `auth.openapi.yaml`), covered by `SessionManagerSliceTest`; the web client is
+  `web/src/features/account/sessions/`. The **one-generation grace** below (refined 2026-09-21 from inbox
+  #123) is **built** in `SessionService.rotate`: a `SUPERSEDED` token exactly one generation behind `CURRENT`
+  re-mints under the orphan's own generation, any other distance revokes the family — pinned by
+  `LoginSliceTest` (the grace block, plus `replayedSupersededRefreshRevokesFamily` for distance two).
 
 ## Context
 
