@@ -209,7 +209,9 @@ acceptanceCriteria:
       # Each dead-channel case (unknown, expired, spent) runs a FRESH channel through the same verbs as its live
       # control, because "they all answer 404" is satisfied by an endpoint that refuses everything; a fourth case
       # compares the three answers byte for byte, which is E1's actual claim. Single use is the pair "polling for
-      # the answer spends nothing, taking the grant spends the channel", and one-outstanding (§8) is supersession
+      # the answer spends nothing, taking the grant spends the channel" — and spending is atomic: two collects
+      # released together through a barrier hand the grant over once, the loser answering as a spent channel
+      # does, with a fresh channel's single collect as the control. One-outstanding (§8) is supersession
       # WITH the revoke of the family that ceremony left behind, against a second account's pairing that must
       # survive. The sweep expires before it deletes and revokes the uncollected family, each with a COLLECTED
       # channel as the control — a sweep that revoked on "overdue" alone would sign out the device that arrived.
@@ -223,6 +225,7 @@ acceptanceCriteria:
           - PairingSliceTest.aSpentChannelIsRefusedWhileAFreshOneAnswers
           - PairingSliceTest.theThreeDeadChannelsAreIndistinguishableFromOneAnother
           - PairingSliceTest.readingTheAnswerSpendsNothingButTakingTheGrantSpendsTheChannel
+          - PairingSliceTest.concurrentCollectsHandOverTheGrantOnce
           - PairingSliceTest.aChannelIsDelegatedOnceAndTheSecondAttemptMintsNothing
           - PairingSliceTest.anotherAccountCannotSealToAChannelItDidNotDelegate
           - PairingSliceTest.delegatingSupersedesTheAccountsOtherPairingAndRevokesTheFamilyItLeftBehind
