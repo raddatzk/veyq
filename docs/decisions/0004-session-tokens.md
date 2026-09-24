@@ -130,13 +130,13 @@ time window buys exactly the same deferral and loses the case below, which is wh
 **The case that forces this, measured** (2026-09-21, `main` @ `c0add4e`, live backend on MariaDB 11.4).
 A refresh whose **response never reaches the client** already committed server-side: the rows go to
 `[gen 1 SUPERSEDED, gen 2 CURRENT]` while the browser still holds gen 1 in its cookie. The next page load
-presents gen 1 — and today that is read as a clone and **revokes the family**. So a single dropped response
-permanently ends a session, with no attacker, no second tab and no concurrency involved. The same shape
-arrives by concurrency: six simultaneous refreshes of one token yield `1 × 200` and `5 × 401`, and all five
-losers are at distance 1. A genuine replay is not: after a chain of three rotations the oldest token sits at
-distance 3 and still revokes, as it must. **The distance is therefore the exact discriminator between the
-benign set and the clone set** — that is the measurement this decision rests on, not an intuition about
-windows.
+presents gen 1 — and before this grace that was read as a clone and **revoked the family**. So a single
+dropped response permanently ended a session, with no attacker, no second tab and no concurrency involved.
+The same shape arrives by concurrency: six simultaneous refreshes of one token yielded `1 × 200` and
+`5 × 401`, and all five losers are at distance 1. A genuine replay is not: after a chain of three
+rotations the oldest token sits at distance 3 and still revokes, as it must. **The distance is therefore the
+exact discriminator between the benign set and the clone set** — that is the measurement this decision
+rests on, not an intuition about windows.
 
 **Why not a time window.** The benign late case is a person coming back — a reload minutes or hours after
 the dropped response. Any window short enough to keep theft detection meaningful is far too short for that,
@@ -171,7 +171,8 @@ presentation revokes the family is therefore narrowed, not deleted.
 **What this does not settle.** Clients still owe a shared in-flight refresh per tab — this decision makes a
 concurrent refresh *harmless*, not *free*, and a client that fires six of them still wastes five rotations.
 And it says nothing about the deadlock the same concurrency provokes in the unique index over token hashes
-(a retryable `SQLSTATE 40001` currently surfaced as a `500`), which is a storage concern, not a session one.
+(a retryable `SQLSTATE 40001` that reached the client as a `500`), which is a storage concern, not a session
+one — answered separately by a bounded retry around rotation (`SessionRotationRetry`).
 
 ## Decision — web refresh cookie lifetimes (session vs persistent)
 
