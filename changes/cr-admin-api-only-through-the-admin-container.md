@@ -1,7 +1,7 @@
 ---
 id: cr-admin-api-only-through-the-admin-container
 title: The Server-Owner API answers only through the admin container
-status: planned
+status: in-progress
 satisfies: [uc.admin.admin-channel]
 adrs: ["0065", "0008", "0064"]
 invariants: [self-hostable by default, API-first, operator-blind E2EE]
@@ -61,7 +61,7 @@ client can move onto it (phase 3) while both doors still answer; only then does 
 (phase 4). Any other order leaves a window in which the e2e job, the seed scripts or the admin container point
 at a door that is closed or does not exist yet.
 
-- [ ] 1 contracts — mark with `x-veyq-channel: admin` every operation whose backend gate is the Server-Owner role,
+- [x] 1 contracts — mark with `x-veyq-channel: admin` every operation whose backend gate is the Server-Owner role,
       plus `createServerOwner`. Locator (a method with no annotation of its own under the class-level
       `@RolesAllowed` carries the gate):
       `for f in $(find backend/src/main -name TenantsResource.kt -o -name InstanceResource.kt -o -name SetupResource.kt); do echo "== $f"; grep -nE '^\s*@(RolesAllowed|PermitAll|Authenticated)|override fun [a-zA-Z]+\(' "$f"; done`.
@@ -70,7 +70,7 @@ at a door that is closed or does not exist yet.
       uses the marker carries one YAML comment pointing at ADR 0065 — its only documentation home besides the ADR.
       · Done when: `npm run generate:api` + `npm run check` green in `web/` and `admin-web/`, `./gradlew check`
       green (the extension generates nothing), trust-chain guards green.
-- [ ] 2 backend — the admin listener, refusing nothing yet.
+- [x] 2 backend — the admin listener, refusing nothing yet.
       - `veyq.admin-channel.port`: default `8090`, `%test` `0`. Not 9000 (Quarkus' management default), not 8081
         (compose's `ADMIN_PORT` host default).
       - A second Vert.x HTTP server whose request handler is `getRootHandler()`. Suggested hook: observe
@@ -86,7 +86,7 @@ at a door that is closed or does not exist yet.
       - **Live check — a machine hint for this CR's form:** run `quarkusDev` in the implement worktree (never the
         user's main checkout), edit a resource, and confirm the listener still answers after the reload.
       · Done when: `./gradlew check` green and the live check seen.
-- [ ] 3 clients + deployment — every Server-Owner caller moves onto the listener; web drops its own call.
+- [x] 3 clients + deployment — every Server-Owner caller moves onto the listener; web drops its own call.
       - **admin-web:** the entrypoint's `BACKEND_URL` default, the CLI's `DEFAULT_BACKEND_URL` and its help text
         (with `adminSession.test.ts`'s pin), `vite.config.ts`'s `VEYQ_API_TARGET` default, and
         `.run/Run Admin.run.xml`. Locator:
@@ -122,7 +122,7 @@ at a door that is closed or does not exist yet.
       · Done when: `npm run check` green in `web/` and `admin-web/`, `./gradlew check` green,
       `python3 scripts/run_web_e2e.py` green (every suite births through the listener), and `helm template` +
       `python3 scripts/chart_meta_check.py` green.
-- [ ] 4 backend — the gate.
+- [x] 4 backend — the gate.
       - **The set, derived:** `backend/gradle/openapi.gradle.kts` reads every spec's operations — swagger-parser is
         already on its classpath through openapi-generator — and emits the operationIds marked
         `x-veyq-channel: admin` as generated Kotlin. Any other value of the extension fails the build. Nothing
@@ -204,6 +204,29 @@ at a door that is closed or does not exist yet.
   design.
 - Dev hot reload beyond phase 2's one live check.
 - A Quarkus upgrade that removes `getRootHandler()` — loud at compile time, but only on the day it happens.
+
+## Record (measured, implement session 2026-09-24)
+
+- **Phase 2 live check** (quarkusDev in the implement worktree): both ports answered before a reload; after a
+  reload forced by a real code change both served the new code. The request that TRIGGERS a reload through the
+  admin port loses its connection (the listener closes with the old app); through 8080 it is held — dev-only,
+  written into `AdminListener`'s KDoc. With 8090 held by another socket the boot failed naming
+  `localhost:8090 (veyq.admin-channel.port)`, and 8080 answered nothing (uc E2, live).
+- **Chart (xii)/(xiii), red first:** on the untouched chart `chart_meta_check.py` failed "the app container
+  declares no containerPort 8090"; after the fix nine injections (second port on `veyq-app`, an Ingress naming the
+  admin Service, BACKEND_URL at the public port, admin rule open / admitting the app pods / a portless allow-all,
+  public rule dropped, no policy, port undeclared) each reddened with its own message; tree unchanged after.
+- **Phase 4 red first:** on the phase-3 tree `SetupServerSliceTest.setupIsAnUnknownRouteOnThePublicPort` failed
+  "Expected status code <404> but was <201>" (and `createsOwner` then 409, the owner already taken); the 64
+  migrated tests were green.
+- **The refusal shape, measured:** the first filter answered an empty 404; an unknown `/api` path answers Vert.x's
+  `text/html; charset=utf-8` "Resource not found" page, so `theRefusalIsIdenticalToAnUnknownRoute` and the
+  per-operation loop went red on it. Fixed by answering the same shape; the test compares against the live page.
+- **Phase 4 bites** (targeted Gradle run each, snapshot-and-restore, red read by test name from the JUnit XML, tree
+  unchanged after): marker dropped from `suspendTenant` → `everyServerOwnerGatedOperationCarriesTheMarker` named
+  `TenantsResource.suspendTenant`; a marked operation on a new, unimplemented tag → `everyMarkerNamesAResource…`
+  named `gateOnNothing`; predicate reading `host()`/`remoteAddress()` → forged headers got `200` instead of `404`;
+  "never globally routable" → 13 global peers accepted; a refusal body of its own → `theRefusalIsIdentical…` red.
 
 ## Retrospective
 

@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.setup
 
+import com.veyq.app.shared.adminchannel.givenAdminChannel
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -37,10 +38,27 @@ class SetupServerSliceTest {
     }
 
 
+    /**
+     * uc.admin.admin-channel `setup-answers-only-on-the-admin-channel`: on a fresh instance the public port answers
+     * setup as an unknown route and creates nothing — the first caller after `up -d` who is not the operator finds
+     * no door. Its positive control on the same predicate is [createsOwner], the identical body on the admin
+     * listener answering 201; that it can is itself the proof nothing was created here.
+     */
+    @Test
+    @Order(2)
+    fun setupIsAnUnknownRouteOnThePublicPort() {
+        given().contentType(ContentType.JSON).body(ownerBody())
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(404)
+        given().`when`().get("/api/setup")
+            .then().statusCode(200)
+            .body("setupRequired", equalTo(true))
+    }
+
     @Test
     @Order(3)
     fun rejectsNonBase64Key() {
-        given().contentType(ContentType.JSON).body(ownerBody(authPublicKey = "not base64!!"))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(authPublicKey = "not base64!!"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
@@ -48,7 +66,7 @@ class SetupServerSliceTest {
     @Test
     @Order(4)
     fun createsOwner() {
-        given().contentType(ContentType.JSON).body(ownerBody())
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
             .`when`().post("/api/setup/owner")
             .then().statusCode(201)
             .body("userId", notNullValue())
@@ -65,7 +83,7 @@ class SetupServerSliceTest {
     @Test
     @Order(6)
     fun rejectsSecondOwner() {
-        given().contentType(ContentType.JSON).body(ownerBody())
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
             .`when`().post("/api/setup/owner")
             .then().statusCode(409)
             .body("code", equalTo("setup_already_complete"))
@@ -74,7 +92,7 @@ class SetupServerSliceTest {
     @Test
     @Order(7)
     fun rejectsInvalidEmail() {
-        given().contentType(ContentType.JSON).body(ownerBody(email = "not-an-email"))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = "not-an-email"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
@@ -85,7 +103,7 @@ class SetupServerSliceTest {
     @Test
     @Order(8)
     fun rejectsNonBase64KdfParams() {
-        given().contentType(ContentType.JSON).body(ownerBody(kdfParams = "not base64!!"))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(kdfParams = "not base64!!"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
@@ -94,7 +112,7 @@ class SetupServerSliceTest {
     @Order(9)
     fun rejectsOversizedKdfParams() {
         // > 256 chars of valid base64 alphabet → trips @Size(max = 256) (kdfParams added in phase 3a)
-        given().contentType(ContentType.JSON).body(ownerBody(kdfParams = "A".repeat(260)))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(kdfParams = "A".repeat(260)))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
@@ -103,7 +121,7 @@ class SetupServerSliceTest {
     @Test
     @Order(11)
     fun rejectsUnknownSuiteId() {
-        given().contentType(ContentType.JSON).body(ownerBody().replace("\"suiteId\":\"v1\"", "\"suiteId\":\"v2\""))
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody().replace("\"suiteId\":\"v1\"", "\"suiteId\":\"v2\""))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
@@ -112,7 +130,7 @@ class SetupServerSliceTest {
     @Order(12)
     fun rejectsEmptyMasterKeyWraps() {
         // minItems: 1 (the PASSWORD floor) — an owner with no wraps must not be accepted.
-        given().contentType(ContentType.JSON)
+        givenAdminChannel().contentType(ContentType.JSON)
             .body(ownerBody().replace(Regex("\"masterKeyWraps\":\\[.*?\\]"), "\"masterKeyWraps\":[]"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
@@ -122,7 +140,7 @@ class SetupServerSliceTest {
     @Order(13)
     fun rejectsNonBase64WrappedKeyInsideWrap() {
         // cascaded (@Valid) validation reaches the wrap's own fields, not just the top-level keys.
-        given().contentType(ContentType.JSON)
+        givenAdminChannel().contentType(ContentType.JSON)
             .body(ownerBody().replace("d3JhcHBlZC1tYXN0ZXIta2V5", "not base64!!"))
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
@@ -137,7 +155,7 @@ class SetupServerSliceTest {
              "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
              "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5"}]}
         """.trimIndent()
-        given().contentType(ContentType.JSON).body(body)
+        givenAdminChannel().contentType(ContentType.JSON).body(body)
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
