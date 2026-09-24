@@ -20,6 +20,9 @@
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { baseCompile } from '@intlify/message-compiler'
+import { VERSION } from 'vue-i18n'
+import { createRequire } from 'node:module'
 import { i18n, SUPPORTED_LOCALES } from './index'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 
@@ -29,8 +32,10 @@ function flatten(o: Record<string, unknown>, prefix = ''): string[] {
   )
 }
 
-const keysOf = (locale: string) =>
-  new Set(flatten((i18n.global as unknown as { getLocaleMessage(l: string): Record<string, unknown> }).getLocaleMessage(locale)))
+const messagesOf = (locale: string) =>
+  (i18n.global as unknown as { getLocaleMessage(l: string): Record<string, unknown> }).getLocaleMessage(locale)
+
+const keysOf = (locale: string) => new Set(flatten(messagesOf(locale)))
 
 /** Every `t('some.key')` literal in this package's sources. Deliberately a plain scan and not a parse: it
  *  reads the same thing a person greps for, and a call site it cannot see is one a person cannot either. */
@@ -87,5 +92,40 @@ describe('admin-web message catalog', () => {
       expect([...base].filter((k) => !other.has(k)), `${locale} is missing keys`).toEqual([])
       expect([...other].filter((k) => !base.has(k)), `${locale} has extra keys`).toEqual([])
     }
+  })
+})
+
+// Every message must also compile under vue-i18n's own message compiler. One that does not still renders — vue-i18n
+// falls back to its source text — so none of the key checks above notice it: `web/` shipped "Invited by @{user}"
+// that way, since a bare `@` opens a linked message (`{'@'}` is the literal). The compiler's own `onError` is the
+// mechanism, deliberately not a spy on `console.warn`, which would pass the day vue-i18n changes how it reports.
+describe('admin-web message syntax', () => {
+  function compileErrors(node: unknown, key: string, errors: string[]): number {
+    if (typeof node === 'string') {
+      baseCompile(node, { onError: (e) => errors.push(`${key}: ${e.message}`) })
+      return 1
+    }
+    if (node && typeof node === 'object') {
+      return Object.entries(node).reduce((n, [k, v]) => n + compileErrors(v, key ? `${key}.${k}` : k, errors), 0)
+    }
+    errors.push(`${key}: not a string message`)
+    return 0
+  }
+
+  it('every message of every locale compiles', () => {
+    const errors: string[] = [] // across all locales, so one red names every broken message at once
+    for (const locale of SUPPORTED_LOCALES) {
+      const compiled = compileErrors(messagesOf(locale), locale, errors)
+      expect(compiled, locale).toBeGreaterThan(50) // a walk that compiled almost nothing proves nothing
+    }
+    expect(errors, 'messages that do not compile').toEqual([])
+  })
+
+  // The proof is only as good as the compiler it runs: a devDependency left behind on a vue-i18n bump would
+  // install a second, older compiler for this test alone, and it would go on passing against syntax the app no
+  // longer parses. vue-i18n's core pins its compiler to its own exact version, so the two must match.
+  it('compiles with the compiler vue-i18n itself runs', () => {
+    const compiler = createRequire(import.meta.url)('@intlify/message-compiler/package.json') as { version: string }
+    expect(compiler.version).toBe(VERSION)
   })
 })
