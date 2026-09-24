@@ -148,8 +148,9 @@ sealed interface ListMembersOutcome {
 }
 
 /**
- * Use-case logic for a member's scopes (en.spaces.personal-scope, cr-0026). The active tenant is resolved
- * from the request Host; the caller must already belong to it (you get a personal scope in tenants you are a
+ * Use-case logic for a member's scopes (en.spaces.personal-scope, cr-0026). The active tenant arrives resolved
+ * (`RequestTenant`, from the request Host) as an id, null when the Host names no tenant; the caller must already
+ * belong to it (you get a personal scope in tenants you are a
  * member of). Birth is client-driven and operator-blind — the handler only persists the ciphertext grant.
  */
 @ApplicationScoped
@@ -159,8 +160,8 @@ class ScopesHandler(
     private val shares: SharingStore,
 ) {
 
-    fun createPersonal(userId: String, host: String?, wrappedGrant: String): CreatePersonalOutcome {
-        val tenantId = host?.let { store.findTenantIdByDomain(it) } ?: return CreatePersonalOutcome.NoTenant
+    fun createPersonal(userId: String, tenantId: String?, wrappedGrant: String): CreatePersonalOutcome {
+        tenantId ?: return CreatePersonalOutcome.NoTenant
         if (!store.isMember(userId, tenantId)) return CreatePersonalOutcome.NoTenant
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
         return CreatePersonalOutcome.Created(store.createPersonal(userId, tenantId, wrappedGrant))
@@ -171,17 +172,17 @@ class ScopesHandler(
      * must belong to the tenant; birth is client-driven and operator-blind — the handler persists only the
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
-    fun createGroup(userId: String, host: String?, encryptedName: String, wrappedGrant: String): CreateGroupOutcome {
+    fun createGroup(userId: String, tenantId: String?, encryptedName: String, wrappedGrant: String): CreateGroupOutcome {
         // Instance policy first (ADR 0032): a personal-only instance disables group scopes → 422, enforced
         // server-side even if a stale client still offers the affordance.
         if (!capabilities.isActive(CapabilityIds.SPACES_GROUPS)) return CreateGroupOutcome.CapabilityDisabled
-        val tenantId = host?.let { store.findTenantIdByDomain(it) } ?: return CreateGroupOutcome.NoTenant
+        tenantId ?: return CreateGroupOutcome.NoTenant
         if (!store.isMember(userId, tenantId)) return CreateGroupOutcome.NoTenant
         return CreateGroupOutcome.Created(store.createGroup(userId, tenantId, encryptedName, wrappedGrant))
     }
 
-    fun listMine(userId: String, host: String?): ListScopesOutcome {
-        val tenantId = host?.let { store.findTenantIdByDomain(it) } ?: return ListScopesOutcome.NoTenant
+    fun listMine(userId: String, tenantId: String?): ListScopesOutcome {
+        tenantId ?: return ListScopesOutcome.NoTenant
         return ListScopesOutcome.Scopes(store.listMine(userId, tenantId))
     }
 
@@ -316,8 +317,8 @@ class ScopesHandler(
     }
 
     /** The caller's pending group invitations in the active tenant (cr-0094) — the invitee's Accept/Decline view. */
-    fun listInvitations(userId: String, host: String?): ListInvitationsOutcome {
-        val tenantId = host?.let { store.findTenantIdByDomain(it) } ?: return ListInvitationsOutcome.NoTenant
+    fun listInvitations(userId: String, tenantId: String?): ListInvitationsOutcome {
+        tenantId ?: return ListInvitationsOutcome.NoTenant
         return ListInvitationsOutcome.Invitations(store.listInvitations(userId, tenantId))
     }
 

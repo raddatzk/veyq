@@ -40,7 +40,8 @@ within the resolved context is still addressed by opaque scope/node IDs**. Tenan
 server-visible operational metadata, so this does not affect operator-blindness.
 
 **The backend resolves the tenant once per request, by one rule.** The header rule (the proxy's
-`X-Forwarded-Host`, else `Host`) and the domain lookup live in one place, `backend/.../shared/tenant/`. An
+`X-Forwarded-Host`, else `Host`) and the domain lookup live in one place, `backend/.../shared/tenant/`, and
+[`validate_lookup_single_home.py`](../../scripts/validate_lookup_single_home.py) keeps it the only one. An
 operation receives the **resolved tenant**, meaning its id and its *registered* domain, and never the header
 value. Both halves are security properties:
 - A gate that normalizes the Host even slightly differently from the handler behind it guards a different

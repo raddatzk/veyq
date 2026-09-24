@@ -724,6 +724,12 @@ does not replace snapshot-and-restore — that is what you fall back to when the
 guard must also reject shapes that never occurred here, or when the case belongs in
 `validate_guard_gaps.py`'s repeated harness.
 
+**And the red is taken through a seam the UNFIXED tree has.** A CR that names its bite's lever in the fix's own
+terms — `cr-request-tenant-and-tenant-bound-recovery` said "the direct delivery call", a method the fix splits out —
+names something that does not exist where the red must be recorded. Record the red through the old seam (there, the
+request method that still ran the delivery inline), re-point the test once the fix creates the new one, and re-bite
+it by injection on the fixed tree; a CR can save that detour by naming the lever for both trees.
+
 **But a live-defect red can land on the wrong STEP, and then it is not a bite either.** § *a bite test must tell
 "the guard held" apart from "nothing ran"* catches an injection that breaks compilation instead of the assertion;
 this is the same failure arriving through the **ordering**. Where several fixes land in sequence, a test staged

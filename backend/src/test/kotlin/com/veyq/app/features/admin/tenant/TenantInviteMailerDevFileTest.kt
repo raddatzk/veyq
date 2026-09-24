@@ -31,8 +31,8 @@ class TenantInviteMailerDevFileTest {
         val file = tmp.resolve("nested/invites.jsonl") // parent created on demand
         val mailer = LoggingTenantInviteMailer(testVeyqConfig(mapOf("veyq.tenant.invite.dev-file" to file.toString())))
 
-        mailer.sendInvite("media.test", "owner@veyq.test", "BOOT-SECRET-123", Instant.parse("2026-07-06T00:00:00Z"))
-        mailer.sendInvite("media.test", "second@veyq.test", "BOOT-SECRET-456", Instant.parse("2026-07-06T00:00:00Z"))
+        mailer.sendInvite(TENANT_ID, "media.test", "owner@veyq.test", "BOOT-SECRET-123", Instant.parse("2026-07-06T00:00:00Z"))
+        mailer.sendInvite(TENANT_ID, "media.test", "second@veyq.test", "BOOT-SECRET-456", Instant.parse("2026-07-06T00:00:00Z"))
 
         val lines = Files.readAllLines(file)
         assertEquals(2, lines.size, "one line appended per invite")
@@ -44,7 +44,7 @@ class TenantInviteMailerDevFileTest {
     @Test
     fun writesNoFileWhenDevFileUnset(@TempDir tmp: Path) {
         val file = tmp.resolve("never.jsonl")
-        LoggingTenantInviteMailer(testVeyqConfig()).sendInvite("media.test", "owner@veyq.test", "T", Instant.parse("2026-07-06T00:00:00Z"))
+        LoggingTenantInviteMailer(testVeyqConfig()).sendInvite(TENANT_ID, "media.test", "owner@veyq.test", "T", Instant.parse("2026-07-06T00:00:00Z"))
         assertFalse(Files.exists(file), "no file written when the config is empty (default)")
     }
 
@@ -69,7 +69,7 @@ class TenantInviteMailerDevFileTest {
         jul.addHandler(handler)
         try {
             LoggingTenantInviteMailer(testVeyqConfig())
-                .sendInvite("media.test", "owner@veyq.test", token, Instant.parse("2026-07-06T00:00:00Z"))
+                .sendInvite(TENANT_ID, "media.test", "owner@veyq.test", token, Instant.parse("2026-07-06T00:00:00Z"))
         } finally {
             jul.removeHandler(handler)
             jul.level = previousLevel
@@ -83,5 +83,10 @@ class TenantInviteMailerDevFileTest {
             }
             assertFalse(emitted.contains(token), "raw invite token must never appear in a log record: <$emitted>")
         }
+    }
+
+    private companion object {
+        /** The logging mailer never reads settings, so any tenant id will do; the domain is what it validates. */
+        const val TENANT_ID = "00000000-0000-0000-0000-000000000001"
     }
 }
