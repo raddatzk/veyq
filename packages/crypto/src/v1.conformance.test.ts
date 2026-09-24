@@ -291,6 +291,18 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.openFrame(unhex(f.contentKey), f.index, f.total, unhex(f.frame)))).toBe(f.plaintext)
   })
 
+  it('the frame size is the contract\'s chunk_frame_size, and sealing adds exactly its overhead', () => {
+    const { note: _note, ...size } = vectors.chunk_frame_size
+    expect(v1.CHUNK_FRAME_SIZE).toEqual(size)
+    expect(v1.FRAME_OVERHEAD).toBe(size.nonceBytes + size.tagBytes)
+    // The constant must describe what sealFrame actually emits, not only agree with the file: a full frame and
+    // an empty one, sealed for real.
+    const f = vectors.chunk_frame
+    const full = v1.sealFrame(unhex(f.contentKey), 0, 2, new Uint8Array(size.plaintextBytes), unhex(f.nonce))
+    expect(full.length).toBe(size.nonceBytes + size.plaintextBytes + size.tagBytes)
+    expect(v1.sealFrame(unhex(f.contentKey), 0, 1, new Uint8Array(0), unhex(f.nonce)).length).toBe(v1.FRAME_OVERHEAD)
+  })
+
   it('identity fingerprint / safety number', () => {
     const f = vectors.fingerprint
     expect(v1.fingerprint({ kemX: unhex(f.kem_x), kemM: unhex(f.kem_m), sign: unhex(f.sign) })).toBe(f.digits)
