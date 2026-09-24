@@ -2,6 +2,7 @@ package com.veyq.app.features.account.recovery
 
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -71,7 +72,7 @@ class RecoveryStore {
     fun recoveryMaterial(userId: String): RecoveryMaterialRow? {
         val user = VeyqUser.findById(userId) ?: return null
         val wrap = MasterKeyWrapEntity
-            .find("userId = ?1 and method = ?2", userId, RECOVERY_METHOD)
+            .find("userId = ?1 and method = ?2", userId, WrapMethod.RECOVERY.name)
             .firstResult() ?: return null
         return RecoveryMaterialRow(user.email, user.suiteId, wrap.wrappedKey, wrap.kdfParams, user.wrappedIdentityPrivateKey)
     }
@@ -85,9 +86,9 @@ class RecoveryStore {
     /**
      * Apply the reset. **One transaction, all four writes or none** (ADR 0054 § Decision 3).
      *
-     * Deleting `DEVICE_KEY` alongside `DEVICE` is the load-bearing part: a `DEVICE` wrap mixes the old password
-     * and would merely fail, but a `DEVICE_KEY` wrap takes no password at all and would keep granting
-     * password-less entry to a device the person may be resetting *because of*.
+     * Deleting every wrap but the survivors ([WrapMethod.SURVIVORS]) is the load-bearing part: a `DEVICE` wrap
+     * mixes the old password and would merely fail, but a `DEVICE_KEY` wrap takes no password at all and would
+     * keep granting password-less entry to a device the person may be resetting *because of*.
      *
      * Returns false if the account lost its PASSWORD floor between release and completion (it cannot, through
      * any HTTP surface — `deleteWrap` whitelists the device methods — but a reset that silently created a
@@ -97,14 +98,14 @@ class RecoveryStore {
     fun applyReset(userId: String, wrappedKey: String, kdfParams: String, authPublicKey: String, tokenId: String): Boolean {
         val user = VeyqUser.findById(userId) ?: return false
         val floor = MasterKeyWrapEntity
-            .find("userId = ?1 and method = ?2", userId, PASSWORD_METHOD)
+            .find("userId = ?1 and method = ?2", userId, WrapMethod.PASSWORD.name)
             .firstResult() ?: return false
 
         floor.wrappedKey = wrappedKey
         floor.kdfParams = kdfParams
         user.authPublicKey = authPublicKey
 
-        MasterKeyWrapEntity.delete("userId = ?1 and method in ?2", userId, DEVICE_METHODS)
+        MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
         AccountRecoveryEntity.update("status = ?1 where id = ?2", AccountRecoveryEntity.CONSUMED, tokenId)
         return true
     }
@@ -123,10 +124,4 @@ class RecoveryStore {
     fun purgeTerminal(before: Instant): Long = AccountRecoveryEntity.delete(
         "status in ?1 and createdAt < ?2", AccountRecoveryEntity.TERMINAL, before,
     )
-
-    private companion object {
-        private const val RECOVERY_METHOD = "RECOVERY"
-        private const val PASSWORD_METHOD = "PASSWORD"
-        private val DEVICE_METHODS = listOf("DEVICE", "DEVICE_KEY")
-    }
 }

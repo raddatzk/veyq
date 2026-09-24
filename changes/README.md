@@ -470,7 +470,9 @@ that lands, so its green says nothing about the merge, and the price of running 
 eight sessions each ran the whole glob at once, and `validate_guard_gaps.py` alone took over 20 minutes in one of
 them. So a wave session runs the guards its own Done-when names (a coverage edit runs `validate_coverage.py`), and
 the coordinating session runs the whole glob after merging the wave, before it calls the wave done. A red there
-goes back to the CR that caused it.
+goes back to the CR that caused it. So a CR refined for a wave **names those guards in its done-when**:
+`cr-wrap-methods-survivor-whitelist` said "every `scripts/validate_*.py`", and its session duly ran a second
+`validate_guard_gaps.py` beside a neighbour's while a web test timed out under the load.
 
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
