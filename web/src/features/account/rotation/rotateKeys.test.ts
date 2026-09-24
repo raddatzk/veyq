@@ -15,7 +15,7 @@ vi.mock('../../../api/client', () => ({
   accountRotationApi: vi.fn(),
   scopesApi: vi.fn(),
 }))
-vi.mock('../login/login', () => ({ withRefresh: (f: () => unknown) => f() }))
+vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../app/vault', () => ({
   masterKey: vi.fn(),
   setUnlocked: vi.fn(),

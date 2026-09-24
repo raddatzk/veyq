@@ -5,7 +5,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum } from '../../../api/generated/account'
-import { withRefresh } from '../login/login'
+import { withRefresh } from '../../../app/sessionRefresh'
 import * as device from './deviceKey'
 
 export { isTrustSupported, forgetAllTrust } from './deviceKey'

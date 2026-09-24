@@ -3,7 +3,7 @@
 // dependency-light, crypto-only module) so the dev bootstrap script can seal identically; it is re-exported here
 // so callers keep a single import site. The username is a plaintext per-tenant handle the server enforces unique on.
 import { accountProfileApi } from '../../../api/client'
-import { withRefresh } from '../login/login'
+import { withRefresh } from '../../../app/sessionRefresh'
 import { openScope } from '../../spaces/scopes'
 import { ScopeKind } from '../../../api/generated/scopes'
 import type { MemberProfile } from '../../../api/generated/account'

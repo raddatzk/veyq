@@ -20,7 +20,8 @@ import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
 import { InviteRole } from '../api/generated/tenants'
 import { buildAccount, type BuiltAccount } from '@veyq/crypto/accountBirth'
-import { login, withRefresh } from '../features/account/login/login'
+import { login } from '../features/account/login/login'
+import { withRefresh } from '../app/sessionRefresh'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { identityPrivate, vaultState } from '../app/vault'
 import { account } from '../app/account'
@@ -203,7 +204,7 @@ async function sealAndAccept() {
  *  a real invite error (400 malformed grant / 403 / 404 / 410), which must surface via mapError instead.
  *  Only a 401 means the session lapsed: withRefresh already rotated once and still got 401, or the refresh
  *  endpoint itself rejected. Delegates to the shared `isUnauthorized` (the same cross-package status duck-type
- *  as login's withRefresh), just under a name that carries the invite-flow meaning. */
+ *  as the app's withRefresh), just under a name that carries the invite-flow meaning. */
 function isAuthLapse(e: unknown): boolean {
   return isUnauthorized(e)
 }
