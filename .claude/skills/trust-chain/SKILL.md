@@ -125,7 +125,9 @@ each has a canonical home — point there, don't try to build past it:
    closes this on the *unit layer* via mutation score; nowhere else.
 2. **Timing** — a test counts only when CI runs it, and *whether it ran* is a fact about a run, not a file.
    The **declared** half is checked: `validate_coverage.py` holds a backend ref's JUnit gates against the
-   Gradle runs the workflows declare (pinned by `validate_guard_gaps.py` 17/18). The **run-time** half is the
+   Gradle runs the workflows declare (pinned by `validate_guard_gaps.py` 17/18), and it refuses any ref on a
+   surface whose job no run has executed (`ADMITTED`, pinned by 24; admission itself is a hand edit that
+   nothing checks). The **run-time** half is the
    edge — a body that `assume`s itself away (pinned open, 21), a variable a script exports, a web `skipIf`, a
    job that executed nothing: green there still means only that the ref resolves.
    [ADR 0040](../../../docs/decisions/0040-coverage-gaps-and-http-not-a-surface.md) +

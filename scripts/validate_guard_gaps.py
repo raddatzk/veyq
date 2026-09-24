@@ -70,6 +70,10 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      backend has neither a ref nor a gap) — rejected: `validate_coverage` requires every use-case to address
      `OWED` (backend, web). The coverage README and the `SURFACES` comment had said "never left silent" with
      nothing reading it; six files were silent (2026-09-23), and one silence hid a real web surface
+  24 an `admin-web` ref on an implemented use-case (a real admin-web test file, under a criterion that is
+     otherwise sound) — rejected: `validate_coverage` admits refs only on a surface in `ADMITTED`, one whose CI
+     job some run has executed (ADR 0040, the note on what a row is). ADR 0040 said that rule carries itself;
+     14 admin-web and 3 crypto refs went in green before anything read it (2026-09-24)
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -178,6 +182,8 @@ OWED_GAP_ANCHOR = "\ngaps:\n  backend: >-\n"
 COV_SETUP = "docs/coverage/features/admin/use-cases/uc.admin.setup-server.yaml"
 ADMIN_WEB_GAP_ANCHOR = "\ngaps:\n  admin-web: >-\n"
 NEXT_GAP_ANCHOR = "\n  web: >-\n"
+# A real admin-web test file — case 24 cites it on a surface no run has admitted, so only admission can reject it.
+ADMIN_WEB_TEST_REF = "src/cli/cli.test.ts"
 # A distinctive base64 cap (the space icon, 21 884) — forging it oversize is the #94 closed-hole probe; a
 # free-text cap (the operator terms, 20 000) — forging it huge is the free-text open-gap probe.
 B64_CAP_ANCHOR = ("contracts/api/scopes.openapi.yaml", "maxLength: 21884", "maxLength: 65536")
@@ -335,6 +341,17 @@ def forge_admin_use_case_silent_on_admin_web(root: pathlib.Path) -> str:
         raise ForgeError(f"anchors not found (drifted?): {ADMIN_WEB_GAP_ANCHOR!r} … {NEXT_GAP_ANCHOR!r}")
     f.write_text(t[:start] + "\ngaps:" + t[end:])
     return "a Server-Owner use-case silent on admin-web, an opt-in surface (the owes-only-backend-and-web limit)"
+
+
+def forge_unadmitted_surface_ref(root: pathlib.Path) -> str:
+    # The ref resolves and is a test file, and admin-web is neither a gap nor owed here, so every other check
+    # passes: the one thing left to reject it is that no run has executed admin-web's job.
+    f = root / COV_APPEARANCE
+    f.write_text(_sub(f.read_text(), f"[{WEB_TEST_REF}]",
+                      f"[{WEB_TEST_REF}] }}\n      admin-web: {{ unit: [{ADMIN_WEB_TEST_REF}]"))
+    if not (root / "admin-web" / ADMIN_WEB_TEST_REF).exists():
+        raise ForgeError(f"admin-web test file missing (moved?): {ADMIN_WEB_TEST_REF}")
+    return "an admin-web ref on an implemented use-case — a surface no run has admitted (must be REJECTED)"
 
 
 def forge_cr_done_no_impl(root: pathlib.Path) -> str:
@@ -540,6 +557,7 @@ CASES = [
     ("21", "validate_coverage.py", forge_backend_runtime_assumption,     True),
     ("22", "validate_coverage.py", forge_owed_surface_silent,            False),
     ("23", "validate_coverage.py", forge_admin_use_case_silent_on_admin_web, True),
+    ("24", "validate_coverage.py", forge_unadmitted_surface_ref,         False),
 ]
 
 
