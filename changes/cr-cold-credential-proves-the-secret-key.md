@@ -44,8 +44,9 @@ dump contains.
   withdrawn before it started. It overlaps `cr-request-tenant-and-tenant-bound-recovery` in text only
   (`RecoveryHandler`, `AccountStore`, `RecoverySliceTest`), so either order works and whichever lands second
   rebases. #156 closes when both are done. It also rewrites `PasswordChangeStore.applyChange` and
-  `RecoveryStore.applyReset`, whose wrap-delete predicate `cr-wrap-methods-survivor-whitelist` replaces with
-  the survivor whitelist — text overlap only; whichever lands second rebases and keeps both. Both this CR and `cr-upload-windowed-presign` add a Flyway migration, and at planning time each would take `V50`
+  `RecoveryStore.applyReset`, whose wrap-delete predicate `cr-wrap-methods-survivor-whitelist` has already
+  replaced with the survivor whitelist — keep `method not in WrapMethod.SURVIVORS` as it is (no store spells a
+  method literal; `scripts/validate_wrap_method_vocabulary.py` reds one). Both this CR and `cr-upload-windowed-presign` add a Flyway migration, and at planning time each would take `V50`
   (the highest was `V49__item_favorites.sql`); whichever merges second renumbers its file.
 - **Every existing account lacks the proof key.** Nothing is migrated. Before V1 the owner resets the
   development instance; tell them, and do not wipe their database yourself.

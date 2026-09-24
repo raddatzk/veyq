@@ -6,6 +6,7 @@ import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.identity.WrapMethod
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
@@ -40,7 +41,7 @@ class KeyMaterialHandler(
      *  PASSKEY stay (their KEKs are device- or password-bound); the client's normal unlock uses PASSWORD. */
     @Transactional
     fun forUser(userId: String): KeyMaterial? =
-        store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method == RECOVERY_METHOD }) }
+        store.find(userId)?.let { m -> m.copy(wraps = m.wraps.filterNot { it.method == WrapMethod.RECOVERY.name }) }
 
     /** Add a wrap for the authenticated caller. Caps DEVICE enrolments per account so a buggy/malicious
      *  client can't flood the row set (re-trust replaces, so normal use never approaches the cap). */
@@ -63,6 +64,5 @@ class KeyMaterialHandler(
 
     companion object {
         const val MAX_WRAPS_PER_METHOD = 20L
-        private const val RECOVERY_METHOD = "RECOVERY"
     }
 }

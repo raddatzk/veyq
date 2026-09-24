@@ -445,7 +445,7 @@ paths:
       summary: Set a new password against a proven Secret Key.
       description: >
         Applies the reset in one transaction: replace the `PASSWORD` wrap, overwrite the auth public key,
-        delete every `DEVICE` and `DEVICE_KEY` wrap, revoke all sessions, and spend the token.
+        delete every wrap but `PASSWORD` and `RECOVERY`, revoke all sessions, and spend the token.
 
         Accepted only if `recoveryAuthTag` matches the commitment stored at account birth — proof that the
         caller actually opened the released wrap, i.e. holds the Secret Key. A caller with mailbox access

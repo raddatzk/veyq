@@ -464,7 +464,7 @@ paths:
       summary: Set a new password from a live, unlocked session.
       description: >
         Applies uc.account.change-password's one server-side mechanism for both entry points: rewrite the
-        `PASSWORD` wrap and `auth_public_key`, delete every `DEVICE`/`DEVICE_KEY` wrap, and revoke every
+        `PASSWORD` wrap and `auth_public_key`, delete every wrap but `PASSWORD` and `RECOVERY`, and revoke every
         session except the one the request arrived on. Mirrors `POST /api/recovery/complete`'s floor +
         auth-key rewrite, with one deliberate difference — this flow has a caller session to spare and must
         not revoke it, where recovery has none.
