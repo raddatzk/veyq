@@ -2,7 +2,7 @@
 
 - **ID:** cc.security.csp
 - **Type:** **Cross-cutting concern.** It is a horizontal, browser-enforced security mechanism for the `web/`
-  surface and for the response headers of the app origin, and for the `admin-web/` console (§ *admin-web*). It has no standalone end-user goal, so it is not a
+  surface and for the response headers of the app origin, and for the `admin-web/` console and its origin's headers (§ *admin-web*). It has no standalone end-user goal, so it is not a
   use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
   rationale and verification are traceable from the threat model.
 - **Status:** **the header delivery described below is decided but not yet built**
@@ -108,13 +108,37 @@ through the compose path route, the rule that makes those responses inert is ADR
 
 ## admin-web
 
-The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)) ships its own policy.
-Its one source is [`admin-web/src/shared/security/csp.ts`](../../admin-web/src/shared/security/csp.ts), and
-`admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
-stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API in
-`connect-src`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is the container
-nginx's `X-Frame-Options: DENY` ([`admin-web/nginx.conf.template`](../../admin-web/nginx.conf.template)), which is
-the whole guard, not a second layer. That nginx sends no HSTS yet (inbox #176).
+The Server-Owner console ([ADR 0065](../decisions/0065-admin-ui-cli-separate-service.md)) is served by its own
+container's nginx ([`admin-web/nginx.conf.template`](../../admin-web/nginx.conf.template)), and that nginx sends
+every header of the admin origin.
+
+- **The policy stays a `<meta>`.** Its one source is
+  [`admin-web/src/shared/security/csp.ts`](../../admin-web/src/shared/security/csp.ts), and
+  `admin-web/vite.config.ts` delivers it as a `<meta>` in the build and as a header on the Vite dev server. It is
+  stricter than web's: there are no map providers, so the only origin besides its own is the HIBP range API in
+  `connect-src`. It carries **no `frame-ancestors`**, because a `<meta>` ignores it. Anti-framing is nginx's
+  `X-Frame-Options: DENY`, which is the whole guard, not a second layer.
+
+  It is not moved into a header. The app's policy needs a header because it contains a value that is only known
+  at runtime, the store origin ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). This policy
+  has no runtime value, and `X-Frame-Options` already covers the one directive a `<meta>` drops. Revisit if the
+  admin policy gains a runtime value, or needs `frame-ancestors` or reporting of its own.
+- **HSTS: the app's value, under the app's switch.** nginx sends the same `Strict-Transport-Security` as the app
+  shell (§ *The other response headers*), and the one deployment switch turns it off on both origins. There is one
+  switch and not two, because two could not be independent. The admin nginx passes the backend's `/api/*` responses
+  through unchanged, and once the backend sends HSTS on those responses they reach the admin host as well.
+
+  nginx sends the header, not the proxy in front of it. ADR 0069 rejects headers at the proxy for the app, and the
+  same reason holds here: the admin surface has two public exposures, compose's `ADMIN_DOMAIN` router and the
+  chart's `admin.domain` Ingress, and nginx is the only component they share. The default exposure (localhost-only,
+  or a port-forward) is plain HTTP, where a browser ignores the header.
+
+  Without `preload`, HSTS never protects the first visit. It keeps every later visit on HTTPS for its `max-age`.
+  Preload is out of reach for arbitrary self-hosted domains, so a network attacker can still downgrade the first
+  visit to an admin domain.
+
+  **Not yet built.** Today this nginx sends no HSTS. It is planned in `cr-admin-origin-hsts`, which follows the
+  app shell's switch.
 
 ## Verification
 

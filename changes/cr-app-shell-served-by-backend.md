@@ -59,8 +59,8 @@ no policy.
   - Store responses and the playback Service Worker's synthesized responses. They are not the shell's
     ([ADR 0013](../docs/decisions/0013-blob-storage-presigned-direct-to-store.md) §6, ADR 0047) and belong to
     `cr-inert-store-responses`.
-  - admin-web, which has its own nginx with a fallback and headers. Its `<meta>` CSP no longer carries the
-    ignored `frame-ancestors` (#165), it sends no HSTS (#176), and it shares nothing with `web/`.
+  - admin-web, which has its own nginx with a fallback and headers, and shares nothing with `web/`. Its HSTS
+    is `cr-admin-origin-hsts` (see § Ordering).
   - `Permissions-Policy` and COOP/COEP, which are not decided.
 
 ## Ordering
@@ -75,6 +75,11 @@ land rebases.
 **With `cr-upload-windowed-presign`: no ordering constraint, only overlap.** That CR reshapes the presign sites
 in `BlobStore`, and phase 1 here adds a read of the signer's endpoint resolution beside them. Whichever lands
 second rebases; phase 1's test anchors on whatever presign call exists by then, not on a symbol name.
+
+**With `cr-admin-origin-hsts`: this CR first.** That CR makes the admin container a second reader of phase 3's
+HSTS switch (cc.security.csp § *admin-web* says why the two origins share one). So phase 3 names the `.env` key
+and the Helm value for the deployment rather than for the app, and writes the `infra/README.md` sentence so that
+the second origin can join it.
 
 This CR does put the Service Worker under the app policy for the first time (phase 2). On compose the worker's
 store fetches are same-origin, so `'self'` covers them in either order.
