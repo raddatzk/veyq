@@ -55,6 +55,15 @@ members; new content seals under it. Nothing is re-encrypted.**
    one's admission tag forward — verified under `E_n`, re-tagged under `E_{n+1}`
    ([ADR 0020](0020-grant-distribution-invite-wrap.md) move 6);
    (c) the server **deletes the removed member's membership** (instant layer-1 access cut — a 403 on the scope).
+
+   **The commit states the epoch it creates, and the server takes it only as the scope's current epoch + 1**;
+   anything else is `409 stale_epoch` and nothing lands. The device builds the link from **its own grant**, not
+   from the scope's epoch, so a rotation that lost a race to another, or rode a grant a previous rotation skipped,
+   would otherwise link the new epoch to a key that is not its predecessor, and every epoch skipped that way would
+   be unreachable for every member. A refused rotation is rebuilt once from a re-opened grant and a **fresh** key.
+   The refused attempt's wraps already left the device, and one of them may be addressed to a member removed in
+   the meantime, so reusing that key would give the server a grant it could hand them.
+
    New content now seals under `E_{n+1}`. The removed member keeps ≤ `E_n` → reads pre-removal content, **never**
    post-removal content, even against a malicious operator.
 

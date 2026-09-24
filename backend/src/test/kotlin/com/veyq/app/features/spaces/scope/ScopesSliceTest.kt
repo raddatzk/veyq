@@ -29,6 +29,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
@@ -196,6 +197,64 @@ class ScopesSliceTest {
             .body("""{"wrappedPrev":"$rotPrev","grants":[]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+    }
+
+    @Test
+    @Disabled("Red on today's code (inbox #177): cr-rotation-states-its-epoch deletes this line before its fix.")
+    fun aRotationBuiltOnASupersededEpochIs409AndLeavesTheChainIntact() {
+        // Two owners each build a rotation from epoch 0: a fresh key, a chain-link wrapping E_0, and re-grants.
+        // The first commits epoch 1. The second link also wraps E_0, so storing it as epoch 2 would send every
+        // holder of E_2 peeling to E_0 while believing it E_1, and everything sealed under E_1 would be
+        // unreachable. The server cannot tell a race from a lagging grant; both are this request.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val coOwner = seedTenantMember(tenantIdOf(domain), "coowner")
+        addToGroup(owner, domain, groupId, "coowner")
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"role":"OWNER"}""")
+            .`when`().patch("/api/scopes/$groupId/members/$coOwner").then().statusCode(200)
+        val linkByOwner = "bGluay1ieS1vd25lcg==" // "link-by-owner" (symWrap(E_1, E_0))
+        val linkByCoOwner = "bGluay1ieS1jby1vd25lcg==" // "link-by-co-owner" (symWrap(E_x, E_0), built on 0)
+        val coOwnerGrantFromOwner = "Y28tb3duZXItZ3JhbnQ=" // "co-owner-grant"
+
+        // Control on the same predicate: a rotation stating the next epoch commits.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body(
+                """{"epoch":1,"wrappedPrev":"$linkByOwner","grants":[""" +
+                    """{"userId":"$owner","wrappedGrant":"$newGrant"},{"userId":"$coOwner","wrappedGrant":"$coOwnerGrantFromOwner"}]}""",
+            )
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(201).body("epoch", equalTo(1))
+
+        // The co-owner's rotation, built on epoch 0, arrives second. It must not commit.
+        given().header("Authorization", "Bearer ${token(coOwner)}").contentType(ContentType.JSON)
+            .body("""{"epoch":1,"wrappedPrev":"$linkByCoOwner","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant"}]}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+
+        // Nothing it carried landed: one link, the owner's; the owner's re-grants stand.
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/epochs")
+            .then().statusCode(200)
+            .body("size()", equalTo(1))
+            .body("[0].wrappedPrev", equalTo(linkByOwner))
+        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.currentEpoch", equalTo(1))
+            .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(newGrant))
+        given().header("Authorization", "Bearer ${token(coOwner)}").header("X-Forwarded-Host", domain)
+            .`when`().get("/api/scopes")
+            .then().statusCode(200)
+            .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(1))
+            .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(coOwnerGrantFromOwner))
+
+        // Re-opened at epoch 1 (the grant the owner's rotation gave it), the co-owner's retry commits epoch 2.
+        // Without this, a scope that refused every second rotation would pass the refusal above.
+        given().header("Authorization", "Bearer ${token(coOwner)}").contentType(ContentType.JSON)
+            .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[]}""")
+            .`when`().post("/api/scopes/$groupId/epochs")
+            .then().statusCode(201).body("epoch", equalTo(2))
     }
 
     // --- rename a group (uc.spaces.rename-group, cr-0097) ---
