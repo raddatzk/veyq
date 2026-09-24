@@ -322,10 +322,6 @@ interface VeyqConfig {
         /** Per-blob declared byte cap. */
         @WithDefault("2147483648")
         fun maxBytes(): Long
-
-        /** Per-blob declared chunk cap. */
-        @WithDefault("100000")
-        fun maxChunks(): Int
     }
 
     interface BlobStore {

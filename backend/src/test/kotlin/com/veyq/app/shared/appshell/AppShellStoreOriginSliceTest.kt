@@ -41,7 +41,7 @@ class AppShellStoreOriginSliceTest {
     fun thePolicyAllowsTheOriginOfAUrlThisAppSigns() {
         // The expected origin is taken from a URL the running signer produced, not from the profile above — so a
         // shell that read `public-endpoint` itself would pass only for as long as the two happened to agree.
-        val signed = URI.create(blobStore.presignPut("storage-key/0", "tenant.example.com")!!)
+        val signed = URI.create(blobStore.presignPut("storage-key/0", 1L, "tenant.example.com")!!)
         val origin = "${signed.scheme}://${signed.host}"
         assertEquals("https://store.example.net", origin, "control: the signer is the real one, in store-origin mode")
 

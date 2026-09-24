@@ -56,7 +56,7 @@ paths:
             example:
               items:
                 - chunkCount: 2
-                  byteSize: 131072
+                  byteSize: 400000
                   wrappedBlobKey: d3JhcHBlZC1rLWJsb2I=
       responses:
         "200":
@@ -90,9 +90,9 @@ paths:
         Each item is **one logical media**: an `originalUploadId` plus up to two role-tagged `derivatives`
         (THUMBNAIL, PREVIEW — generated client-side, [en.memory.derivatives](../../docs/features/memory/enablers/en.memory.derivatives.md)).
         The server verifies **every** upload session of the item, **stats the stored chunk objects** per blob
-        (declare-then-verify: count + total bytes must match what was declared, else the objects are purged and
-        the item fails `budget_exceeded`), records one `blob` per upload (each with its own per-chunk size
-        `manifest` and `K_blob` wrap), and one `media` row linking the original blob to `nodeId` with a
+        (declare-then-verify: every chunk must be present at exactly the length its declared `byteSize` derives,
+        else the objects are purged and the item fails `budget_exceeded`), records one `blob` per upload (each
+        with its own per-chunk size `manifest` and `K_blob` wrap), and one `media` row linking the original blob to `nodeId` with a
         derivative row per derivative. Returns `{ blobId (the original), mediaId }` — or a per-item error. The
         target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
       security:
@@ -752,19 +752,28 @@ components:
           x-veyq-visibility: measure
           type: integer
           format: int32
-          description: Number of ciphertext chunks the blob is sealed into (≥ 1).
+          description: >
+            Number of ciphertext chunks the blob is sealed into. Not a free choice: it is derived from `byteSize`
+            by the contract's frame size (`chunk_frame_size` in `contracts/crypto/vectors/v1.json`, ADR 0013 §3) —
+            every frame but the last is full, so `chunkCount = ⌈byteSize / (nonceBytes + plaintextBytes +
+            tagBytes)⌉` — and any other value is refused per item (`shape_invalid`). No maximum of its own: the
+            ceiling is the server's per-blob byte cap.
           minimum: 1
-          maximum: 100000
           example: 2
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1) @field:jakarta.validation.constraints.Max(100000)'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
         byteSize:
           x-veyq-visibility: measure
           type: integer
           format: int64
-          description: Total ciphertext byte size declared up front (verified against the stored objects on complete).
-          minimum: 0
-          example: 131072
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+          description: >
+            Total ciphertext byte size declared up front — the sum of the blob's sealed frames. It fixes the blob's
+            shape (`chunk_frame_size` in the crypto vectors): `chunkCount` and every chunk's exact length follow
+            from it, and a size no frame sequence has — under one empty frame (28), or whose last frame of several
+            would carry no plaintext — is refused per item (`shape_invalid`). Verified on complete: every chunk
+            must be present at exactly its derived length.
+          minimum: 28
+          example: 400000
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(28)'
         wrappedBlobKey:
           type: string
           description: The blob's random `K_blob` wrapped under the Memory's `K_mem` (opaque base64).
@@ -793,12 +802,14 @@ components:
           example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
         presignedPuts:
           type: [array, "null"]
-          description: One presigned PUT URL per chunk, in chunk order.
+          description: >
+            One presigned PUT URL per chunk, in chunk order. Each is signed for its chunk's exact `Content-Length`
+            (full frames, then the remainder), so the store refuses a body of any other length.
           items: { $ref: "#/components/schemas/PresignedUrl" }
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = declared bytes/chunks over the cap, `store_unavailable`); null on success.
+          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `store_unavailable`); null on success.
           maxLength: 64
           example: null
 
@@ -924,7 +935,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded`); null on success.
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged); null on success.
           maxLength: 64
           example: null
 

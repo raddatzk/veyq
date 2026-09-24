@@ -170,9 +170,10 @@ sealed interface MoveMediaOutcome {
  * store: bytes never flow through here — `start` presigns PUTs, `complete` stats the stored objects
  * (declare-then-verify), `download` presigns GETs.
  *
- * Two budget gates (ADR 0013 §3): the **declared** shape is capped at `start` (`budget_exceeded` per item),
- * and the **actual** object sizes are verified against the declaration at `complete` (purge + `budget_exceeded`
- * on excess). The in-memory dev store has no transport, so its `complete` trusts the declaration (manifest
+ * Two gates (ADR 0013 §3): the **declared** shape is checked at `start` — a size over the cap is
+ * `budget_exceeded`, a `chunkCount` the size does not derive (or a size no frame sequence has) is `shape_invalid` —
+ * and the **actual** objects are verified against it at `complete`: every chunk at exactly its derived length, else
+ * purge + `budget_exceeded`. The in-memory dev store has no transport, so its `complete` trusts the declaration (manifest
  * null); the byte path is covered by the opt-in store e2e.
  */
 @ApplicationScoped
@@ -183,7 +184,6 @@ class MediaHandler(
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
-    private val maxChunks: Int = config.blob().maxChunks()
 
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         if (!store.isMember(userId, scopeId)) return StartOutcome.NoScope
@@ -199,15 +199,22 @@ class MediaHandler(
         declares.map { startOne(scopeId, it, domain) }
 
     private fun startOne(scopeId: String, d: UploadDeclare, domain: String?): UploadItemResult {
-        if (d.chunkCount < 1 || d.chunkCount > maxChunks || d.byteSize < 0 || d.byteSize > maxBytes) {
+        if (d.byteSize > maxBytes) {
             return UploadItemResult(uploadId = null, presignedPuts = null, error = "budget_exceeded")
+        }
+        // The frame size fixes the shape (ADR 0013 §3): a count the size does not derive is a client bug, not a big
+        // file, so it gets its own code. The size is checked first — chunkCount() is defined only where it holds.
+        if (!ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize)) {
+            return UploadItemResult(uploadId = null, presignedPuts = null, error = "shape_invalid")
         }
         val storageKey = UUID.randomUUID().toString()
         val uploadId = store.createSession(scopeId, storageKey, d.chunkCount, d.byteSize, d.wrappedBlobKey)
         // The session is metadata; presigned PUTs require a transport-capable store. Only the %test in-memory stub
         // cannot presign (puts = null) — %dev/%prod always have a real store (BlobStoreStartupCheck, ADR 0013).
         val puts = if (blobStore.canPresign) {
-            (0 until d.chunkCount).map { i -> PresignedRef(i, blobStore.presignPut(chunkKey(storageKey, i), domain)!!) }
+            (0 until d.chunkCount).map { i ->
+                PresignedRef(i, blobStore.presignPut(chunkKey(storageKey, i), ChunkFrames.chunkLength(d.byteSize, i), domain)!!)
+            }
         } else {
             null
         }
@@ -275,13 +282,21 @@ class MediaHandler(
         object Budget : BlobVerify
     }
 
-    /** Stat a session's stored objects against its declaration. Ok carries the manifest (null on the dev store). */
+    /**
+     * Stat a session's stored objects against its declaration: every chunk present at **exactly** its derived length
+     * (ADR 0013 §3). "The total does not exceed `byteSize`" would pass a short chunk — a frame no client sealed — and
+     * this is the check that still holds on a store that ignores the signed `Content-Length`. A session whose shape
+     * the size does not derive (one opened before `start` refused such shapes) cannot match and fails the same way.
+     * Ok carries the manifest (null on the dev store).
+     */
     private fun verifyBlob(session: UploadSessionEntity): BlobVerify {
         if (!blobStore.canPresign) return BlobVerify.Ok(null) // dev store: no transport, trust the declaration
-        val keys = (0 until session.chunkCount).map { chunkKey(session.storageKey, it) }
-        val sizes = keys.map { blobStore.stat(it) }
-        if (sizes.any { it == null } || sizes.filterNotNull().sum() > session.byteSize) return BlobVerify.Budget
-        return BlobVerify.Ok(sizes.filterNotNull())
+        if (!ChunkFrames.isPossible(session.byteSize) || session.chunkCount != ChunkFrames.chunkCount(session.byteSize)) {
+            return BlobVerify.Budget
+        }
+        val sizes = (0 until session.chunkCount).map { blobStore.stat(chunkKey(session.storageKey, it)) }
+        val exact = sizes.withIndex().all { (i, size) -> size == ChunkFrames.chunkLength(session.byteSize, i) }
+        return if (exact) BlobVerify.Ok(sizes.filterNotNull()) else BlobVerify.Budget
     }
 
     /**

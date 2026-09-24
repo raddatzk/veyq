@@ -31,7 +31,7 @@ purpose. It is a stored-format change, and it is being made before V1 because af
   reset after phase 4. **Say so, and do not wipe their database yourself**: their IntelliJ backend runs against
   it.
 - **Order:**
-  - **After** `cr-inert-store-responses`, `cr-request-bounds-enforced`, `cr-upload-frame-size-contract` and
+  - **After** `cr-inert-store-responses`, `cr-request-bounds-enforced`, `cr-upload-frame-size-contract` (done) and
     `cr-upload-windowed-presign`. All four reshape the upload schemas and `media.ts` that this CR also changes,
     and they were refined earlier against the current tree. The new id fields also land under
     `scripts/validate_request_bounds.py`.

@@ -1,6 +1,7 @@
 package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -1035,7 +1036,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = poisoned; storageKey = marker
-                chunkCount = 1; byteSize = 1024; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Ymxvyi13cmFw"; createdAt = Instant.now()
             }.persist()
         }
         // `clean`'s own blob — unmarked, so the refusing store passes it straight to the real `record`. Proves
@@ -1044,7 +1045,7 @@ class ScopesSliceTest {
         QuarkusTransaction.requiringNew().run {
             BlobEntity().apply {
                 id = UUID.randomUUID().toString(); scopeId = clean; storageKey = cleanKey
-                chunkCount = 1; byteSize = 1024; wrappedBlobKey = "Y2xlYW4="; createdAt = Instant.now()
+                chunkCount = TestBlob.SMALL.chunkCount; byteSize = TestBlob.SMALL.byteSize; wrappedBlobKey = "Y2xlYW4="; createdAt = Instant.now()
             }.persist()
         }
         listOf(poisoned, clean).forEach {
@@ -1160,8 +1161,10 @@ class ScopesSliceTest {
         val fresh = createGroupAs(owner, domain)
         val expiredKey = UUID.randomUUID().toString()
         val freshKey = UUID.randomUUID().toString()
-        val expiredSession = mediaStore.createSession(expired, expiredKey, chunkCount = 3, byteSize = 900, wrappedBlobKey = "d3JhcA==")
-        val freshSession = mediaStore.createSession(fresh, freshKey, chunkCount = 2, byteSize = 600, wrappedBlobKey = "d3JhcA==")
+        val blob3 = TestBlob.ofChunks(3)
+        val expiredSession = mediaStore.createSession(expired, expiredKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
+        val blob2 = TestBlob.ofChunks(2)
+        val freshSession = mediaStore.createSession(fresh, freshKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
 
         listOf(expired, fresh).forEach {
             given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)

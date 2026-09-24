@@ -35,8 +35,8 @@ class S3BlobStorePresigningTest {
         // differ" would pass on that alone while the origin stayed wrong.
         val store = sameOriginStore()
 
-        val a = URI.create(store.presignPut(KEY, "a.example.com"))
-        val b = URI.create(store.presignPut(KEY, "b.example.com"))
+        val a = URI.create(store.presignPut(KEY, LENGTH, "a.example.com"))
+        val b = URI.create(store.presignPut(KEY, LENGTH, "b.example.com"))
 
         assertEquals("a.example.com", a.host)
         assertEquals("b.example.com", b.host)
@@ -48,7 +48,7 @@ class S3BlobStorePresigningTest {
         // `null` is "this request resolved to no tenant" — the bootstrap domain, or a Host that claims none. It
         // must fall back to the configured public endpoint and never to something derived from the request.
         val store = sameOriginStore()
-        assertEquals("veyq.example.org", URI.create(store.presignPut(KEY, null)).host)
+        assertEquals("veyq.example.org", URI.create(store.presignPut(KEY, LENGTH, null)).host)
         assertEquals("veyq.example.org", URI.create(store.presignGet(KEY, null)).host)
     }
 
@@ -61,7 +61,7 @@ class S3BlobStorePresigningTest {
             internalEndpoint = "http://garage:3900", publicEndpoint = "https://veyq.example.org:8443",
             credentials = CREDENTIALS, region = "us-east-1",
         )
-        val url = URI.create(store.presignPut(KEY, "tenant.example.com"))
+        val url = URI.create(store.presignPut(KEY, LENGTH, "tenant.example.com"))
         assertEquals("https", url.scheme)
         assertEquals("tenant.example.com", url.host)
         assertEquals(8443, url.port)
@@ -78,7 +78,7 @@ class S3BlobStorePresigningTest {
             internalEndpoint = "https://s3.eu-central-1.amazonaws.com", publicEndpoint = "",
             credentials = CREDENTIALS, region = "eu-central-1",
         )
-        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, LENGTH, "tenant.example.com")).host)
     }
 
     @Test
@@ -87,10 +87,10 @@ class S3BlobStorePresigningTest {
         // another's answer. Interleaved on purpose — a cache keyed on "the last domain seen" passes a sequential
         // A,A,B,B and fails this.
         val store = sameOriginStore()
-        assertEquals("a.example.com", URI.create(store.presignPut(KEY, "a.example.com")).host)
+        assertEquals("a.example.com", URI.create(store.presignPut(KEY, LENGTH, "a.example.com")).host)
         assertEquals("b.example.com", URI.create(store.presignGet(KEY, "b.example.com")).host)
         assertEquals("a.example.com", URI.create(store.presignGet("$KEY/1", "a.example.com")).host)
-        assertEquals("b.example.com", URI.create(store.presignPut("$KEY/1", "b.example.com")).host)
+        assertEquals("b.example.com", URI.create(store.presignPut("$KEY/1", LENGTH, "b.example.com")).host)
     }
 
     @Test
@@ -101,8 +101,8 @@ class S3BlobStorePresigningTest {
         // host of each URL, not on "the two are equal" — two URLs signed for the same *wrong* host are equal too.
         val store = storeOriginStore()
 
-        val a = URI.create(store.presignPut(KEY, "a.example.com"))
-        val b = URI.create(store.presignPut(KEY, "b.example.com"))
+        val a = URI.create(store.presignPut(KEY, LENGTH, "a.example.com"))
+        val b = URI.create(store.presignPut(KEY, LENGTH, "b.example.com"))
 
         assertEquals("store.example.net", a.host)
         assertEquals("store.example.net", b.host)
@@ -117,7 +117,7 @@ class S3BlobStorePresigningTest {
         // a signer that silently produced the internal endpoint would also not throw.
         val store = storeOriginStore()
         for (domain in listOf(null, "a.example.com", "attacker.evil.example", "store.example.net")) {
-            assertEquals("store.example.net", URI.create(store.presignPut(KEY, domain)).host, "domain=$domain")
+            assertEquals("store.example.net", URI.create(store.presignPut(KEY, LENGTH, domain)).host, "domain=$domain")
             assertEquals("store.example.net", URI.create(store.presignGet(KEY, domain)).host, "domain=$domain")
         }
     }
@@ -133,7 +133,7 @@ class S3BlobStorePresigningTest {
             publicEndpoint = "https://store.example.net:8443", signingMode = SigningMode.STORE_ORIGIN,
             credentials = CREDENTIALS, region = "us-east-1",
         )
-        val url = URI.create(store.presignPut(KEY, "tenant.example.com"))
+        val url = URI.create(store.presignPut(KEY, LENGTH, "tenant.example.com"))
         assertEquals("https", url.scheme)
         assertEquals("store.example.net", url.host)
         assertEquals(8443, url.port)
@@ -152,7 +152,7 @@ class S3BlobStorePresigningTest {
             publicEndpoint = "https://ignored.example.net", signingMode = SigningMode.INTERNAL_ENDPOINT,
             credentials = CREDENTIALS, region = "eu-central-1",
         )
-        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, LENGTH, "tenant.example.com")).host)
         assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignGet(KEY, null)).host)
     }
 
@@ -168,7 +168,7 @@ class S3BlobStorePresigningTest {
             internalEndpoint = "https://s3.eu-central-1.amazonaws.com", publicEndpoint = "",
             signingMode = SigningMode.STORE_ORIGIN, credentials = CREDENTIALS, region = "eu-central-1",
         )
-        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, "tenant.example.com")).host)
+        assertEquals("s3.eu-central-1.amazonaws.com", URI.create(store.presignPut(KEY, LENGTH, "tenant.example.com")).host)
     }
 
     @Test
@@ -191,8 +191,20 @@ class S3BlobStorePresigningTest {
         // ignores whatever the client sends and stores it as sent). WHICH value is signed is a property only the
         // store can show: `BlobBatchE2ETest` sends `text/html` to such a URL and gets its 403.
         for ((mode, store) in allModes()) {
-            val signed = queryOf(store.presignPut(KEY, "tenant.example.com"))["X-Amz-SignedHeaders"]
+            val signed = queryOf(store.presignPut(KEY, LENGTH, "tenant.example.com"))["X-Amz-SignedHeaders"]
             assertTrue(signed.orEmpty().split(';').contains("content-type"), "mode=$mode signed=$signed")
+        }
+    }
+
+    @Test
+    fun everyPresignedPutSignsItsChunksExactLength() {
+        // ADR 0013 §3: a URL is good for one frame of one size. Only the header NAME is visible in the URL, so this
+        // pins that `content-length` is signed at all — measured first, before anything was built on it, because it
+        // is a property of the SDK's presigner rather than of this repo. That the store refuses another length is
+        // `BlobBatchE2ETest`'s to show, and `complete`'s exact check is what holds where a store ignores it.
+        for ((mode, store) in allModes()) {
+            val signed = queryOf(store.presignPut(KEY, LENGTH, "tenant.example.com"))["X-Amz-SignedHeaders"]
+            assertTrue(signed.orEmpty().split(';').contains("content-length"), "mode=$mode signed=$signed")
         }
     }
 
@@ -228,6 +240,8 @@ class S3BlobStorePresigningTest {
 
     private companion object {
         const val KEY = "storage-key/0"
+        /** A chunk's length. Any value signs the same way; which lengths are legal is ChunkFrames' question. */
+        const val LENGTH = 1_024L
         const val BUCKET = "veyq"
         val CREDENTIALS: StaticCredentialsProvider =
             StaticCredentialsProvider.create(AwsBasicCredentials.create("access", "secret"))

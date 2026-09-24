@@ -3,6 +3,7 @@ package com.veyq.app.features.sharing
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
@@ -73,7 +74,7 @@ class SharePasswordWriteGateTest {
             .then().statusCode(201).extract().path<String>("contributorToken")
 
         // The no-/wrong-token calls below carry a VALID contributorToken — refusal proves the password is checked FIRST.
-        val declares = """"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"Ymxvyi13cmFw"}]"""
+        val declares = """"items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]"""
 
         // --- startShareBlobUploads
         postBlobUploads(shareId, null, contributorToken, declares).then().statusCode(404).body("code", equalTo("share_not_found"))

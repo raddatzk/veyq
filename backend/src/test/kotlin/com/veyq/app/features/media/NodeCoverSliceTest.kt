@@ -46,7 +46,8 @@ class NodeCoverSliceTest {
     fun commitAttachesCoverBlobWithNoMediaRow() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, chunkCount = 1, byteSize = 4096, wrap = "Y292ZXItd3JhcA==")
+        val blob = TestBlob.ofPlaintext(4096)
+        val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==")
 
         // commit the upload as the node's standalone cover — the ref echoes the declared shape + wrap verbatim
         val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -55,7 +56,7 @@ class NodeCoverSliceTest {
             .then().statusCode(200)
             .body("blobId", notNullValue())
             .body("chunkCount", equalTo(1))
-            .body("byteSize", equalTo(4096))
+            .body("byteSize", equalTo(blob.byteSize.toInt()))
             .body("wrappedBlobKey", equalTo("Y292ZXItd3JhcA==")) // operator-blind: the K_blob wrap round-trips
             .extract().path<String>("blobId")
 
@@ -75,7 +76,7 @@ class NodeCoverSliceTest {
         QuarkusTransaction.requiringNew().run {
             val node = NodeEntity.findById(memory)!!
             assertEquals(blobId, node.coverBlobId)
-            assertEquals(4096L, node.coverByteSize)
+            assertEquals(blob.byteSize, node.coverByteSize)
         }
     }
 
@@ -83,12 +84,12 @@ class NodeCoverSliceTest {
     fun replaceReclaimsPriorCoverBlob() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "Zmlyc3Q="))
+        val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Zmlyc3Q="))
 
         // the key the replace must not lose — read while the row that holds it still exists
         val firstStorageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(first)!!.storageKey }
 
-        val second = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 2, 32, "c2Vjb25k"))
+        val second = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.ofChunks(2), "c2Vjb25k"))
 
         // the superseded first blob is reclaimed (gone); the new one is authorized
         assertEquals("upload_not_found", downloadError(userId, scopeId, first))
@@ -105,7 +106,7 @@ class NodeCoverSliceTest {
     fun deleteCoverBlobDetachesAndReclaims() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "ZGVs"))
+        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "ZGVs"))
 
         // the key the delete must not lose — read while the row that holds it still exists
         val storageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.storageKey }
@@ -141,7 +142,7 @@ class NodeCoverSliceTest {
     fun deleteNodeKeepsTheCoverBlobForTheRestore() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, 1, 16, "bm9kZQ=="))
+        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bm9kZQ=="))
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory")
@@ -156,7 +157,7 @@ class NodeCoverSliceTest {
     fun coverOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
         val folder = seedNode(scopeId, NodeEntity.FOLDER)
-        val uploadId = startOne(userId, scopeId, 1, 16, "Zm9sZA==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "Zm9sZA==")
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
@@ -177,7 +178,7 @@ class NodeCoverSliceTest {
     @Test
     fun commitUnknownNodeIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val uploadId = startOne(userId, scopeId, 1, 16, "bm9wZQ==")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "bm9wZQ==")
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/${UUID.randomUUID()}/cover-blob")
@@ -189,7 +190,7 @@ class NodeCoverSliceTest {
         val (userId, scopeA) = seedMemberScope()
         val scopeB = seedScopeFor(userId) // the same user is a member of a second scope
         val memoryB = seedNode(scopeB, NodeEntity.MEMORY)
-        val uploadInA = startOne(userId, scopeA, 1, 16, "eA==")
+        val uploadInA = startOne(userId, scopeA, TestBlob.SMALL, "eA==")
 
         // committing scope A's upload against a scope B node — the session isn't in B → 404 (no cross-scope reach)
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -202,7 +203,7 @@ class NodeCoverSliceTest {
     fun nonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, 1, 16, "b3V0")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "b3V0")
         val outsider = seedUser()
 
         given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
@@ -221,9 +222,9 @@ class NodeCoverSliceTest {
 
     // --- helpers ---
 
-    private fun startOne(userId: String, scopeId: String, chunkCount: Int, byteSize: Long, wrap: String): String =
+    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":$chunkCount,"byteSize":$byteSize,"wrappedBlobKey":"$wrap"}]}""")
+            .body("""{"items":[${blob.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")

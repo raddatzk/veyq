@@ -59,7 +59,7 @@ class S3BlobStoreSigningModeConfigTest {
             ),
         ).blobStore()
 
-        val url = URI.create(store.presignPut("storage-key/0", "tenant.example.com")!!)
+        val url = URI.create(store.presignPut("storage-key/0", 1L, "tenant.example.com")!!)
         assertEquals("store.example.net", url.host)
     }
 
@@ -68,7 +68,7 @@ class S3BlobStoreSigningModeConfigTest {
         // The positive control on the same predicate as the case above, through the same wire. Without it,
         // "the store host was signed" is equally satisfied by a producer that has stopped resolving tenants at
         // all — the two cases differ in one property value and in nothing else.
-        val url = URI.create(storeWith().presignPut("storage-key/0", "tenant.example.com")!!)
+        val url = URI.create(storeWith().presignPut("storage-key/0", 1L, "tenant.example.com")!!)
         assertEquals("tenant.example.com", url.host)
     }
 
@@ -79,9 +79,9 @@ class S3BlobStoreSigningModeConfigTest {
         // that never heard of `signing-mode` and the one that spells today's behaviour out must produce the same
         // signed URL, character for character. A default that drifted to another constant breaks this even
         // where every mode-specific case above still passes, because each of those sets its own mode.
-        val implicit = storeWith().presignPut("storage-key/0", "tenant.example.com")!!
+        val implicit = storeWith().presignPut("storage-key/0", 1L, "tenant.example.com")!!
         val explicit = storeWith("veyq.blob-store.signing-mode" to "tenant-domain")
-            .presignPut("storage-key/0", "tenant.example.com")!!
+            .presignPut("storage-key/0", 1L, "tenant.example.com")!!
 
         assertEquals(URI.create(implicit).host, URI.create(explicit).host)
         assertEquals("tenant.example.com", URI.create(explicit).host)

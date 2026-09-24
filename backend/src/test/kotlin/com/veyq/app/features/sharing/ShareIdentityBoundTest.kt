@@ -3,6 +3,7 @@ package com.veyq.app.features.sharing
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
@@ -83,7 +84,7 @@ class ShareIdentityBoundTest {
 
         // ...but the upload budget is a different window, so a contributor who already named itself still works.
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"a2V5"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("a2V5")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads")
             .then().statusCode(200)
     }

@@ -118,7 +118,7 @@ class MediaPresignDomainSliceTest {
 
         given().header("Authorization", token(userId)).header("X-Forwarded-Host", domain)
             .contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"d3JhcA=="}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(403).body("code", org.hamcrest.CoreMatchers.equalTo("tenant_suspended"))
     }
@@ -131,19 +131,19 @@ class MediaPresignDomainSliceTest {
     private fun startUpload(userId: String, scopeId: String, host: String): String =
         given().header("Authorization", token(userId)).header("X-Forwarded-Host", host)
             .contentType(ContentType.JSON)
-            .body("""{"items":[{"chunkCount":1,"byteSize":16,"wrappedBlobKey":"d3JhcA=="}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .extract().path("results[0].presignedPuts[0].url")
 
     /**
-     * The download path needs a committed blob, and `complete` verifies the declared size against the store —
-     * so the fake's `stat` is scripted to the declared 16 bytes first. Returns the new blob's id.
+     * The download path needs a committed blob, and `complete` verifies every chunk's exact length against the
+     * store — so the fake's `stat` is staged at the declared shape first. Returns the new blob's id.
      */
     private fun completeAndReadBlobId(userId: String, scopeId: String, uploadUrl: URI): String {
         // The fake echoes the key into the URL path: /put/<storageKey>/<index>.
         val key = uploadUrl.path.removePrefix("/put/")
-        fakeStore.statOf(key, 16)
+        TestBlob.SMALL.stage(fakeStore, key.substringBeforeLast('/'))
         val uploadId = QuarkusTransaction.requiringNew().call {
             UploadSessionEntity.find("storageKey", key.substringBeforeLast('/')).firstResult()!!.id
         }

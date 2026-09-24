@@ -2,6 +2,7 @@ package com.veyq.app.shared.http
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
@@ -73,7 +74,7 @@ class OperatorBlindProbeTest {
             """{"ciphertext":"$b64"}"""),
         // --- media ---
         Probe("media.startBlobUploads", "POST", "/api/scopes/{scopeId}/blob-uploads-batch",
-            """{"items":[{"chunkCount":1,"byteSize":1024,"wrappedBlobKey":"$b64"}]}"""),
+            """{"items":[${TestBlob.ofPlaintext(1024).declare(b64)}]}"""),
         Probe("media.completeMedia", "POST", "/api/scopes/{scopeId}/media-batch",
             """{"items":[{"nodeId":"$someId","originalUploadId":"$someId","derivatives":[]}]}"""),
         Probe("media.listNodeMedia", "GET", "/api/scopes/{scopeId}/nodes/$someId/media"),
