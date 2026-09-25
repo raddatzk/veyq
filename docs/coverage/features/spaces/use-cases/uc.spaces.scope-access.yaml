@@ -1,33 +1,71 @@
 useCase: uc.spaces.scope-access
 feature: spaces
 title: Act on a space — who is let in, and what everyone else is told
-status: planned
-# Refined 2026-09-23 (inbox #157) out of the security/reuse review. Every criterion below is a property with
-# several triggers, which is why none of them lives under the operation that happens to cause it
-# (changes/README.md § coverage). The neighbours keep their operations and point here.
-#
-# Planned, not partly built: today's non-member identity check (OperatorBlindProbeTest) covers 39 hand-listed
-# operations for one persona only, and a ref to it here would claim the derived, four-persona property the CR
-# builds. cr-scope-access-gate replaces both gaps with refs.
+# Every criterion below is a property with several triggers, which is why none of them lives under the operation
+# that happens to cause it (changes/README.md § coverage). The neighbours keep their operations and point here.
 acceptanceCriteria:
   - id: one-answer-for-non-members
     text: A caller with no accepted membership on the addressed scope — a stranger, or a proposed member who has not accepted — gets the operation's own 404, identical in status and code to the answer for an invented id, on every scope-, tenant-, share- and job-addressed operation; a deleting scope or a suspended tenant never changes that answer.
+    coverage:
+      backend:
+        integration:
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
   - id: every-operation-is-classified
-    text: Every operation in the contract is either probed against every state of the gate or named on a reasoned exclusion list (public, token-gated, Server-Owner, account-wide), so an operation nobody classified fails the build on the day it is added.
+    text: Every operation in the contract is either probed against every state of the gate or named on a reasoned exclusion list (public or token-gated, Server-Owner, account-wide, the Host-resolved operations that touch only the caller's own rows, the answer to one's own proposal, and the listings that filter instead of refusing — each of those with its own test), so an operation nobody classified fails the build on the day it is added.
+    coverage:
+      backend:
+        integration:
+          - OperatorBlindProbeTest.everyContractOperationIsProbedOrExcludedWithAReason
   - id: suspended-tenant-refuses-its-members
     text: While a tenant is suspended, every scope- and tenant-addressed operation answers its members 403 tenant_suspended — reads included, on whatever Host the request arrives — no job in it can be claimed or completed, and my-tenants lists it with its status and neither grant nor icon.
+    coverage:
+      backend:
+        integration:
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
+          - ScopeAccessSliceTest.claimHandsOutNoJobInASuspendedTenantOrADeletingGroup
+          - ScopeAccessSliceTest.myTenantsListsASuspendedTenantWithNeitherGrantNorIcon
+          - ScopeAccessSliceTest.myShareListDropsSharesInSpacesTheCallerMayNoLongerRead
   - id: deleting-scope-is-read-only
     text: While a scope is being deleted, every write on it answers 409 scope_deleting — content, media, buckets, favorites, shares, roster, icon, key rotation and job work alike — reads stay open, and the owner's restore of a GROUP is the one write that passes.
+    coverage:
+      backend:
+        integration:
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
+          - ScopeAccessSliceTest.claimHandsOutNoJobInASuspendedTenantOrADeletingGroup
   - id: former-member-reads-only-their-own
     text: A member removed from the tenant keeps read access to their own personal space and solo groups for the grace window and nothing else — no write, no restore, and every tenant-addressed operation answers them 404.
+    coverage:
+      backend:
+        integration:
+          - ScopeAccessSliceTest.aFormerTenantMemberReadsTheirGraceSpaceButCannotRestoreIt
+          - ScopeAccessSliceTest.myShareListDropsSharesInSpacesTheCallerMayNoLongerRead
   - id: shares-serve-only-a-live-scope
     text: A share guest gets the same 404 as for a revoked link while the share's scope is being deleted or its tenant is suspended, and the link serves again unchanged after a restore or reactivation; an invite link to a suspended tenant answers like one that is no longer valid.
+    coverage:
+      backend:
+        integration:
+          - ScopeAccessSliceTest.aShareInASuspendedTenantOrADeletingGroupAnswersAsARevokedLink
+          - ScopeAccessSliceTest.anInviteToASuspendedTenantAnswersAsADeadInvite
   - id: share-curation-needs-a-current-member
     text: Editing, revoking and re-activating a share need a current member of the share's scope (a removed creator gets 404), and re-activating additionally needs the sharing capability for the share's role (422 capability_disabled), exactly as creating one does.
+    coverage:
+      backend:
+        integration:
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
+          - ReactivateShareCapabilitySliceTest.reactivatingALinkWhoseCapabilityIsOffIs422
   - id: job-completion-needs-the-lease
     text: Completing or failing a background job needs the caller to hold its current lease (409 not_lease_holder otherwise, as heartbeat and decline already answer); completing an already-done job stays a no-op success.
+    coverage:
+      backend:
+        integration:
+          - ScopeAccessSliceTest.onlyTheLeaseHolderCompletesOrFailsAJobAndADoneJobStaysANoOp
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
   - id: web-shows-a-suspended-tenant-offline
     text: The web space switcher shows a suspended tenant as offline and not enterable; a 403 tenant_suspended arriving mid-session for another tenant leaves that space for the current domain's tenant, and on the suspended tenant's own domain the app shows a full-page temporarily-offline notice.
-gaps:
-  backend: "Not built — cr-scope-access-gate adds ScopeAccess and derives OperatorBlindProbeTest's operation set from the generated API interfaces (four personas: stranger, pending invitee, member of a suspended tenant, member of a deleting group)."
-  web: "Not built — cr-scope-access-gate's web phase renders MyTenant.status in the switcher and handles 403 tenant_suspended."
+    coverage:
+      web:
+        unit:
+          - src/app/tenantSuspension.test.ts
+          - src/app/activeSpace.test.ts
+          - src/app/boot.test.ts
+          - src/components/app/AppSidebar.test.ts
