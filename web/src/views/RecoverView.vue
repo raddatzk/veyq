@@ -17,9 +17,10 @@ import Card from 'primevue/card'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Password from 'primevue/password'
-import { usePwnedWarning } from '../features/account/passwordWarning'
+import { useBreachCheck } from '../features/account/passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import Message from 'primevue/message'
+import Checkbox from 'primevue/checkbox'
 import { completeRecovery, openWithSecretKey, releaseRecoveryMaterial, requestRecovery } from '../features/account/recovery/recovery'
 import type { OpenedRecovery } from '../features/account/recovery/recovery'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -35,7 +36,7 @@ const email = ref('')
 const secretKey = ref('')
 const newPassword = ref('')
 const confirmPassword = ref('')
-const { breachCount } = usePwnedWarning(newPassword)
+const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(newPassword)
 
 const busy = ref(false)
 const error = ref('')
@@ -140,6 +141,7 @@ async function setNewPassword() {
   busy.value = true
   error.value = ''
   try {
+    if (!(await breachCheckPasses())) return
     await completeRecovery(token.value, material.value!, opened.value!, secretKey.value.trim(), newPassword.value)
     done.value = true
     setTimeout(() => router.push({ name: 'login' }), 2500)
@@ -198,8 +200,15 @@ async function setNewPassword() {
           <Password v-model="confirmPassword" toggle-mask :feedback="false" input-id="recovery-confirm" required />
         </label>
         <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
-        <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
-          t('password.pwnedWarning', { count: breachCount })
+        <div class="checkbox-row">
+          <Checkbox v-model="checkBreaches" input-id="recovery-breach-check" binary :disabled="busy" />
+          <label for="recovery-breach-check">
+            {{ t('password.pwnedCheck') }}
+            <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
+          </label>
+        </div>
+        <Message v-if="breachStop" severity="warn" :closable="false">{{
+          breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
         }}</Message>
         <p class="field-hint">{{ t('recovery.deviceNote') }}</p>
         <Button

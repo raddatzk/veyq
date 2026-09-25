@@ -5,7 +5,7 @@
 // project's own vitest and neither project collects the other's suites.
 //
 // WHAT is mutated lives in stryker.mutate.json (the canonical scope, shared with the CI meta-check so the two
-// never drift) — v1.ts + accountBirth.ts, NOT the argon*.worker wiring layer (ADR 0045 §3); see that file's
+// never drift) — NOT the argon*.worker wiring layer (ADR 0045 §3); see that file's
 // _comment for the measured evidence.
 //
 // inPlace (not Stryker's default copy-to-sandbox): v1.conformance.test.ts reads the shared crypto vectors at
@@ -24,6 +24,9 @@ const config = {
   coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'html', 'json'],
   // Incremental report doubles as the CI cache (ADR 0045 §4) — a PR re-runs only changed mutants.
+  // Its limit, measured: a mutant whose own line is unchanged keeps its cached verdict even when an edit to the
+  // NEXT line changes that verdict (emergencyKit.ts's `if (!m)` stayed "Survived" after `m[1]` moved out of the
+  // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
   // break: the gate goes red below this. Carried over unchanged from web/stryker.config.mjs, where both files
   // were measured: v1.ts 100% (134 mutants, zero survivors, zero equivalents), accountBirth.ts 100%. The

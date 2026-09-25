@@ -1,8 +1,9 @@
-// Have I Been Pwned (Pwned Passwords) k-anonymity check — a SOFT signal shown as a warning when a chosen
-// master password appears in known breaches. It is NEVER a hard gate (operator-blind: choosing a weak password
-// is the user's call). Privacy: the password never leaves the device — only the first 5 hex chars of its SHA-1
-// are sent, directly to the HIBP range API (not via our server), which returns ~hundreds of suffixes; the
-// suffix match is computed locally (k-anonymity). Fail-open: any error/network path returns 0 (no warning).
+// Have I Been Pwned (Pwned Passwords) k-anonymity check — an opt-in, advisory check of a chosen master password
+// against known breaches, run once on submit (features/account/passwordWarning). It is NEVER a hard gate
+// (operator-blind: choosing a weak password is the user's call). Privacy: the password never leaves the device —
+// only the first 5 hex chars of its SHA-1 are sent, directly to the HIBP range API (not via our server), which
+// returns ~hundreds of padded suffixes; the suffix match is computed locally (k-anonymity). The rule and its
+// fences: docs/crosscutting/security-model.md § the breached-password check.
 
 const HIBP_RANGE = 'https://api.pwnedpasswords.com/range/'
 
@@ -22,15 +23,19 @@ export function breachCountFromRange(hashHexUpper: string, body: string): number
   return 0
 }
 
-/** How many known breaches a password appears in (0 = none, or the check was unavailable). Fail-open. */
-export async function pwnedCount(password: string): Promise<number> {
+/**
+ * How many known breaches a password appears in (0 = none), or `null` when the check could not run — network,
+ * CSP, a non-2xx, a firewalled admin container. Failure is NOT folded into 0: someone who asked for the check
+ * must not read "not checked" as "clean".
+ */
+export async function pwnedCount(password: string): Promise<number | null> {
   if (!password) return 0
   try {
     const hash = await sha1HexUpper(password)
     const res = await fetch(HIBP_RANGE + hash.slice(0, 5), { headers: { 'Add-Padding': 'true' } })
-    if (!res.ok) return 0
+    if (!res.ok) return null
     return breachCountFromRange(hash, await res.text())
   } catch {
-    return 0
+    return null
   }
 }

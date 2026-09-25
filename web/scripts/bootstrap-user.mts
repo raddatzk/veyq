@@ -150,7 +150,7 @@ console.log(`owner: created ${email}`)
 // 2 — log in (account-level token)
 const ch = await json(await post('/api/login/challenge', { email }))
 const auth = v1.deriveAuthKeypair(password, v1.deriveAuthSalt(fromB64std(ch.instanceSalt), email), v1.ARGON)
-const verify = await post('/api/login/verify', { email, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) })
+const verify = await post('/api/login/verify', { email, nonce: ch.nonce, signature: b64std(v1.authSign(auth.privateKey, fromB64std(ch.nonce))) })
 if (!verify.ok) fail(`login failed: ${verify.status} ${await verify.text()}`)
 const token = (await json(verify)).accessToken as string
 

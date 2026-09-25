@@ -120,12 +120,66 @@ Garage, and a Traefik that terminates TLS in front of them. It is **standalone**
 file — that file has no app service at all, publishes `3306`/`19000`/`18080`, and ships `change-me` passwords.
 
 ```sh
-cp infra/.env.example infra/.env          # then fill in every value (it is gitignored)
+# first: § Verifying a release, below — it leaves the recipe in ./recipe-<version>/ and prints two image lines
+cp ./recipe-<version>/docker-compose.prod.yml ./recipe-<version>/.env.example infra/
+cp infra/.env.example infra/.env          # then fill in every value (it is gitignored), and the two image lines
 docker compose -f infra/docker-compose.prod.yml up -d
 ```
 
 **Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
 rather than starting an instance on a password that is printed in this repository.
+
+### Verifying a release — before anything runs it
+
+A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admin`, and the publish signs both
+keylessly with cosign ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md) §3). This is
+the one procedure for a first install, an upgrade and a Helm install alike. It ends with the two image references
+you deploy, **by digest**: a tag can move between the moment you verify it and the moment you pull it, and a
+digest cannot.
+
+```sh
+version=<version>        # the <major>.<minor> you are about to run, e.g. 1.0
+
+# 1. resolve each tag to its multi-arch index digest ONCE — everything below uses the digest, never the tag
+app_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/veyq:${version}" --format '{{.Manifest.Digest}}')"
+admin_digest="$(docker buildx imagetools inspect "ghcr.io/raddatzk/veyq-admin:${version}" --format '{{.Manifest.Digest}}')"
+
+# 2. verify both signatures against the one identity that publishes veyq
+cosign verify "ghcr.io/raddatzk/veyq@${app_digest}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+cosign verify "ghcr.io/raddatzk/veyq-admin@${admin_digest}" \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github\.com/raddatzk/veyq/\.github/workflows/container\.yml@refs/heads/(main|release/[0-9]+\.x)$'
+
+# 3. pull both by digest, and extract the recipe from the verified app image
+docker pull "ghcr.io/raddatzk/veyq-admin@${admin_digest}"
+docker create --name veyq-recipe "ghcr.io/raddatzk/veyq@${app_digest}" >/dev/null
+docker cp veyq-recipe:/opt/veyq/deploy/. "./recipe-${version}/"
+docker rm veyq-recipe >/dev/null
+
+# 4. the two lines infra/.env pins (under Helm: image.tag/digest and admin.image.tag/digest, § Running on Kubernetes)
+echo "VEYQ_IMAGE=ghcr.io/raddatzk/veyq:${version}@${app_digest}"
+echo "VEYQ_ADMIN_IMAGE=ghcr.io/raddatzk/veyq-admin:${version}@${admin_digest}"
+```
+
+**If either `cosign verify` fails, stop.** Nothing has run yet, and nothing should.
+
+**What the identity accepts, and why it is this narrow.** A signature made by `container.yml` in
+`raddatzk/veyq`, on `main` or a `release/<major>.x` branch, under GitHub's own OIDC issuer — which are exactly the
+branches the publish runs from, so what signs and what verifies agree. It rejects every other workflow in the
+repository, every other branch, pull-request and tag refs, every other owner, and every repository whose name
+only starts with `veyq`: a looser pattern accepts a signature the veyq release never made, and a check that
+accepts anything a fork signs checks nothing. The upstream is written out rather than left as a placeholder for
+the same reason. If you deploy your own fork's images, verify them against **your** fork's identity, knowingly.
+`scripts/validate_release_identity.py` holds this command to what the workflow signs.
+
+In the two image lines, Docker pulls by the digest and ignores the tag; the tag is there so a person can still
+read which release a line names.
+
+**Nothing has been published yet**, so this procedure has never run against a veyq release. It has been run as
+written against another image that is keyless-signed from a GitHub workflow on `main`, with that image's own
+identity; the first publish is where it is first run for real.
 
 ### Setting up a brand-new instance
 
@@ -244,16 +298,13 @@ Two things worth knowing rather than discovering:
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
 - **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are
   built, versioned and cosign-signed by the same publish ([ADR 0057](../docs/decisions/0057-release-identity-and-deployment-recipe.md)),
-  so pin the same `<major>.<minor>` on both. A mismatched pair is two versions of one instance, and only one of
+  so pin the same `<major>.<minor>` on both, each by the digest § *Verifying a release* resolved. A mismatched pair is two versions of one instance, and only one of
   them migrated the schema.
 - **The compose file and the env template ride inside the image.** Every published image carries the recipe it
   was built with at `/opt/veyq/deploy/`, so the file you deploy a version with cannot drift from the bits it
-  describes, and it inherits the image's cosign signature instead of needing a second trust decision. Read one
-  out of an image without running it:
-
-  ```sh
-  docker run --rm --entrypoint cat ghcr.io/<owner>/veyq:<version> /opt/veyq/deploy/docker-compose.prod.yml
-  ```
+  describes, and it inherits the image's cosign signature instead of needing a second trust decision — which
+  holds only for a recipe read out of the digest you verified, so § *Verifying a release* extracts it from
+  exactly that digest, never from a tag.
 
   (Note the current limit: the recipe is those two files, so the store's `garage.toml` still comes from this
   repository — the Helm chart carries its own copy as a `ConfigMap`, so the file has a second, self-sufficient
@@ -273,6 +324,7 @@ would reconcile each other's routing away.
 ```sh
 cp charts/veyq/values.yaml my-values.yaml         # fill in: domain, storeDomain, both image repositories,
                                                   # every key under secrets, and the ingress.tls block
+# § Verifying a release, then pin what it verified: image.tag/digest and admin.image.tag/digest
 helm install veyq ./charts/veyq -n veyq --create-namespace -f my-values.yaml
 ```
 
@@ -400,12 +452,16 @@ to this target.
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application, and only it
 # 2. capture and verify — § Backup & restore, through port-forwards
-helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml --set image.tag=<new> --set admin.image.tag=<new>
+helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml \
+  --set image.tag=<new> --set image.digest="${app_digest}" \
+  --set admin.image.tag=<new> --set admin.image.digest="${admin_digest}"   # from § Verifying a release
 # 3. the schema migrates during this boot; then verify as the compose runbook says — not by "it started"
 ```
 
-Pin the same tag on both images: they ship as one release, and only one of a mismatched pair migrated the
-schema. Rollback is the backup plus the previous tag, exactly as under compose.
+Pin the same tag on both images, each with the digest the verification resolved for it: they ship as one
+release, and only one of a mismatched pair migrated the schema. With a digest set the pod runs
+`repository:tag@digest`, and the node pulls by the digest. Rollback is the backup plus the previous tags and
+digests, exactly as under compose.
 
 ## Backup & restore
 
@@ -578,28 +634,28 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    names one fixed set of bits for good — which is what makes it a rollback target rather than a label. If the
    manifest records no release, the backup is still valid and still restorable; what it cannot tell you is which
    image to start it under, so write that down yourself now, from **Settings → Server → Release**, while the
-   instance you are leaving still exists to be asked.
+   instance you are leaving still exists to be asked. And keep a copy of `infra/.env`'s `VEYQ_IMAGE` and
+   `VEYQ_ADMIN_IMAGE` lines: they name, by the digest you verified when you installed them, the pair you roll
+   back to.
 
-4. **Pull the new tag**, so the download is not part of the outage:
-
-   ```sh
-   docker pull ghcr.io/<owner>/veyq:<new-version>
-   ```
+4. **Verify the new release and pull both of its images**, so the download is not part of the outage: run
+   § *Verifying a release* with `version=<new-version>`. It pulls the app and the admin image by digest, extracts
+   the new recipe into `./recipe-<new-version>/` and prints the two image lines step 6 pins. If either
+   `cosign verify` fails, stop here — nothing has changed yet.
 
 5. **Diff the new image's recipe against the one you are running.** The image's copy is authoritative for the
    version it belongs to (ADR 0057), and a version that adds a service or a required variable has **no other
    delivery path to you** — the first sign of one you missed is a `up` that dies on a missing variable.
 
    ```sh
-   docker create --name veyq-recipe ghcr.io/<owner>/veyq:<new-version> >/dev/null
-   docker cp veyq-recipe:/opt/veyq/deploy/. ./recipe-<new-version>/
-   docker rm veyq-recipe >/dev/null
    diff -u infra/docker-compose.prod.yml ./recipe-<new-version>/docker-compose.prod.yml
    diff -u infra/.env.example            ./recipe-<new-version>/.env.example
    ```
 
-6. **Apply what the diff showed, then bring the new version up.** Take the new compose file as yours, carry any
-   new variable into `infra/.env`, set `VEYQ_IMAGE` to the tag you pulled, and:
+6. **Apply what the diff showed, then bring the new version up.** Take the new recipe as yours
+   (`cp ./recipe-<new-version>/docker-compose.prod.yml ./recipe-<new-version>/.env.example infra/`), carry any
+   new variable into `infra/.env`, replace its `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` lines with the two step 4
+   printed — both, never one — and:
 
    ```sh
    docker compose -f infra/docker-compose.prod.yml up -d
@@ -613,8 +669,8 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    object and the key are three different failures wearing the same "it looked fine".
 
 **Rollback is the backup plus the tag, and both are nameable only because a release is immutable.** Stop the
-app, restore the capture from step 2 onto an empty instance (§ Restore), and pin `VEYQ_IMAGE` to the release
-step 3 recorded. There is no other way back: the migrations carry no down path, so an instance that has booted
+app, restore the capture from step 2 onto an empty instance (§ Restore), and pin `VEYQ_IMAGE` and
+`VEYQ_ADMIN_IMAGE` back to the two lines step 3 kept. There is no other way back: the migrations carry no down path, so an instance that has booted
 on the new schema cannot be handed to the old image.
 
 ## Seeding a reproducible dev instance (cr-0046)

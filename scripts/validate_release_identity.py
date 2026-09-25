@@ -2,7 +2,7 @@
 """Guard that a veyq release has an identity, that the identity comes from the tree, and that every artifact
 naming a release names a shape the pipeline actually emits (ADR 0057).
 
-**What it asserts.** Four things, in the order a release happens:
+**What it asserts.** Seven things, in the order a release happens:
 
   1. **`VERSION` exists at the repository root and holds `<major>.<minor>`.** That file *is* the release
      identity (ADR 0057 §1) — a checkout answers what it is, with no network call and no registry.
@@ -36,6 +36,14 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      that depends on an operator remembering a flag is one shell away from addressing the wrong stack. The two
      halves are one assertion, not two: dropping the flag is safe only *because* the file carries what the
      flag used to say, and re-introducing the flag beside the key is how the two start to disagree.
+  7. **The operator's documented signature check is exactly as narrow as what signs** (ADR 0057 §3). Every
+     `cosign verify` in `infra/README.md` pins GitHub's OIDC issuer and one certificate identity; that identity
+     **accepts** the signing identity of every branch assertion 2's scenarios turn into a publish, and
+     **rejects** every other workflow in `.github/workflows/`, non-release branches (which the version step must
+     refuse as well), pull-request and tag refs, another owner, a repository whose name only starts with ours,
+     and the right identity quoted inside another URL. Every image the build matrix publishes is verified, by
+     digest and never by tag, and the workflow states no identity of its own. The upstream is the chart's
+     `home`, not the workflow's `github.repository_owner`, which is whoever runs it — a fork included.
 
 **The defect that bought it.** All of it was live when this guard was written (2026-08-11), and the first run
 was the discovery: there was no `VERSION` file at all, so `container.yml`'s first command
@@ -60,6 +68,12 @@ production capture resolved project `infra`. Measured on a host running the dev 
 capture completed, writing a manifest for the wrong instance and reporting success. The rule it was supposed to
 obey — *always name the project on the command line* — existed in exactly two places, both prose, enforced by
 nothing.
+
+Assertion 7 was bought by the same kind of first run (2026-09-25, cr-image-provenance-verifiable), red three
+ways before a line of the fix existed: the only verification command in the repository was a comment in the
+publish workflow whose pattern, `^https://github.com/<repo>/`, accepts a signature from any workflow in the
+repository on any ref, a pull request's included; `infra/README.md` never told an operator to verify at all;
+and the version step still published — and so signed — from a `master` branch nothing else knew about.
 
 **A note for whoever edits this next, because the first run of assertion 5 tripped on it:** this guard scans
 durable state for a literal, and its own file is durable state, so spelling that literal here makes the guard
@@ -93,11 +107,21 @@ Second, the flag scan covers **durable state only**: `changes/` and `docs/inbox.
 (`docs/ai/README.md` § State vs. flow) and necessarily go on naming a retired rule in order to record that it
 was retired, so an instruction hidden in a work order is out of reach. The line drawn is the repository's own,
 not a convenience — a whitelist of files that happened to be red would have been the convenience.
+
+Assertion 7's limits. **It proves the documented command's shape, never that it runs**: no veyq release has been
+published, so it has never verified one (it was run once by hand, as written, against another image keyless-
+signed from a GitHub workflow on `main`, with that image's identity). It judges the identity pattern with Python's
+`re.search` as a model of cosign's Go `regexp.MatchString` — unanchored, which is why a pattern without `^…$`
+fails here as it would there. The two engines agree on what the pattern uses (anchors, classes, alternation); a
+construct where they diverge would be judged by the wrong one. The rejected identities are a probe list of the
+ways a pattern is too wide, not a proof that no other string is accepted; the accepted ones are derived. The
+registry (`ghcr.io`) is a constant here. And it cannot see whether an operator runs the command at all.
 """
 from __future__ import annotations
 
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -151,6 +175,18 @@ IMAGE_TAG = re.compile(r"(?:^|[\s/=\"'`])veyq:([^\s\"'`,;)}\]]+)")
 
 # Anything that would make the version a function of the network rather than of the tree.
 NETWORK_TOOLS = re.compile(r"(?:^|[\s|(&;])(gh|curl|wget|nc)\s", re.MULTILINE)
+
+
+def non_release_branches(major: str) -> list[str]:
+    """Adversarial branch names: each must be refused by the version step AND by the documented verify.
+
+    A probe list, not an anchor set — the branches that DO publish are derived from the scenarios' outcomes.
+    """
+    return ["master", "develop", "main-next", f"release/{major}.x-rc", f"release/{major}.x/hotfix"]
+
+
+# Filled by assertion 2's scenarios: every branch a push to which the version step turns into a publish.
+publishing_branches: list[str] = []
 
 errors: list[str] = []
 
@@ -273,6 +309,17 @@ elif compute is not None and version_match:
                 1,
                 {},
             ),
+        ] + [
+            # Branches that are not release branches must publish nothing, because whatever publishes also
+            # signs, and assertion 7 holds the documented verify to rejecting exactly these (ADR 0057 §3: what
+            # signs and what verifies agree). `master` is the one a publish accepted until cr-image-provenance.
+            (
+                f"a push to {branch}, which is not a release branch",
+                {"EVENT_NAME": "push", "REF_TYPE": "branch", "REF_NAME": branch},
+                1,
+                {},
+            )
+            for branch in non_release_branches(major)
         ]
         for label, env, expect_rc, expect in scenarios:
             try:
@@ -280,6 +327,8 @@ elif compute is not None and version_match:
             except subprocess.TimeoutExpired:
                 fail(f"the `{VERSION_STEP}` step hung for {label} — a version derivation that waits is waiting on a network")
                 continue
+            if env["EVENT_NAME"] == "push" and rc == 0 and written.get("publish_branch_tags") == "true":
+                publishing_branches.append(env["REF_NAME"])
             if expect_rc == 0 and rc != 0:
                 fail(f"the `{VERSION_STEP}` step fails for {label}: {message or f'exit {rc}'}")
                 continue
@@ -287,8 +336,9 @@ elif compute is not None and version_match:
                 if rc == 0:
                     fail(
                         f"the `{VERSION_STEP}` step accepts {label} and would stamp "
-                        f"`{written.get('version')}` — a release names itself from the tree, so a ref that "
-                        f"disagrees with VERSION must fail rather than pick a side"
+                        f"`{written.get('version')}` — a release names itself from the tree and publishes only "
+                        f"from main or release/<major>.x, so a ref that disagrees with VERSION must fail rather "
+                        f"than pick a side, and any other branch must fail rather than publish a signed image"
                     )
                 continue
             for key, want in expect.items():
@@ -424,7 +474,9 @@ for path in sorted(p for p in INFRA.rglob("*") if p.is_file()):
     except (UnicodeDecodeError, OSError):
         continue
     for match in IMAGE_TAG.finditer(text):
-        tag = match.group(1)
+        # `<tag>@sha256:<digest>` is how a release is deployed (ADR 0057 §3); the tag is the half that makes a claim
+        # about the pipeline's shapes, and the digest's own form is validate_image_pins.py's business.
+        tag = match.group(1).split("@", 1)[0]
         if tag.startswith("${") or "<" in tag:
             continue  # a variable or a placeholder, not a claim about a tag that exists
         written_tags += 1
@@ -554,6 +606,168 @@ if prod_project:
                     f"one the tooling obeys is the file. Drop the flag; the file is what makes that safe."
                 )
 
+# ---- 7. the documented verification pins exactly the identity that signs -------------------------------------
+
+README = INFRA / "README.md"
+CHART = ROOT / "charts/veyq/Chart.yaml"
+OIDC_ISSUER = "https://token.actions.githubusercontent.com"
+# The registry the publish pushes to. The owner is not taken from the workflow — there it is
+# `github.repository_owner`, which is whoever runs it, a fork included — but from the chart's `home`, the one
+# file of state that names the upstream.
+REGISTRY = "ghcr.io"
+UPSTREAM = re.compile(r"^https://github\.com/([^/\s]+)/([^/\s]+?)/?$")
+FENCE = re.compile(r"^```[^\n]*\n(.*?)^```", re.MULTILINE | re.DOTALL)
+
+
+def verify_commands(markdown: str) -> list[list[str]]:
+    """Every documented signature verification, as argv, from the fenced blocks of a markdown file."""
+    commands = []
+    for block in FENCE.findall(markdown):
+        for line in block.replace("\\\n", " ").splitlines():
+            line = line.split(" #", 1)[0].strip()
+            if not line.startswith("cosign "):
+                continue
+            try:
+                argv = shlex.split(line)
+            except ValueError as e:
+                fail(f"{README.relative_to(ROOT)}: cannot parse the command `{line[:80]}…`: {e}")
+                continue
+            if argv[:2] == ["cosign", "verify"]:
+                commands.append(argv[2:])
+    return commands
+
+
+def flag_values(argv: list[str], name: str) -> list[str]:
+    values = []
+    for index, token in enumerate(argv):
+        if token == name and index + 1 < len(argv):
+            values.append(argv[index + 1])
+        elif token.startswith(name + "="):
+            values.append(token.split("=", 1)[1])
+    return values
+
+
+verify_summary = ""
+upstream = None
+if CHART.is_file():
+    upstream = UPSTREAM.match(str((yaml.safe_load(CHART.read_text()) or {}).get("home") or ""))
+if upstream is None:
+    fail(
+        f"{CHART.relative_to(ROOT)} has no `home: https://github.com/<owner>/<repo>` — it is where this guard "
+        f"reads the upstream a verification must pin, so without it the identity check below checks NOTHING"
+    )
+elif not README.is_file():
+    fail(f"{README.relative_to(ROOT)} is missing — it is where an operator is told how to verify a release")
+else:
+    owner, repo = upstream.group(1), upstream.group(2)
+    workflow_file = WORKFLOW.relative_to(ROOT).as_posix()
+
+    def san(ref: str, workflow: str = workflow_file, slug: str = f"{owner}/{repo}") -> str:
+        """The certificate identity keyless signing from a GitHub workflow produces."""
+        return f"https://github.com/{slug}/{workflow}@{ref}"
+
+    accepted = {f"a publish from `{b}`": san(f"refs/heads/{b}") for b in publishing_branches}
+    rejected = {
+        **{
+            f"`{w.relative_to(ROOT).as_posix()}` (another workflow) on main": san(
+                "refs/heads/main", workflow=w.relative_to(ROOT).as_posix()
+            )
+            for w in sorted(WORKFLOW.parent.glob("*.y*ml"))
+            if w != WORKFLOW
+        },
+        **{f"a push to `{b}`, not a release branch": san(f"refs/heads/{b}") for b in
+           non_release_branches(version_match.group(1) if version_match else "1")},
+        "a pull request ref": san("refs/pull/1/merge"),
+        "a tag ref": san(f"refs/tags/v{version_value}"),
+        "another owner's repository": san("refs/heads/main", slug=f"not-{owner}/{repo}"),
+        "an owner whose name only starts with ours": san("refs/heads/main", slug=f"{owner}x/{repo}"),
+        f"a repository whose name only starts with `{repo}`": san("refs/heads/main", slug=f"{owner}/{repo}-fork"),
+        "the right identity quoted inside another URL": "https://evil.example/" + san("refs/heads/main"),
+    }
+    if not accepted:
+        fail(
+            "assertion 2's scenarios found no branch the publish runs from, so the verify identity has nothing "
+            "to be checked against and this assertion would check NOTHING"
+        )
+
+    commands = verify_commands(README.read_text())
+    if not commands:
+        fail(
+            f"{README.relative_to(ROOT)} documents no `cosign verify`. Both images are keyless-signed by the "
+            f"publish, and a signature nobody is told to check protects nobody (ADR 0057 §3). Document one per "
+            f"published image, pinned to `{workflow_file}` in {owner}/{repo} on its release branches."
+        )
+    verified_images: set[str] = set()
+    verify_summary = (
+        f", and {len(commands)} documented `cosign verify` command(s) each accept the {len(accepted)} publishing "
+        f"branch identities and reject {len(rejected)} others"
+    )
+    for argv in commands:
+        shown = " ".join(argv)[:120]
+        issuers = flag_values(argv, "--certificate-oidc-issuer")
+        if flag_values(argv, "--certificate-oidc-issuer-regexp") or issuers != [OIDC_ISSUER]:
+            fail(
+                f"{README.relative_to(ROOT)}: `cosign verify {shown}` must pin exactly "
+                f"`--certificate-oidc-issuer {OIDC_ISSUER}` — GitHub's OIDC issuer is what makes the identity "
+                f"below mean `a GitHub workflow run`, and any other issuer lets someone else mint that string"
+            )
+        exact = flag_values(argv, "--certificate-identity")
+        patterns = flag_values(argv, "--certificate-identity-regexp")
+        if len(exact) + len(patterns) != 1:
+            fail(
+                f"{README.relative_to(ROOT)}: `cosign verify {shown}` must carry exactly one certificate "
+                f"identity (found {len(exact) + len(patterns)})"
+            )
+            continue
+        if exact:
+            matches = lambda subject, want=exact[0]: subject == want  # noqa: E731
+        else:
+            try:
+                # cosign matches with Go's `regexp.MatchString`, which is UNANCHORED — `re.search`, not
+                # `re.fullmatch`, is the faithful model. A pattern without `^…$` is exactly what it lets through.
+                compiled = re.compile(patterns[0])
+            except re.error as e:
+                fail(f"{README.relative_to(ROOT)}: the identity pattern `{patterns[0]}` does not compile: {e}")
+                continue
+            matches = lambda subject, rx=compiled: rx.search(subject) is not None  # noqa: E731
+        for what, subject in accepted.items():
+            if not matches(subject):
+                fail(
+                    f"{README.relative_to(ROOT)}: `cosign verify {shown}` rejects {what} ({subject}) — the "
+                    f"workflow publishes and signs from that branch, so a genuine release fails to verify"
+                )
+        for what, subject in rejected.items():
+            if matches(subject):
+                fail(
+                    f"{README.relative_to(ROOT)}: `cosign verify {shown}` accepts {what} ({subject}). A "
+                    f"verification is only as narrow as the identity it pins (ADR 0057 §3) — this one "
+                    f"accepts a signature the veyq release never made."
+                )
+        for token in argv:
+            match = re.match(rf"^{re.escape(REGISTRY)}/{re.escape(owner)}/([a-z0-9-]+)([@:])", token)
+            if match:
+                if match.group(2) == ":":
+                    fail(
+                        f"{README.relative_to(ROOT)}: `cosign verify {shown}` verifies a TAG. A tag can move "
+                        f"between the verify and the pull; verify the digest the tag resolved to, and deploy "
+                        f"that digest (ADR 0057 §3)."
+                    )
+                else:
+                    verified_images.add(match.group(1))
+    for image in sorted(published_images(WORKFLOW.read_text()) if WORKFLOW.is_file() else set()):
+        if commands and image not in verified_images:
+            fail(
+                f"{README.relative_to(ROOT)} never verifies `{REGISTRY}/{owner}/{image}` by digest. The publish "
+                f"signs every image it ships, and an operator told to verify one of a pair runs the other on "
+                f"trust — and the pair includes the higher-privilege admin image (ADR 0065)."
+            )
+    if WORKFLOW.is_file() and "certificate-identity" in WORKFLOW.read_text():
+        fail(
+            f"{workflow_file} states a verification identity of its own. The identity is stated once, in "
+            f"{README.relative_to(ROOT)}, where this guard holds it to what signs — a second copy is one "
+            f"nothing checks, and the one the workflow carried accepted any workflow on any ref."
+        )
+
 if not written_tags and not errors:
     # A guard that checked nothing and a guard whose subject is sound report the same green.
     fail(
@@ -572,5 +786,5 @@ print(
     f"refused, ref v{version_value} is created, the recipe is declared in "
     f"{len(runtime_stages(DOCKERFILE.read_text()))} runtime target(s), {written_tags} written-down image "
     f"tag(s) name a shape the pipeline emits, and the production stack names its own project "
-    f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced"
+    f"(`name: {prod_project}`) with nothing in durable state instructing the flag it replaced{verify_summary}"
 )

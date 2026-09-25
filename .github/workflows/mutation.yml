@@ -97,7 +97,7 @@ jobs:
       # Stryker's test runner is the project's own vitest and neither project collects the other's suites, so
       # each manifest must be mutated where its killing tests live — a single run across the boundary would
       # report a green score over uncovered files, the exact failure the meta-check below exists to catch.
-      - name: Run shared-crypto mutation gate (v1.ts + accountBirth.ts)
+      - name: Run shared-crypto mutation gate (scope: stryker.mutate.json)
         working-directory: packages/crypto
         # Full scope, incremental-accelerated. stryker.config.mjs breaks the build below the calibrated break
         # threshold — that is the gate.

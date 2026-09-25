@@ -73,6 +73,10 @@ render, asserts — deriving every anchor from the source rather than listing it
        exit code alone cannot tell "the schema held" from any other failure. Measured on helm v4.0.1: lint
        prints the schema violation on STDOUT (`[ERROR] values.yaml: - at '/ingress/…'`) and only a summary on
        stderr, so both streams are read.
+  xiv. **A digest the values pin is the digest the pod runs.** Where a values file sets `image.digest` /
+       `admin.image.digest`, every container running that image renders as `…@<that digest>`; where it sets none,
+       the image carries no digest at all. Some file in `ci/` must set both, or the digest render is checked by
+       nobody, and `helm lint` with a digest that is not `sha256:<64 hex>` must be refused naming `digest`.
 
 The app container is recognised the way the compose guards recognise the app service: an image whose
 repository is `veyq` — never `veyq-admin` or any other veyq-namespaced sibling — with the datasource
@@ -90,6 +94,9 @@ pinned so they cannot be re-argued into the chart. (vii)–(xi) came with the AC
 against the chart before the opt-in existed; (x) apart from (ix) because removing the helper from the
 ConfigMap alone was the injection that turned only one of them red. (xii) and (xiii) came with the admin
 channel (uc.admin.admin-channel), both run red against the chart before its admin Service and policy existed.
+(xiv) came with deploy-by-digest (cr-image-provenance-verifiable, ADR 0057 §3): no incident in the chart, which had
+no digest value at all; it pins that the digest an operator verified is the one the pod pulls, and each of its
+three halves was bitten by injection (template, schema pattern, the `ci/` file).
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -103,7 +110,8 @@ checked at its default alone — `admin.domain` set, `mariadb.enabled` false, `i
 enforces it — on a cluster whose CNI ignores NetworkPolicy, any pod reaches the admin port (ADR 0065 residual
 (ii)). (ii) checks the app container's mount and the pod's
 `fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
-checks three contradictions, not the schema's completeness. And it says nothing about the compose recipe, which
+checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
+digest exists or is the one `infra/README.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
 its two siblings own.
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
@@ -288,6 +296,33 @@ def port_hits(entry, port_name: str | None, port_number: int) -> bool:
             return port <= port_number <= end
         return port_hits(port, port_name, port_number)
     return entry == port_number or (port_name is not None and entry == port_name)
+
+
+def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
+    """(xiv) a digest the values set is the digest the pod runs, and one they leave unset adds none."""
+    wanted = {
+        "app": (((values.get("image") or {}).get("digest")) or "", APP_IMAGE),
+        "admin": ((((values.get("admin") or {}).get("image") or {}).get("digest")) or "", ADMIN_IMAGE),
+    }
+    for which, (digest, pattern) in wanted.items():
+        if digest:
+            digests_set.add(which)
+        images = [
+            str(c.get("image") or "")
+            for obj in rendered
+            for c in ((pod_spec(obj) or {}).get("containers") or [])
+            if pattern.search(str(c.get("image") or "").split("@", 1)[0])
+        ]
+        if not images:
+            errors.append(f"(xiv) {tag}: no container runs the {which} image, so its digest reached nothing this could check")
+        for image in images:
+            if digest and not image.endswith(f"@{digest}"):
+                errors.append(
+                    f"(xiv) {tag}: the {which} image renders as `{image}` although the values pin `{digest}` — the "
+                    f"operator verified that digest (infra/README.md § Verifying a release), and the pod pulls something else"
+                )
+            if not digest and "@" in image:
+                errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")
 
 
 def check_admin_channel(tag: str, rendered: list[dict]) -> None:
@@ -555,6 +590,7 @@ def check(values_file: pathlib.Path) -> list[dict]:
                         )
 
     check_admin_channel(tag, rendered)
+    check_image_digests(tag, values, rendered)
 
     if not first:
         return rendered
@@ -633,7 +669,20 @@ def check(values_file: pathlib.Path) -> list[dict]:
 values_files = sorted(CI_DIR.glob("*.yaml"))
 if not values_files:
     errors.append(f"{CI_DIR.relative_to(ROOT)} holds no values file — nothing would be rendered, and a run over nothing is not a green")
+digests_set: set[str] = set()
 renders = {f.name: check(f) for f in values_files}
+
+# (xiv) the digest path is rendered by some file, and the schema refuses a digest that is not one.
+for which in ("app", "admin"):
+    if values_files and which not in digests_set:
+        errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
+if values_files:
+    for key in ("image.digest", "admin.image.digest"):
+        code, output = lint(values_files[0], ["--set", f"{key}=sha256:not-a-digest"])
+        if code == 0:
+            errors.append(f"(xiv) `helm lint --set {key}=sha256:not-a-digest` passed — the schema must refuse a digest that is not `sha256:<64 hex>`")
+        elif "digest" not in output:
+            errors.append(f"(xiv) `helm lint --set {key}=sha256:not-a-digest` failed, but its output never names `digest`:\n{output.strip()}")
 
 if errors:
     print("CHART META CHECK FAILED:")
@@ -649,5 +698,5 @@ print(
     f"listener on a Service of its own that no Ingress names and the admin surface points at, admitted by policy from "
     f"the admin pod alone; the ACME "
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on every Ingress and in the properties file, "
-    f"its contradictions refused by the schema"
+    f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs"
 )

@@ -10,7 +10,8 @@
 // (`admin-web/nginx.conf.template`). See docs/crosscutting/cc.security.csp.md.
 
 /** The pwned-password range API (k-anonymity: only a 5-hex SHA-1 prefix leaves the device) — the ONE outbound
- *  call this surface makes. On a localhost-only or firewalled admin container it simply fails. */
+ *  call this surface makes, and only when setup's breach-check box is ticked, once on submit. On a localhost-only
+ *  or firewalled admin container it fails, and setup says the check could not run. */
 export const PWNED_ORIGIN = 'https://api.pwnedpasswords.com'
 
 export const ADMIN_CSP = [

@@ -120,9 +120,12 @@ Bumping a pin is part of cutting a release, not something that happens on its ow
   [ADR 0040](0040-coverage-gaps-and-http-not-a-surface.md) leaves owed.
 - **A pin trades silent patches for explicit ones.** A tag-pinned `mariadb:11.4` picked up patch releases on
   the next pull; a digest-pinned one does not until the release bumps it. That is the intended trade: the
-  same silent path would deliver a compromised tag just as quietly. The bump needs an updater. Dependabot's
-  image ecosystems are the intended one, and which files each of them reaches is checked when it is
-  configured, not assumed. It is remembered, not measured, that Dependabot does not regenerate Gradle's
+  same silent path would deliver a compromised tag just as quietly. The bump needs an updater:
+  [`.github/dependabot.yml`](../../.github/dependabot.yml) runs Dependabot's `docker`, `docker-compose` and
+  `helm` ecosystems over the Dockerfiles, both compose files and the chart values — each one's reach read from
+  dependabot-core's source, not assumed, and never observed, because the repository has no remote. Nothing
+  reaches the backup tool's image constants, so those are bumped by hand; `scripts/validate_image_pins.py` holds
+  one `repo:tag` to one digest everywhere, which turns a bump that misses one of its sites red. It is remembered, not measured, that Dependabot does not regenerate Gradle's
   verification metadata, so a Gradle bump regenerates it by hand. The metadata holds checksums only, trusted
   on first write, which is the same trust the generator JAR's pin has.
 - **Rejected — deriving the version from the registry.** It makes the released artifact the authority on its own

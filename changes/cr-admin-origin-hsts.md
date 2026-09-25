@@ -63,7 +63,8 @@ receiving builds, onto the maintained 1.30 stable branch. Inbox #176.
   uid 101, port 8080, pid under `/tmp`, `conf.d` writable by 101, `apk add` as root) is re-checked on 1.30 by
   the live build, not assumed. Locator: `git grep -n "nginx-unprivileged:"` (measured: `admin-web/Dockerfile:56`
   only). The pin's comment gains the rule that governs it: the stable branch, moved when nginx cuts the next
-  one.
+  one. The `FROM` is written `repo:tag@sha256:<multi-arch index digest>` (ADR 0057 §6), and
+  `scripts/validate_image_pins.py` is red on a bare tag, so the move resolves the new tag's index digest too.
 - **Neighbours, all textual overlap only; whichever lands second rebases.**
   - `cr-admin-api-only-through-the-admin-container`: the same entrypoint hook (its `BACKEND_URL` default) and
     the same admin env blocks.

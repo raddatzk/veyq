@@ -142,12 +142,21 @@ const en = {
     "download": "Download Emergency Kit (PDF)",
     "downloaded": "Emergency Kit downloaded.",
     "downloadFailed": "Could not create the Emergency Kit. Please try again.",
-    "backupDownloadConfirm": "I have saved my Emergency Kit somewhere safe."
+    "backupDownloadConfirm": "I have saved my Emergency Kit somewhere safe.",
+    "pdfTitle": "veyq Emergency Kit",
+    "pdfHeading": "veyq — Emergency Kit",
+    "pdfKeepSafe": "Keep this safe. With your Secret Key + your password you can always sign in again.",
+    "pdfEmail": "Email",
+    "pdfSecretKey": "Secret Key",
+    "pdfScanHint": "Scan this code, or import this PDF, to fill in your email + Secret Key on a new device."
   },
   "password": {
     "minLength": "Use at least 10 characters.",
     "strong": "Nice and long — that is a strong password.",
-    "pwnedWarning": "This password appeared in {count} known data breaches. Consider a different one."
+    "pwnedCheck": "Check this password against known data breaches",
+    "pwnedCheckNote": "Only the first 5 characters of a hash of the password go to haveibeenpwned.com — never the password itself.",
+    "pwnedWarning": "This password appeared in {count} known data breaches. Choose a different one, or press the button again to use it anyway.",
+    "pwnedUnavailable": "The breach check could not run. Press the button again to continue without it."
   },
   "admin": {
     "title": "Server administration",
@@ -302,12 +311,21 @@ const de: typeof en = {
     "download": "Notfall-Kit herunterladen (PDF)",
     "downloaded": "Notfall-Kit heruntergeladen.",
     "downloadFailed": "Notfall-Kit konnte nicht erstellt werden. Bitte erneut versuchen.",
-    "backupDownloadConfirm": "Ich habe mein Notfall-Kit sicher gespeichert."
+    "backupDownloadConfirm": "Ich habe mein Notfall-Kit sicher gespeichert.",
+    "pdfTitle": "veyq-Notfall-Kit",
+    "pdfHeading": "veyq — Notfall-Kit",
+    "pdfKeepSafe": "Bewahre es sicher auf. Mit deinem Secret Key und deinem Passwort kannst du dich jederzeit wieder anmelden.",
+    "pdfEmail": "E-Mail",
+    "pdfSecretKey": "Secret Key",
+    "pdfScanHint": "Scanne diesen Code oder importiere dieses PDF, um auf einem neuen Gerät deine E-Mail und deinen Secret Key einzutragen."
   },
   "password": {
     "minLength": "Mindestens 10 Zeichen verwenden.",
     "strong": "Schön lang — ein starkes Passwort.",
-    "pwnedWarning": "Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle besser ein anderes."
+    "pwnedCheck": "Passwort mit bekannten Datenlecks abgleichen",
+    "pwnedCheckNote": "Nur die ersten 5 Zeichen eines Hashwerts des Passworts gehen an haveibeenpwned.com — nie das Passwort selbst.",
+    "pwnedWarning": "Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle ein anderes oder klicke erneut, um es trotzdem zu verwenden.",
+    "pwnedUnavailable": "Die Prüfung auf Datenlecks konnte nicht laufen. Klicke erneut, um ohne sie fortzufahren."
   },
   "admin": {
     "title": "Serververwaltung",

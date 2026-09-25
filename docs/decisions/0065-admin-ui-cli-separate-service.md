@@ -32,7 +32,7 @@ Forces:
   backup/restore E2E rehearsals (ADR 0056) parked there only incidentally. A literal directory move would
   break all four. The one that reshapes this ADR's own reasoning: `setupServer.ts` (the first-run
   Server-Owner registration, `SetupView.vue`) performs a full cold account birth — identity keypair, Master
-  Key wraps, Emergency Kit — the same `shared/crypto/v1` machinery as any member registration, which
+  Key wraps, Emergency Kit — the same `v1` crypto machinery as any member registration, which
   contradicts this ADR's original "admin touches no client-side crypto" premise. Resolved in Decision below by
   moving setup **with** the admin surface rather than leaving it behind, on the argument that first-run setup
   is if anything the *most* privileged single action an instance ever takes (it mints the account with total
@@ -60,8 +60,9 @@ direct DB or KEK access. The backend answers that API only through it (the *admi
   `contracts/api/tenants.openapi.yaml` + `contracts/api/instance.openapi.yaml` + `contracts/api/auth.openapi.yaml`,
   mirroring `scopes.openapi.yaml`'s
   `ScopeKind` if the moved code still needs it), and its own router/state/UI — none of that is shared with
-  `web/`. The **one** thing that is: `shared/crypto/v1` + `accountBirth` are extracted into a small internal
-  workspace package both `web/` and `admin-web/` depend on — the only genuinely shared surface, and the one
+  `web/`. The **one** thing that is: `v1` + `accountBirth` + the Emergency Kit codec that carries the birth's
+  Secret Key are extracted into a small internal workspace package, `@veyq/crypto` (`packages/crypto/`), both
+  `web/` and `admin-web/` depend on — the only genuinely shared surface, and the one
   place duplication would be a security defect rather than a maintenance nuisance, per this ADR's own
   Context finding. Everything else stays independent per package on purpose (no shared UI-component library,
   no shared router) — the point of the workspace is that one crypto module, not general code-sharing.
