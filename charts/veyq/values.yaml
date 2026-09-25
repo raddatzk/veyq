@@ -31,11 +31,15 @@ hsts:
   enabled: true
 
 image:
-  # e.g. ghcr.io/<owner>/veyq. The app image, cosign-signed by the same publish as the admin image below.
+  # e.g. ghcr.io/raddatzk/veyq. The app image, cosign-signed by the same publish as the admin image below.
   repository: ""
   # Defaults to the chart's appVersion, which has the release shape `<major>.<minor>`. Pin one; `latest` moves,
   # the schema migrates at boot with no gate, and there is no downgrade path (ADR 0057).
   tag: ""
+  # The digest infra/README.md § Verifying a release resolved and verified for that tag (`sha256:<64 hex>`).
+  # Set, the pod runs `repository:tag@digest` and the runtime pulls by the digest; the tag stays for a reader.
+  # Leave it empty only if you accept running whatever the tag points at when the node pulls.
+  digest: ""
   pullPolicy: IfNotPresent
 
 app:
@@ -87,10 +91,12 @@ app:
 
 admin:
   image:
-    # e.g. ghcr.io/<owner>/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
+    # e.g. ghcr.io/raddatzk/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
     # of a mismatched pair migrated the schema.
     repository: ""
     tag: ""
+    # Verified with the app image, by the same section, and set together with it — never one digest alone.
+    digest: ""
     pullPolicy: IfNotPresent
   # The Server-Owner administration surface's exposure (ADR 0065), translated as a PROPERTY and not as compose's
   # mechanism. Compose binds 127.0.0.1:<port>; here the default is NO Ingress and a ClusterIP Service, reached
@@ -185,7 +191,7 @@ secrets:
 mariadb:
   # false = an operator-managed database (ADR 0064's escape hatch); then set externalDatabase below.
   enabled: true
-  image: mariadb:11.4
+  image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
   persistence:
     size: 10Gi
     storageClass: ""
@@ -203,7 +209,7 @@ externalDatabase:
   username: veyq
 
 garage:
-  image: dxflrs/garage:v2.0.0
+  image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
   # Three claims, mirroring the compose recipe's three volumes. Snapshots are separate from meta on purpose:
   # `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the very volume a rollback would
   # copy (ADR 0056 §3).
