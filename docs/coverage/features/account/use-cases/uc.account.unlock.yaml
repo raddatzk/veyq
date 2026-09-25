@@ -14,6 +14,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit:
+          # renders each locale's real kit PDF and reads it back through importKitFromFile — the upload path end
+          # to end. The codec itself is pinned by a vector in packages/crypto: a guard, not a coverage surface.
           - src/features/account/emergencyKit/emergencyKit.test.ts
           - src/shared/ui/SecretKeyField.test.ts
           - src/views/TenantJoinView.kitImport.test.ts

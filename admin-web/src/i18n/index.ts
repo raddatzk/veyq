@@ -142,7 +142,13 @@ const en = {
     "download": "Download Emergency Kit (PDF)",
     "downloaded": "Emergency Kit downloaded.",
     "downloadFailed": "Could not create the Emergency Kit. Please try again.",
-    "backupDownloadConfirm": "I have saved my Emergency Kit somewhere safe."
+    "backupDownloadConfirm": "I have saved my Emergency Kit somewhere safe.",
+    "pdfTitle": "veyq Emergency Kit",
+    "pdfHeading": "veyq — Emergency Kit",
+    "pdfKeepSafe": "Keep this safe. With your Secret Key + your password you can always sign in again.",
+    "pdfEmail": "Email",
+    "pdfSecretKey": "Secret Key",
+    "pdfScanHint": "Scan this code, or import this PDF, to fill in your email + Secret Key on a new device."
   },
   "password": {
     "minLength": "Use at least 10 characters.",
@@ -305,7 +311,13 @@ const de: typeof en = {
     "download": "Notfall-Kit herunterladen (PDF)",
     "downloaded": "Notfall-Kit heruntergeladen.",
     "downloadFailed": "Notfall-Kit konnte nicht erstellt werden. Bitte erneut versuchen.",
-    "backupDownloadConfirm": "Ich habe mein Notfall-Kit sicher gespeichert."
+    "backupDownloadConfirm": "Ich habe mein Notfall-Kit sicher gespeichert.",
+    "pdfTitle": "veyq-Notfall-Kit",
+    "pdfHeading": "veyq — Notfall-Kit",
+    "pdfKeepSafe": "Bewahre es sicher auf. Mit deinem Secret Key und deinem Passwort kannst du dich jederzeit wieder anmelden.",
+    "pdfEmail": "E-Mail",
+    "pdfSecretKey": "Secret Key",
+    "pdfScanHint": "Scanne diesen Code oder importiere dieses PDF, um auf einem neuen Gerät deine E-Mail und deinen Secret Key einzutragen."
   },
   "password": {
     "minLength": "Mindestens 10 Zeichen verwenden.",

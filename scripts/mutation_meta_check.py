@@ -14,7 +14,7 @@ glob. It is a permanent guard all the same, standing alongside the config's brea
 
 The mutate scope is read from each project's own stryker.mutate.json — the SAME manifests the matching
 stryker.config.mjs files consume, so a mutator and its check never drift. There are TWO since
-cr-admin-web-extraction (ADR 0065) split the suite: `packages/crypto` (v1.ts + accountBirth.ts) and `web`
+cr-admin-web-extraction (ADR 0065) split the suite: `packages/crypto` (the shared suite) and `web`
 (the six crypto-logic files that stayed). They are checked **per project, not as a union**: Stryker's test
 runner is the project's own vitest, so each project produces its own report, and a diff touching only one
 project's scope must be answered by THAT project's report — a union would let a healthy web report excuse a
