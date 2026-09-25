@@ -74,6 +74,11 @@ password appears in known breaches. The fences apply like this:
 - **It advises, never gates.** A hit, or a check that could not run, stops the first submit once with a message
   saying which; submitting again goes ahead with the same password. The result is not stored.
 
+**Verification:** [`passwordWarning.test.ts`](../../web/src/features/account/passwordWarning.test.ts) (identical
+in `admin-web/`) pins the rule on the request itself — nothing while typing, nothing unticked, one prefix of the
+final password, no second request on the second press — and each dialog's own test (`ChangePasswordPanel.policy`,
+`TenantJoinView.passwordPolicy`, `RecoverView`, admin-web's `SetupView`) pins that it awaits the check.
+
 So the veyq operator stays blind by construction; the only thing that ever crosses is a consented, identity-free
 request the **user** turned on, straight to the chosen provider.
 
