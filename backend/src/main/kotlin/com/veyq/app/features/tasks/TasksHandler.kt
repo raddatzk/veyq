@@ -3,51 +3,81 @@ package com.veyq.app.features.tasks
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
-import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import java.time.Duration
 
 /** Outcome of a client-originated enqueue (cr-0162 gave it the membership boundary; ADR 0042). */
 sealed interface EnqueueOutcome {
     data class Created(val jobId: String) : EnqueueOutcome
+    data object Suspended : EnqueueOutcome, HttpFailure by Failures.tenantSuspended
+    data object Deleting : EnqueueOutcome, HttpFailure by Failures.scopeDeleting
     data object ScopeNotFound : EnqueueOutcome, HttpFailure by Failures.scopeNotFound
     data object NotKeyHolder : EnqueueOutcome, HttpFailure by Failures.notKeyHolder
 }
 
 /**
  * Use-case logic for the background-task pull queue (ADR 0021, cr-0076). Thin over [TasksStore]; it owns the
- * lease TTL + max-attempts policy (config) and passes them down. Eligibility ("holds the scope key") and the
- * atomic claim/lease live in the store; operator-blindness is structural — nothing here interprets a body.
+ * lease TTL + max-attempts policy (config) and passes them down. Every job operation asks the scope-access gate
+ * first — a job is worked by writing into its space (uc.spaces.scope-access A5); eligibility ("holds the scope
+ * key") and the atomic claim/lease live in the store. Operator-blindness is structural — nothing here interprets a
+ * body.
  */
 @ApplicationScoped
 class TasksHandler(
     private val store: TasksStore,
-    private val membership: MembershipStore,
+    private val access: ScopeAccess,
     config: VeyqConfig,
 ) {
     private val leaseTtl: Duration = config.tasks().lease().ttl()
     private val maxAttempts: Int = config.tasks().maxAttempts()
 
-    fun claim(userId: String, tags: List<String>, scopeFilter: String?): ClaimedJobView? =
-        store.claim(userId, tags, scopeFilter, leaseTtl, maxAttempts)
+    /**
+     * Lease one job. Working a job is a write on its space (uc.spaces.scope-access A5), so the eligible scopes are the
+     * caller's granted ones the gate lets them **write** — a suspended tenant's or a deleting group's jobs are simply
+     * not handed out; they wait for the reactivation or the restore, or are erased with the purge.
+     */
+    fun claim(userId: String, tags: List<String>, scopeFilter: String?): ClaimedJobView? {
+        val granted = store.grantedScopeIds(userId).let { g -> if (scopeFilter != null) g intersect setOf(scopeFilter) else g }
+        return store.claim(userId, access.writable(userId, granted), tags, leaseTtl, maxAttempts)
+    }
 
-    fun heartbeat(userId: String, jobId: String): HeartbeatResult =
-        store.heartbeat(userId, jobId, leaseTtl)
+    fun heartbeat(userId: String, jobId: String): HeartbeatResult {
+        val job = store.find(jobId) ?: return HeartbeatResult.NotFound
+        access.check(userId, job.scopeId, WRITE)
+            .refusal(HeartbeatResult.NotFound, HeartbeatResult.Suspended, HeartbeatResult.Deleting)?.let { return it }
+        return store.heartbeat(userId, jobId, leaseTtl)
+    }
 
-    fun complete(userId: String, jobId: String, sealedResult: String?): CompleteResult =
-        store.complete(userId, jobId, sealedResult)
+    fun complete(userId: String, jobId: String, sealedResult: String?): CompleteResult {
+        val job = store.find(jobId) ?: return CompleteResult.NotFound
+        access.check(userId, job.scopeId, WRITE)
+            .refusal(CompleteResult.NotFound, CompleteResult.Suspended, CompleteResult.Deleting)?.let { return it }
+        return store.complete(userId, jobId, sealedResult)
+    }
 
-    fun fail(userId: String, jobId: String): FailResult =
-        store.fail(userId, jobId)
+    fun fail(userId: String, jobId: String): FailResult {
+        val job = store.find(jobId) ?: return FailResult.NotFound
+        access.check(userId, job.scopeId, WRITE)
+            .refusal(FailResult.NotFound, FailResult.Suspended, FailResult.Deleting)?.let { return it }
+        return store.fail(userId, jobId)
+    }
 
-    fun decline(userId: String, jobId: String, reason: String?): DeclineResult =
-        store.decline(userId, jobId, reason)
+    fun decline(userId: String, jobId: String, reason: String?): DeclineResult {
+        val job = store.find(jobId) ?: return DeclineResult.NotFound
+        access.check(userId, job.scopeId, WRITE)
+            .refusal(DeclineResult.NotFound, DeclineResult.Suspended, DeclineResult.Deleting)?.let { return it }
+        return store.decline(userId, jobId, reason)
+    }
 
     /**
      * Clear the caller's own declines against a contact whose changed identity key they just accepted
      * (ADR 0028 (2), ADR 0060 Decision 7) — the seam that makes *"the wrap then proceeds"* true.
      *
-     * No membership boundary guard, and deliberately so: unlike [enqueue] this names no scope, so there is no
+     * No scope-access gate, and deliberately so: unlike [enqueue] this names no scope, so there is no
      * scope existence to disclose. It touches only rows the caller wrote themselves, so an unknown or unrelated
      * `targetUserId` simply clears nothing — `0` is the ordinary answer, and it is the same answer for a
      * stranger as for a contact this caller never declined.
@@ -56,13 +86,14 @@ class TasksHandler(
         store.clearDeclinesForTarget(userId, targetUserId)
 
     /**
-     * Enqueue a client-originated job. The **membership boundary is the first guard** (ADR 0042): a non-member
+     * Enqueue a client-originated job. The **scope-access gate is the first guard** (ADR 0042): a non-member
      * gets the same 404 as a bogus scope id, so scope existence is not enumerable. Only then does the store's
      * grant gate run — a member who holds no grant could not have sealed the body anyway, and gets a 403 that
      * discloses nothing, because they already know the scope exists.
      */
     fun enqueue(userId: String, scopeId: String, capabilityTag: String, resourceRef: String?, sealedBody: String?): EnqueueOutcome {
-        if (!membership.isScopeMember(userId, scopeId)) return EnqueueOutcome.ScopeNotFound
+        access.check(userId, scopeId, WRITE)
+            .refusal(EnqueueOutcome.ScopeNotFound, EnqueueOutcome.Suspended, EnqueueOutcome.Deleting)?.let { return it }
         val jobId = store.enqueue(userId, scopeId, capabilityTag, resourceRef, sealedBody, maxAttempts)
             ?: return EnqueueOutcome.NotKeyHolder
         return EnqueueOutcome.Created(jobId)

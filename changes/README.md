@@ -835,6 +835,15 @@ attempt to bite it surfaced which semantics the use-case had meant all along. So
 design question, asked in the cheapest possible place**, and it is worth one round of "what *would* this cost, in
 what the user sees?" before deciding the lever is at fault.
 
+**An ordering bite is the sharpest case: the lever must make the misplaced check answer differently.**
+`cr-scope-access-gate` planned to prove its existence-oracle guard by moving `findNode` ahead of the gate in
+`listMedia`. It stayed green, and correctly: a missing node and a non-member both answer that operation's own
+`NoNode`, so the reordering discloses nothing and no stranger can tell — the design (a refusal maps onto the
+operation's own 404) is what made the lever inert. The bite that reddens is a pre-gate check whose **miss answers
+something else**: `restoreGroup`'s kind check, `409 not_group` for an invented id against the gate's `404`. So
+before freezing an ordering bite, write the two answers — real id, invented id — side by side; if they are the
+same variant, the lever proves nothing.
+
 ### A threshold added against false positives is where the false NEGATIVES hide
 
 A sensor that scores something continuous — a length, a ratio, a score — almost always grows a floor, because
@@ -910,6 +919,13 @@ whose lever is inert is indistinguishable from a fix that works — both print g
 is the one you will trust later. Note what made the gap findable at all: the CR had **named** the lever per bite
 test, so there was something concrete to try. A CR that says only "test that it stays fixed" leaves nothing to
 falsify, and the inert control is never discovered.
+
+**A control that shares a fixture with a negative is independent only while that negative is refused.** In
+`cr-scope-access-gate`'s probe the unaccepted-proposal persona was, on the unfixed tree, *let through* — and it
+purged the medium and spent the upload session the same operations' controls then needed, so three controls went
+red for a reason that was not theirs, and the same coupling reddened them again under the pending-consent bite
+once the fix existed. The fix was structural: the control fires on its **own**, identically seeded space. Where a
+live defect or a bite can let a negative write, give the control a fixture the negative cannot reach.
 
 ### Each layer of a defence in depth is tested with the other layers held off
 

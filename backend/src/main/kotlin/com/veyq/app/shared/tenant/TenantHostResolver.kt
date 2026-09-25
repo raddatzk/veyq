@@ -1,6 +1,5 @@
 package com.veyq.app.shared.tenant
 
-import com.veyq.app.features.admin.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

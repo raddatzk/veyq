@@ -44,7 +44,8 @@ export function revokeTenant(tenantId: string): Promise<void> {
 }
 
 /** Take an ACTIVE tenant offline (ADR 0066) — reversible, and nothing but its `status` changes: no key, grant,
- *  content row or session is touched. While suspended every request to its domain is refused at the boundary.
+ *  content row or session is touched. While suspended its members are refused on every operation acting on it,
+ *  from any domain, and its own domain refuses every API call (uc.spaces.scope-access).
  *  409 `tenant_not_active` if it isn't ACTIVE. */
 export function suspendTenant(tenantId: string): Promise<void> {
   return tenantsApi().suspendTenant({ tenantId })

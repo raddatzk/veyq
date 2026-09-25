@@ -61,7 +61,7 @@ sequenceDiagram
   removed a member and rotated, so `currentEpoch` advanced. The POST's `nameEpoch` is now stale → `409 stale_epoch`.
   The client **refetches** the scope (grant-delivery keeps an owner at the current epoch), re-seals under the fresh
   epoch, and retries. Rare — only a multi-owner read-then-write race; a single-owner group never hits it.
-- **A2 — the group is pending-deletion:** a rename is a name-write, rejected during the grace period (`409`,
+- **A2 — the group is pending-deletion:** a rename is a name-write, rejected during the grace period (`409 scope_deleting`,
   read-only until restore/purge, [uc.spaces.delete-group](uc.spaces.delete-group.md) A4).
 - **A3 — the caller is not an OWNER:** `403 not_scope_owner` (a plain MEMBER is not the name authority).
 - **A4 — blank / oversized name:** rejected at the contract boundary (`400` — non-blank, base64, `maxLength`), same

@@ -27,8 +27,8 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
  * HTTP adapter for the operator-blind background-task pull queue (ADR 0021, cr-0076). Implements the generated
  * [TasksApi]; thin (ADR 0001) — delegates to [TasksHandler]. Central auth (`@Authenticated`): a missing/invalid
  * token is a generic 401 before this runs; the caller's worker identity is the `SecurityIdentity` principal.
- * Authorization (the caller must hold a grant in the job's scope — be a key-holder there) lives in the store;
- * the membership boundary above it (ADR 0042) is the handler's first guard.
+ * The scope-access gate (uc.spaces.scope-access) is the handler's first guard on every job; the lease and the
+ * grant checks behind it live in the store.
  */
 @Authenticated
 @RateLimitExempt(

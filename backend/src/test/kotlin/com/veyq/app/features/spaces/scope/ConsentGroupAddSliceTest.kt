@@ -2,12 +2,13 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

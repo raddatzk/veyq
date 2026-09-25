@@ -73,10 +73,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such node, or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: >
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
@@ -91,10 +93,13 @@ paths:
       operationId: listShares
       summary: List shares — the caller's own, or (with nodeId) every member's on one Memory.
       description: >
-        Without `nodeId`: every share the authenticated caller created. With `nodeId`: **every** share on that
-        Memory node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can see
-        and adopt an orphaned (disabled) share on a shared Memory. Each row carries `mine` (owned by the caller).
-        Operator-blind: the row carries no plaintext name or content; a non-member / unknown node yields `[]`.
+        Without `nodeId`: every share the authenticated caller created **in a space they may still read** — a
+        share whose space they left, or whose tenant is suspended, drops out of the list (uc.spaces.scope-access;
+        the list is account-addressed and carries sealed names of those spaces). With `nodeId`: **every** share on
+        that Memory node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can
+        see and adopt an orphaned (disabled) share on a shared Memory; a non-member or an unknown node gets `[]`,
+        an accepted member of a suspended tenant `403 tenant_suspended`. Each row carries `mine` (owned by the
+        caller). Operator-blind: the row carries no plaintext name or content.
       security:
         - bearerAuth: []
       parameters:
@@ -115,6 +120,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
 
   /api/shares/{shareId}/revoke:
     post:
@@ -123,7 +129,8 @@ paths:
       summary: Revoke a share (soft — the next guest request 404s).
       description: >
         Disables the share (`enabled = false`). The next `resolve` + gated blob GET then `404`. Idempotent — a
-        missing/already-disabled share the caller owns still returns 204. Soft (L1) revocation: already-
+        missing/already-disabled share the caller owns still returns 204. Only its creator, and only while they
+        are still a member of its space (uc.sharing.share-shared-scope A3). Soft (L1) revocation: already-
         downloaded ciphertext and a saved fragment link cannot be retracted (ADR 0029 §7, a stated limitation).
       security:
         - bearerAuth: []
@@ -136,10 +143,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such share owned by the caller.
+          description: No such share owned by the caller, or the caller is no longer a member of its space.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/shares/{shareId}/reactivate:
     post:
@@ -150,7 +159,9 @@ paths:
         Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller — for a share
         auto-deactivated when its creator was removed from the scope (cr-0104, ADR 0029 §6). Any **current member**
         of the share's scope may adopt it; the link resolves again (its `#k=K_share` fragment is unchanged), now
-        owned by the caller. Idempotent for a share the caller may already adopt.
+        owned by the caller. Idempotent for a share the caller may already adopt. Re-activating is a publication
+        like creating, so it passes the same checks: a current member outside the space's deletion grace, and the
+        instance's sharing capability for the share's role (uc.sharing.share-shared-scope A2).
       security:
         - bearerAuth: []
       parameters:
@@ -162,10 +173,18 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such share, or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "422":
+          description: >
+            The instance capability this share's role needs is disabled (ADR 0032) — the same check
+            `createShare` runs, since a re-activation publishes the link again.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
   /api/shares/{shareId}:
     get:
@@ -196,7 +215,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
         "404":
-          description: No such share, or it is disabled/expired (non-enumerable — identical in every case).
+          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
     patch:
@@ -209,8 +228,8 @@ paths:
         `K_share` from the share's `sealedShareKey` (`symWrap(K_mem, K_share)`, which they hold `K_mem` for),
         re-seals them, and PATCHes them (null/blank clears a field). Optionally changes the **`role`** in place
         (cr-0119) — a plaintext authorization change, no re-crypto, **VIEWER ↔ CONTRIBUTOR** only (UPLOADER →
-        `422`). Owner-gated: only the share's `owner_account` may edit — a share not owned by the caller is a
-        non-enumerable `404` (like revoke). Operator-blind: opaque ciphertext in, opaque ciphertext out; no key
+        `422`). Owner-gated: only the share's `owner_account` may edit, and only while still a member of its space —
+        anything else is a non-enumerable `404` (like revoke). Operator-blind: opaque ciphertext in, opaque ciphertext out; no key
         crosses the boundary.
       security:
         - bearerAuth: []
@@ -233,10 +252,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such share owned by the caller (non-enumerable).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: >
             An illegal role change (cr-0119) — `role = UPLOADER`, or a role change on a share whose current role is
@@ -270,7 +291,7 @@ paths:
               schema: { $ref: "#/components/schemas/ShareTerms" }
               example: { tenantId: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c, termsVersion: 3, terms: { de: "## Nutzungsbedingungen\n…", en: "## Terms of use\n…" } }
         "404":
-          description: No such share, or it is disabled/expired (non-enumerable — identical in every case, like `resolveShare`).
+          description: No such share, or it is disabled/expired, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4) — non-enumerable, identical in every case, like `resolveShare`.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
 
@@ -303,7 +324,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_password_incorrect } }
         "404":
-          description: No such share (disabled/expired/unknown), the blob is not under the shared subtree, or a required password token is absent.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), the blob is not under the shared subtree, or a required password token is absent.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "503":
@@ -351,7 +372,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable, identical in every case.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
 
@@ -397,7 +418,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "429":
@@ -456,7 +477,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such share (disabled/expired/unknown), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
 
@@ -493,7 +514,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
         "404":
-          description: No such media under this share owned by this identity, or a password-protected share with no `X-Share-Password` token given (cr-0164) — also covers a disabled/expired/unknown share, non-enumerable.
+          description: No such media under this share owned by this identity, or a password-protected share with no `X-Share-Password` token given (cr-0164) — also covers a disabled/expired/unknown share and one whose space is being deleted or its tenant suspended (uc.spaces.scope-access A4), non-enumerable.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_media_not_found } }
 

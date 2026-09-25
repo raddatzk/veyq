@@ -10,11 +10,18 @@ import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.membership.Access
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Outcome of birthing a personal scope. */
 sealed interface CreatePersonalOutcome {
     data class Created(val scopeId: String) : CreatePersonalOutcome
+    object Suspended : CreatePersonalOutcome, HttpFailure by Failures.tenantSuspended
     object NoTenant : CreatePersonalOutcome, HttpFailure by Failures.tenantNotFound
     object AlreadyExists : CreatePersonalOutcome, HttpFailure by httpFailure("personal_scope_exists", CONFLICT)
 }
@@ -22,6 +29,7 @@ sealed interface CreatePersonalOutcome {
 /** Outcome of creating a group scope. Group names are not unique, so there is no "already exists" case. */
 sealed interface CreateGroupOutcome {
     data class Created(val scopeId: String) : CreateGroupOutcome
+    object Suspended : CreateGroupOutcome, HttpFailure by Failures.tenantSuspended
     object NoTenant : CreateGroupOutcome, HttpFailure by Failures.tenantNotFound
     /** The `spaces.groups` capability is disabled instance-wide (ADR 0032) — a 422, a personal-only instance. */
     object CapabilityDisabled : CreateGroupOutcome, HttpFailure by Failures.capabilityDisabled
@@ -37,6 +45,8 @@ sealed interface ListScopesOutcome {
  *  `ConsentRequired` (cr-0096): the target has consent on but no `sealedNameKey` was supplied. */
 sealed interface AddGroupMemberOutcome {
     data class Added(val row: ScopeMemberRow) : AddGroupMemberOutcome
+    object Suspended : AddGroupMemberOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : AddGroupMemberOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : AddGroupMemberOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : AddGroupMemberOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object MemberNotFound : AddGroupMemberOutcome, HttpFailure by Failures.memberNotFound
@@ -47,6 +57,7 @@ sealed interface AddGroupMemberOutcome {
 /** Outcome of resolving a per-tenant username to a group-add candidate (cr-0094) — records nothing. */
 sealed interface ResolveCandidateOutcome {
     data class Ok(val row: ResolvedCandidateRow) : ResolveCandidateOutcome
+    object Suspended : ResolveCandidateOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeNotFound : ResolveCandidateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : ResolveCandidateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object MemberNotFound : ResolveCandidateOutcome, HttpFailure by Failures.memberNotFound
@@ -67,6 +78,8 @@ sealed interface ListInvitationsOutcome {
 /** Outcome of promote/demote (cr-0088). */
 sealed interface SetRoleOutcome {
     data class Ok(val row: ScopeMemberRow) : SetRoleOutcome
+    object Suspended : SetRoleOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : SetRoleOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : SetRoleOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : SetRoleOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object MemberNotFound : SetRoleOutcome, HttpFailure by Failures.memberNotFound
@@ -76,6 +89,8 @@ sealed interface SetRoleOutcome {
 /** Outcome of removing a member (cr-0088). */
 sealed interface RemoveMemberOutcome {
     object Ok : RemoveMemberOutcome
+    object Suspended : RemoveMemberOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RemoveMemberOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RemoveMemberOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RemoveMemberOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object MemberNotFound : RemoveMemberOutcome, HttpFailure by Failures.memberNotFound
@@ -85,6 +100,8 @@ sealed interface RemoveMemberOutcome {
 /** Outcome of a rotation-commit (cr-0088). */
 sealed interface RotateOutcome {
     data class Ok(val epoch: Int) : RotateOutcome
+    object Suspended : RotateOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RotateOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RotateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RotateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
 }
@@ -92,6 +109,7 @@ sealed interface RotateOutcome {
 /** Outcome of reading the epoch-chain links (cr-0088). */
 sealed interface EpochsOutcome {
     data class Links(val links: List<Pair<Int, String>>) : EpochsOutcome
+    object Suspended : EpochsOutcome, HttpFailure by Failures.tenantSuspended
     object NotKeyHolder : EpochsOutcome, HttpFailure by Failures.notKeyHolder
     object ScopeNotFound : EpochsOutcome, HttpFailure by Failures.scopeNotFound
 }
@@ -99,9 +117,10 @@ sealed interface EpochsOutcome {
 /** Outcome of renaming a group (cr-0097). Owner-gated, GROUP-only, active-only, current-epoch-only. */
 sealed interface RenameGroupOutcome {
     object Ok : RenameGroupOutcome
+    object Suspended : RenameGroupOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RenameGroupOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RenameGroupOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RenameGroupOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    object PendingDeletion : RenameGroupOutcome, HttpFailure by httpFailure("scope_pending_deletion", CONFLICT)
     object StaleEpoch : RenameGroupOutcome, HttpFailure by httpFailure("stale_epoch", CONFLICT)
 }
 
@@ -109,9 +128,10 @@ sealed interface RenameGroupOutcome {
  *  (PERSONAL has no icon), active-only, current-epoch-only — the [RenameGroupOutcome] shape one scope-kind up. */
 sealed interface SetScopeIconOutcome {
     object Ok : SetScopeIconOutcome
+    object Suspended : SetScopeIconOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : SetScopeIconOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : SetScopeIconOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : SetScopeIconOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    object PendingDeletion : SetScopeIconOutcome, HttpFailure by httpFailure("scope_pending_deletion", CONFLICT)
     object StaleEpoch : SetScopeIconOutcome, HttpFailure by httpFailure("stale_epoch", CONFLICT)
 }
 
@@ -119,6 +139,8 @@ sealed interface SetScopeIconOutcome {
  *  a removal carries no ciphertext that could be stale — and idempotent. */
 sealed interface ClearScopeIconOutcome {
     object Ok : ClearScopeIconOutcome
+    object Suspended : ClearScopeIconOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : ClearScopeIconOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : ClearScopeIconOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : ClearScopeIconOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
 }
@@ -126,23 +148,27 @@ sealed interface ClearScopeIconOutcome {
 /** Outcome of soft-deleting a group (cr-0090). */
 sealed interface DeleteGroupOutcome {
     object Ok : DeleteGroupOutcome
+    object Suspended : DeleteGroupOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : DeleteGroupOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : DeleteGroupOutcome, HttpFailure by Failures.scopeNotFound
     object NotGroup : DeleteGroupOutcome, HttpFailure by httpFailure("not_group", CONFLICT)
     object NotOwner : DeleteGroupOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    object AlreadyDeleted : DeleteGroupOutcome, HttpFailure by httpFailure("scope_already_deleted", CONFLICT)
 }
 
 /** Outcome of restoring a soft-deleted group (cr-0090). */
 sealed interface RestoreGroupOutcome {
     object Ok : RestoreGroupOutcome
+    object Suspended : RestoreGroupOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeNotFound : RestoreGroupOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RestoreGroupOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object NotDeleted : RestoreGroupOutcome, HttpFailure by httpFailure("not_deleted", CONFLICT)
+    object NotGroup : RestoreGroupOutcome, HttpFailure by httpFailure("not_group", CONFLICT)
 }
 
 /** Outcome of listing a scope's members (the directory, cr-0077). */
 sealed interface ListMembersOutcome {
     data class Members(val rows: List<ScopeMemberRow>) : ListMembersOutcome
+    object Suspended : ListMembersOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeNotFound : ListMembersOutcome, HttpFailure by Failures.scopeNotFound
     object NotKeyHolder : ListMembersOutcome, HttpFailure by Failures.notKeyHolder
 }
@@ -150,19 +176,22 @@ sealed interface ListMembersOutcome {
 /**
  * Use-case logic for a member's scopes (en.spaces.personal-scope, cr-0026). The active tenant arrives resolved
  * (`RequestTenant`, from the request Host) as an id, null when the Host names no tenant; the caller must already
- * belong to it (you get a personal scope in tenants you are a
- * member of). Birth is client-driven and operator-blind — the handler only persists the ciphertext grant.
+ * belong to it (you get a personal scope in tenants you are a member of). Every scope- and tenant-addressed
+ * operation here asks the one gate, [ScopeAccess], before anything else (uc.spaces.scope-access). Birth is
+ * client-driven and operator-blind — the handler only persists the ciphertext grant.
  */
 @ApplicationScoped
 class ScopesHandler(
     private val store: ScopesStore,
     private val capabilities: CapabilityRegistry,
     private val shares: SharingStore,
+    private val access: ScopeAccess,
 ) {
 
     fun createPersonal(userId: String, tenantId: String?, wrappedGrant: String): CreatePersonalOutcome {
         tenantId ?: return CreatePersonalOutcome.NoTenant
-        if (!store.isMember(userId, tenantId)) return CreatePersonalOutcome.NoTenant
+        access.check(userId, tenantId, WRITE)
+            .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
         return CreatePersonalOutcome.Created(store.createPersonal(userId, tenantId, wrappedGrant))
     }
@@ -177,7 +206,8 @@ class ScopesHandler(
         // server-side even if a stale client still offers the affordance.
         if (!capabilities.isActive(CapabilityIds.SPACES_GROUPS)) return CreateGroupOutcome.CapabilityDisabled
         tenantId ?: return CreateGroupOutcome.NoTenant
-        if (!store.isMember(userId, tenantId)) return CreateGroupOutcome.NoTenant
+        access.check(userId, tenantId, WRITE)
+            .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
         return CreateGroupOutcome.Created(store.createGroup(userId, tenantId, encryptedName, wrappedGrant))
     }
 
@@ -188,17 +218,17 @@ class ScopesHandler(
 
     /**
      * Rename a GROUP (uc.spaces.rename-group, cr-0097, ADR 0027). Owner-gated ([ADR 0014](0014) §4 — the name
-     * authority); GROUP-only; rejected while pending-deletion (a name-write during the grace period). The client
+     * authority); GROUP-only; refused while the group is being deleted, like every write (the gate). The client
      * sealed the new name under `K_name` of the **current** epoch and sends that epoch back; the server enforces
      * `nameEpoch == currentEpoch` (`StaleEpoch` on a concurrent rotation) so the name stays forward-secret, then
      * overwrites the row's ciphertext name + name-epoch. Name-only — no `K_SC` rotation, no re-grant. Operator-blind:
      * the server never sees a key or the plaintext name.
      */
     fun renameGroup(callerId: String, scopeId: String, encryptedName: String, nameEpoch: Int): RenameGroupOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return RenameGroupOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(RenameGroupOutcome.ScopeNotFound, RenameGroupOutcome.Suspended, RenameGroupOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RenameGroupOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return RenameGroupOutcome.NotOwner
-        if (store.deletedAt(scopeId) != null) return RenameGroupOutcome.PendingDeletion
         if (store.currentEpoch(scopeId) != nameEpoch) return RenameGroupOutcome.StaleEpoch
         store.renameGroup(scopeId, encryptedName, nameEpoch)
         return RenameGroupOutcome.Ok
@@ -208,20 +238,20 @@ class ScopesHandler(
      * Set or replace a space icon (uc.spaces.set-space-icon). Owner-gated on the scope **root** row — for a
      * `kind=TENANT` row `isScopeOwner(caller, scopeId==tenantId)` **is** the tenant-owner check (ADR 0007 — no new
      * query, and no opening to the `tenantId`-only gate cr-0163 fixed); a GROUP root gates the same way and a GROUP
-     * **co-owner** is an OWNER too. TENANT or GROUP only — a PERSONAL scope has no icon (rejected); rejected while
-     * pending-deletion. The client sealed the padded, constant-length
+     * **co-owner** is an OWNER too. TENANT or GROUP only — a PERSONAL scope has no icon (rejected); refused while
+     * the scope is being deleted, like every write (the gate). The client sealed the padded, constant-length
      * icon under `K_icon` of the **current** epoch and sends that epoch back; the server enforces `iconEpoch ==
      * currentEpoch` (`StaleEpoch` on a concurrent rotation) so a replace stays forward-secret, then overwrites the
      * row's ciphertext icon + icon-epoch. (A GROUP rotates on member-removal, ADR 0024, so its `iconEpoch` may
      * later sit below `currentEpoch` — the read peels the chain; a rotation never re-seals the icon here.) Guard
-     * order is [renameGroup]'s exactly (membership → kind → owner → active → epoch, ADR 0042). Operator-blind: the
+     * order is [renameGroup]'s exactly (access gate → kind → owner → epoch, ADR 0042). Operator-blind: the
      * server never sees a key or the image.
      */
     fun setScopeIcon(callerId: String, scopeId: String, sealedIcon: String, iconEpoch: Int): SetScopeIconOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return SetScopeIconOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(SetScopeIconOutcome.ScopeNotFound, SetScopeIconOutcome.Suspended, SetScopeIconOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) == ScopeEntity.PERSONAL) return SetScopeIconOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return SetScopeIconOutcome.NotOwner
-        if (store.deletedAt(scopeId) != null) return SetScopeIconOutcome.PendingDeletion
         if (store.currentEpoch(scopeId) != iconEpoch) return SetScopeIconOutcome.StaleEpoch
         store.setIcon(scopeId, sealedIcon, iconEpoch)
         return SetScopeIconOutcome.Ok
@@ -230,12 +260,13 @@ class ScopesHandler(
     /**
      * Remove a space icon (uc.spaces.set-space-icon A5) — reset the row's icon + epoch; every member falls back to
      * the initial. Same owner gate as the set, but **no epoch check** (a removal carries no ciphertext that could
-     * be sealed under a stale epoch) and idempotent. Membership-gated first (ADR 0042), then kind (PERSONAL is
-     * rejected), then owner. A clear is not blocked while pending-deletion — dropping an icon off a dying scope is
-     * inconsequential (unlike a set, which writes ciphertext that must stay epoch-current).
+     * be sealed under a stale epoch) and idempotent. Access-gated first (uc.spaces.scope-access), then kind
+     * (PERSONAL is rejected), then owner. Like every write it is refused while the scope is being deleted: the grace
+     * window promises that nothing about the space changes, its icon included.
      */
     fun clearScopeIcon(callerId: String, scopeId: String): ClearScopeIconOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return ClearScopeIconOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(ClearScopeIconOutcome.ScopeNotFound, ClearScopeIconOutcome.Suspended, ClearScopeIconOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) == ScopeEntity.PERSONAL) return ClearScopeIconOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return ClearScopeIconOutcome.NotOwner
         store.clearIcon(scopeId)
@@ -250,13 +281,14 @@ class ScopesHandler(
      * returned row has its `email` nulled (the add response never exposes it).
      */
     fun addGroupMember(callerId: String, scopeId: String, username: String, sealedNameKey: String?): AddGroupMemberOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return AddGroupMemberOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(AddGroupMemberOutcome.ScopeNotFound, AddGroupMemberOutcome.Suspended, AddGroupMemberOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return AddGroupMemberOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return AddGroupMemberOutcome.NotOwner
         val tenantId = store.scopeTenantId(scopeId) ?: return AddGroupMemberOutcome.ScopeNotFound
         val targetId = store.resolveUsernameInTenant(tenantId, username) ?: return AddGroupMemberOutcome.MemberNotFound
-        if (!store.isMember(targetId, tenantId)) return AddGroupMemberOutcome.MemberNotFound
-        if (store.isScopeMember(targetId, scopeId)) return AddGroupMemberOutcome.AlreadyMember
+        if (!store.belongsToTenant(targetId, tenantId)) return AddGroupMemberOutcome.MemberNotFound
+        if (store.holdsAnyRow(targetId, scopeId)) return AddGroupMemberOutcome.AlreadyMember
         // Consent-first (cr-0096, ADR 0027): if the target asked to be consulted, record a soft `pendingConsent`
         // membership grant-delivery skips — so `K_SC` is gated **before** the wrap — carrying the wrapped name-key
         // `K_name`. The owner must have derived + sealed it (learned consent is required from the prior resolve);
@@ -273,7 +305,7 @@ class ScopesHandler(
 
     /**
      * Resolve a per-tenant username to a group-add candidate (uc.spaces.consent-group-add, cr-0094) — records
-     * nothing. Membership-gated first, then owner-gated (the same gates as the add). The **owner** gate is
+     * nothing. Access-gated first, then owner-gated (the same gates as the add). The **owner** gate is
      * convenience, **not** a confidentiality barrier: any tenant member can create a group and become its owner in
      * O(1), so username → identity-public-key → consent-flag are effectively enumerable by every tenant member.
      * That is within the metadata model (per-tenant usernames + identity pubkeys are tenant-visible, ADR 0023/0014
@@ -283,12 +315,13 @@ class ScopesHandler(
      * Returns the candidate's identity public key (to seal the derived group name-key to) + whether consent is required.
      */
     fun resolveGroupMember(callerId: String, scopeId: String, username: String): ResolveCandidateOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return ResolveCandidateOutcome.ScopeNotFound
+        access.check(callerId, scopeId, READ)
+            .refusal(ResolveCandidateOutcome.ScopeNotFound, ResolveCandidateOutcome.Suspended)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return ResolveCandidateOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return ResolveCandidateOutcome.NotOwner
         val tenantId = store.scopeTenantId(scopeId) ?: return ResolveCandidateOutcome.ScopeNotFound
         val targetId = store.resolveUsernameInTenant(tenantId, username) ?: return ResolveCandidateOutcome.MemberNotFound
-        if (!store.isMember(targetId, tenantId)) return ResolveCandidateOutcome.MemberNotFound
+        if (!store.belongsToTenant(targetId, tenantId)) return ResolveCandidateOutcome.MemberNotFound
         val pubkey = store.identityPublicKeyOf(targetId) ?: return ResolveCandidateOutcome.MemberNotFound
         return ResolveCandidateOutcome.Ok(
             ResolvedCandidateRow(targetId, username.trim().lowercase(), pubkey, store.requiresGroupAddConsent(targetId)),
@@ -327,7 +360,8 @@ class ScopesHandler(
      * the **last-owner guard** rejects demoting the last OWNER (ADR 0007). A pure role change — no key moves.
      */
     fun setMemberRole(callerId: String, scopeId: String, targetId: String, role: String): SetRoleOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return SetRoleOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(SetRoleOutcome.ScopeNotFound, SetRoleOutcome.Suspended, SetRoleOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return SetRoleOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return SetRoleOutcome.NotOwner
         val current = store.memberRole(targetId, scopeId) ?: return SetRoleOutcome.MemberNotFound
@@ -346,7 +380,8 @@ class ScopesHandler(
      * the last OWNER cannot be removed. **Layer-2** forward-secrecy is the caller's follow-up rotation.
      */
     fun removeMember(callerId: String, scopeId: String, targetId: String): RemoveMemberOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return RemoveMemberOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(RemoveMemberOutcome.ScopeNotFound, RemoveMemberOutcome.Suspended, RemoveMemberOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RemoveMemberOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return RemoveMemberOutcome.NotOwner
         val current = store.memberRole(targetId, scopeId) ?: return RemoveMemberOutcome.MemberNotFound
@@ -363,7 +398,8 @@ class ScopesHandler(
      * remaining members. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
      */
     fun rotateScope(callerId: String, scopeId: String, wrappedPrev: String, grants: List<Pair<String, String>>): RotateOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return RotateOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
         return RotateOutcome.Ok(store.rotate(scopeId, wrappedPrev, grants))
@@ -371,56 +407,64 @@ class ScopesHandler(
 
     /**
      * Soft-delete a group (uc.spaces.delete-group, cr-0090, ADR 0014 §6) — set the `deletedAt` marker so the
-     * group enters its grace period (read-only + restorable). Owner-gated; GROUP-only; idempotent (a group already
-     * pending-deletion is rejected). Memberships/grants are untouched, so a restore is trivial.
+     * group enters its grace period (read-only + restorable). Owner-gated; GROUP-only; a group already being
+     * deleted answers `scope_deleting` like any other write. Memberships/grants are untouched, so a restore is trivial.
      */
     fun deleteGroup(callerId: String, scopeId: String): DeleteGroupOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return DeleteGroupOutcome.ScopeNotFound
+        access.check(callerId, scopeId, WRITE)
+            .refusal(DeleteGroupOutcome.ScopeNotFound, DeleteGroupOutcome.Suspended, DeleteGroupOutcome.Deleting)?.let { return it }
         val kind = store.scopeKind(scopeId) ?: return DeleteGroupOutcome.ScopeNotFound
         if (kind != ScopeEntity.GROUP) return DeleteGroupOutcome.NotGroup
         if (!store.isScopeOwner(callerId, scopeId)) return DeleteGroupOutcome.NotOwner
-        if (store.deletedAt(scopeId) != null) return DeleteGroupOutcome.AlreadyDeleted
         store.softDelete(scopeId, java.time.Instant.now())
         return DeleteGroupOutcome.Ok
     }
 
     /**
-     * Restore a group from pending-deletion (cr-0090) — clear the marker, active again for everyone. Owner-gated;
-     * `409` if the group is not pending-deletion; a hard-purged scope is simply gone (404 from `scopeKind`).
+     * Restore a group from its deletion grace (cr-0090) — clear the marker, active again for everyone. The one write
+     * a deleting group allows (uc.spaces.scope-access A1): an owner who still belongs to the tenant, on a GROUP;
+     * `409 not_deleted` if the group is not being deleted; a hard-purged scope is simply gone (the gate's 404).
      */
     fun restoreGroup(callerId: String, scopeId: String): RestoreGroupOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return RestoreGroupOutcome.ScopeNotFound
-        if (store.scopeKind(scopeId) == null) return RestoreGroupOutcome.ScopeNotFound
+        // The one write a deleting group allows (uc.spaces.scope-access A1): `Deleting` is its precondition, not a
+        // refusal — and only that is waived, so a former tenant member still stops at the gate (A2).
+        val state = access.check(callerId, scopeId, WRITE)
+        if (state != Access.Deleting) {
+            state.refusal(RestoreGroupOutcome.ScopeNotFound, RestoreGroupOutcome.Suspended)?.let { return it }
+        }
+        if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RestoreGroupOutcome.NotGroup
         if (!store.isScopeOwner(callerId, scopeId)) return RestoreGroupOutcome.NotOwner
-        if (store.deletedAt(scopeId) == null) return RestoreGroupOutcome.NotDeleted
+        if (state != Access.Deleting) return RestoreGroupOutcome.NotDeleted
         store.restore(scopeId)
         return RestoreGroupOutcome.Ok
     }
 
     /**
-     * The scope's epoch-chain links — any key-holder in the scope may read them (cr-0088, ADR 0024). Membership
-     * first (ADR 0042): a non-member gets the same 404 as a bogus id. A member without a grant gets 403 — they
+     * The scope's epoch-chain links — any key-holder in the scope may read them (cr-0088, ADR 0024). The access
+     * gate first (ADR 0042): a non-member gets the same 404 as a bogus id. A member without a grant gets 403 — they
      * already know the scope exists, so that discloses nothing. (Until cr-0162 this probed the epoch **before**
      * the gate, which made the 404-vs-403 split an existence oracle for a stranger.)
      */
     fun listEpochs(callerId: String, scopeId: String): EpochsOutcome {
-        if (!store.isScopeMember(callerId, scopeId)) return EpochsOutcome.ScopeNotFound
+        access.check(callerId, scopeId, READ)
+            .refusal(EpochsOutcome.ScopeNotFound, EpochsOutcome.Suspended)?.let { return it }
         if (!store.holdsGrant(callerId, scopeId)) return EpochsOutcome.NotKeyHolder
         return EpochsOutcome.Links(store.epochLinks(scopeId))
     }
 
-    /** Every tenant the caller belongs to (Host-independent) — the space switcher. */
+    /** Every tenant the caller holds an accepted membership in (Host-independent) — the space switcher. */
     fun myTenants(userId: String): List<TenantRow> = store.myTenants(userId)
 
     /**
      * The member directory of a scope (uc.spaces.add-member, ADR 0020). Only a **key-holder** in the scope may
-     * read it. Membership first (ADR 0042): a non-member — or a bogus scope id — gets a uniform 404, so scope
+     * read it. The access gate first (ADR 0042): a non-member — or a bogus scope id — gets a uniform 404, so scope
      * existence is not enumerable; a member without a grant gets 403. Returns each member's per-tenant identity
      * (username + sealed name), pubkey + grant-present; **email is owner-only** — nulled for a non-owner caller
      * (ADR 0023).
      */
     fun listMembers(userId: String, scopeId: String): ListMembersOutcome {
-        if (!store.isScopeMember(userId, scopeId)) return ListMembersOutcome.ScopeNotFound
+        access.check(userId, scopeId, READ)
+            .refusal(ListMembersOutcome.ScopeNotFound, ListMembersOutcome.Suspended)?.let { return it }
         if (!store.holdsGrant(userId, scopeId)) return ListMembersOutcome.NotKeyHolder
         val tenantId = store.scopeTenantId(scopeId) ?: return ListMembersOutcome.ScopeNotFound
         val tenantOwner = store.isTenantOwner(userId, tenantId)

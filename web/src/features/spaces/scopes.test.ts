@@ -395,7 +395,7 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const iconKey = deriveSpaceIconKey(scopeKey)
     const sealedIcon = sealIcon(iconKey, encoded)
     const wrappedGrant = b64std(v1.asymWrap(v1.hybridPublic(ID.priv), scopeKey, SCOPE_GRANT, { nonce: v1.randomBytes(12) }))
-    return { tenantId: 't1', name: 'Fam', domain: 'd', role: 'OWNER', iconEpoch: 0, wrappedGrant, sealedIcon }
+    return { tenantId: 't1', name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, wrappedGrant, sealedIcon }
   }
 
   it('opens the caller’s own grant and returns the encoded icon bytes', async () => {
@@ -406,8 +406,8 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
   })
 
   it('returns null (→ the initial) when the tenant has no icon or the caller holds no grant', async () => {
-    expect(await openMyTenantIcon({ tenantId: 't1', name: 'Fam', domain: 'd', role: 'MEMBER', iconEpoch: 0 })).toBeNull()
-    expect(await openMyTenantIcon({ tenantId: 't1', name: 'Fam', domain: 'd', role: 'MEMBER', iconEpoch: 0, sealedIcon: 'c2VhbGVk', wrappedGrant: null })).toBeNull()
+    expect(await openMyTenantIcon({ tenantId: 't1', name: 'Fam', domain: 'd', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 })).toBeNull()
+    expect(await openMyTenantIcon({ tenantId: 't1', name: 'Fam', domain: 'd', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0, sealedIcon: 'c2VhbGVk', wrappedGrant: null })).toBeNull()
   })
 
   it('returns null (never throws) when the grant opens but the icon was sealed under a different key', async () => {
@@ -415,7 +415,7 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const scopeKey = v1.randomBytes(32)
     const wrappedGrant = b64std(v1.asymWrap(v1.hybridPublic(ID.priv), scopeKey, SCOPE_GRANT, { nonce: v1.randomBytes(12) }))
     const foreign = sealIcon(deriveSpaceIconKey(v1.randomBytes(32)), new Uint8Array([9, 9, 9]))
-    const tenant: MyTenant = { tenantId: 't1', name: 'Fam', domain: 'd', role: 'OWNER', iconEpoch: 0, wrappedGrant, sealedIcon: foreign }
+    const tenant: MyTenant = { tenantId: 't1', name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, wrappedGrant, sealedIcon: foreign }
     expect(await openMyTenantIcon(tenant)).toBeNull()
   })
 })

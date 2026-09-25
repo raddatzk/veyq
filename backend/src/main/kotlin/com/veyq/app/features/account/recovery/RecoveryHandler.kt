@@ -114,7 +114,7 @@ class RecoveryHandler(
     fun deliver(email: String, tenant: ResolvedTenant): RequestOutcome {
         val normalized = normalizeEmail(email)
         val user = QuarkusTransaction.requiringNew().call {
-            accounts.findByEmail(normalized)?.takeIf { membership.isMember(it.id, tenant.id) }
+            accounts.findByEmail(normalized)?.takeIf { membership.belongsToTenant(it.id, tenant.id) }
         } ?: return RequestOutcome.NO_ACCOUNT
 
         val token = Tokens.random()

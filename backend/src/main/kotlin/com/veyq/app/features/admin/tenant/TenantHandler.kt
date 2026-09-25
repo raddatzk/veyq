@@ -12,7 +12,12 @@ import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.normalizeEmail
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -72,6 +77,7 @@ sealed interface ReactivateOutcome {
 /** Result of a tenant owner inviting a member by email (cr-0077). */
 sealed interface MemberInviteOutcome {
     data class Done(val invite: InviteView, val delivery: DeliveryResult) : MemberInviteOutcome
+    data object Suspended : MemberInviteOutcome, HttpFailure by Failures.tenantSuspended
     /** Over the invite-mail rate limit (cr-email-invite-send-hardening) — mapped to 429 + Retry-After, no mint. */
     data class RateLimited(val retryAfterSeconds: Long) : MemberInviteOutcome
     data object NotFound : MemberInviteOutcome, HttpFailure by Failures.tenantNotFound
@@ -90,6 +96,7 @@ sealed interface MemberInviteOutcome {
 /** Result of listing a tenant's pending member invites (cr-0082). */
 sealed interface MemberInvitesOutcome {
     data class Listed(val invites: List<PendingInviteRow>) : MemberInvitesOutcome
+    data object Suspended : MemberInvitesOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : MemberInvitesOutcome, HttpFailure by Failures.tenantNotFound
     data object NotOwner : MemberInvitesOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
 }
@@ -97,6 +104,7 @@ sealed interface MemberInvitesOutcome {
 /** Result of re-issuing a pending member invite (cr-0082). */
 sealed interface ReissueOutcome {
     data class Done(val invite: InviteView, val delivery: DeliveryResult) : ReissueOutcome
+    data object Suspended : ReissueOutcome, HttpFailure by Failures.tenantSuspended
     /** Over the invite-mail rate limit (cr-email-invite-send-hardening) — mapped to 429 + Retry-After, no mint. */
     data class RateLimited(val retryAfterSeconds: Long) : ReissueOutcome
     data object NotFound : ReissueOutcome, HttpFailure by Failures.tenantNotFound        // no such tenant
@@ -113,6 +121,7 @@ sealed interface ReissueOutcome {
 /** Result of revoking a pending member invite (cr-0082). */
 sealed interface RevokeMemberInviteOutcome {
     data object Done : RevokeMemberInviteOutcome
+    data object Suspended : RevokeMemberInviteOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : RevokeMemberInviteOutcome, HttpFailure by Failures.tenantNotFound
     data object NotOwner : RevokeMemberInviteOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object InviteNotFound : RevokeMemberInviteOutcome, HttpFailure by httpFailure("invite_not_found", FailureStatus.NOT_FOUND)
@@ -121,6 +130,7 @@ sealed interface RevokeMemberInviteOutcome {
 /** Result of a tenant owner removing a member — the ACL-revoke cascade + orphan rule (cr-0091). */
 sealed interface RemoveTenantMemberOutcome {
     data object Ok : RemoveTenantMemberOutcome
+    data object Suspended : RemoveTenantMemberOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : RemoveTenantMemberOutcome, HttpFailure by Failures.tenantNotFound  // no such tenant, or the caller is not a member (indistinguishable)
     data object NotOwner : RemoveTenantMemberOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)       // caller is not the tenant OWNER
     data object MemberNotFound : RemoveTenantMemberOutcome, HttpFailure by Failures.memberNotFound  // target holds no tenant-scope membership
@@ -145,6 +155,7 @@ class TenantHandler(
     private val shares: SharingStore,
     private val ingress: TenantIngressProjector,
     private val accounts: AccountStore,
+    private val access: ScopeAccess,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -250,19 +261,20 @@ class TenantHandler(
     /**
      * Take an ACTIVE tenant offline (uc.admin.suspend-tenant, ADR 0066). Deliberately **not** `revoke`'s shape:
      * that hard-deletes a tenant nothing was ever behind, this one preserves everything and changes only
-     * reachability — the lockout itself is `TenantSuspensionFilter`, which reads the very row this writes.
+     * reachability — the lockout itself is the scope-access gate every operation on the tenant asks (from any
+     * domain), plus `TenantSuspensionFilter` on the tenant's own domain; both read the very row this writes.
      *
      * Nothing else happens here on purpose. In particular **no session is revoked**: sessions are account-global,
      * not tenant-scoped (ADR 0004 — `SessionFamilyEntity` carries no tenantId), so revoking a member's sessions
      * to lock them out of *this* tenant would sign them out of every other tenant they belong to as well. The
-     * gate keys on the resolved Host, so it already refuses every request the instant the status flips; a
-     * still-valid token against a suspended tenant is not a defect to patch here.
+     * gate keys on the tenant an operation acts on, so it already refuses every such request the instant the status
+     * flips; a still-valid token against a suspended tenant is not a defect to patch here.
      *
      * The existence probe only separates 404 from 409 — the transition itself is the store's guarded UPDATE.
      *
      * The one thing that *does* follow is [reproject]: a suspended tenant drops out of the routing projection
-     * (ADR 0063). That is a **secondary** effect and not the lockout — the request-boundary gate is, and it is
-     * what still refuses a request that reaches this instance by any other route while the file catches up.
+     * (ADR 0063). That is a **secondary** effect and not the lockout — the gate is, and it is what still refuses a
+     * request that reaches this instance by any other route while the file catches up.
      */
     fun suspend(tenantId: String): SuspendOutcome {
         val outcome = QuarkusTransaction.requiringNew().call {
@@ -292,13 +304,14 @@ class TenantHandler(
      * key-holder (cr-0076) — this only mints the admission token.
      */
     fun inviteMember(callerId: String, tenantId: String, email: String): MemberInviteOutcome = commitThenSend {
-        if (!store.hasMembership(callerId, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotFound)
+        access.check(callerId, tenantId, WRITE)
+            .refusal(MemberInviteOutcome.NotFound, MemberInviteOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotFound)
         if (!store.isOwner(callerId, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotOwner)
         if (tenant.status != TenantEntity.ACTIVE) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotActive)
         val normalizedEmail = normalizeEmail(email)
         val existing = accounts.findByEmail(normalizedEmail)
-        if (existing != null && store.hasMembership(existing.id, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.AlreadyMember)
+        if (existing != null && store.belongsToTenant(existing.id, tenantId)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.AlreadyMember)
         // Mail is the only channel for a member invite (ADR 0055 §2), so ask *before* minting: an invitation that
         // cannot be delivered is a live secret with no recipient, and there is no copy-link to hand it to.
         if (!mailer.canSend(tenant.id)) return@commitThenSend MintResult.Rejected(MemberInviteOutcome.MailUnavailable)
@@ -338,7 +351,8 @@ class TenantHandler(
     /** List a tenant's pending member invites — owner-gated (cr-0082). */
     @Transactional
     fun listMemberInvites(callerId: String, tenantId: String): MemberInvitesOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return MemberInvitesOutcome.NotFound
+        access.check(callerId, tenantId, READ)
+            .refusal(MemberInvitesOutcome.NotFound, MemberInvitesOutcome.Suspended)?.let { return it }
         store.findTenant(tenantId) ?: return MemberInvitesOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return MemberInvitesOutcome.NotOwner
         return MemberInvitesOutcome.Listed(store.listPendingMemberInvites(tenantId))
@@ -346,7 +360,8 @@ class TenantHandler(
 
     /** Re-issue a pending member invite: supersede it + mint a fresh secret for the same email (cr-0082). */
     fun reissueMemberInvite(callerId: String, tenantId: String, inviteId: String): ReissueOutcome = commitThenSend {
-        if (!store.hasMembership(callerId, tenantId)) return@commitThenSend MintResult.Rejected(ReissueOutcome.NotFound)
+        access.check(callerId, tenantId, WRITE)
+            .refusal(ReissueOutcome.NotFound, ReissueOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.NotFound)
         if (!store.isOwner(callerId, tenantId)) return@commitThenSend MintResult.Rejected(ReissueOutcome.NotOwner)
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return@commitThenSend MintResult.Rejected(ReissueOutcome.InviteNotFound)
@@ -372,7 +387,8 @@ class TenantHandler(
     /** Revoke a pending member invite (soft-terminal, additive-safe) — owner-gated (cr-0082). */
     @Transactional
     fun revokeMemberInvite(callerId: String, tenantId: String, inviteId: String): RevokeMemberInviteOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return RevokeMemberInviteOutcome.NotFound
+        access.check(callerId, tenantId, WRITE)
+            .refusal(RevokeMemberInviteOutcome.NotFound, RevokeMemberInviteOutcome.Suspended)?.let { return it }
         store.findTenant(tenantId) ?: return RevokeMemberInviteOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return RevokeMemberInviteOutcome.NotOwner
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return RevokeMemberInviteOutcome.InviteNotFound
@@ -398,7 +414,8 @@ class TenantHandler(
      */
     @Transactional
     fun removeMember(callerId: String, tenantId: String, targetId: String): RemoveTenantMemberOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return RemoveTenantMemberOutcome.NotFound
+        access.check(callerId, tenantId, WRITE)
+            .refusal(RemoveTenantMemberOutcome.NotFound, RemoveTenantMemberOutcome.Suspended)?.let { return it }
         if (!store.isOwner(callerId, tenantId)) return RemoveTenantMemberOutcome.NotOwner
         // Impure shell: load the directory (ownerCount pre-resolved per row), ask the pure policy, execute its steps.
         // Every branch and boundary of the decision lives in RemovalPolicy, where it is mutation-verified (ADR 0045 §2).

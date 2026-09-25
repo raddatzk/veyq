@@ -5,12 +5,12 @@
     "sharing.public-links": {
       "serves": ["uc.sharing.share-public-viewer", "uc.sharing.share-contributor"],
       "source": "operator-policy",
-      "description": "Public read/contribute share links of a personal-scope Memory (viewer + contributor roles). Disabled => the Share affordance is hidden client-side and createShare(VIEWER|CONTRIBUTOR) is rejected server-side with 422 capability_disabled."
+      "description": "Public read/contribute share links of a personal-scope Memory (viewer + contributor roles). Disabled => the Share affordance is hidden client-side and createShare(VIEWER|CONTRIBUTOR) and reactivateShare of such a link are rejected server-side with 422 capability_disabled."
     },
     "sharing.uploader-links": {
       "serves": ["uc.sharing.share-uploader"],
       "source": "operator-policy",
-      "description": "Write-only uploader (drop-box) share links. Disabled => the Uploader role option is hidden client-side and createShare(UPLOADER) is rejected server-side with 422 capability_disabled."
+      "description": "Write-only uploader (drop-box) share links. Disabled => the Uploader role option is hidden client-side and createShare(UPLOADER) and reactivateShare of such a link are rejected server-side with 422 capability_disabled."
     },
     "spaces.groups": {
       "serves": ["uc.spaces.add-group-member", "uc.spaces.manage-group-members", "uc.spaces.rename-group", "uc.spaces.delete-group", "uc.spaces.consent-group-add"],

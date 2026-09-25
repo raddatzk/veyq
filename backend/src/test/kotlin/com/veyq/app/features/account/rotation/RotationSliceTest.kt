@@ -3,8 +3,8 @@ package com.veyq.app.features.account.rotation
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.account.pairing.DevicePairingEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.identity.MasterKeyWrapEntity

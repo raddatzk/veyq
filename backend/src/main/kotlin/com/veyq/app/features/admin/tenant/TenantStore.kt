@@ -1,8 +1,9 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -123,8 +124,9 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, inviteId)
     }
 
-    /** Whether the user holds any membership in the tenant. */
-    fun hasMembership(userId: String, tenantId: String): Boolean = membership.isMember(userId, tenantId)
+    /** Whether [userId] belongs to the tenant — an accepted root membership. A question about a *target* (an
+     *  invitee, a returning member); whether a *caller* may act on the tenant is the scope-access gate's. */
+    fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
 
     /** Whether the user holds the OWNER membership of the tenant (the admission gate for member invites). */
     /** A tenant owner holds an OWNER membership on the tenant **root scope** (cr-0163), not merely any OWNER row

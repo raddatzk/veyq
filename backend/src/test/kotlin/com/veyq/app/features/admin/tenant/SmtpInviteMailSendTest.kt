@@ -7,6 +7,7 @@ import com.veyq.app.generated.model.DeliveryResult
 import com.veyq.app.shared.crypto.ConfigSecretKeyGuard
 import com.veyq.app.shared.crypto.ConfigSecretSeal
 import com.veyq.app.shared.instance.InstanceStore
+import com.veyq.app.shared.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject

@@ -9,54 +9,6 @@ import jakarta.persistence.Table
 import java.time.Instant
 
 /**
- * A tenant: a domain-scoped container resolved by Host. Operational metadata only — name, domain and the
- * intended owner email are cleartext; there is no content key here (the cold TENANT-scope birth that
- * activates a tenant is Slice B / cr-0010). PENDING until its owner accepts, then ACTIVE — and reversibly
- * SUSPENDED while a Server Owner has it offline (ADR 0066): an availability-only state that no key, grant,
- * content row or session takes part in, enforced by `TenantSuspensionFilter` at the request boundary.
- */
-@Entity
-@Table(name = "veyq_tenant")
-class TenantEntity : PanacheEntityBase {
-    @Id
-    @Column(name = "id", length = 36)
-    lateinit var id: String
-
-    @Column(name = "name", nullable = false, length = 100)
-    lateinit var name: String
-
-    @Column(name = "domain", nullable = false, length = 253)
-    lateinit var domain: String
-
-    @Column(name = "owner_email", nullable = false, length = 254)
-    lateinit var ownerEmail: String
-
-    @Column(name = "status", nullable = false, length = 16)
-    lateinit var status: String
-
-    @Column(name = "created_at", nullable = false)
-    lateinit var createdAt: Instant
-
-    /** cr-0114 (ADR 0035): the operator's per-locale terms markdown, serialized as a locale→markdown JSON map
-     *  (opaque TEXT). Null until the owner first publishes. Public operational content, never a key. */
-    @Column(name = "terms_markdown_by_locale")
-    var termsMarkdownByLocale: String? = null
-
-    /** cr-0114: the terms version, bumped only on a **normalized** change (idempotent re-saves don't). 0 = no
-     *  terms set (the member accept-gate never fires); a member whose accepted version is below this re-accepts. */
-    @Column(name = "terms_version", nullable = false)
-    var termsVersion: Int = 0
-
-    companion object : PanacheCompanionBase<TenantEntity, String> {
-        const val PENDING = "PENDING"
-        const val ACTIVE = "ACTIVE"
-
-        /** Reversibly offline (ADR 0066). `status` is the *only* column either transition touches. */
-        const val SUSPENDED = "SUSPENDED"
-    }
-}
-
-/**
  * A member's acceptance of a tenant's terms (cr-0114, ADR 0035). Keyed logically by (user_id, tenant_id) — a
  * surrogate id + a UNIQUE — it records the highest terms version the member accepted. **Coarse operational
  * metadata** (like membership), never content. When `acceptedVersion < tenant.termsVersion` the member accept

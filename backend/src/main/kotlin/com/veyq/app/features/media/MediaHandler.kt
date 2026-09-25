@@ -13,6 +13,10 @@ import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.UUID
@@ -47,16 +51,21 @@ data class DownloadItemResult(val presignedGets: List<PresignedRef>?, val error:
 
 sealed interface StartOutcome {
     data class Results(val items: List<UploadItemResult>) : StartOutcome
+    object Suspended : StartOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : StartOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : StartOutcome, HttpFailure by Failures.scopeNotFound
 }
 
 sealed interface CompleteOutcome {
     data class Results(val items: List<CompleteItemResult>) : CompleteOutcome
+    object Suspended : CompleteOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : CompleteOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : CompleteOutcome, HttpFailure by Failures.scopeNotFound
 }
 
 sealed interface ListMediaOutcome {
     /** A conditional-GET page (cr-0107, ADR 0033): the keyset delta + both revisions + the id-set — the latter present **only when a delete advanced `delete_revision`** past the client's `sinceDelete`. */
+    object Suspended : ListMediaOutcome, HttpFailure by Failures.tenantSuspended
     data class Page(
         val rows: List<MediaRow>,
         val mediaRevision: Int,
@@ -70,23 +79,29 @@ sealed interface ListMediaOutcome {
 
 sealed interface DownloadOutcome {
     data class Results(val items: List<DownloadItemResult>) : DownloadOutcome
+    object Suspended : DownloadOutcome, HttpFailure by Failures.tenantSuspended
     object NoScope : DownloadOutcome, HttpFailure by Failures.scopeNotFound
 }
 
 sealed interface MediaExifOutcome {
     /** The media's sealed panel bundle (opaque base64), or null when none was sealed. */
+    object Suspended : MediaExifOutcome, HttpFailure by Failures.tenantSuspended
     data class Found(val wrappedExif: String?) : MediaExifOutcome
     object NoMedia : MediaExifOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
 }
 
 sealed interface MetaOutcome {
     /** The media's sealed listed-metadata blob (opaque base64), or null when none/cleared. */
+    object Suspended : MetaOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : MetaOutcome, HttpFailure by Failures.scopeDeleting
     data class Found(val wrappedMeta: String?) : MetaOutcome
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
 }
 
 sealed interface CoverCommitOutcome {
     /** The committed cover blob ref (any prior cover blob was reclaimed). */
+    object Suspended : CoverCommitOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : CoverCommitOutcome, HttpFailure by Failures.scopeDeleting
     data class Ok(val ref: BlobRefData) : CoverCommitOutcome
     /** No such scope/node/upload, or the caller holds no grant (a 404, no reveal). */
     object NoTarget : CoverCommitOutcome, HttpFailure by Failures.nodeNotFound
@@ -98,6 +113,8 @@ sealed interface CoverCommitOutcome {
 
 sealed interface CoverDeleteOutcome {
     /** The cover blob was detached + reclaimed (or the node had none — idempotent). */
+    object Suspended : CoverDeleteOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : CoverDeleteOutcome, HttpFailure by Failures.scopeDeleting
     object Done : CoverDeleteOutcome
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoTarget : CoverDeleteOutcome, HttpFailure by Failures.nodeNotFound
@@ -105,6 +122,8 @@ sealed interface CoverDeleteOutcome {
 
 sealed interface DeleteMediaOutcome {
     /** The media is trashed (or was already trashed — idempotent). */
+    object Suspended : DeleteMediaOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : DeleteMediaOutcome, HttpFailure by Failures.scopeDeleting
     object Done : DeleteMediaOutcome
     /** No such scope/media, or the caller holds no grant (a 404, no reveal). */
     object NoMedia : DeleteMediaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
@@ -112,6 +131,8 @@ sealed interface DeleteMediaOutcome {
 
 sealed interface RestoreMediaOutcome {
     /** The media is restored (or was already live — idempotent). */
+    object Suspended : RestoreMediaOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RestoreMediaOutcome, HttpFailure by Failures.scopeDeleting
     object Done : RestoreMediaOutcome
     /** No such scope/media (e.g. already purged), or the caller holds no grant (a 404). */
     object NoMedia : RestoreMediaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
@@ -119,6 +140,8 @@ sealed interface RestoreMediaOutcome {
 
 sealed interface PurgeMediaOutcome {
     /** The trashed media was permanently deleted. */
+    object Suspended : PurgeMediaOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : PurgeMediaOutcome, HttpFailure by Failures.scopeDeleting
     object Done : PurgeMediaOutcome
     /** No such trashed media (unknown / already purged / still live), or no grant (a 404). */
     object NoMedia : PurgeMediaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
@@ -126,12 +149,15 @@ sealed interface PurgeMediaOutcome {
 
 sealed interface ListBucketsOutcome {
     data class Ok(val buckets: List<BucketRow>) : ListBucketsOutcome
+    object Suspended : ListBucketsOutcome, HttpFailure by Failures.tenantSuspended
     /** No such scope/node, or the caller holds no grant (a 404, no reveal). */
     object NoNode : ListBucketsOutcome, HttpFailure by Failures.nodeNotFound
 }
 
 sealed interface CreateBucketOutcome {
     data class Ok(val bucket: BucketRow) : CreateBucketOutcome
+    object Suspended : CreateBucketOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : CreateBucketOutcome, HttpFailure by Failures.scopeDeleting
     /** A given parentBucketId is missing or not a primary (sub-buckets nest one level) — a 403. */
     object Forbidden : CreateBucketOutcome, HttpFailure by httpFailure("illegal_target", FORBIDDEN)
     /** No such scope/node, or the caller holds no grant (a 404). */
@@ -140,6 +166,8 @@ sealed interface CreateBucketOutcome {
 
 sealed interface RenameBucketOutcome {
     data class Ok(val bucket: BucketRow) : RenameBucketOutcome
+    object Suspended : RenameBucketOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RenameBucketOutcome, HttpFailure by Failures.scopeDeleting
     /** No such scope/node/bucket, or the caller holds no grant (a 404). */
     object NoBucket : RenameBucketOutcome, HttpFailure by httpFailure("bucket_not_found", NOT_FOUND)
     /** The bucket is a primary (not renameable) — a 403. */
@@ -148,6 +176,8 @@ sealed interface RenameBucketOutcome {
 
 sealed interface DeleteBucketOutcome {
     /** The sub-bucket was deleted + its media reparented (or it did not exist — idempotent). */
+    object Suspended : DeleteBucketOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : DeleteBucketOutcome, HttpFailure by Failures.scopeDeleting
     object Done : DeleteBucketOutcome
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoNode : DeleteBucketOutcome, HttpFailure by Failures.nodeNotFound
@@ -157,6 +187,8 @@ sealed interface DeleteBucketOutcome {
 
 sealed interface MoveMediaOutcome {
     /** The media were moved. */
+    object Suspended : MoveMediaOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : MoveMediaOutcome, HttpFailure by Failures.scopeDeleting
     object Done : MoveMediaOutcome
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoNode : MoveMediaOutcome, HttpFailure by Failures.nodeNotFound
@@ -166,7 +198,8 @@ sealed interface MoveMediaOutcome {
 
 /**
  * Use-case logic for media blobs (en.memory.media, cr-0028). Operator-blind, batch-shaped, per-item results.
- * Scope access = the caller holds a membership (a non-member sees a top-level 404, not a reveal). Direct-to-
+ * Scope access is the one gate, [ScopeAccess], asked first (uc.spaces.scope-access): a non-member sees a top-level
+ * 404, not a reveal. Direct-to-
  * store: bytes never flow through here — `start` presigns PUTs, `complete` stats the stored objects
  * (declare-then-verify), `download` presigns GETs.
  *
@@ -181,12 +214,14 @@ class MediaHandler(
     private val store: MediaStore,
     private val blobStore: BlobStore,
     private val reclaim: StoreReclaimStore,
+    private val access: ScopeAccess,
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
 
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
-        if (!store.isMember(userId, scopeId)) return StartOutcome.NoScope
+        access.check(userId, scopeId, WRITE)
+            .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
         return StartOutcome.Results(startForScope(scopeId, declares, domain))
     }
 
@@ -222,7 +257,8 @@ class MediaHandler(
     }
 
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
-        if (!store.isMember(userId, scopeId)) return CompleteOutcome.NoScope
+        access.check(userId, scopeId, WRITE)
+            .refusal(CompleteOutcome.NoScope, CompleteOutcome.Suspended, CompleteOutcome.Deleting)?.let { return it }
         return CompleteOutcome.Results(completeForNode(scopeId, items, null, userId)) // cr-0113: member uploader → owner_key
     }
 
@@ -333,7 +369,8 @@ class MediaHandler(
         sinceDelete: Int,
         trashed: Boolean,
     ): ListMediaOutcome {
-        if (!store.isMember(userId, scopeId)) return ListMediaOutcome.NoNode
+        access.check(userId, scopeId, READ)
+            .refusal(ListMediaOutcome.NoNode, ListMediaOutcome.Suspended)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return ListMediaOutcome.NoNode
         // The Trash tab (cr-0110): a plain full list of the node's trashed media (carrying deletedAt/deletedBy), no
         // conditional-GET/delta — the trash isn't live-polled, so the ETag/since/id-set machinery doesn't apply.
@@ -348,14 +385,16 @@ class MediaHandler(
 
     /** The media's lazy, panel-only tier for the detail panel. Non-member or unknown media → NoMedia (a 404, no reveal). */
     fun mediaExif(userId: String, scopeId: String, mediaId: String): MediaExifOutcome {
-        if (!store.isMember(userId, scopeId)) return MediaExifOutcome.NoMedia
+        access.check(userId, scopeId, READ)
+            .refusal(MediaExifOutcome.NoMedia, MediaExifOutcome.Suspended)?.let { return it }
         val media = store.findMedia(scopeId, mediaId) ?: return MediaExifOutcome.NoMedia
         return MediaExifOutcome.Found(media.wrappedExif)
     }
 
     /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date). */
     fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?): MetaOutcome {
-        if (!store.isMember(userId, scopeId)) return MetaOutcome.NoMedia
+        access.check(userId, scopeId, WRITE)
+            .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
         val media = store.setMeta(scopeId, mediaId, wrappedMeta) ?: return MetaOutcome.NoMedia
         return MetaOutcome.Found(media.wrappedMeta)
     }
@@ -366,13 +405,15 @@ class MediaHandler(
      * NoMedia (a 404, no reveal). Idempotent.
      */
     fun deleteMedia(userId: String, scopeId: String, mediaId: String): DeleteMediaOutcome {
-        if (!store.isMember(userId, scopeId)) return DeleteMediaOutcome.NoMedia
+        access.check(userId, scopeId, WRITE)
+            .refusal(DeleteMediaOutcome.NoMedia, DeleteMediaOutcome.Suspended, DeleteMediaOutcome.Deleting)?.let { return it }
         return if (store.trashMedia(scopeId, mediaId, userId) != null) DeleteMediaOutcome.Done else DeleteMediaOutcome.NoMedia
     }
 
     /** Restore a trashed media (cr-0110): any member may bring it back before the purge. 404 on unknown/purged. */
     fun restoreMedia(userId: String, scopeId: String, mediaId: String): RestoreMediaOutcome {
-        if (!store.isMember(userId, scopeId)) return RestoreMediaOutcome.NoMedia
+        access.check(userId, scopeId, WRITE)
+            .refusal(RestoreMediaOutcome.NoMedia, RestoreMediaOutcome.Suspended, RestoreMediaOutcome.Deleting)?.let { return it }
         return if (store.restoreMedia(scopeId, mediaId) != null) RestoreMediaOutcome.Done else RestoreMediaOutcome.NoMedia
     }
 
@@ -382,7 +423,8 @@ class MediaHandler(
      * still-LIVE media → NoMedia (a 404). The blob objects go on the reclaim list with the rows.
      */
     fun purgeMedia(userId: String, scopeId: String, mediaId: String): PurgeMediaOutcome {
-        if (!store.isMember(userId, scopeId)) return PurgeMediaOutcome.NoMedia
+        access.check(userId, scopeId, WRITE)
+            .refusal(PurgeMediaOutcome.NoMedia, PurgeMediaOutcome.Suspended, PurgeMediaOutcome.Deleting)?.let { return it }
         if (!store.purgeMedia(scopeId, mediaId)) return PurgeMediaOutcome.NoMedia
         return PurgeMediaOutcome.Done
     }
@@ -395,7 +437,8 @@ class MediaHandler(
      * gallery. Guards mirror `complete`: member gate (non-member → NoTarget/404), FOLDER → IllegalTarget/422.
      */
     fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): CoverCommitOutcome {
-        if (!store.isMember(userId, scopeId)) return CoverCommitOutcome.NoTarget
+        access.check(userId, scopeId, WRITE)
+            .refusal(CoverCommitOutcome.NoTarget, CoverCommitOutcome.Suspended, CoverCommitOutcome.Deleting)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
         if (node.kind == NodeEntity.FOLDER) return CoverCommitOutcome.IllegalTarget
         val session = store.findSession(scopeId, uploadId) ?: return CoverCommitOutcome.NoTarget
@@ -411,14 +454,16 @@ class MediaHandler(
 
     /** Detach + reclaim the node's standalone cover blob (cr-0073). Idempotent — a node with no cover → Done. */
     fun deleteCover(userId: String, scopeId: String, nodeId: String): CoverDeleteOutcome {
-        if (!store.isMember(userId, scopeId)) return CoverDeleteOutcome.NoTarget
+        access.check(userId, scopeId, WRITE)
+            .refusal(CoverDeleteOutcome.NoTarget, CoverDeleteOutcome.Suspended, CoverDeleteOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CoverDeleteOutcome.NoTarget
         store.clearCover(scopeId, nodeId)
         return CoverDeleteOutcome.Done
     }
 
     fun download(userId: String, scopeId: String, blobIds: List<String>, domain: String?): DownloadOutcome {
-        if (!store.isMember(userId, scopeId)) return DownloadOutcome.NoScope
+        access.check(userId, scopeId, READ)
+            .refusal(DownloadOutcome.NoScope, DownloadOutcome.Suspended)?.let { return it }
         return DownloadOutcome.Results(blobIds.map { downloadOne(scopeId, it, domain) })
     }
 
@@ -436,7 +481,8 @@ class MediaHandler(
 
     /** List the node's uploader buckets for the "Beiträge" tab. Non-member / unknown node → NoNode (404, no reveal). */
     fun listBuckets(userId: String, scopeId: String, nodeId: String): ListBucketsOutcome {
-        if (!store.isMember(userId, scopeId)) return ListBucketsOutcome.NoNode
+        access.check(userId, scopeId, READ)
+            .refusal(ListBucketsOutcome.NoNode, ListBucketsOutcome.Suspended)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return ListBucketsOutcome.NoNode
         return ListBucketsOutcome.Ok(store.listBuckets(scopeId, nodeId))
     }
@@ -447,7 +493,8 @@ class MediaHandler(
      * inherits that root's owner_key. A missing/non-primary parent → Forbidden (403). Non-member / unknown node → NoNode (404).
      */
     fun createBucket(userId: String, scopeId: String, nodeId: String, sealedName: String, parentBucketId: String?): CreateBucketOutcome {
-        if (!store.isMember(userId, scopeId)) return CreateBucketOutcome.NoNode
+        access.check(userId, scopeId, WRITE)
+            .refusal(CreateBucketOutcome.NoNode, CreateBucketOutcome.Suspended, CreateBucketOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CreateBucketOutcome.NoNode
         val ownerKey = if (parentBucketId != null) {
             val parent = store.findBucket(scopeId, nodeId, parentBucketId) ?: return CreateBucketOutcome.Forbidden
@@ -461,7 +508,8 @@ class MediaHandler(
 
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */
     fun renameBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String): RenameBucketOutcome {
-        if (!store.isMember(userId, scopeId)) return RenameBucketOutcome.NoBucket
+        access.check(userId, scopeId, WRITE)
+            .refusal(RenameBucketOutcome.NoBucket, RenameBucketOutcome.Suspended, RenameBucketOutcome.Deleting)?.let { return it }
         // ADR 0061: the bucket lookup is keyed on (scope, node, bucket) and never touches the node row, so the
         // node gate every sibling op passes through has to be spelled out here — else a trashed subtree's
         // buckets stay writable while everything else about it is hidden.
@@ -478,7 +526,8 @@ class MediaHandler(
      * idempotent (Done → 204).
      */
     fun deleteBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): DeleteBucketOutcome {
-        if (!store.isMember(userId, scopeId)) return DeleteBucketOutcome.NoNode
+        access.check(userId, scopeId, WRITE)
+            .refusal(DeleteBucketOutcome.NoNode, DeleteBucketOutcome.Suspended, DeleteBucketOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return DeleteBucketOutcome.NoNode // ADR 0061, as in renameBucket
         val b = store.findBucket(scopeId, nodeId, bucketId) ?: return DeleteBucketOutcome.Done // idempotent
         if (b.isPrimary) return DeleteBucketOutcome.Forbidden
@@ -492,7 +541,8 @@ class MediaHandler(
      * contributor's media, but a cross-owner move (or a target of a different owner) → Forbidden (403).
      */
     fun moveMedia(userId: String, scopeId: String, nodeId: String, mediaIds: List<String>, targetBucketId: String?): MoveMediaOutcome {
-        if (!store.isMember(userId, scopeId)) return MoveMediaOutcome.NoNode
+        access.check(userId, scopeId, WRITE)
+            .refusal(MoveMediaOutcome.NoNode, MoveMediaOutcome.Suspended, MoveMediaOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return MoveMediaOutcome.NoNode
         val ok = store.moveMedia(scopeId, nodeId, mediaIds, targetBucketId)
         return if (ok) MoveMediaOutcome.Done else MoveMediaOutcome.Forbidden

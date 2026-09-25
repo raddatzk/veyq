@@ -360,7 +360,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner (only the owner may invite members).
+          description: The caller is a member of this tenant but not its owner (only the owner may invite members). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -423,7 +423,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller does not own this tenant.
+          description: The caller does not own this tenant. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -472,7 +472,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner.
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -521,7 +521,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner.
+          description: The caller is a member of this tenant but not its owner. Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -568,7 +568,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner (only the owner may remove members).
+          description: The caller is a member of this tenant but not its owner (only the owner may remove members). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -638,12 +638,14 @@ paths:
       x-veyq-channel: admin
       summary: Suspend an active tenant.
       description: >
-        Takes an ACTIVE tenant offline: flips its status to SUSPENDED, after which **every** request resolving
-        to that tenant's domain is refused `403 tenant_suspended` at the request boundary, before authentication
-        is evaluated — a still-valid access token is refused exactly like an anonymous request (ADR 0066).
-        Availability only: no key, grant, content row or session is read, written or revoked, and the
-        transition is reversible via `reactivateTenant`. Server-Owner only — and Server-Owner status does not
-        exempt the caller's own membership from the gate while the tenant is suspended.
+        Takes an ACTIVE tenant offline: flips its status to SUSPENDED, after which every operation acting on the
+        tenant — its spaces, its tenant routes, its shares, its background jobs — refuses its members
+        `403 tenant_suspended`, on whatever domain the request arrived; share guests and invite holders are told
+        as for a revoked link or a dead invite (uc.spaces.scope-access). The tenant's own domain additionally
+        refuses every API request, sign-in included, before authentication (ADR 0066). Availability only: no key,
+        grant, content row or session is read, written or revoked, and the transition is reversible via
+        `reactivateTenant`. Server-Owner only — and Server-Owner status does not exempt the caller's own
+        membership while the tenant is suspended.
       security:
         - bearerAuth: []
       parameters:
@@ -685,8 +687,8 @@ paths:
       x-veyq-channel: admin
       summary: Reactivate a suspended tenant.
       description: >
-        Brings a SUSPENDED tenant back: flips its status to ACTIVE and the request-boundary gate stops firing
-        for it. Nothing was torn down by the suspension, so nothing is rebuilt here (ADR 0066) — a member whose
+        Brings a SUSPENDED tenant back: flips its status to ACTIVE, and every operation on the tenant answers
+        again — its shares and invites included, unchanged, and its waiting background jobs resume. Nothing was torn down by the suspension, so nothing is rebuilt here (ADR 0066) — a member whose
         session stayed technically valid throughout simply resumes. Server-Owner only.
       security:
         - bearerAuth: []
@@ -754,6 +756,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No tenant with that id, or the caller is not a member (indistinguishable).
           content:
@@ -809,7 +812,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner (only the owner may edit terms).
+          description: The caller is a member of this tenant but not its owner (only the owner may edit terms). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -868,6 +871,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No tenant with that id, or the caller is not a member (indistinguishable).
           content:
@@ -920,7 +924,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner (only the owner may read mail settings).
+          description: The caller is a member of this tenant but not its owner (only the owner may read mail settings). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -997,7 +1001,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of this tenant but not its owner (only the owner may edit mail settings).
+          description: The caller is a member of this tenant but not its owner (only the owner may edit mail settings). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1052,7 +1056,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: invite_not_found }
         "410":
-          description: The invite is no longer valid (superseded, consumed, or expired).
+          description: >
+            The invite is no longer valid (superseded, consumed, or expired) — or its tenant is suspended, which an
+            invite holder is told exactly as a dead invite (uc.spaces.scope-access A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1119,7 +1125,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_pending }
         "410":
-          description: The invite is no longer valid (superseded, consumed, or expired).
+          description: >
+            The invite is no longer valid (superseded, consumed, or expired) — or its tenant is suspended, which an
+            invite holder is told exactly as a dead invite (uc.spaces.scope-access A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1186,7 +1194,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: email_taken }
         "410":
-          description: The invite is no longer valid (superseded, consumed, or expired).
+          description: >
+            The invite is no longer valid (superseded, consumed, or expired) — or its tenant is suspended, which an
+            invite holder is told exactly as a dead invite (uc.spaces.scope-access A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1374,14 +1384,10 @@ components:
         delivery:
           $ref: "#/components/schemas/DeliveryResult"
 
+    # A local alias to the _common source (the ErrorResponse pattern): the scopes spec's `MyTenant.status`
+    # carries the same lifecycle, so the enum is single-sourced rather than copied.
     TenantStatus:
-      type: string
-      description: >
-        Lifecycle state of a tenant. SUSPENDED is a reversible, availability-only lockout (ADR 0066): while
-        suspended, every request resolving to the tenant's domain is refused at the request boundary, before
-        authentication — its content, keys and memberships are untouched.
-      enum: [PENDING, ACTIVE, SUSPENDED]
-      example: PENDING
+      $ref: '_common.openapi.yaml#/components/schemas/TenantStatus'
 
     InviteStatus:
       type: string

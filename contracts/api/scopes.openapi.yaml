@@ -67,6 +67,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No tenant resolves from the request Host.
           content:
@@ -165,6 +166,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No tenant resolves from the request Host.
           content:
@@ -229,7 +231,8 @@ paths:
               example: { code: authentication_failed }
         "403":
           description: >
-            The caller is a member but holds no grant yet (only a key-holder may list the members).
+            The caller is a member but holds no grant yet (`not_key_holder` — only a key-holder may list the
+            members), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -309,7 +312,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of the group but not its OWNER (only an owner may add a member).
+          description: The caller is a member of the group but not its OWNER (`not_scope_owner` — only an owner may add a member), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -324,7 +327,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: member_not_found }
         "409":
-          description: That user is already a member of the group (or already has an open proposal).
+          description: That user is already a member of the group or already has an open proposal (`already_member`), or the group is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -385,7 +388,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of the group but not its OWNER (only an owner may resolve a candidate).
+          description: The caller is a member of the group but not its OWNER (`not_scope_owner` — only an owner may resolve a candidate), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -430,9 +433,9 @@ paths:
               schema: { $ref: "#/components/schemas/ScopeMember" }
         "400": { description: Malformed (invalid role)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
-        "409": { description: The last remaining OWNER cannot be demoted., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "409": { description: "The last remaining OWNER cannot be demoted (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
     delete:
       tags: [scopes]
       operationId: removeMember
@@ -453,9 +456,9 @@ paths:
       responses:
         "204": { description: The member was removed (their grant is gone). }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
-        "409": { description: The last remaining OWNER cannot be removed., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "409": { description: "The last remaining OWNER cannot be removed (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
 
   /api/scopes/{scopeId}/epochs:
     get:
@@ -481,7 +484,7 @@ paths:
               example:
                 - { epoch: 1, wrappedPrev: AQ== }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member but holds no grant in this scope., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_key_holder } } } }
+        "403": { description: "The caller is a member but holds no grant in this scope (`not_key_holder`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_key_holder } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
     post:
       tags: [scopes]
@@ -514,8 +517,9 @@ paths:
               example: { epoch: 1 }
         "400": { description: Malformed (missing/invalid link or grant)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}:
     delete:
@@ -527,8 +531,10 @@ paths:
         marker, so it enters a **grace period** (`purgeAfter = deletedAt + retention`, 30 days). During grace the
         group stays listed + readable but **read-only** and marked as deleting; a scheduled job hard-erases it
         (nodes + blob objects + memberships + epoch links + the scope) after `purgeAfter`. Grants/memberships are
-        untouched, so **any owner** may {@link restoreGroup} in-window. Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`);
-        **GROUP-only** and idempotent (`409`). Enforced by code, not this spec (ADR 0008). Erasure only — the
+        untouched, so **any owner** who still belongs to the tenant may {@link restoreGroup} in-window.
+        Access-gated first (a non-member gets `404 scope_not_found`; an already-deleting group answers
+        `409 scope_deleting` like any other write, uc.spaces.scope-access), then **GROUP-only** (`409 not_group`),
+        then owner-gated (`403 not_scope_owner`). Enforced by code, not this spec (ADR 0008). Erasure only — the
         server needs no key.
       security:
         - bearerAuth: []
@@ -537,9 +543,9 @@ paths:
       responses:
         "204": { description: The group entered pending-deletion (grace period started). }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: Not a GROUP or already pending-deletion., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_already_deleted } } } }
+        "409": { description: "The group is already being deleted (`scope_deleting` — a deleting group refuses the delete like any other write), or the scope is not a GROUP (`not_group`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } } } }
 
   /api/scopes/{scopeId}/restore:
     post:
@@ -549,8 +555,11 @@ paths:
       description: >
         Restores a GROUP scope that is in **pending-deletion** and still within its grace window (uc.spaces.delete-group,
         cr-0090): clears `deletedAt`/`purgeAfter`, so the group is fully active again for everyone (grants/memberships
-        were never touched). Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`). `409` if the group is not pending-deletion; once the
-        scheduled hard-purge has run the scope is gone (`404 scope_not_found`).
+        were never touched). It is the one write a deleting group allows, and only that: it still needs an owner
+        who still belongs to the tenant — a former tenant member gets `404 scope_not_found`, like a non-member
+        (uc.spaces.scope-access A1/A2). Then **GROUP-only** (`409 not_group`), then owner-gated
+        (`403 not_scope_owner`); `409 not_deleted` if the group is not being deleted. Once the scheduled
+        hard-purge has run the scope is gone (`404 scope_not_found`).
       security:
         - bearerAuth: []
       parameters:
@@ -558,9 +567,9 @@ paths:
       responses:
         "204": { description: The group was restored (active again). }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope (or already hard-purged) — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: The group is not in pending-deletion., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_deleted } } } }
+        "409": { description: "The group is not being deleted (`not_deleted` — nothing to restore), or the scope is not a GROUP (`not_group`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_deleted } } } }
 
   /api/scopes/{scopeId}/name:
     post:
@@ -573,7 +582,7 @@ paths:
         "group-name-key")`) and posts the opaque `encryptedName` + the `nameEpoch` it sealed under. The server
         overwrites the scope's `encrypted_name` + `name_epoch` — **only** when `nameEpoch == currentEpoch` (else
         `409 stale_epoch`: a concurrent rotation advanced the epoch under the caller, refetch + retry) and the group
-        is active (else `409 scope_pending_deletion`: a name-write is blocked during the grace period). Sealing under
+        is not being deleted (else `409 scope_deleting`, like every write during the grace period). Sealing under
         the **current** epoch makes the rename **forward-secret** — a member removed at an earlier epoch cannot
         derive the new `K_name`. **Name-only**: no `K_SC` rotation, no re-grant. Membership-gated first (a
         non-member gets `404 scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`; ADR 0014 §4).
@@ -592,9 +601,9 @@ paths:
         "204": { description: The group was renamed (the row's encrypted_name + name_epoch were overwritten). }
         "400": { description: Malformed request (blank/oversized/invalid encryptedName)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the group but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The submitted `nameEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the group is pending-deletion (`scope_pending_deletion`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The submitted `nameEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
 
   /api/scopes/{scopeId}/icon:
     post:
@@ -607,8 +616,8 @@ paths:
         scope's **current** content-key epoch (`K_icon = HKDF(E_currentEpoch, "veyq/v1/space-icon-key")`), then
         posts the opaque `sealedIcon` + the `iconEpoch` it sealed under. The server overwrites the scope's
         `sealed_icon` + `icon_epoch` — **only** when `iconEpoch == currentEpoch` (else `409 stale_epoch`: a
-        concurrent rotation advanced the epoch under the caller, refetch + retry) and the scope is active (else
-        `409 scope_pending_deletion`). Sealing under the current epoch makes a replaced icon forward-secret. The
+        concurrent rotation advanced the epoch under the caller, refetch + retry) and the scope is not being deleted
+        (else `409 scope_deleting`). Sealing under the current epoch makes a replaced icon forward-secret. The
         scope must be a **TENANT** or a **GROUP** — a **PERSONAL** scope has no icon (nothing to tell it apart
         from) and answers `404`. For a GROUP the `iconEpoch` may sit below `currentEpoch` (a group rotates its
         content-key on member-removal, ADR 0024, but a rotation never re-seals the icon), so a reader peels the
@@ -631,9 +640,9 @@ paths:
         "204": { description: The icon was set (the row's sealed_icon + icon_epoch were overwritten). }
         "400": { description: Malformed request (blank/wrong-length/invalid sealedIcon)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the scope but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the scope but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope (or already hard-purged) — or the caller is not a member of it (indistinguishable, ADR 0042) — or it is a PERSONAL scope (which carries no icon).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The submitted `iconEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the scope is pending-deletion (`scope_pending_deletion`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The submitted `iconEpoch` is stale (a concurrent rotation moved the epoch — `stale_epoch`, refetch + retry), or the scope is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
     delete:
       tags: [scopes]
       operationId: clearScopeIcon
@@ -642,8 +651,9 @@ paths:
         Clears a space's icon (uc.spaces.set-space-icon A5): the row's `sealed_icon` + `icon_epoch` are reset and
         every member falls back to the initial. **No epoch check** — a removal carries no ciphertext that could be
         sealed under a stale epoch, so it is idempotent (clearing an already-iconless scope is still a `204`).
-        Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then owner-gated
-        (`403 not_scope_owner`). Operator-blind.
+        Like every write it is refused while the scope is being deleted (`409 scope_deleting`). Access-gated first
+        (a non-member gets `404 scope_not_found`, uc.spaces.scope-access), then owner-gated (`403 not_scope_owner`).
+        Operator-blind.
       security:
         - bearerAuth: []
       parameters:
@@ -651,8 +661,9 @@ paths:
       responses:
         "204": { description: The icon was removed (or was already absent — idempotent). }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
-        "403": { description: The caller is a member of the scope but not its OWNER., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
+        "403": { description: "The caller is a member of the scope but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/my-tenants:
     get:
@@ -668,7 +679,10 @@ paths:
         client can render a switcher and link to each tenant's domain). Tenant name + domain are server-visible
         operational metadata (tenant identity = the domain, ADR 0002). The `wrappedGrant` and `sealedIcon` are
         **opaque ciphertext** the server never interprets — it derives no key and never sees the icon
-        (operator-blind, ADR 0008).
+        (operator-blind, ADR 0008). A `SUSPENDED` tenant stays listed with its `status`, but with neither grant nor
+        icon, so the switcher shows it offline and not enterable (uc.spaces.scope-access A7). Listed are the
+        tenants the caller holds any accepted membership in — a member removed from a tenant keeps it here for the
+        grace window, where their own spaces stay readable (uc.spaces.remove-tenant-member).
       security:
         - bearerAuth: []
       responses:
@@ -684,6 +698,7 @@ paths:
                   name: Familie Raddatz
                   domain: memories.raddatz.me
                   role: OWNER
+                  status: ACTIVE
                   wrappedGrant: AQ==
                   sealedIcon: c2VhbGVkLWljb24=
                   iconEpoch: 0
@@ -1002,7 +1017,7 @@ components:
 
     MyTenant:
       type: object
-      required: [tenantId, name, domain, role, iconEpoch]
+      required: [tenantId, name, domain, role, status, iconEpoch]
       properties:
         tenantId:
           x-veyq-visibility: id
@@ -1028,6 +1043,8 @@ components:
           description: The caller's role in this tenant.
           enum: [OWNER, MEMBER]
           example: OWNER
+        status:
+          $ref: "#/components/schemas/TenantStatus"
         wrappedGrant:
           type: [string, "null"]
           description: >
@@ -1035,7 +1052,8 @@ components:
             (opaque base64), so the switcher can open the tenant's `sealedIcon` without a per-tenant scopes call
             (en.spaces.tenant-scope). The client `asymUnwrap`s it locally; the server never interprets it. `null`
             while the caller is grant-less — the transient awaiting-access window, during which the icon renders
-            as the initial.
+            as the initial — and while the tenant is `SUSPENDED`, which withholds it as a standing reason
+            (en.spaces.tenant-scope E1a): suspension refuses its members every read, this one included.
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
@@ -1044,7 +1062,8 @@ components:
           description: >
             The tenant's icon (uc.spaces.set-space-icon): padded to a constant length and sealed under `K_icon =
             HKDF(E_iconEpoch, "veyq/v1/space-icon-key")` — opaque base64 the client opens + unpads on-device to
-            render the tenant's avatar in the switcher. `null` when the tenant has no icon (render the initial).
+            render the tenant's avatar in the switcher. `null` when the tenant has no icon (render the initial), and
+            while the tenant is `SUSPENDED` (withheld like `wrappedGrant`).
           contentEncoding: base64
           maxLength: 21884
           example: c2VhbGVkLWljb24=
@@ -1332,6 +1351,10 @@ components:
             When the scheduled job will **hard-erase** a pending-deletion group (`deletedAt + retention`, derived).
             `null` when active. After this instant the group is gone (restore → 404).
           example: null
+
+    # A local alias to the _common source, shared with the tenants spec (the ErrorResponse pattern).
+    TenantStatus:
+      $ref: '_common.openapi.yaml#/components/schemas/TenantStatus'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

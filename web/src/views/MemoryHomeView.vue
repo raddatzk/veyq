@@ -7,13 +7,14 @@ import { computed, ref, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { activeSpace, activeEpochKeys, enterScope } from '../app/activeSpace'
+import { suspensionSignals } from '../app/tenantSuspension'
 import { keyAt } from '../features/spaces/epochs'
 import { setBreadcrumb } from '../app/breadcrumb'
 import { isFavorite, toggleFavorite, loadFavoritesFor, favoritesStore } from '../app/favoritesStore'
 import { treeStore, loadTree, patchNodeMeta } from '../features/memory/treeStore'
 import { childrenOf, breadcrumbOf, nodeById } from '../features/memory/browse'
 import { nodeContentKey } from '../features/memory/tree'
-import { parseHash, resolveSlugPath, hashForNode } from '../features/memory/location'
+import { parseHash, resolveSlugPath, hashForNode, TENANT_SCOPE } from '../features/memory/location'
 import { listMyTenants } from '../features/spaces/scopes'
 import { NodeKind } from '../api/generated/content'
 import { ScopeKind, type MyTenant } from '../api/generated/scopes'
@@ -34,7 +35,7 @@ const { t, locale } = useI18n()
 const { hasCapability } = useCapabilities()
 
 // Pending-deletion (cr-0090): the active GROUP is being deleted — the shell shows a banner and the browse hides
-// its create affordances (writes are server-rejected during the grace window anyway).
+// its create affordances (every write is server-rejected during the grace window anyway, uc.spaces.scope-access).
 const isPendingDeletion = computed(() => activeSpace.deletedAt !== null)
 const pendingPurgeDay = computed(() =>
   activeSpace.purgeAfter ? new Date(activeSpace.purgeAfter).toLocaleDateString(locale.value) : '',
@@ -89,13 +90,15 @@ const deleteTarget = ref<TreeNode | null>(null)
 // The breadcrumb root label reflects the **active** scope (the tenant's name vs. Personal), not the URL token —
 // a no-grant member sees `Personal` at the token-less `/` because the tenant home fell back to Personal.
 const tenants = ref<MyTenant[]>([])
-onMounted(async () => {
+async function loadTenants() {
   try {
     tenants.value = await listMyTenants()
   } catch {
     /* the label tolerates an unknown tenant name */
   }
-})
+}
+onMounted(loadTenants)
+watch(() => suspensionSignals.tenantList, () => void loadTenants())
 const activeTenantName = computed(
   () => tenants.value.find((tn) => tn.tenantId === activeSpace.tenantId)?.name ?? '',
 )
@@ -128,6 +131,14 @@ async function reenter(scope: string) {
   }
 }
 watch(currentScope, (scope) => void reenter(scope), { immediate: true })
+// A space in another, suspended tenant (uc.spaces.scope-access A7): leave it for this domain's own home. (The home
+// itself belongs to this domain's tenant, so it is never the one to leave.)
+watch(
+  () => suspensionSignals.leaveHome,
+  () => {
+    if (currentScope.value !== TENANT_SCOPE) void router.replace({ name: 'home', hash: '' })
+  },
+)
 
 // Item marks seal under `K_SC` at the **base epoch `E_0`** (ADR 0068), never under `activeScopeKey()`, which is
 // the *write* key `E_current`: the marked set is re-sealed whole on every toggle, so a rotation would strand it.

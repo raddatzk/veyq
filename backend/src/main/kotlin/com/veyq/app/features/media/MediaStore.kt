@@ -5,7 +5,6 @@ import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.MembershipStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -70,13 +69,11 @@ data class BucketRow(
 
 /**
  * Persistence for media blobs (cr-0028). Operator-blind: stores ciphertext wraps + opaque metadata only.
- * Scope access = the caller holds a membership for the scope (cr-0026). The manifest (per-chunk ciphertext
- * sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
+ * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate. The
+ * manifest (per-chunk ciphertext sizes) is held as a small JSON array of integers — itself only ciphertext-size metadata.
  */
 @ApplicationScoped
-class MediaStore(private val membership: MembershipStore, private val reclaim: StoreReclaimStore) {
-
-    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
+class MediaStore(private val reclaim: StoreReclaimStore) {
 
     /** The node, if it exists **live** in this scope (its `kind` decides the media-target rule). `deletedAt is
      *  null` (ADR 0061): this is the gate every media/bucket/cover handler routes through, so filtering it once

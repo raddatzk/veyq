@@ -5,14 +5,14 @@
     "grant-delivery": {
       "tag": "02f271ff",
       "since": "cr-0076",
-      "lease": false,
+      "lease": true,
       "originator": "server-structural",
-      "description": "Deliver a scope grant to a pending (grant-less) member: any online key-holder wraps K_SC to the target member's identity public key (asymWrap to a foreign identity, context `scope-grant`) and posts the ciphertext as that member's wrappedGrant. Universal tag, no lease needed (idempotent, first-online-wins). The first, trivially-blind consumer of the mechanism (ADR 0020)."
+      "description": "Deliver a scope grant to a pending (grant-less) member: any online key-holder wraps K_SC to the target member's identity public key (asymWrap to a foreign identity, context `scope-grant`) and posts the ciphertext as that member's wrappedGrant. Universal tag; like every job it is completed only by the worker holding its lease (ADR 0021 §6), and a repeated completion is a no-op (idempotent, first-online-wins). The first, trivially-blind consumer of the mechanism (ADR 0020)."
     },
     "scope-rotation": {
       "tag": "663157d8",
       "since": "cr-0092",
-      "lease": false,
+      "lease": true,
       "originator": "server-event",
       "description": "Complete a queued group-key rotation after a co-shared member was cut with no key-holder online to rotate synchronously (en.spaces.scope-key-rotation §E1, ADR 0025 — groups rotate). Originated by the server on a tenant-member removal that cut a shared GROUP membership (the removing owner is not necessarily a key-holder there, so cannot mint the new epoch). Unlike grant-delivery this is NOT reconcilable from DB state: a removal cut advances no epoch and leaves no stale-epoch mismatch, so the pending-rotation state is recorded explicitly as this job (resourceRef == scopeId). The next online remaining key-holder claims it, mints E_{n+1} + wraps E_n + re-grants the surviving member set on-device (reusing the cr-0089 rotation-commit POST /api/scopes/{scopeId}/epochs), then completes. One live job per scope coalesces multiple removals (a single rotation re-grants exactly the current members); idempotent + first-online-wins. Operator-blind: opaque tag + scopeId + the resulting ciphertext epoch-link/re-grants — the server never mints, wraps, or holds a key."
     }

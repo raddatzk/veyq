@@ -43,8 +43,11 @@ info:
     themselves would let an attacker holding the old identity re-admit only themselves. The exclusion rides on
     the same per-key-holder decline mechanism the TOFU seam uses, written at origination.
 
-    Every operation requires an authenticated caller; authorization (scope membership) is enforced by code, not
-    this spec (ADR 0008). Field validation is declared here via `x-field-extra-annotation`, so malformed input
+    Every operation requires an authenticated caller; authorization is enforced by code, not this spec
+    (ADR 0008). Working a job is a **write on its space** (uc.spaces.scope-access A5): nothing is claimed,
+    heartbeated, completed, failed, declined or enqueued in a suspended tenant or a space being deleted — such
+    jobs wait for the reactivation or the restore, or are erased with the purge — and only the member holding a
+    job's current lease acts on it (ADR 0021 §6). Field validation is declared here via `x-field-extra-annotation`, so malformed input
     is rejected at the boundary (400) before any handler runs.
 tags:
   - name: tasks
@@ -60,9 +63,10 @@ paths:
       summary: Atomically lease one claimable job for this worker.
       description: >
         The worker sends its **capability tags**; the server atomically leases and returns **one** job where
-        `scope ∈ the caller's memberships ∧ tag ∈ the sent tags`, treating a `pending` job — or a `leased` job
-        whose lease has expired (lazy reclaim) — as claimable (MariaDB `SKIP LOCKED`). Returns `204` when
-        nothing is claimable. For a `grant-delivery` job the response also resolves the delivery target (the
+        `scope ∈ the caller's granted scopes they may write ∧ tag ∈ the sent tags`, treating a `pending` job — or a
+        `leased` job whose lease has expired (lazy reclaim) — as claimable (MariaDB `SKIP LOCKED`). A scope in a
+        suspended tenant, or one being deleted, is simply not eligible, so its jobs are never handed out
+        (uc.spaces.scope-access A5). Returns `204` when nothing is claimable. For a `grant-delivery` job the response also resolves the delivery target (the
         pending member's userId + identity public key) so the worker can wrap `K_SC` to it directly.
       security:
         - bearerAuth: []
@@ -106,8 +110,10 @@ paths:
         `grant-delivery`) are **not** created here — the backend originates those itself; this is the front
         door for content-processing jobs a client/agent prepares ready. Membership is the **first** gate (ADR
         0042): a caller who is not a member of `scopeId` gets `404 scope_not_found` — the same answer as for a
-        scope id that does not exist, so scope existence is not enumerable. A member who holds no grant in the
-        scope (not a key-holder, so they could not have sealed the body) gets `403 not_key_holder`.
+        scope id that does not exist, so scope existence is not enumerable. Then the tenant's suspension
+        (`403 tenant_suspended`) and the space's deletion grace (`409 scope_deleting`, uc.spaces.scope-access).
+        A member who holds no grant in the scope (not a key-holder, so they could not have sealed the body) gets
+        `403 not_key_holder`.
       security:
         - bearerAuth: []
       requestBody:
@@ -141,7 +147,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
         "403":
-          description: The caller is a member of the target scope but holds no grant in it.
+          description: >
+            The caller is a member of the target scope but holds no grant in it (`not_key_holder`), or its tenant
+            is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -153,6 +161,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: scope_not_found }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/tasks/{jobId}/heartbeat:
     post:
@@ -179,6 +188,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such job (or not in a scope the caller belongs to).
           content:
@@ -186,7 +196,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: job_not_found }
         "409":
-          description: The job is not currently leased to this worker.
+          description: >
+            The job is not currently leased to this worker (`not_lease_holder`), or its space is being deleted
+            (`scope_deleting`, uc.spaces.scope-access A5).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -202,8 +214,9 @@ paths:
         output rides the optional opaque `sealedResult`. For a `grant-delivery` job the `sealedResult` **is**
         the `wrappedGrant` — the scope key sealed to the pending member's identity public key — which the
         backend writes onto the target membership. **Idempotent**: completing an already-`done` job, or a
-        `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). The
-        caller must be a member of the job's scope; a lease is not required (a cheap idempotent job needs none).
+        `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). Otherwise
+        the caller must hold the job's current lease (`409 not_lease_holder`, ADR 0021 §6): idempotency makes a
+        *repeated* completion harmless, it does not make an unclaimed one legitimate.
       security:
         - bearerAuth: []
       parameters:
@@ -230,12 +243,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such job (or not in a scope the caller belongs to).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: job_not_found }
+        "409":
+          description: >
+            The job is not currently leased to this worker (`not_lease_holder`), or its space is being deleted
+            (`scope_deleting`, uc.spaces.scope-access A5).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_lease_holder }
 
   /api/tasks/{jobId}/fail:
     post:
@@ -243,10 +265,11 @@ paths:
       operationId: failTask
       summary: Report a failed attempt; requeue or dead-letter.
       description: >
-        Records a failed attempt: `attempts` is incremented and the lease released. If `attempts` is below the
-        job's max the job returns to `pending` (claimable again, at-least-once); once it reaches the max the
-        job is **dead-lettered** (`failed`, surfaced for inspection). The caller must be a member of the job's
-        scope.
+        Records a failed attempt and releases the lease. The attempt was already counted by the claim that leased
+        the job, so `attempts` is not incremented again here. If `attempts` is below the job's max the job returns
+        to `pending` (claimable again, at-least-once); once it reaches the max the job is **dead-lettered**
+        (`failed`, surfaced for inspection). The caller must hold the job's current lease, and the job must still
+        be `leased` (`409 not_lease_holder`, ADR 0021 §6).
       security:
         - bearerAuth: []
       parameters:
@@ -273,12 +296,21 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such job (or not in a scope the caller belongs to).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: job_not_found }
+        "409":
+          description: >
+            The job is not currently leased to this worker (`not_lease_holder`), or its space is being deleted
+            (`scope_deleting`, uc.spaces.scope-access A5).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_lease_holder }
 
   /api/tasks/{jobId}/decline:
     post:
@@ -326,6 +358,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such job (or not in a scope the caller belongs to).
           content:
@@ -333,7 +366,9 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: job_not_found }
         "409":
-          description: The caller does not hold the job's lease (only the lease-holder may decline).
+          description: >
+            The caller does not hold the job's lease (`not_lease_holder` — only the lease-holder may decline), or
+            its space is being deleted (`scope_deleting`, uc.spaces.scope-access A5).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -483,7 +518,7 @@ components:
           x-veyq-visibility: time
           type: [string, "null"]
           format: date-time
-          description: When this worker's lease expires (heartbeat to extend). Absent for lease-less claims.
+          description: When this worker's lease expires (heartbeat to extend). Every claim leases, so it is set on every claimed job.
           example: 2026-07-04T12:34:56Z
         attempts:
           x-veyq-visibility: measure

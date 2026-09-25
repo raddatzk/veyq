@@ -23,7 +23,7 @@ Enforcing the manifest's *"an EXPLICIT list, never a package sweep"* rule falls 
 (`com.veyq.app.features.*`) derives no filename and is rejected here with that reason named.
 
 **Its limit — a path filter cannot cover transitive dependencies.** `MembershipPolicy` imports
-`shared.membership.MembershipEntity`; `RemovalPolicy` imports that plus `spaces.scope.ScopeEntity`. A change
+`shared.membership.MembershipEntity`; `RemovalPolicy` imports that plus `shared.scope.ScopeEntity`. A change
 to those moves a mutation score without touching any listed path, and no path-based trigger list can see it —
 this is a principled limit of the mechanism, not a hole to plug (pinned as a case in
 `validate_guard_gaps.py`). Two narrower ones: it proves a path is **listed**, never that GitHub Actions

@@ -2,11 +2,16 @@ package com.veyq.app.features.content
 
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CreateNodeOutcome {
     data class Created(val nodeId: String) : CreateNodeOutcome
     object NoScope : CreateNodeOutcome, HttpFailure by Failures.scopeNotFound
+    object Suspended : CreateNodeOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeDeleting : CreateNodeOutcome, HttpFailure by Failures.scopeDeleting
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
@@ -15,11 +20,13 @@ sealed interface CreateNodeOutcome {
 sealed interface ListNodesOutcome {
     data class Nodes(val rows: List<NodeRow>) : ListNodesOutcome
     object NoScope : ListNodesOutcome, HttpFailure by Failures.scopeNotFound
+    object Suspended : ListNodesOutcome, HttpFailure by Failures.tenantSuspended
 }
 
 sealed interface UpdateNodeOutcome {
     object Updated : UpdateNodeOutcome
     object NotFound : UpdateNodeOutcome, HttpFailure by Failures.nodeNotFound
+    object Suspended : UpdateNodeOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeDeleting : UpdateNodeOutcome, HttpFailure by Failures.scopeDeleting
     object IllegalStructure : UpdateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : UpdateNodeOutcome, HttpFailure by Failures.slugTaken
@@ -28,12 +35,14 @@ sealed interface UpdateNodeOutcome {
 sealed interface DeleteNodeOutcome {
     object Deleted : DeleteNodeOutcome
     object NoScope : DeleteNodeOutcome, HttpFailure by Failures.scopeNotFound
+    object Suspended : DeleteNodeOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeDeleting : DeleteNodeOutcome, HttpFailure by Failures.scopeDeleting
 }
 
 sealed interface RestoreNodeOutcome {
     object Restored : RestoreNodeOutcome
     object NotFound : RestoreNodeOutcome, HttpFailure by Failures.nodeNotFound
+    object Suspended : RestoreNodeOutcome, HttpFailure by Failures.tenantSuspended
     object ScopeDeleting : RestoreNodeOutcome, HttpFailure by Failures.scopeDeleting
     object SlugTaken : RestoreNodeOutcome, HttpFailure by Failures.slugTaken
 }
@@ -41,15 +50,16 @@ sealed interface RestoreNodeOutcome {
 sealed interface ListTrashOutcome {
     data class Trash(val rows: List<TrashedNodeRow>) : ListTrashOutcome
     object NoScope : ListTrashOutcome, HttpFailure by Failures.scopeNotFound
+    object Suspended : ListTrashOutcome, HttpFailure by Failures.tenantSuspended
 }
 
 /**
- * Use-case logic for the Memory tree (en.memory.tree, cr-0027). Scope access = the caller holds a membership
- * for the scope (operator-blind: a non-member sees a 404, not a reveal). Structural rules: FOLDER/MEMORY live
+ * Use-case logic for the Memory tree (en.memory.tree, cr-0027). Scope access is the one gate, [ScopeAccess],
+ * asked first by every operation (uc.spaces.scope-access): a non-member sees a 404, not a reveal. Structural rules: FOLDER/MEMORY live
  * at the root or under a FOLDER; CHAPTER lives inside a MEMORY; no cycle on move; slug unique per parent.
  */
 @ApplicationScoped
-class NodesHandler(private val store: NodesStore) {
+class NodesHandler(private val store: NodesStore, private val access: ScopeAccess) {
 
     private fun parentAllows(kind: String, parent: ParentSlot): Boolean = when (kind) {
         NodeEntity.FOLDER, NodeEntity.MEMORY ->
@@ -62,8 +72,8 @@ class NodesHandler(private val store: NodesStore) {
         userId: String, scopeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
     ): CreateNodeOutcome {
-        if (!store.isMember(userId, scopeId)) return CreateNodeOutcome.NoScope
-        if (store.isPendingDeletion(scopeId)) return CreateNodeOutcome.ScopeDeleting // read-only during grace (cr-0090)
+        access.check(userId, scopeId, WRITE)
+            .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
         val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
@@ -75,7 +85,7 @@ class NodesHandler(private val store: NodesStore) {
     }
 
     fun list(userId: String, scopeId: String): ListNodesOutcome {
-        if (!store.isMember(userId, scopeId)) return ListNodesOutcome.NoScope
+        access.check(userId, scopeId, READ).refusal(ListNodesOutcome.NoScope, ListNodesOutcome.Suspended)?.let { return it }
         return ListNodesOutcome.Nodes(store.list(scopeId))
     }
 
@@ -83,8 +93,8 @@ class NodesHandler(private val store: NodesStore) {
         userId: String, scopeId: String, nodeId: String,
         encryptedName: String?, slugToken: String?, newParentSlotId: String?, orderIndex: Int?, wrappedMeta: String?,
     ): UpdateNodeOutcome {
-        if (!store.isMember(userId, scopeId)) return UpdateNodeOutcome.NotFound
-        if (store.isPendingDeletion(scopeId)) return UpdateNodeOutcome.ScopeDeleting // read-only during grace (cr-0090)
+        access.check(userId, scopeId, WRITE)
+            .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
 
         var moveSlot: String? = null
@@ -106,8 +116,8 @@ class NodesHandler(private val store: NodesStore) {
     }
 
     fun delete(userId: String, scopeId: String, nodeId: String): DeleteNodeOutcome {
-        if (!store.isMember(userId, scopeId)) return DeleteNodeOutcome.NoScope
-        if (store.isPendingDeletion(scopeId)) return DeleteNodeOutcome.ScopeDeleting // read-only during grace (cr-0090)
+        access.check(userId, scopeId, WRITE)
+            .refusal(DeleteNodeOutcome.NoScope, DeleteNodeOutcome.Suspended, DeleteNodeOutcome.ScopeDeleting)?.let { return it }
         // Bind the node to THIS scope before deleting (mirrors update, cr-0126): membership on scopeId alone does
         // not authorize deleting a node that lives in another scope. Same NoScope 404 whether the node is foreign
         // or absent — non-enumerable, and it stops the cross-scope delete the primary-key path used to allow.
@@ -126,8 +136,8 @@ class NodesHandler(private val store: NodesStore) {
     fun restore(
         userId: String, scopeId: String, nodeId: String, slugToken: String, encryptedName: String?,
     ): RestoreNodeOutcome {
-        if (!store.isMember(userId, scopeId)) return RestoreNodeOutcome.NotFound
-        if (store.isPendingDeletion(scopeId)) return RestoreNodeOutcome.ScopeDeleting // read-only during grace (cr-0090)
+        access.check(userId, scopeId, WRITE)
+            .refusal(RestoreNodeOutcome.NotFound, RestoreNodeOutcome.Suspended, RestoreNodeOutcome.ScopeDeleting)?.let { return it }
         return when (store.restoreSubtree(scopeId, nodeId, slugToken, encryptedName)) {
             NodesStore.RestoreResult.DONE -> RestoreNodeOutcome.Restored
             NodesStore.RestoreResult.SLUG_TAKEN -> RestoreNodeOutcome.SlugTaken
@@ -136,7 +146,7 @@ class NodesHandler(private val store: NodesStore) {
     }
 
     fun listTrash(userId: String, scopeId: String): ListTrashOutcome {
-        if (!store.isMember(userId, scopeId)) return ListTrashOutcome.NoScope
+        access.check(userId, scopeId, READ).refusal(ListTrashOutcome.NoScope, ListTrashOutcome.Suspended)?.let { return it }
         return ListTrashOutcome.Trash(store.listTrashRoots(scopeId))
     }
 }

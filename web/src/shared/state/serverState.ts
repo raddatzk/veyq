@@ -6,4 +6,7 @@ export const serverState = reactive({
   setupCompleted: null as boolean | null,
   // true when the instance couldn't be reached on boot — surfaces a clear error instead of a blank screen.
   unreachable: false,
+  // true when the tenant this domain belongs to is suspended (ADR 0066): every API call on this domain answers
+  // `403 tenant_suspended`, so the app routes to the full-page offline notice (uc.spaces.scope-access A7).
+  suspended: false,
 })
