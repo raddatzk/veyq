@@ -178,7 +178,7 @@ Two round-trip tests in two packages cannot keep a writer and a reader in agreem
 
 - **The token** is `veyqkit:` followed by the unpadded base64url of the UTF-8 bytes of
   `{"v":1,"email":…,"sk":…}` — `sk` being the Secret Key's 32 bytes as padded standard base64. `v` is the
-  version. A reader rejects any other `v`, an `email` that is not a string, and an `sk` that is not 32 bytes.
+  version. A reader rejects any other `v`, an `email` that is not a non-empty string, and an `sk` that is not 32 bytes.
   The password is never in it.
 - **It travels three ways, and each is part of the format:** as the **QR code**; as **printed** email +
   Secret Key for typing; and as a literal string in the PDF's **document information** (`keywords`), because

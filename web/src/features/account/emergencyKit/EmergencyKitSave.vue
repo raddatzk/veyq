@@ -2,13 +2,13 @@
 // The "save your Emergency Kit" step — shared by first-run server setup and invite-accept registration. It never
 // shows the raw Secret Key: the user downloads the kit PDF, then confirms they stored it — only then is it
 // "ready". The parent owns the follow-on action button and gates it on the v-model (ready = downloaded AND
-// confirmed). Reuses downloadKitPdf so both flows stay identical. Pass the intro copy via the default slot.
+// confirmed). Renders the kit PDF in the user's language, then saves it. Pass the intro copy via the default slot.
 import { ref, watchEffect } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Checkbox from 'primevue/checkbox'
 import Message from 'primevue/message'
-import { downloadKitPdf } from './emergencyKit'
+import { renderKitPdf, saveKitPdf } from './emergencyKit'
 
 const props = defineProps<{ email: string; secretKey: string }>()
 const ready = defineModel<boolean>({ default: false })
@@ -26,7 +26,8 @@ watchEffect(() => {
 async function download() {
   failed.value = false
   try {
-    await downloadKitPdf({ email: props.email, secretKey: props.secretKey })
+    const bytes = await renderKitPdf({ email: props.email, secretKey: props.secretKey }, (key) => t(key))
+    saveKitPdf(bytes, props.email)
     downloaded.value = true
   } catch {
     failed.value = true
