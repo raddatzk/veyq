@@ -35,11 +35,11 @@ seccompProfile:
 {{- end }}
 
 {{- define "veyq.appImage" -}}
-{{ required "image.repository is required (e.g. ghcr.io/raddatzk/veyq)" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}
+{{ required "image.repository is required (e.g. ghcr.io/raddatzk/veyq)" .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}{{ with .Values.image.digest }}@{{ . }}{{ end }}
 {{- end }}
 
 {{- define "veyq.adminImage" -}}
-{{ required "admin.image.repository is required (e.g. ghcr.io/raddatzk/veyq-admin)" .Values.admin.image.repository }}:{{ .Values.admin.image.tag | default .Chart.AppVersion }}
+{{ required "admin.image.repository is required (e.g. ghcr.io/raddatzk/veyq-admin)" .Values.admin.image.repository }}:{{ .Values.admin.image.tag | default .Chart.AppVersion }}{{ with .Values.admin.image.digest }}@{{ . }}{{ end }}
 {{- end }}
 
 {{/*

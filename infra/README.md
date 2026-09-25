@@ -324,6 +324,7 @@ would reconcile each other's routing away.
 ```sh
 cp charts/veyq/values.yaml my-values.yaml         # fill in: domain, storeDomain, both image repositories,
                                                   # every key under secrets, and the ingress.tls block
+# § Verifying a release, then pin what it verified: image.tag/digest and admin.image.tag/digest
 helm install veyq ./charts/veyq -n veyq --create-namespace -f my-values.yaml
 ```
 
@@ -451,12 +452,16 @@ to this target.
 ```sh
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application, and only it
 # 2. capture and verify — § Backup & restore, through port-forwards
-helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml --set image.tag=<new> --set admin.image.tag=<new>
+helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml \
+  --set image.tag=<new> --set image.digest="${app_digest}" \
+  --set admin.image.tag=<new> --set admin.image.digest="${admin_digest}"   # from § Verifying a release
 # 3. the schema migrates during this boot; then verify as the compose runbook says — not by "it started"
 ```
 
-Pin the same tag on both images: they ship as one release, and only one of a mismatched pair migrated the
-schema. Rollback is the backup plus the previous tag, exactly as under compose.
+Pin the same tag on both images, each with the digest the verification resolved for it: they ship as one
+release, and only one of a mismatched pair migrated the schema. With a digest set the pod runs
+`repository:tag@digest`, and the node pulls by the digest. Rollback is the backup plus the previous tags and
+digests, exactly as under compose.
 
 ## Backup & restore
 
