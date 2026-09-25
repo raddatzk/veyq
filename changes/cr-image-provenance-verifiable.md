@@ -1,7 +1,7 @@
 ---
 id: cr-image-provenance-verifiable
 title: A self-hoster can verify where both images came from, and the recipe pins every image it runs
-status: planned
+status: done
 satisfies: []
 adrs: ["0057", "0064", "0065"]
 invariants: [self-hostable by default]
@@ -50,7 +50,7 @@ Inbox #163, runtime half, and before V1. The build-time half is `cr-build-inputs
 
 ## Phases
 
-- [ ] 1 identity — ordered guard → red → fix → green, because the defect is live
+- [x] 1 identity — ordered guard → red → fix → green, because the defect is live
       (`changes/README.md` § *Where the defect is still live*).
       - **Guard first.** `validate_release_identity.py` gains the check. It reads the README's documented
         `cosign verify`, then asserts two things. The issuer is `https://token.actions.githubusercontent.com`.
@@ -82,11 +82,11 @@ Inbox #163, runtime half, and before V1. The build-time half is `cr-build-inputs
       · Done when: the README's commands, run by hand against any public cosign-signed multi-arch image with
         that image's own identity, verify and extract as written. No release of ours exists to run them
         against, and the retro says so.
-- [ ] 2 chart — `image.digest` and `admin.image.digest` values. `_helpers.tpl:37-43` renders `repo:tag@digest`
+- [x] 2 chart — `image.digest` and `admin.image.digest` values. `_helpers.tpl:37-43` renders `repo:tag@digest`
       when a digest is set; the schema gains the key with a `^sha256:[0-9a-f]{64}$` pattern. The Helm upgrade
       line (`infra/README.md:374`) sets both digests.
       · Done when: `python3 scripts/chart_meta_check.py` green with a digest set in one `ci/` values file.
-- [ ] 3 third-party digest pins + guard — pin every external image by its **multi-arch index** digest, as
+- [x] 3 third-party digest pins + guard — pin every external image by its **multi-arch index** digest, as
       `repo:tag@sha256:…`. A platform manifest's digest would pin one architecture, and the publish builds
       amd64 and arm64. The sites come from two locators that must agree:
       - by key: `grep -rn -E '^\s*(- )?image:|^FROM ' infra charts/veyq/values.yaml Dockerfile admin-web/Dockerfile`
@@ -109,7 +109,7 @@ Inbox #163, runtime half, and before V1. The build-time half is `cr-build-inputs
       keychain credential helper. A registry-API call without Docker's credential store avoids it.
       · Done when: the guards are green, and `docker compose -f infra/docker-compose.prod.yml config -q` still
         passes.
-- [ ] 4 updater config — `.github/dependabot.yml`:
+- [x] 4 updater config — `.github/dependabot.yml`:
       - add the image ecosystems for the Dockerfiles (`/`, `/admin-web`), the compose files (`/infra`) and the
         chart (`/charts/veyq`), after checking against Dependabot's current docs which of them it actually
         reads, since that was remembered at refine, not measured;
@@ -130,3 +130,22 @@ published. The first publish's retro runs the README's verification section agai
 ADR 0057 §3 observed rather than written.
 
 ## Retrospective
+
+- **Planning — a planned bite had no path to red.** Phase 1 derived the accepted identities from the guard's
+  existing scenarios and bit it by restoring `master` in the workflow, but no scenario pushed to `master`, so
+  that lever reached nothing; and the one refused scenario (`release/<major+7>.x`) could not double as a
+  must-reject identity, because the pinned pattern rightly accepts every major. It needed a refused-branch probe
+  list run through the version step. This is § *first check the lever is wired to the mechanism* — an existing
+  rule, missed at refine. Likewise the schema pattern `^sha256:[0-9a-f]{64}$` would have refused the empty
+  default the value needs; it shipped as `^(sha256:[0-9a-f]{64})?$`.
+- **Execution — the hand-run failed once on the stand-in, not on the procedure.** `docker create` refuses an
+  image with no command (Chainguard's `static`); the veyq image has an `ENTRYPOINT`, so the procedure holds, and
+  the rerun used `cgr.dev/chainguard/nginx` + `static`, both keyless-signed from
+  `chainguard-images/images`'s `release.yaml` on `refs/heads/main` — the same shape as ours, which makes it the
+  stand-in to reuse. The negative control (our workflow name, their repo) failed as it should. No veyq release
+  exists, so ADR 0057 §3 is still written, not observed.
+- **Process — the brief and `changes/README.md` disagreed on the guard glob.** The brief said "green before each
+  commit"; the wave rule says the glob gates the merged tree once. Each full run took ~25 min, most of it
+  `validate_guard_gaps.py` with a neighbour's copy running beside it; phases 3 and 4 shared one run over their
+  combined tree. **Next time:** a wave brief names the guards each phase runs and leaves the whole glob to the merge.
+
