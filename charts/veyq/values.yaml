@@ -131,7 +131,7 @@ ingress:
     #              and its Ingress withdrawn, cert-manager does NOT delete the Secret it issued unless it runs
     #              with --enable-certificate-owner-ref, so a withdrawn domain leaves an orphaned TLS Secret in
     #              the namespace. Operator-visible, not a routing leak (the Ingress is gone) and not an access
-    #              leak (suspension's guarantee is the request-boundary gate); not swept by the chart, because
+    #              leak (suspension's guarantee is the app's scope-access gate); not swept by the chart, because
     #              sweeping Secrets would need RBAC this design exists to avoid.
     # shared     — every Ingress points at ONE pre-provisioned TLS Secret (secretName below): a wildcard
     #              certificate, kept as an operator's choice rather than as everyone's ceiling. An operator who

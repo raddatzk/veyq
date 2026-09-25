@@ -329,7 +329,7 @@ yours, or — opted in — the one the chart templates (below):
   withdrawn, cert-manager does **not** delete the `Secret` it issued unless it runs with
   `--enable-certificate-owner-ref`. A withdrawn domain therefore leaves an orphaned TLS `Secret` in the
   namespace — visible to you, not a routing leak (the `Ingress` is gone) and not an access leak (a suspended
-  tenant is locked out at the request boundary, not by routing). The chart does not sweep them, because
+  tenant is locked out by the app's scope-access gate, not by routing). The chart does not sweep them, because
   sweeping `Secret`s would need the RBAC this design exists to avoid.
 - `shared`: every `Ingress` points at the one `Secret` you name in `ingress.tls.secretName` — a wildcard
   certificate you obtained yourself. A working instance with no ACME at all, at the price of per-tenant custom

@@ -195,10 +195,12 @@ not documented; the code is the source of truth for that.
   no `…Resource` constructs `ErrorResponse` or keeps a per-resource `error`/`forbidden`/`notFound` helper. The
   variant self-describes its `code` + status bucket (recurring failures via a shared `Failures` catalog), so the
   projection is single-sourced and status drift is structurally impossible. **The membership boundary is the first
-  guard** on every scope-addressed operation — gate on membership *before* any existence/kind/state probe, so a
-  non-member and a bogus id get the same 404 and existence is not enumerable. Capability checks (grant-holder,
-  owner) run **after** it and may answer 403: that caller is a member and already knows the resource exists.
-  `OperatorBlindProbeTest` enforces this for every endpoint — add a row when you add one.
+  guard** on every scope-addressed operation — the one call `ScopeAccess.check` *before* any existence/kind/state
+  probe, so a non-member and a bogus id get the same 404 and existence is not enumerable
+  ([uc.spaces.scope-access](../features/spaces/use-cases/uc.spaces.scope-access.md)). Capability checks
+  (grant-holder, owner) run **after** it and may answer 403: that caller is a member and already knows the resource
+  exists. `OperatorBlindProbeTest` enforces this for every operation it derives from the contract — a new one is
+  red until it is probed or named on the test's exclusion list with a reason.
   ([ADR 0042](../decisions/0042-http-failure-projection.md); cr-0161 the projection, cr-0162 the ordering.)
 - *(to decide)* Cross-context communication — direct call vs. domain events — settled when bounded
   contexts are cut.
