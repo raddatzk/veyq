@@ -5,7 +5,7 @@
 // project's own vitest and neither project collects the other's suites.
 //
 // WHAT is mutated lives in stryker.mutate.json (the canonical scope, shared with the CI meta-check so the two
-// never drift) — v1.ts + accountBirth.ts, NOT the argon*.worker wiring layer (ADR 0045 §3); see that file's
+// never drift) — NOT the argon*.worker wiring layer (ADR 0045 §3); see that file's
 // _comment for the measured evidence.
 //
 // inPlace (not Stryker's default copy-to-sandbox): v1.conformance.test.ts reads the shared crypto vectors at

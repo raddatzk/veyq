@@ -8,6 +8,7 @@
     "./v1": "./src/v1.ts",
     "./argonWorker": "./src/argonWorker.ts",
     "./accountBirth": "./src/accountBirth.ts",
+    "./emergencyKit": "./src/emergencyKit.ts",
     "./base64": "./src/base64.ts",
     "./testArgon": "./src/testArgon.ts"
   },
