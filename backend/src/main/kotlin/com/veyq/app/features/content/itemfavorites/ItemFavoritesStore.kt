@@ -1,6 +1,5 @@
 package com.veyq.app.features.content.itemfavorites
 
-import com.veyq.app.shared.membership.MembershipStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -14,12 +13,10 @@ data class MemberItemFavorites(val own: Boolean, val ciphertext: String)
 
 /**
  * Persistence for per-(member, scope, node) item favorites (ADR 0068). Operator-blind: stores the sealed
- * ciphertext only. Scope access = the caller holds a membership for the scope (same gate as the Memory tree).
+ * ciphertext only. Who may act on a scope is decided by the handler's `ScopeAccess` gate.
  */
 @ApplicationScoped
-class ItemFavoritesStore(private val membership: MembershipStore) {
-
-    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
+class ItemFavoritesStore {
 
     /**
      * **Every** member's sealed blob for the node — not just the caller's. That is the point of this resource:

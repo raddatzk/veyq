@@ -10,11 +10,12 @@ import com.veyq.app.shared.identity.ServerRoles
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.identity.WrapData
+import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
-import org.jboss.logging.Logger
 import java.time.Instant
+import org.jboss.logging.Logger
 
 /** Cold-birth account material for the register-and-accept path (the email comes from the invite). No display
  *  name — identity is the per-tenant `username` (threaded separately) + the sealed name set later (ADR 0023). */
@@ -62,7 +63,9 @@ sealed interface RegisterAcceptOutcome {
 /**
  * Tenant activation — invite acceptance (uc.admin.create-tenant Slice B, cr-0010). Verifies the bootstrap
  * secret by hash, applies reuse-detection (a presented non-ACTIVE / expired invite is a replay → rejected +
- * logged, mirroring the session model), and on success cold-activates the tenant atomically: the owner's
+ * logged, mirroring the session model) — an invite to a SUSPENDED tenant answers exactly as a dead one: its holder
+ * is no member and learns nothing of the suspension (uc.spaces.scope-access A4) — and on success cold-activates the
+ * tenant atomically: the owner's
  * `OWNER` membership + grant, the tenant flipped `ACTIVE`, the invite `CONSUMED`. Operator-blind — the grant
  * is opaque ciphertext stored verbatim; the server never sees the scope key.
  */
@@ -71,6 +74,7 @@ class TenantAcceptHandler(
     private val store: TenantStore,
     private val accounts: AccountStore,
     private val profiles: TenantProfileStore,
+    private val access: ScopeAccess,
 ) {
     private val log = Logger.getLogger(TenantAcceptHandler::class.java)
 
@@ -79,6 +83,7 @@ class TenantAcceptHandler(
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return PreviewOutcome.NotFound
         if (!isLive(invite)) return PreviewOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return PreviewOutcome.NotFound
+        if (!access.isTenantLive(tenant.id)) return PreviewOutcome.NoLongerValid
         // The invited email is the invite's own — for a MEMBER invite it differs from the tenant owner's.
         return PreviewOutcome.Found(
             tenantId = tenant.id,
@@ -103,10 +108,15 @@ class TenantAcceptHandler(
         if (caller.email != invite.ownerEmail) return AcceptOutcome.NotInvitedOwner
 
         return if (invite.role == TenantInviteEntity.MEMBER) {
+            if (!access.isTenantLive(tenant.id)) return AcceptOutcome.NoLongerValid
             // A member joins an ACTIVE tenant grant-less; if already a member, just consume the invite (their
             // tenant profile already exists — the username is only chosen on a fresh join).
-            if (store.hasMembership(userId, tenant.id)) {
+            if (store.belongsToTenant(userId, tenant.id)) {
                 store.consumeInvite(invite.id)
+            } else if (profiles.find(userId, tenant.id) != null) {
+                // A member removed from the tenant and invited back: the profile outlived the removal, so they
+                // rejoin under the username they had rather than being handed a second one.
+                store.joinAsMember(tenant.id, userId, invite.id)
             } else {
                 if (profiles.usernameTaken(tenant.id, username)) return AcceptOutcome.UsernameTaken
                 store.joinAsMember(tenant.id, userId, invite.id)
@@ -131,6 +141,7 @@ class TenantAcceptHandler(
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return RegisterAcceptOutcome.NotFound
+        if (!access.isTenantLive(tenant.id)) return RegisterAcceptOutcome.NoLongerValid
 
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
         if (accounts.findByEmail(invite.ownerEmail) != null) return RegisterAcceptOutcome.EmailTaken

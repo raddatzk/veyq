@@ -42,7 +42,7 @@ import java.util.jar.JarFile
  *  3. **Accepted member of a SUSPENDED tenant** — `403 tenant_suspended`, sent on a `Host` **no tenant claims**,
  *     so the answer cannot come from `TenantSuspensionFilter`.
  *  4. **Accepted member of a deleting GROUP** — a write is `409 scope_deleting`; a read is not refused.
- *  5. **Control** — the same call by the live group's owner is refused by none of the above. Every negative owes a
+ *  5. **Control** — the same call by the owner of an identical live group is refused by none of the above. Every negative owes a
  *     positive control on the same predicate: without it a probe that 404s wholesale (a broken path, a missing
  *     fixture) would satisfy the stranger and proposal checks perfectly.
  *
@@ -63,7 +63,7 @@ class OperatorBlindProbeTest {
         val address: Address,
         /** The status the gate's NotMember answer carries — 404 everywhere but a listing that answers `[]`. */
         val notMemberStatus: Int = 404,
-        /** Puts the live space into the state the control needs to get past the operation's own checks. */
+        /** Puts the live spaces into the state the control needs to get past the operation's own checks. */
         val prepare: (ScopeAccessWorld) -> Unit = {},
         /** A listing that answers a non-member `[]`: its answer is told apart by whether rows came back. */
         val rowsTell: Boolean = false,
@@ -84,7 +84,7 @@ class OperatorBlindProbeTest {
             Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}", """{"encryptedName":"$B64"}""")
         },
         "deleteNode" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}") },
-        "restoreNode" to Probe(Address.SCOPE, prepare = { w -> trashNode(w, w.live) }) { s ->
+        "restoreNode" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashNode(w, it) } }) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/restore", """{"slugToken":"$slug"}""")
         },
         "listTrashedNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/trash/nodes") },
@@ -123,7 +123,7 @@ class OperatorBlindProbeTest {
         },
         "deleteMedia" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/media/${s.mediaId}") },
         "restoreMedia" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/media/${s.mediaId}/restore") },
-        "purgeMedia" to Probe(Address.SCOPE, prepare = { w -> trashMedia(w, w.live) }) { s ->
+        "purgeMedia" to Probe(Address.SCOPE, prepare = { w -> listOf(w.live, w.control).forEach { trashMedia(w, it) } }) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/media/${s.mediaId}/purge")
         },
         "presignBlobDownloads" to Probe(Address.SCOPE) { s ->
@@ -320,8 +320,9 @@ class OperatorBlindProbeTest {
             }
         }
 
-        // 5. control — last, since a call the gate lets through may change the world
-        val asControl = fire(w, w.live.ownerId, probe.call(w.live)).answer()
+        // 5. control — the same call by the owner of an identical live group (its own space, so a negative the gate
+        // wrongly let through cannot have changed the state the control needs)
+        val asControl = fire(w, w.control.ownerId, probe.call(w.control)).answer()
         checks += Executable {
             assertTrue(asControl !in refusals && asControl.first !in setOf(400, 401),
                 "[control] $id refuses the live group's owner: $asControl — the negatives above prove nothing while this is refused")

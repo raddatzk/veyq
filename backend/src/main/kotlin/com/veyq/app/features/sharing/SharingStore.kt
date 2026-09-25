@@ -6,7 +6,6 @@ import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
 import com.veyq.app.shared.crypto.Tokens
-import com.veyq.app.shared.membership.MembershipStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -64,10 +63,7 @@ data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
 class SharingStore(
     /** cr-0107: the delete-own path bumps the node's live-updates counters via the media store's single bump helper. */
     private val mediaStore: MediaStore,
-    private val membership: MembershipStore,
 ) {
-
-    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
 
@@ -150,13 +146,12 @@ class SharingStore(
         return true
     }
 
-    /** Re-activate a soft-revoked share and adopt its ownership (cr-0104): any current **member** of the share's
-     *  scope may flip `enabled` back on and take `ownerAccount`. False when there is no such share, or the caller
-     *  is not a member of its scope. */
+    /** Re-activate a soft-revoked share and adopt its ownership (cr-0104): flip `enabled` back on and take
+     *  `ownerAccount`. The handler has already let the caller through the scope-access gate. False when there is no
+     *  such share. */
     @Transactional
     fun reactivate(callerAccount: String, shareId: String): Boolean {
         val share = ShareEntity.findById(shareId) ?: return false
-        if (!isMember(callerAccount, share.scopeId)) return false
         share.enabled = true
         share.ownerAccount = callerAccount
         return true

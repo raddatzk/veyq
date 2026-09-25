@@ -6,6 +6,7 @@ import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -145,6 +146,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
                 scopeId = seed.scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="
                 createdAt = Instant.now()
             }.persist()
+            TenantRoots.join(seed.userId, seed.tenantId)
             NodeEntity().apply {
                 id = seed.nodeId; scopeId = seed.scopeId; parentId = seed.scopeId; kind = NodeEntity.MEMORY
                 encryptedName = "bg=="; slugToken = "c2x1Zy0${seed.nodeId}".take(120); orderIndex = 0

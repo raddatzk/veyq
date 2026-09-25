@@ -6,6 +6,7 @@ import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TenantRoots
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -103,8 +104,9 @@ class MediaPresignDomainSliceTest {
     @Test
     fun aSuspendedTenantsHostNeverReachesThePresignerAtAll() {
         // A **negative control**, not a presigning rule. The presigning path deliberately knows nothing about
-        // SUSPENDED — it does not have to, because `TenantSuspensionFilter` refuses the request before matching,
-        // so `MediaResource` is never entered and there is no domain to sign for. Asserted on the specific
+        // SUSPENDED — it does not have to: on the suspended tenant's own domain `TenantSuspensionFilter` refuses the
+        // request before matching, so `MediaResource` is never entered and there is no domain to sign for (from any
+        // other domain the scope-access gate answers first, before any presign — `OperatorBlindProbeTest`). Asserted on the specific
         // observable (403 + `tenant_suspended`) precisely so it reads as the *filter* refusing: if this were
         // ever silently handled inside the presigning path instead, the code would answer something else here
         // and `TenantSuspendSliceTest` — not this class — is where the real regression would surface.
@@ -200,6 +202,7 @@ class MediaPresignDomainSliceTest {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
                 this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
+            TenantRoots.join(userId, tenantId)
         }
         return userId to scopeId
     }

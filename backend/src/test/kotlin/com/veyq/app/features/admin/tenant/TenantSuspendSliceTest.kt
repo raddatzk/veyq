@@ -19,7 +19,8 @@ import java.util.UUID
 
 /**
  * Slice tests for tenant suspension (uc.admin.suspend-tenant, ADR 0066): the two Server-Owner transitions and —
- * the part that is actually load-bearing — the request-boundary gate they arm.
+ * the `Host` filter they arm on the tenant's own domain. What refuses the same tenant from every other domain is the
+ * scope-access gate, and `OperatorBlindProbeTest` pins that on a Host no tenant claims.
  *
  * Two properties here are permanent regression guards, not incidental coverage, and both are asserted on the
  * **specific** observable (`403` + `tenant_suspended` in the body) rather than on "not 2xx", because a wholesale

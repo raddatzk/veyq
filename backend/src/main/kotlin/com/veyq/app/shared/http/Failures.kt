@@ -18,9 +18,10 @@ import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
  */
 object Failures {
     /**
-     * No such scope — **or** the caller holds no membership for it. The two are deliberately indistinguishable
-     * (ADR 0042): a non-member must not learn a scope exists. Every scope-addressed operation raises this from
-     * its **first** guard, before any existence/kind/state probe, so a stranger and a bogus id get one answer.
+     * No such scope — **or** the caller holds no accepted membership for it. The two are deliberately
+     * indistinguishable (ADR 0042): a non-member must not learn a scope exists. Every scope-addressed operation
+     * raises this from its **first** guard, the scope-access gate (`ScopeAccess`), before any existence/kind/state
+     * probe, so a stranger, an unaccepted proposal and a bogus id get one answer.
      */
     val scopeNotFound: HttpFailure = httpFailure("scope_not_found", NOT_FOUND)
 
@@ -35,26 +36,29 @@ object Failures {
     val memberNotFound: HttpFailure = httpFailure("member_not_found", NOT_FOUND)
 
     /**
-     * The tenant the request resolved to is SUSPENDED → 403 (ADR 0066). Raised by `TenantSuspensionFilter` at
-     * the request boundary, before authentication, so it is the answer *every* route can give — which is why it
-     * belongs in this catalog rather than in one slice's vocabulary: it is not owned by the slice it interrupts.
+     * The tenant an operation acts on is SUSPENDED → 403 (ADR 0066). Raised by the scope-access gate on every
+     * operation acting on the tenant, from whichever domain it arrived (uc.spaces.scope-access), and by
+     * `TenantSuspensionFilter` on the tenant's own domain, before authentication — so it is the answer *every*
+     * route can give, which is why it belongs in this catalog rather than in one slice's vocabulary.
      *
-     * Deliberately **not** indistinguishable from [tenantNotFound]: unlike a membership gate it discloses
-     * nothing private. A suspended tenant's domain is public by construction (it is how the request got here),
-     * and the caller needs to be able to tell "this space is temporarily offline" from "wrong address" —
-     * telling them their own space still exists is the honest answer, not a leak.
+     * Deliberately **not** indistinguishable from [tenantNotFound], and safe for that: the gate tells it only to an
+     * accepted member — a stranger gets the 404 first — and on the tenant's own domain the domain is public by
+     * construction (it is how the request got here). The caller needs to tell "this space is temporarily offline"
+     * from "wrong address"; telling a member their own space still exists is the honest answer, not a leak.
      */
     val tenantSuspended: HttpFailure = httpFailure("tenant_suspended", FORBIDDEN)
 
     /**
-     * The caller **is** a member of the scope but holds no grant there — not a key-holder (ADR 0020: a grant is
-     * a capability *within* the membership boundary, e.g. a member whose consent is still pending). A legitimate
-     * 403: the membership guard already ran, so this caller knows the scope exists and no existence is disclosed
+     * The caller **is** an accepted member of the scope but holds no grant there yet — not a key-holder (ADR 0020:
+     * a grant is a capability *within* the membership boundary, delivered after admission). Never an unaccepted
+     * proposal: the gate answers that one like a stranger. A legitimate 403: the scope-access gate already ran, so this caller knows the scope exists and no existence is disclosed
      * (ADR 0042). Do not raise it for a non-member — that is [scopeNotFound].
      */
     val notKeyHolder: HttpFailure = httpFailure("not_key_holder", FORBIDDEN)
 
-    /** Scope is pending deletion; mutating it conflicts with that terminal transition → 409. */
+    /** The scope is being deleted — read-only for its grace window, for every write (uc.spaces.delete-group A4) → 409.
+     *  The one code for that state; raised by the scope-access gate, so only an accepted member who still belongs to
+     *  the tenant ever sees it. */
     val scopeDeleting: HttpFailure = httpFailure("scope_deleting", CONFLICT)
 
     /** Slug already taken under the parent (uniqueness) → 409. */

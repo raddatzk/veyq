@@ -32,9 +32,11 @@ data class ClaimedJobView(
     val grantDelivery: GrantDeliveryTargetView?,
 )
 
-/** Outcome of a heartbeat: the job was found in the caller's scope but may not be leased to them. */
+/** Outcome of a heartbeat: the gate let the caller in, but the job may not be leased to them. */
 sealed interface HeartbeatResult {
     data class Extended(val leaseExpiresAt: Instant) : HeartbeatResult
+    object Suspended : HeartbeatResult, HttpFailure by Failures.tenantSuspended
+    object Deleting : HeartbeatResult, HttpFailure by Failures.scopeDeleting
     object NotFound : HeartbeatResult, HttpFailure by httpFailure("job_not_found", NOT_FOUND)
     object NotHolder : HeartbeatResult, HttpFailure by httpFailure("not_lease_holder", CONFLICT)
 }
@@ -42,19 +44,30 @@ sealed interface HeartbeatResult {
 /** Outcome of a completion. */
 sealed interface CompleteResult {
     object Done : CompleteResult
+    object Suspended : CompleteResult, HttpFailure by Failures.tenantSuspended
+    object Deleting : CompleteResult, HttpFailure by Failures.scopeDeleting
     object NotFound : CompleteResult, HttpFailure by httpFailure("job_not_found", NOT_FOUND)
     object MissingResult : CompleteResult, HttpFailure by Failures.invalidRequest
+    /** The job is not leased to the caller (ADR 0021 §6) — idempotency makes a repeated completion harmless, it does
+     *  not make an unclaimed one legitimate. */
+    object NotHolder : CompleteResult, HttpFailure by httpFailure("not_lease_holder", CONFLICT)
 }
 
 /** Outcome of a failure report — the job's status + attempts after requeue-or-dead-letter. */
 sealed interface FailResult {
     data class Recorded(val status: String, val attempts: Int) : FailResult
+    object Suspended : FailResult, HttpFailure by Failures.tenantSuspended
+    object Deleting : FailResult, HttpFailure by Failures.scopeDeleting
     object NotFound : FailResult, HttpFailure by httpFailure("job_not_found", NOT_FOUND)
+    /** The job is not leased to the caller, or no longer leased at all (ADR 0021 §6). */
+    object NotHolder : FailResult, HttpFailure by httpFailure("not_lease_holder", CONFLICT)
 }
 
 /** Outcome of a decline — the job released back to pending, or the caller wasn't its lease-holder. */
 sealed interface DeclineResult {
     data class Released(val status: String, val attempts: Int) : DeclineResult
+    object Suspended : DeclineResult, HttpFailure by Failures.tenantSuspended
+    object Deleting : DeclineResult, HttpFailure by Failures.scopeDeleting
     object NotFound : DeclineResult, HttpFailure by httpFailure("job_not_found", NOT_FOUND)
     object NotHolder : DeclineResult, HttpFailure by httpFailure("not_lease_holder", CONFLICT)
 }
@@ -74,19 +87,23 @@ class TasksStore {
         MembershipEntity.find("userId = ?1 and wrappedGrant is not null", userId)
             .list().map { it.scopeId }.toSet()
 
+    /** A job by id, or null — the handler resolves the job's scope from it before asking the gate. */
+    fun find(jobId: String): JobEntity? = JobEntity.findById(jobId)
+
     /**
-     * Atomically lease one claimable job for this worker: `scope ∈ granted memberships ∧ tag ∈ [tags]`, where
+     * Atomically lease one claimable job for this worker: `scope ∈ [eligible] ∧ tag ∈ [tags]`, where
      * a PENDING job — or a LEASED job whose lease has expired (lazy reclaim) — is claimable. Reconciles
      * grant-delivery jobs first (structural origination) and dead-letters exhausted expired jobs. Returns the
      * leased job, or null when nothing is claimable.
      */
     @Transactional
     fun claim(
-        userId: String, tags: List<String>, scopeFilter: String?,
+        userId: String, eligible: Set<String>, tags: List<String>,
         ttl: java.time.Duration, maxAttempts: Int,
     ): ClaimedJobView? {
-        // Eligible scopes = the caller's granted scopes, optionally narrowed to one the worker has opened.
-        val scopeIds = grantedScopeIds(userId).let { g -> if (scopeFilter != null) g intersect setOf(scopeFilter) else g }
+        // Eligible scopes come from the handler: the caller's granted scopes the scope-access gate lets them write
+        // (uc.spaces.scope-access A5), optionally narrowed to one the worker has opened.
+        val scopeIds = eligible
         if (scopeIds.isEmpty() || tags.isEmpty()) return null
 
         val now = Instant.now()
@@ -142,8 +159,7 @@ class TasksStore {
     /** Extend the caller's lease on a job they hold. */
     @Transactional
     fun heartbeat(userId: String, jobId: String, ttl: java.time.Duration): HeartbeatResult {
-        val job = JobEntity.findById(jobId) ?: return HeartbeatResult.NotFound
-        if (job.scopeId !in grantedScopeIds(userId)) return HeartbeatResult.NotFound
+        JobEntity.findById(jobId) ?: return HeartbeatResult.NotFound
         val newExpiry = Instant.now().plus(ttl)
         val rows = JobEntity.update(
             "leaseExpiresAt = ?1 where id = ?2 and leaseHolder = ?3 and status = ?4",
@@ -155,13 +171,14 @@ class TasksStore {
     /**
      * Mark a job done. For grant-delivery the `sealedResult` **is** the wrappedGrant, written onto the target
      * membership — idempotently (no-op if the target already holds a grant, first-online-wins). A job already
-     * DONE is a success no-op. The caller must hold a grant in the job's scope (be a key-holder there).
+     * DONE is a success no-op, checked first; otherwise the caller must hold the job's current lease
+     * (ADR 0021 §6) — which also makes them a key-holder there, since only a granted scope is claimable.
      */
     @Transactional
     fun complete(userId: String, jobId: String, sealedResult: String?): CompleteResult {
         val job = JobEntity.findById(jobId) ?: return CompleteResult.NotFound
-        if (job.scopeId !in grantedScopeIds(userId)) return CompleteResult.NotFound
         if (job.status == JobEntity.DONE) return CompleteResult.Done // idempotent no-op
+        if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
 
         if (job.capabilityTag == CapabilityTags.GRANT_DELIVERY) {
             val grant = sealedResult ?: return CompleteResult.MissingResult
@@ -188,23 +205,22 @@ class TasksStore {
         return CompleteResult.Done
     }
 
-    /** Record a failed attempt: requeue (PENDING) while attempts remain, else dead-letter (FAILED). */
+    /**
+     * Record a failed attempt: requeue (PENDING) while attempts remain, else dead-letter (FAILED). Only the lease
+     * holder, and only while the job is still LEASED (ADR 0021 §6) — else [FailResult.NotHolder].
+     */
     @Transactional
     fun fail(userId: String, jobId: String): FailResult {
         val job = JobEntity.findById(jobId) ?: return FailResult.NotFound
-        if (job.scopeId !in grantedScopeIds(userId)) return FailResult.NotFound
         // attempts was already incremented at claim; dead-letter once it has reached the job's own max.
         val newStatus = if (job.attempts >= job.maxAttempts) JobEntity.FAILED else JobEntity.PENDING
         val rows = JobEntity.update(
-            "status = ?1, leaseHolder = null, leaseExpiresAt = null where id = ?2 and status = ?3",
-            newStatus, jobId, JobEntity.LEASED,
+            "status = ?1, leaseHolder = null, leaseExpiresAt = null where id = ?2 and status = ?3 and leaseHolder = ?4",
+            newStatus, jobId, JobEntity.LEASED, userId,
         )
-        // fail doesn't change attempts, so the count is what we loaded; the status is the one we just set.
-        // The bulk update bypasses the persistence context, so we don't re-read the (now-stale) managed entity
-        // — on a lost race (another worker already acted) refresh to report the authoritative state instead.
-        if (rows == 1) return FailResult.Recorded(newStatus, job.attempts)
-        JobEntity.getEntityManager().refresh(job)
-        return FailResult.Recorded(job.status, job.attempts)
+        // fail doesn't change attempts, so the count is what we loaded; the status is the one we just set. A lost
+        // race (the lease expired and another worker re-leased it) matches no row, so it is the same NotHolder.
+        return if (rows == 1) FailResult.Recorded(newStatus, job.attempts) else FailResult.NotHolder
     }
 
     /**
@@ -212,8 +228,8 @@ class TasksStore {
      * OTHER workers — and record a `(job, worker)` decline so this worker is never re-offered it (the exclusion in
      * [claim]'s candidate query). Unlike [fail], the claim's attempt increment is **rolled back** (`attempts - 1`),
      * so a legitimately-declined job is never dead-lettered by declines alone. Only the lease-holder may decline
-     * (`and leaseHolder = ?`), else [DeclineResult.NotHolder] → 409. The job must be in a scope the caller holds a
-     * grant in, else [DeclineResult.NotFound] → 404. Per **key-holder**, not a global veto: `workerId` is the
+     * (`and leaseHolder = ?`), else [DeclineResult.NotHolder] → 409 — the handler's scope-access gate has already
+     * answered a caller outside the job's space. Per **key-holder**, not a global veto: `workerId` is the
      * user id, so the decliner's other devices are excluded too — the refusal was a decision about an identity,
      * not about a browser — while a different key-holder still delivers. The blind server never adjudicates the
      * crypto claim, it only removes this worker from the candidate set.
@@ -225,7 +241,6 @@ class TasksStore {
     @Transactional
     fun decline(userId: String, jobId: String, reason: String?): DeclineResult {
         val job = JobEntity.findById(jobId) ?: return DeclineResult.NotFound
-        if (job.scopeId !in grantedScopeIds(userId)) return DeclineResult.NotFound
         val rows = JobEntity.update(
             "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
                 "where id = ?2 and leaseHolder = ?3 and status = ?4",

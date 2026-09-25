@@ -20,6 +20,11 @@ import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.membership.Access
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
 import java.time.Instant
@@ -38,6 +43,8 @@ data class ShareCompleteItem(
 
 sealed interface CreateShareOutcome {
     data class Created(val shareId: String) : CreateShareOutcome
+    object Suspended : CreateShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : CreateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** The sharing capability this role needs is disabled instance-wide (ADR 0032) — a 422, instance policy. */
     object CapabilityDisabled : CreateShareOutcome, HttpFailure by Failures.capabilityDisabled
     /** No such node, or the caller holds no grant for its scope (a 404, no reveal). */
@@ -119,11 +126,15 @@ sealed interface ShareBlobOutcome {
 
 sealed interface RevokeShareOutcome {
     object Done : RevokeShareOutcome
+    object Suspended : RevokeShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RevokeShareOutcome, HttpFailure by Failures.scopeDeleting
     object NotFound : RevokeShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
 
 sealed interface UpdateShareOutcome {
     object Done : UpdateShareOutcome
+    object Suspended : UpdateShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : UpdateShareOutcome, HttpFailure by Failures.scopeDeleting
     /** No such share owned by the caller — a non-enumerable 404 (owner-gated, like revoke). */
     object NotFound : UpdateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** An illegal role change (cr-0119) — `role = UPLOADER`, or a change on an UPLOADER share → 422. */
@@ -132,8 +143,18 @@ sealed interface UpdateShareOutcome {
 
 sealed interface ReactivateShareOutcome {
     object Done : ReactivateShareOutcome
+    object Suspended : ReactivateShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : ReactivateShareOutcome, HttpFailure by Failures.scopeDeleting
+    /** The capability this share's role needs is off (ADR 0032) — re-activating publishes, so it checks what create checks. */
+    object CapabilityDisabled : ReactivateShareOutcome, HttpFailure by Failures.capabilityDisabled
     /** No such share, or the caller is not a member of its scope — a non-enumerable 404. */
     object NotFound : ReactivateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+}
+
+/** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
+sealed interface NodeSharesOutcome {
+    data class Shares(val rows: List<ShareEntity>) : NodeSharesOutcome
+    object Suspended : NodeSharesOutcome, HttpFailure by Failures.tenantSuspended
 }
 
 sealed interface ShareTermsOutcome {
@@ -145,9 +166,10 @@ sealed interface ShareTermsOutcome {
 
 /**
  * Use-case logic for public viewer shares (cr-0100, ADR 0029). Two authorization surfaces:
- *  - **Curator** (create/list/revoke/reactivate): authenticated + gated to a **MEMORY in a scope the caller is
- *    a member of** (personal, group, or tenant — cr-0104).
- *  - **Guest** (resolve/blob): unauthenticated, keyed only on share state (`enabled` + `expiresAt`) — a
+ *  - **Curator** (create/list/revoke/reactivate/update): authenticated, and gated first by [ScopeAccess] on the
+ *    share's (or node's) space — a **MEMORY in a scope the caller is a member of** (personal, group, or tenant —
+ *    cr-0104), writable only outside its deletion grace and a suspension (uc.spaces.scope-access).
+ *  - **Guest** (resolve/blob): unauthenticated, keyed only on share state (`enabled` + `expiresAt` + a live space) — a
  *    parallel authz path, never a relaxed scope filter. The blob GET is authorized structurally (the blob is
  *    attached under the shared subtree), and bytes go **direct-from-store** so the operator never learns which
  *    media a viewer opens. A disabled/expired/unknown share is a non-enumerable 404 in every case.
@@ -162,6 +184,7 @@ class SharingHandler(
     private val capabilities: CapabilityRegistry,
     private val scopes: ScopesStore,
     private val tenantTerms: TenantTermsHandler,
+    private val access: ScopeAccess,
 ) {
 
     fun create(
@@ -173,7 +196,8 @@ class SharingHandler(
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
         if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
         val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
-        if (!store.isMember(userId, node.scopeId)) return CreateShareOutcome.NoNode // no reveal
+        access.check(userId, node.scopeId, WRITE)
+            .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a MEMORY node can
         // be public-shared (ADR 0029 §6, ADR 0030).
         if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
@@ -184,19 +208,34 @@ class SharingHandler(
         return CreateShareOutcome.Created(shareId)
     }
 
-    fun list(userId: String): List<ShareEntity> = store.listByOwner(userId)
+    /**
+     * The caller's own shares — "my shares". Account-addressed, so it filters instead of refusing: a share in a space
+     * the caller may no longer read (they left it, or its tenant is suspended) drops out, because every row carries
+     * that space's sealed names (uc.spaces.scope-access).
+     */
+    fun list(userId: String): List<ShareEntity> =
+        store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok }
 
     /** Every public share on a Memory node, for the shared-scope manage panel (cr-0104): visible to any **member**
      *  of the node's scope, not only the shares' owners — so a member can see + adopt an orphaned (disabled) share.
-     *  Empty when the node is unknown or the caller is not a member (no reveal). The resource tags each row `mine`. */
-    fun listForNode(userId: String, nodeId: String): List<ShareEntity> {
-        val node = store.findNode(nodeId) ?: return emptyList()
-        if (!store.isMember(userId, node.scopeId)) return emptyList()
-        return store.listByNode(nodeId)
+     *  Empty when the node is unknown or the caller is not a member (no reveal); a member of a suspended tenant is
+     *  told so. The resource tags each row `mine`. */
+    fun listForNode(userId: String, nodeId: String): NodeSharesOutcome {
+        val node = store.findNode(nodeId) ?: return NodeSharesOutcome.Shares(emptyList())
+        return when (access.check(userId, node.scopeId, READ)) {
+            Access.Ok -> NodeSharesOutcome.Shares(store.listByNode(nodeId))
+            Access.Suspended -> NodeSharesOutcome.Suspended
+            else -> NodeSharesOutcome.Shares(emptyList())
+        }
     }
 
-    fun revoke(userId: String, shareId: String): RevokeShareOutcome =
-        if (store.revoke(userId, shareId)) RevokeShareOutcome.Done else RevokeShareOutcome.NotFound
+    /** Revoke a share — only its creator, and only while they are still a member of its space (share-shared-scope A3). */
+    fun revoke(userId: String, shareId: String): RevokeShareOutcome {
+        val share = store.find(shareId) ?: return RevokeShareOutcome.NotFound
+        access.check(userId, share.scopeId, WRITE)
+            .refusal(RevokeShareOutcome.NotFound, RevokeShareOutcome.Suspended, RevokeShareOutcome.Deleting)?.let { return it }
+        return if (store.revoke(userId, shareId)) RevokeShareOutcome.Done else RevokeShareOutcome.NotFound
+    }
 
     /** Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated. A share not owned by the caller is a
      *  non-enumerable 404. The `K_share`-sealed ciphertexts (re-sealed client-side) full-replace the note + name;
@@ -206,17 +245,30 @@ class SharingHandler(
     fun updateShare(
         userId: String, shareId: String, sealedNote: String?, sealedShareName: String?, role: String?,
         expiresAt: Instant?, passwordRequired: Boolean?, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-    ): UpdateShareOutcome =
-        when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
+    ): UpdateShareOutcome {
+        val share = store.find(shareId) ?: return UpdateShareOutcome.NotFound
+        access.check(userId, share.scopeId, WRITE)
+            .refusal(UpdateShareOutcome.NotFound, UpdateShareOutcome.Suspended, UpdateShareOutcome.Deleting)?.let { return it }
+        return when (store.updateShare(userId, shareId, sealedNote, sealedShareName, role, expiresAt, passwordRequired, pwSalt, pwVerifier, sealedPassword)) {
             SharingStore.UpdateResult.DONE -> UpdateShareOutcome.Done
             SharingStore.UpdateResult.NOT_FOUND -> UpdateShareOutcome.NotFound
             SharingStore.UpdateResult.INVALID_ROLE -> UpdateShareOutcome.InvalidRole
         }
+    }
 
     /** Re-activate a soft-revoked share and adopt it (cr-0104): any current member of the share's scope may flip
-     *  it back on, which transfers ownership to them. A non-member / unknown share is a non-enumerable 404. */
-    fun reactivate(userId: String, shareId: String): ReactivateShareOutcome =
-        if (store.reactivate(userId, shareId)) ReactivateShareOutcome.Done else ReactivateShareOutcome.NotFound
+     *  it back on, which transfers ownership to them. A non-member / unknown share is a non-enumerable 404.
+     *  Re-activating publishes the link again, so it passes what creating does (share-shared-scope A2): the gate
+     *  (no adoption during the space's deletion grace) and the instance capability for the share's role. */
+    fun reactivate(userId: String, shareId: String): ReactivateShareOutcome {
+        val share = store.find(shareId) ?: return ReactivateShareOutcome.NotFound
+        access.check(userId, share.scopeId, WRITE)
+            .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
+            ?.let { return it }
+        if (!capabilities.isActive(capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
+        store.reactivate(userId, shareId)
+        return ReactivateShareOutcome.Done
+    }
 
     /**
      * Resolve a share for a guest. For a **viewable** role (VIEWER/CONTRIBUTOR) the full sealed subtree + the
@@ -393,12 +445,18 @@ class SharingHandler(
         return if (passwordAttemptLimiter.allow(share.id)) PwCheck.WRONG else PwCheck.TOO_MANY
     }
 
-    /** A share that exists, is enabled, and has not expired — else null (the single non-enumerable 404 gate). */
+    /**
+     * A share that exists, is enabled, has not expired, and whose space serves guests — else null (the single
+     * non-enumerable 404 gate). A space being deleted or a suspended tenant answers exactly as a revoked link does:
+     * a guest is no member and learns neither state, and nothing is written onto the share, so it serves again
+     * unchanged after a restore or a reactivation (uc.spaces.scope-access A4).
+     */
     private fun activeShare(shareId: String): ShareEntity? {
         val share = store.find(shareId) ?: return null
         if (!share.enabled) return null
         val expiry = share.expiresAt
         if (expiry != null && !expiry.isAfter(Instant.now())) return null
+        if (!access.isLive(share.scopeId)) return null
         return share
     }
 }

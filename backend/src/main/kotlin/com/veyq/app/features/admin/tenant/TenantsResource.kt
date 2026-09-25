@@ -102,8 +102,8 @@ class TenantsResource(
         }
 
     // Suspend / reactivate (uc.admin.suspend-tenant, ADR 0066): Server-Owner-gated by the class-level
-    // @RolesAllowed, exactly like revokeTenant. Note these two are themselves subject to TenantSuspensionFilter:
-    // reaching them **on the suspended tenant's own domain** is refused like any other request, which is the
+    // @RolesAllowed, exactly like revokeTenant. Note these two are themselves subject to TenantSuspensionFilter,
+    // which guards the tenant's own domain: reaching them **there** is refused like any other request, which is the
     // deliberate reading of the use-case's E1 — Server-Owner status is global, it is not a per-tenant exemption.
     // The Server Owner reactivates from the server-admin surface (ADR 0065), which is not that domain.
     override fun suspendTenant(tenantId: UUID): Response =

@@ -10,6 +10,7 @@ import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TenantRoots
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -155,6 +156,7 @@ class SharePresignDomainSliceTest {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
                 this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
+            TenantRoots.join(userId, tenantId)
         }
         return userId to scopeId
     }

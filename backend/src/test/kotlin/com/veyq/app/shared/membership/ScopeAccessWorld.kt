@@ -25,6 +25,9 @@ import java.util.UUID
  * have produced, and nothing here depends on the gate letting a seeding write through.
  *
  * - [live]: a GROUP in tenant A (ACTIVE), owned by [Space.ownerId], who is also tenant A's root OWNER.
+ * - [control]: a second GROUP exactly like [live], same owner — where a probe fires its control. A separate space,
+ *   so a negative the gate wrongly lets through (and that mutates, e.g. purges the medium) cannot take the
+ *   control's state with it: the control then still answers about the gate, not about a neighbour's side effect.
  * - [deleting]: a GROUP in tenant A being deleted, owned by a root MEMBER of A.
  * - [suspended]: a GROUP in tenant B, which is SUSPENDED, owned by B's root OWNER.
  * - [stranger]: no row anywhere. [proposal]: an accepted root member of A with an unaccepted proposal on [live].
@@ -52,6 +55,7 @@ class ScopeAccessWorld(
     )
 
     lateinit var live: Space
+    lateinit var control: Space
     lateinit var deleting: Space
     lateinit var suspended: Space
     lateinit var stranger: String
@@ -71,6 +75,7 @@ class ScopeAccessWorld(
         val ownerB = seedUser().also { member(it, tenantB.first, tenantB.first, MembershipEntity.OWNER) }
 
         live = seedSpace(tenantA, ownerA)
+        control = seedSpace(tenantA, ownerA)
         deleting = seedSpace(tenantA, deleter)
         suspended = seedSpace(tenantB, ownerB)
 

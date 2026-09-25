@@ -2,6 +2,7 @@ package com.veyq.app.features.media
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
@@ -278,6 +279,7 @@ class NodeCoverSliceTest {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
                 this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
+            TenantRoots.join(userId, tenantId)
         }
         return scopeId
     }

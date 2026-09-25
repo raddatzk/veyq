@@ -90,8 +90,8 @@ class ScopesStore(
     private val membership: MembershipStore,
 ) {
 
-    /** Whether the caller already holds a membership in this tenant (i.e. belongs to it). */
-    fun isMember(userId: String, tenantId: String): Boolean = membership.isMember(userId, tenantId)
+    /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
+    fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
 
     /** Whether the caller already has a PERSONAL scope in this tenant (one per member, per tenant). */
     fun personalScopeExists(userId: String, tenantId: String): Boolean {
@@ -210,8 +210,8 @@ class ScopesStore(
     /** Whether the caller holds an OWNER membership on this scope (the group-admission gate, ADR 0014 §4). */
     fun isScopeOwner(userId: String, scopeId: String): Boolean = membership.isScopeOwner(userId, scopeId)
 
-    /** Whether the user already holds any membership on this scope (grant or not) — the idempotency check. */
-    fun isScopeMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
+    /** Whether the user already holds any row on this scope, an open proposal included — the add's idempotency. */
+    fun holdsAnyRow(userId: String, scopeId: String): Boolean = membership.holdsAnyRow(userId, scopeId)
 
     /** Resolve a per-tenant username to a userId within a tenant (cr-0086) — the tenant-scoped resolve. */
     fun resolveUsernameInTenant(tenantId: String, username: String): String? =
@@ -287,8 +287,6 @@ class ScopesStore(
 
     // --- group lifecycle: soft-delete + grace + purge (cr-0090) ---
 
-    /** When a scope was soft-deleted (`deletedAt`), or null if active / no such scope. */
-    fun deletedAt(scopeId: String): Instant? = ScopeEntity.findById(scopeId)?.deletedAt
 
     /** Soft-delete a group: set `deletedAt = now` (enters the grace period). */
     @Transactional
@@ -444,9 +442,15 @@ class ScopesStore(
         }
     }
 
-    /** Every tenant the caller belongs to (one row per tenant, name+domain joined) — the space switcher. */
+    /**
+     * Every tenant the caller holds an **accepted** membership in (one row per tenant, name+domain joined) — the
+     * space switcher. Not only the root row: a member removed from a tenant keeps their own spaces readable for the
+     * grace window, and the switcher finds a tenant only through this list (uc.spaces.remove-tenant-member). A
+     * SUSPENDED tenant stays listed with its status but withholds both the grant and the icon: suspension refuses
+     * its members every read, this one included (en.spaces.tenant-scope E1a).
+     */
     fun myTenants(userId: String): List<TenantRow> =
-        MembershipEntity.find("userId", userId).list()
+        MembershipEntity.find("userId = ?1 and pendingConsent = false", userId).list()
             .groupBy { it.tenantId }
             .mapNotNull { (tenantId, memberships) ->
                 // The tenant role keys on the ROOT scope (scopeId == tenantId), mirroring isTenantOwner
@@ -461,7 +465,12 @@ class ScopesStore(
                 val role = root?.role ?: MembershipEntity.MEMBER
                 val rootScope = ScopeEntity.findById(tenantId)
                 TenantEntity.findById(tenantId)?.let { t ->
-                    TenantRow(t.id, t.name, t.domain, role, t.status, root?.wrappedGrant, rootScope?.sealedIcon, rootScope?.iconEpoch ?: 0)
+                    val open = t.status != TenantEntity.SUSPENDED
+                    TenantRow(
+                        t.id, t.name, t.domain, role, t.status,
+                        root?.wrappedGrant?.takeIf { open }, rootScope?.sealedIcon?.takeIf { open },
+                        rootScope?.iconEpoch ?: 0,
+                    )
                 }
             }
             .sortedBy { it.name }

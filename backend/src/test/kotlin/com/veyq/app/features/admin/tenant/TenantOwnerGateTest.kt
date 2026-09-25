@@ -45,6 +45,7 @@ class TenantOwnerGateTest {
         // the escalation actor: belongs to the tenant, OWNER of a personal scope AND a self-made group, but has NO
         // OWNER row on the root scope — a tenant *member*, not a tenant *owner*.
         val actor = seedUser("actor@gate.example.com")
+        membership(actor, tenantId, tenantId, MembershipEntity.MEMBER)
         seedScope(tenantId, ScopeEntity.PERSONAL).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
         val group = seedScope(tenantId, ScopeEntity.GROUP).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
 
