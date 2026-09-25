@@ -13,7 +13,6 @@ vi.mock('../features/account/recovery/recovery', () => ({
   openWithSecretKey: vi.fn(),
   completeRecovery: vi.fn().mockResolvedValue(undefined),
 }))
-vi.mock('../features/account/emergencyKit/emergencyKit', () => ({ parseKit: vi.fn().mockReturnValue(null) }))
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
