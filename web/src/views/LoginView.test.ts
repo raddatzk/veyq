@@ -15,7 +15,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
-vi.mock('../features/account/login/login', () => ({ login: vi.fn(), logout: vi.fn() }))
+vi.mock('../features/account/login/login', () => ({ login: vi.fn() }))
+vi.mock('../features/account/login/signOut', () => ({ signOut: vi.fn(), takeSignOutNotice: vi.fn() }))
 vi.mock('../features/account/unlock/unlock', () => ({ unlockMasterKey: vi.fn(), unlockWithDevice: vi.fn() }))
 vi.mock('../features/account/trustDevice/trustDevice', () => ({
   trustThisDevice: vi.fn(),
@@ -60,7 +61,9 @@ const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
 import LoginView from './LoginView.vue'
-import { login, logout } from '../features/account/login/login'
+import { login } from '../features/account/login/login'
+import { signOut, takeSignOutNotice } from '../features/account/login/signOut'
+import { session } from '../app/session'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
 import { enrolDeviceKey, clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
@@ -157,7 +160,9 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     // `clearAllMocks` clears calls, not implementations, so every resolved value is restated per test.
     vi.mocked(isTrusted).mockResolvedValue(false)
     vi.mocked(login).mockResolvedValue(undefined)
-    vi.mocked(logout).mockResolvedValue(undefined)
+    vi.mocked(signOut).mockResolvedValue(undefined)
+    vi.mocked(takeSignOutNotice).mockReturnValue(null)
+    session.accessToken = null
     vi.mocked(unlockMasterKey).mockResolvedValue(undefined)
     vi.mocked(unlockWithDevice).mockResolvedValue(true)
     vi.mocked(trustThisDevice).mockResolvedValue('wrap-1')
@@ -174,6 +179,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
 
   afterEach(() => {
     mounted.splice(0).forEach((w) => w.unmount())
+    session.accessToken = null
   })
 
   it('offers the locked entry exactly where the Secret-Key field is', async () => {
@@ -278,7 +284,7 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(enrolDeviceKey).toHaveBeenCalled()
   })
 
-  it('signs this device out too, and says so on the form it hands back', async () => {
+  it('signs this device out too, through the one sign-out', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
     await enterLocked(wrapper)
@@ -286,7 +292,15 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     await flushPromises()
 
     expect(revokeOtherSessionFamilies).toHaveBeenCalledTimes(1)
-    expect(logout).toHaveBeenCalledTimes(1)
+    expect(signOut).toHaveBeenCalledExactlyOnceWith({ everywhere: true })
+  })
+
+  it('says every device was signed out on the page that sign-out lands on', async () => {
+    // The sign-out ends in a new document, so its outcome arrives as the notice it left, read at mount.
+    vi.mocked(takeSignOutNotice).mockReturnValue('everywhere')
+    const wrapper = mountView()
+    await flushPromises()
+
     expect(wrapper.text()).toContain(t('sessions.lockedDone'))
     // Nothing is left to do here, so nothing is left standing: no live session means no sign-out button.
     expect(buttonLabelled(wrapper, t('login.signOut'))).toBeUndefined()
@@ -437,15 +451,39 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   })
 
   it('a failed sign-out leaves this device’s own sign-out button reachable', async () => {
-    vi.mocked(logout).mockRejectedValue(new Error('offline'))
+    // The new document booted with the refresh cookie the failed revoke left live, so it holds a session again —
+    // locked, since the ending dropped every convenience tier.
+    vi.mocked(takeSignOutNotice).mockReturnValue('everywhereUnconfirmed')
+    session.accessToken = 'restored'
     const wrapper = mountView()
-    await fillCredentials(wrapper)
-    await enterLocked(wrapper)
-    await buttonLabelled(wrapper, t('sessions.lockedAction'))!.trigger('click')
     await flushPromises()
 
     // The other devices are gone; this one is still signed in and must not be told otherwise.
     expect(wrapper.text()).toContain(t('sessions.lockedDoneStillHere'))
+    expect(buttonLabelled(wrapper, t('login.signOut'))).toBeDefined()
+  })
+
+  it('says a sign-out did not reach the server, and offers the retry (uc.account.sign-out E4)', async () => {
+    vi.mocked(takeSignOutNotice).mockReturnValue('unconfirmed')
+    session.accessToken = 'restored'
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).toContain(t('login.signOutUnconfirmed'))
+    await buttonLabelled(wrapper, t('login.signOut'))!.trigger('click')
+    await flushPromises()
+    // The sign-in card is one of the five entry points: its sign-out is the one sequence, not a copy.
+    expect(signOut).toHaveBeenCalledExactlyOnceWith()
+  })
+
+  it('says nothing about a sign-out when none left a notice', async () => {
+    // The control for the two above: the warnings come from the notice, not from the restored session.
+    session.accessToken = 'restored'
+    const wrapper = mountView()
+    await flushPromises()
+
+    expect(wrapper.text()).not.toContain(t('login.signOutUnconfirmed'))
+    expect(wrapper.text()).not.toContain(t('sessions.lockedDoneStillHere'))
     expect(buttonLabelled(wrapper, t('login.signOut'))).toBeDefined()
   })
 

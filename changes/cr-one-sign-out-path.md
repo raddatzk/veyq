@@ -84,7 +84,7 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
       **Bite:** replace `location.replace` with a router push and the navigation test must go red; drop the
       has-a-session check and the no-session test must go red.
       · Done when: `npm run check` is green.
-- [ ] 2 web — **the one sign-out sequence.**
+- [x] 2 web — **the one sign-out sequence.**
       - `features/account/login/signOut.ts` absorbs `logout()`: it deletes the convenience wraps and revokes the
         family while the session works, then calls the ending, whether or not those calls succeeded. A failed
         revoke is carried into the new document as E4's notice. The notice carries no account data and is read

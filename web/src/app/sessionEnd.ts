@@ -8,7 +8,7 @@
 // without a cycle. Screens never call it: they call the one sign-out sequence in
 // `features/account/login/signOut.ts`, and an ESLint rule keeps `.vue` files from importing this module.
 import { session } from './session'
-import { vaultState } from './vault'
+import { clearVault, vaultState } from './vault'
 import { dropConvenienceTiers } from './convenienceTiers'
 import { endAllPlaybacks } from '../sw/register'
 
@@ -71,6 +71,10 @@ async function runEnding(announce: boolean): Promise<void> {
     channel.postMessage({ type: 'ended' } satisfies SessionAnnouncement)
     channel.close()
   }
+  // Not the wipe — the document load below is — but the one buffer that holds the Master Key at rest is zeroed
+  // first, so a heap snapshot taken before the old page is collected finds zeroes there (best-effort, as
+  // `clearVault` says: the copies its getters handed out are the new document's to drop).
+  clearVault()
   // 4. A DOCUMENT LOAD, never a router push. This line is the whole guarantee (ADR 0070): a route change keeps the
   //    page's memory, and a list of stores to reset is how decrypted names outlived every sign-out before. `replace`
   //    rather than `assign`, so Back does not return to the page that held the keys.

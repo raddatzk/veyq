@@ -1,22 +1,71 @@
-// The complete sign-out (web) — one owner of "end the local session and land on the sign-in screen".
+// The one sign-out sequence (uc.account.sign-out § Main flow, ADR 0070 § Decision 2). All five sign-out entry
+// points call it — the profile menu, revoking your own session, declining the terms, the sign-in card and the
+// locked screen — and none carries its own copy: a screen with its own sequence is how a sign-out that skips half
+// of it ships. `web/eslint.config.js` keeps `.vue` files from importing the ending directly.
 //
-// `logout()` alone is not it: it revokes the family and drops the tokens + vault, but leaves the active space
-// behind and leaves the user standing on whatever route they were on. Both call sites
-// need the whole sequence — the profile menu, and the session manager when you revoke the family you are sitting
-// on (uc.account.sessions E2, "sign me out here too"). Two half-copies of a sign-out is how a stale
-// `activeSpace` survives into the next account's session, so the sequence lives here once.
+// It does only what needs the session still working — delete the convenience wraps, revoke the family — and then
+// hands over to the ending (`app/sessionEnd.ts`), which loads the sign-in page as a new document. That document is
+// the wipe, so nothing here resets a store: not the vault, not the active space, not anything added next year.
 //
 // `handle401` is deliberately NOT this: it is redirect-only, for a request that came back unauthorized.
-import type { Router } from 'vue-router'
-import { logout } from './login'
-import { clearActiveSpace } from '../../../app/activeSpace'
+import { sessionApi } from '../../../api/client'
+import { withRefresh } from '../../../app/sessionRefresh'
+import { endSession } from '../../../app/sessionEnd'
+import { isAuthoritativeRejection } from '../../../shared/httpError'
+import { clearDeviceKey } from '../rememberMe/deviceKeyWrap'
+import { clearSessionVault } from '../rememberMe/sessionVault'
 
-/** Revoke the current session, drop every local trace of it, and return to the sign-in screen. Idempotent. */
-export async function signOut(router: Router): Promise<void> {
+/**
+ * What the sign-in page says after a sign-out, carried across the new document as one word — never account data.
+ * - `unconfirmed`: the revoke did not reach the server (E4). The refresh cookie is still live, so this browser
+ *   can come back signed in, though locked; the sign-in card's own sign-out is the retry.
+ * - `everywhere` / `everywhereUnconfirmed`: the locked screen's *sign out everywhere*, whose other half — every
+ *   other device — already succeeded (uc.account.sessions E3).
+ */
+export type SignOutNotice = 'unconfirmed' | 'everywhere' | 'everywhereUnconfirmed'
+
+// This tab's `sessionStorage`: it survives the document load in the same tab and nowhere else.
+const NOTICE_KEY = 'veyq.sign-out-notice'
+const NOTICES: readonly SignOutNotice[] = ['unconfirmed', 'everywhere', 'everywhereUnconfirmed']
+
+/**
+ * Sign this tab out: delete the convenience wraps and revoke the family while the session works, then end the
+ * session. The ending runs whether or not the server calls succeeded — an unreachable server is no reason to
+ * leave keys in the page. Resolves when the ending has started the document load.
+ *
+ * `everywhere` is the locked screen's case: it has just revoked every other family, and says so.
+ */
+export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void> {
+  await clearSessionVault().catch(() => {})
+  await clearDeviceKey().catch(() => {})
+  let reached = true
   try {
-    await logout()
-  } finally {
-    clearActiveSpace()
-    await router.push({ name: 'login' })
+    await withRefresh(() => sessionApi().logout())
+  } catch (e) {
+    // A 4xx is the server answering that this session is not live any more — revoked or expired — which is what
+    // signing out wanted. Only a failure that never got that answer (offline, 5xx) leaves the cookie standing.
+    reached = isAuthoritativeRejection(e)
+  }
+  leaveNotice(opts.everywhere ? (reached ? 'everywhere' : 'everywhereUnconfirmed') : reached ? null : 'unconfirmed')
+  await endSession()
+}
+
+function leaveNotice(notice: SignOutNotice | null): void {
+  if (!notice) return
+  try {
+    sessionStorage.setItem(NOTICE_KEY, notice)
+  } catch {
+    /* storage denied — the sign-in page then says nothing, and the sign-out itself still ran */
+  }
+}
+
+/** The notice the last sign-out in this tab left, or null. Read ONCE: taking it removes it. */
+export function takeSignOutNotice(): SignOutNotice | null {
+  try {
+    const raw = sessionStorage.getItem(NOTICE_KEY)
+    sessionStorage.removeItem(NOTICE_KEY)
+    return NOTICES.find((n) => n === raw) ?? null
+  } catch {
+    return null
   }
 }
