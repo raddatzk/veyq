@@ -89,3 +89,21 @@ run, stops that first submit with a message saying which; submitting again with 
   nothing, an unticked submit sends nothing, and a ticked submit sends one `range/<5 hex>` request.
 
 ## Retrospective
+
+- **The CR was complete from the doc alone.** Every decision held unmodified; the one design detail it left open
+  (the guard's shape) resolved to `useBreachCheck(password)` → `{ enabled, stop, proceed }`, with the stop kept
+  after a second press so a failed submit does not re-query a password already advised on, and a `sync` watcher so
+  a stop can never outlive its password by a render tick. Measured bite: the typing test saw **5** requests for 5
+  keystrokes against the old watcher; four sabotages of the composable and one per dialog (`void` instead of
+  `await` the guard) each went red.
+- **The locator missed one test, and `npm run check` found it as an unhandled error, not a failure.**
+  `TenantJoinView.fragment.test.ts` mounts the register branch without referencing the composable, so
+  `grep usePwnedWarning` could not see it; the real PrimeVue `Checkbox` threw during render, every test still
+  passed, and vitest failed the run on the unhandled rejection. The key for "who renders this view" is the view's
+  name in the test tree, not the symbol being replaced.
+- **The live pass found two sensor traps and one real defect outside the CR.** The browser pane's network list
+  does not show cross-origin requests at all, so it would have "proved" nothing-sent vacuously; Resource Timing
+  (buffer raised past its default 250) was the sensor that saw `range/E6B6A`. And the three dev seeders
+  (`bootstrap-user`, `seed-dev`, `seed-tenant`) had not learned that a login verify names its nonce, so the
+  documented cold start failed with 400 after creating the owner — fixed in its own commit; the reason it could
+  drift silently (hand-written request bodies, no generated client) is an inbox row.
