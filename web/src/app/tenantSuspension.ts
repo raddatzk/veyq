@@ -33,11 +33,26 @@ export async function domainIsSuspended(): Promise<boolean> {
   }
 }
 
+type Suspension = 'own-domain' | 'other-tenant' | null
+
+// One failure can pass two handlers — `withRefresh` sees every authed call, `enterScope` then catches the same
+// error — so the answer is kept per error object and a failure is acted on once.
+const handled = new WeakMap<object, Promise<Suspension>>()
+
 /**
  * React to a failed call: returns `'own-domain'` or `'other-tenant'` when it was a `403 tenant_suspended` (after
- * acting on it), `null` for anything else — which the caller handles as before.
+ * acting on it, once per failure), `null` for anything else — which the caller handles as before.
  */
-export async function handleTenantSuspended(err: unknown): Promise<'own-domain' | 'other-tenant' | null> {
+export function handleTenantSuspended(err: unknown): Promise<Suspension> {
+  if (typeof err !== 'object' || err === null) return classify(err)
+  const known = handled.get(err)
+  if (known) return known
+  const result = classify(err)
+  handled.set(err, result)
+  return result
+}
+
+async function classify(err: unknown): Promise<Suspension> {
   if (!(await isTenantSuspended(err))) return null
   if (await domainIsSuspended()) {
     useServerState().setSuspended(true)

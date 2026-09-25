@@ -317,4 +317,48 @@ Each decision names the line that settles it.
 
 ## Retrospective
 
-To be filled at implement time. It must list the phase-3 red set per persona and every bite's red → green.
+**Phase-3 red set on the untouched handlers** (measured: `./gradlew test --tests '*OperatorBlindProbeTest'
+--tests '*ScopeAccessSliceTest' --tests '*ReactivateShareCapabilitySliceTest'` at `e986670`, per-persona parse
+of the JUnit XML):
+- **stranger 0** — cr-0162 had already closed every existence oracle; this persona is now a regression guard.
+- **proposal 54** — every scope- and tenant-addressed operation except the four job ops and revoke/update share
+  (those gate on a lease or an owner the proposal does not hold).
+- **suspended 58** — every probed operation except the two Host-resolved creates (unreachable at the gate by
+  design: the own domain's filter answers first).
+- **deleting 31** — every write that had no grace check (content node writes already had one).
+- **control 3** (`commitCoverBlob`, `purgeMedia`, `restoreNode`) — collateral: the leaking proposal persona had
+  consumed the state those controls needed. Fixed structurally in phase 4 (the control fires on its own space).
+- **Dedicated: 8/8 red** on the expected first assertion.
+
+**Bites** (snapshot → inject → run → restore, bytes compared to the snapshot; all restored identical):
+- **B1** drop `listTrashedNodes` from the probe map → red: *"unclassified operations … [listTrashedNodes]"*
+  (one of the two the hand-kept list had missed) → green.
+- **B2** drop `pendingConsent = false` → proposal red on 46 scope-addressed ops; controls green only after the
+  control got its own space (first run: the same 3 collateral controls) → green.
+- **B3** drop the suspension branch → suspended red on 58 while `TenantSuspensionFilter` is untouched → green.
+- **B4** `MediaHandler.start` → `READ` → red naming `startBlobUploads` (deleting persona) → green.
+- **B5 as written stays green, correctly**: `findNode` ahead of the gate in `listMedia` answers the same
+  `NoNode` as the gate. Bitten instead by moving `restoreGroup`'s kind check ahead of the gate → stranger red on
+  `restoreGroup` (invented id `409 not_group` vs real `404`) → green. Harvested into `changes/README.md`.
+- **B6** drop the lease predicate from `TasksStore.complete` → red: expected 409, got 204 → green.
+
+**What went wrong**
+- *Planning:* the gate's step 3 turned the backend fixtures' default — a member of a space with no row on the
+  tenant root, a state the product never produces — into a former member: 125 existing tests went 404. § *A new
+  universal check meets every existing local one* already asks for exactly this measurement at refine; it was not
+  run against the fixtures. Fixed with one `TenantRoots.join` helper.
+- *Planning:* two internal contradictions — phase 2's done-when (`./gradlew check` green) against phase 1's
+  expected red (`MyTenant.status` required); resolved by passing the status through in phase 2. And B5's lever
+  (above), which one side-by-side of the two answers would have caught.
+- *Planning:* the exclusion categories missed the own-proposal operations (accept/decline) and the uc said the
+  gate precedes capability checks while `create` answers instance policy first; both decided and written back
+  into uc.spaces.scope-access.
+- *Execution:* the probe's first red run carried two probe bugs (a uuid as share id, terms version 0) — one extra
+  run. D3 reached two sites the CR did not list: recovery's address check and the member-invite accept, where a
+  returning member now rejoins under the profile they kept.
+- *Execution:* phase 5 was not verified in a browser: no stack runs the new backend, and the constraints (8080 is
+  the user's, one e2e run machine-wide) made standing one up the expensive path. Unit tests pin both 403 branches.
+
+**Next time:** when a CR introduces a gate, run its predicate over the **test fixtures** at refine (`grep` the
+seeding helpers for the state it newly refuses) — the fixture corpus is the largest set of "existing local
+checks" a universal one meets.
