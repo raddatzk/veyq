@@ -35,9 +35,9 @@ vi.mock('../features/account/rememberMe/sessionVault', () => ({
 vi.mock('../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => true }) }))
 // `parseKit` mirrors the real contract (a kit payload or `null`) rather than being asserted on: what this file
 // owns is the DISPATCH between the two codes, and the payload formats themselves are pinned in their own
-// modules' tests (`emergencyKit`, and `pairing.test.ts` for D5, both directions).
-vi.mock('../features/account/emergencyKit/emergencyKit', () => ({
-  importKitFromFile: vi.fn(),
+// modules' tests (`@veyq/crypto/emergencyKit`, and `pairing.test.ts` for D5, both directions).
+vi.mock('../features/account/emergencyKit/emergencyKit', () => ({ importKitFromFile: vi.fn() }))
+vi.mock('@veyq/crypto/emergencyKit', () => ({
   parseKit: (text: string) =>
     text.startsWith('veyqkit:') ? { email: 'scanned@example.com', secretKey: 'scanned-secret-key' } : null,
 }))

@@ -23,7 +23,8 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import { importKitFromFile, parseKit, type KitData } from '../../features/account/emergencyKit/emergencyKit'
+import { parseKit, type KitData } from '@veyq/crypto/emergencyKit'
+import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import KitScanner from '../../features/account/emergencyKit/KitScanner.vue'
 
 // Multi-root (the field, its two messages, the hidden file input, the teleported scanner) — there is no single

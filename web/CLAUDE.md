@@ -88,16 +88,18 @@ here; the server is blind.
   through the workspace ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)). `v1` is the
   **conformance-pinned** suite (keep it byte-identical to `../contracts/crypto/vectors/v1.json`; the
   conformance test must stay green), the Model B auth derivation (`deriveAuthSalt` / `deriveAuthKeypair`,
-  Ed25519 from Argon2id — ADR 0003) and the cold `accountBirth` live there too, and so does `base64` —
+  Ed25519 from Argon2id — ADR 0003) and the cold `accountBirth` live there too, so does the Emergency Kit's
+  `veyqkit:` codec (`emergencyKit` — both packages write kits, and two copies drifted apart unseen; the PDF
+  writer and the file/QR import stay here), and so does `base64` —
   transport encoding, but `accountBirth` needs it, and a second copy of the encoder is exactly the drift its
-  own header warns about. Import via the package (`@veyq/crypto/v1`, `/accountBirth`, `/base64`,
-  `/argonWorker`, `/testArgon`) — never by a relative path back into it. Its check is its own:
+  own header warns about. Import via the package (`@veyq/crypto/v1`, `/accountBirth`, `/emergencyKit`,
+  `/base64`, `/argonWorker`, `/testArgon`) — never by a relative path back into it. Its check is its own:
   `cd ../packages/crypto && npm run check`, and `npm ci` runs from the **repo root**, not from `web/`.
   **`npm run mutation`** is the assertion-strength gate over the curated crypto-logic scope (StrykerJS, [ADR 0045](../docs/decisions/0045-mutation-testing-trust-chain-unit-layer.md))
   — a heavier PR-only crypto job, **not** part of `npm run check`; scope (the single source of truth, an explicit
   per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
   [`mutation.yml`](../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
-  — `web/`'s (the six crypto-logic files that stayed) and `packages/crypto/`'s (`v1.ts` + `accountBirth.ts`);
+  — `web/`'s (the six crypto-logic files that stayed) and `packages/crypto/`'s (the shared suite);
   run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an

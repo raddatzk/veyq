@@ -44,11 +44,13 @@ vi.mock('vue-router', () => ({
 import TenantJoinView from './TenantJoinView.vue'
 import { previewInvite } from '../features/tenant/tenantInvite'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
-import { importKitFromFile, kitPayload, type KitData } from '../features/account/emergencyKit/emergencyKit'
+import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
+import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
 import { i18n } from '../i18n'
 
 const OWNER_EMAIL = 'owner@acme.example'
-const OWNERS_KIT: KitData = { email: OWNER_EMAIL, secretKey: 'dGhlLW93bmVycy1zZWNyZXQ=' }
+// 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
+const OWNERS_KIT: KitData = { email: OWNER_EMAIL, secretKey: 'IiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiIiI=' }
 
 const stubs = {
   Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
