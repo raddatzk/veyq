@@ -191,7 +191,7 @@ secrets:
 mariadb:
   # false = an operator-managed database (ADR 0064's escape hatch); then set externalDatabase below.
   enabled: true
-  image: mariadb:11.4
+  image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
   persistence:
     size: 10Gi
     storageClass: ""
@@ -209,7 +209,7 @@ externalDatabase:
   username: veyq
 
 garage:
-  image: dxflrs/garage:v2.0.0
+  image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
   # Three claims, mirroring the compose recipe's three volumes. Snapshots are separate from meta on purpose:
   # `garage meta snapshot` defaults to writing INSIDE metadata_dir, into the very volume a rollback would
   # copy (ADR 0056 §3).
