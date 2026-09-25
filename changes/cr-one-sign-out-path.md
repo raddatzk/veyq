@@ -107,7 +107,7 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
       guard by snapshot-and-restore*.
       · Done when: `npm run check` is green, and
         `grep -rn "logout()" web/src --include='*.vue' | grep -v '\.test\.'` finds nothing.
-- [ ] 3 web — **a rejected refresh ends the session.**
+- [x] 3 web — **a rejected refresh ends the session.**
       - In `app/sessionRefresh.ts`, a 4xx from the refresh endpoint in a tab that holds a session drops the
         tokens and runs the ending.
       - A network failure or a 5xx keeps the tokens and rethrows. Today it drops them.

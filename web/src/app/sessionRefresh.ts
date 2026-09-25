@@ -4,7 +4,8 @@
 // `api/client` imports `session` for the bearer token — putting it there would close `session → client → session`.
 import { tokenApi } from '../api/client'
 import { clearTokens, session, setTokens } from './session'
-import { isUnauthorized } from '../shared/httpError'
+import { endSession } from './sessionEnd'
+import { isAuthoritativeRejection, isUnauthorized } from '../shared/httpError'
 
 /**
  * The refresh this tab already has outstanding, or null. Callers that arrive while one is in flight join it
@@ -16,9 +17,12 @@ import { isUnauthorized } from '../shared/httpError'
 let inFlight: Promise<void> | null = null
 
 /**
- * Rotate the session tokens (silent refresh). Throws if the refresh is rejected — and on rejection drops the
- * dead tokens so the session lands in a clean logged-out state instead of looping 401→refresh→throw on every
- * subsequent authed call.
+ * Rotate the session tokens (silent refresh). Throws if the refresh fails. **Only an authoritative rejection (a
+ * 4xx) ends the session** (uc.account.sign-out E1, ADR 0070 § Decision 3): it drops the dead tokens, so no later
+ * call loops 401→refresh→throw, and runs the ending in a tab that holds a session — the family was revoked from
+ * another device, or expired, and the plaintext this page decrypted must not outlive it. At boot the tab holds no
+ * session yet, so a rejection there is just *not signed in* (E2). A network failure or a 5xx is no answer about
+ * the session: the tokens stay, and the next call tries again.
  *
  * **Callers that arrive together share one request.** A page load fires many authed calls that do not await
  * each other, and they 401 as a group; each one reaching for its own refresh would present the *same* token
@@ -42,14 +46,20 @@ async function rotateSession(): Promise<void> {
   try {
     // refreshToken null → the httpOnly cookie carries it (remember me): send an empty body and the browser
     // attaches the cookie. Otherwise send the in-memory body token. A boot with neither yields a 400/401 → the
-    // catch drops to a clean logged-out state. The new token comes back in the body (in-memory path) or a fresh
+    // catch leaves a clean logged-out state. The new token comes back in the body (in-memory path) or a fresh
     // cookie (remember path, body token absent → keep null).
     const pair = await tokenApi().refreshSession({
       refreshRequest: { refreshToken: session.refreshToken ?? undefined },
     })
     setTokens(pair.accessToken, pair.refreshToken ?? null)
   } catch (e) {
-    clearTokens()
+    if (isAuthoritativeRejection(e)) {
+      // `endSession` decides whether this tab holds a session before it awaits anything, so the tokens can go
+      // right after; it is awaited so no caller acts on the failure while the document load is under way.
+      const ended = endSession()
+      clearTokens()
+      await ended
+    }
     throw e
   }
 }
