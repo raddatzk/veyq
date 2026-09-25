@@ -10,6 +10,7 @@ vi.mock('../features/spaces/scopes', () => ({
 // the stores real so the other tests still assert on treeStore/favoritesStore.
 vi.mock('../features/memory/treeStore', async (orig) => ({ ...(await orig<object>()), loadTree: vi.fn() }))
 vi.mock('./favoritesStore', async (orig) => ({ ...(await orig<object>()), loadFavoritesFor: vi.fn() }))
+vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
 import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActiveScope, clearActiveSpace } from './activeSpace'
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken } from '../features/spaces/scopes'
@@ -19,6 +20,9 @@ import { TENANT_SCOPE } from '../features/memory/location'
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../features/memory/treeStore'
 import { favoritesStore, clearFavorites } from './favoritesStore'
+import { getSetupStatus } from '../features/account/instance/instance'
+import { serverState } from '../shared/state/serverState'
+import { suspensionSignals } from './tenantSuspension'
 import type { TreeNode } from '../features/memory/tree'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
@@ -186,5 +190,39 @@ describe('clearActiveSpace', () => {
     expect(activeSpace.name).toBeNull()
     expect(activeScopeKey()).toBeNull()
     expect(Array.from(key)).toEqual(Array(32).fill(0)) // zeroed in place
+  })
+})
+
+describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => {
+  const suspended = () => ({ response: new Response(JSON.stringify({ code: 'tenant_suspended' }), { status: 403 }) })
+
+  beforeEach(() => {
+    serverState.suspended = false
+    suspensionSignals.leaveHome = 0
+  })
+
+  it('on this domain’s own tenant, hands over to the offline notice instead of an error', async () => {
+    vi.mocked(openGroupByToken).mockRejectedValue(suspended())
+    vi.mocked(getSetupStatus).mockRejectedValue(suspended())
+    await enterScope('@group')
+    expect(serverState.suspended).toBe(true)
+    expect(activeSpace.status).not.toBe('error')
+  })
+
+  it('in another tenant, asks the home to leave for this domain’s own space', async () => {
+    vi.mocked(openGroupByToken).mockRejectedValue(suspended())
+    vi.mocked(getSetupStatus).mockResolvedValue({ setupRequired: false } as never)
+    await enterScope('@group')
+    expect(suspensionSignals.leaveHome).toBe(1)
+    expect(serverState.suspended).toBe(false)
+    expect(activeSpace.status).not.toBe('error')
+  })
+
+  it('control: a 404 is still no-tenant, with neither signal', async () => {
+    vi.mocked(ensurePersonalScope).mockRejectedValue({ response: { status: 404 } })
+    await enterScope(PERSONAL_SCOPE)
+    expect(activeSpace.status).toBe('no-tenant')
+    expect(serverState.suspended).toBe(false)
+    expect(suspensionSignals.leaveHome).toBe(0)
   })
 })

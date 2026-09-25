@@ -26,8 +26,8 @@ import SpaceMap from './SpaceMap.vue'
 
 // `epochs` (the scope's epoch key set, ADR 0024) unseals each Memory's sealed date/cover/pins under its own epoch's
 // K_SC — a rotated scope mixes epochs across the grid; null (locked) ⇒ no dates/covers/pins.
-// `readonly` (cr-0090): the scope is in pending-deletion → hide create/rename/delete affordances (writes are
-// server-rejected during the grace window; view + download stay open).
+// `readonly` (cr-0090): the scope is being deleted → hide create/rename/delete affordances (every write is
+// server-rejected during the grace window, uc.spaces.scope-access; view + download stay open).
 const props = defineProps<{ folder?: TreeNode | null; folders: TreeNode[]; memories: TreeNode[]; epochs?: EpochKeys | null; readonly?: boolean }>()
 const emit = defineEmits<{
   openFolder: [folder: TreeNode]

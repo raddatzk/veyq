@@ -38,7 +38,8 @@ import { getMyProfile } from '../../features/account/profile/profile'
 import { NodeKind } from '../../api/generated/content'
 import { type TreeNode } from '../../features/memory/tree'
 import { slugify } from '../../shared/naming'
-import type { MyTenant } from '../../api/generated/scopes'
+import { TenantStatus, type MyTenant } from '../../api/generated/scopes'
+import { suspensionSignals } from '../../app/tenantSuspension'
 import ProfileMenu from './ProfileMenu.vue'
 
 const { t } = useI18n()
@@ -130,6 +131,7 @@ async function loadTenants() {
   )
 }
 watch(spaceIconVersion, () => { void loadTenants(); void loadGroups() })
+watch(() => suspensionSignals.tenantList, () => void loadTenants())
 
 // Create-group dialog. On success: refresh the list + switch into the new group (`#@<id>`).
 const createGroupOpen = ref(false)
@@ -268,8 +270,14 @@ function isActive(tenant: MyTenant): boolean {
   return tenant.tenantId === activeSpace.tenantId
 }
 
+// A suspended tenant (uc.spaces.scope-access A7) stays listed — its initial, marked offline — but is not enterable:
+// its domain answers nothing but the offline notice. Not the awaiting-access marker, which is a different reason.
+function isOffline(tenant: MyTenant): boolean {
+  return tenant.status === TenantStatus.Suspended
+}
+
 function switchTenant(tenant: MyTenant) {
-  if (isActive(tenant)) return
+  if (isActive(tenant) || isOffline(tenant)) return
   // Each tenant is reached at its own domain (ADR 0002); switching is a full navigation there.
   window.location.assign(`https://${tenant.domain}`)
 }
@@ -343,12 +351,14 @@ function closeMobileMenu() {
               :class="{ 'sidebar-tenant-link-active': isActive(tenant) }"
               type="button"
               :title="tenant.name"
+              :disabled="isOffline(tenant)"
               @click="switchTenant(tenant); tenantOverview?.hide()"
             >
               <TenantAvatar :name="tenant.name" :icon="tenantIcon(tenant.tenantId)" :active="isActive(tenant)" />
               <span class="sidebar-tenant-text">
                 <strong>{{ tenant.name }}</strong>
-                <small>{{ tenant.domain }}</small>
+                <small v-if="isOffline(tenant)" class="sidebar-tenant-offline">{{ t('shell.tenantOffline') }}</small>
+                <small v-else>{{ tenant.domain }}</small>
               </span>
               <span v-if="isActive(tenant)" class="pi pi-check sidebar-tenant-current" aria-hidden="true" />
             </button>
@@ -515,10 +525,15 @@ function closeMobileMenu() {
                 v-else
                 class="mobile-nav-item"
                 type="button"
+                :disabled="isOffline(tenant)"
                 @click="switchTenant(tenant); closeMobileMenu()"
               >
                 <TenantAvatar :name="tenant.name" :icon="tenantIcon(tenant.tenantId)" />
-                <span><strong>{{ tenant.name }}</strong><small>{{ tenant.domain }}</small></span>
+                <span>
+                  <strong>{{ tenant.name }}</strong>
+                  <small v-if="isOffline(tenant)" class="sidebar-tenant-offline">{{ t('shell.tenantOffline') }}</small>
+                  <small v-else>{{ tenant.domain }}</small>
+                </span>
               </button>
             </template>
             <RouterLink

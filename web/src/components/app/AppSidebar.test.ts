@@ -196,6 +196,28 @@ describe('AppSidebar tenant switcher', () => {
 
     assign.mockRestore()
   })
+  // uc.spaces.scope-access A7: a suspended tenant stays listed — its initial (no grant, no icon), marked offline —
+  // but is not enterable. The control is the same list's active row, which still carries its domain.
+  it('lists a suspended tenant offline and not enterable', async () => {
+    vi.mocked(listMyTenants).mockResolvedValueOnce([
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'SUSPENDED', iconEpoch: 0 },
+    ])
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    const wrapper = await mountAt('')
+
+    const rows = wrapper.findAll('.sidebar-tenant-overview-list .sidebar-tenant-link')
+    expect(rows[1].find('.sidebar-tenant-offline').text()).toBe('shell.tenantOffline')
+    expect(rows[1].text()).not.toContain('verein.localhost')
+    expect(rows[1].attributes('disabled')).toBeDefined()
+    await rows[1].trigger('click')
+    expect(assign).not.toHaveBeenCalled()
+    // control: the active tenant is neither marked nor disabled
+    expect(rows[0].find('.sidebar-tenant-offline').exists()).toBe(false)
+    expect(rows[0].attributes('disabled')).toBeUndefined()
+
+    assign.mockRestore()
+  })
 })
 
 // uc.memory.cover promises a chosen cover is shown "identically wherever the Memory appears". The rail is the

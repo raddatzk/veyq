@@ -11,6 +11,11 @@ const en = {
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
     operator: 'Setting a server up is done by the person who runs it, on the server’s own administration surface — not from this page. If that is you, open it on the machine the server runs on.',
   },
+  spaceOffline: {
+    title: 'This space is temporarily offline',
+    sub: 'Its content is safe and unchanged — it just can’t be opened right now.',
+    operator: 'The person who runs this server has taken it offline for the moment. Once they bring it back, everything is exactly where you left it.',
+  },
   incompatible: {
     title: 'This app and this server don’t match',
     updateApp: 'Your app is older than this server. Update the app to a newer version to continue.',
@@ -518,6 +523,7 @@ const en = {
     shared: 'Shared',
     personal: 'Personal',
     tenantSwitch: 'Switch space',
+    tenantOffline: 'Temporarily offline',
     groups: 'Groups',
     groupCreate: 'New group',
     groupsMenuOpen: 'More groups',
@@ -939,6 +945,11 @@ const de: typeof en = {
     title: 'Diese Instanz ist noch nicht eingerichtet',
     sub: 'Auf diesem Server wurde noch kein erstes Konto angelegt — es gibt hier also noch nichts, wo du dich anmelden könntest.',
     operator: 'Die Einrichtung übernimmt, wer den Server betreibt, auf dessen eigener Verwaltungsoberfläche — nicht auf dieser Seite. Falls du das bist: Öffne sie auf der Maschine, auf der der Server läuft.',
+  },
+  spaceOffline: {
+    title: 'Dieser Bereich ist vorübergehend offline',
+    sub: 'Seine Inhalte sind sicher und unverändert — er lässt sich gerade nur nicht öffnen.',
+    operator: 'Wer diesen Server betreibt, hat ihn vorübergehend offline genommen. Sobald er wieder da ist, ist alles genau so, wie du es verlassen hast.',
   },
   incompatible: {
     title: 'Diese App und dieser Server passen nicht zusammen',
@@ -1428,6 +1439,7 @@ const de: typeof en = {
     shared: 'Gemeinsam',
     personal: 'Persönlich',
     tenantSwitch: 'Bereich wechseln',
+    tenantOffline: 'Vorübergehend offline',
     groups: 'Gruppen',
     groupCreate: 'Neue Gruppe',
     groupsMenuOpen: 'Weitere Gruppen',

@@ -9,5 +9,9 @@ export function useServerState() {
     serverState.unreachable = value
   }
 
-  return { serverState, setSetupCompleted, setUnreachable }
+  function setSuspended(value: boolean) {
+    serverState.suspended = value
+  }
+
+  return { serverState, setSetupCompleted, setUnreachable, setSuspended }
 }

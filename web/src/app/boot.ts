@@ -12,24 +12,29 @@ import { restoreVaultFromCache } from '../features/account/unlock/unlock'
 import { clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { maybeDevAutoUnlock } from './devAutoUnlock'
+import { isTenantSuspended } from './tenantSuspension'
 
 /**
  * Discover the instance state and prepare the app shell. The result is reflected in the shared server
  * state, which the router + App shell read to land on the right view.
  */
 export async function boot(): Promise<void> {
-  const { serverState, setSetupCompleted, setUnreachable } = useServerState()
+  const { serverState, setSetupCompleted, setUnreachable, setSuspended } = useServerState()
   const { incompatibility } = useCapabilities()
   setUnreachable(false)
+  setSuspended(false)
   try {
     const status = await getSetupStatus()
     // Record the instance's version + capability manifest first — the shell reads it to soft-gate optional
     // features, and to hard-gate on a `major` mismatch (ADR 0032).
     setCapabilities(status)
     setSetupCompleted(!status.setupRequired)
-  } catch {
-    // The instance is unreachable — show a clear error state instead of forcing setup or a blank screen.
-    setUnreachable(true)
+  } catch (err) {
+    // This domain's tenant is suspended: the shell arrived, but every API call here is refused — the offline
+    // notice, not an "unreachable" error (uc.spaces.scope-access A7).
+    if (await isTenantSuspended(err)) setSuspended(true)
+    // Otherwise the instance is unreachable — show a clear error state instead of forcing setup or a blank screen.
+    else setUnreachable(true)
     return
   }
   // Hard compatibility gate: on a `major` mismatch the shell shows a blocking incompatibility screen before
