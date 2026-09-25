@@ -1,4 +1,4 @@
-# The Server-Owner administration surface as its own image (ADR 0065) — `ghcr.io/<owner>/veyq-admin`,
+# The Server-Owner administration surface as its own image (ADR 0065) — `ghcr.io/raddatzk/veyq-admin`,
 # versioned and signed the same way as the app image (ADR 0057).
 #
 # Separate from the root Dockerfile on purpose: that one builds a JVM application server with the app SPA baked

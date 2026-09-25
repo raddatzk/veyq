@@ -31,7 +31,7 @@ hsts:
   enabled: true
 
 image:
-  # e.g. ghcr.io/<owner>/veyq. The app image, cosign-signed by the same publish as the admin image below.
+  # e.g. ghcr.io/raddatzk/veyq. The app image, cosign-signed by the same publish as the admin image below.
   repository: ""
   # Defaults to the chart's appVersion, which has the release shape `<major>.<minor>`. Pin one; `latest` moves,
   # the schema migrates at boot with no gate, and there is no downgrade path (ADR 0057).
@@ -87,7 +87,7 @@ app:
 
 admin:
   image:
-    # e.g. ghcr.io/<owner>/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
+    # e.g. ghcr.io/raddatzk/veyq-admin — pin the SAME tag as the app: the two ship as one release and only one
     # of a mismatched pair migrated the schema.
     repository: ""
     tag: ""
