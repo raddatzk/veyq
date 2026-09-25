@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // uc.account.onboard-device — the trusted device's half of "show a code" (ADR 0059 §1). `qrcode` is already a
-// dependency and is imported lazily here for the same reason `downloadKitPdf` does it: the encoder is heavy and
+// dependency and is imported lazily here for the same reason `renderKitPdf` does it: the encoder is heavy and
 // only the screen that actually shows a code needs it.
 //
 // The QR is rendered ON A WHITE PLATE, unconditionally. A code is scanned by a camera, not read by a person, so

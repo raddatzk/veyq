@@ -1,7 +1,7 @@
 ---
 id: cr-emergency-kit-codec-in-crypto
 title: One Emergency Kit codec in @veyq/crypto, pinned by a vector — and a writer test in each package
-status: planned
+status: done
 satisfies: [uc.account.unlock]
 adrs: ["0065", "0045", "0054"]
 invariants: [operator-blind E2EE, self-hostable by default]
@@ -67,7 +67,7 @@ The PDF writer stays per package.
 
 ## Phases
 
-- [ ] 1 packages/crypto: **the vector first, then the codec.**
+- [x] 1 packages/crypto: **the vector first, then the codec.**
       - **Compute the vector from today's code before you move anything.** Run web's current `kitPayload` on a
         fixed kit: an email with a non-ASCII character (the UTF-8 path is the one place a rewrite can differ)
         and a real-shaped Secret Key (32 fixed bytes, padded standard base64). Write the resulting token into
@@ -92,7 +92,7 @@ The PDF writer stays per package.
       · Done when: `cd packages/crypto && npm run check` is green, and `npm run mutation` runs with the new file
       in scope and no surviving mutant in it. Stryker mutates **in place**, so never run it while another
       session's mutation run is live.
-- [ ] 2 web: **the reader moves, the writer gets a test.**
+- [x] 2 web: **the reader moves, the writer gets a test.**
       - Delete the local codec and base64url from `features/account/emergencyKit/emergencyKit.ts`. Import from
         `@veyq/crypto/emergencyKit` at every site the locator above finds, and fix the `vi.mock` paths it
         finds. A mock left on the old path mocks nothing, and a test that passed by mocking may then pass for
@@ -104,7 +104,7 @@ The PDF writer stays per package.
         `importKitFromFile(new File([bytes], 'kit.pdf'))`. It must return the kit.
       - **Bite:** drop `keywords` from the render step's `setProperties` and this test must go red.
       · Done when: `npm run check` is green in `web/`.
-- [ ] 3 admin-web: **the writer only.**
+- [x] 3 admin-web: **the writer only.**
       - Delete the local codec, `parseKit`, and the tests that exercised only them.
       - Take `kitPayload` from `@veyq/crypto/emergencyKit`.
       - Split the PDF writer and localize its text, as in phase 2.
@@ -113,7 +113,7 @@ The PDF writer stays per package.
         the two copies diverged.
       - **Bite:** drop `keywords` and the test must go red.
       · Done when: `npm run check` is green in `admin-web/` (it builds the CLI bundle too).
-- [ ] 4 docs + coverage:
+- [x] 4 docs + coverage:
       - Widen the charter sentence for `packages/crypto` to include the kit codec, in each of its three places:
         root `CLAUDE.md` § Repository shape; `web/CLAUDE.md` § Conventions, including the import list; and
         the `"//"` in `packages/crypto/package.json`.
@@ -146,3 +146,20 @@ The PDF writer stays per package.
 
 ## Retrospective
 
+- **Planning — the mutation DoD assumed a green baseline it never measured.** "No surviving mutant in it" was
+  reachable (emergencyKit.ts: 33/33 killed), but the run exits 1 anyway: `v1.ts` scores 77.99 % on untouched code,
+  so `npm run mutation` cannot be green in this package today (inbox #184). Root cause: the refine cited the
+  manifest's "100 %" instead of running the gate once. **Next time:** a CR whose done-when is a gate runs that gate
+  on `main` during refine and records its exit code, so the implement session is not the one discovering it.
+- **Planning — one line-level instruction was already stale.** Phase 1's "`v1.ts` lines 1 and 319 still name
+  `docs/api/…`" had been fixed by an earlier wave; the grep settled it in seconds, which is the argument for
+  handing over the locator rather than the line.
+- **Execution — two of my own survivors were equivalent by construction,** and Stryker's incremental rerun kept
+  reporting one after the fix (its cached verdict ignores an edit to the neighbouring line). Harvested as a comment
+  at `incremental: true` in `packages/crypto/stryker.config.mjs`; the one genuinely equivalent mutant (`typeof sk`)
+  carries a scoped `Stryker disable` with the reason. Also: the stricter parser rejected two web test fixtures whose
+  "Secret Key" was 14 bytes — correct, and a reminder that a validation CR's blast radius includes every fixture
+  that fed the old lenient path.
+- **Process — the brief and `changes/README.md` disagreed on who runs the whole guard glob in a wave.** The README
+  says the coordinating session runs it once on the merged tree; the brief asked this session to run it, twice. I
+  followed the brief. **Next time:** the wave brief says which of the two it means, so neither is ignored silently.
