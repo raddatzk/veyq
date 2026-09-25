@@ -20,10 +20,13 @@ vi.mock('../rememberMe/deviceKeyWrap', () => ({
   rememberThisDevice: vi.fn(),
 }))
 vi.mock('../../../shared/state/useCapabilities', () => ({ useCapabilities: () => ({ hasCapability: () => false }) }))
-vi.mock('../passwordWarning', () => ({ usePwnedWarning: () => ({ breachCount: { value: 0 } }) }))
+// The breach lookup is the only thing stubbed of the check: the dialog's real guard runs, which is what the wiring
+// case below pins.
+vi.mock('../../../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 
 import ChangePasswordPanel from './ChangePasswordPanel.vue'
 import { changePassword } from './changePassword'
+import { pwnedCount } from '../../../shared/pwned'
 
 const stubs = {
   // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
@@ -39,6 +42,11 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
+  // The breach-check box: a native checkbox, so a test ticks it with `setValue(true)`.
+  Checkbox: {
+    props: ['modelValue'],
+    template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const i18n = createI18n({
@@ -48,7 +56,7 @@ const i18n = createI18n({
   fallbackWarn: false,
   messages: {
     en: {
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.' },
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.', pwnedUnavailable: 'Not checked.' },
       unlock: { secretKey: 'Secret Key' },
       changePassword: {
         title: 'Change password', sub: 's', currentLabel: 'Current', newPasswordLabel: 'New', confirmLabel: 'Repeat',
@@ -114,5 +122,31 @@ describe('ChangePasswordPanel — the password floor', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(changePassword).toHaveBeenCalledWith('a long enough new password', 'the-secret-key', 'old')
+  })
+
+  it('with the breach check ticked, a hit stops the first submit and the second goes ahead', async () => {
+    // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
+    vi.mocked(pwnedCount).mockResolvedValue(3)
+    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    await flushPromises()
+
+    const pw = passwords(w)
+    await pw[0].setValue('the-current-one')
+    await pw[1].setValue('a long enough new password')
+    await pw[2].setValue('a long enough new password')
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('input[type="checkbox"]').setValue(true)
+    await flushPromises()
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).not.toHaveBeenCalled()
+    expect(w.text()).toContain('Seen in 3.')
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(changePassword).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledWith('a long enough new password')
   })
 })

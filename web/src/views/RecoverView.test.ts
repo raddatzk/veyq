@@ -14,6 +14,7 @@ vi.mock('../features/account/recovery/recovery', () => ({
   completeRecovery: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../features/account/emergencyKit/emergencyKit', () => ({ parseKit: vi.fn().mockReturnValue(null) }))
+vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
@@ -25,6 +26,7 @@ import {
   openWithSecretKey,
   completeRecovery,
 } from '../features/account/recovery/recovery'
+import { pwnedCount } from '../shared/pwned'
 import { RecoveryMaterialSuiteIdEnum, type RecoveryMaterial } from '../api/generated/auth'
 
 const i18n = createI18n({
@@ -45,7 +47,7 @@ const i18n = createI18n({
       },
       unlock: { secretKey: 'Secret Key', secretKeyHint: 'hint' },
       common: { unreachable: 'This instance can’t be reached right now' },
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count} breaches.' },
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count} breaches.', pwnedUnavailable: 'Not checked.' },
     },
   },
 })
@@ -56,6 +58,11 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
   Password: { props: ['modelValue'], template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />' },
+  // The breach-check box: a native checkbox, so a test ticks it with `setValue(true)`.
+  Checkbox: {
+    props: ['modelValue'],
+    template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const MATERIAL: RecoveryMaterial = {
@@ -324,5 +331,33 @@ describe('RecoverView', () => {
       'a brand new password',
     )
     expect(w.text()).toContain('Done')
+  })
+
+  it('with the breach check ticked, a hit stops the first submit and the second goes ahead', async () => {
+    // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
+    vi.mocked(pwnedCount).mockResolvedValue(3)
+    withToken()
+    vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    const w = mountView()
+    await flushPromises()
+
+    await w.find('input[name="secret-key"]').setValue('the-secret-key')
+    await w.find('form').trigger('submit')
+    await flushPromises()
+
+    const pw = w.findAll('input[type="password"]')
+    await pw[0].setValue('a brand new password')
+    await pw[1].setValue('a brand new password')
+    await w.find('input[type="checkbox"]').setValue(true)
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(completeRecovery).not.toHaveBeenCalled()
+    expect(w.text()).toContain('Seen in 3 breaches.')
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(completeRecovery).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledOnce()
   })
 })
