@@ -5,13 +5,47 @@
 # it. It exists only as a single-source $ref target, so a shared component cannot drift across the per-domain
 # specs. openapi-generator (both surfaces) resolves the external $ref in place, emitting the same model per
 # module it emitted from the inline copies — a pure refactor, no wire change.
+#
+# The two shared `responses` are the scope-access gate's answers (uc.spaces.scope-access). An operation that
+# declares no other 403/409 points at them; one that already has a 403/409 names the code in its own description
+# instead, since a status carries only one response object.
 openapi: 3.1.0
 info:
   title: veyq shared contract components
   version: 1.0.0
 paths: {}
 components:
+  responses:
+    TenantSuspended:
+      description: >
+        The tenant this operation acts on is suspended (`tenant_suspended`, ADR 0066). Only an accepted member is
+        told so — anyone else gets the operation's 404 — for reads and writes alike, whatever `Host` the request
+        arrived on (uc.spaces.scope-access).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { code: tenant_suspended }
+    ScopeDeleting:
+      description: >
+        The space is being deleted and is read-only for its grace window (`scope_deleting`, uc.spaces.delete-group
+        A4). Only an accepted member who still belongs to the tenant is told so (uc.spaces.scope-access).
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorResponse" }
+          example: { code: scope_deleting }
   schemas:
+    TenantStatus:
+      # Shared by the tenants spec (the Server-Owner's tenant list) and the scopes spec (`MyTenant.status`, the
+      # space switcher) — one lifecycle, so one enum (ADR 0038).
+      type: string
+      description: >
+        Lifecycle state of a tenant. SUSPENDED is a reversible, availability-only lockout (ADR 0066): every
+        operation acting on the tenant refuses its members `403 tenant_suspended`, on whatever domain the request
+        arrived (uc.spaces.scope-access), and the tenant's own domain refuses every API request, sign-in included —
+        its content, keys and memberships are untouched.
+      enum: [PENDING, ACTIVE, SUSPENDED]
+      example: ACTIVE
+
     ErrorResponse:
       type: object
       required: [code]

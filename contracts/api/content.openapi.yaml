@@ -87,12 +87,13 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          description: A sibling already has that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
@@ -123,8 +124,9 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
 
@@ -159,12 +161,13 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          description: A sibling already has that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
@@ -197,12 +200,13 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409":
-          description: The scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          description: The space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_deleting } }
 
@@ -241,12 +245,13 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such trashed node (unknown, already purged, or still live), or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: A live sibling already holds that slug (`slug_taken`), or the scope is in pending-deletion and read-only (`scope_deleting`, cr-0090).
+          description: A live sibling already holds that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
 
@@ -276,8 +281,9 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
 
@@ -310,8 +316,9 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
     put:
@@ -345,10 +352,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/favorites:
     get:
@@ -375,8 +384,9 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
     put:
@@ -407,10 +417,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
 components:
   securitySchemes:

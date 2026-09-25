@@ -72,10 +72,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "503":
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
@@ -127,10 +129,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media:
     get:
@@ -209,6 +213,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
@@ -241,6 +246,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
@@ -283,13 +289,14 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The given parentBucketId is not a primary bucket (sub-buckets nest one level only).
+          description: The given parentBucketId is not a primary bucket (sub-buckets nest one level only). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/buckets/{bucketId}:
     patch:
@@ -328,13 +335,14 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The bucket is a primary (not renameable).
+          description: The bucket is a primary (not renameable). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
         "404":
           description: No such scope/node/bucket, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: bucket_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
     delete:
       tags: [buckets]
       operationId: deleteBucket
@@ -358,13 +366,14 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The bucket is a primary (not deletable).
+          description: The bucket is a primary (not deletable). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/media-moves:
     post:
@@ -402,13 +411,14 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403":
-          description: The source media span more than one owner, or the target bucket's owner differs (cross-owner move).
+          description: The source media span more than one owner, or the target bucket's owner differs (cross-owner move). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
         "404":
           description: No such scope/node/media/bucket, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/cover-blob:
     post:
@@ -452,10 +462,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node/upload, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
           description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover).
           content:
@@ -486,10 +498,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}/exif:
     get:
@@ -520,6 +534,7 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
@@ -563,10 +578,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}:
     delete:
@@ -592,10 +609,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}/restore:
     post:
@@ -619,10 +638,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such scope/media (e.g. already purged), or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media/{mediaId}/purge:
     post:
@@ -649,10 +670,12 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: No such trashed media (unknown, already purged, or still live), or no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/blob-downloads-batch:
     post:
@@ -689,8 +712,9 @@ paths:
           description: Generic authentication failure.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such scope, or the caller holds no grant for it.
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "503":

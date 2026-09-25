@@ -8,7 +8,7 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 // multi-tenant overview).
 vi.mock('../../features/spaces/scopes', () => ({
   listMyTenants: vi.fn().mockResolvedValue([
-    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
+    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
   ]),
   listMyGroups: vi.fn().mockResolvedValue([]),
   openMyTenantIcon: vi.fn().mockResolvedValue(null),
@@ -166,8 +166,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('shows a chevron and an overview of every tenant when there are several', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', iconEpoch: 0 },
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
     ])
     const wrapper = await mountAt('')
 
@@ -184,8 +184,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('switches to another tenant from the overview (full navigation to its domain)', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', iconEpoch: 0 },
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
     ])
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
     const wrapper = await mountAt('')
