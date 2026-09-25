@@ -18,10 +18,12 @@ vi.mock('../../features/account/emergencyKit/emergencyKit', async (orig) => ({
 }))
 
 import SecretKeyField from './SecretKeyField.vue'
-import { importKitFromFile, kitPayload, type KitData } from '../../features/account/emergencyKit/emergencyKit'
+import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
+import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
 import { i18n } from '../../i18n'
 
-const KIT: KitData = { email: 'kevin@example.com', secretKey: 'dGhlLXNlY3JldC1rZXk=' }
+// 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
+const KIT: KitData = { email: 'kevin@example.com', secretKey: 'ERERERERERERERERERERERERERERERERERERERERERE=' }
 
 const stubs = {
   // `name`, `type`, `id` and the rest fall through as attributes — which is how every host's test finds this

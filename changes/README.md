@@ -1226,6 +1226,14 @@ capability (the DB fingerprint tripwire) let the server *detect* a state it prev
 question is the server's knowledge, not the client's wish — name that dependency when first weighing the field,
 not a CR later.
 
+### A done-when that names a gate records that gate's exit code on `main`, measured at refine
+
+A gate is a claim about the whole tree, not about the CR's files, so "green" in a done-when silently assumes a
+green baseline. cr-emergency-kit-codec-in-crypto asked for `npm run mutation` in `packages/crypto` with no survivor
+in the new file; the file reached 100 %, and the run still exited 1 because `v1.ts` scored 78 % on untouched code
+(the manifest's `_comment` said 100 %, measured before the package split). Run the gate once during refine; if it
+is already red, the done-when names the scope it can honestly promise and the red goes to the inbox.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
