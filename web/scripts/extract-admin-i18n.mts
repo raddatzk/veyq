@@ -2,7 +2,7 @@ import { i18n } from '../src/i18n/index'
 const WHOLE = ['common', 'tenant', 'mail', 'release', 'setup', 'terms']
 const PARTIAL: Record<string, string[]> = {
   members: ['copied', 'copyLink', 'copyLinkIntro'],
-  password: ['pwnedWarning'],
+  password: ['pwnedCheck', 'pwnedCheckNote', 'pwnedWarning', 'pwnedUnavailable'],
 }
 const out: any = {}
 for (const loc of ['en', 'de']) {
