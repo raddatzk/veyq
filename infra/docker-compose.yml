@@ -5,7 +5,7 @@
 #   docker compose down -v      (stop AND wipe the data — fresh instance)
 services:
   mariadb:
-    image: mariadb:11.4
+    image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
     container_name: veyq-mariadb
     restart: unless-stopped
     environment:
@@ -33,7 +33,7 @@ services:
   # MinIO). Exposed on :19000 for the backend e2e (`VEYQ_S3_E2E=1`, BlobBatchE2ETest); Traefik path-routes the
   # bucket so the web app reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4). Throwaway creds only.
   garage:
-    image: dxflrs/garage:v2.0.0
+    image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
     container_name: veyq-garage
     profiles: ["s3"]
     restart: unless-stopped
@@ -73,7 +73,7 @@ services:
     # empty error, so it loads NO routers at all — the proxy answers 404 for everything while looking healthy.
     # That is how this route stayed broken here unnoticed: the Vite dev server proxies `/veyq` itself
     # (application-dev.properties signs for http://127.0.0.1:5173), so nothing in the dev loop reads this path.
-    image: traefik:v3.6
+    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     container_name: veyq-traefik
     profiles: ["s3"]
     restart: unless-stopped
@@ -95,7 +95,7 @@ services:
   # (MIT, actively maintained) — NOT the archived MailHog (root CLAUDE.md: no EOL deps). Nothing is stored across
   # restarts (in-memory), which is exactly what a throwaway test mailbox wants.
   mailpit:
-    image: axllent/mailpit:v1.20.0
+    image: axllent/mailpit:v1.20.0@sha256:6105f08377323c3e11a21b6e5e51648e33151fb4e525aab8d0961573c9e94a4d
     container_name: veyq-mailpit
     profiles: ["mail"]
     restart: unless-stopped
