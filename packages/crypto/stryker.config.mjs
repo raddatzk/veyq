@@ -24,6 +24,9 @@ const config = {
   coverageAnalysis: 'perTest',
   reporters: ['clear-text', 'html', 'json'],
   // Incremental report doubles as the CI cache (ADR 0045 §4) — a PR re-runs only changed mutants.
+  // Its limit, measured: a mutant whose own line is unchanged keeps its cached verdict even when an edit to the
+  // NEXT line changes that verdict (emergencyKit.ts's `if (!m)` stayed "Survived" after `m[1]` moved out of the
+  // try). Judge a local fix with `--force`, not with the incremental rerun.
   incremental: true,
   // break: the gate goes red below this. Carried over unchanged from web/stryker.config.mjs, where both files
   // were measured: v1.ts 100% (134 mutants, zero survivors, zero equivalents), accountBirth.ts 100%. The
