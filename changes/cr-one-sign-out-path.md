@@ -1,7 +1,7 @@
 ---
 id: cr-one-sign-out-path
 title: One sign-out, one ending — a new document, a rejected refresh, and every other tab
-status: planned
+status: in-progress
 satisfies: [uc.account.sign-out]
 adrs: ["0070", "0004", "0047", "0058"]
 invariants: [operator-blind E2EE]
@@ -61,7 +61,7 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
 
 ## Phases
 
-- [ ] 1 web — **the ending.**
+- [x] 1 web — **the ending.**
       - Add `web/src/app/sessionEnd.ts` with one function. It runs the four steps of uc.account.sign-out
         § *The ending*, in that order, and only when the tab holds a session (an access token in memory or an
         unlocked vault).
