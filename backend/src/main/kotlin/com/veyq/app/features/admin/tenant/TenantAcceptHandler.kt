@@ -10,6 +10,7 @@ import com.veyq.app.shared.identity.ServerRoles
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.identity.WrapData
+import com.veyq.app.shared.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import org.jboss.logging.Logger

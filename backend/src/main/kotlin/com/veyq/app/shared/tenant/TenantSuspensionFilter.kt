@@ -1,6 +1,5 @@
 package com.veyq.app.shared.tenant
 
-import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.httpError
 import io.smallrye.mutiny.Uni

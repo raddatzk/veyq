@@ -10,6 +10,7 @@ import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Outcome of birthing a personal scope. */

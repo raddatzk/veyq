@@ -1,6 +1,5 @@
 package com.veyq.app.shared.tenant
 
-import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.runtime.StartupEvent

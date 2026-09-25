@@ -1,7 +1,7 @@
 package com.veyq.app.features.content
 
-import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant

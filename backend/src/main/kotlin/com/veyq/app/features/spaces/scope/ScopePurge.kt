@@ -15,6 +15,7 @@ import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
 import jakarta.enterprise.context.ApplicationScoped

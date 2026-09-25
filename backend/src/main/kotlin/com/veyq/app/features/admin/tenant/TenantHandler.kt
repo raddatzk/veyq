@@ -13,6 +13,7 @@ import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.normalizeEmail
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantIngressProjector
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped

@@ -1,11 +1,12 @@
 package com.veyq.app.features.spaces.scope
 
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -42,6 +43,7 @@ data class TenantRow(
     val name: String,
     val domain: String,
     val role: String,
+    val status: String,
     val wrappedGrant: String?,
     val sealedIcon: String?,
     val iconEpoch: Int,
@@ -459,7 +461,7 @@ class ScopesStore(
                 val role = root?.role ?: MembershipEntity.MEMBER
                 val rootScope = ScopeEntity.findById(tenantId)
                 TenantEntity.findById(tenantId)?.let { t ->
-                    TenantRow(t.id, t.name, t.domain, role, root?.wrappedGrant, rootScope?.sealedIcon, rootScope?.iconEpoch ?: 0)
+                    TenantRow(t.id, t.name, t.domain, role, t.status, root?.wrappedGrant, rootScope?.sealedIcon, rootScope?.iconEpoch ?: 0)
                 }
             }
             .sortedBy { it.name }

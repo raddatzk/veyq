@@ -1,8 +1,7 @@
 package com.veyq.app.shared.tenant
 
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.admin.tenant.TenantEntity
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction

@@ -1,5 +1,7 @@
 package com.veyq.app.shared.membership
 
+import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 
 /**

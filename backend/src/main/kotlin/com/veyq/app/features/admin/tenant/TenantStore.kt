@@ -1,8 +1,9 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional

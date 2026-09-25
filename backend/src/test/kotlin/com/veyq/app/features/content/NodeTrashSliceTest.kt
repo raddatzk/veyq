@@ -3,13 +3,13 @@ package com.veyq.app.features.content
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.blobstore.RecordingBlobStore

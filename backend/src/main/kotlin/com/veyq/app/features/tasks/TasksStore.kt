@@ -1,7 +1,7 @@
 package com.veyq.app.features.tasks
 
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND

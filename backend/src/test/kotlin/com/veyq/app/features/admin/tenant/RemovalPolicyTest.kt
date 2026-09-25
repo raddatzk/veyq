@@ -1,7 +1,7 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.spaces.scope.ScopeEntity
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
