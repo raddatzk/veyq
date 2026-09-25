@@ -119,7 +119,7 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
 
       **Bite:** make the network error count as a rejection and its test must go red.
       · Done when: `npm run check` is green.
-- [ ] 4 docs + coverage:
+- [x] 4 docs + coverage:
       - `uc.account.sign-out.yaml` loses `status: planned`. Each criterion cites the phase-1 to phase-3 tests.
         The backend gap stays, because the server half is `uc.account.login`'s `logout-revokes-family`.
       - uc.account.sessions E2 (revoking your own family) has no criterion of its own. `one-sign-out-sequence`

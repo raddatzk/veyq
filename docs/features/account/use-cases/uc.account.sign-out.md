@@ -46,14 +46,16 @@ This is a property with several triggers, so it lives here and not under any one
 3. The other tabs of this instance are told the session ended — only by the tab that ended it, so the message
    never echoes.
 4. The tab loads the sign-in page as a **new document**. That discards everything the page held in memory,
-   which is what makes *every* decrypted store go without a list of stores to keep complete.
+   which is what makes *every* decrypted store go without a list of stores to keep complete. (The vault's own
+   key buffer is zeroed just before, as hygiene for the heap the old page leaves behind — not as the wipe.)
 
 ## Alternate / exception flows
 
 - **E1 — a refresh is rejected.** An authoritative rejection (the refresh endpoint answers 4xx: revoked,
   expired, unknown) in a tab that holds a session runs the ending. A network failure or a 5xx is **not** a
   rejection: the session and its tokens stay, and the next call tries again. Losing the connection for a
-  moment must not cost an unlock.
+  moment must not cost an unlock. Neither is a 408 or a 429, which a proxy in front of the instance may answer:
+  they say *not now*, not *no*.
 - **E2 — the tab holds no session.** The sign-in page at boot, a public share, a device waiting in a pairing
   ceremony: such a tab ignores the other-tab message, and a refresh rejected at boot is the ordinary *not
   signed in* path, not an ending. Without this, an ending on the sign-in page would load the sign-in page
@@ -64,7 +66,8 @@ This is a property with several triggers, so it lives here and not under any one
   that the sign-out did not reach the server. The refresh cookie is then still live, so this browser can come
   back signed in, though locked. The sign-in card's own sign-out is the retry, the same fallback
   [uc.account.sessions](uc.account.sessions.md) E3 names for the locked entry. The notice carries no account
-  data across the new document.
+  data across the new document: it is one word in this tab's `sessionStorage`, and the sign-in page removes it
+  when it reads it.
 
 ## What stays on the device
 
@@ -74,8 +77,10 @@ Only what cannot open content on its own, or does not belong to the account:
   and not the Secret Key ([uc.account.trust-device](uc.account.trust-device.md)); removing it is *untrust*,
   a separate action;
 - the **device id**, which holds no key and names this browser in the sealed device register;
-- a **public-share contributor capability**, which belongs to a share link, not to the account;
-- display preferences.
+- a **public-share contributor capability** and a share visitor's **terms consent**, which belong to a share
+  link or its tenant, not to the account;
+- display preferences, including which contributor bucket a Memory's picker last opened on (two opaque ids, no
+  name).
 
 ## Quality notes
 

@@ -1,28 +1,63 @@
 useCase: uc.account.sign-out
 feature: account
 title: Sign out — and every other way a session ends
-status: planned
-# Refined 2026-09-23 (inbox #168) ahead of any implementation. The server half of signing out — revoking the
-# family — is uc.account.login's `logout-revokes-family` and is not restated here; every criterion below is
-# about what the web client does with the session it ends.
+# cr-one-sign-out-path builds it, web-only: the ending in `app/sessionEnd.ts` (tiers, service worker, announce,
+# document load), the one sign-out sequence in `features/account/login/signOut.ts` that all five entry points
+# call, and a refresh the server rejects running that same ending. The server half of signing out — revoking the
+# family — is uc.account.login's `logout-revokes-family` and is not restated here; every criterion below is about
+# what the web client does with the session it ends.
+#
+# What these unit suites cannot claim: that the new document really takes every decrypted store with it, and that
+# a real service worker in a real browser drops a playback another tab registered. jsdom has neither a document
+# load nor a worker; that half needs a live check, two tabs on the dev app, and no CI run repeats it.
 acceptanceCriteria:
   - id: one-sign-out-sequence
     text: Every sign-out entry point (profile menu, revoking your own session, declining the terms, the sign-in
       card, the locked screen) runs the one sign-out sequence — convenience wraps deleted and the family revoked
       while the session still works, then the ending — and the ending runs even when the server calls fail,
       in which case the sign-in page says the sign-out did not reach the server.
+    coverage:
+      # signOut.test.ts owns the sequence, its order and E4's notice; each entry point's own test asserts it calls
+      # `signOut` rather than a copy — SessionsPanel's is uc.account.sessions E2, which has no criterion of its own.
+      # The ESLint rule in web/eslint.config.js keeps a `.vue` file from importing the ending at all.
+      web:
+        unit:
+          - src/features/account/login/signOut.test.ts
+          - src/components/app/ProfileMenu.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
+          - src/views/TermsAcceptView.test.ts
+          - src/views/LoginView.test.ts
+          - src/features/account/sessions/LockedSignOut.test.ts
   - id: ending-is-a-new-document
     text: The ending drops the local convenience tiers, tells the media service worker to drop every playback,
       and loads the sign-in page as a new document rather than changing route in place.
+    coverage:
+      # The navigation assertion is on `location.replace` itself: swapping it for an in-app route change reddens
+      # it. The service-worker half is the worker's own handler — every playback, pending reads rejected, acked.
+      web:
+        unit:
+          - src/app/sessionEnd.test.ts
+          - src/sw/mediaSw.test.ts
   - id: refresh-rejection-ends-the-session
     text: An authoritative refresh rejection (4xx) in a tab that holds a session runs the ending; a network
       failure or a 5xx keeps the session and its tokens.
+    coverage:
+      web:
+        unit:
+          - src/app/sessionRefresh.test.ts
+          - src/shared/httpError.test.ts
   - id: other-tabs-end-with-it
     text: A tab that ends its session announces it on a same-origin channel carrying no account data; every
       other tab that holds a session runs the ending without calling the server, and none re-announces it.
+    coverage:
+      web: { unit: [src/app/sessionEnd.test.ts] }
   - id: no-session-no-ending
     text: A tab that holds no session (the sign-in page at boot, a public share, a pairing ceremony) ignores the
       announcement, and a refresh rejected at boot does not run the ending.
+    coverage:
+      web:
+        unit:
+          - src/app/sessionEnd.test.ts
+          - src/app/sessionRefresh.test.ts
 gaps:
-  web: "Not built: sign-out today resets an incomplete list of stores, and a rejected refresh drops only the tokens."
   backend: "No backend work: the server half (revoking the family) is uc.account.login's logout-revokes-family, already covered there."
