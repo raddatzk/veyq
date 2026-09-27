@@ -3,15 +3,14 @@ package com.veyq.app.features.tasks
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.admit
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -30,19 +29,14 @@ import java.util.UUID
 @QuarkusTest
 class TasksSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     // --- grant-delivery: the first, trivially-blind consumer -------------------------------------------------
 
     @Test
     fun grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
-        val target = seedUser(pubkey = "dGFyZ2V0LXB1YmtleQ==") // "target-pubkey"
+        val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==") // "target-pubkey"
         val targetMembership = seedGrantlessMembership(target, scopeId)
 
         // The worker pulls its scopes with the grant-delivery tag → the server originates + leases the job,
@@ -86,7 +80,7 @@ class TasksSliceTest {
     fun grantDeliveryServesTheTargetsAdmissionAndRecordsTheWorkerAsGranter() {
         // ADR 0020 move 6 / ADR 0028 Decision 6: the target carries its admission so the worker can verify it
         // before it wraps, and the grant it posts is written with the worker as granter and its signature.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val targetMembership = seedGrantlessMembership(seedUser(), scopeId)
@@ -117,7 +111,7 @@ class TasksSliceTest {
 
     @Test
     fun grantDeliveryCompletionWithoutAWrapIs400() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         seedGrantlessMembership(seedUser(), scopeId)
@@ -133,11 +127,11 @@ class TasksSliceTest {
         // A member added to an ALREADY-ROTATED scope: the worker wraps E_current (here E_1), so the membership must
         // be recorded at the current epoch — else the client peels the chain from the wrong base (treats E_1 as E_0)
         // and cannot read post-rotation content (cr-0093).
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         setScopeEpoch(scopeId, 1) // the scope has rotated to E_1
         val worker = seedUser()
         seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 1) // current → not itself behind
-        val target = seedUser(pubkey = "dGFyZ2V0LXB1YmtleQ==")
+        val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==")
         val targetMembership = seedGrantlessMembership(target, scopeId) // grantedEpoch defaults to 0
 
         val jobId = claimGrantDelivery(worker)
@@ -154,11 +148,11 @@ class TasksSliceTest {
         // worker sealed — and a worker whose epoch is not the current one (a rotation landed between its claim and
         // its completion) delivers a grant the target cannot use. Refused, nothing written, the lease released
         // without spending an attempt so the job re-runs; the control is the same job completed at the current epoch.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         setScopeEpoch(scopeId, 2)
         val worker = seedUser()
         seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 2)
-        val target = seedUser(pubkey = "dGFyZ2V0LXB1YmtleQ==")
+        val target = seedUser(identityPublicKey = "dGFyZ2V0LXB1YmtleQ==")
         val targetMembership = seedGrantlessMembership(target, scopeId)
 
         val jobId = claimGrantDelivery(worker)
@@ -183,11 +177,11 @@ class TasksSliceTest {
         // A remaining member left stale by a rotation (grant present but grantedEpoch < currentEpoch — e.g. their
         // re-wrap failed at rotation time, en.spaces.scope-key-rotation §E2) is re-originated by reconcile and
         // re-delivered at the current epoch, instead of being stranded on "awaiting access" (cr-0093).
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         setScopeEpoch(scopeId, 2)
         val worker = seedUser()
         seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 2) // current → not itself behind
-        val stale = seedUser(pubkey = "c3RhbGUtcHVia2V5")
+        val stale = seedUser(identityPublicKey = "c3RhbGUtcHVia2V5")
         val staleMembership = seedGrantedMembershipRow(stale, scopeId, "old-grant", grantedEpoch = 1) // holds E_1, scope at E_2
 
         val jobId = claimGrantDelivery(worker) // reconcile-on-claim originates a delivery for the stale member
@@ -203,7 +197,7 @@ class TasksSliceTest {
 
     @Test
     fun claimIsAtomicFirstWins() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val tag = "deadbeef"
@@ -215,7 +209,7 @@ class TasksSliceTest {
 
     @Test
     fun expiredLeaseIsLazilyReclaimed() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val tag = "deadbeef"
@@ -227,7 +221,7 @@ class TasksSliceTest {
 
     @Test
     fun exhaustedExpiredJobIsDeadLetteredNotClaimed() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val tag = "deadbeef"
@@ -242,7 +236,7 @@ class TasksSliceTest {
 
     @Test
     fun failBelowMaxRequeuesThenAtMaxDeadLetters() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val tag = "deadbeef"
@@ -265,7 +259,7 @@ class TasksSliceTest {
         // PENDING — still claimable by OTHER workers — but is itself never re-offered it (per KEY-HOLDER, not a
         // global veto; the exclusion is keyed on the account, so the decliner's other devices stay out too).
         // The declined attempt is rolled back, so a legitimate decline never dead-letters the job.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val workerA = seedUser()
         val workerB = seedUser()
         seedGrantedMembership(workerA, scopeId, "a-grant")
@@ -292,7 +286,7 @@ class TasksSliceTest {
         // deleted a decline row, so the accept authorised a wrap that never happened (ADR 0060 Decision 7).
         // This is the failure mode that strands a rotated account — its re-admission is exactly a delivery to a
         // contact somebody already declined.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "worker-grant")
         val target = seedUser()
@@ -319,7 +313,7 @@ class TasksSliceTest {
         // exclusion that keeps a rotator off their own re-grant (ADR 0060 Decision 4) — the takeover's finishing
         // move, handed over by a cleanup. It cannot, because a scope-rotation job has no delivery target for a
         // membership id to resolve to; this asserts that in the one run where both rows belong to one worker.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val rotator = seedUser()
         seedGrantedMembership(rotator, scopeId, "rotator-grant")
         val target = seedUser()
@@ -342,7 +336,7 @@ class TasksSliceTest {
 
     @Test
     fun declineRequiresTheLease() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val holder = seedUser()
         val other = seedUser()
         seedGrantedMembership(holder, scopeId, "holder-grant")
@@ -359,7 +353,7 @@ class TasksSliceTest {
 
     @Test
     fun heartbeatExtendsTheLeaseForTheHolderOnly() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "owner-grant")
         val tag = "deadbeef"
@@ -380,7 +374,7 @@ class TasksSliceTest {
 
     @Test
     fun enqueueRequiresScopeMembership() {
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val member = seedUser()
         seedGrantedMembership(member, scopeId, "member-grant")
 
@@ -432,7 +426,7 @@ class TasksSliceTest {
     fun enqueueRejectsStructuralGrantDeliveryTag() {
         // Security (cr-0081): a client cannot forge a grant-delivery job — structural tags are server-originated
         // only, so the enqueue front door rejects them (400) instead of minting an arbitrary-target delivery.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val worker = seedUser()
         seedGrantedMembership(worker, scopeId, "grant")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
@@ -445,11 +439,11 @@ class TasksSliceTest {
     fun completeCannotWriteAGrantOntoAMembershipInAnotherScope() {
         // Security (cr-0081): the grant write is bound to the job's own scope. An attacker holding a grant in
         // scope A cannot use a grant-delivery job in A to write a wrappedGrant onto a membership in scope B.
-        val scopeA = seedTenantScope()
+        val scopeA = seedTenant()
         val attacker = seedUser()
         seedGrantedMembership(attacker, scopeA, "attacker-grant")
 
-        val scopeB = seedTenantScope()
+        val scopeB = seedTenant()
         val victimMembership = seedGrantlessMembership(seedUser(), scopeB)
 
         // A grant-delivery job in scope A (attacker's) pointing at the victim's grant-less membership in scope B,
@@ -479,7 +473,7 @@ class TasksSliceTest {
     @Test
     fun grantLessWorkerCannotClaim() {
         // Eligibility is holding the scope key: a grant-less member is a *target*, not a worker.
-        val scopeId = seedTenantScope()
+        val scopeId = seedTenant()
         val pending = seedUser()
         seedGrantlessMembership(pending, scopeId)
         claim(pending, CapabilityTags.GRANT_DELIVERY).then().statusCode(204)
@@ -506,33 +500,6 @@ class TasksSliceTest {
 
     private fun claimGrantDelivery(userId: String): String =
         claim(userId, CapabilityTags.GRANT_DELIVERY).then().statusCode(200).extract().path("jobId")
-
-    private fun seedTenantScope(): String {
-        val tenantId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-        }
-        return tenantId
-    }
-
-    private fun seedUser(pubkey: String = "aWRlbnRpdHktcHVibGljLWtleQ=="): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"
-                serverRole = "MEMBER"; suiteId = "v1"; identityPublicKey = pubkey
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="; authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private fun seedGrantedMembership(userId: String, scopeId: String, grant: String) =
         QuarkusTransaction.requiringNew().run {
