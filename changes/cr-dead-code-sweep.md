@@ -105,14 +105,14 @@ site found was ADR 0007 (Decision 6); `docs/inbox.md` #170 names them all and ge
 
 ## Phases
 
-- [ ] 1 admin-web: Decision 5, plus the markdown sanitiser and the undo half. · Done when: `npm run
+- [x] 1 admin-web: Decision 5, plus the markdown sanitiser and the undo half. · Done when: `npm run
       check` in `admin-web/` is green, and the new assertion was red on the untouched tree with its list
       recorded in the retrospective.
-- [ ] 2 web: Decisions 2, 3 and 5, plus `inviteLink`, `startDayOf` and
+- [x] 2 web: Decisions 2, 3 and 5, plus `inviteLink`, `startDayOf` and
       `mediaSwReady`. · Done when: `npm run generate:api` + `npm run check` in `web/` are green over a
       `src/api/generated/` holding no `instance/`, and the new assertion was red on the untouched tree with its
       list recorded.
-- [ ] 3 backend + prose: the two methods and Decision 6. · Done when: `./gradlew check` is green and the
+- [x] 3 backend + prose: the two methods and Decision 6. · Done when: `./gradlew check` is green and the
       `@Test` count is unchanged (Definition of done). ADR 0007 is narrowed, and
       `admin-web/CLAUDE.md` stays true. Inbox #170 → done.
 
@@ -134,4 +134,29 @@ site found was ADR 0007 (Decision 6); `docs/inbox.md` #170 names them all and ge
 
 ## Retrospective
 
-_(filled at implement)_
+**Baseline** (main `f7edfb7`, 2026-09-27, before the first edit): 39/39 guards exit 0 (the run overlapped my
+first admin-web edits, so it is a baseline of `f7edfb7` only for the guards that ran first); `@Test` = 796;
+web `Tests 1212 passed | 13 skipped (1225)`; admin-web `Tests 119 passed (119)`.
+**After:** 39/39 guards exit 0; `@Test` = 796, `./gradlew check` BUILD SUCCESSFUL (824 tests, 0 failures);
+web `Tests 1213 passed | 13 skipped (1226)`; admin-web `Tests 120 passed (120)`. No test fell: the one
+predicted to go, web's `inviteLink.test.ts`, was already gone (below). Each count rose by the new assertion.
+
+**Red lists on the untouched tree.** admin-web: 43 of 146 keys (`common.save/show/hide/undo/more/unreachable`,
+`tenant.manageTitle/manageSub/inviteSent/edit/reassign/reassignTitle/revoked/changeDomain`, and 29
+`tenant.join.*`). web: 35 of 818, of which 3 were false positives (`shell.themeSystem/Light/Dark`, built as
+`` `shell.theme${Pref}` `` by `ProfileMenu`) — the predicate learned mid-segment heads, the list became 32.
+
+- **Planning — the inventory was stale on arrival in three rows.** web's `inviteLink` + test and the
+  `TenantMembersPanel` mock were deleted by `cr-client-hygiene` (`7ccc504`) the day this CR was refined;
+  admin-web's catalog shrank 198 → 146 (`291f7c0`, `31fffa8`, `3e9f2ed`), so "104 dead" became 43; and the
+  DoD's count prediction named a test that no longer existed. Root cause: refine and a neighbour's implement
+  ran the same day, and the CR froze a number beside each locator. The locators themselves held — which is the
+  rule working. *Next time:* a CR refined while a neighbour is mid-implement names that neighbour and says
+  which rows it may already consume.
+- **Planning — the predicate spec carried a known-shape false positive.** Decision 5 defined the template head
+  as `` `a.b.${ ``; web's `` `shell.theme${ `` is the one spelling that breaks it, and the refine's "~36" was
+  measured with it. The CR's own "widen, never allowlist" order caught it cleanly.
+- **Execution — my miss:** a split `git add` failed on an already-`git rm`'d path, and the following
+  `git commit` swept in a *later* phase's staged `git rm` (web's `authPrefill.ts`). Undone by `reset --soft`
+  to the parent hash. *Next time:* `git rm` stages at once, so stage a phase's deletions only when that phase
+  commits, and check `git status --short` between add and commit.
