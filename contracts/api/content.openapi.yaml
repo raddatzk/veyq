@@ -95,7 +95,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), the `epoch` is not the scope's current one (`stale_epoch` — the caller's grant lags a rotation; nothing stored), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
@@ -498,8 +498,9 @@ components:
           type: integer
           description: >
             The scope **content-key epoch** this node's name / slug / `K_mem`-wrap are sealed under (ADR 0024).
-            The client sends the scope's current epoch; omitted/absent = 0 (the pre-rotation baseline). A member
-            reads a node of epoch `k` iff they hold an epoch ≥ `k`.
+            Must be the scope's **current** epoch (else `409 stale_epoch`, nothing stored — ADR 0024 Decision 6: a
+            write under an older epoch would be readable by a member removed since); omitted/absent = 0 (the
+            pre-rotation baseline). A member reads a node of epoch `k` iff they hold an epoch ≥ `k`.
           minimum: 0
           default: 0
           example: 0
