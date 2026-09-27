@@ -23,6 +23,10 @@ data class TenantView(
     val status: String,
     val inviteStatus: String?,
     val inviteExpiresAt: Instant?,
+    /** What the tenant holds in the store (ADR 0073 §2), from `StorageQuota` — this store never sums. */
+    val storageUsedBytes: Long,
+    /** The Server Owner's quota for the tenant; null = none (ADR 0073 §1). */
+    val storageQuotaBytes: Long?,
 )
 
 /** The state of a tenant's current invite after a mint/resend/reassign. `bootstrapSecret` is the raw token,
@@ -266,6 +270,19 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         TenantEntity.update("shareLinkLimitBytes = ?1 where id = ?2", shareLinkLimitBytes, tenantId)
     }
 
+    /**
+     * Set or clear (null) the tenant's storage quota (ADR 0073 §1) — the only writer of the column, reached only by
+     * the Server Owner. The write is an UPDATE of the tenant row at flush, so it waits for, and is waited on by, the row
+     * lock an upload start holds while it reserves. (Through the entity, not a JPQL `update`: Panache's positional
+     * parameters are non-null, and null is the value that clears.) Returns whether the tenant exists.
+     */
+    @Transactional
+    fun setStorageQuota(tenantId: String, quotaBytes: Long?): Boolean {
+        val tenant = TenantEntity.findById(tenantId) ?: return false
+        tenant.storageQuotaBytes = quotaBytes
+        return true
+    }
+
     /** Bring a SUSPENDED tenant back to ACTIVE — the exact inverse of [suspend], same guarded-UPDATE reasoning. */
     @Transactional
     fun reactivate(tenantId: String): Boolean =
@@ -296,7 +313,8 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         TenantEntity.deleteById(tenantId)
     }
 
-    fun listAll(): List<TenantView> =
+    /** Every tenant, with its usage read from [usageByTenant] (tenant id → bytes; a tenant it lacks holds nothing). */
+    fun listAll(usageByTenant: Map<String, Long>): List<TenantView> =
         TenantEntity.listAll().map { t ->
             val invite = currentInvite(t.id)
             TenantView(
@@ -307,6 +325,8 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
                 status = t.status,
                 inviteStatus = invite?.status,
                 inviteExpiresAt = invite?.expiresAt,
+                storageUsedBytes = usageByTenant[t.id] ?: 0,
+                storageQuotaBytes = t.storageQuotaBytes,
             )
         }
 

@@ -218,7 +218,8 @@ class OperatorBlindProbeTest {
             "Server-Owner route: @RolesAllowed(SERVER_OWNER) plus its own lifecycle guards; it administers tenants, " +
                 "it does not act inside one.",
             "createTenant", "listTenants", "resendTenantInvite", "reassignTenantInvite", "changeTenantDomain",
-            "revokeTenant", "suspendTenant", "reactivateTenant", "getInstanceRelease", "getInstanceStoreProvisioning",
+            "revokeTenant", "suspendTenant", "reactivateTenant", "setTenantStorageQuota", "getInstanceRelease",
+            "getInstanceStoreProvisioning",
         )
         reason(
             "account-wide: addresses the caller's own account, no space; a rotation job it originates simply waits " +

@@ -23,6 +23,7 @@ import com.veyq.app.generated.model.TenantCreated
 import com.veyq.app.generated.model.TenantInviteState
 import com.veyq.app.generated.model.TenantStatus
 import com.veyq.app.generated.model.TenantStorage
+import com.veyq.app.generated.model.TenantStorageQuotaUpdate
 import com.veyq.app.generated.model.TenantStorageUpdate
 import com.veyq.app.generated.model.TenantSummary
 import com.veyq.app.generated.model.TenantTerms
@@ -335,9 +336,17 @@ class TenantsResource(
             .toResponse()
 
     private fun TenantStorageOutcome.toResponse(): Response = when (this) {
-        is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(storage.usedBytes, storage.shareLinkLimitBytes)).build()
+        is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(storage.usedBytes, storage.quotaBytes, storage.shareLinkLimitBytes)).build()
         is HttpFailure -> httpError(this)
     }
+
+    // The tenant's quota (uc.admin.tenant-storage-quota, ADR 0073 §1): Server-Owner-gated by the class-level
+    // @RolesAllowed and answered only on the admin listener (`x-veyq-channel: admin`). No tenant-owner route writes it.
+    override fun setTenantStorageQuota(tenantId: UUID, tenantStorageQuotaUpdate: TenantStorageQuotaUpdate): Response =
+        when (val o = storageHandler.setQuota(tenantId.toString(), tenantStorageQuotaUpdate.quotaBytes)) {
+            SetQuotaOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
 
 
     private fun InviteOutcome.toResponse(): Response = when (this) {
@@ -360,6 +369,8 @@ class TenantsResource(
         status = TenantStatus.decode(status),
         inviteStatus = inviteStatus?.let { InviteStatus.decode(it) },
         inviteExpiresAt = inviteExpiresAt?.utc(),
+        storageUsedBytes = storageUsedBytes,
+        storageQuotaBytes = storageQuotaBytes,
     )
 
     private fun Instant.utc() = atOffset(ZoneOffset.UTC)
