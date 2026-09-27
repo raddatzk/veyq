@@ -11,11 +11,9 @@
 // server-side).
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { idbRun } from '../../../shared/idb'
+import { SESSION_VAULT, dropSessionVault } from '../../../app/convenienceTiers'
 
-const DB_NAME = 'veyq-session'
-const STORE = 'key'
-const RECORD = 'current'
-const SS_KEY = 'veyq.session-vault'
+const { db: DB_NAME, store: STORE, record: RECORD, storageKey: SS_KEY } = SESSION_VAULT
 
 /** The sessionStorage record: the account email + the Master Key sealed under the IndexedDB key K (iv +
  *  ciphertext, base64). No plaintext key material. */
@@ -89,10 +87,5 @@ export async function loadSessionVault(): Promise<{ email: string; masterKey: Ui
 /** Drop the session vault (logout, switching to the persistent tier, or a no-session boot): both the
  *  sessionStorage ciphertext and the IndexedDB key. */
 export async function clearSessionVault(): Promise<void> {
-  try {
-    sessionStorage.removeItem(SS_KEY)
-  } catch {
-    /* ignore */
-  }
-  await dropKey()
+  await dropSessionVault()
 }

@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { decodeHttpError, httpStatus, isCodedError, isHttpStatus, isUnauthorized } from './httpError'
+import {
+  decodeHttpError,
+  httpStatus,
+  isAuthoritativeRejection,
+  isCodedError,
+  isHttpStatus,
+  isUnauthorized,
+} from './httpError'
 
 /** A stand-in for a generated-client `ResponseError`: any package's error carries a `.response: Response`. */
 function responseError(status: number, body?: unknown): { name: string; response: Response } {
@@ -23,6 +30,12 @@ describe('httpError', () => {
     expect(isUnauthorized(responseError(401))).toBe(true)
     expect(isUnauthorized(responseError(403))).toBe(false)
     expect(isUnauthorized(new Error('network'))).toBe(false)
+  })
+
+  it('isAuthoritativeRejection is a 4xx that says "no", never a network failure, a 5xx, or a "not now"', () => {
+    for (const status of [400, 401, 403, 404, 410]) expect(isAuthoritativeRejection(responseError(status))).toBe(true)
+    for (const status of [408, 429, 500, 502, 503]) expect(isAuthoritativeRejection(responseError(status))).toBe(false)
+    expect(isAuthoritativeRejection(new TypeError('Failed to fetch'))).toBe(false)
   })
 
   it('decodeHttpError returns status + body code', async () => {

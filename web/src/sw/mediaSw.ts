@@ -22,7 +22,14 @@ import {
   unsatisfiedRange,
   type ByteRange,
 } from './range'
-import { MEDIA_PATH_PREFIX, PROTOCOL_VERSION, isVideoMediaType, type ChunkReply, type PageToSwMessage } from './protocol'
+import {
+  MEDIA_PATH_PREFIX,
+  PROTOCOL_VERSION,
+  isVideoMediaType,
+  type ChunkReply,
+  type EndSessionAck,
+  type PageToSwMessage,
+} from './protocol'
 
 /** Max decrypted plaintext held in the read-ahead cache, per playback. A UX/bandwidth dial, NOT a privacy control
  *  (the ADR 0047 seek-leak is accepted) — re-tune after live-verify. Two 256 KiB chunks of headroom over the
@@ -191,6 +198,8 @@ export function buildRangeResponse(session: PlaybackSession, rangeHeader: string
 export type PlaybackRegistry = {
   register(handle: string, session: PlaybackSession): void
   revoke(handle: string): void
+  /** Drop every playback: a session ended, and the SW outlives the page that registered them. */
+  revokeAll(): void
   get(handle: string): PlaybackSession | undefined
 }
 
@@ -205,11 +214,15 @@ export function makeRegistry(): PlaybackRegistry {
       sessions.get(handle)?.close()
       sessions.delete(handle)
     },
+    revokeAll: () => {
+      sessions.forEach((session) => session.close())
+      sessions.clear()
+    },
     get: (handle) => sessions.get(handle),
   }
 }
 
-/** Handle a `postMessage` to the SW: handshake, register, or revoke. Exported for unit testing. */
+/** Handle a `postMessage` to the SW: handshake, register, revoke, or end-session. Exported for unit testing. */
 export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: readonly MessagePort[]): void {
   const msg = data as PageToSwMessage
   if (!msg || typeof msg !== 'object') return
@@ -223,6 +236,10 @@ export function handleMessage(registry: PlaybackRegistry, data: unknown, ports: 
     }
   } else if (msg.type === 'veyq-revoke-playback') {
     registry.revoke(msg.handle)
+  } else if (msg.type === 'veyq-end-session') {
+    // Not version-gated like a playback: dropping plaintext is always safe, so any page may ask for it.
+    registry.revokeAll()
+    ports[0]?.postMessage({ type: 'veyq-end-session-ack' } satisfies EndSessionAck)
   }
 }
 

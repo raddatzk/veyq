@@ -9,7 +9,7 @@
  * controlling SW built at a different version answers a mismatch (or nothing), and the page falls back to the
  * Slice-1 full-blob path. This is what lets a freshly-deployed page detect a stale still-controlling SW.
  */
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 
 /** The synthetic in-origin path the SW intercepts. `<handle>` is opaque + per-playback — never a blobId (ADR 0047). */
 export const MEDIA_PATH_PREFIX = '/__media/'
@@ -49,7 +49,13 @@ export type RegisterMsg = {
 /** Tear a playback down: the SW drops the session + its in-memory plaintext cache. */
 export type RevokeMsg = { type: 'veyq-revoke-playback'; handle: string }
 
-export type PageToSwMessage = HandshakeMsg | RegisterMsg | RevokeMsg
+/** A session ended (uc.account.sign-out § The ending): drop EVERY playback — whichever tab registered it — with
+ *  its pending chunk requests and its plaintext cache. The SW acks on the transferred port once they are gone. */
+export type EndSessionMsg = { type: 'veyq-end-session' }
+/** The end-session reply: every playback this SW held is gone. */
+export type EndSessionAck = { type: 'veyq-end-session-ack' }
+
+export type PageToSwMessage = HandshakeMsg | RegisterMsg | RevokeMsg | EndSessionMsg
 
 // --- SW ↔ page (over the per-playback MessagePort) ---------------------------
 

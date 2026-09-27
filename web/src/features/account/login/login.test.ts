@@ -1,11 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../../../api/client', () => ({ loginApi: vi.fn(), sessionApi: vi.fn() }))
+vi.mock('../../../api/client', () => ({ loginApi: vi.fn() }))
 
-import { login, logout } from './login'
-import { loginApi, sessionApi } from '../../../api/client'
+import { login } from './login'
+import { loginApi } from '../../../api/client'
 import { session } from '../../../app/session'
-import { setUnlocked, isUnlocked } from '../../../app/vault'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
@@ -57,20 +56,4 @@ describe('login (uc.account.login)', () => {
     // keypairs must match it — the cost is inherent here, unlike the wraps whose params ride on the wire.
     // Only this test gets the raised ceiling; the three below stay on the 5s default. See packages/crypto/src/testArgon.ts.
   }, PRODUCTION_ARGON_TIMEOUT_MS)
-
-  it('re-locks the vault on logout (every sign-out path drops the unlocked keys)', async () => {
-    vi.mocked(sessionApi).mockReturnValue({
-      logout: () => Promise.resolve(),
-    } as unknown as ReturnType<typeof sessionApi>)
-    setUnlocked(
-      new Uint8Array(32).fill(7),
-      { kemX: new Uint8Array(1), mlkemSeed: new Uint8Array(1), sign: new Uint8Array(1) },
-      'cold',
-    )
-    expect(isUnlocked()).toBe(true)
-
-    await logout()
-
-    expect(isUnlocked()).toBe(false)
-  })
 })

@@ -58,6 +58,17 @@ export function isUnauthorized(e: unknown): boolean {
 }
 
 /**
+ * Whether the server AUTHORITATIVELY refused the session: a 4xx (revoked, expired, unknown, malformed). A network
+ * failure or a 5xx is not an answer about the session, so it never ends one — losing the connection for a moment
+ * must not cost an unlock (uc.account.sign-out E1, ADR 0070 § Decision 3). 408 and 429 are 4xx that say "not
+ * now" rather than "no", which a proxy in front of the instance may answer, so they are not refusals either.
+ */
+export function isAuthoritativeRejection(e: unknown): boolean {
+  const status = httpStatus(e)
+  return status >= 400 && status < 500 && status !== 408 && status !== HttpStatus.tooManyRequests
+}
+
+/**
  * Decode a failed call into `{ status, code }` — `status` is the HTTP status (`0` for a non-HTTP failure),
  * `code` is the server's machine-readable error `code` from a JSON body (`null` when absent or non-JSON). The
  * body is cloned and read solely for that `code`; it is never returned verbatim.
