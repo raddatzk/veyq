@@ -15,7 +15,7 @@ import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountRotationApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
-import { setUnlocked } from '../../../app/vault'
+import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
@@ -81,6 +81,14 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     if (e instanceof ColdCredentialRefused) throw new RotationRefused(e.reason)
     throw e
   })
+  // The identity this rotation replaces, as the server's statement binds it. Read from the vault's own private
+  // key rather than the directory, for the same reason the sole-member re-key below trusts no round-trip.
+  const currentPriv = identityPrivate()
+  if (!currentPriv) {
+    oldMasterKey.fill(0)
+    throw new RotationRefused('vaultLocked')
+  }
+  const currentIdentityPublicKey = v1.serializeIdentityPublic(v1.identityPublicFromPrivate(currentPriv))
   const secretKey = fromB64std(secretKeyB64.trim())
 
   const identity = v1.generateIdentity()
@@ -94,21 +102,46 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     const recSalt = v1.randomBytes(16)
     const pwKek = await unlockKekAsync(secretKey, password, pwSalt, ARGON)
     const recKek = await recoveryKekAsync(secretKey, recSalt, ARGON)
+    const identityPublicKey = v1.serializeIdentityPublic(identity.pub)
+    const passwordWrap = {
+      wrappedKey: v1.symWrap(pwKek, newMasterKey, 'master-key', v1.randomBytes(12)),
+      kdfParams: v1.encodeKdfParams(ARGON, pwSalt),
+    }
+    const recoveryWrap = {
+      wrappedKey: v1.symWrap(recKek, newMasterKey, 'master-key', v1.randomBytes(12)),
+      kdfParams: v1.encodeKdfParams(ARGON, recSalt),
+    }
 
+    // The gate's server half (ADR 0060 Decision 2): a signature under the key only the Secret Key derives, over
+    // the identity this replaces and everything it installs. The proof key itself survives the rotation — the
+    // Secret Key does not change — so nothing is re-registered.
+    const proof = v1.deriveSecretKeyProofKeypair(secretKey)
+    const secretKeyProofSignature = b64std(
+      v1.secretKeyProofSign(
+        proof.privateKey,
+        v1.rotationProofStatement({
+          currentIdentityPublicKey,
+          identityPublicKey,
+          wrappedIdentityPrivateKey: fromB64std(wrappedPriv),
+          passwordWrap,
+          recoveryWrap,
+        }),
+      ),
+    )
+    proof.privateKey.fill(0)
+
+    const wire = (w: { wrappedKey: Uint8Array; kdfParams: Uint8Array }) => ({
+      wrappedKey: b64std(w.wrappedKey),
+      kdfParams: b64std(w.kdfParams),
+    })
     const result = await withRefresh(() =>
       accountRotationApi().rotateAccountKeys({
         rotateAccountKeysRequest: {
-          identityPublicKey: b64std(v1.serializeIdentityPublic(identity.pub)),
+          identityPublicKey: b64std(identityPublicKey),
           wrappedIdentityPrivateKey: wrappedPriv,
-          passwordWrap: {
-            wrappedKey: b64std(v1.symWrap(pwKek, newMasterKey, 'master-key', v1.randomBytes(12))),
-            kdfParams: b64std(v1.encodeKdfParams(ARGON, pwSalt)),
-          },
-          recoveryWrap: {
-            wrappedKey: b64std(v1.symWrap(recKek, newMasterKey, 'master-key', v1.randomBytes(12))),
-            kdfParams: b64std(v1.encodeKdfParams(ARGON, recSalt)),
-          },
-          recoveryMasterKeyTag: b64std(v1.recoveryAuthTag(newMasterKey)),
+          passwordWrap: wire(passwordWrap),
+          recoveryWrap: wire(recoveryWrap),
+          secretKeyProofSignature,
         },
       }),
     )

@@ -24,7 +24,7 @@ data class NewAccount(
     val identityPublicKey: String,
     val wrappedIdentityPrivateKey: String,
     val authPublicKey: String,
-    val recoveryMasterKeyTag: String?,
+    val secretKeyProofPublicKey: String,
     val wraps: List<WrapData>,
 )
 
@@ -155,7 +155,7 @@ class TenantAcceptHandler(
             identityPublicKey = account.identityPublicKey,
             wrappedIdentityPrivateKey = account.wrappedIdentityPrivateKey,
             authPublicKey = account.authPublicKey,
-            recoveryMasterKeyTag = account.recoveryMasterKeyTag,
+            secretKeyProofPublicKey = account.secretKeyProofPublicKey,
             wraps = account.wraps,
         )
         if (invite.role == TenantInviteEntity.MEMBER) store.joinAsMember(tenant.id, userId, invite.id)

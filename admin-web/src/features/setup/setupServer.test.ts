@@ -39,7 +39,7 @@ describe('setupServer — Model B request (uc.admin.setup-server)', () => {
   })
 
   it('emits standard-base64 (not base64url) for every opaque field', () => {
-    for (const field of [request.identityPublicKey, request.wrappedIdentityPrivateKey, request.recoveryMasterKeyTag!]) {
+    for (const field of [request.identityPublicKey, request.wrappedIdentityPrivateKey, request.secretKeyProofPublicKey]) {
       expect(field).toMatch(STD_B64)
     }
     for (const wrap of request.masterKeyWraps) {

@@ -220,7 +220,7 @@ class TenantsResource(
             identityPublicKey = a.identityPublicKey,
             wrappedIdentityPrivateKey = a.wrappedIdentityPrivateKey,
             authPublicKey = a.authPublicKey,
-            recoveryMasterKeyTag = a.recoveryMasterKeyTag,
+            secretKeyProofPublicKey = a.secretKeyProofPublicKey,
             wraps = a.masterKeyWraps.map { WrapData(it.method.value, it.wrappedKey, it.kdfParams) },
         )
         return when (val outcome = acceptHandler.registerAndAccept(

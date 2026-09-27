@@ -50,7 +50,7 @@ export function registerAndAccept(
         wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey,
         authPublicKey: material.authPublicKey,
         masterKeyWraps: material.masterKeyWraps,
-        recoveryMasterKeyTag: material.recoveryMasterKeyTag,
+        secretKeyProofPublicKey: material.secretKeyProofPublicKey,
       },
       grant,
       sealedName,

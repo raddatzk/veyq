@@ -270,9 +270,65 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.dedupToken(unhex(d.contentKey), unhex(d.content)))).toBe(d.token)
   })
 
-  it('recovery commitment (password reset)', () => {
-    const r = vectors.recovery_auth_tag
-    expect(hex(v1.recoveryAuthTag(unhex(r.masterKey)))).toBe(r.tag)
+  describe('Secret-Key proof key (ADR 0060 Decision 2)', () => {
+    const p = vectors.secret_key_proof
+    const wrap = (w: { wrapped_key: string; kdf_params: string }) => ({
+      wrappedKey: unhex(w.wrapped_key),
+      kdfParams: unhex(w.kdf_params),
+    })
+    const key = v1.deriveSecretKeyProofKeypair(unhex(p.key.secret_key))
+
+    it('derives the keypair from the Secret Key alone', () => {
+      expect(hex(key.privateKey)).toBe(p.key.private_key)
+      expect(hex(key.publicKey)).toBe(p.key.public_key)
+    })
+
+    // Each case pins the bytes AND the signature: the backend rebuilds the statement itself, so an encoding
+    // drift on either side is a refused request in production, not a local test failure.
+    const cases: [string, Uint8Array, { domain: string; statement: string; signature: string }][] = [
+      [
+        'rotation',
+        v1.rotationProofStatement({
+          currentIdentityPublicKey: unhex(p.rotation.current_identity_public_key),
+          identityPublicKey: unhex(p.rotation.identity_public_key),
+          wrappedIdentityPrivateKey: unhex(p.rotation.wrapped_identity_private_key),
+          passwordWrap: wrap(p.rotation.password_wrap),
+          recoveryWrap: wrap(p.rotation.recovery_wrap),
+        }),
+        p.rotation,
+      ],
+      [
+        'change-password',
+        v1.passwordChangeProofStatement({
+          currentAuthPublicKey: unhex(p.change_password.current_auth_public_key),
+          authPublicKey: unhex(p.change_password.auth_public_key),
+          passwordWrap: wrap(p.change_password.password_wrap),
+        }),
+        p.change_password,
+      ],
+      [
+        'recovery',
+        v1.recoveryProofStatement({
+          token: p.recovery.token_utf8,
+          authPublicKey: unhex(p.recovery.auth_public_key),
+          passwordWrap: wrap(p.recovery.password_wrap),
+        }),
+        p.recovery,
+      ],
+    ]
+    it.each(cases)('%s statement and signature', (_name, stmt, v) => {
+      expect(hex(stmt)).toBe(v.statement)
+      expect(hex(v1.secretKeyProofSign(key.privateKey, stmt))).toBe(v.signature)
+      expect(v1.authVerify(key.publicKey, stmt, unhex(v.signature))).toBe(true)
+    })
+
+    it('the three domains differ, so no statement answers for another flow', () => {
+      const domains = new Set([p.rotation.domain, p.change_password.domain, p.recovery.domain])
+      expect(domains.size).toBe(3)
+      for (const [, stmt, v] of cases) {
+        expect(new TextDecoder().decode(stmt.slice(4, 4 + v.domain.length))).toBe(v.domain)
+      }
+    })
   })
 
   it('journal seal (per-message sub-key)', () => {

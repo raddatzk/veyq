@@ -60,12 +60,6 @@ describe('recovery — opening the withheld wrap', () => {
     expect(opened.masterKey).toHaveLength(32)
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
-  it('reproduces the commitment the server compares against', async () => {
-    const { built, material, secretKey } = mine
-    const opened = await openWithSecretKey(material, secretKey)
-    expect(opened.recoveryAuthTag).toBe(built.material.recoveryMasterKeyTag)
-  }, PRODUCTION_ARGON_TIMEOUT_MS)
-
   it('recovers the SAME Master Key the password floor holds — so nothing needs re-encrypting', async () => {
     const { built, material, secretKey } = mine
     const opened = await openWithSecretKey(material, secretKey)
@@ -116,7 +110,16 @@ describe('recovery — setting the new password', () => {
 
     const body = completePasswordRecovery.mock.calls[0][0].recoveryCompleteRequest
     expect(body.token).toBe('the-token')
-    expect(body.recoveryAuthTag).toBe(opened.recoveryAuthTag)
+    // The server's check, run here: the statement rebuilt from what was SENT verifies under the proof key this
+    // account registered at birth — and not under another account's, so the signature is the Secret Key's.
+    const stmt = v1.recoveryProofStatement({
+      token: body.token,
+      authPublicKey: fromB64std(body.authPublicKey),
+      passwordWrap: { wrappedKey: fromB64std(body.wrappedKey), kdfParams: fromB64std(body.kdfParams) },
+    })
+    const sig = fromB64std(body.secretKeyProofSignature)
+    expect(v1.authVerify(fromB64std(mine.built.material.secretKeyProofPublicKey), stmt, sig)).toBe(true)
+    expect(v1.authVerify(fromB64std(theirs.built.material.secretKeyProofPublicKey), stmt, sig)).toBe(false)
 
     const wire = JSON.stringify(body)
     expect(wire).not.toContain('a brand new password')

@@ -2,6 +2,8 @@ package com.veyq.app.features.account.password
 
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.shared.crypto.SecretKeyProof
+import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -33,6 +35,9 @@ import java.util.UUID
  *    by the contract, so this one is bitten at the boundary rather than in the handler, and it is the live
  *    defect this flow shipped with: it used to be a second entry point that applied the identical rewrite
  *    while proving nothing (ADR 0060 Decision 2's bypass);
+ *  - a valid attestation with a Secret-Key proof from **another** Secret Key is refused with nothing written — a
+ *    phished or cracked password buys the attestation and nothing else (ADR 0060 Decision 2), with the same
+ *    request under the account's own proof key as its control;
  *  - an account with no `PASSWORD` floor refuses with nothing written.
  *
  * Seeds use UUID-unique ids: the H2 mem DB lives for the whole JVM and is shared across test classes.
@@ -86,6 +91,34 @@ class PasswordChangeSliceTest {
     }
 
     @Test
+    fun aValidPasswordWithoutTheSecretKeyIsRefusedAndWritesNothing() {
+        // The attestation is genuine — this caller knows the current password — but the proof is signed with a
+        // key the account never registered, because the caller does not hold its Secret Key. That is someone
+        // who phished the password, and the half this server can check for them is this one.
+        val user = seedAccount()
+        val attestation = sign(KEYPAIR, NEW_AUTH_PUB)
+
+        change(user, sessions.issue(user).accessToken, attestation, proof = OTHER_KEY.sign(changeStatement()))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+
+        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "a failed proof writes nothing")
+        assertEquals(OLD_AUTH_PUB, field(user) { it.authPublicKey })
+
+        change(user, sessions.issue(user).accessToken, attestation).then().statusCode(204)
+        assertEquals(NEW_AUTH_PUB, field(user) { it.authPublicKey }, "control: the account's own proof key applies")
+    }
+
+    @Test
+    fun anAccountWithNoProofKeyCannotChangeItsPassword() {
+        val user = seedAccount()
+        QuarkusTransaction.requiringNew().run { VeyqUser.findById(user)!!.secretKeyProofPublicKey = null }
+
+        change(user, sessions.issue(user).accessToken, attestation = sign(KEYPAIR, NEW_AUTH_PUB))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertEquals(OLD_AUTH_PUB, field(user) { it.authPublicKey })
+    }
+
+    @Test
     fun aChangeWithoutAnAttestationWritesNothing() {
         val user = seedAccount()
 
@@ -109,17 +142,26 @@ class PasswordChangeSliceTest {
 
     // --- helpers ---------------------------------------------------------------------------------------------
 
-    private fun change(userId: String, accessToken: String, attestation: String?) =
-        given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-            .body(changeBody(attestation)).`when`().post("/api/account/password")
+    private fun change(
+        userId: String,
+        accessToken: String,
+        attestation: String?,
+        proof: String = PROOF_KEY.sign(changeStatement()),
+    ) = given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
+        .body(changeBody(attestation, proof)).`when`().post("/api/account/password")
 
-    private fun changeBody(attestation: String?): String {
+    private fun changeBody(attestation: String?, proof: String): String {
         val attestationField = attestation?.let { ""","attestationSignature":"$it"""" } ?: ""
         return """
             {"passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
-             "authPublicKey":"$NEW_AUTH_PUB"$attestationField}
+             "authPublicKey":"$NEW_AUTH_PUB"$attestationField,
+             "secretKeyProofSignature":"$proof"}
         """.trimIndent()
     }
+
+    /** What a legitimate client signs for this fixture's change: from the seeded auth key to the new one. */
+    private fun changeStatement() =
+        SecretKeyProof.passwordChangeStatement(OLD_AUTH_PUB, NEW_AUTH_PUB, SecretKeyProof.Wrap(NEW_PW_WRAP, KDF))
 
     private fun seedAccount(): String {
         val userId = UUID.randomUUID().toString()
@@ -128,7 +170,7 @@ class PasswordChangeSliceTest {
                 id = userId; email = "pwchg-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
                 identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
                 wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ=="
-                authPublicKey = OLD_AUTH_PUB; recoveryMasterKeyTag = "cmVjb3ZlcnktdGFn"
+                authPublicKey = OLD_AUTH_PUB; secretKeyProofPublicKey = PROOF_KEY.publicKey
                 createdAt = Instant.now()
             }.persist()
         }
@@ -171,6 +213,10 @@ class PasswordChangeSliceTest {
         const val NEW_AUTH_PUB = "bmV3LWF1dGgtcHVibGljLWtleQ=="
 
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()
+
+        /** The Secret-Key proof key every seeded account registers; [OTHER_KEY] is a Secret Key it does not hold. */
+        val PROOF_KEY = TestProofKey()
+        val OTHER_KEY = TestProofKey()
 
         // The account's stored auth key must be the REAL public key of KEYPAIR — the attestation is verified
         // against it, so a placeholder string here would make every valid-attestation case fail closed.

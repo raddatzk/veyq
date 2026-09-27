@@ -328,13 +328,15 @@ A web client you serve yourself against someone else's server, a trusted/atteste
 apps: there, confidentiality is **designed** to hold against an actively malicious operator. This table is the
 one place that says how much of that design is **built**. Self-hosted, none of it is live (the operator is you);
 on operator-served web, the answer is "passive only" whatever the table says. A change-request that closes a row
-edits that row in its docs phase.
+edits that row in its docs phase. **A check the server runs never closes a row here** — the operator *is* the
+server, and skips the check or writes the table behind it; only something a client verifies with a key the
+operator lacks can.
 
 | An active operator … | Today | Closed by |
 |---|---|---|
 | reads content already stored | **Cannot** — it holds no key | — |
 | gets a scope's key through an owner's session alone: admits an account of its own, or plants a grant | **Can** | [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6, [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 — inbox #159 |
-| installs an identity of its own on an account through a session or a password | **Can** | [ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2 — inbox #159 |
+| installs an identity of its own on an account | **Can** — it writes the directory itself. Through the API a session or a password no longer suffices: rotation, change-password and recovery need a signature of the Secret-Key proof key ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2), which binds every caller but the operator | Key Transparency ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) (g)); until then a member who pinned the old key sees `changed` ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md)) |
 | serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Can** | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) — inbox #160 |
 | links a device of its own while the user links theirs | **Can** — the relay grinds either binding step in under a second | [ADR 0059](../decisions/0059-device-linking.md) §11 — inbox #161 (a) |
 | gets a removed group member re-granted by the removal's own rotation | **Can** — the rotation trusts the member list it reads afterwards | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 — inbox #161 (b) |

@@ -64,6 +64,6 @@ private fun CreateServerOwnerRequest.toRegistration() = OwnerRegistration(
     identityPublicKey = identityPublicKey,
     wrappedIdentityPrivateKey = wrappedIdentityPrivateKey,
     authPublicKey = authPublicKey,
-    recoveryMasterKeyTag = recoveryMasterKeyTag,
+    secretKeyProofPublicKey = secretKeyProofPublicKey,
     wraps = masterKeyWraps.map { WrapInput(method = it.method.value, wrappedKey = it.wrappedKey, kdfParams = it.kdfParams) },
 )

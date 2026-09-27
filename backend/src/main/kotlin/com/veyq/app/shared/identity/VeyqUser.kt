@@ -38,8 +38,12 @@ class VeyqUser : PanacheEntityBase {
     @Column(name = "auth_public_key", nullable = false)
     lateinit var authPublicKey: String
 
-    @Column(name = "recovery_master_key_tag")
-    var recoveryMasterKeyTag: String? = null
+    /** The account's Secret-Key proof key (ADR 0060 Decision 2): an Ed25519 PUBLIC key the client derives from the
+     *  Secret Key alone, registered at birth and never changed by rotation, change-password or recovery — none of
+     *  them rotates the Secret Key. Each of those flows must carry a signature under it (`SecretKeyProof`). Null
+     *  only for an account born before it existed, and such an account can do none of the three. */
+    @Column(name = "secret_key_proof_public_key")
+    var secretKeyProofPublicKey: String? = null
 
     /** The account-global "ask before adding me to groups" preference (uc.spaces.consent-group-add, cr-0094,
      *  ADR 0014 §5) — default false. When true, a GroupOwner's add becomes a consent proposal (a soft

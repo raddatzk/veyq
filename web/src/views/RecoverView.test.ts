@@ -253,7 +253,7 @@ describe('RecoverView', () => {
   it('refuses to submit two different passwords, without calling the server', async () => {
     withToken()
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
-    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32) })
     const w = mountView()
     await flushPromises()
 
@@ -278,7 +278,7 @@ describe('RecoverView', () => {
     // convenience over a server-side one — which is why it is pinned, and pinned at the boundary.
     withToken()
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
-    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32) })
     const w = mountView()
     await flushPromises()
 
@@ -308,7 +308,7 @@ describe('RecoverView', () => {
   it('completes with the released material, never with a re-typed address', async () => {
     withToken()
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
-    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32) })
     const w = mountView()
     await flushPromises()
 
@@ -325,7 +325,7 @@ describe('RecoverView', () => {
     expect(completeRecovery).toHaveBeenCalledWith(
       'tok-123',
       MATERIAL,
-      expect.objectContaining({ recoveryAuthTag: 'dGFn' }),
+      expect.objectContaining({ masterKey: expect.any(Uint8Array) }),
       'the-secret-key',
       'a brand new password',
     )
@@ -337,7 +337,7 @@ describe('RecoverView', () => {
     vi.mocked(pwnedCount).mockResolvedValue(3)
     withToken()
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
-    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32), recoveryAuthTag: 'dGFn' })
+    vi.mocked(openWithSecretKey).mockResolvedValue({ masterKey: new Uint8Array(32) })
     const w = mountView()
     await flushPromises()
 

@@ -29,7 +29,7 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
   it('registerAndAccept threads the sealedName; undefined when the name is skipped (cr-0106)', async () => {
     const material = {
       suiteId: 'v1', identityPublicKey: 'aQ==', wrappedIdentityPrivateKey: 'aQ==',
-      authPublicKey: 'aQ==', masterKeyWraps: [], recoveryMasterKeyTag: 'aQ==',
+      authPublicKey: 'aQ==', masterKeyWraps: [], secretKeyProofPublicKey: 'aQ==',
     }
     await registerAndAccept('secret', 'kevin', material as never, 'AQ==') // grant set, no name
     expect(api.registerAndAcceptTenantInvite).toHaveBeenCalledWith(

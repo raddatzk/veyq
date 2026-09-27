@@ -77,11 +77,10 @@ class RecoveryStore {
         return RecoveryMaterialRow(user.email, user.suiteId, wrap.wrappedKey, wrap.kdfParams, user.wrappedIdentityPrivateKey)
     }
 
-    /** The commitment written at account birth. Null means the account predates it or was written wrong — an
-     *  account that cannot prove possession must not be resettable, so the caller treats null as a refusal. */
+    /** The Secret-Key proof key registered at account birth. Null means the account predates it — an account that
+     *  cannot prove the Secret Key must not be resettable, so the caller treats null as a refusal. */
     @Transactional
-    fun recoveryTag(userId: String): String? =
-        VeyqUser.findById(userId)?.recoveryMasterKeyTag
+    fun proofKey(userId: String): String? = VeyqUser.findById(userId)?.secretKeyProofPublicKey
 
     /**
      * Apply the reset. **One transaction, all four writes or none** (ADR 0054 § Decision 3).

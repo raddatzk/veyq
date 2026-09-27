@@ -399,7 +399,7 @@ paths:
         (uc.account.rotate-keys, ADR 0060): publish the new identity public key; replace
         `wrappedIdentityPrivateKey` with the identity private key sealed under the new Master Key; rewrite the
         `PASSWORD` and `RECOVERY` wraps; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their
-        key material is device-held and cannot be rewritten from here); replace `recoveryMasterKeyTag`;
+        key material is device-held and cannot be rewritten from here);
         supersede every live pairing channel (an unspent envelope carries the *old* Master Key and a live
         delegated session, so a later collect would hand a device a dead key and a working login); revoke every
         other session; and originate a `scope-rotation` job for each scope the caller shares with somebody.
@@ -411,12 +411,15 @@ paths:
         useless (ADR 0060 Decision 1). `scripts/validate_rotation_shape.py` pins the request's property set so
         that negative cannot be undone by an additive field.
 
-        **The cold-credential gate is client-side, and cannot be otherwise.** The rotation is refused unless the
-        caller's vault was opened by a `PASSWORD` or released `RECOVERY` wrap — the two that take the Secret
-        Key, which is precisely what a phished device-link grant never hands over (ADR 0060 Decision 2). The
-        server holds no evidence of *which* wrap opened a vault, the Secret Key never reaches it, and a blind
-        server must not adjudicate a crypto claim; so this is client-enforced, at ADR 0026's usual tier. What
-        the server does enforce is the *shape*: both cold wraps rewritten together, or nothing written.
+        **The cold-credential gate has two halves, and the server holds the one both attackers lack.** A
+        session is not enough: a device-link holder has one with no password at all, and so does whoever
+        phished or cracked the password. So `secretKeyProofSignature` is **required** — an Ed25519 signature
+        under the account's **Secret-Key proof key**, derived from the Secret Key alone and registered at
+        account birth, over what this rotation installs and the identity it replaces (ADR 0060 Decision 2). The
+        server rebuilds that statement itself and verifies it against the stored public key before anything is
+        written; a signature that does not verify is `403 secret_key_proof_failed`. The other half, the
+        password, is proven on the client by re-opening the current `PASSWORD` wrap. The proof key survives
+        the rotation unchanged, because the Secret Key does.
 
         **Forward secrecy, not repair.** What the old identity already read stays read. The response is a
         per-scope split rather than a success tick, because between rotating and being re-admitted the caller is
@@ -448,6 +451,16 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: authentication_failed }
+        "403":
+          description: >
+            `secret_key_proof_failed` — `secretKeyProofSignature` did not verify against the account's
+            Secret-Key proof key, over the statement the server rebuilt from this request and the account's
+            current identity. The caller is authenticated; they did not prove the Secret Key. **Nothing was
+            written.**
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: secret_key_proof_failed }
         "409":
           description: >
             The account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the rotation cannot be
@@ -472,12 +485,13 @@ paths:
         `attestationSignature` is **required**: an Ed25519 signature over `authPublicKey`'s raw bytes made
         with the OLD auth private key, proving the caller still controls the password being replaced. It is
         the one half of the cold credential a blind server can verify for itself — it holds
-        `auth_public_key` (ADR 0003) and nothing else about the password. The other half, that the Secret Key
-        the new wrap is built under is this account's, is proven **on the client** by opening the current
-        `PASSWORD` wrap before anything is sent; the server holds only ciphertext there and cannot adjudicate
-        it. Both together are ADR 0060 Decision 2: a flow that mints a cold credential may not be reachable
-        without the material an attacker lacks. Someone who has forgotten their password goes through
-        `POST /api/recovery/request`, not here.
+        `auth_public_key` (ADR 0003). The other half is the Secret Key: `secretKeyProofSignature` is
+        **required**, an Ed25519 signature under the account's Secret-Key proof key over the current auth key,
+        the new one and the new `PASSWORD` wrap, which the server rebuilds and verifies against the key
+        registered at account birth. Both together are ADR 0060 Decision 2: a flow that mints a cold credential
+        may not be reachable without the material an attacker lacks, and a phished password alone is not that
+        material. Someone who has forgotten their password goes through `POST /api/recovery/request`, not
+        here.
 
         This is **not** a rotation: the identity keypair is untouched and no scope is touched — see
         `POST /api/account/rotation` for the compromise-recovery mechanism, which is mandatory-paired and
@@ -506,9 +520,12 @@ paths:
               example: { code: authentication_failed }
         "403":
           description: >
-            The `attestationSignature` did not verify against the current `auth_public_key`.
-            Distinct from `401`: the caller **is** authenticated, they failed the additional old-password
-            proof. Nothing was written.
+            One of the two cold-credential proofs failed; the code says which, because "your password was
+            wrong" and "your Emergency Kit was wrong" are different things to tell a person.
+            `attestation_failed` — `attestationSignature` did not verify against the current
+            `auth_public_key` (the old password). `secret_key_proof_failed` — `secretKeyProofSignature` did not
+            verify against the account's Secret-Key proof key (the Secret Key). Distinct from `401`: the caller
+            **is** authenticated. Nothing was written.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -863,7 +880,7 @@ components:
         does not change, so what logs in is untouched and the Emergency Kit survives; no wrap `method` — see
         `RotatedWrap`; no list of wraps to delete — every non-cold wrap goes, always, because device-held key
         material cannot be rewritten from here.
-      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, recoveryMasterKeyTag]
+      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature]
       properties:
         identityPublicKey:
           type: string
@@ -888,15 +905,17 @@ components:
         recoveryWrap:
           $ref: "#/components/schemas/RotatedWrap"
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
-        recoveryMasterKeyTag:
+        secretKeyProofSignature:
           type: string
           description: >
-            `sha256("veyq/v1/recovery-auth" ‖ newMasterKey)` — the commitment recovery compares against,
-            re-derived from the new Master Key. Without it a later recovery would prove possession of a key the
-            account no longer has, and the reset would be refused.
+            Ed25519 signature under the account's Secret-Key proof key (ADR 0060 Decision 2) over
+            `veyq/v1/secret-key-proof/rotation`: digests of the account's **current** identity public key, of
+            the three new values above and of both rewritten wraps. The encoding is pinned by the
+            `secret_key_proof` crypto vector. Binding the current identity is what makes a captured signature
+            useless after the rotation it authorised.
           contentEncoding: base64
           maxLength: 128
-          example: bmV3LXJlY292ZXJ5LWF1dGgtdGFn
+          example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotateAccountKeysResult:
@@ -939,10 +958,10 @@ components:
     ChangePasswordRequest:
       type: object
       description: >
-        Everything `POST /api/account/password` needs. All three fields are required: the wrap and the auth
-        key are what is installed, and `attestationSignature` is the half of the proof the server can check
-        itself (see the operation description).
-      required: [passwordWrap, authPublicKey, attestationSignature]
+        Everything `POST /api/account/password` needs. All four fields are required: the wrap and the auth
+        key are what is installed, and the two signatures are the two halves of the cold credential — the old
+        password and the Secret Key (see the operation description).
+      required: [passwordWrap, authPublicKey, attestationSignature, secretKeyProofSignature]
       properties:
         passwordWrap:
           $ref: "#/components/schemas/RotatedWrap"
@@ -965,6 +984,16 @@ components:
           maxLength: 256
           example: YXR0ZXN0YXRpb24tc2lnbmF0dXJl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        secretKeyProofSignature:
+          type: string
+          description: >
+            Ed25519 signature under the account's Secret-Key proof key (ADR 0060 Decision 2) over
+            `veyq/v1/secret-key-proof/change-password`: the **current** auth public key, `authPublicKey`, and a
+            digest of `passwordWrap`. The encoding is pinned by the `secret_key_proof` crypto vector.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

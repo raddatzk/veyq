@@ -207,7 +207,7 @@ class MemberIdentitySliceTest {
                "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
                "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
                "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
-               "recoveryMasterKeyTag":"cmVjb3ZlcnktdGFn"}}
+               "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"}}
         """.trimIndent()
     }
 }

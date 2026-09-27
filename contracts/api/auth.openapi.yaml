@@ -450,10 +450,13 @@ paths:
         Applies the reset in one transaction: replace the `PASSWORD` wrap, overwrite the auth public key,
         delete every wrap but `PASSWORD` and `RECOVERY`, revoke all sessions, and spend the token.
 
-        Accepted only if `recoveryAuthTag` matches the commitment stored at account birth — proof that the
-        caller actually opened the released wrap, i.e. holds the Secret Key. A caller with mailbox access
-        alone cannot produce it (ADR 0054 § Decision 1). The Master Key is unchanged, so **no content is
-        re-encrypted** and the Emergency Kit stays valid.
+        Accepted only if `secretKeyProofSignature` verifies against the account's **Secret-Key proof key** —
+        derived from the Secret Key alone and registered at account birth — over a statement the server
+        rebuilds from this request: the token, the new auth key and the new `PASSWORD` wrap (ADR 0054
+        Decision 1, ADR 0060 Decision 2). A caller with mailbox access alone cannot produce it, and neither can
+        a linked device, which holds the Master Key but never saw the Secret Key; the server stores only the
+        public key, so a database dump cannot produce it either. The Master Key is unchanged, so **no content
+        is re-encrypted** and the Emergency Kit stays valid.
       requestBody:
         required: true
         content:
@@ -463,10 +466,14 @@ paths:
         "204":
           description: The password is reset; sign in with it. All device trust is gone.
         "403":
-          description: The commitment did not match. Nothing was written.
+          description: >
+            `secret_key_proof_failed` — the signature did not verify against the account's Secret-Key proof
+            key. The token is **not** spent, so a mistyped Emergency Kit costs a retry, not the mail. Nothing
+            was written.
           content:
             application/json:
               schema: { $ref: "./_common.openapi.yaml#/components/schemas/ErrorResponse" }
+              example: { code: secret_key_proof_failed }
         "404":
           description: The token is unknown, expired or already spent.
           content:
@@ -994,9 +1001,9 @@ components:
     RecoveryCompleteRequest:
       type: object
       description: >
-        The new password's derived material, plus the proof that the caller opened the released wrap. Applied
+        The new password's derived material, plus the proof that the caller holds the Secret Key. Applied
         atomically or not at all — a partial apply would leave an account that logs in but cannot unlock.
-      required: [token, recoveryAuthTag, wrappedKey, kdfParams, authPublicKey]
+      required: [token, secretKeyProofSignature, wrappedKey, kdfParams, authPublicKey]
       properties:
         token:
           x-veyq-visibility: token
@@ -1005,15 +1012,17 @@ components:
           maxLength: 512
           example: cmVjb3ZlcnktdG9rZW4
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
-        recoveryAuthTag:
+        secretKeyProofSignature:
           type: string
           description: >
-            sha256("veyq/v1/recovery-auth" ‖ masterKey) — reproducible only after opening the released wrap,
-            and compared against the commitment stored at account birth. Not a secret: a non-invertible hash
-            of 32 random bytes.
+            Ed25519 signature under the account's Secret-Key proof key (ADR 0060 Decision 2) over
+            `veyq/v1/secret-key-proof/recovery`: a digest of `token`, `authPublicKey`, and a digest of the new
+            `PASSWORD` wrap (`wrappedKey` + `kdfParams`). The encoding is pinned by the `secret_key_proof`
+            crypto vector. The token is single-use and bound to one account, so a signature cannot be replayed
+            into a later reset.
           contentEncoding: base64
           maxLength: 128
-          example: cmVjb3ZlcnktYXV0aC10YWc=
+          example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedKey:
           type: string

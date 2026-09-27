@@ -77,6 +77,24 @@ describe('changePassword', () => {
     expect(verified).toBe(true)
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
+  it('proves the Secret Key to the server over the auth key it replaces and what it installs', async () => {
+    // The half a phished password cannot produce (ADR 0060 Decision 2). The server's check, run here: the
+    // statement rebuilt from what was SENT verifies under the proof key the Secret Key derives — and under no
+    // other, so it is the Secret Key's signature and not merely a well-formed one.
+    await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
+    const body = changePasswordCall.mock.calls[0][0].changePasswordRequest
+
+    const oldAuth = v1.deriveAuthKeypair(OLD_PASSWORD, v1.deriveAuthSalt(INSTANCE_SALT, EMAIL), v1.ARGON)
+    const stmt = v1.passwordChangeProofStatement({
+      currentAuthPublicKey: oldAuth.publicKey,
+      authPublicKey: fromB64std(body.authPublicKey),
+      passwordWrap: { wrappedKey: fromB64std(body.passwordWrap.wrappedKey), kdfParams: fromB64std(body.passwordWrap.kdfParams) },
+    })
+    const sig = fromB64std(body.secretKeyProofSignature)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(SECRET_KEY).publicKey, stmt, sig)).toBe(true)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(v1.randomBytes(32)).publicKey, stmt, sig)).toBe(false)
+  }, PRODUCTION_ARGON_TIMEOUT_MS)
+
   it('the new floor opens the SAME Master Key under the NEW password only', async () => {
     await changePassword(NEW_PASSWORD, SECRET_KEY_B64, OLD_PASSWORD)
     const body = changePasswordCall.mock.calls[0][0].changePasswordRequest

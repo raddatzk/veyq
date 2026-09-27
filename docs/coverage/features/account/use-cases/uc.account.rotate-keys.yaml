@@ -16,7 +16,7 @@ title: Rotate my keys after a compromise
 # below cover what the one producer actually sends.
 acceptanceCriteria:
   - id: one-mode-master-and-identity
-    text: Rotation replaces the Master Key and the identity keypair together — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, and recoveryMasterKeyTag is re-derived.
+    text: Rotation replaces the Master Key and the identity keypair together — there is no identity-only mode and no choice offered. wrappedIdentityPrivateKey is re-wrapped under the new Master Key, the new identity public bundle replaces the directory value, and the Secret-Key proof key is left as it is — the Secret Key does not rotate.
     coverage:
       backend: { integration: [RotationSliceTest.rotationReplacesEveryKeyRewritesBothColdWrapsAndDeletesTheDeviceOnes] }
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
@@ -29,6 +29,19 @@ acceptanceCriteria:
     # refusal.
     text: Rotation runs only against a live proof of the cold credential — the password + Secret Key are re-derived into the floor KEK and must open the stored PASSWORD wrap to the Master Key the vault already holds. A DEVICE, DEVICE_KEY or restored-session unlock is asked for that credential in place and rotates only once it produces it; the attacker this defends against holds a device wrap and never the Secret Key, so they fail the proof from whichever screen they reach it.
     coverage:
+      web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
+  - id: secret-key-proof-required
+    # The server half of the gate above, and inbox #159's second door. Bitten against the tree that accepted the
+    # new field but did not yet verify it: a session plus a signature from another key rotated (200), which is
+    # what a device-link holder can do. Each negative carries its control on the same request.
+    text: Rotation is refused without a signature of the account's Secret-Key proof key over the identity it replaces, the new identity, the new wrapped identity private key and both rewritten wraps. The server rebuilds that statement from the request and the account's current identity and answers secret_key_proof_failed with nothing written — a valid session with any other key is refused, a captured signature cannot be replayed once its rotation applied, and an account with no proof key cannot rotate.
+    coverage:
+      backend:
+        integration:
+          - RotationSliceTest.aSessionWithoutTheSecretKeyCannotRotate
+          - RotationSliceTest.aCapturedRotationSignatureCannotBeReplayed
+          - RotationSliceTest.anAccountWithNoProofKeyCannotRotate
+        unit: [SecretKeyProofTest.theRotationStatementIsTheVectorsAndItsSignatureVerifies]
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }
   - id: wraps-and-sealed-blobs-follow
     # The wrap deletion is asserted as a whitelist of survivors (PASSKEY dies too), not as a DEVICE/DEVICE_KEY

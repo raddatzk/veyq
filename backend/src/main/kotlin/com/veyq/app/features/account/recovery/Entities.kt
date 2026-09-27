@@ -14,7 +14,8 @@ import java.time.Instant
  * Only the SHA-256 token hash is stored — never the token (the ADR 0004 model, and the same shape as
  * `TenantInviteEntity`). A live row is **not** a second factor: it only buys the release of the RECOVERY wrap,
  * which is opened by the Secret Key alone. Whoever holds this row — including the operator — still faces
- * ciphertext they cannot open, and the completing reset is gated on reproducing `recovery_master_key_tag`.
+ * ciphertext they cannot open, and the completing reset is gated on a signature under the account's Secret-Key
+ * proof key (`SecretKeyProof`), which only the Secret Key derives.
  *
  * [email] is kept next to [userId] because it is the address actually mailed: an account's address can change,
  * and a token must not stay redeemable against an address it was never sent to.

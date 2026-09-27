@@ -28,8 +28,8 @@ content factor into a login-only one. So release cannot be authenticated by sess
 something the ordinary logged-in user does not have.
 
 **3. A hash of the Master Key is not a proof of the Secret Key — the trap this record first fell into.** It
-first gated the reset on reproducing `recoveryAuthTag = sha256("veyq/v1/recovery-auth" ‖ masterKey)` against
-the copy stored at birth, on the reasoning that it *"needs the master key, i.e. the Secret Key"*. Both halves
+first gated the reset on reproducing a domain-separated SHA-256 of the Master Key against the copy stored at
+birth, on the reasoning that it *"needs the master key, i.e. the Secret Key"*. Both halves
 of that fail.
 - **The Master Key is not the Secret Key.** A linked device holds the Master Key without ever having seen the
   Secret Key ([ADR 0059](0059-device-linking.md) §10).

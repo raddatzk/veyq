@@ -1,10 +1,11 @@
 useCase: uc.account.recover-access
 feature: account
 title: Recover access after a forgotten password
-# Built by cr-account-recovery (ADR 0054). The RECOVERY wrap and recovery_master_key_tag had existed since V1
-# and were both unreachable — the wrap filtered out of the only endpoint that serves wraps, the tag read by
-# nothing. This use-case is the release path: a mailed one-time token authorizes handing over the wrap, and
-# reproducing the tag proves the Secret Key opened it.
+# Built by cr-account-recovery (ADR 0054). The RECOVERY wrap had existed since V1 and was unreachable — filtered
+# out of the only endpoint that serves wraps. This use-case is the release path: a mailed one-time token
+# authorizes handing over the wrap, and a signature under the account's Secret-Key proof key (ADR 0060 Decision 2)
+# proves the Secret Key. That signature replaced a stored Master-Key hash, which a linked device can compute and a
+# database dump contains — ADR 0054 § Context fact 3.
 acceptanceCriteria:
   - id: request-is-non-enumerable
     # The test runs against a tenant that CAN send (a hermetic GreenMail server). That is load-bearing, not
@@ -42,10 +43,17 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [RecoverySliceTest.releaseDoesNotSpendTheToken] }
       web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
-  - id: commitment-proves-possession
-    text: The reset is accepted only if the client reproduces recoveryAuthTag(masterKey) matching the stored recovery_master_key_tag. An attacker holding only a valid mail token cannot produce it, so mailbox access alone never completes a reset.
+  - id: secret-key-proof-proves-possession
+    # Bitten against the tree that accepted the new field but did not yet verify it: all three cases reddened on
+    # their refusal assertion (the reset applied), and each negative has its control on the same token.
+    text: The reset is refused without a signature of the account's Secret-Key proof key — derived from the Secret Key alone and registered at account birth — over the token being spent, the new auth public key and the new PASSWORD wrap. The server rebuilds that statement and answers secret_key_proof_failed with nothing written and the token unspent. Mailbox access alone, a linked device's Master Key, a proof made for another token, and a database dump each fail to produce it.
     coverage:
-      backend: { integration: [RecoverySliceTest.validTokenWithWrongSecretKeyDoesNotReset] }
+      backend:
+        integration:
+          - RecoverySliceTest.validTokenWithWrongSecretKeyDoesNotReset
+          - RecoverySliceTest.aProofForAnotherTokenDoesNotReset
+          - RecoverySliceTest.aFailedProofAnswersSecretKeyProofFailedOnTheWire
+        unit: [SecretKeyProofTest.theRecoveryStatementIsTheVectorsAndItsSignatureVerifies]
       web: { unit: [src/features/account/recovery/recovery.test.ts], e2e: [src/features/account/recovery/recovery.e2e.test.ts] }
   - id: reset-is-atomic-and-drops-device-trust
     text: In one transaction the reset replaces the PASSWORD wrap, overwrites auth_public_key, deletes every wrap but PASSWORD and RECOVERY, revokes all sessions, and marks the token spent. A partial apply is impossible; DEVICE_KEY wraps in particular must not survive, since they carry no password input and would keep granting password-less entry, and neither does a PASSKEY wrap or any method not declared a survivor — while the RECOVERY wrap survives byte-for-byte.

@@ -53,6 +53,13 @@ rather than a violation of the rule above.** The generated `…Api` interface ga
 does, so the `…Resource` implementing it no longer compiles until the backend phase — there is no ordering that
 avoids this and no reason to want one.
 
+**The clients are in the same position, and there the trigger is any request shape change.** A generated
+TypeScript client turns a new required field into a missing-property error and a removed one into an
+excess-property error at every call site that builds the request, so after `npm run generate:api` a contracts
+phase that reshapes a request is red in `web/` and `admin-web/` until the client phase lands.
+`cr-cold-credential-proves-the-secret-key` wrote "`npm run check` (web and admin-web) green" into exactly such a
+phase; the Done-when for it is `generate:api` plus the contracts guards.
+
 **The qualifier is load-bearing: an operation on a NEW tag ends green.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase
 is green on every surface, `./gradlew check` included. `cr-favorites-two-objects` predicted a red from the

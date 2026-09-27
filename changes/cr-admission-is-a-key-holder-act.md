@@ -153,8 +153,11 @@ Automatic delivery stays.
       `grep -rn 'no second human\|wrappedGrant\|admission' docs/features docs/crosscutting --include=*.md`.
       Check the wiki promise this CR makes true (`wiki/en/who-gets-into-your-space.md`, the "behind your back"
       line, and its DE mirror): it should now read true without an edit. Flip the row "gets a scope's key
-      through an owner's session alone" in [security-model § What holds today](../docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve) — together with
-      `cr-cold-credential-proves-the-secret-key`, which closes #159's other row.
+      through an owner's session alone" in [security-model § What holds today](../docs/crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve) — but first
+      check the flip holds against the table's own subject, an **active operator**, and not only against a
+      caller who holds a session: #159's other row ("installs an identity of its own") could not be flipped
+      by `cr-cold-credential-proves-the-secret-key`, because a server-side check binds every caller but the
+      operator, who writes the directory itself (ADR 0060 § Consequences).
       · Done when: `python3 scripts/validate_coverage.py` green, all `scripts/validate_*.py` green.
 
 ## Definition of done

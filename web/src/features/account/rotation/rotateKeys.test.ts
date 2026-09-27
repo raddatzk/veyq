@@ -96,7 +96,7 @@ function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[
       wrappedIdentityPrivateKey: string
       passwordWrap: { wrappedKey: string; kdfParams: string }
       recoveryWrap: { wrappedKey: string; kdfParams: string }
-      recoveryMasterKeyTag: string
+      secretKeyProofSignature: string
     }
   }
   const rotateAccountKeys = vi.fn(async (_body: RotateBody) => ({
@@ -234,12 +234,27 @@ describe('what a rotation posts', () => {
     // stored salt is not even readable from here (ADR 0054 withholds it), so fresh is the only shape available.
     expect(body.passwordWrap.kdfParams).not.toBe(body.recoveryWrap.kdfParams)
 
-    // The identity private key rides the new Master Key, and the commitment is re-derived from it — without
-    // that, a later recovery proves possession of a key the account no longer has and is refused.
+    // The identity private key rides the new Master Key.
     expect(() =>
       v1.symUnwrap(newMk, fromB64std(body.wrappedIdentityPrivateKey), 'identity-priv'),
     ).not.toThrow()
-    expect(body.recoveryMasterKeyTag).toBe(b64std(v1.recoveryAuthTag(newMk)))
+
+    // The server's check, run here (ADR 0060 Decision 2): the statement rebuilt from what was SENT, from the
+    // identity the vault held, verifies under the proof key the Secret Key derives — and under no other.
+    const wrap = (w: { wrappedKey: string; kdfParams: string }) => ({
+      wrappedKey: fromB64std(w.wrappedKey),
+      kdfParams: fromB64std(w.kdfParams),
+    })
+    const stmt = v1.rotationProofStatement({
+      currentIdentityPublicKey: v1.serializeIdentityPublic(OLD_ID.pub),
+      identityPublicKey: fromB64std(body.identityPublicKey),
+      wrappedIdentityPrivateKey: fromB64std(body.wrappedIdentityPrivateKey),
+      passwordWrap: wrap(body.passwordWrap),
+      recoveryWrap: wrap(body.recoveryWrap),
+    })
+    const sig = fromB64std(body.secretKeyProofSignature)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(SECRET_KEY).publicKey, stmt, sig)).toBe(true)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(v1.randomBytes(32)).publicKey, stmt, sig)).toBe(false)
   })
 
   it('carries no mode, no identityOnly and no scope subset — there is one rotation', async () => {
@@ -251,8 +266,8 @@ describe('what a rotation posts', () => {
     expect(Object.keys(srv.rotateAccountKeys.mock.calls[0][0].rotateAccountKeysRequest).sort()).toEqual([
       'identityPublicKey',
       'passwordWrap',
-      'recoveryMasterKeyTag',
       'recoveryWrap',
+      'secretKeyProofSignature',
       'wrappedIdentityPrivateKey',
     ])
   })

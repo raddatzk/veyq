@@ -1,11 +1,14 @@
 package com.veyq.app.features.admin.setup
 
 import com.veyq.app.shared.adminchannel.givenAdminChannel
+import com.veyq.app.shared.identity.VeyqUser
+import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
@@ -25,7 +28,7 @@ class SetupServerSliceTest {
          "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
          "authPublicKey":"$authPublicKey",
          "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"$kdfParams"}],
-         "recoveryMasterKeyTag":"cmVjb3ZlcnktdGFn"}
+         "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"}
     """.trimIndent()
 
     @Test
@@ -66,10 +69,17 @@ class SetupServerSliceTest {
     @Test
     @Order(4)
     fun createsOwner() {
-        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
+        val userId: String = givenAdminChannel().contentType(ContentType.JSON).body(ownerBody())
             .`when`().post("/api/setup/owner")
             .then().statusCode(201)
             .body("userId", notNullValue())
+            .extract().path("userId")
+        // Rotation, change-password and recovery all verify against this key (ADR 0060 Decision 2); an owner
+        // born without it could do none of the three.
+        assertEquals(
+            "c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
+            QuarkusTransaction.requiringNew().call<String?> { VeyqUser.findById(userId)?.secretKeyProofPublicKey },
+        )
     }
 
     @Test
@@ -155,6 +165,18 @@ class SetupServerSliceTest {
              "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
              "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5"}]}
         """.trimIndent()
+        givenAdminChannel().contentType(ContentType.JSON).body(body)
+            .`when`().post("/api/setup/owner")
+            .then().statusCode(400)
+    }
+
+    @Test
+    @Order(15)
+    fun rejectsMissingSecretKeyProofPublicKey() {
+        // Required, not optional: an account born without its proof key could never rotate, change its password
+        // or recover (ADR 0054 § Consequences), so it is refused at birth rather than discovered at the worst time.
+        val body = ownerBody().replace(Regex(""",\s*"secretKeyProofPublicKey":"[^"]*""""), "")
+        check("secretKeyProofPublicKey" !in body) { "the fixture must actually drop the field" }
         givenAdminChannel().contentType(ContentType.JSON).body(body)
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)

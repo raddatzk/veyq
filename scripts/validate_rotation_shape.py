@@ -4,7 +4,7 @@
 **What it asserts.** In `contracts/api/account.openapi.yaml`:
 
   1. `components.schemas.RotateAccountKeysRequest` has exactly the property set
-     {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, recoveryMasterKeyTag}.
+     {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature}.
   2. Its `required` list equals that same set — **every** property is mandatory. An optional field is a
      discriminator spelled by omission: leave `recoveryWrap` out and you have asked for a rotation that
      rewrites one cold wrap and leaves the other holding the old Master Key, which is identity-only rotation
@@ -31,9 +31,11 @@ documents agree on is still prose.
 nothing else. A green run does **not** prove that rotation rotates both halves: the handler could ignore a
 field, the client could send the old Master Key re-wrapped, and this would still pass. It does not look at the
 response, at path/query parameters, at headers, or inside the opaque base64 fields — a mode smuggled into a
-ciphertext blob is invisible here and always will be. It says nothing about the cold-credential gate, which is
-client-side by construction (ADR 0026) and has no contract surface to guard at all. Green means exactly: **the
-rotation request still has these five mandatory fields and no sixth, and its wraps still carry no method.**
+ciphertext blob is invisible here and always will be. Of the cold-credential gate (ADR 0060 Decision 2) it pins
+only that `secretKeyProofSignature` is present and required; whether the server *verifies* it is the backend's
+bite tests' job, and the password half is client-side and has no contract surface at all. Green means exactly:
+**the rotation request still has these five mandatory fields and no sixth, and its wraps still carry no
+method.**
 
 Two narrower predicates were reached for first and are wrong; recorded so the next reader does not re-derive
 them (§ *run the predicate against the untouched tree*, `changes/README.md`):
@@ -61,13 +63,13 @@ REQUEST = "RotateAccountKeysRequest"
 WRAP = "RotatedWrap"
 
 # ADR 0060 Decision 1 + § Consequences: the new identity, the private key under the new Master Key, both cold
-# wraps rewritten, and the re-derived recovery commitment. Nothing optional, nothing selectable.
+# wraps rewritten, and the Secret-Key proof over all of it (Decision 2). Nothing optional, nothing selectable.
 REQUEST_PROPS = {
     "identityPublicKey",
     "wrappedIdentityPrivateKey",
     "passwordWrap",
     "recoveryWrap",
-    "recoveryMasterKeyTag",
+    "secretKeyProofSignature",
 }
 WRAP_PROPS = {"wrappedKey", "kdfParams"}
 WRAP_REFS = ("passwordWrap", "recoveryWrap")

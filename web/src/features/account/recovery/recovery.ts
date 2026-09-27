@@ -2,8 +2,9 @@
 //
 // The whole flow is two factors that meet on the device: a mailed token authorizes the server to hand over the
 // withheld RECOVERY wrap, and the Secret Key from the Emergency Kit is what actually opens it. The server never
-// sees the Secret Key, the Master Key or either password — it receives a proof it can compare and ciphertext it
-// cannot read.
+// sees the Secret Key, the Master Key or either password — it receives a signature under the account's
+// Secret-Key proof key (ADR 0054 Decision 1), which it verifies against a public key, and ciphertext it cannot
+// read.
 //
 // Nothing here re-encrypts content: the Master Key is unwrapped and re-wrapped under a new KEK, so every scope
 // key, every sealed blob and the identity keypair are untouched. That is also why the Emergency Kit stays valid
@@ -16,12 +17,8 @@ import type { RecoveryMaterial } from '../../../api/generated/auth'
 
 const ARGON = v1.ARGON
 
-/** The opened account: the Master Key plus the proof that opening it actually happened. */
-export type OpenedRecovery = {
-  masterKey: Uint8Array
-  /** `sha256("veyq/v1/recovery-auth" ‖ masterKey)` — reproducible only after a successful unwrap. */
-  recoveryAuthTag: string
-}
+/** The opened account: the Master Key the released wrap yielded — proof, on this device, that the kit is right. */
+export type OpenedRecovery = { masterKey: Uint8Array }
 
 /**
  * Ask for a recovery link. Resolves the same way for a registered and an unknown address — the endpoint is
@@ -53,7 +50,7 @@ export async function openWithSecretKey(material: RecoveryMaterial, secretKeyB64
   const { params, salt } = v1.decodeKdfParams(fromB64std(material.kdfParams))
   const kek = await recoveryKekAsync(secretKey, salt, params)
   const masterKey = v1.symUnwrap(kek, fromB64std(material.wrappedKey), 'master-key')
-  return { masterKey, recoveryAuthTag: b64std(v1.recoveryAuthTag(masterKey)) }
+  return { masterKey }
 }
 
 /**
@@ -87,13 +84,25 @@ export async function completeRecovery(
   const challenge = await loginApi().requestLoginChallenge({ loginChallengeRequest: { email: material.email } })
   const authSalt = v1.deriveAuthSalt(fromB64std(challenge.instanceSalt), material.email)
   const auth = await deriveAuthKeypairAsync(newPassword, authSalt, ARGON)
+  const kdfParams = v1.encodeKdfParams(ARGON, salt)
+
+  // The second factor, as the server checks it: a signature under the key only the Secret Key derives, over the
+  // token being spent and exactly what this reset installs.
+  const proof = v1.deriveSecretKeyProofKeypair(secretKey)
+  const secretKeyProofSignature = b64std(
+    v1.secretKeyProofSign(
+      proof.privateKey,
+      v1.recoveryProofStatement({ token, authPublicKey: auth.publicKey, passwordWrap: { wrappedKey: wrapped, kdfParams } }),
+    ),
+  )
+  proof.privateKey.fill(0)
 
   await recoveryApi().completePasswordRecovery({
     recoveryCompleteRequest: {
       token,
-      recoveryAuthTag: opened.recoveryAuthTag,
+      secretKeyProofSignature,
       wrappedKey: b64std(wrapped),
-      kdfParams: b64std(v1.encodeKdfParams(ARGON, salt)),
+      kdfParams: b64std(kdfParams),
       authPublicKey: b64std(auth.publicKey),
     },
   })

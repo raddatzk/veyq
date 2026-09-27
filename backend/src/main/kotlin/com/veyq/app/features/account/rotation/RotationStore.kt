@@ -23,13 +23,11 @@ class RotationStore {
     /**
      * Replace the account's key material. **All of it or none** (ADR 0060 § Consequences).
      *
-     * Five writes, and each one is load-bearing:
+     * Four writes, and each one is load-bearing:
      *  - the published `identityPublicKey` — from here every contact who pinned this account reads `changed`;
      *  - `wrappedIdentityPrivateKey` — the new identity private key under the **new** Master Key;
      *  - the `PASSWORD` and `RECOVERY` wraps, rewritten to hold the new Master Key under their existing
      *    secrets (a fresh salt each; the Emergency Kit survives because the *Secret Key* is unchanged);
-     *  - `recoveryMasterKeyTag` — without it a later recovery proves possession of a key the account no longer
-     *    has, and refuses;
      *  - the deletion of every **other** wrap.
      *
      * That deletion keeps [WrapMethod.SURVIVORS] and nothing else — a whitelist, shared with password change and
@@ -47,7 +45,6 @@ class RotationStore {
         wrappedIdentityPrivateKey: String,
         passwordWrap: RewrittenWrap,
         recoveryWrap: RewrittenWrap,
-        recoveryMasterKeyTag: String,
     ): Boolean {
         val user = VeyqUser.findById(userId) ?: return false
         val floor = wrapOf(userId, WrapMethod.PASSWORD) ?: return false
@@ -60,7 +57,6 @@ class RotationStore {
 
         user.identityPublicKey = identityPublicKey
         user.wrappedIdentityPrivateKey = wrappedIdentityPrivateKey
-        user.recoveryMasterKeyTag = recoveryMasterKeyTag
 
         MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
         return true

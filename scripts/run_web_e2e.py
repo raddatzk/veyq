@@ -615,7 +615,7 @@ def opacity_failure(value: str) -> str | None:
 
     So length is the second test, and on this wire it is not a heuristic at all. Measured across every
     declared-opaque field a real suite sends, the shortest is **32 bytes** (`instanceSalt`, `nonce`,
-    `kdfParams`, `authPublicKey`, `recoveryMasterKeyTag`, `slugToken`), and the shortest an AEAD *can* be is
+    `kdfParams`, `authPublicKey`, `secretKeyProofPublicKey`, `slugToken`), and the shortest an AEAD *can* be is
     [MIN_SEALED_BYTES]. Anything below that is not a sealed value, whatever it decodes to.
 
     A value that is not base64 at all is **not** this sweep's business: what shape a field may take is the
