@@ -1,4 +1,4 @@
-# The bootstrap domain's route — the compose recipe's static `traefik.http.routers.veyq-app` label. Chart-owned
+# The bootstrap domain's route — what the compose recipe's ingress sink renders from configuration. Chart-owned
 # and Helm-labelled, which is what keeps it apart from the tenant Ingress objects the backend projects: the
 # backend lists by ITS ownership value and would delete a chart object wearing it on the first regenerate. The
 # bootstrap domain is excluded from that projection (VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN), so this is its one

@@ -42,7 +42,7 @@ import org.jboss.logging.Logger
 @ApplicationScoped
 class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngressSink) {
 
-    private val bootstrapDomain: String? = config.tenant().ingress().bootstrapDomain().orElse(null)?.lowercase()
+    private val bootstrapDomain: String? = config.tenant().ingress().bootstrapDomain().orElse(null)?.trim()?.lowercase()
 
     /** A fresh or wiped projection repairs itself here, before this instance answers its first request. */
     fun onStartup(@Observes event: StartupEvent) {
@@ -64,7 +64,9 @@ class TenantIngressProjector(config: VeyqConfig, private val sink: TenantIngress
         }
         val routable = domains
             .map { it.lowercase() }
-            .filter { it != bootstrapDomain } // already a static router in the compose file — never emitted twice
+            // Routed from configuration on both targets — by the Traefik sink's own bootstrap pair, by the chart's
+            // Ingress on Kubernetes. A row carrying it again would be a second router on one Host.
+            .filter { it != bootstrapDomain }
             .filter { isRoutableHostname(it) }
             .distinct()
             .sorted()

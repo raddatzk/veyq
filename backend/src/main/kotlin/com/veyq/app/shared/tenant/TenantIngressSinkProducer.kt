@@ -40,15 +40,43 @@ class TenantIngressSinkProducer(
     fun ingressSink(): TenantIngressSink {
         val ingress = config.tenant().ingress()
         return when (ingress.sink()) {
-            IngressSinkType.TRAEFIK_FILE -> traefikFileSink(ingress.dynamicConfigPath().orElse(null))
+            IngressSinkType.TRAEFIK_FILE -> traefikFileSink(ingress)
             IngressSinkType.KUBERNETES -> kubernetesSink(ingress.kubernetes())
         }
     }
 
-    private fun traefikFileSink(path: String?): TenantIngressSink {
-        if (path == null) return DisabledIngressSink
+    private fun traefikFileSink(ingress: VeyqConfig.Tenant.Ingress): TenantIngressSink {
+        val path = ingress.dynamicConfigPath().orElse(null) ?: return DisabledIngressSink
+        val bootstrapDomain = hostname(ingress.bootstrapDomain().orElse(null), "bootstrap-domain")
+        if (bootstrapDomain == null) {
+            // Loud, never a failed boot (ADR 0063: the projection is not a startup requirement). The sink still
+            // writes the tenants' routes, and the admin surface's localhost port bypasses Traefik entirely — but
+            // the domain the operator opens first routes nowhere, so this is an error, not a warning.
+            log.error(
+                "veyq.tenant.ingress.dynamic-config-path is set but veyq.tenant.ingress.bootstrap-domain is not a " +
+                    "routable hostname — the bootstrap domain will not be routed.",
+            )
+        }
+        val upstream = ingress.upstream()
         log.infof("Tenant ingress projection: Traefik file provider at %s", path)
-        return TraefikFileIngressSink(Path.of(path))
+        return TraefikFileIngressSink(
+            target = Path.of(path),
+            bootstrapDomain = bootstrapDomain,
+            adminDomain = hostname(ingress.adminDomain().orElse(null), "admin-domain"),
+            upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
+        )
+    }
+
+    /**
+     * A configured domain goes through the same shape check a tenant row does, for the same reason: it is
+     * interpolated into a Traefik `Host(` matcher. A blank value is absent — compose passes an unset
+     * `${ADMIN_DOMAIN:-}` through as the empty string.
+     */
+    private fun hostname(value: String?, key: String): String? {
+        val domain = value?.trim()?.lowercase()?.takeIf { it.isNotEmpty() } ?: return null
+        if (TenantIngressProjector.isRoutableHostname(domain)) return domain
+        log.errorf("veyq.tenant.ingress.%s=%s is not a routable hostname and is ignored", key, domain)
+        return null
     }
 
     private fun kubernetesSink(k8s: VeyqConfig.Tenant.Ingress.Kubernetes): TenantIngressSink {
