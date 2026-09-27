@@ -6,13 +6,13 @@
 // holding the lost device, and it is the half that needs the session this screen is about to give up — so it
 // runs first, and it is recorded as a sequence rather than as two independent call assertions, because two
 // `toHaveBeenCalled` lines are satisfied just as well by the wrong order. A failed revoke must not cost the
-// session needed to retry it; a failed logout must be reported rather than swallowed, since the caller's own
-// sign-out button is the fallback the message points at.
+// session needed to retry it. Signing this device out is the one sign-out sequence (uc.account.sign-out), whose
+// own test owns what a failed sign-out reports.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
-vi.mock('../login/login', () => ({ logout: vi.fn() }))
+vi.mock('../login/signOut', () => ({ signOut: vi.fn() }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog), mounted in App.vue and reached from the
 // public sign-in card too: the component awaits `ask()`, so the answer is given here.
 const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
@@ -20,7 +20,7 @@ vi.mock('../../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: c
 
 import LockedSignOut from './LockedSignOut.vue'
 import { revokeOtherSessionFamilies } from './sessions'
-import { logout } from '../login/login'
+import { signOut } from '../login/signOut'
 import { i18n } from '../../../i18n'
 
 const stubs = {
@@ -48,22 +48,23 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     vi.clearAllMocks()
     i18n.global.locale.value = 'en'
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
-    vi.mocked(logout).mockResolvedValue(undefined)
+    vi.mocked(signOut).mockResolvedValue(undefined)
     confirmAsk.mockResolvedValue(true)
   })
 
-  it('cuts the other sessions off FIRST and only then signs this device out', async () => {
+  it('cuts the other sessions off FIRST and only then signs this device out, through the one sign-out', async () => {
     const order: string[] = []
     vi.mocked(revokeOtherSessionFamilies).mockImplementation(async () => void order.push('revoke'))
-    vi.mocked(logout).mockImplementation(async () => void order.push('logout'))
+    vi.mocked(signOut).mockImplementation(async () => void order.push('sign-out'))
 
     const wrapper = mountLocked()
     await pressAction(wrapper)
 
-    // The sequence IS the assertion: logout drops the tokens the revoke needs, so the reverse order would leave
-    // the lost device signed in while this one is the only thing that got cut off.
-    expect(order).toEqual(['revoke', 'logout'])
-    expect(wrapper.emitted('done')).toEqual([[true]])
+    // The sequence IS the assertion: signing out ends the session the revoke needs, so the reverse order would
+    // leave the lost device signed in while this one is the only thing that got cut off.
+    expect(order).toEqual(['revoke', 'sign-out'])
+    // `everywhere`: the sign-in page it lands on says every device was signed out, not just this one.
+    expect(signOut).toHaveBeenCalledWith({ everywhere: true })
   })
 
   it('never signs this device out when the revoke failed — the session to retry with survives', async () => {
@@ -71,20 +72,8 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     const wrapper = mountLocked()
     await pressAction(wrapper)
 
-    expect(logout).not.toHaveBeenCalled()
-    expect(wrapper.emitted('done')).toBeUndefined()
+    expect(signOut).not.toHaveBeenCalled()
     expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
-  })
-
-  it('reports a failed sign-out instead of claiming everything was cut off', async () => {
-    vi.mocked(logout).mockRejectedValue(new Error('offline'))
-    const wrapper = mountLocked()
-    await pressAction(wrapper)
-
-    // The other devices ARE gone, so this is not a failure to report as one — it is a half-success, and the
-    // caller needs the boolean to decide whether to keep its sign-out button standing.
-    expect(revokeOtherSessionFamilies).toHaveBeenCalledTimes(1)
-    expect(wrapper.emitted('done')).toEqual([[false]])
   })
 
   it('does nothing when the confirmation is declined', async () => {
@@ -93,7 +82,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     await pressAction(wrapper)
 
     expect(revokeOtherSessionFamilies).not.toHaveBeenCalled()
-    expect(logout).not.toHaveBeenCalled()
+    expect(signOut).not.toHaveBeenCalled()
   })
 
   it('offers the way back to unlocking, and touches no session doing it', async () => {
@@ -103,7 +92,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
 
     expect(wrapper.emitted('unlock')).toHaveLength(1)
     expect(revokeOtherSessionFamilies).not.toHaveBeenCalled()
-    expect(logout).not.toHaveBeenCalled()
+    expect(signOut).not.toHaveBeenCalled()
   })
 
   it('says this device keeps nothing, because the toggle that says otherwise is on the form behind it', async () => {

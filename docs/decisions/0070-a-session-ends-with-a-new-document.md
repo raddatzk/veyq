@@ -33,8 +33,9 @@ session ([uc.account.sign-out](../features/account/use-cases/uc.account.sign-out
    while the session still works, then runs the ending. Screens call that sequence; none has its own. **A
    failed revoke never skips the ending.** It is reported on the sign-in page, because the refresh cookie is
    then still live, and on someone else's browser the person has to know that.
-3. **Only an authoritative refresh rejection ends a session** — a 4xx from the refresh endpoint. A network
-   failure or a 5xx keeps the session and its tokens.
+3. **Only an authoritative refresh rejection ends a session** — a 4xx from the refresh endpoint, other than a
+   408 or 429 (*not now*, which a proxy may answer, rather than *no*). A network failure or a 5xx keeps the
+   session and its tokens.
 4. **A tab that holds no session never runs the ending.** The sign-in page at boot, a public share and a
    device waiting in a pairing ceremony have nothing to end, and an ending there would reload the sign-in page
    into itself.

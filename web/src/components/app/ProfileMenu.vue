@@ -57,7 +57,7 @@ const menuItems = computed<MenuItem[]>(() => [
   // InvitationsBadge.vue) — an appears-on-demand badge routing to /invitations, so it is no longer a quiet,
   // always-present menu row here.
   { separator: true },
-  { label: t('shell.logout'), icon: 'pi pi-sign-out', command: () => void signOut(router) },
+  { label: t('shell.logout'), icon: 'pi pi-sign-out', command: () => void signOut() },
 ])
 </script>
 

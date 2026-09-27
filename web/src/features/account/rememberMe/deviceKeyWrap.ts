@@ -13,10 +13,9 @@ import { idbRun } from '../../../shared/idb'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum, MasterKeyWrapMethodEnum, type AccountKeyMaterial } from '../../../api/generated/account'
 import { withRefresh } from '../../../app/sessionRefresh'
+import { REMEMBER_KEY, dropRememberKey } from '../../../app/convenienceTiers'
 
-const DB_NAME = 'veyq-remember'
-const STORE = 'device-key'
-const RECORD_KEY = 'current'
+const { db: DB_NAME, store: STORE, record: RECORD_KEY } = REMEMBER_KEY
 
 /** This device's remember-me state: the email (the server wrap is operator-blind, so boot has no email
  *  otherwise), the non-extractable AES-GCM key that opens the wrap, and the server wrap's id (the join key
@@ -147,7 +146,7 @@ export async function clearDeviceKey(deleteServerWrap = true): Promise<void> {
       }
     }
   }
-  await run('readwrite', (s) => s.delete(RECORD_KEY))
+  await dropRememberKey()
 }
 
 /** Is this device currently enrolled for password-less remember-me? */
