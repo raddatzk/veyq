@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.features.media.StorageQuota
 import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.features.spaces.scope.ScopesStore
 import com.veyq.app.features.tasks.TasksStore
@@ -159,6 +160,7 @@ class TenantHandler(
     private val ingress: TenantIngressProjector,
     private val accounts: AccountStore,
     private val access: ScopeAccess,
+    private val quota: StorageQuota,
     config: VeyqConfig,
 ) {
     private val inviteTtl: Duration = config.tenant().invite().ttl()
@@ -208,8 +210,9 @@ class TenantHandler(
         return outcome
     }
 
+    /** Every tenant with its storage usage — one grouped read from [StorageQuota], never one query per tenant. */
     @Transactional
-    fun list(): List<TenantView> = store.listAll()
+    fun list(): List<TenantView> = store.listAll(quota.usageByTenant())
 
     /** Resend: re-mint to the SAME owner email. */
     fun resendInvite(tenantId: String): InviteOutcome = commitThenSend {

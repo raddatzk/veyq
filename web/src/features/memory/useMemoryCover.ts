@@ -8,6 +8,8 @@ import { ref, computed, watch, type Ref } from 'vue'
 import { unsealMemoryCover, setMemoryCover, FULL_FRAME, type MemoryCover, type CoverSaveIntent } from './memoryCover'
 import { openBlob, uploadCoverBlob, deleteCoverBlob } from './media'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
+import { useToast } from '../../shared/state/useToast'
+import { QUOTA_EXCEEDED } from './uploadQueue'
 import type { TreeNode } from './tree'
 
 /** The reactive context MemoryDetail hands the cover slice — getters so props stay reactive, plus the live gallery
@@ -18,9 +20,12 @@ export interface MemoryCoverContext {
   memoryKey: () => Uint8Array | null
   thumbs: Ref<Map<string, string>>
   onMetaUpdated: (payload: { nodeId: string; wrappedMeta: string }) => void
+  /** The resolved "no space left" wording (`media.uploadNoSpace`), for a cover refused `quota_exceeded`. */
+  noSpaceMessage: () => string
 }
 
 export function useMemoryCover(ctx: MemoryCoverContext) {
+  const toast = useToast()
   const coverEditorOpen = ref(false)
   // When the cover editor is opened from the lightbox "Set as cover", it is seeded to crop THAT photo (its already-
   // decrypted thumbnail is the crop source); null = the header "edit current cover" flow. Cleared on close.
@@ -117,8 +122,10 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
       }
       const wrappedMeta = await setMemoryCover(ctx.scopeId(), nodeId, key, cover, ctx.node().wrappedMeta)
       ctx.onMetaUpdated({ nodeId, wrappedMeta })
-    } catch {
-      // best-effort: keep the header stable; a retry re-seals
+    } catch (e) {
+      // best-effort: keep the header stable; a retry re-seals. A refusal for lack of room is the one failure the
+      // user must hear about — the cover would otherwise just not appear — and it reads as the uploads tray's does.
+      if ((e as Error)?.message === QUOTA_EXCEEDED) toast.error(ctx.noSpaceMessage())
     }
   }
 

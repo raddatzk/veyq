@@ -24,6 +24,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import UploadStatusMenu from './UploadStatusMenu.vue'
 import { enqueueUploads, clearUploads } from '../uploadQueue'
+import { addMedia } from '../media'
 
 const i18n = createI18n({
   legacy: false,
@@ -37,6 +38,7 @@ const i18n = createI18n({
         uploadCancelAll: 'Cancel all',
         uploadCancel: 'Cancel',
         uploadRetry: 'Retry',
+        uploadNoSpace: 'No space left.',
         close: 'Close',
         uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
       },
@@ -79,5 +81,34 @@ describe('UploadStatusMenu', () => {
 
     expect(w.text()).toContain('Cancelled')
     expect(w.find('.uploads-badge').exists()).toBe(false) // no longer active
+  })
+
+  // uc.admin.tenant-storage-quota / ADR 0073 §6: a file refused for lack of room says so, and offers no retry.
+  it('shows the no-space reason and no retry on a quota_exceeded failure', async () => {
+    vi.mocked(addMedia).mockRejectedValueOnce(new Error('quota_exceeded'))
+    enqueueUploads({ scopeId: 's', nodeId: 'n', memoryKey: new Uint8Array(32) }, [{ file: photo(), mediaType: 'image/png' }], {
+      label: '1 photo',
+    })
+    const w = mountTray()
+    await flushPromises()
+    await w.find('.uploads-trigger').trigger('click')
+
+    expect(w.text()).toContain('Failed')
+    expect(w.find('.uploads-file-reason').text()).toBe('No space left.')
+    expect(w.find('.uploads-file-action').exists()).toBe(false)
+  })
+
+  it('control: any other failure offers the retry and gives no no-space reason', async () => {
+    vi.mocked(addMedia).mockRejectedValueOnce(new Error('chunk_put_failed:500')).mockRejectedValueOnce(new Error('chunk_put_failed:500'))
+    enqueueUploads({ scopeId: 's', nodeId: 'n', memoryKey: new Uint8Array(32) }, [{ file: photo(), mediaType: 'image/png' }], {
+      label: '1 photo',
+    })
+    const w = mountTray()
+    await flushPromises()
+    await w.find('.uploads-trigger').trigger('click')
+
+    expect(w.text()).toContain('Failed')
+    expect(w.find('.uploads-file-reason').exists()).toBe(false)
+    expect(w.find('.uploads-file-action').attributes('aria-label')).toBe('Retry')
   })
 })

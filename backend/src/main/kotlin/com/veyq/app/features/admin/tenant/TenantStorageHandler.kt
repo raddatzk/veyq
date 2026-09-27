@@ -12,8 +12,8 @@ import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
-/** A tenant's storage as its owner reads it: the tenant's total usage and the per-link limit (ADR 0073 §4, §6). */
-data class TenantStorageView(val usedBytes: Long, val shareLinkLimitBytes: Long)
+/** A tenant's storage as its owner reads it: the tenant's total usage, its quota and the per-link limit (ADR 0073 §4, §6). */
+data class TenantStorageView(val usedBytes: Long, val quotaBytes: Long?, val shareLinkLimitBytes: Long)
 
 sealed interface TenantStorageOutcome {
     data class Ok(val storage: TenantStorageView) : TenantStorageOutcome
@@ -43,16 +43,30 @@ class TenantStorageHandler(
             .refusal(TenantStorageOutcome.NotFound, TenantStorageOutcome.Suspended)?.let { return it }
         val tenant = store.findTenant(tenantId) ?: return TenantStorageOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return TenantStorageOutcome.NotOwner
-        return TenantStorageOutcome.Ok(TenantStorageView(quota.tenantUsage(tenantId), tenant.shareLinkLimitBytes))
+        return TenantStorageOutcome.Ok(TenantStorageView(quota.tenantUsage(tenantId), tenant.storageQuotaBytes, tenant.shareLinkLimitBytes))
     }
 
     @Transactional
     fun updateShareLinkLimit(callerId: String, tenantId: String, shareLinkLimitBytes: Long): TenantStorageOutcome {
         access.check(callerId, tenantId, WRITE)
             .refusal(TenantStorageOutcome.NotFound, TenantStorageOutcome.Suspended)?.let { return it }
-        if (store.findTenant(tenantId) == null) return TenantStorageOutcome.NotFound
+        val tenant = store.findTenant(tenantId) ?: return TenantStorageOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return TenantStorageOutcome.NotOwner
         store.setShareLinkLimit(tenantId, shareLinkLimitBytes)
-        return TenantStorageOutcome.Ok(TenantStorageView(quota.tenantUsage(tenantId), shareLinkLimitBytes))
+        return TenantStorageOutcome.Ok(TenantStorageView(quota.tenantUsage(tenantId), tenant.storageQuotaBytes, shareLinkLimitBytes))
     }
+
+    /**
+     * The Server Owner sets, changes or clears (null) a tenant's quota (uc.admin.tenant-storage-quota, ADR 0073 §1).
+     * The Server-Owner gate and the admin channel are the resource's; nothing here is owner-gated, and no tenant-owner
+     * path reaches it — which is what makes "the tenant owner cannot raise it" structural. Any tenant status: a
+     * suspended tenant keeps its quota. Deletes nothing: a quota below the usage refuses the next start.
+     */
+    fun setQuota(tenantId: String, quotaBytes: Long?): SetQuotaOutcome =
+        if (store.setStorageQuota(tenantId, quotaBytes)) SetQuotaOutcome.Done else SetQuotaOutcome.NotFound
+}
+
+sealed interface SetQuotaOutcome {
+    data object Done : SetQuotaOutcome
+    data object NotFound : SetQuotaOutcome, HttpFailure by Failures.tenantNotFound
 }

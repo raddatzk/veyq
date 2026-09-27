@@ -57,6 +57,11 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "share_link_limit_bytes", nullable = false)
     var shareLinkLimitBytes: Long = DEFAULT_SHARE_LINK_LIMIT_BYTES
 
+    /** The most this tenant may hold in the store (ADR 0073 §1), set only by the Server Owner; null = no quota, the
+     *  default. Read under the same tenant-row lock every upload start takes, so a start and a change serialize. */
+    @Column(name = "storage_quota_bytes")
+    var storageQuotaBytes: Long? = null
+
     companion object : PanacheCompanionBase<TenantEntity, String> {
         /** 10 GiB — enough for an event's photos, too little for a leaked link to eat a disk (ADR 0073 §4). The
          *  column default in V55 is the same number for the tenants that existed before it. */

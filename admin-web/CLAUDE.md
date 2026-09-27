@@ -22,9 +22,10 @@ The Server-Owner administration surface, extracted from `web/` by
 The line that actually holds:
 
 - **Here:** what only the **Server Owner** does — tenant CRUD (create/list/resend/reassign/revoke/
-  change-domain/suspend/reactivate), release info, first-run setup.
+  change-domain/suspend/reactivate), each tenant's storage quota (ADR 0073 §1), release info, first-run setup.
 - **In `web/`:** what an **ordinary or anonymous user** does — accepting a tenant invite, accepting terms —
-  *and* what a **tenant OWNER** does for their own tenant: terms authoring and per-tenant mail settings.
+  *and* what a **tenant OWNER** does for their own tenant: terms authoring, per-tenant mail settings, and the
+  per-link storage limit (which the owner distributes below the quota, and reads the quota beside).
   Those two look like administration and are not: the backend gates them with `403 not_tenant_owner`, and a
   tenant owner is an ordinary user who accepted an invite. Moving them here would take a tenant's own
   settings away from everyone who is not also the Server Owner. ADR 0065's own "what moves" list got this

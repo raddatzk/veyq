@@ -5,8 +5,9 @@
 // in the facade, where the UI gets it too.
 //
 // The set mirrors what `admin-web` actually holds, not ADR 0065's original (corrected-since) list: tenant CRUD
-// + release info. Per-tenant mail settings and terms authoring are TENANT-OWNER actions gated with
-// `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so they are not Server-Owner commands.
+// + the tenant storage quota + release info. Per-tenant mail settings, terms authoring and the per-link storage
+// limit are TENANT-OWNER actions gated with `403 not_tenant_owner` and live in `web/` (admin-web/CLAUDE.md), so
+// they are not Server-Owner commands.
 // First-run **setup** is excluded on purpose (cr-admin-cli): it is a one-time interactive ceremony that mints
 // key material and force-confirms a saved Emergency Kit — not something a script should be able to do blind.
 import {
@@ -16,9 +17,12 @@ import {
   reactivateTenant,
   reassignInvite,
   resendInvite,
+  parseQuotaGib,
   revokeTenant,
+  setTenantStorageQuota,
   suspendTenant,
 } from '../features/tenants/tenants'
+import { CliError } from './output'
 import { getInstanceRelease } from '../features/instance/release'
 
 /** One `--flag value` a command takes. `node:util.parseArgs` has no notion of "required", so we carry it. */
@@ -50,7 +54,7 @@ export const COMMANDS: Record<string, Command> = {
   },
   'tenant list': {
     usage: 'tenant list',
-    summary: 'List all tenants with their current invite status.',
+    summary: 'List all tenants with their invite status, storage usage and quota (bytes; null = no quota).',
     flags: {},
     run: () => listTenants(),
   },
@@ -89,6 +93,16 @@ export const COMMANDS: Record<string, Command> = {
     summary: 'Bring a SUSPENDED tenant back to ACTIVE.',
     flags: { 'tenant-id': tenantId },
     run: (f) => reactivateTenant(f['tenant-id']),
+  },
+  'tenant quota': {
+    usage: 'tenant quota --tenant-id <id> --gib <GiB|none>',
+    summary: "Set a tenant's storage quota in GiB, or clear it with none (deletes nothing).",
+    flags: { 'tenant-id': tenantId, gib: { describe: 'the quota in GiB, or none', required: true } },
+    run: (f) => {
+      const bytes = parseQuotaGib(f.gib)
+      if (bytes === undefined) throw new CliError(`--gib must be a number of GiB, 0 or more, or none (got '${f.gib}')`)
+      return setTenantStorageQuota(f['tenant-id'], bytes)
+    },
   },
   release: {
     usage: 'release',

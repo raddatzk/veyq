@@ -248,6 +248,7 @@ const {
   memoryKey: () => props.memoryKey,
   thumbs,
   onMetaUpdated: (payload) => emit('metaUpdated', payload),
+  noSpaceMessage: () => t('media.uploadNoSpace'),
 })
 
 /** The reconcile settle point `useMediaGalleryLive` calls after each list refresh: auto-date first, then

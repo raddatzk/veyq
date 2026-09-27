@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 // uc.sharing.share-link-storage-limit (web) — the owner-gated Storage rubric: the owner reads the tenant's usage and
 // saves the per-link limit, entered in GiB and sent in bytes; a 403 read renders the read-only notice, not the editor.
+// uc.admin.tenant-storage-quota (web) — the Server Owner's quota shows beside the usage when set, and not at all when null.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
@@ -58,8 +59,8 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
   })
 
   it('shows the usage in a human unit and saves the limit typed in GiB as bytes', async () => {
-    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, shareLinkLimitBytes: 10 * GIB })
-    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, shareLinkLimitBytes: 2.5 * GIB })
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 2.5 * GIB })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain('3 MB')
     const input = wrapper.find('input')
@@ -72,8 +73,8 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
   })
 
   it('sends 0 as link uploads off, and refuses a limit that is not a non-negative number without calling', async () => {
-    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, shareLinkLimitBytes: 10 * GIB })
-    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, shareLinkLimitBytes: 0 })
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, quotaBytes: null, shareLinkLimitBytes: 0 })
     const wrapper = await mountPanel()
     const input = wrapper.find('input')
 
@@ -87,6 +88,21 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     await saveButton(wrapper)!.trigger('click')
     await flushPromises()
     expect(updateTenantStorage).toHaveBeenCalledWith('t-1', 0)
+  })
+
+  it('shows the quota beside the usage when one is set, read-only', async () => {
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: 5 * GIB, shareLinkLimitBytes: 10 * GIB })
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain(i18n.global.t('storage.quota'))
+    expect(wrapper.text()).toContain('5 GB') // 5 GiB, in formatBytes' binary steps
+    expect(wrapper.findAll('input')).toHaveLength(1) // the per-link limit only: the owner cannot edit the quota
+  })
+
+  it('omits the quota when none is set', async () => {
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain('3 MB') // control: the panel rendered its figures
+    expect(wrapper.text()).not.toContain(i18n.global.t('storage.quota'))
   })
 
   it('renders a read-only notice (not the editor) when the read is owner-gated 403', async () => {

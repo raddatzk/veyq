@@ -3,7 +3,8 @@
 // the TopBar UploadStatusMenu renders `useUploadQueue()` and the gallery enqueues against the open Memory.
 //
 // First slice: SEQUENTIAL (one file at a time), fraction-based progress (no speed/ETA), one automatic retry on
-// a transient failure, explicit retry on a hard failure. Operator-blind is entirely `addMedia`'s concern.
+// a transient failure, explicit retry on a hard failure — except a refusal no retry can help (`quota_exceeded`),
+// which fails at once and offers none. Operator-blind is entirely `addMedia`'s concern.
 import { reactive, computed } from 'vue'
 import { addMedia, type AddMediaSource, type AddMediaOptions } from './media'
 
@@ -67,6 +68,16 @@ export type UploadBatch = {
 }
 
 const MAX_ATTEMPTS = 2 // one automatic retry on a transient failure
+
+/**
+ * The server refused the file because the tenant or the link has no room left (ADR 0073 §6). No retry can help —
+ * the room is still gone a moment later — so the file fails on its first attempt and no retry is offered. A
+ * member's upload and a link visitor's both carry this code; each surface words it for its own reader.
+ */
+export const QUOTA_EXCEEDED = 'quota_exceeded'
+
+/** Whether a failed file is one a retry could help — every failure but [QUOTA_EXCEEDED]. */
+export const isRetryable = (f: Pick<UploadFile, 'error'>): boolean => f.error !== QUOTA_EXCEEDED
 
 const batches = reactive<UploadBatch[]>([])
 let seq = 0
@@ -209,13 +220,14 @@ async function uploadOne(file: UploadFile): Promise<void> {
     file.progress = 1
     batch.onFileDone?.(file) // cr-0111: reconcile THIS file's tile now, not only at the batch's onComplete
   } catch (e) {
+    const error = (e as Error)?.message ?? 'upload_failed'
     if (file.controller.signal.aborted || (e as { name?: string })?.name === 'AbortError') {
       file.status = 'cancelled'
-    } else if (file.attempts < MAX_ATTEMPTS) {
+    } else if (file.attempts < MAX_ATTEMPTS && isRetryable({ error })) {
       file.status = 'queued' // one automatic retry on a transient failure
     } else {
       file.status = 'failed'
-      file.error = (e as Error)?.message ?? 'upload_failed'
+      file.error = error
     }
   }
   finalize(batch)

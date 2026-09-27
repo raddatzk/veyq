@@ -48,6 +48,7 @@ const i18n = createI18n({
         title: 'Server administration', sub: 's', signOut: 'Sign out', tenants: 'Tenants', server: 'Server',
         forbidden: 'This account is not the Server Owner.', forbiddenSub: 'reason', unreachable: 'unreachable',
         noTenants: 'No tenants yet.', loading: 'Loading…',
+        storageOfQuota: '{used} of {quota}', storageNoQuota: '{used}, no quota',
       },
       tenant: { create: 'Create' },
       release: { navTitle: 'Release' },
@@ -109,7 +110,7 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
 
   it('renders the console for the Server Owner, listing the tenants it administers', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' } as never,
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
     ])
     const { w } = await mountConsole()
     expect(w.find('.admin-shell__nav').exists()).toBe(true)
@@ -117,9 +118,20 @@ describe('AdminConsoleView — the root Server-Owner gate', () => {
     expect(w.text()).not.toContain('This account is not the Server Owner.')
   })
 
+  // uc.admin.tenant-storage-quota: the list shows each tenant's usage beside its quota, or that it has none.
+  it('shows each tenant’s storage usage beside its quota in the list', async () => {
+    vi.mocked(listTenants).mockResolvedValue([
+      { tenantId: 'tn-1', name: 'Capped', domain: 'c.example', ownerEmail: 'o@c.example', status: 'ACTIVE', storageUsedBytes: 3 * 1024 ** 2, storageQuotaBytes: 10 * 1024 ** 3 } as never,
+      { tenantId: 'tn-2', name: 'Open', domain: 'o.example', ownerEmail: 'o@o.example', status: 'ACTIVE', storageUsedBytes: 0, storageQuotaBytes: null } as never,
+    ])
+    const { w } = await mountConsole()
+    const lines = w.findAll('.admin-shell__storage').map((s) => s.text())
+    expect(lines).toEqual(['3 MB of 10 GB', '0 B, no quota'])
+  })
+
   it('opens a tenant’s detail page from the list', async () => {
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING' } as never,
+      { tenantId: 'tn-7', name: 'Acme', domain: 'acme.example', ownerEmail: 'o@acme.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
     ])
     const { w } = await mountConsole()
     const item = w.findAll('.admin-shell__nav button').find((b) => b.text().includes('Acme'))!
@@ -142,7 +154,7 @@ describe('AdminConsoleView — creating a tenant', () => {
     expect(w.findComponent({ name: 'CreateTenantDialog' }).props('visible')).toBe(true)
 
     vi.mocked(listTenants).mockResolvedValue([
-      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING' } as never,
+      { tenantId: 'tn-9', name: 'Fresh', domain: 'fresh.example', ownerEmail: 'o@fresh.example', status: 'PENDING', storageUsedBytes: 0, storageQuotaBytes: null } as never,
     ])
     w.findComponent({ name: 'CreateTenantDialog' }).vm.$emit('created')
     await flushPromises()

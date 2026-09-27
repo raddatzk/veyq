@@ -1,7 +1,8 @@
 <script setup lang="ts">
 // uc.admin.create-tenant + uc.admin.suspend-tenant (web) — the per-tenant detail page of the Server settings:
-// one tenant's status, its availability lever (take offline / bring back online, ADR 0066) and, for a PENDING
-// one, its owner-invite management (reassign email / resend / revoke). Addressed by tenantId
+// one tenant's status, its availability lever (take offline / bring back online, ADR 0066), its storage usage and
+// quota (uc.admin.tenant-storage-quota — set, change or clear, GiB in and bytes out) and, for a PENDING one, its
+// owner-invite management (reassign email / resend / revoke). Addressed by tenantId
 // (the Tenants collection in the settings rail routes here); mirrors the old TenantAdminPanel row + edit, scoped
 // to a single tenant. Operator-blind: only operational metadata (name/domain/owner email/status). The backend
 // enforces Server-Owner with a 403 regardless of what the client renders.
@@ -11,7 +12,21 @@ import { useRouter } from 'vue-router'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
-import { changeTenantDomain, listTenants, reactivateTenant, reassignInvite, resendInvite, revokeTenant, suspendTenant, tenantError, type TenantSummary } from './tenants'
+import {
+  changeTenantDomain,
+  GIB,
+  listTenants,
+  parseQuotaGib,
+  reactivateTenant,
+  reassignInvite,
+  resendInvite,
+  revokeTenant,
+  setTenantStorageQuota,
+  suspendTenant,
+  tenantError,
+  type TenantSummary,
+} from './tenants'
+import { formatBytes } from '../../shared/formatBytes'
 import { buildInviteLink, copyText } from '../../shared/inviteLink'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
@@ -23,7 +38,7 @@ import { isUnauthorized } from '../../shared/httpError'
 // Addressed by id (cr-0087) — the settings rail renders one panel per tenant; the tenantId watch re-loads on switch.
 const props = defineProps<{ tenantId: string }>()
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const toast = useToast()
 // Confirmation is the console's own dialog (`shared/ui/ConfirmDialog.vue`, mounted once in App.vue), never the
 // browser's box — `no-alert` in eslint.config.js is what keeps it that way (cr-admin-web-own-confirm-dialog).
@@ -40,6 +55,8 @@ const domain = ref('')
 // After a resend/reassign, show the fresh invite link to copy (cr-0080 — the owner hands it off, no mailer).
 const inviteUrl = ref('')
 const copied = ref(false)
+// The quota as typed, in GiB — prefilled with the current one (empty when none is set).
+const quotaGib = ref('')
 
 const isPending = computed(() => tenant.value?.status === 'PENDING')
 // ADR 0066 — the third status. Availability only: SUSPENDED says nothing about the tenant's content, which is
@@ -58,6 +75,7 @@ const { pending: loading, error: loadErr, reload } = useAsyncData(async () => {
   if (found) {
     email.value = found.ownerEmail
     domain.value = found.domain
+    quotaGib.value = found.storageQuotaBytes == null ? '' : String(Math.round((found.storageQuotaBytes / GIB) * 100) / 100)
   }
   return found
 }, { onError: on401 })
@@ -143,6 +161,29 @@ async function changeDomain() {
         : code === 'tenant_not_pending_or_active' ? t('tenant.domainNotMovable')
           : status === 400 ? t('tenant.domainInvalid')
             : t('tenant.actionFailed')
+  }
+}
+
+// The storage quota (uc.admin.tenant-storage-quota, ADR 0073 §1). Not confirm-gated: it deletes nothing — a quota
+// below the usage only refuses the tenant's next upload — and it is reversed by setting it again.
+const storageUsed = computed(() => (tenant.value ? formatBytes(tenant.value.storageUsedBytes, locale.value) : ''))
+const storageQuota = computed(() =>
+  tenant.value?.storageQuotaBytes == null ? t('tenant.quotaNone') : formatBytes(tenant.value.storageQuotaBytes, locale.value),
+)
+async function saveQuota(clear: boolean) {
+  const bytes = clear ? null : parseQuotaGib(quotaGib.value)
+  actionError.value = ''
+  if (bytes === undefined) {
+    actionError.value = t('tenant.quotaInvalid')
+    return
+  }
+  try {
+    await setTenantStorageQuota(props.tenantId, bytes)
+    toast.success(t(bytes === null ? 'tenant.quotaCleared' : 'tenant.quotaSaved'))
+    await reload()
+  } catch (e) {
+    on401(e)
+    if (!isUnauthorized(e)) actionError.value = t('tenant.actionFailed')
   }
 }
 
@@ -256,9 +297,41 @@ async function copyInviteLink() {
           </div>
         </div>
       </template>
+
+      <!-- Storage (uc.admin.tenant-storage-quota): one total per tenant beside its quota, never a figure per member or
+           space. Offered in every status — a suspended tenant keeps its quota (ADR 0073). -->
+      <form class="veyq-form tenant-storage" @submit.prevent="saveQuota(false)">
+        <p class="tenant-storage__figures">
+          <span>{{ t('tenant.storageUsed') }} <strong>{{ storageUsed }}</strong></span>
+          <span>{{ t('tenant.quota') }} <strong>{{ storageQuota }}</strong></span>
+        </p>
+        <label>
+          {{ t('tenant.quotaInput') }}
+          <InputText v-model="quotaGib" inputmode="decimal" autocomplete="off" />
+        </label>
+        <p class="settings-muted">{{ t('tenant.quotaHint') }}</p>
+        <div class="veyq-dialog-action-row">
+          <Button
+            v-if="tenant.storageQuotaBytes != null"
+            type="button"
+            :label="t('tenant.quotaClear')"
+            icon="pi pi-times"
+            severity="secondary"
+            outlined
+            @click="saveQuota(true)"
+          />
+          <Button type="submit" :label="t('tenant.quotaSave')" icon="pi pi-save" severity="secondary" outlined />
+        </div>
+      </form>
     </section>
   </section>
 </template>
 
 <style scoped>
+.tenant-storage__figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  margin: 0;
+}
 </style>

@@ -23,6 +23,7 @@ export interface ShowUndoOptions {
 
 export function useToast(): {
   success: (summary: string) => void
+  error: (summary: string) => void
   showUndo: (options: ShowUndoOptions) => void
   dismissUndo: () => void
 } {
@@ -31,6 +32,11 @@ export function useToast(): {
   /** An auto-dismissing success acknowledgement in the default toast region. */
   function success(summary: string): void {
     toast.add({ severity: 'success', summary, life: SUCCESS_LIFE_MS })
+  }
+
+  /** A failure the user must hear about when no open form can hold an inline message — stays until closed. */
+  function error(summary: string): void {
+    toast.add({ severity: 'error', summary })
   }
 
   /** An undo-toast: shown in the `undo` group, its `#message` slot renders the action wired to `onUndo`. */
@@ -53,5 +59,5 @@ export function useToast(): {
     toast.removeGroup(UNDO_GROUP)
   }
 
-  return { success, showUndo, dismissUndo }
+  return { success, error, showUndo, dismissUndo }
 }

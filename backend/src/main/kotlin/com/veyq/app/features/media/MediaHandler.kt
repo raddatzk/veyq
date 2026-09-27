@@ -269,35 +269,37 @@ class MediaHandler(
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
-        return StartOutcome.Results(startForScope(scopeId, UploadOpener.Member(userId), declares, domain))
+        return StartOutcome.Results(reserveAndOpen(scopeId, UploadOpener.Member(userId), linkShareId = null, declares, domain))
     }
 
     /**
-     * The member core of [start]: per declared blob, a session bound to [opener] and its first window of PUTs. Each
-     * session is its own transaction and nothing is reserved: a member start is not bounded by a total yet (the
-     * tenant quota, ADR 0073 §1, routes it through [startForLink]'s locked transaction). Bytes never flow through here.
+     * The start of an upload link — CONTRIBUTOR or UPLOADER link [shareId], opened by its identity [identityId]. The
+     * caller does its own authorization (the link's gate), which runs first; the reservation is [reserveAndOpen]'s,
+     * with the per-link limit checked beside the tenant quota.
      */
-    private fun startForScope(scopeId: String, opener: UploadOpener, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> {
-        val checked = admissibility(declares)
-        val opened = checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }
-        return presignOpened(checked, opened, domain)
-    }
+    fun startForLink(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
+        reserveAndOpen(scopeId, UploadOpener.Contributor(identityId), linkShareId = shareId, declares, domain)
 
     /**
-     * The start of an upload link — CONTRIBUTOR or UPLOADER link [shareId], opened by its identity [identityId] —
-     * reserved against the tenant's per-link limit (ADR 0073 §4–§5). The caller does its own authorization (the
-     * link's gate), which runs first. One transaction:
-     *  1. lock the tenant row, so concurrent starts into the tenant serialize (A6);
-     *  2. check each item on its own, as a member start does;
-     *  3. ask [StorageQuota] whether the admissible items fit **together**. If not, every admissible item is
-     *     `quota_exceeded` and no session is inserted, so a photo never lands without its derivatives — admitting
-     *     item by item would reserve an original alone until the stale-session purge;
+     * Every start into the store — a member's upload, a cover, a link upload — reserved against what the tenant may
+     * hold (ADR 0073 §5). Bytes never flow through here. One transaction:
+     *  1. lock the tenant row, so concurrent starts into the tenant serialize (uc.admin.tenant-storage-quota A5);
+     *  2. check each item on its own ([admissibility]);
+     *  3. ask [StorageQuota] whether the admissible items fit **together**: the tenant quota always, and the per-link
+     *     limit too when [linkShareId] names a link. The two are independent, and either one refuses the whole
+     *     request — every admissible item `quota_exceeded`, no session inserted — so a photo never lands without its
+     *     derivatives; admitting item by item would reserve an original alone until the stale-session purge;
      *  4. otherwise insert every admissible session, and commit.
      * Presigning runs after the commit: the lock covers the check and the inserts only, never up to 256 × window
      * signatures.
      */
-    fun startForLink(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> {
-        val opener = UploadOpener.Contributor(identityId)
+    private fun reserveAndOpen(
+        scopeId: String,
+        opener: UploadOpener,
+        linkShareId: String?,
+        declares: List<UploadDeclare>,
+        domain: String?,
+    ): List<UploadItemResult> {
         val (checked, opened) = QuarkusTransaction.requiringNew().call {
             val tenant = ScopeEntity.findById(scopeId)?.tenantId?.let { quota.lockTenant(it) }
             // Checked under the lock, not before it: the sessions are inserted together at the end, so a blob id
@@ -305,7 +307,10 @@ class MediaHandler(
             // the unique index at insert — a 500 instead of `id_taken`.
             val checked = admissibility(declares)
             val admissible = checked.filter { (_, error) -> error == null }.map { (d, _) -> d }
-            if (tenant == null || !quota.linkFits(tenant, shareId, admissible)) {
+            val fits = tenant != null &&
+                quota.tenantFits(tenant, admissible) &&
+                (linkShareId == null || quota.linkFits(tenant, linkShareId, admissible))
+            if (!fits) {
                 checked.map { (d, error) -> d to (error ?: "quota_exceeded") } to checked.map { null }
             } else {
                 checked to checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }

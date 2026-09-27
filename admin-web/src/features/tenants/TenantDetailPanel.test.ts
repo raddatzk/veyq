@@ -4,6 +4,7 @@
 // confirm-gates revoke (delegating to the facade + routing back), maps 403/401, and carries the availability
 // lever: an ACTIVE tenant offers "take offline" (confirm-gated), a SUSPENDED one its own badge, its
 // explain-what-this-means notice and "bring back online" — and, deliberately, no invite controls in either.
+// uc.admin.tenant-storage-quota: the panel shows usage beside the quota, and sets (GiB in, bytes out) or clears it.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
@@ -11,7 +12,11 @@ import { createI18n } from 'vue-i18n'
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 
-vi.mock('./tenants', () => ({
+// The real `GIB` and `parseQuotaGib`: the conversion is what the quota cases assert, so it must not be stubbed away.
+vi.mock('./tenants', async (importOriginal) => ({
+  GIB: (await importOriginal<typeof import('./tenants')>()).GIB,
+  parseQuotaGib: (await importOriginal<typeof import('./tenants')>()).parseQuotaGib,
+  setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
   listTenants: vi.fn(),
   resendInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
   reassignInvite: vi.fn().mockResolvedValue({ bootstrapSecret: 'sek' }),
@@ -32,7 +37,7 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
-import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError } from './tenants'
+import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
 
 const i18n = createI18n({
   legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false,
@@ -52,6 +57,9 @@ const i18n = createI18n({
         changeDomainConfirm: 'move to {domain}?', changeDomainConfirmTitle: 'Move this tenant to a new address',
         domainChanged: 'moved',
         domainTaken: 'taken', domainNotMovable: 'offline tenants cannot move', domainInvalid: 'not an address',
+        storageUsed: 'Used', quota: 'Quota', quotaNone: 'none', quotaInput: 'Quota (GiB)', quotaHint: 'hint',
+        quotaSave: 'Save quota', quotaClear: 'Remove quota', quotaSaved: 'saved', quotaCleared: 'cleared',
+        quotaInvalid: 'not a quota',
       },
       members: { copyLinkIntro: 'copy', copyLink: 'link', copied: 'copied' },
       common: { done: 'Done', cancel: 'Cancel' },
@@ -69,9 +77,11 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
 }
 
-const PENDING = { tenantId: 't-1', name: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', status: 'PENDING' }
-const ACTIVE = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE' }
-const SUSPENDED = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED' }
+const NO_QUOTA = { storageUsedBytes: 0, storageQuotaBytes: null }
+const PENDING = { tenantId: 't-1', name: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', status: 'PENDING', ...NO_QUOTA }
+const ACTIVE = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE', ...NO_QUOTA }
+const SUSPENDED = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED', ...NO_QUOTA }
+const GiB = 1024 ** 3
 
 const mountPanel = (tenantId = 't-1') => mount(TenantDetailPanel, { props: { tenantId }, global: { plugins: [i18n], stubs } })
 const btn = (w: ReturnType<typeof mountPanel>, label: string) => w.findAll('button').find((b) => b.text() === label)!
@@ -238,6 +248,58 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
       await flushPromises()
       expect(w.text()).toContain(expected)
     }
+  })
+
+  // --- the storage quota (uc.admin.tenant-storage-quota) ---
+  const submitQuota = (w: ReturnType<typeof mountPanel>) => w.find('form.tenant-storage').trigger('submit')
+  const quotaInput = (w: ReturnType<typeof mountPanel>) => w.find('form.tenant-storage input')
+
+  it('shows the usage beside the quota, and "none" with no Remove when no quota is set', async () => {
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageUsedBytes: 3 * 1024 ** 2 } as never])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    expect(w.find('.tenant-storage__figures').text()).toContain('3 MB')
+    expect(w.find('.tenant-storage__figures').text()).toContain('none')
+    expect(w.findAll('button').find((b) => b.text() === 'Remove quota')).toBeUndefined()
+  })
+
+  it('sets the quota typed in GiB as bytes, and reloads in place', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    await quotaInput(w).setValue('2,5') // the German decimal comma is a decimal too
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: 2.5 * GiB } as never])
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', 2_684_354_560) // 2.5 × 1024³
+    expect(w.find('.tenant-storage__figures').text()).toContain('2.5 GB')
+  })
+
+  it('clears a set quota with null, and prefills the input with the current one in GiB', async () => {
+    vi.mocked(listTenants).mockResolvedValue([{ ...SUSPENDED, storageQuotaBytes: 10 * GiB } as never]) // a suspended tenant keeps its quota
+    const w = mountPanel('t-3')
+    await flushPromises()
+    expect((quotaInput(w).element as HTMLInputElement).value).toBe('10')
+    await btn(w, 'Remove quota').trigger('click')
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-3', null)
+  })
+
+  it('refuses a quota that is not a number of GiB without calling', async () => {
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    const w = mountPanel('t-2')
+    await flushPromises()
+    for (const bad of ['-1', 'lots', '']) {
+      await quotaInput(w).setValue(bad)
+      await submitQuota(w)
+      await flushPromises()
+    }
+    expect(setTenantStorageQuota).not.toHaveBeenCalled()
+    expect(w.text()).toContain('not a quota')
+    await quotaInput(w).setValue('0') // control: 0 is a real quota — nothing more may be uploaded
+    await submitQuota(w)
+    await flushPromises()
+    expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', 0)
   })
 
   it('shows a not-authorized state on a 403', async () => {

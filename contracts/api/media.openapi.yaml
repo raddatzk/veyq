@@ -49,6 +49,10 @@ paths:
         ciphertext chunk **directly to the object store**, asks `blob-upload-windows` for each next window (and to
         re-sign one whose URLs expired), and calls `media-batch` to complete + attach. The in-memory store cannot
         presign and answers `store_unavailable`.
+        **Tenant quota ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
+        when the Server Owner has set one, the request's admissible items are reserved together against what the
+        tenant already holds (every blob in its scopes, trash included until purged, plus its open sessions): all of
+        them fit, or every one is refused `quota_exceeded` and no session is opened.
       security:
         - bearerAuth: []
       parameters:
@@ -919,7 +923,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `id_taken` = the `blobId` already exists, `store_unavailable`); null on success.
+          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `id_taken` = the `blobId` already exists, `quota_exceeded` = the request's admissible items together do not fit the tenant's storage quota, so every one of them is refused and no session is opened — no retry can help (ADR 0073 §5–§6), `store_unavailable`); null on success.
           maxLength: 64
           example: null
 

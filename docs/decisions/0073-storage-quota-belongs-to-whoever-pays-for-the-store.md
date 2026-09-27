@@ -111,7 +111,9 @@ Who pays for the store differs by deployment. Today there is one store connectio
 
 - **Operator-blind holds.** The quota reads sizes the server already sees, and shows only aggregates of them:
   per tenant to the Server Owner, who already sees every size, and each Tenant Owner only their own tenant's.
-- **Starts into one tenant serialize.** Each one costs a SUM over indexed joins while the lock is held.
+- **Starts into one tenant serialize.** Every start takes the tenant-row lock, and costs a SUM over indexed joins
+  while it is held wherever there is something to check: the tenant's, when it has a quota, and the link's, for a
+  link start. A member start into a tenant without a quota takes the lock and sums nothing.
   `veyq_media.share_identity_id` has no index today (it was added bare in V32), and the link SUM wants one. A
   maintained counter is the fallback only against a *measured* cost, and it would come with a reconciliation
   against the SUM.

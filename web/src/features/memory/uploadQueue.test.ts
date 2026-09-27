@@ -16,6 +16,7 @@ import {
   isSupportedMediaFile,
   inferMediaType,
   mergeFiles,
+  isRetryable,
   type UploadTarget,
 } from './uploadQueue'
 
@@ -158,6 +159,32 @@ describe('uploadQueue — runner', () => {
     await vi.waitFor(() => expect(file.status).toBe('done'))
     expect(calls).toBe(2)
     expect(file.attempts).toBe(2)
+  })
+
+  // uc.admin.tenant-storage-quota / ADR 0073 §6: no room left is not transient — a retry cannot help, so none is made.
+  // The test above is this one's control: the same queue still retries every other failure once.
+  it('fails a quota_exceeded file on its first attempt, with its reason, and makes no retry', async () => {
+    vi.mocked(addMedia).mockRejectedValue(new Error('quota_exceeded'))
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [sel(png())], { label: '1' })
+    const file = batches.value[0].files[0]
+
+    await vi.waitFor(() => expect(file.status).toBe('failed'))
+    expect(file.error).toBe('quota_exceeded')
+    expect(file.attempts).toBe(1)
+    expect(addMedia).toHaveBeenCalledOnce()
+    expect(isRetryable(file)).toBe(false)
+  })
+
+  it('makes no retry of a link upload refused quota_exceeded either (the share transport rides the same queue)', async () => {
+    const upload = vi.fn().mockRejectedValue(new Error('quota_exceeded'))
+    const { batches } = useUploadQueue()
+    enqueueUploads({ key: 'share-1', upload }, [sel(png())], { label: '1' })
+    const file = batches.value[0].files[0]
+
+    await vi.waitFor(() => expect(file.status).toBe('failed'))
+    expect(upload).toHaveBeenCalledOnce()
+    expect(file.error).toBe('quota_exceeded')
   })
 
   it('removeFile drops a settled file (cr-0102 uploader delete-own) and empties an exhausted batch', async () => {
