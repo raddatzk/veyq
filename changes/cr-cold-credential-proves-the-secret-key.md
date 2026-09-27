@@ -1,7 +1,7 @@
 ---
 id: cr-cold-credential-proves-the-secret-key
 title: Rotation, password change and recovery prove the Secret Key to the server
-status: planned
+status: done
 satisfies: [uc.account.rotate-keys, uc.account.change-password, uc.account.recover-access]
 adrs: ["0060", "0054", "0017", "0003"]
 invariants: [operator-blind E2EE, API-first]
@@ -78,10 +78,10 @@ dump contains.
 
 ## Phases
 
-- [ ] 1 contracts (crypto) — the derivation, the three statement encodings, sign/verify helpers, and vectors
+- [x] 1 contracts (crypto) — the derivation, the three statement encodings, sign/verify helpers, and vectors
       for the key and for each statement.
       · Done when: `npm run check` in `packages/crypto` green, all `scripts/validate_*.py` green.
-- [ ] 2 contracts (api) — `AccountRegistration` swaps `recoveryMasterKeyTag` for `secretKeyProofPublicKey`. It
+- [x] 2 contracts (api) — `AccountRegistration` swaps `recoveryMasterKeyTag` for `secretKeyProofPublicKey`. It
       is in `setup` and `tenants`, and every other copy is found by
       `grep -rn 'recoveryMasterKeyTag\|recoveryAuthTag' contracts/api`. `RotateAccountKeysRequest` swaps it for
       `secretKeyProofSignature`; `changePassword` gains `secretKeyProofSignature`; `completePasswordRecovery`
@@ -90,7 +90,7 @@ dump contains.
       contract-less. Bite the updated guard by injection (drop the new field → red).
       · Done when: `npm run generate:api` + `npm run check` (web **and** admin-web) green, all
       `scripts/validate_*.py` green. The backend will not compile until phase 3, which is expected.
-- [ ] 3 backend — a Flyway migration adds the proof-key column and drops `recovery_master_key_tag`;
+- [x] 3 backend — a Flyway migration adds the proof-key column and drops `recovery_master_key_tag`;
       registration stores the key; the three handlers verify. The statement builder is pinned to the vector by
       a unit test that reads the contracts file.
       Locator: `grep -rlE 'recoveryMasterKeyTag|recoveryAuthTag|recovery_master_key_tag|RecoveryMasterKeyTag' backend/src`
@@ -108,13 +108,13 @@ dump contains.
       Each negative has its positive control on the same request, and anchors on `secret_key_proof_failed`, not
       on "it failed".
       · Done when: `./gradlew check` green.
-- [ ] 4 web + admin-web — birth registers the key; rotation, change-password and recovery sign. The Secret Key
+- [x] 4 web + admin-web — birth registers the key; rotation, change-password and recovery sign. The Secret Key
       is already in hand on each of those screens (ADR 0060 Decision 2: *"every path through the screen
       supplies them anyway"*).
       Locator: `grep -rlE 'recoveryMasterKeyTag|recoveryAuthTag' web/src admin-web/src packages/crypto/src`.
       · Done when: `npm run check` (web, admin-web, packages/crypto) green, and `python3 scripts/run_web_e2e.py`
       green. Its recovery and rotation suites cross the new fields end to end.
-- [ ] 5 docs + coverage
+- [x] 5 docs + coverage
       - The three use-cases' coverage files each gain the criterion *"refused without a signature of the
         account's Secret-Key proof key"*, covered by the phase-3 bites.
       - `uc.account.recover-access.yaml`'s criterion that names `recoveryAuthTag` is **edited** to name the
@@ -139,3 +139,26 @@ dump contains.
 holder by every factor veyq has, and it is the case rotation exists for.
 
 ## Retrospective
+
+- **Planning — the docs phase told me to flip a row the change cannot flip.** security-model's table is about an
+  *active operator*, and a server-side signature check binds every caller but the operator, who writes the
+  directory itself. ADR 0060 § Consequences already said so. Root cause: the flip was specified against the
+  attacker the CR was thinking of (a device-link holder, a password phisher), not against the table's subject.
+  Harvested into security-model's table intro (a server-run check never closes a row there); the sibling
+  `cr-admission-is-a-key-holder-act`, which relied on this CR closing "#159's other row", was corrected. The owner
+  confirmed keeping the row at *Can* with the reason stated.
+- **Planning — two Done-whens could not hold as written.** Phase 2 promised web and admin-web green after
+  `generate:api`; a typed client turns a removed or newly required request field into a compile error, so they are
+  red until phase 4 (harvested into `changes/README.md` beside the backend version of the same rule). Phase 4's
+  e2e was to run through the main checkout's orchestrator, but that runs `main`'s `web/`, which this CR changes, so
+  it would have tested the old client against the new jar. The run instead used the worktree's orchestrator with
+  the main checkout's compose file. The Decisions also named `userId` in the rotation statement, and the web client
+  cannot know it; it was dropped, with the reason at the line (`v1.ts`).
+- **Execution — the locator keyed on the field being removed, so it missed a fixture that never had it.**
+  `SetupRequestSanitizationTest` builds a `CreateServerOwnerRequest` without the tag and went red on the new
+  required field in the first full run. `changes/README.md` already says to key a narrowing's locator on the input's
+  *producer*. The rule existed and the refine did not apply it. Nothing new to write; the second angle
+  (`masterKeyWraps` without `secretKeyProofPublicKey`) found no further site.
+- **Next time:** when a CR edits a table or a claim, the refine reads that table's subject line and asks whether
+  the change binds that subject.
+

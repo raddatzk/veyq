@@ -43,8 +43,7 @@ holds only **public** keys and ciphertext, never the password and never a conten
 - [uc.account.recover-access](use-cases/uc.account.recover-access.md) — **built (web)** (cr-account-recovery): reset a
   forgotten password by releasing the withheld `RECOVERY` wrap against **two** factors — a mailed one-time
   token (address control) and the Secret Key (possession, proven by a signature of the Secret-Key proof key,
-  [ADR 0060](../../decisions/0060-key-rotation-after-compromise.md) Decision 2 — the built flow still reproduces
-  `recoveryAuthTag`, which that decision replaces).
+  [ADR 0060](../../decisions/0060-key-rotation-after-compromise.md) Decision 2).
   [ADR 0054](../../decisions/0054-password-recovery-two-factor-release.md). Note there is **no separate
   recovery code** in veyq: the recovery factor is the Secret Key from the Emergency Kit, and a reset does not
   re-issue the kit. An instance that cannot send mail refuses the request with `503 mail_unavailable` rather than

@@ -111,7 +111,7 @@ The point is the **default**. Today silence means "nobody classified this". Afte
   and the content is a prefixed UUID. Marking it `pii` was considered — as a tripwire on the field most likely
   to *become* sensitive — and rejected, because it buys no protection (the marker checks the contract, never the
   traffic, so a username later written into it goes unseen either way) while putting two non-PII fields into the
-  budget. A budget with false entries stops being read, and being read is its only function. And `kdfParams`, `pwSalt`, `pwVerifier`, `recoveryMasterKeyTag`, `signature`, `slugToken`,
+  budget. A budget with false entries stops being read, and being read is its only function. And `kdfParams`, `pwSalt`, `pwVerifier`, `secretKeyProofSignature`, `signature`, `slugToken`,
   `nonce`, `instanceSalt` are opaque with no matching name. A convention that is 80% real is worse than none: it
   invites the rule that the other 20% silently defeats.
 - **Rejected — a central allowlist of permitted field names.** 401 occurrences collapse to 136 names, so names
