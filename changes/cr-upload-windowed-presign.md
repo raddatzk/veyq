@@ -221,3 +221,41 @@ never reads the whole file and bounds what is in flight. A live upload of a file
 is a manual check, not a claim.
 
 ## Retrospective
+
+**Reds and bites** (measured: targeted `./gradlew test --tests …` / `npx vitest run -t …`, the JUnit XML / vitest
+output read per case; every injection by snapshot → inject → run → restore, bytes compared to the snapshot):
+- **Backend live defects, on the phase-1 tree** (the two resources carried uncommitted `TODO()` stubs so it
+  compiled): `startSignsOnlyTheFirstWindow…` red *expected 64, was 65* on the W+1 line (its W control above it
+  green); `aSecondMemberCannotComplete…` and `aSecondIdentityCannotComplete…` red *expected upload_not_found, was
+  null*; `…CommitAnotherMembersSessionAsACover` red *404 expected, was 200*. All four on the assertion, none on setup.
+- **Backend injections**: revocation (`activeShare` → `store.find` in the window path) red *404 expected, was
+  200*; removed member (the window's `access.check` refusal dropped) the same; liveness (purge predicate back on
+  `createdAt`) red on *"a session windowed inside the retention is alive"*; range (the `range_invalid` check
+  dropped) red *expected range_invalid, was null*.
+- **Web live defects, against the HEAD sources** (restored beside the new tests, then snapshot back): in-flight
+  red *expected 12 to be ≤ 4*; the queue's read red *arrayBuffer called 1 time*. **Web injections**: the 403
+  retry removed → the upload fails `chunk_put_failed:403`; the look-ahead removed → see below.
+- **Opt-in e2e** against the dev Garage: a 5-chunk blob at `presign-window=2` moved through start + two windows
+  and read back byte-equal; the existing round-trip green beside it.
+
+What went wrong:
+- **The look-ahead test was green with its lever pulled.** Written with an instant fake, its order (`window:10`
+  before `put:9`) was produced by the microtask queue, not the pump. Fixed by a fake that takes time and an
+  assertion with room in it; harvested to `changes/README.md`. Root cause: the CR said "assert on the order of
+  calls, not on timing", which is right, but an order over concurrent steps still needs its lever run once.
+- **`BlobBatchE2ETest` had been dead since `cr-scope-access-gate`** — its seed has no tenant membership, so both
+  tests were `404` at `start` before this CR touched them. Found only because this CR's done-when ran it. One
+  seed line fixed it; the lesson (a CR that tightens a gate runs the opt-in suites seeding through it) is
+  harvested. That refine could not have seen it without running the suite, which is the point.
+- **Execution order in web:** the pump was written before the web live-defect reds were recorded, against the
+  CR's guard → red → fix. Recovered without loss by restoring the HEAD sources beside the new tests, but that
+  was a detour the ordering rule exists to avoid.
+- **Planning, small:** the CR named `V50` (taken since; expected, and flagged in the brief), and phrased the 403
+  bite's lever as the test's own fault injection — the lever that proves the retry is removing the retry.
+- **A decision the CR left open:** the contributor window's rate-limit annotation. It spends no `allowUpload`
+  (as decided), so it carries `@RateLimitExempt` with the per-call bound, and `cc.security.rate-limit` names it
+  beside the guest reads — raw call volume by a link holder stays open, as there.
+
+Next time: when a bite asserts an **order** between concurrent steps, run its lever before believing the green,
+and give the fake a duration.
+
