@@ -289,6 +289,88 @@ export const authSign = (privateKey: Uint8Array, message: Uint8Array): Uint8Arra
 export const authVerify = (publicKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean =>
   ed25519.verify(signature, message, publicKey)
 
+// ── Secret-Key proof key (ADR 0060 Decision 2, ADR 0054 Decision 1) ─────────────────────────────────────
+// The server half of the cold-credential gate. Every flow that MINTS a cold credential — rotation, change-password,
+// recovery completion — carries an Ed25519 signature under a key derived from the Secret Key ALONE, verified
+// against the public half registered at account birth. It is the one factor both attackers ADR 0060 names lack: a
+// linked device holds the Master Key and never saw the Secret Key, a phished password is not the Secret Key. A
+// proof derived from the Master Key (the retired recovery tag) is one a linked device can compute and a database
+// dump contains; one derived from the PASSWORD floor's KEK would change on every password change and cannot exist
+// on the recovery path (ADR 0060 (i)).
+//
+// Each statement is `lp(domain) || lp(field)…`: domain-separated per flow so a signature for one can never be
+// presented to another, and binding what the flow installs AND the state it replaces, so a captured signature
+// cannot be replayed once that state has moved. Every field is the DECODED bytes of the wire value, never its
+// base64 text — so both stacks rebuild it from bytes, not from an encoding either could spell differently. The
+// backend rebuilds the same bytes itself; `secret_key_proof` in the vectors pins both stacks to one encoding.
+
+/** `seed = HKDF-SHA256(ikm = secretKey, salt = "", info = "veyq/v1/secret-key-proof")`, and from it an Ed25519
+ *  keypair. Deterministic: the Secret Key never changes in these flows, so neither does this key. */
+export function deriveSecretKeyProofKeypair(secretKey: Uint8Array): AuthKeypair {
+  const seed = hkdf(sha256, secretKey, new Uint8Array(0), utf8('veyq/v1/secret-key-proof'), 32)
+  return { privateKey: seed, publicKey: ed25519.getPublicKey(seed) }
+}
+
+/** One wrap as a statement sees it: its ciphertext and its KDF params, both decoded. */
+export type ProofWrap = { wrappedKey: Uint8Array; kdfParams: Uint8Array }
+
+const wrapDigest = (w: ProofWrap): Uint8Array => sha256(concat(lp(w.wrappedKey), lp(w.kdfParams)))
+
+const statement = (domain: string, ...fields: Uint8Array[]): Uint8Array =>
+  concat(lp(utf8(domain)), ...fields.map(lp))
+
+/**
+ * Rotation (uc.account.rotate-keys): the identity it replaces, and everything it installs — the new identity
+ * public bundle, the new identity private key under the new Master Key, and both rewritten cold wraps. Binding the
+ * CURRENT identity is what makes a replay fail after the rotation it authorised: that identity is gone.
+ */
+export const rotationProofStatement = (s: {
+  currentIdentityPublicKey: Uint8Array
+  identityPublicKey: Uint8Array
+  wrappedIdentityPrivateKey: Uint8Array
+  passwordWrap: ProofWrap
+  recoveryWrap: ProofWrap
+}): Uint8Array =>
+  statement(
+    'veyq/v1/secret-key-proof/rotation',
+    sha256(s.currentIdentityPublicKey),
+    sha256(s.identityPublicKey),
+    sha256(s.wrappedIdentityPrivateKey),
+    wrapDigest(s.passwordWrap),
+    wrapDigest(s.recoveryWrap),
+  )
+
+/** Change-password (uc.account.change-password): the auth key it replaces, the one it installs, and the new
+ *  `PASSWORD` floor. */
+export const passwordChangeProofStatement = (s: {
+  currentAuthPublicKey: Uint8Array
+  authPublicKey: Uint8Array
+  passwordWrap: ProofWrap
+}): Uint8Array =>
+  statement(
+    'veyq/v1/secret-key-proof/change-password',
+    s.currentAuthPublicKey,
+    s.authPublicKey,
+    wrapDigest(s.passwordWrap),
+  )
+
+/** Recovery completion (uc.account.recover-access): the one-time token it spends — single-use and bound to one
+ *  account, so it is the replaced state — the new auth key, and the new `PASSWORD` floor. */
+export const recoveryProofStatement = (s: {
+  token: string
+  authPublicKey: Uint8Array
+  passwordWrap: ProofWrap
+}): Uint8Array =>
+  statement(
+    'veyq/v1/secret-key-proof/recovery',
+    sha256(utf8(s.token)),
+    s.authPublicKey,
+    wrapDigest(s.passwordWrap),
+  )
+
+/** Sign a statement with the proof key's private half. Ed25519 is deterministic, so the vectors pin signatures. */
+export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)
+
 export const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n))
 
 /** The user's identity: a hybrid KEM keypair (X25519 + ML-KEM-768) + an Ed25519 signing keypair. */
