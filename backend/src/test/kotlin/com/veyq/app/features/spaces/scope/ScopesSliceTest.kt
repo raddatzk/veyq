@@ -110,30 +110,133 @@ class ScopesSliceTest {
             .then().statusCode(409).body("code", equalTo("last_owner"))
     }
 
+    // --- a removal and its rotation are one request (ADR 0024 Decision 4) ---
+
+    /** A removal-rotation by [caller] of [scopeId] from its current epoch, removing [removes] and granting [grantees]. */
+    private fun removeRotating(caller: String, scopeId: String, removes: String, grantees: List<String>) =
+        given().header("Authorization", "Bearer ${token(caller)}").contentType(ContentType.JSON)
+            .body(
+                """{"epoch":${TestAdmission.epochOf(scopeId) + 1},"wrappedPrev":"$rotPrev","grants":[""" +
+                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}""" } +
+                    """],${TestAdmission.openJson(scopeId)},"removesUserId":"$removes"}""",
+            )
+            .`when`().post("/api/scopes/$scopeId/epochs")
+
+    /** Whether [userId] still holds a membership row on [scopeId], read straight from the DB. */
+    private fun isMember(userId: String, scopeId: String): Boolean =
+        QuarkusTransaction.requiringNew().call { MembershipEntity.count("userId = ?1 and scopeId = ?2", userId, scopeId) > 0 }
+
     @Test
-    fun removeMemberThenLastOwnerGuard() {
+    fun aRemovalRotationWhoseGrantsNameTheRemovedMemberIsRefusedAndChangesNothing() {
+        // Whatever list the server served the remover, the new epoch must never be wrapped to the member it removes.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+
+        removeRotating(owner, groupId, removes = partner, grantees = listOf(owner, partner))
+            .then().statusCode(422).body("code", equalTo("removed_member_granted"))
+        assertTrue(isMember(partner, groupId), "a refused removal-rotation leaves the member in place")
+        assertEquals(0, TestAdmission.epochOf(groupId), "…and the epoch unmoved")
+
+        // Control on the same predicate: without their grant the member is gone and the epoch is n+1, in one request.
+        removeRotating(owner, groupId, removes = partner, grantees = listOf(owner)).then().statusCode(201).body("epoch", equalTo(1))
+        assertTrue(!isMember(partner, groupId), "the removal-rotation deleted the membership")
+        assertEquals(1, TestAdmission.epochOf(groupId))
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/members")
+            .then().statusCode(200).body("find { it.username == 'partner' }", equalTo(null))
+    }
+
+    @Test
+    fun aRemovalRotationThatFailsAtCommitLeavesTheMemberInPlace() {
+        // Atomicity. The lever: a chain link already stored at the epoch this rotation creates, so the rotation passes
+        // every check and dies on `ux_scope_epoch` when the transaction flushes — after the membership was deleted
+        // in it. One transaction rolls both back; a removal committed on its own would leave the member gone and
+        // the group unrotated, the defect a closed tab produced.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+        QuarkusTransaction.requiringNew().run {
+            ScopeEpochEntity().apply {
+                id = UUID.randomUUID().toString(); scopeId = groupId; epoch = 1; wrappedPrev = rotPrev; createdAt = Instant.now()
+            }.persist()
+        }
+
+        val status = removeRotating(owner, groupId, removes = partner, grantees = listOf(owner)).then().extract().statusCode()
+        assertTrue(status >= 500, "the commit failed (got $status)")
+        assertTrue(isMember(partner, groupId), "a removal-rotation that failed after validation leaves the member in place")
+        assertEquals(0, TestAdmission.epochOf(groupId))
+    }
+
+    @Test
+    fun aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner")
 
         // A non-owner (partner, a MEMBER) cannot remove anyone.
-        given().header("Authorization", "Bearer ${token(partner)}")
-            .`when`().delete("/api/scopes/$groupId/members/$owner")
+        removeRotating(partner, groupId, removes = owner, grantees = emptyList())
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        // The last owner cannot be removed.
+        removeRotating(owner, groupId, removes = owner, grantees = listOf(partner))
+            .then().statusCode(409).body("code", equalTo("last_owner"))
+        // Nor can someone who is not a member.
+        removeRotating(owner, groupId, removes = seedUser(), grantees = listOf(owner))
+            .then().statusCode(404).body("code", equalTo("member_not_found"))
+        assertTrue(isMember(owner, groupId) && isMember(partner, groupId))
+        assertEquals(0, TestAdmission.epochOf(groupId))
+    }
 
-        // The owner removes partner → 204; the directory no longer lists them.
+    @Test
+    fun theMemberDeleteRefusesAKeyedMemberAndRescindsOnlyAProposal() {
+        // A keyed member leaves only by a removal-rotation — a bare delete would end the removal without its rotation.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val partner = seedTenantMember(tenantIdOf(domain), "partner")
+        addToGroup(owner, domain, groupId, "partner")
+        // Key the partner: a rotation that re-grants them.
+        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
+            .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201)
+
         given().header("Authorization", "Bearer ${token(owner)}")
             .`when`().delete("/api/scopes/$groupId/members/$partner")
-            .then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}")
-            .`when`().get("/api/scopes/$groupId/members")
-            .then().statusCode(200).body("find { it.username == 'partner' }", equalTo(null))
+            .then().statusCode(409).body("code", equalTo("removal_requires_rotation"))
+        assertTrue(isMember(partner, groupId), "the refused delete deleted nothing")
 
-        // The last owner cannot be removed (last-owner guard).
+        // Control: a pending consent proposal was never keyed, so the delete rescinds it without a rotation.
+        val invitee = seedTenantMember(tenantIdOf(domain), "invitee")
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); userId = invitee; tenantId = tenantIdOf(domain); scopeId = groupId
+                role = MembershipEntity.MEMBER; pendingConsent = true; createdAt = Instant.now()
+            }.persist()
+        }
         given().header("Authorization", "Bearer ${token(owner)}")
-            .`when`().delete("/api/scopes/$groupId/members/$owner")
-            .then().statusCode(409).body("code", equalTo("last_owner"))
+            .`when`().delete("/api/scopes/$groupId/members/$invitee")
+            .then().statusCode(204)
+        assertTrue(!isMember(invitee, groupId), "the proposal is gone")
+        assertEquals(1, TestAdmission.epochOf(groupId), "…and nothing rotated")
+    }
+
+    @Test
+    fun aNodeCreateAtAStaleEpochIsRefused() {
+        // ADR 0024 Decision 6, layer 1: a writer whose grant lags a rotation would seal under a key the removed
+        // member holds. The server refuses an epoch-tagged write below the current epoch.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        rotateCarrying(owner, groupId, retagged = admissionRows(groupId).keys.toList()).then().statusCode(201)
+        val create = { epoch: Int ->
+            given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+                .body(nodeBody("stale-$epoch").dropLast(1) + ""","epoch":$epoch}""")
+                .`when`().post("/api/scopes/$groupId/nodes")
+        }
+        create(0).then().statusCode(409).body("code", equalTo("stale_epoch"))
+        // Control: at the current epoch the create lands.
+        create(1).then().statusCode(201)
     }
 
     @Test

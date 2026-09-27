@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -91,6 +92,9 @@ class NodesStore {
         }
         return false
     }
+
+    /** The scope's current content-key epoch (ADR 0024), or null if there is no such scope. */
+    fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch
 
     /** Persist a node under the client-minted [id]; false — nothing written — if any node, live or trashed, in
      *  any scope already holds it (ADR 0072: never overwrite, never substitute). */

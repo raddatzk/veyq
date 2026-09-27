@@ -1325,6 +1325,16 @@ the real byte path was dead for a wave without anyone knowing. So a CR that tigh
 suites (`grep -rln 'EnabledIfEnvironmentVariable' backend/src/test`) for fixtures that seed through it, and runs
 the ones it can.
 
+### A locator for an endpoint's callers greps its route, not only its operation name
+
+**Slice tests call the API by URL, so a grep for the Kotlin/TS symbol misses them.** `cr-removal-rotates-in-one-request`
+narrowed `DELETE /api/scopes/{scopeId}/members/{userId}` to pending proposals, and its test locator
+(`grep -rlE 'removeMember|rotateScope|/epochs' backend/src/test`) found three files. The fourth,
+`ShareSharedScopeSliceTest`, removed a member with `.delete("/api/scopes/$group/members/$member")` and surfaced
+only as a red in the full `./gradlew check`. When a CR changes what an endpoint accepts, the locator also greps
+the route's path shape (`grep -rnE 'delete\("/api/scopes/\$[a-zA-Z]+/members/' backend/src/test`) — one angle per
+way a caller can name it.
+
 ### A done-when that names a gate records that gate's exit code on `main`, measured at refine
 
 A gate is a claim about the whole tree, not about the CR's files, so "green" in a done-when silently assumes a

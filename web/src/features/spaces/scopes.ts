@@ -200,21 +200,39 @@ async function openOwnGrant(
   return v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant))
 }
 
-/** `open` with a refused grant read as no grant: the scope is awaiting access, not an error (ADR 0028 Decision 6). */
+/** Our grant is older than the scope's current epoch (ADR 0024 Decision 6): a rotation skipped us, or its re-grant
+ *  has not reached us yet. The scope reads as awaiting the current key — nothing is written into it. */
+class AwaitingCurrentKey extends Error {
+  constructor(readonly scopeId: string) {
+    super(`awaiting_current_key: ${scopeId}`)
+    this.name = 'AwaitingCurrentKey'
+  }
+}
+
+/** `open` with a refused grant — or one a rotation left behind — read as no grant: the scope is awaiting access,
+ *  not an error (ADR 0028 Decision 6, ADR 0024 Decision 6). */
 async function orAwaitingAccess<T>(open: () => Promise<T | null>): Promise<T | null> {
   try {
     return await open()
   } catch (e) {
-    if (e instanceof GrantRefused) return null
+    if (e instanceof GrantRefused || e instanceof AwaitingCurrentKey) return null
     throw e
   }
 }
 
 /** Open a scope summary → its epoch keys + (for a GROUP) its decrypted name. The name is sealed under `K_name`
- *  derived from its **name-epoch** key (cr-0096/ADR 0027), so it decrypts under that epoch of the peeled chain. */
+ *  derived from its **name-epoch** key (cr-0096/ADR 0027), so it decrypts under that epoch of the peeled chain.
+ *
+ *  **No write under a known-stale epoch** (ADR 0024 Decision 6, layer 1): a grant older than the scope's current
+ *  epoch holds a key every member removed since also holds, so content sealed under it would be readable by them.
+ *  Such a scope is not opened ({@link AwaitingCurrentKey}); the grant-delivery reconcile re-grants it. Only a
+ *  rotation opens it anyway (`staleGrant: 'open'`): it states the epoch it creates, which the server refuses unless
+ *  it is the scope's next, so a lagging rotator gets `stale_epoch` — the answer its callers already handle. */
 async function toOpenedScope(
   scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }, self: Me,
+  staleGrant: 'refuse' | 'open' = 'refuse',
 ): Promise<OpenedScope> {
+  if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
   const grantKey = await openOwnGrant(scope, priv, self)
   const epochs = await epochKeysFor(scope, grantKey)
   let name: string | undefined
@@ -252,11 +270,16 @@ export async function openScope(kind: ScopeKind): Promise<OpenedScope | null> {
  * such scope / the vault is locked. Used to enter a group from the `#@<id>` fragment (en.spaces.group-scope).
  */
 export async function openScopeById(scopeId: string): Promise<OpenedScope | null> {
+  return openById(scopeId, 'refuse')
+}
+
+/** {@link openScopeById} with the stale-grant rule chosen — `'open'` only for {@link commitRotation}. */
+async function openById(scopeId: string, staleGrant: 'refuse' | 'open'): Promise<OpenedScope | null> {
   const priv = identityPrivate()
   if (!priv) return null
   try {
     const scope = (await listMyScopes()).find((s) => s.id === scopeId)
-    return scope ? await orAwaitingAccess(async () => toOpenedScope(scope, priv, await me(priv))) : null
+    return scope ? await orAwaitingAccess(async () => toOpenedScope(scope, priv, await me(priv), staleGrant)) : null
   } finally {
     zero(priv)
   }
@@ -473,19 +496,19 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
 }
 
 /**
- * Rotate a group's content key forward after a member was removed (ADR 0024, cr-0089) — the crypto half of the
- * remove: {@link commitRotation} over every **remaining member**. New content thereafter seals under `E_{n+1}`,
- * which the removed member never holds — so they read pre-removal content but never post-removal content, even
- * against a malicious operator. Operator-blind: only the opaque chain-link + per-member grants and tags are posted.
- * Returns the new epoch index.
+ * Remove a member from a group — the removal and its rotation in **one request** (ADR 0024 Decision 4): a
+ * {@link commitRotation} that names the member it removes, so the server deletes the membership and commits the new
+ * epoch in one transaction. A failed call leaves the member in place; a closed tab cannot leave a removal without its
+ * rotation. New content thereafter seals under `E_{n+1}`, which the removed member never holds. Returns the new
+ * epoch index. Requires an unlocked vault (opens the caller's own grant to derive `E_n`).
  *
- * `remaining` is the directory **after** the removal (the removed member excluded); the caller passes it so this
- * carries exactly the surviving set. It is reused across a stale retry: the server drops every grant whose
- * membership is gone or still pending at commit, so a stale list is harmless against an honest server.
- * Requires an unlocked vault (opens the caller's own grant to derive `E_n`).
+ * **Excluded by the remover's own choice.** `pickedFrom` is the directory the owner picked the member from, read
+ * **before** the removal; every row carrying `removedUserId` is dropped from it — a duplicate included — so a server
+ * that re-lists the removed member cannot get the new epoch wrapped to their genuine key. Never pass a list read
+ * after the removal: that is the server's word on who remains, not the owner's.
  */
-export async function rotateGroupForRemoval(scopeId: string, remaining: ScopeMember[]): Promise<number> {
-  return commitRotation(scopeId, remaining)
+export async function rotateGroupForRemoval(scopeId: string, pickedFrom: ScopeMember[], removedUserId: string): Promise<number> {
+  return commitRotation(scopeId, pickedFrom, undefined, removedUserId)
 }
 
 /** One re-grant a rotation carries: the new epoch key wrapped to a member's identity, signed by the rotator. */
@@ -517,10 +540,16 @@ type CarriedAdmission = { admissionId: string; admissionTag: string }
  * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
  * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
  * hand them. Returns the new epoch; a second stale answer (our grant still lags) is thrown, see {@link isStaleEpoch}.
+ *
+ * With `removes` it is a removal-rotation ({@link rotateGroupForRemoval}): no row with that id is carried, and the
+ * request names them so the server deletes their membership in the same commit.
  */
-export async function commitRotation(scopeId: string, carry: ScopeMember[], rotator?: Rotator): Promise<number> {
+export async function commitRotation(scopeId: string, members: ScopeMember[], rotator?: Rotator, removes?: string): Promise<number> {
+  const carry = removes === undefined ? members : members.filter((m) => m.userId !== removes)
   for (let attempt = 0; ; attempt++) {
-    const opened = await openScopeById(scopeId) // our grant → the epoch keys we hold (E_n = the write key)
+    // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
+    // refuses the epoch this rotation states unless it is the next one, which is the stale answer handled below.
+    const opened = await openById(scopeId, 'open')
     if (!opened) throw new Error('cannot open scope to rotate')
     const newKey = v1.randomBytes(32)
     const who = rotator ?? (await vaultRotator())
@@ -563,7 +592,7 @@ export async function commitRotation(scopeId: string, carry: ScopeMember[], rota
         for (const invite of await withRefresh(() => tenantsApi().listMemberInvites({ tenantId: scopeId }))) carryAdmission('', invite)
       }
       const rotated = await withRefresh(() =>
-        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions } }),
+        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions, removesUserId: removes } }),
       )
       return rotated.epoch
     } catch (e) {

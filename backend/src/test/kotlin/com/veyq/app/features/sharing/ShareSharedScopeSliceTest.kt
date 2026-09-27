@@ -3,6 +3,7 @@ package com.veyq.app.features.sharing
 import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
@@ -67,9 +68,13 @@ class ShareSharedScopeSliceTest {
         given().`when`().get("/api/shares/$ownerShare").then().statusCode(200)
         given().`when`().get("/api/shares/$memberShare").then().statusCode(200)
 
-        // the owner removes the member from the group
-        given().header("Authorization", bearer(owner))
-            .`when`().delete("/api/scopes/$group/members/$member").then().statusCode(204)
+        // the owner removes the member from the group — a removal-rotation, the one way a keyed member leaves
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
+            .body(
+                """{"epoch":1,"wrappedPrev":"cHJldg==","grants":[{"userId":"$owner","wrappedGrant":"Z3JhbnQ=",${TestAdmission.SIGNATURE_JSON}}],""" +
+                    """${TestAdmission.openJson(group)},"removesUserId":"$member"}""",
+            )
+            .`when`().post("/api/scopes/$group/epochs").then().statusCode(201)
 
         // the removed member's share is soft-revoked (404); the owner's own share is untouched
         given().`when`().get("/api/shares/$memberShare").then().statusCode(404).body("code", equalTo("share_not_found"))

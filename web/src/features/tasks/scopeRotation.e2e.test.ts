@@ -20,7 +20,7 @@
 import { describe, it, expect } from 'vitest'
 import { tasksApi } from '../../api/client'
 import { addGroupMember, listScopeMembers, removeTenantMember } from '../spaces/members'
-import { createGroup, listMyScopes, listScopeEpochs, openScopeById } from '../spaces/scopes'
+import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
 import { createMemory, listTree } from '../memory/tree'
 import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
@@ -106,5 +106,21 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     // under E_1. The epoch keys and grants this suite is really about are `Uint8Array`s and drop by type; what
     // is left is the one plaintext this flow sealed into the group's tree.
     recordCanaries(treeD.map((n) => n.name))
+
+    // --- ADR 0024 Decision 4: an owner's removal and its rotation are ONE request ---
+    // B removes D from the directory B picked from; the server deletes D's membership and commits epoch 2 together.
+    await become(B)
+    const picked = await listScopeMembers(gG)
+    expect(await rotateGroupForRemoval(gG, picked, D.userId!), 'the removal-rotation commits the next epoch').toBe(2)
+    expect((await listScopeMembers(gG)).some((x) => x.userId === D.userId), 'D is gone, in the same request').toBe(false)
+    expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'B re-granted at the new epoch').toBe(2)
+
+    // --- Decision 6, the server half: a write still sealed under the superseded epoch is refused ---
+    const stale = await createMemory(gG, openedForWrite!.epochs, 'Sealed under E_1').catch((e: unknown) => e)
+    expect(await isStaleEpoch(stale), 'a create tagged with epoch 1 after the rotation to 2 is 409 stale_epoch').toBe(true)
+    // Control on the same predicate: re-opened at the current epoch, the same write lands.
+    const current = await openScopeById(gG)
+    expect(current!.epochs.current).toBe(2)
+    await createMemory(gG, current!.epochs, 'Sealed under E_2')
   }, 240_000)
 })

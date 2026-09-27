@@ -459,26 +459,26 @@ paths:
     delete:
       tags: [scopes]
       operationId: removeMember
-      summary: Remove a member from a group (layer-1 access cut; the caller then rotates the key).
+      summary: Rescind a pending consent proposal (a keyed member is removed by the rotation that excludes them).
       description: >
-        Deletes a member's GROUP membership — the instant **layer-1** access cut (a 404 on the scope afterwards:
-        once the membership is gone the scope is indistinguishable from one that never existed, ADR 0042)
-        of uc.spaces.manage-group-members (cr-0088). Membership-gated first (a non-member gets `404
-        scope_not_found`, ADR 0042), then owner-gated (`403 not_scope_owner`); the **last-owner guard**
-        rejects removing the last OWNER (`409 last_owner`). This is admission only — **layer-2** forward-secrecy is
-        the caller's follow-up **rotation-commit** (`POST /api/scopes/{scopeId}/epochs`, ADR 0024): mint a new
-        epoch, re-grant the remaining members. The server never holds a key.
+        Deletes a GROUP membership that is still a **pending consent proposal** (uc.spaces.consent-group-add) — the
+        owner withdraws it before the invitee accepts. A proposal was never keyed, so nothing is rotated. Every other
+        membership is removed only by a **removal-rotation** (`POST /api/scopes/{scopeId}/epochs` with
+        `removesUserId`, ADR 0024 Decision 4), which deletes it and commits the new epoch in one transaction, so no
+        removal can end without its rotation; this path refuses it (`409 removal_requires_rotation`) and deletes
+        nothing. Membership-gated first (a non-member gets `404 scope_not_found`, ADR 0042), then owner-gated
+        (`403 not_scope_owner`).
       security:
         - bearerAuth: []
       parameters:
         - { name: scopeId, in: path, required: true, description: Opaque id of the GROUP scope., schema: { type: string, format: uuid } }
         - { name: userId, in: path, required: true, description: Opaque id of the member to remove., schema: { type: string, format: uuid } }
       responses:
-        "204": { description: The member was removed (their grant is gone). }
+        "204": { description: The pending proposal was deleted. }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such GROUP scope, or the caller is not a member of it (`scope_not_found`, indistinguishable per ADR 0042); or no such target member (`member_not_found`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: member_not_found } } } }
-        "409": { description: "The last remaining OWNER cannot be removed (`last_owner`), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: last_owner } } } }
+        "409": { description: "The member is not a pending proposal — removing them is a removal-rotation (`removal_requires_rotation`, nothing deleted) — or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removal_requires_rotation } } } }
 
   /api/scopes/{scopeId}/epochs:
     get:
@@ -519,6 +519,13 @@ paths:
         and rebuilds once from a **fresh** key. The client mints the new epoch on-device; the server stores only
         ciphertext. Owner-gated (`403`). Grants for members not listed here are delivered afterwards by
         grant-delivery (stale-epoch reconcile, ADR 0020/0021).
+
+        **A removal-rotation** names the member it removes (`removesUserId`, ADR 0024 Decision 4): the server
+        deletes that membership — with its item favorites and the public shares it created in the group — and
+        commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
+        leaves the member in place. The request's grants must not name that member (`422
+        removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). The removed
+        member's admission goes with the membership, so the rotation need not re-tag or drop it.
       security:
         - bearerAuth: []
       parameters:
@@ -533,6 +540,7 @@ paths:
               wrappedPrev: AQ==
               grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ==, grantSignature: c2lnbmF0dXJl }]
               admissions: [{ admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d, admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg= }]
+              removesUserId: 4e2a9b1d-8b2c-4f2d-9e4a-5b6c7c3f0e2a
       responses:
         "201":
           description: The scope rotated; the new current epoch.
@@ -543,8 +551,9 @@ paths:
         "400": { description: Malformed (missing/invalid link or grant)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
-        "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), `removesUserId` is the last remaining OWNER (`last_owner`, nothing stored), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "422": { description: "The grants name the member `removesUserId` removes (`removed_member_granted`, nothing stored) — the new epoch is never wrapped to the member the rotation removes.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: removed_member_granted } } } }
 
   /api/scopes/{scopeId}:
     delete:
@@ -1203,6 +1212,17 @@ components:
             them. The server clears each one's tag — no client will deliver to that membership or invite again
             unless an owner re-admits it — and the rotator surfaces it. Omitted = none.
           items: { type: string, format: uuid, example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d }
+        removesUserId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The member this rotation removes (a **removal-rotation**, ADR 0024 Decision 4): the server deletes their
+            membership and commits the epoch in one transaction, and refuses the request if `grants` names them
+            (`422 removed_member_granted`). The remover's client builds `grants` from the directory the owner picked
+            from, minus this member — never from a list read after the removal. Omitted = a rotation that removes
+            no one (a queued rotation, an account rotation).
+          example: 4e2a9b1d-8b2c-4f2d-9e4a-5b6c7c3f0e2a
 
     ScopeRotated:
       type: object

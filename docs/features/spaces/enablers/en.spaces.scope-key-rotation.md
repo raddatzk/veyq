@@ -60,8 +60,8 @@ sequenceDiagram
   participant S as Server<br>(blind)
   actor X as Removed<br>member
   O->>O: E_{n+1} = random(32)
-  O->>S: chain-link = symWrap(E_{n+1}, E_n)   #59; delete removed membership
-  O->>S: re-grant asymWrap(remainingPub, E_{n+1})  (rest via grant-delivery, first-online-wins)
+  O->>S: one request — chain-link symWrap(E_{n+1}, E_n) + re-grants asymWrap(remainingPub, E_{n+1}) + removes X
+  Note right of S: deletes X's membership and commits n+1 in one transaction (rest via grant-delivery)
   Note right of S: opaque epoch link + grants + per-node epoch index — never a key
   Note over O,X: new content
   O->>S: new node sealed under E_{n+1}, tagged epoch n+1
@@ -76,11 +76,15 @@ sequenceDiagram
   already deleted → layer-1 403 blocks their fetches meanwhile; the next online key-holder claims it, completes the
   mint + re-grant on-device, and closes the job. One live job per scope coalesces multiple removals; idempotent +
   first-online-wins. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
-  co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4); when the
-  remover *is* a key-holder the rotation runs synchronously (cr-0088/0089), and no job stands behind it: if that
-  rotation fails after the cut, nothing rotates the scope until the next removal (inbox #178).
+  co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4). When the
+  remover *is* a key-holder (a group owner), the removal and its rotation are **one request**
+  ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4): the server deletes the membership and
+  commits the epoch in one transaction, so a failed rotation leaves the member in place and no job is needed; the
+  bare member delete is refused for anyone but a pending consent proposal (`409 removal_requires_rotation`).
 - **E2 — a remaining member's grant can't be re-wrapped:** that member's grant stays stale (they hold `E_n`
-  while the scope is at `E_{n+1}`) → they fall to *awaiting access*. **Two cases that must not be confused,
+  while the scope is at `E_{n+1}`) → they fall to *awaiting access*: their client does not open the scope, so it
+  writes nothing under `E_n`, and the server refuses a node create tagged `n` (`409 stale_epoch`, ADR 0024
+  Decision 6). **Two cases that must not be confused,
   because only one self-heals.**
   - **A corrupt or unreadable pubkey** — the grant-delivery **stale-epoch trigger** (cr-0093) treats
     `grantedEpoch < currentEpoch` like a grant-less member and queues a delivery, so the next online key-holder
@@ -100,7 +104,7 @@ sequenceDiagram
   no grant. The device re-opens its grant and rebuilds the rotation **once**, from a fresh key
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) §4 says why the key must be fresh). After a race the
   re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
-  synchronous remove reports it (and, per E1, nothing queues it again), and a queued job is **declined** rather than failed, so it waits for a key-holder
+  synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it waits for a key-holder
   who is current instead of burning its attempts.
 
 ## Quality notes

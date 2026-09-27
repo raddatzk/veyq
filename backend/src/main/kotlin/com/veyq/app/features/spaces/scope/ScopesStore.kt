@@ -1,6 +1,7 @@
 package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.admin.tenant.TenantStore
+import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.admission
@@ -112,6 +113,7 @@ class ScopesStore(
     private val profiles: TenantProfileStore,
     private val membership: MembershipStore,
     private val tenants: TenantStore,
+    private val shares: SharingStore,
 ) {
 
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
@@ -278,11 +280,13 @@ class ScopesStore(
     }
 
     /**
-     * Delete a member's membership (layer-1 removal — the instant access cut).
+     * Delete a member's membership (layer-1 removal — the instant access cut). The tenant-removal cascade's path,
+     * which queues the rotation it cannot perform; a group owner's removal goes through [rotate] instead.
      *
-     * Their **item favorites** for this scope go with it (ADR 0068). Unlike the private pin set, those blobs
-     * feed an aggregate every remaining member sees: left behind, a removed member keeps voting on which
-     * photos are the good ones, forever, with no way for anyone — including them — to take it back.
+     * Their **item favorites** for this scope go with it (ADR 0068) — as they do in a removal-rotation. Unlike the
+     * private pin set, those blobs feed an aggregate every remaining member sees: left behind, a removed member
+     * keeps voting on which photos are the good ones, forever, with no way for anyone — including them — to take
+     * it back.
      */
     @Transactional
     fun removeMembership(userId: String, scopeId: String) {
@@ -316,16 +320,28 @@ class ScopesStore(
     @Transactional
     fun rotate(
         scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
-        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>,
+        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
     ): RotationDecision {
         val scope = ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)!!
-        val rows = MembershipEntity.find("scopeId", scopeId).list()
+        val all = MembershipEntity.find("scopeId", scopeId).list()
         val invites = if (scope.kind == ScopeEntity.TENANT) tenants.openMemberInvites(scope.tenantId) else emptyList()
-        val open = rows.mapNotNull { it.admissionId }.toSet() + invites.mapNotNull { it.admissionId }
+        val open = all.mapNotNull { it.admissionId }.toSet() + invites.mapNotNull { it.admissionId }
         val decision = RotationPolicy.plan(
-            scope.currentEpoch, epoch, rows.map { RotationMember(it.userId, it.pendingConsent) }, open, grants, retags, dropped,
+            scope.currentEpoch, epoch, all.map { RotationMember(it.userId, it.pendingConsent, it.role, it.admissionId) },
+            open, grants, retags, dropped, removes,
         )
         val plan = (decision as? RotationDecision.Commit)?.plan ?: return decision
+        // A removal-rotation deletes the membership in this same transaction (ADR 0024 Decision 4): if anything below
+        // fails, the member is still in place — a removal never ends without its rotation. An entity delete, not a
+        // bulk one, so the loops below never re-persist the row it took. The transaction starts HERE, not in the
+        // handler: a caller transaction that had already read the scope row would make the lock above hand back that
+        // stale copy, and two concurrent commits would both pass the policy (twoConcurrentRotations… bites that).
+        val rows = plan.removes?.let { removed ->
+            all.filter { it.userId == removed }.forEach { it.delete() }
+            ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", removed, scopeId)
+            shares.deactivateSharesByOwnerInScope(removed, scopeId) // cr-0104: their public links 404 from now on
+            all.filter { it.userId != removed }
+        } ?: all
         scope.currentEpoch = plan.newEpoch
         scope.persist()
         ScopeEpochEntity().apply {

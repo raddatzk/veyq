@@ -114,10 +114,10 @@ export function setMemberRole(scopeId: string, userId: string, role: SetMemberRo
 }
 
 /**
- * Remove a member's membership from a group (uc.spaces.manage-group-members, cr-0088/0089) — owner-gated
- * (`403 not_scope_owner`); the last-owner guard rejects removing the last OWNER (`409 last_owner`). This deletes
- * the membership only (instant layer-1 403 for the ex-member); the caller then **rotates the scope key forward**
- * ({@link rotateGroupForRemoval}) so the removal is cryptographic, not just an ACL change (ADR 0024).
+ * Rescind a pending consent proposal (uc.spaces.consent-group-add) — owner-gated (`403 not_scope_owner`). A
+ * proposal was never keyed, so nothing rotates. Any other member is removed only by the removal-rotation
+ * (`rotateGroupForRemoval`, ADR 0024 Decision 4); the server refuses this delete for them
+ * (`409 removal_requires_rotation`), so a removal can never end without its rotation.
  */
 export function removeGroupMember(scopeId: string, userId: string): Promise<void> {
   return withRefresh(() => scopesApi().removeMember({ scopeId, userId }))

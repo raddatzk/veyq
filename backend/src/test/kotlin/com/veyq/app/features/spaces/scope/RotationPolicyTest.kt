@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test
  */
 class RotationPolicyTest {
 
-    private fun member(id: String, pending: Boolean = false) = RotationMember(id, pending)
+    private fun member(id: String, pending: Boolean = false, owner: Boolean = false, admission: String? = null) =
+        RotationMember(id, pending, if (owner) "OWNER" else "MEMBER", admission)
     private fun grant(id: String) = RotationGrant(id, SignedGrant("g-$id", "s-$id"))
 
     private fun plan(
@@ -25,7 +26,8 @@ class RotationPolicyTest {
         grants: List<RotationGrant> = emptyList(),
         retags: List<Pair<String, String>> = emptyList(),
         dropped: Set<String> = emptySet(),
-    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, retags, dropped)
+        removes: String? = null,
+    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, retags, dropped, removes)
 
     private fun committed(d: RotationDecision): RotationPlan = (d as RotationDecision.Commit).plan
 
@@ -121,5 +123,68 @@ class RotationPolicyTest {
     fun aScopeWithNoOpenAdmissionNeedsNone() {
         // A pre-admission membership carries none, so there is nothing to carry — the rotation commits.
         assertEquals(1, committed(plan(open = emptySet())).newEpoch)
+    }
+
+    // --- a removal-rotation: the removal and its rotation are one request (ADR 0024 Decision 4) ---
+
+    private val group = listOf(member("owner", owner = true, admission = "adm-owner"), member("bob", admission = "adm-bob"))
+
+    @Test
+    fun refusesARemovalWhoseGrantsNameTheRemovedMember() {
+        // The bite: the request wraps the new epoch to the very member it removes. Whatever list the server served
+        // the remover, the new key must never reach them — layer 1 refuses it, nothing stored.
+        val d = plan(members = group, open = setOf("adm-owner", "adm-bob"), grants = listOf(grant("owner"), grant("bob")), retags = listOf("adm-owner" to "t"), removes = "bob")
+        assertSame(RotationDecision.RemovedMemberGranted, d)
+    }
+
+    @Test
+    fun aRemovalThatGrantsOnlyTheRemainingMembersCommitsAndNamesWhomItRemoves() {
+        // The control on the same predicate: without bob's grant it commits, removing bob and granting the owner.
+        val p = committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), grants = listOf(grant("owner")), retags = listOf("adm-owner" to "t"), removes = "bob"))
+        assertEquals("bob", p.removes)
+        assertEquals(listOf(grant("owner")), p.grants)
+        assertEquals(mapOf("adm-owner" to "t"), p.retags, "the removed member's admission goes with the membership — neither required nor written")
+    }
+
+    @Test
+    fun aRotationThatRemovesNoOneNamesNoOne() {
+        assertEquals(null, committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"))).removes)
+    }
+
+    @Test
+    fun theRemovedMembersAdmissionIsNeverReTaggedEvenWhenCarried() {
+        val p = committed(plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"), removes = "bob"))
+        assertEquals(mapOf("adm-owner" to "t"), p.retags)
+    }
+
+    @Test
+    fun aRemovalStillCarriesEveryOtherOpenAdmission() {
+        // Removing bob does not excuse leaving carol's admission behind.
+        val d = plan(members = group + member("carol", admission = "adm-carol"), open = setOf("adm-owner", "adm-bob", "adm-carol"), retags = listOf("adm-owner" to "t"), removes = "bob")
+        assertSame(RotationDecision.AdmissionsIncomplete, d)
+    }
+
+    @Test
+    fun refusesRemovingSomeoneWhoIsNotAMember() {
+        assertSame(RotationDecision.MemberNotFound, plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-owner" to "t", "adm-bob" to "u"), removes = "stranger"))
+    }
+
+    @Test
+    fun refusesRemovingTheLastOwner() {
+        // The last-owner guard (ADR 0007) is unchanged by the removal moving into the rotation.
+        assertSame(RotationDecision.LastOwner, plan(members = group, open = setOf("adm-owner", "adm-bob"), retags = listOf("adm-bob" to "u"), removes = "owner"))
+    }
+
+    @Test
+    fun removesAnOwnerWhileAnotherOwnerRemains() {
+        // The control: with a second owner, removing one commits.
+        val members = listOf(member("owner", owner = true), member("co", owner = true))
+        assertEquals("owner", committed(plan(members = members, grants = listOf(grant("co")), removes = "owner")).removes)
+    }
+
+    @Test
+    fun aStaleRemovalIsStaleBeforeAnythingElse() {
+        // The client's answer to stale is to re-open and rebuild — whatever else the request got wrong.
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 3, statedEpoch = 3, members = group, grants = listOf(grant("bob")), removes = "bob"))
     }
 }

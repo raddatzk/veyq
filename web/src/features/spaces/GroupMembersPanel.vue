@@ -166,8 +166,8 @@ async function acceptChangedKeyAndRetry() {
   await submit() // the pin now matches → the add proceeds
 }
 
-// Rescind a pending consent proposal (cr-0094) — owner withdraws before acceptance. It is the same delete as a
-// member-remove, but a soft proposal was never keyed, so there is **no rotation** (unlike removeMember).
+// Rescind a pending consent proposal (cr-0094) — owner withdraws before acceptance. The one delete without a
+// rotation: a soft proposal was never keyed (the server refuses the bare delete for anyone else).
 async function rescind(m: ScopeMember) {
   actionError.value = ''
   try {
@@ -201,18 +201,19 @@ async function changeRole(m: ScopeMember, role: SetMemberRoleRequestRoleEnum) {
   }
 }
 
-// Remove a member (cr-0089) — the cryptographic removal: delete the membership, then **rotate the scope key
-// forward** and re-grant the remaining members (ADR 0024), so the ex-member reads pre-removal content but never
-// post-removal content. Owner-only; last-owner guarded server-side. If the rotated group is the active browsing
-// scope, refresh its epoch keys so the owner's next new content seals under the fresh epoch, not the stale one.
+// Remove a member — the removal and its rotation are ONE request (ADR 0024 Decision 4): the server deletes the
+// membership and commits the new epoch in one transaction, so a failed call leaves the member in place and a
+// closed tab cannot leave the group unrotated. The re-grant set is the directory the owner picked the member from,
+// minus that member, by the owner's own choice — never a list read after the removal, which is the server's word.
+// Owner-only; last-owner guarded server-side. If the rotated group is the active browsing scope, refresh its epoch
+// keys so the owner's next new content seals under the fresh epoch, not the stale one.
 async function removeMember(m: ScopeMember) {
   actionError.value = ''
   removing.value = true
   try {
-    await removeGroupMember(props.scopeId, m.userId)
-    const remaining = await listScopeMembers(props.scopeId)
-    await rotateGroupForRemoval(props.scopeId, remaining)
-    members.value = remaining
+    await rotateGroupForRemoval(props.scopeId, members.value, m.userId)
+    // Shown without the removed member however the server lists them: the directory is display, not a key decision.
+    members.value = (await listScopeMembers(props.scopeId)).filter((r) => r.userId !== m.userId)
     if (activeSpace.scopeId === props.scopeId) await refreshActiveScope()
   } catch (e) {
     on401(e)
