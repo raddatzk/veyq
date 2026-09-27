@@ -18,9 +18,13 @@ export const TIER_SPECS: Record<MediaDerivativeKind, { maxEdge: number; quality:
 /** A media's pristine pixel dimensions, used to lay out the justified gallery grid (cr-0059). */
 export type Dimensions = { w: number; h: number }
 
-/** The source to attach: the pristine original bytes + their MIME type, plus the file's creation date (cr-0066). */
+/**
+ * The source to attach: the pristine original + its MIME type, plus the file's creation date (cr-0066). A `Blob`
+ * (a picked `File` is one), never its bytes: the upload reads it one frame at a time and derivation and EXIF read
+ * it directly, so nothing ever holds a whole copy of a large video (ADR 0013 Consequences).
+ */
 export type AddMediaSource = {
-  bytes: Uint8Array
+  blob: Blob
   mediaType: string
   lastModified?: number
   /** The original's filename. Sealed into the lazy EXIF tier and **never sent** — the server's view of a media
@@ -243,7 +247,8 @@ export async function deriveTiers(
   source: AddMediaSource,
   deriver: MediaDeriver,
 ): Promise<{ derivatives: { kind: MediaDerivativeKind; bytes: Uint8Array }[]; dimensions: Dimensions | null }> {
-  const blob = new Blob([source.bytes as BlobPart], { type: source.mediaType })
+  // The derivers decode by the MIME type, so the source is re-typed without copying it (a slice shares its bytes).
+  const blob = source.blob.type === source.mediaType ? source.blob : source.blob.slice(0, source.blob.size, source.mediaType)
   // Best-effort: a codec the browser can't decode (e.g. HEIC off Safari), an empty MIME type, or corrupt bytes
   // must NOT fail the upload — fall back to original-only (the gallery shows an icon, uc.memory.upload E4).
   try {

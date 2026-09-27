@@ -48,6 +48,20 @@ describe('uploadQueue — runner', () => {
     expect(source.mediaType).toBe('image/png')
   })
 
+  it('hands the upload the picked File itself and never reads it whole (ADR 0013 Consequences)', async () => {
+    // A large video read whole — and then sealed whole — dies in the tab long before any server limit; the pump
+    // reads the File a frame at a time, so the queue must pass it on unread.
+    vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'm' })
+    const file = png()
+    const readWhole = vi.spyOn(file, 'arrayBuffer')
+    const { batches } = useUploadQueue()
+    enqueueUploads(TARGET, [sel(file)], { label: '1' })
+    await vi.waitFor(() => expect(batches.value[0].files[0].status).toBe('done'))
+
+    expect(readWhole).not.toHaveBeenCalled()
+    expect(vi.mocked(addMedia).mock.calls[0][3].blob).toBe(file)
+  })
+
   it('records the mediaId addMedia returns on the settled file (cr-0074 reconcile key)', async () => {
     vi.mocked(addMedia).mockResolvedValue({ blobId: 'b', mediaId: 'media-xyz' })
     const { batches } = useUploadQueue()

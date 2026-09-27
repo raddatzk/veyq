@@ -140,7 +140,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     // the listed media is the NEWER one, so "the tile appeared" and "the tile is first" are different claims
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png', lastModified: NEW }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png', lastModified: NEW }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)
     await flushPromises()
@@ -176,7 +176,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     // one listed media, captured OLD; an upload of that same moment is what will settle onto it
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png', lastModified: OLD }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png', lastModified: OLD }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)
     await flushPromises()
@@ -255,7 +255,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
 
     // the queue still holds the done file, but its media (media-0) is already listed → the optimistic tile drops
     pushBatch([uploadFile('u1', 'done', { mediaId: 'media-0' })])

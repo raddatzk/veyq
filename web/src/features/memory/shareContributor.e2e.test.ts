@@ -115,8 +115,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
 
     const upload = { ...session, shareId, memoryKey: resolved.rootMemoryKey }
     // raw bytes with no MIME ⇒ the original-only path (nothing derivable) — the byte transport is what this gates
-    const first = await addSharePhoto(upload, { bytes: bytes(3), mediaType: '' })
-    const second = await addSharePhoto(upload, { bytes: bytes(101), mediaType: '' })
+    const first = await addSharePhoto(upload, { blob: new Blob([bytes(3) as BlobPart]), mediaType: '' })
+    const second = await addSharePhoto(upload, { blob: new Blob([bytes(101) as BlobPart]), mediaType: '' })
     expect(first.mediaId, 'the first contribution attached').toBeTruthy()
     expect(second.mediaId, 'the second contribution attached').toBeTruthy()
 
