@@ -123,6 +123,18 @@ class TenantInviteEntity : PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 
+    /** A MEMBER invite's admission (ADR 0020 move 6) — tagged by the owner's client under the tenant scope's epoch
+     *  key, kept by a reissue, and copied onto the membership its acceptance creates. Null on an owner invite (the
+     *  tenant has no key yet). Never verified here. */
+    @Column(name = "admission_id", length = 36)
+    var admissionId: String? = null
+
+    @Column(name = "admission_epoch")
+    var admissionEpoch: Int? = null
+
+    @Column(name = "admission_tag")
+    var admissionTag: String? = null
+
     companion object : PanacheCompanionBase<TenantInviteEntity, String> {
         const val ACTIVE = "ACTIVE"
         const val SUPERSEDED = "SUPERSEDED"

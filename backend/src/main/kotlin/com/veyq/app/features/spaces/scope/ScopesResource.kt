@@ -6,6 +6,7 @@ import com.veyq.app.generated.model.CreateGroupRequest
 import com.veyq.app.generated.model.CreatePersonalScopeRequest
 import com.veyq.app.generated.model.GroupInvitation
 import com.veyq.app.generated.model.MyTenant
+import com.veyq.app.generated.model.ResolveGroupMemberRequest
 import com.veyq.app.generated.model.ResolvedGroupCandidate
 import com.veyq.app.generated.model.RenameGroupRequest
 import com.veyq.app.generated.model.RotateScopeRequest
@@ -21,6 +22,8 @@ import com.veyq.app.generated.model.SetScopeIconRequest
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
+import com.veyq.app.shared.membership.Admission
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.tenant.RequestTenant
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
@@ -57,7 +60,8 @@ class ScopesResource(
 
     override fun createPersonalScope(createPersonalScopeRequest: CreatePersonalScopeRequest): Response =
         when (val outcome = handler.createPersonal(
-            identity.principal.name, activeTenantId(), createPersonalScopeRequest.scopeId.toString(), createPersonalScopeRequest.wrappedGrant,
+            identity.principal.name, activeTenantId(), createPersonalScopeRequest.scopeId.toString(),
+            SignedGrant(createPersonalScopeRequest.wrappedGrant, createPersonalScopeRequest.grantSignature),
         )) {
             is CreatePersonalOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -68,7 +72,8 @@ class ScopesResource(
     override fun createGroup(createGroupRequest: CreateGroupRequest): Response =
         when (val outcome = handler.createGroup(
             identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
-            createGroupRequest.wrappedGrant,
+            SignedGrant(createGroupRequest.wrappedGrant, createGroupRequest.grantSignature),
+            Admission(createGroupRequest.admissionId.toString(), createGroupRequest.admissionEpoch, createGroupRequest.admissionTag),
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -88,6 +93,9 @@ class ScopesResource(
                         sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch,
                         deletedAt = it.deletedAt?.let { d -> OffsetDateTime.ofInstant(d, ZoneOffset.UTC) },
                         purgeAfter = it.deletedAt?.let { d -> OffsetDateTime.ofInstant(d.plus(deleteRetention), ZoneOffset.UTC) },
+                        granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
+                        grantSignature = it.granter?.signature,
+                        granterIdentityPublicKey = it.granter?.identityPublicKey,
                     )
                 }).build()
             is HttpFailure -> httpError(outcome)
@@ -96,13 +104,14 @@ class ScopesResource(
     override fun addGroupMember(scopeId: UUID, addGroupMemberRequest: AddGroupMemberRequest): Response =
         when (val outcome = handler.addGroupMember(
             identity.principal.name, scopeId.toString(), addGroupMemberRequest.username, addGroupMemberRequest.sealedNameKey,
+            Admission(addGroupMemberRequest.admissionId.toString(), addGroupMemberRequest.admissionEpoch, addGroupMemberRequest.admissionTag),
         )) {
             is AddGroupMemberOutcome.Added -> Response.status(Response.Status.CREATED).entity(scopeMember(outcome.row)).build()
             is HttpFailure -> httpError(outcome)
         }
 
-    override fun resolveGroupMember(scopeId: UUID, addGroupMemberRequest: AddGroupMemberRequest): Response =
-        when (val outcome = handler.resolveGroupMember(identity.principal.name, scopeId.toString(), addGroupMemberRequest.username)) {
+    override fun resolveGroupMember(scopeId: UUID, resolveGroupMemberRequest: ResolveGroupMemberRequest): Response =
+        when (val outcome = handler.resolveGroupMember(identity.principal.name, scopeId.toString(), resolveGroupMemberRequest.username)) {
             is ResolveCandidateOutcome.Ok -> Response.ok(
                 ResolvedGroupCandidate(
                     userId = UUID.fromString(outcome.row.userId), username = outcome.row.username,
@@ -151,7 +160,9 @@ class ScopesResource(
     override fun rotateScope(scopeId: UUID, rotateScopeRequest: RotateScopeRequest): Response =
         when (val outcome = handler.rotateScope(
             identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch, rotateScopeRequest.wrappedPrev,
-            rotateScopeRequest.grants.map { it.userId.toString() to it.wrappedGrant },
+            rotateScopeRequest.grants.map { RotationGrant(it.userId.toString(), SignedGrant(it.wrappedGrant, it.grantSignature)) },
+            rotateScopeRequest.admissions.map { it.admissionId.toString() to it.admissionTag },
+            rotateScopeRequest.droppedAdmissions.orEmpty().map { it.toString() }.toSet(),
         )) {
             is RotateOutcome.Ok -> Response.status(Response.Status.CREATED).entity(ScopeRotated(epoch = outcome.epoch)).build()
             is HttpFailure -> httpError(outcome)
@@ -210,6 +221,9 @@ class ScopesResource(
                     tenantId = UUID.fromString(it.tenantId), name = it.name, domain = it.domain, role = MyTenant.Role.valueOf(it.role),
                     status = TenantStatus.valueOf(it.status),
                     wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch, grantedEpoch = it.grantedEpoch,
+                    granterUserId = it.granter?.let { g -> UUID.fromString(g.userId) },
+                    grantSignature = it.granter?.signature,
+                    granterIdentityPublicKey = it.granter?.identityPublicKey,
                 )
             },
         ).build()
@@ -219,6 +233,9 @@ class ScopesResource(
         userId = UUID.fromString(row.userId), username = row.username, sealedName = row.sealedName,
         email = row.email, role = ScopeMember.Role.valueOf(row.role), identityPublicKey = row.identityPublicKey,
         hasGrant = row.hasGrant, pendingConsent = row.pendingConsent,
+        admissionId = row.admission?.let { UUID.fromString(it.id) },
+        admissionEpoch = row.admission?.epoch,
+        admissionTag = row.admission?.tag,
     )
 
     /** The active tenant's id — resolved by [RequestTenant] through the one canonical resolver, which

@@ -11,6 +11,8 @@ import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.membership.Access
+import com.veyq.app.shared.membership.Admission
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
@@ -54,6 +56,8 @@ sealed interface AddGroupMemberOutcome {
     object MemberNotFound : AddGroupMemberOutcome, HttpFailure by Failures.memberNotFound
     object AlreadyMember : AddGroupMemberOutcome, HttpFailure by Failures.alreadyMember
     object ConsentRequired : AddGroupMemberOutcome, HttpFailure by httpFailure("consent_required", BAD_REQUEST)
+    /** The admission was tagged at an epoch that is no longer the scope's current one (ADR 0020 move 6). */
+    object StaleEpoch : AddGroupMemberOutcome, HttpFailure by Failures.staleEpoch
 }
 
 /** Outcome of resolving a per-tenant username to a group-add candidate (cr-0094) — records nothing. */
@@ -106,7 +110,9 @@ sealed interface RotateOutcome {
     object Deleting : RotateOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RotateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RotateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
-    object StaleEpoch : RotateOutcome, HttpFailure by httpFailure("stale_epoch", CONFLICT)
+    object StaleEpoch : RotateOutcome, HttpFailure by Failures.staleEpoch
+    /** The rotation leaves an open admission neither re-tagged nor dropped (ADR 0020 move 6) — nothing stored. */
+    object AdmissionsIncomplete : RotateOutcome, HttpFailure by httpFailure("admissions_incomplete", CONFLICT)
 }
 
 /** Outcome of reading the epoch-chain links (cr-0088). */
@@ -191,13 +197,13 @@ class ScopesHandler(
     private val access: ScopeAccess,
 ) {
 
-    fun createPersonal(userId: String, tenantId: String?, scopeId: String, wrappedGrant: String): CreatePersonalOutcome {
+    fun createPersonal(userId: String, tenantId: String?, scopeId: String, grant: SignedGrant): CreatePersonalOutcome {
         tenantId ?: return CreatePersonalOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
         // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it.
-        if (!store.createPersonal(scopeId, userId, tenantId, wrappedGrant)) return CreatePersonalOutcome.IdTaken
+        if (!store.createPersonal(scopeId, userId, tenantId, grant)) return CreatePersonalOutcome.IdTaken
         return CreatePersonalOutcome.Created(scopeId)
     }
 
@@ -206,7 +212,9 @@ class ScopesHandler(
      * must belong to the tenant; birth is client-driven and operator-blind — the handler persists only the
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
-    fun createGroup(userId: String, tenantId: String?, scopeId: String, encryptedName: String, wrappedGrant: String): CreateGroupOutcome {
+    fun createGroup(
+        userId: String, tenantId: String?, scopeId: String, encryptedName: String, grant: SignedGrant, admission: Admission,
+    ): CreateGroupOutcome {
         // Instance policy first (ADR 0032): a personal-only instance disables group scopes → 422, enforced
         // server-side even if a stale client still offers the affordance.
         if (!capabilities.isActive(CapabilityIds.SPACES_GROUPS)) return CreateGroupOutcome.CapabilityDisabled
@@ -214,7 +222,7 @@ class ScopesHandler(
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
         // The client-minted scope id (ADR 0072): the self-grant and the group name are sealed bound to it.
-        if (!store.createGroup(scopeId, userId, tenantId, encryptedName, wrappedGrant)) return CreateGroupOutcome.IdTaken
+        if (!store.createGroup(scopeId, userId, tenantId, encryptedName, grant, admission)) return CreateGroupOutcome.IdTaken
         return CreateGroupOutcome.Created(scopeId)
     }
 
@@ -287,7 +295,9 @@ class ScopesHandler(
      * MEMBER membership — no key crosses the wire; grant-delivery wraps `K_SC` to them afterwards (cr-0076). The
      * returned row has its `email` nulled (the add response never exposes it).
      */
-    fun addGroupMember(callerId: String, scopeId: String, username: String, sealedNameKey: String?): AddGroupMemberOutcome {
+    fun addGroupMember(
+        callerId: String, scopeId: String, username: String, sealedNameKey: String?, admission: Admission,
+    ): AddGroupMemberOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(AddGroupMemberOutcome.ScopeNotFound, AddGroupMemberOutcome.Suspended, AddGroupMemberOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return AddGroupMemberOutcome.ScopeNotFound
@@ -302,9 +312,13 @@ class ScopesHandler(
         // no name-key → ConsentRequired.
         if (store.requiresGroupAddConsent(targetId)) {
             if (sealedNameKey == null) return AddGroupMemberOutcome.ConsentRequired
-            store.addSoftPendingMember(targetId, tenantId, scopeId, sealedNameKey, callerId)
-        } else {
-            store.addGrantlessMember(targetId, tenantId, scopeId)
+            if (!store.addSoftPendingMember(targetId, tenantId, scopeId, sealedNameKey, callerId, admission)) {
+                return AddGroupMemberOutcome.StaleEpoch
+            }
+        } else if (!store.addGrantlessMember(targetId, tenantId, scopeId, admission)) {
+            // Both paths store the admission the owner's client tagged (ADR 0020 move 6) — opaque here, verified by
+            // every key-holder before it wraps; refused only when stated at an epoch a rotation already left.
+            return AddGroupMemberOutcome.StaleEpoch
         }
         val row = store.scopeMemberRow(scopeId, targetId) ?: return AddGroupMemberOutcome.MemberNotFound
         return AddGroupMemberOutcome.Added(row.copy(email = null))
@@ -405,12 +419,19 @@ class ScopesHandler(
      * store the chain-link, re-grant the listed remaining members; any other epoch is `409 stale_epoch` with nothing
      * stored. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
      */
-    fun rotateScope(callerId: String, scopeId: String, epoch: Int, wrappedPrev: String, grants: List<Pair<String, String>>): RotateOutcome {
+    fun rotateScope(
+        callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
+        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>,
+    ): RotateOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return store.rotate(scopeId, epoch, wrappedPrev, grants)?.let { RotateOutcome.Ok(it) } ?: RotateOutcome.StaleEpoch
+        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped)) {
+            is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
+            RotationDecision.Stale -> RotateOutcome.StaleEpoch
+            RotationDecision.AdmissionsIncomplete -> RotateOutcome.AdmissionsIncomplete
+        }
     }
 
     /**

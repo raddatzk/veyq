@@ -27,7 +27,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { sealName } from '../src/features/account/profile/memberName'
-import { wrapScopeKeyToMember } from '../src/features/spaces/grant'
+import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
 import { awaitInvite } from './devSeed.mts'
 import { MAILPIT, MAILPIT_SMTP_PORT, clearMailbox, waitForMail } from '../src/test/mailpit'
 
@@ -167,17 +167,24 @@ if (numeric) {
 // the optional real name at accept, exactly as TenantJoinView does at an owner cold-birth (cr-0106).
 const tenantScopeKey = v1.randomBytes(32)
 // Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0; the name to (tenant scope, our id) (ADR 0072).
-const tenantGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, v1.hybridPublic(built.identity.priv), tenantScopeKey))
+// The birth is what TenantJoinView sends: the grant signed by our identity (ADR 0028 Decision 6) and our own
+// admission self-tagged under E_0 (ADR 0020 move 6).
 const ownerId = (await tenant('GET', '/api/account/key-material', token, domain)).body?.userId as string
+const ownerPub = b64std(v1.serializeIdentityPublic(built.identity.pub))
+const tenantBirth = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
+const ownerAdmission = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
 const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
-const accepted = await tenant('POST', '/api/tenants/accept', token, domain, { bootstrapSecret, username, grant: tenantGrant, ...(sealedName ? { sealedName } : {}) })
+const accepted = await tenant('POST', '/api/tenants/accept', token, domain, {
+  bootstrapSecret, username, grant: tenantBirth.wrappedGrant, grantSignature: tenantBirth.grantSignature, ...ownerAdmission,
+  ...(sealedName ? { sealedName } : {}),
+})
 if (accepted.status >= 300) fail(`accept failed: ${accepted.status} ${JSON.stringify(accepted.body)}`)
 console.log(`tenant: ${domain} created + accepted${sealedName ? ' + name sealed' : ''}`)
 
 // 4 — the owner's PERSONAL scope
 const personalScopeId = crypto.randomUUID() // client-minted: the grant is bound to it (ADR 0072)
-const personalGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: personalScopeId, epoch: 0 }, v1.hybridPublic(built.identity.priv), v1.randomBytes(32)))
-const scopeRes = await tenant('POST', '/api/scopes', token, domain, { scopeId: personalScopeId, wrappedGrant: personalGrant })
+const personalGrant = sealGrant(v1.randomBytes(32), { scopeId: personalScopeId, kind: 'PERSONAL', epoch: 0 }, { userId: ownerId, identityPublicKeyB64: ownerPub }, built.identity.priv.sign)
+const scopeRes = await tenant('POST', '/api/scopes', token, domain, { scopeId: personalScopeId, ...personalGrant })
 if (scopeRes.status >= 300) fail(`createPersonalScope failed: ${scopeRes.status} ${JSON.stringify(scopeRes.body)}`)
 console.log(`scope: personal scope ${scopeRes.body?.scopeId ?? ''} created`)
 
@@ -228,7 +235,9 @@ const mailReady = await configureMail()
 async function onboardUser2(): Promise<void> {
   if (!mailReady) throw new Error('no sendable mail settings — a MEMBER invite has no other channel (ADR 0055)')
   await clearMailbox(u2Email)
-  const inv = await tenant('POST', `/api/tenants/${tenantId}/member-invites`, token, domain, { email: u2Email })
+  // The invite carries our admission tag under K_tenant (ADR 0020 move 6) — without it no worker delivers to user2.
+  const invite = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
+  const inv = await tenant('POST', `/api/tenants/${tenantId}/member-invites`, token, domain, { email: u2Email, ...invite })
   if (inv.status >= 300) throw new Error(`inviteTenantMember failed: ${inv.status} ${JSON.stringify(inv.body)}`)
   const body = await waitForMail(u2Email)
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
@@ -259,8 +268,13 @@ async function onboardUser2(): Promise<void> {
     else await sleep(400)
   }
   if (!job) throw new Error('grant-delivery job for user2 was not claimable')
-  const wrap = wrapScopeKeyToMember(tenantScopeKey, tenantId, 0, job.grantDelivery.identityPublicKey)
-  const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: wrap, epoch: 0 })
+  // The same checks a key-holder's worker runs: the admission verifies under K_tenant, then a signed wrap.
+  const target = job.grantDelivery
+  if (!admissionVerifies(tenantScopeKey, 0, { scopeId: tenantId, kind: 'TENANT' }, target.targetUserId, target)) {
+    throw new Error('user2\'s admission does not verify under K_tenant — refusing to wrap to it')
+  }
+  const signed = sealGrant(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 }, { userId: target.targetUserId, identityPublicKeyB64: target.identityPublicKey }, built.identity.priv.sign)
+  const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: signed.wrappedGrant, epoch: 0, grantSignature: signed.grantSignature })
   if (done.status >= 300) throw new Error(`grant-delivery complete failed: ${done.status} ${JSON.stringify(done.body)}`)
   u2SecretKey = u2.emergencyKit.secretKey
   u2WrappedKey = u2.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!.wrappedKey

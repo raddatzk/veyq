@@ -151,8 +151,12 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
 Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
 all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the changed-key review. Decision 5 is
-settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is decided and not yet built
-(inbox #159). Decision 7 is decided and not yet built (inbox #161 (c)): today a device keeps no mark, reads a
+settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is built: every grant producer signs,
+the grant rows store and serve the signature with the granter's current key, and the one unwrap path and the
+switcher's icon read verify before the key is used. Two consequences of verifying under the granter's *current*
+key are deliberate: a granter who rotates their account keys leaves the grants they signed unverifiable until
+the rotation's re-grant reaches the recipient, and the recipient's pin of them reads `changed` until a human
+accepts it — both are the Decision 1–2 behaviour for a changed key, not new failure modes. Decision 7 is decided and not yet built (inbox #161 (c)): today a device keeps no mark, reads a
 store that does not open as empty, and re-seals whatever copy it was served, so the server can wipe or roll
 back any account's pins — every detected key change becomes a first use again, and a rolled-back pin makes a
 retired key match. Two further things remain:

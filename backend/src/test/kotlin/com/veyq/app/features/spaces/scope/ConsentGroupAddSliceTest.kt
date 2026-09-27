@@ -1,5 +1,6 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
@@ -64,7 +65,7 @@ class ConsentGroupAddSliceTest {
         // The owner adds WITH the wrapped name-key → a soft, pending, grant-less proposal.
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey"}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members")
             .then().statusCode(201)
             .body("role", equalTo("MEMBER"))
@@ -85,7 +86,7 @@ class ConsentGroupAddSliceTest {
 
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner"}""") // no sealedNameKey
+            .body("""{"username":"partner",${TestAdmission.json()}}""") // no sealedNameKey
             .`when`().post("/api/scopes/$groupId/members")
             .then().statusCode(400).body("code", equalTo("consent_required"))
     }
@@ -141,7 +142,7 @@ class ConsentGroupAddSliceTest {
         // Re-invite after a decline is allowed (no `declined` marker kept) — a fresh proposal succeeds.
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey"}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
     }
 
@@ -194,7 +195,7 @@ class ConsentGroupAddSliceTest {
         // The owner rotates and — as a full-directory re-grant would — lists both themselves and the pending partner.
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant"},{"userId":"$partner","wrappedGrant":"$groupGrant"}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
@@ -224,7 +225,7 @@ class ConsentGroupAddSliceTest {
             .then().statusCode(200).body("requiresConsent", equalTo(false))
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner"}""")
+            .body("""{"username":"partner",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members")
             .then().statusCode(201).body("hasGrant", equalTo(false)).body("pendingConsent", equalTo(false))
 
@@ -255,7 +256,7 @@ class ConsentGroupAddSliceTest {
 
     @Test
     fun addGroupMemberUnauthenticatedIs401() {
-        given().contentType(ContentType.JSON).body("""{"username":"x","sealedNameKey":"$sealedNameKey"}""")
+        given().contentType(ContentType.JSON).body("""{"username":"x","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/${UUID.randomUUID()}/members")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -277,7 +278,7 @@ class ConsentGroupAddSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", "Bearer ${token(userId)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 
@@ -285,7 +286,7 @@ class ConsentGroupAddSliceTest {
     private fun addSoft(owner: String, domain: String, groupId: String) {
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey"}""")
+            .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
     }
 

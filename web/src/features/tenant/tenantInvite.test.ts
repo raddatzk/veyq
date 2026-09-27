@@ -19,10 +19,12 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
     Object.values(api).forEach((m) => m.mockClear())
   })
 
-  it('acceptInvite threads the optional sealedName onto the accept request (cr-0106)', async () => {
-    await acceptInvite('secret', 'kevin', 'AQ==', 'c2VhbGVkLW5hbWU=')
+  const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln', admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 0, admissionTag: 'dGFn' }
+
+  it('acceptInvite threads the birth and the optional sealedName onto the accept request (cr-0106)', async () => {
+    await acceptInvite('secret', 'kevin', BIRTH, 'c2VhbGVkLW5hbWU=')
     expect(api.acceptTenantInvite).toHaveBeenCalledWith({
-      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', grant: 'AQ==', sealedName: 'c2VhbGVkLW5hbWU=' },
+      acceptInviteRequest: { bootstrapSecret: 'secret', username: 'kevin', ...BIRTH, sealedName: 'c2VhbGVkLW5hbWU=' },
     })
   })
 
@@ -32,10 +34,10 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
       authPublicKey: 'aQ==', masterKeyWraps: [], secretKeyProofPublicKey: 'aQ==',
     }
     const userId = '5c09e000-0000-4000-8000-0000000000a7' // client-minted: a sealed name is bound to it (ADR 0072)
-    await registerAndAccept('secret', userId, 'kevin', material as never, 'AQ==') // grant set, no name
+    await registerAndAccept('secret', userId, 'kevin', material as never, BIRTH) // birth set, no name
     expect(api.registerAndAcceptTenantInvite).toHaveBeenCalledWith(
       expect.objectContaining({
-        registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', grant: 'AQ==', sealedName: undefined }),
+        registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', ...BIRTH, sealedName: undefined }),
       }),
     )
   })

@@ -1,6 +1,8 @@
 package com.veyq.app.features.tasks
 
+import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.admission
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
@@ -14,11 +16,13 @@ import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
 
-/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds. */
+/** The resolved delivery target for a grant-delivery job — operational metadata the server already holds, and the
+ *  membership's admission (ADR 0020 move 6), which the worker verifies under its own epoch key before it wraps. */
 data class GrantDeliveryTargetView(
     val targetUserId: String,
     val targetMembershipId: String,
     val identityPublicKey: String,
+    val admission: Admission?,
 )
 
 /** A leased job handed back to a worker (a plain view — never a managed entity, so no L1-cache surprises). */
@@ -179,7 +183,7 @@ class TasksStore {
      * (ADR 0021 §6) — which also makes them a key-holder there, since only a granted scope is claimable.
      */
     @Transactional
-    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?): CompleteResult {
+    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?): CompleteResult {
         val job = JobEntity.findById(jobId) ?: return CompleteResult.NotFound
         if (job.status == JobEntity.DONE) return CompleteResult.Done // idempotent no-op
         if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
@@ -187,6 +191,8 @@ class TasksStore {
         if (job.capabilityTag == CapabilityTags.GRANT_DELIVERY) {
             val grant = sealedResult ?: return CompleteResult.MissingResult
             val epoch = statedEpoch ?: return CompleteResult.MissingResult
+            // The worker's signature over the grant it posts (ADR 0028 Decision 6) — stored, never verified here.
+            val signature = grantSignature ?: return CompleteResult.MissingResult
             // The grant is sealed bound to (scope, the epoch the worker states) (ADR 0072), so that is the epoch the
             // membership records — and it must be the scope's CURRENT one: a rotation that landed between claim and
             // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
@@ -208,9 +214,9 @@ class TasksStore {
             // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
             job.resourceRef?.let { membershipId ->
                 MembershipEntity.update(
-                    "wrappedGrant = ?1, grantedEpoch = ?2 where id = ?3 and scopeId = ?4 " +
-                        "and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
-                    grant, epoch, membershipId, job.scopeId,
+                    "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6 " +
+                        "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
+                    grant, epoch, membershipId, job.scopeId, userId, signature,
                 )
             }
         }
@@ -478,7 +484,7 @@ class TasksStore {
     private fun resolveGrantTarget(membershipId: String?): GrantDeliveryTargetView? {
         val m = membershipId?.let { MembershipEntity.findById(it) } ?: return null
         val user = VeyqUser.findById(m.userId) ?: return null
-        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey)
+        return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey, m.admission())
     }
 
     private companion object {

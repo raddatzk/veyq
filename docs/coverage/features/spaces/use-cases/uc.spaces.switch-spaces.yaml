@@ -60,3 +60,15 @@ acceptanceCriteria:
     text: On a narrow viewport a hamburger opens a bottom-sheet with the full navigation — the active-tenant row (which enters the shared Tenant home, cr-0108), other tenants to switch to, Personal, and favorites; each item navigates and closes the sheet.
     coverage:
       web: { unit: [src/components/app/AppSidebar.test.ts] }
+  - id: a-grant-opens-only-if-its-granter-signed-it
+    # ADR 0028 Decision 6: a seal to a public key needs only that key, so without a signature the server could
+    # plant a scope key of its own choosing. Every grant is signed by its granter's identity key; the one unwrap
+    # path verifies before the key inside is used — PERSONAL only under the caller's own vault key (the kind is
+    # signed, so a group's genuine grant cannot pose as it), a shared one under the granter's TOFU-pinned key. A
+    # refused grant reads as awaiting access.
+    text: A grant opens only if its granter's signature verifies — the personal scope's only under the caller's own key.
+    coverage:
+      backend:
+        integration: [ScopesSliceTest.aGrantIsServedWithItsGranterSignatureAndKey]
+      web:
+        unit: [src/features/spaces/scopes.test.ts, src/features/memory/sealBinding.test.ts]

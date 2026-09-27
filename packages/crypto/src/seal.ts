@@ -25,12 +25,16 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/version), or a blob role.
+ * (epoch/version), or a blob role. Statements (below) add three kinds a seal never binds: an id that may be absent
+ * (encoded as the empty field), a scope kind, and a 32-byte SHA-256 digest.
  */
-type FieldKind = 'id' | 'shareId' | 'uint' | 'role'
+type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest'
 
 /** The role a sealed `K_blob` plays for its owner — a media's ORIGINAL and derivatives, or a node's COVER. */
 export type BlobRole = 'ORIGINAL' | 'THUMBNAIL' | 'PREVIEW' | 'COVER'
+
+/** A scope's kind, as a grant statement signs it (ADR 0028 Decision 6). */
+export type ScopeKind = 'TENANT' | 'GROUP' | 'PERSONAL'
 
 type Schema = Readonly<Record<string, readonly (readonly [string, FieldKind])[]>>
 
@@ -77,7 +81,17 @@ export const SEAL_TO_PURPOSES = {
   'pairing-grant': [],
 } as const satisfies Schema
 
-type KindValue<K extends FieldKind> = K extends 'uint' ? number : K extends 'role' ? BlobRole : string
+type KindValue<K extends FieldKind> = K extends 'uint'
+  ? number
+  : K extends 'role'
+    ? BlobRole
+    : K extends 'optionalId'
+      ? string | null
+      : K extends 'scopeKind'
+        ? ScopeKind
+        : K extends 'digest'
+          ? Uint8Array
+          : string
 type Simplify<T> = { [K in keyof T]: T[K] }
 type ContextOf<S extends Schema> = {
   [P in keyof S]: Simplify<{ purpose: P } & { [F in S[P][number] as F[0]]: KindValue<F[1]> }>
@@ -109,6 +123,7 @@ export class OpenRefused extends Error {
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHARE_ID = /^[A-Za-z0-9_-]{43}$/
 const ROLES: readonly string[] = ['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'] satisfies BlobRole[]
+const SCOPE_KINDS: readonly string[] = ['TENANT', 'GROUP', 'PERSONAL'] satisfies ScopeKind[]
 
 const u64be = (n: number): Uint8Array => {
   const b = new Uint8Array(8)
@@ -139,6 +154,20 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
         throw new SealContextInvalid(`${purpose}.${name} is not a blob role`)
       }
       return utf8(value)
+    case 'optionalId':
+      // Absent is explicit (`null`) and encodes as the EMPTY field — never `undefined`, which is a forgotten field.
+      if (value === null) return new Uint8Array(0)
+      return encodeField(purpose, name, 'id', value)
+    case 'scopeKind':
+      if (typeof value !== 'string' || !SCOPE_KINDS.includes(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a scope kind`)
+      }
+      return utf8(value)
+    case 'digest':
+      if (!(value instanceof Uint8Array) || value.length !== 32) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a SHA-256 digest`)
+      }
+      return value
   }
 }
 
@@ -161,6 +190,32 @@ function encode(schema: Schema, context: { purpose: string }): Uint8Array {
  */
 export const encodeSealContext = (context: SealContext): Uint8Array => encode(SEAL_PURPOSES, context)
 export const encodeSealToContext = (context: SealToContext): Uint8Array => encode(SEAL_TO_PURPOSES, context)
+
+/**
+ * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
+ * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json#admission`.
+ *   - `admission-tag` (ADR 0020 move 6): what the scope's current epoch key MACs to admit a membership. `userId` is
+ *     the target's account for a group add and absent (`null`, the empty field) for a tenant invite, whose invitee
+ *     has no account yet. It binds neither the role nor the identity key, on purpose (ADR 0020 move 6).
+ *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
+ *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
+ *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext.
+ */
+export const STATEMENT_PURPOSES = {
+  'admission-tag': [['scopeId', 'id'], ['epoch', 'uint'], ['admissionId', 'id'], ['userId', 'optionalId']],
+  grant: [
+    ['scopeId', 'id'],
+    ['scopeKind', 'scopeKind'],
+    ['epoch', 'uint'],
+    ['recipientUserId', 'id'],
+    ['recipientIdentityDigest', 'digest'],
+    ['wrappedGrantDigest', 'digest'],
+  ],
+} as const satisfies Schema
+
+/** A statement's context: its label and exactly its fields. */
+export type StatementContext = ContextOf<typeof STATEMENT_PURPOSES>
+export const encodeStatement = (context: StatementContext): Uint8Array => encode(STATEMENT_PURPOSES, context)
 
 const randomNonce = (): Uint8Array => crypto.getRandomValues(new Uint8Array(12))
 

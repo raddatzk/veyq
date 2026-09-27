@@ -1,11 +1,15 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.SignedGrant
+import com.veyq.app.shared.membership.admit
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.tenant.TenantHostResolver
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -26,7 +30,17 @@ data class TenantView(
 data class InviteView(val ownerEmail: String, val status: String, val expiresAt: Instant, val bootstrapSecret: String? = null)
 
 /** A pending member invite in the owner-facing list (cr-0082) — metadata only, never the secret. */
-data class PendingInviteRow(val inviteId: String, val email: String, val status: String, val expiresAt: Instant)
+data class PendingInviteRow(
+    val inviteId: String, val email: String, val status: String, val expiresAt: Instant,
+    /** The invite's admission (ADR 0020 move 6), served so a rotation of the tenant scope can carry it forward. */
+    val admission: Admission?,
+)
+
+/** An invite's admission, or null when it carries none (an owner invite, or one a rotation dropped). */
+fun TenantInviteEntity.admission(): Admission? {
+    val id = admissionId ?: return null
+    return Admission(id, admissionEpoch ?: return null, admissionTag ?: return null)
+}
 
 /** A tenant's current terms + a specific caller's accepted version (cr-0114). `markdownByLocale` is the raw
  *  serialized locale→markdown map (null = none set); the handler decodes it into the per-locale DTO. */
@@ -74,10 +88,12 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
 
     /**
      * Activate a tenant on acceptance — **atomic**: record the owner's `OWNER` membership + grant, flip the
-     * tenant `ACTIVE`, and mark the invite `CONSUMED`. The grant is opaque ciphertext stored verbatim.
+     * tenant `ACTIVE`, and mark the invite `CONSUMED`. The grant is opaque ciphertext stored verbatim, with the
+     * owner's self-signature over it (ADR 0028 Decision 6) and the admission the owner self-tagged under `E_0`, so
+     * the tenant's first rotation has a tag to carry forward (ADR 0020 move 6).
      */
     @Transactional
-    fun activate(tenantId: String, userId: String, wrappedGrant: String, inviteId: String) {
+    fun activate(tenantId: String, userId: String, grant: SignedGrant, admission: Admission, inviteId: String) {
         // The TENANT root scope is born with the owner membership; keyed id == tenantId (cr-0026).
         ScopeEntity().apply {
             id = tenantId
@@ -91,7 +107,10 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             this.tenantId = tenantId
             scopeId = tenantId
             role = MembershipEntity.OWNER
-            this.wrappedGrant = wrappedGrant
+            wrappedGrant = grant.wrappedGrant
+            granterUserId = userId
+            grantSignature = grant.signature
+            admit(admission)
             createdAt = Instant.now()
         }.persist()
         TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
@@ -102,10 +121,11 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
      * Join an **already-active** tenant as a grant-less MEMBER (cr-0077): record a hollow membership (role, no
      * grant) on the existing TENANT scope — **no** scope birth, **no** tenant status change — and consume the
      * invite. Creating the grant-less membership is what cr-0076 reconciles into a `grant-delivery` job; a
-     * key-holder then wraps `K_SC` to this member. Idempotent-friendly: the caller checks membership first.
+     * key-holder then wraps `K_SC` to this member — once the admission copied here from the invite verifies
+     * (ADR 0020 move 6). Idempotent-friendly: the caller checks membership first.
      */
     @Transactional
-    fun joinAsMember(tenantId: String, userId: String, inviteId: String) {
+    fun joinAsMember(tenantId: String, userId: String, invite: TenantInviteEntity) {
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
@@ -113,9 +133,10 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             scopeId = tenantId // the TENANT root scope is keyed id == tenantId (cr-0026)
             role = MembershipEntity.MEMBER
             wrappedGrant = null // grant-less: delivered later by a key-holder (cr-0076)
+            admit(invite.admission())
             createdAt = Instant.now()
         }.persist()
-        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, inviteId)
+        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, invite.id)
     }
 
     /** Mark an invite CONSUMED without side effects (the member was already in the tenant — idempotent accept). */
@@ -132,22 +153,38 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
      *  carrying this `tenantId`. Delegates to the single home in `shared/membership/`. */
     fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
 
-    /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email. */
+    /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email, carrying
+     *  [admission] (ADR 0020 move 6). A fresh invite ([checkEpoch]) is refused — null, nothing written — when its
+     *  admission was tagged at an epoch that is no longer the tenant scope's current one, read under the lock a
+     *  rotation takes: a rotation that committed in between could not have carried it. A reissue keeps the admission
+     *  it replaces as it is. */
     @Transactional
-    fun mintMemberInvite(tenantId: String, email: String, tokenHash: String, expiresAt: Instant): String {
+    fun mintMemberInvite(
+        tenantId: String, email: String, tokenHash: String, expiresAt: Instant, admission: Admission?, checkEpoch: Boolean,
+    ): String? {
+        if (checkEpoch && admission != null &&
+            ScopeEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch != admission.epoch
+        ) return null
         TenantInviteEntity.update(
             "status = ?1 where tenantId = ?2 and ownerEmail = ?3 and status = ?4",
             TenantInviteEntity.SUPERSEDED, tenantId, email, TenantInviteEntity.ACTIVE,
         )
-        return mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now(), TenantInviteEntity.MEMBER)
+        return mintInvite(tenantId, email, tokenHash, expiresAt, Instant.now(), TenantInviteEntity.MEMBER, admission)
     }
 
     /** The tenant's pending (ACTIVE + unexpired) MEMBER invites — metadata only, for the owner's tracking list. */
     fun listPendingMemberInvites(tenantId: String): List<PendingInviteRow> =
+        openMemberInvites(tenantId).map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt, it.admission()) }
+
+    /** The tenant's open MEMBER invites (ACTIVE + unexpired) — the one predicate both the owner's list and a tenant
+     *  rotation's completeness check use, so a rotator is required to carry exactly the invites it was shown
+     *  (ADR 0020 move 6). An invite that expires unswept is left behind; reissuing it keeps its old tag, which a
+     *  worker then declines as `admission_unverified` — the owner invites anew. */
+    fun openMemberInvites(tenantId: String): List<TenantInviteEntity> =
         TenantInviteEntity.find(
             "tenantId = ?1 and role = ?2 and status = ?3 and expiresAt > ?4",
             tenantId, TenantInviteEntity.MEMBER, TenantInviteEntity.ACTIVE, Instant.now(),
-        ).list().map { PendingInviteRow(it.id, it.ownerEmail, it.status, it.expiresAt) }
+        ).list()
 
     /** A specific pending (ACTIVE) MEMBER invite of this tenant, or null (unknown / consumed / terminal). */
     fun findPendingMemberInvite(tenantId: String, inviteId: String): TenantInviteEntity? =
@@ -379,6 +416,7 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
     private fun mintInvite(
         tenantId: String, ownerEmail: String, tokenHash: String, expiresAt: Instant, now: Instant,
         role: String = TenantInviteEntity.OWNER,
+        admission: Admission? = null,
     ): String {
         val inviteId = UUID.randomUUID().toString()
         TenantInviteEntity().apply {
@@ -390,6 +428,9 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             this.role = role
             this.expiresAt = expiresAt
             createdAt = now
+            admissionId = admission?.id
+            admissionEpoch = admission?.epoch
+            admissionTag = admission?.tag
         }.persist()
         return inviteId
     }

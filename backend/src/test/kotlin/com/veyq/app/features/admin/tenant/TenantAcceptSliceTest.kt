@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.TenantProfileEntity
@@ -62,7 +63,7 @@ class TenantAcceptSliceTest {
         val id = seedPendingTenant("acc.example.com", "owner2@example.com", secret)
         val userId = seedUser("owner2@example.com")
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ=="}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
         assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
@@ -77,7 +78,7 @@ class TenantAcceptSliceTest {
         val userId = seedUser("owner-name@example.com")
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .contentType(ContentType.JSON)
-            .body("""{"bootstrapSecret":"$secret","username":"named","grant":"AQ==","sealedName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"bootstrapSecret":"$secret","username":"named","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},"sealedName":"c2VhbGVkLW5hbWU="}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
         // The server stored the opaque sealed blob verbatim on the profile row (never a plaintext name).
@@ -87,7 +88,7 @@ class TenantAcceptSliceTest {
         val id2 = seedPendingTenant("accnoname.example.com", "owner-noname@example.com", secret2)
         val userId2 = seedUser("owner-noname@example.com")
         given().header("Authorization", "Bearer ${sessions.issue(userId2).accessToken}")
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret2","username":"noname","grant":"AQ=="}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret2","username":"noname","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assert(profileSealedName(id2, userId2) == null)
     }
@@ -122,7 +123,7 @@ class TenantAcceptSliceTest {
         seedPendingTenant("mm.example.com", "intended@example.com", secret)
         val otherId = seedUser("other@example.com")
         given().header("Authorization", "Bearer ${sessions.issue(otherId).accessToken}")
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ=="}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(403).body("code", equalTo("not_invited_owner"))
     }
@@ -155,7 +156,7 @@ class TenantAcceptSliceTest {
 
     @Test
     fun unauthenticatedAcceptIs401() {
-        given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"x","username":"anyone","grant":"AQ=="}""")
+        given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"x","username":"anyone","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -205,6 +206,6 @@ class TenantAcceptSliceTest {
            "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
            "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
            "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"},
-         "grant":"AQ=="}
+         "grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}
     """.trimIndent()
 }

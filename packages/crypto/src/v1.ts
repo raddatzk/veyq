@@ -8,6 +8,7 @@ import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { argon2id } from '@noble/hashes/argon2.js'
 import { aeadOpen, aeadSeal, concat, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
+import { encodeStatement, type ScopeKind, type StatementContext } from './seal'
 
 export { concat, lp, utf8, type HybridPublic, type HybridSecret }
 export {
@@ -17,6 +18,7 @@ export {
   openAs,
   encodeSealContext,
   encodeSealToContext,
+  encodeStatement,
   OpenRefused,
   SealContextInvalid,
   type BlobRole,
@@ -24,6 +26,8 @@ export {
   type SealToContext,
   type SealPurpose,
   type SealToPurpose,
+  type ScopeKind,
+  type StatementContext,
 } from './seal'
 
 export type ArgonParams = { t: number; m: number; p: number; dkLen: number }
@@ -272,6 +276,81 @@ export const recoveryProofStatement = (s: {
 export const secretKeyProofSign = (privateKey: Uint8Array, stmt: Uint8Array): Uint8Array => ed25519.sign(stmt, privateKey)
 
 export const randomBytes = (n: number): Uint8Array => crypto.getRandomValues(new Uint8Array(n))
+
+// ── Admission tag (ADR 0020 move 6) ─────────────────────────────────────────────────────────────────────
+// An owner's SESSION proves a password, not a key. So every membership that is to receive a grant carries a tag
+// only a holder of the scope's current epoch key can compute, and no client wraps a scope key to anyone whose tag
+// does not verify. `HMAC-SHA256(HKDF(E_epoch, salt = "", info = "veyq/v1/admission-tag"), statement)`, the
+// statement being the canonical `admission-tag` encoding. A MAC, not a signature: it needs no trust root, and any
+// key-holder computing it is no stronger than what a key-holder can already do with the key itself.
+
+/** What an admission tag binds: the scope, the epoch whose key made it, the client-minted admission id, and the
+ *  target's account for a group add (`null` for a tenant invite — the invitee has no account yet). */
+export type Admission = { scopeId: string; epoch: number; admissionId: string; userId: string | null }
+
+const ADMISSION_TAG_INFO = utf8('veyq/v1/admission-tag')
+
+/** The admission tag under the epoch key `epochKey`, which must be the key of `a.epoch`. */
+export function admissionTag(epochKey: Uint8Array, a: Admission): Uint8Array {
+  const key = hkdf(sha256, epochKey, new Uint8Array(0), ADMISSION_TAG_INFO, 32)
+  return hmac(sha256, key, encodeStatement({ purpose: 'admission-tag', ...a }))
+}
+
+/** Whether `tag` is the admission tag of `a` under `epochKey`. Constant-time over the tag bytes. The CALLER decides
+ *  which epoch key it holds — a worker passes its own current one, so a tag made before a rotation does not admit. */
+export function admissionTagVerifies(epochKey: Uint8Array, a: Admission, tag: Uint8Array): boolean {
+  const expected = admissionTag(epochKey, a)
+  if (tag.length !== expected.length) return false
+  return expected.reduce((diff, byte, i) => diff | (byte ^ tag[i]), 0) === 0
+}
+
+// ── Grant signature (ADR 0028 Decision 6) ───────────────────────────────────────────────────────────────
+// A seal to a public key needs only that key, so without a signature the server can plant a scope key of its own
+// choosing. Every grant therefore carries its granter's Ed25519 identity signature over the `grant` statement, and
+// the recipient checks it before the key inside is used. Domain-separated from `authSign` (a different key, over a
+// server nonce) and from the Secret-Key proof statements by the statement's own label.
+
+/** One grant as its signature sees it: the object it is bound to, and the two byte strings it commits to. */
+export type GrantStatementInput = {
+  scopeId: string
+  scopeKind: ScopeKind
+  epoch: number
+  recipientUserId: string
+  /** The DECODED recipient identity public bundle the grant was sealed to (`serializeIdentityPublic`). */
+  recipientIdentityPublicKey: Uint8Array
+  /** The DECODED grant ciphertext. */
+  wrappedGrant: Uint8Array
+}
+
+/** The typed `grant` statement for `g` — the two byte strings reduced to their SHA-256 digests. */
+export const grantStatement = (g: GrantStatementInput): Extract<StatementContext, { purpose: 'grant' }> => ({
+  purpose: 'grant',
+  scopeId: g.scopeId,
+  scopeKind: g.scopeKind,
+  epoch: g.epoch,
+  recipientUserId: g.recipientUserId,
+  recipientIdentityDigest: sha256(g.recipientIdentityPublicKey),
+  wrappedGrantDigest: sha256(g.wrappedGrant),
+})
+
+/** Sign a statement with the identity's Ed25519 private half (`Identity['priv'].sign`). Only a typed statement can
+ *  be signed, so this key never signs bytes whose meaning it does not name. Deterministic, so the vectors pin it. */
+export const identitySign = (signPrivateKey: Uint8Array, statement: Extract<StatementContext, { purpose: 'grant' }>): Uint8Array =>
+  ed25519.sign(encodeStatement(statement), signPrivateKey)
+
+/** Verify an identity signature over a typed statement. False — never a throw — for a malformed key or signature:
+ *  both come from the server, and a refusal is the answer either way. */
+export function identityVerify(
+  signPublicKey: Uint8Array,
+  statement: Extract<StatementContext, { purpose: 'grant' }>,
+  signature: Uint8Array,
+): boolean {
+  try {
+    return ed25519.verify(signature, encodeStatement(statement), signPublicKey)
+  } catch {
+    return false
+  }
+}
 
 /** The user's identity: a hybrid KEM keypair (X25519 + ML-KEM-768) + an Ed25519 signing keypair. */
 export type Identity = {

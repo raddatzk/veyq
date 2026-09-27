@@ -1321,6 +1321,17 @@ in the new file; the file reached 100 %, and the run still exited 1 because `v1.
 (the manifest's `_comment` said 100 %, measured before the package split). Run the gate once during refine; if it
 is already red, the done-when names the scope it can honestly promise and the red goes to the inbox.
 
+### A server that insists on completeness needs a way to leave something out on purpose
+
+**When a CR has the client skip an item and the server refuse a request that misses one, it has made "skipped" and
+"forgotten" the same bytes.** `cr-admission-is-a-key-holder-act` said both, three lines apart: a rotation does not
+carry an admission whose tag fails, and the server refuses a rotation that leaves any open admission without a new
+tag. Read together, one forged admission — which the operator can plant, since it writes the rows — blocks every
+future rotation of that scope, removals included. The fix was a third state on the wire (`droppedAdmissions`: left
+out *on purpose*, and cleared by the server so it is no longer open); the refine could have named it in a sentence.
+So wherever a CR pairs a client-side skip with a server-side completeness check, it names how the request says
+"this one, deliberately not" — and what the server does with it.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

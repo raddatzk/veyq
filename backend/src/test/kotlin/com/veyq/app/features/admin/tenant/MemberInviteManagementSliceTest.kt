@@ -5,6 +5,7 @@ import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -66,6 +67,7 @@ class MemberInviteManagementSliceTest {
         val member = "member@reissue.example.com"
         seedMemberInvite(tenantId, member, oldSecret)
         val inviteId = firstPendingInviteId(tenantId)
+        val admissionBefore = QuarkusTransaction.requiringNew().call { store.listPendingMemberInvites(tenantId).first().admission }
 
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .`when`().post("/api/tenants/$tenantId/member-invites/$inviteId/reissue")
@@ -76,6 +78,13 @@ class MemberInviteManagementSliceTest {
             .body("bootstrapSecret", nullValue()) // ADR 0055 §2: the fresh secret goes to the invitee, not the owner
         val freshSecret = mail.awaitToken(member)
         assert(freshSecret != oldSecret)
+        // A new secret is not a new admission (ADR 0020 move 6): the fresh invite keeps the one the owner tagged,
+        // and the owner's list serves it so a tenant rotation can carry it forward.
+        given().header("Authorization", bearer(owner)).`when`().get("/api/tenants/$tenantId/member-invites")
+            .then().statusCode(200)
+            .body("[0].admissionId", equalTo(admissionBefore!!.id))
+            .body("[0].admissionEpoch", equalTo(0))
+            .body("[0].admissionTag", equalTo(TestAdmission.TAG))
 
         // The OLD secret is dead — a register replay is rejected as no-longer-valid.
         given().contentType(ContentType.JSON).body(memberRegisterBody(oldSecret))
@@ -199,7 +208,10 @@ class MemberInviteManagementSliceTest {
 
     private fun seedMemberInvite(tenantId: String, email: String, secret: String) =
         QuarkusTransaction.requiringNew().run {
-            store.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS))
+            store.mintMemberInvite(
+                tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS),
+                TestAdmission.admission(), checkEpoch = false,
+            )
         }
 
     private fun firstPendingInviteId(tenantId: String): String =
