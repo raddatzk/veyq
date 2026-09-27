@@ -128,14 +128,9 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
      *  invitee, a returning member); whether a *caller* may act on the tenant is the scope-access gate's. */
     fun belongsToTenant(userId: String, tenantId: String): Boolean = membership.belongsToTenant(userId, tenantId)
 
-    /** Whether the user holds the OWNER membership of the tenant (the admission gate for member invites). */
     /** A tenant owner holds an OWNER membership on the tenant **root scope** (cr-0163), not merely any OWNER row
-     *  carrying this `tenantId`. Delegates to the single home in `shared/membership/` — mirrors `tenantOwnerCount`. */
+     *  carrying this `tenantId`. Delegates to the single home in `shared/membership/`. */
     fun isOwner(userId: String, tenantId: String): Boolean = membership.isTenantOwner(userId, tenantId)
-
-    /** The number of OWNER memberships on the tenant root scope (`scopeId == tenantId`) — the tenant last-owner
-     *  guard (ADR 0007): the last tenant OWNER may not be removed (cr-0091). Delegates to the shared owner-count. */
-    fun tenantOwnerCount(tenantId: String): Long = membership.ownerCount(tenantId)
 
     /** Mint a single-use MEMBER invite on an active tenant, superseding any prior ACTIVE invite to that email. */
     @Transactional

@@ -47,7 +47,6 @@ vi.mock('../features/account/deviceIdentity', () => ({
   guessDeviceLabel: () => 'Firefox · macOS',
 }))
 vi.mock('../features/account/sessions/sessions', () => ({ revokeOtherSessionFamilies: vi.fn() }))
-vi.mock('../app/authPrefill', () => ({ takeAuthPrefill: () => null }))
 vi.mock('../app/pendingRoute', () => ({ takeRoute: () => null }))
 // The locked sign-out this view renders confirms through the app's own dialog (cr-web-own-confirm-dialog),
 // which is mounted in App.vue — out of reach of a view-level mount, so its answer is mocked here.

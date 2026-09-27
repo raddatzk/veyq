@@ -77,12 +77,6 @@ async function handshake(sw: ServiceWorker, timeoutMs = 2000): Promise<boolean> 
   })
 }
 
-/** True if a controlling SW is present AND speaks our protocol version. Checked per play (a controller can change). */
-export async function mediaSwReady(): Promise<boolean> {
-  const sw = await controllingSw()
-  return sw ? handshake(sw) : false
-}
-
 /** An opaque, unguessable per-playback handle — never a blobId (ADR 0047). */
 function newHandle(): string {
   return crypto.randomUUID()

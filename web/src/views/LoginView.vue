@@ -29,7 +29,6 @@ import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { vaultState, masterKey } from '../app/vault'
 import { session } from '../app/session'
-import { takeAuthPrefill } from '../app/authPrefill'
 import { takeRoute } from '../app/pendingRoute'
 
 // uc.account.remember-this-device (web, cr-0054) — ONE adaptive login/unlock screen with ONE "remember me"
@@ -320,14 +319,7 @@ watch(email, () => {
 onBeforeUnmount(() => clearTimeout(resolveTimer))
 
 onMounted(async () => {
-  // Setup hands over email + Secret Key once, for the first sign-in. Both pre-fill the (adaptive) screen — the
-  // device is fresh, so the Secret-Key field is shown. A returning user has no prefill.
   showSignOutNotice(takeSignOutNotice())
-  const prefill = takeAuthPrefill()
-  if (prefill) {
-    email.value = prefill.email
-    secretKey.value = prefill.secretKey
-  }
   await resolveDeviceState()
 })
 </script>

@@ -90,11 +90,6 @@ export function computeAutoRange(items: MediaItem[], nodeKey: Uint8Array): Memor
   return { mode: 'auto', from: epochMsToIsoDate(Math.min(...days)), to: epochMsToIsoDate(Math.max(...days)) }
 }
 
-/** The start day used to sort the card grid (newest first, undated last) — a materialized/manual `from`. */
-export function startDayOf(date: MemoryDate | null | undefined): string | undefined {
-  return date?.from
-}
-
 /** Whether two date ranges are equal (mode + both ends) — the reconcile re-seals only when this is false. */
 export function sameMemoryDate(a: MemoryDate | null, b: MemoryDate | null): boolean {
   return a?.mode === b?.mode && a?.from === b?.from && a?.to === b?.to

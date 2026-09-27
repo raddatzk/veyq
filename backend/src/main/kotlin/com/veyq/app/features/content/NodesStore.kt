@@ -1,6 +1,5 @@
 package com.veyq.app.features.content
 
-import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -47,8 +46,6 @@ class NodesStore {
     // `NodeSubtreePurge`: under a soft-delete, reclaiming the cover when the user deletes would hand a restore
     // back a Memory whose cover is already gone. So this store no longer touches the blob store at all — the
     // one-way dependency (media → content) is restored, and the purge worker owns both directions.
-
-    fun scopeExists(scopeId: String): Boolean = ScopeEntity.findById(scopeId) != null
 
     /** Resolve a parent slot within the scope: the scope id (root), a node in the same scope, or missing. */
     fun parentSlot(scopeId: String, parentSlot: String): ParentSlot {

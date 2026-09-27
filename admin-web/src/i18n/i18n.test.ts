@@ -13,10 +13,13 @@
 // only chance the owner gets to save their Secret Key. Two misses of the same kind in one sitting is a class,
 // not an accident, which is why this is a test and not a fixed typo.
 //
-// Hence three assertions, aimed at the three ways a key goes missing:
+// Hence four assertions — three aimed at the three ways a key goes missing, one at the way a key outlives
+// its use:
 //  1. every key a FUNCTION can return resolves — invisible to any scan of `t('…')` call sites;
 //  2. every key a TEMPLATE or script asks for by literal resolves — the `kit.*` case;
-//  3. EN and DE carry the identical key set — a lift that took one locale's group and not the other's.
+//  3. EN and DE carry the identical key set — a lift that took one locale's group and not the other's;
+//  4. every key the catalog carries is used somewhere — the lift's other failure: whole groups copied from
+//     `web/` for flows ADR 0065 keeps there (43 of 146 keys when this assertion was written).
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -56,6 +59,34 @@ function literalKeysInSources(dir: string): Map<string, string> {
   return found
 }
 
+/** What the sources could be asking the catalog for: every dotted string they quote in any of the three
+ *  quote styles, and the static head of every template literal that builds a key (`` `a.b.${x}` `` → `a.b.`,
+ *  and mid-segment `` `a.bc${X}` `` → `a.bc`, which `web/` has). The same predicate as web's catalog test.
+ *  Deliberately ANY quoted literal and not only `t('…')`'s argument: keys travel through variables here —
+ *  `TenantDetailPanel`'s `successKey`, `StoreProvisioningPanel`'s `shown.key` and `passwordHintKey()`'s
+ *  return value all reach `t()` one hop later. A key this cannot see is one it calls unused, so a new
+ *  spelling is taught here, never allowlisted. Its limit: a template head counts every key under it as used,
+ *  so a dead key inside a dynamically built group is invisible. */
+function quotedKeysInSources(dir: string, catalog: string): { literals: Set<string>; heads: Set<string> } {
+  const literals = new Set<string>()
+  const heads = new Set<string>()
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'generated') continue // the API client, not ours to translate
+      const inner = quotedKeysInSources(path, catalog)
+      inner.literals.forEach((k) => literals.add(k))
+      inner.heads.forEach((h) => heads.add(h))
+    } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.vue')) {
+      if (entry.name.endsWith('.test.ts') || path === catalog) continue // tests build their own catalogs
+      const text = readFileSync(path, 'utf8')
+      for (const m of text.matchAll(/(['"`])([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)+)\1/g)) literals.add(m[2])
+      for (const m of text.matchAll(/`((?:[a-zA-Z0-9_]+\.)+[a-zA-Z0-9_]*)\$\{/g)) heads.add(m[1])
+    }
+  }
+  return { literals, heads }
+}
+
 describe('admin-web message catalog', () => {
   it('resolves every key `passwordHintKey` can return, in every locale', () => {
     // The three branches of the policy: too short, in between (null), long enough to praise.
@@ -82,6 +113,18 @@ describe('admin-web message catalog', () => {
       const missing = [...asked].filter(([k]) => !have.has(k)).map(([k, where]) => `${k} (${where})`)
       expect(missing, `${locale} is missing keys the sources use`).toEqual([])
     }
+  })
+
+  it('uses every key it carries', () => {
+    const src = new URL('..', import.meta.url).pathname
+    const { literals, heads } = quotedKeysInSources(src, join(src, 'i18n', 'index.ts'))
+    expect(literals.size).toBeGreaterThan(20) // a scan that found almost nothing proves nothing
+
+    // EN is enough: the next case holds every other locale to EN's key set.
+    const unused = [...keysOf(SUPPORTED_LOCALES[0])].filter(
+      (k) => !literals.has(k) && ![...heads].some((h) => k.startsWith(h)),
+    )
+    expect(unused, 'catalog keys no source uses').toEqual([])
   })
 
   it('carries the same key set in every locale', () => {
