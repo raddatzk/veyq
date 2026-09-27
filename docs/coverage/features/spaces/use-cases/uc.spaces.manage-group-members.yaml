@@ -62,3 +62,15 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ScopesSliceTest.rotateBumpsEpochAndReGrantsRemaining] }
       web: { unit: [src/features/spaces/scopes.test.ts] }
+  - id: rotation-carries-only-verified-admissions
+    # ADR 0020 move 6 / ADR 0024 §4: a rotation verifies each open admission's old tag under E_n, re-tags the ones
+    # that verify under E_{n+1} and drops the rest (whose members it does not re-grant). The server refuses a
+    # rotation that leaves any open admission neither re-tagged nor dropped — one forgotten would never be
+    # delivered to again. It checks presence only; it holds no key.
+    text: A removal's rotation carries forward only admissions whose tag verifies, and re-tags each under the new epoch.
+    coverage:
+      backend:
+        unit: [RotationPolicyTest.refusesARotationThatLeavesAnOpenAdmissionUnTagged, RotationPolicyTest.commitsWhenEveryOpenAdmissionIsReTagged, RotationPolicyTest.anAdmissionTheRotatorDropsCountsAsHandled]
+        integration: [ScopesSliceTest.aRotationThatLeavesAnOpenAdmissionBehindIsRefused, ScopesSliceTest.anAdmissionTheRotatorDropsIsClearedAndNoLongerOpen]
+      web:
+        unit: [src/features/spaces/scopes.test.ts, src/features/account/rotation/rotateKeys.test.ts]

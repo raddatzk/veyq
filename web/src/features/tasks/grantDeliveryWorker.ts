@@ -7,18 +7,24 @@
 import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
+import { identityPrivate } from '../../app/vault'
 import { checkAndPin } from '../account/identityPins'
-import { wrapScopeKeyToMember } from '../spaces/grant'
+import { admissionVerifies, sealGrant } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'
 import type { ClaimedJob } from '../../api/generated/tasks'
+import type { ScopeKind } from '../../api/generated/scopes'
 
 // The foreign-identity wrap (ADR 0020) now lives in `../spaces/grant` (shared with rotation re-grants, cr-0089);
 // re-exported here so this worker + its test keep their existing import path.
 export { wrapScopeKeyToMember } from '../spaces/grant'
 
-/** Just what the worker needs from a cr-0075 opened scope: its id, the in-memory write key `K_SC` and the epoch it
- *  is — a grant is sealed bound to that epoch, and the completion states it (ADR 0072). */
-export type ScopeKeyHolder = { scopeId: string; key: Uint8Array; epoch: number }
+/** Just what the worker needs from a cr-0075 opened scope: its id and kind, the in-memory write key `K_SC` and the
+ *  epoch it is — a grant is sealed bound to that epoch, and the completion states it (ADR 0072); the kind is signed
+ *  with the grant (ADR 0028 Decision 6) and decides whether an admission binds its target's account. */
+export type ScopeKeyHolder = { scopeId: string; kind: ScopeKind; key: Uint8Array; epoch: number }
+
+/** The decline reason for a target whose admission tag does not verify under this worker's current epoch key. */
+export const ADMISSION_UNVERIFIED = 'admission_unverified'
 
 /**
  * Drain the grant-delivery jobs claimable for a single opened scope: claim → wrap `K_SC` to the target →
@@ -27,6 +33,19 @@ export type ScopeKeyHolder = { scopeId: string; key: Uint8Array; epoch: number }
  * key-holder running this simply finds nothing to claim. Returns how many grants this worker delivered.
  */
 export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<number> {
+  // The identity whose signing key signs every grant this run posts (ADR 0028 Decision 6). Locked vault: no run.
+  const priv = identityPrivate()
+  if (!priv) return 0
+  try {
+    return await drain(scope, priv.sign)
+  } finally {
+    priv.kemX.fill(0)
+    priv.mlkemSeed.fill(0)
+    priv.sign.fill(0)
+  }
+}
+
+async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise<number> {
   let delivered = 0
   for (;;) {
     const job = await claimGrantDelivery(scope.scopeId)
@@ -35,6 +54,15 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
     if (job.capabilityTag !== GRANT_DELIVERY || !target) {
       // Not a grant-delivery job we can fulfil with this scope key — release it for the right worker.
       await failJob(job.jobId, 'not-grant-delivery')
+      continue
+    }
+    // Admission gate (ADR 0020 move 6): wrap only to a member whose admission tag verifies under THIS worker's
+    // current epoch key — stated at exactly that epoch, so a tag made before a rotation does not admit. An owner's
+    // session alone (no vault), or the operator, can create a membership but not a tag; such a target is declined,
+    // never wrapped to, and the member stays awaiting access. Checked before the TOFU pin, so an unadmitted target's
+    // key is never pinned either.
+    if (!admissionVerifies(scope.key, scope.epoch, scope, target.targetUserId, target)) {
+      await declineJob(job.jobId, ADMISSION_UNVERIFIED)
       continue
     }
     // TOFU gate (cr-0098, ADR 0028): pin the target's identity key on first sight, proceed on a match, but on a
@@ -47,9 +75,12 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
       await declineJob(job.jobId, 'identity_changed')
       continue
     }
-    const wrap = wrapScopeKeyToMember(scope.key, scope.scopeId, scope.epoch, target.identityPublicKey)
+    const signed = sealGrant(
+      scope.key, { scopeId: scope.scopeId, kind: scope.kind, epoch: scope.epoch },
+      { userId: target.targetUserId, identityPublicKeyB64: target.identityPublicKey }, signPrivateKey,
+    )
     try {
-      await completeJob(job.jobId, wrap, scope.epoch)
+      await completeJob(job.jobId, signed.wrappedGrant, scope.epoch, signed.grantSignature)
     } catch (e) {
       // Our key is not the scope's current epoch (a rotation landed, or we still hold an older grant): the server
       // wrote nothing and released the job, so a key-holder at the current epoch delivers it. Stop draining —
@@ -69,8 +100,8 @@ async function claimGrantDelivery(scopeId: string): Promise<ClaimedJob | null> {
   return job ?? null
 }
 
-async function completeJob(jobId: string, sealedResult: string, epoch: number): Promise<void> {
-  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: { sealedResult, epoch } }))
+async function completeJob(jobId: string, sealedResult: string, epoch: number, grantSignature: string): Promise<void> {
+  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: { sealedResult, epoch, grantSignature } }))
 }
 
 async function failJob(jobId: string, reason: string): Promise<void> {
@@ -78,7 +109,8 @@ async function failJob(jobId: string, reason: string): Promise<void> {
 }
 
 /** Decline a job back to the queue without a failed attempt (cr-0098): release it to other workers + never
- *  re-offer it to this one. Used when the target's identity key changed (this worker refuses to wrap to it). */
+ *  re-offer it to this one. Used when the target's identity key changed (this worker refuses to wrap to it), or
+ *  when its admission does not verify under this worker's current epoch key. */
 async function declineJob(jobId: string, reason: string): Promise<void> {
   await withRefresh(() => tasksApi().declineTask({ jobId, declineRequest: { reason } }))
 }

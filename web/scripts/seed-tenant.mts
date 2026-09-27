@@ -22,6 +22,7 @@ import { fileURLToPath } from 'node:url'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import * as v1 from '@veyq/crypto/v1'
+import { sealGrant, tagAdmission } from '../src/features/spaces/grant'
 import { writeTenant, materializeKeys, awaitInvite } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
@@ -66,12 +67,21 @@ const bootstrapSecret = await awaitInvite(inviteFile, tenantOwnerEmail)
 // 3 — cold-birth the tenant owner + seal the first scope grant to its own identity, then accept (public).
 const built = buildAccount(tenantOwnerEmail, tenantOwnerPassword, instanceSalt)
 const scopeRootKey = v1.randomBytes(32)
-const idPub = { x: built.identity.pub.kemX, m: built.identity.pub.kemM }
 // Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0 (ADR 0072); the account id is minted here.
-const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, idPub, scopeRootKey))
+// The birth is signed by the owner's identity and self-tags the owner's admission (ADR 0028 D6, ADR 0020 move 6).
+const ownerId = crypto.randomUUID()
+const birthGrant = sealGrant(
+  scopeRootKey, { scopeId: tenantId, kind: 'TENANT', epoch: 0 },
+  { userId: ownerId, identityPublicKeyB64: built.material.identityPublicKey }, built.identity.priv.sign,
+)
+const birth = {
+  grant: birthGrant.wrappedGrant,
+  grantSignature: birthGrant.grantSignature,
+  ...tagAdmission(scopeRootKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null),
+}
 const accepted = await post('/api/tenants/accept/register', {
   bootstrapSecret,
-  userId: crypto.randomUUID(),
+  userId: ownerId,
   username: (process.env.VEYQ_TENANT_OWNER_USERNAME ?? tenantOwnerEmail.split('@')[0]).toLowerCase(),
   account: {
     suiteId: built.material.suiteId,
@@ -81,7 +91,7 @@ const accepted = await post('/api/tenants/accept/register', {
     masterKeyWraps: built.material.masterKeyWraps,
     secretKeyProofPublicKey: built.material.secretKeyProofPublicKey,
   },
-  grant,
+  ...birth,
 })
 if (!accepted.ok) { console.error('accept/register failed', accepted.status, await accepted.text()); process.exit(1) }
 

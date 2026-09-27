@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
@@ -51,7 +52,7 @@ class TenantOwnerGateTest {
 
         val a = bearer(actor)
         // --- the 5 TenantHandler ops + terms: the owner gate fires first, so a random invite/member id still 403s
-        given().header("Authorization", a).contentType(ContentType.JSON).body("""{"email":"x@gate.example.com"}""")
+        given().header("Authorization", a).contentType(ContentType.JSON).body("""{"email":"x@gate.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(403).body("code", equalTo("not_tenant_owner"))
         given().header("Authorization", a)
@@ -95,7 +96,7 @@ class TenantOwnerGateTest {
 
         val o = bearer(owner)
         // passes the owner gate: mint succeeds (201), list succeeds (200) — not the 403 the escalation actor gets
-        given().header("Authorization", o).contentType(ContentType.JSON).body("""{"email":"new@owner.example.com"}""")
+        given().header("Authorization", o).contentType(ContentType.JSON).body("""{"email":"new@owner.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201)
         given().header("Authorization", o)

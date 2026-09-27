@@ -25,6 +25,7 @@ import com.veyq.app.generated.model.TenantStatus
 import com.veyq.app.generated.model.TenantSummary
 import com.veyq.app.generated.model.TenantTerms
 import com.veyq.app.generated.model.TenantTermsUpdate
+import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.crypto.ConfigSecretKeyState
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
@@ -127,7 +128,10 @@ class TenantsResource(
     @Authenticated
     @RateLimit(key = RateLimitKey.RECIPIENT)
     override fun inviteTenantMember(tenantId: UUID, memberInviteRequest: MemberInviteRequest): Response =
-        when (val outcome = handler.inviteMember(identity.principal.name, tenantId.toString(), memberInviteRequest.email)) {
+        when (val outcome = handler.inviteMember(
+            identity.principal.name, tenantId.toString(), memberInviteRequest.email,
+            Admission(memberInviteRequest.admissionId.toString(), memberInviteRequest.admissionEpoch, memberInviteRequest.admissionTag),
+        )) {
             // No bootstrapSecret on the wire: a member invite's token is minted for the invited person and
             // travels by mail only (ADR 0055 §2). `delivery` can only be SENT here — the other outcomes are 503s.
             is MemberInviteOutcome.Done -> Response.status(Response.Status.CREATED).entity(
@@ -144,7 +148,12 @@ class TenantsResource(
         when (val outcome = handler.listMemberInvites(identity.principal.name, tenantId.toString())) {
             is MemberInvitesOutcome.Listed -> Response.ok(
                 outcome.invites.map {
-                    PendingMemberInvite(UUID.fromString(it.inviteId), it.email, InviteStatus.decode(it.status), it.expiresAt.utc())
+                    PendingMemberInvite(
+                        UUID.fromString(it.inviteId), it.email, InviteStatus.decode(it.status), it.expiresAt.utc(),
+                        admissionId = it.admission?.let { a -> UUID.fromString(a.id) },
+                        admissionEpoch = it.admission?.epoch,
+                        admissionTag = it.admission?.tag,
+                    )
                 },
             ).build()
             is HttpFailure -> httpError(outcome)
@@ -202,7 +211,7 @@ class TenantsResource(
         when (val outcome = acceptHandler.accept(
             identity.principal.name,
             acceptInviteRequest.bootstrapSecret,
-            acceptInviteRequest.grant,
+            with(acceptInviteRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
             acceptInviteRequest.username,
             acceptInviteRequest.sealedName,
         )) {
@@ -224,7 +233,8 @@ class TenantsResource(
             wraps = a.masterKeyWraps.map { WrapData(it.method.value, it.wrappedKey, it.kdfParams) },
         )
         return when (val outcome = acceptHandler.registerAndAccept(
-            registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account, registerAndAcceptRequest.grant,
+            registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account,
+            with(registerAndAcceptRequest) { OwnerBirth.of(grant, grantSignature, admissionId, admissionEpoch, admissionTag) },
             registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)

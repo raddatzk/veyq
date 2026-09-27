@@ -44,10 +44,10 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     // --- B: create group G, add C, deliver K_SC to C (real foreign wrap) so C is a genuine co-holder ---
     await become(B)
     const gG = await createGroup('Shared G')
-    await addGroupMember(gG, C.username)
+    await addGroupMember(gG, C.username, C.userId!)
     const openedB = await openScopeById(gG)
     expect(openedB, 'B opens its own group').toBeTruthy()
-    await runGrantDeliveryWorker({ scopeId: gG, key: openedB!.key, epoch: openedB!.epochs.current }) // wraps K_SC (E_0) to C's identity
+    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedB!.key, epoch: openedB!.epochs.current }) // wraps K_SC (E_0) to C's identity
     const before = await listScopeMembers(gG)
     expect(before.find((x) => x.userId === C.userId)?.hasGrant, 'C is a co-holder before removal').toBe(true)
     expect((await listMyScopes()).find((s) => s.id === gG)?.currentEpoch, 'G starts at epoch 0').toBe(0)
@@ -90,9 +90,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     await become(A)
     const D = await onboardMember(tenant.tenantId, mkActor('d'), salt)
     await become(B)
-    await addGroupMember(gG, D.username)
+    await addGroupMember(gG, D.username, D.userId!)
     const openedForDelivery = await openScopeById(gG)
-    await runGrantDeliveryWorker({ scopeId: gG, key: openedForDelivery!.key, epoch: openedForDelivery!.epochs.current })
+    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedForDelivery!.key, epoch: openedForDelivery!.epochs.current })
 
     // D must be recorded at the CURRENT epoch (not 0) and therefore read the post-rotation memo. Before cr-0093,
     // complete left grantedEpoch=0, so D's client peeled E_1 as E_0 and listTree would fail on the epoch-1 node.

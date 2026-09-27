@@ -1,5 +1,6 @@
 package com.veyq.app.shared.http
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
@@ -135,14 +136,14 @@ class OperatorBlindProbeTest {
         },
         // --- scopes ---
         "listScopeMembers" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/members") },
-        "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost"}""") },
+        "addGroupMember" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/members", """{"username":"ghost",${TestAdmission.json()}}""") },
         "resolveGroupMember" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/members/resolve", """{"username":"ghost"}""")
         },
         "setMemberRole" to Probe(Address.SCOPE) { s -> Call("PATCH", "/api/scopes/${s.scopeId}/members/$someId", """{"role":"OWNER"}""") },
         "removeMember" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/members/$someId") },
         "listScopeEpochs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/epochs") },
-        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[]}""") },
+        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[],"admissions":[]}""") },
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
         "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0}""") },
@@ -150,9 +151,9 @@ class OperatorBlindProbeTest {
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },
         // Host-resolved: the Host names the tenant, so its root is what the gate checks. The suspended persona
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
-        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64"}""", host = s.domain) },
+        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64",${TestAdmission.SIGNATURE_JSON}}""", host = s.domain) },
         "createGroup" to Probe(Address.HOST) { s ->
-            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64"}""", host = s.domain)
+            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""", host = s.domain)
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
@@ -176,7 +177,7 @@ class OperatorBlindProbeTest {
         "declineTask" to Probe(Address.JOB) { s -> Call("POST", "/api/tasks/${s.jobId}/decline", "{}") },
         // --- tenant-addressed (the gate on the tenant's root scope) ---
         "inviteTenantMember" to Probe(Address.TENANT) { s ->
-            Call("POST", "/api/tenants/${s.tenantId}/member-invites", """{"email":"invitee-${UUID.randomUUID()}@example.com"}""")
+            Call("POST", "/api/tenants/${s.tenantId}/member-invites", """{"email":"invitee-${UUID.randomUUID()}@example.com",${TestAdmission.json()}}""")
         },
         "listMemberInvites" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/member-invites") },
         "reissueMemberInvite" to Probe(Address.TENANT) { s -> Call("POST", "/api/tenants/${s.tenantId}/member-invites/$someId/reissue") },

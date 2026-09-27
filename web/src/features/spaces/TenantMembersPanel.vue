@@ -22,7 +22,7 @@ import {
 } from './members'
 import { listMyTenants, setSpaceIcon, clearSpaceIcon, openMyTenantIcon } from './scopes'
 import { bumpSpaceIcon } from './spaceIconSignal'
-import { activeSpace, activeScopeKey } from '../../app/activeSpace'
+import { activeSpace, activeScopeKey, activeWriteKey } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
 import { unsealName, type MemberName } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
@@ -60,7 +60,7 @@ const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeS
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The load body is Tenant-specific: fetch
 // the roster, decrypt each real name with K_tenant (operator-blind, on-device), then read the owner-only invite
 // list — and resolve ownership from the tenant role.
-const { members, isOwner, trust, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
@@ -83,6 +83,12 @@ const { members, isOwner, trust, reviewTarget, reviewOpen, loading, loadError, r
     // Only the owner may read the pending-invite list (the backend 403s any non-owner).
     pendingInvites.value = owner ? await listMemberInvites(activeSpace.tenantId) : []
     return { rows, isOwner: owner }
+  }, async () => {
+    // The active tenant's write key — the one its admissions are tagged under. Owned by the active space: no release.
+    const held = activeWriteKey()
+    return held && activeSpace.scopeId
+      ? { scopeId: activeSpace.scopeId, kind: ScopeKind.Tenant, key: held.key, epoch: held.epoch }
+      : null
   })
 
 /** The member's decrypted "First Last", or '' when not yet sealed (awaiting access) / unreadable. */
@@ -297,6 +303,10 @@ async function revoke(invite: PendingMemberInvite) {
                      pin (a rotation or an operator substitution). Verified/recognized are intentionally not shown. -->
                 <span v-if="trust[member.userId] === 'changed'" class="veyq-badge changed">
                   <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('verify.badgeChanged') }}
+                </span>
+                <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
+                <span v-if="unadmitted[member.userId]" class="veyq-badge changed">
+                  <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('members.badgeNotAdmitted') }}
                 </span>
               </div>
             </div>

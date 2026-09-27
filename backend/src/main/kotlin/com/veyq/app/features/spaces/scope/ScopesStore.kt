@@ -1,5 +1,10 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.features.admin.tenant.TenantStore
+import com.veyq.app.shared.membership.Admission
+import com.veyq.app.shared.membership.SignedGrant
+import com.veyq.app.shared.membership.admission
+import com.veyq.app.shared.membership.admit
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
@@ -33,7 +38,14 @@ data class ScopeRow(
     val iconEpoch: Int,
     /** When a GROUP is in pending-deletion (cr-0090); null = active. The client marks + (for owners) restores it. */
     val deletedAt: Instant?,
+    /** Who posted the caller's grant, their signature over it and their current identity public key (ADR 0028
+     *  Decision 6) — the recipient verifies before it opens. Null for a grant written before grants were signed. */
+    val granter: GranterRow?,
 )
+
+/** The granter of one grant as a read serves it: its id, its signature over the grant, and its current identity
+ *  public key (so the recipient needs no directory call). Opaque to the server, which verifies none of it. */
+data class GranterRow(val userId: String, val signature: String, val identityPublicKey: String)
 
 /** A tenant the caller belongs to — the row behind a `MyTenant` (the space switcher). Carries the caller's own
  *  root-scope `wrappedGrant` + the tenant's `sealedIcon`/`iconEpoch` (uc.spaces.set-space-icon) so the switcher
@@ -50,6 +62,8 @@ data class TenantRow(
     val iconEpoch: Int,
     /** The epoch `wrappedGrant` holds (its seal is bound to it, ADR 0072); null whenever the grant is. */
     val grantedEpoch: Int?,
+    /** The grant's granter (ADR 0028 Decision 6); null whenever the grant is, or when it was never signed. */
+    val granter: GranterRow?,
 )
 
 /** A member of a scope — the row behind a `ScopeMember` (the member directory, cr-0077). `hasGrant=false` is a
@@ -66,6 +80,8 @@ data class ScopeMemberRow(
     val hasGrant: Boolean,
     /** A soft consent proposal awaiting the target's Accept (cr-0094) — owner-visible only in the directory. */
     val pendingConsent: Boolean = false,
+    /** The membership's admission (ADR 0020 move 6) — served so a rotation can verify it before carrying it. */
+    val admission: Admission? = null,
 )
 
 /** The result of resolving a per-tenant username to a group-add candidate (cr-0094) — records nothing. */
@@ -95,6 +111,7 @@ enum class ConsentState { PENDING, ACTIVE, NONE }
 class ScopesStore(
     private val profiles: TenantProfileStore,
     private val membership: MembershipStore,
+    private val tenants: TenantStore,
 ) {
 
     /** Whether [userId] belongs to the tenant — an accepted root membership (a group-add candidate's check). */
@@ -110,7 +127,7 @@ class ScopesStore(
 
     /** Birth a PERSONAL scope for the caller in this tenant + the self-membership (grant = opaque ciphertext). */
     @Transactional
-    fun createPersonal(scopeId: String, userId: String, tenantId: String, wrappedGrant: String): Boolean {
+    fun createPersonal(scopeId: String, userId: String, tenantId: String, grant: SignedGrant): Boolean {
         if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
         ScopeEntity().apply {
@@ -125,7 +142,9 @@ class ScopesStore(
             this.tenantId = tenantId
             this.scopeId = scopeId
             role = MembershipEntity.OWNER
-            this.wrappedGrant = wrappedGrant
+            wrappedGrant = grant.wrappedGrant
+            granterUserId = userId
+            grantSignature = grant.signature
             createdAt = now
         }.persist()
         return true
@@ -133,9 +152,11 @@ class ScopesStore(
 
     /** Birth a GROUP scope for the caller in this tenant + the OWNER self-membership (en.spaces.group-scope,
      *  cr-0032). Mirrors [createPersonal] but stores the opaque `encryptedName` (the group name sealed under its
-     *  derived name-key `K_name`, cr-0096) on the scope row, at name-epoch 0. Group names are not unique — no existence check. */
+     *  derived name-key `K_name`, cr-0096) on the scope row, at name-epoch 0. Group names are not unique — no existence check.
+     *  The creator's own membership carries the admission it self-tagged under `E_0` (ADR 0020 move 6), so the first
+     *  rotation has a tag to carry forward. */
     @Transactional
-    fun createGroup(scopeId: String, userId: String, tenantId: String, encryptedName: String, wrappedGrant: String): Boolean {
+    fun createGroup(scopeId: String, userId: String, tenantId: String, encryptedName: String, grant: SignedGrant, admission: Admission): Boolean {
         if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
         ScopeEntity().apply {
@@ -151,7 +172,10 @@ class ScopesStore(
             this.tenantId = tenantId
             this.scopeId = scopeId
             role = MembershipEntity.OWNER
-            this.wrappedGrant = wrappedGrant
+            wrappedGrant = grant.wrappedGrant
+            granterUserId = userId
+            grantSignature = grant.signature
+            admit(admission)
             createdAt = now
         }.persist()
         return true
@@ -200,10 +224,22 @@ class ScopesStore(
         MembershipEntity.find("userId = ?1 and tenantId = ?2", userId, tenantId).list().mapNotNull { m ->
             m.wrappedGrant?.let { grant ->
                 ScopeEntity.findById(m.scopeId)?.let {
-                    ScopeRow(it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName, it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt)
+                    ScopeRow(
+                        it.id, it.kind, it.tenantId, m.role, it.currentEpoch, m.grantedEpoch, grant, it.encryptedName,
+                        it.nameEpoch, it.sealedIcon, it.iconEpoch, it.deletedAt, granterOf(m),
+                    )
                 }
             }
         }
+
+    /** The granter of a membership's grant — id, signature and CURRENT identity public key — or null when the grant
+     *  carries no signature (written before grants were signed) or the granter's account is gone. */
+    private fun granterOf(m: MembershipEntity): GranterRow? {
+        val granterId = m.granterUserId ?: return null
+        val signature = m.grantSignature ?: return null
+        val key = VeyqUser.findById(granterId)?.identityPublicKey ?: return null
+        return GranterRow(granterId, signature, key)
+    }
 
     /** Whether the caller holds a grant in this scope (is a key-holder there) — the member-directory gate. */
     fun holdsGrant(userId: String, scopeId: String): Boolean = membership.holdsGrant(userId, scopeId)
@@ -261,24 +297,35 @@ class ScopesStore(
     fun epochLinks(scopeId: String): List<Pair<Int, String>> =
         ScopeEpochEntity.find("scopeId", scopeId).list().sortedBy { it.epoch }.map { it.epoch to it.wrappedPrev }
 
-    /** Commit a rotation (ADR 0024 §4): if [epoch] is the scope's next one, advance to it, store the chain-link and
-     *  apply the re-grants (each to the new epoch); otherwise store nothing and return `null` (stale). Client-minted;
-     *  the server stores only ciphertext. Returns the new epoch.
+    /** Commit a rotation (ADR 0024 §4): if [epoch] is the scope's next one and the rotation re-tags or drops every
+     *  open admission of the scope, advance to it, store the chain-link, apply the re-grants (each to the new epoch,
+     *  signed by [granterId]) and the re-tags; otherwise store nothing. Client-minted; the server stores only
+     *  ciphertext and tags it cannot check.
      *
-     *  Dumb by design (ADR 0045 §2): the decision — only the next epoch commits, and a `pendingConsent` proposal is
-     *  never (re-)granted so `K_SC` stays gated before the wrap (cr-0094/cr-0095) — lives in the pure
-     *  [RotationPolicy], where it is unit-tested and mutation-verified. This method only locks the row, loads the
-     *  directory, asks the policy, and writes what it returns.
+     *  Dumb by design (ADR 0045 §2): the decision — only the next epoch commits, a `pendingConsent` proposal is never
+     *  (re-)granted so `K_SC` stays gated before the wrap (cr-0094/cr-0095), and no open admission may be left behind
+     *  (ADR 0020 move 6) — lives in the pure [RotationPolicy], where it is unit-tested and mutation-verified. This
+     *  method only locks the row, loads the directory and the open admissions, asks the policy, and writes what it
+     *  returns.
      *
      *  The scope row is read under `PESSIMISTIC_WRITE`, so two in-flight commits stating the same epoch serialize:
      *  the loser reads the winner's epoch and is a clean stale. Without the lock both read the old epoch, both pass
      *  the policy, and the loser dies on `ux_scope_epoch` — the chain still holds, but as an error the client does
-     *  not retry. */
+     *  not retry. An admission write takes the same lock ([addGrantlessMember], the tenant's member invite), so no
+     *  admission can be tagged at an epoch a concurrent rotation is leaving. */
     @Transactional
-    fun rotate(scopeId: String, epoch: Int, wrappedPrev: String, grants: List<Pair<String, String>>): Int? {
+    fun rotate(
+        scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
+        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>,
+    ): RotationDecision {
         val scope = ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)!!
-        val members = MembershipEntity.find("scopeId", scopeId).list().map { RotationMember(it.userId, it.pendingConsent) }
-        val plan = RotationPolicy.plan(scope.currentEpoch, epoch, members, grants) ?: return null
+        val rows = MembershipEntity.find("scopeId", scopeId).list()
+        val invites = if (scope.kind == ScopeEntity.TENANT) tenants.openMemberInvites(scope.tenantId) else emptyList()
+        val open = rows.mapNotNull { it.admissionId }.toSet() + invites.mapNotNull { it.admissionId }
+        val decision = RotationPolicy.plan(
+            scope.currentEpoch, epoch, rows.map { RotationMember(it.userId, it.pendingConsent) }, open, grants, retags, dropped,
+        )
+        val plan = (decision as? RotationDecision.Commit)?.plan ?: return decision
         scope.currentEpoch = plan.newEpoch
         scope.persist()
         ScopeEpochEntity().apply {
@@ -288,14 +335,35 @@ class ScopesStore(
             this.wrappedPrev = wrappedPrev
             createdAt = Instant.now()
         }.persist()
-        plan.grants.forEach { (uid, g) ->
-            MembershipEntity.find("userId = ?1 and scopeId = ?2", uid, scopeId).firstResult()?.let {
-                it.wrappedGrant = g
+        plan.grants.forEach { g ->
+            rows.firstOrNull { it.userId == g.userId }?.let {
+                it.wrappedGrant = g.grant.wrappedGrant
                 it.grantedEpoch = plan.newEpoch
+                it.granterUserId = granterId
+                it.grantSignature = g.grant.signature
                 it.persist()
             }
         }
-        return plan.newEpoch
+        rows.forEach { m ->
+            val id = m.admissionId ?: return@forEach
+            if (id in plan.dropped) m.admit(null) else plan.retags[id]?.let { m.admit(Admission(id, plan.newEpoch, it)) }
+            m.persist()
+        }
+        invites.forEach { inv ->
+            val id = inv.admissionId ?: return@forEach
+            if (id in plan.dropped) {
+                inv.admissionId = null
+                inv.admissionEpoch = null
+                inv.admissionTag = null
+            } else {
+                plan.retags[id]?.let {
+                    inv.admissionEpoch = plan.newEpoch
+                    inv.admissionTag = it
+                }
+            }
+            inv.persist()
+        }
+        return decision
     }
 
     // --- group lifecycle: soft-delete + grace + purge (cr-0090) ---
@@ -351,9 +419,12 @@ class ScopesStore(
             .firstResult()?.userId
 
     /** Admit a member to a scope **grant-less** (role=MEMBER, no grant) — grant-delivery wraps `K_SC` to them
-     *  later (cr-0076). Operator-blind: **no key is written here**. */
+     *  later (cr-0076), once their [admission] verifies (ADR 0020 move 6). Operator-blind: **no key is written here**.
+     *  False — nothing written — when the admission was tagged at an epoch that is no longer the scope's current one:
+     *  read under the lock a rotation takes, so an admission can never land behind a rotation that did not carry it. */
     @Transactional
-    fun addGrantlessMember(userId: String, tenantId: String, scopeId: String) {
+    fun addGrantlessMember(userId: String, tenantId: String, scopeId: String, admission: Admission): Boolean {
+        if (!admissionIsCurrent(scopeId, admission)) return false
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
@@ -361,9 +432,15 @@ class ScopesStore(
             this.scopeId = scopeId
             role = MembershipEntity.MEMBER
             wrappedGrant = null
+            admit(admission)
             createdAt = Instant.now()
         }.persist()
+        return true
     }
+
+    /** Whether [admission] is stated at the scope's current epoch, read under the rotation's lock. */
+    private fun admissionIsCurrent(scopeId: String, admission: Admission): Boolean =
+        ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch == admission.epoch
 
     /** Whether a user's account-global "ask before adding me to groups" preference is on (cr-0094). */
     fun requiresGroupAddConsent(userId: String): Boolean =
@@ -376,7 +453,10 @@ class ScopesStore(
      *  carrying the wrapped group name-key `K_name` (`sealedNameKey`) + who proposed. grant-delivery SKIPS it — no
      *  `K_SC` wrap — until the invitee accepts. Operator-blind: only ciphertext + operational metadata is written. */
     @Transactional
-    fun addSoftPendingMember(userId: String, tenantId: String, scopeId: String, sealedNameKey: String, addedBy: String) {
+    fun addSoftPendingMember(
+        userId: String, tenantId: String, scopeId: String, sealedNameKey: String, addedBy: String, admission: Admission,
+    ): Boolean {
+        if (!admissionIsCurrent(scopeId, admission)) return false
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
@@ -387,8 +467,10 @@ class ScopesStore(
             pendingConsent = true
             this.sealedNameKey = sealedNameKey
             this.addedBy = addedBy
+            admit(admission)
             createdAt = Instant.now()
         }.persist()
+        return true
     }
 
     /** The caller's membership state on a scope (cr-0094): a live pending proposal, an ordinary member, or none. */
@@ -434,7 +516,10 @@ class ScopesStore(
         val m = MembershipEntity.find("userId = ?1 and scopeId = ?2", userId, scopeId).firstResult() ?: return null
         val u = VeyqUser.findById(userId) ?: return null
         val p = profiles.byUserInTenant(tenantId)[userId]
-        return ScopeMemberRow(userId, p?.username ?: "", p?.sealedName, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null, m.pendingConsent)
+        return ScopeMemberRow(
+            userId, p?.username ?: "", p?.sealedName, u.email, m.role, u.identityPublicKey, m.wrappedGrant != null,
+            m.pendingConsent, m.admission(),
+        )
     }
 
     /** Whether the user is the tenant's OWNER (gates the owner-only email in the directory). */
@@ -452,7 +537,7 @@ class ScopesStore(
                 val p = profileByUser[m.userId]
                 ScopeMemberRow(
                     m.userId, p?.username ?: "", p?.sealedName, u.email, m.role,
-                    u.identityPublicKey, m.wrappedGrant != null, m.pendingConsent,
+                    u.identityPublicKey, m.wrappedGrant != null, m.pendingConsent, m.admission(),
                 )
             }
         }
@@ -488,6 +573,7 @@ class ScopesStore(
                         grant, rootScope?.sealedIcon?.takeIf { open },
                         rootScope?.iconEpoch ?: 0,
                         root?.grantedEpoch?.takeIf { grant != null },
+                        root?.takeIf { grant != null }?.let { granterOf(it) },
                     )
                 }
             }

@@ -339,7 +339,8 @@ operator lacks can.
 | An active operator … | Today | Closed by |
 |---|---|---|
 | reads content already stored | **Cannot** — it holds no key | — |
-| gets a scope's key through an owner's session alone: admits an account of its own, or plants a grant | **Can** | [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6, [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 — inbox #159 |
+| gets a scope's key through an owner's session alone by admitting an account of its own | **Cannot** — every wrap to another member needs an admission tag that only a holder of the scope's current epoch key computes, and every key-holder's client checks it before it wraps; a session without the vault, and the operator, can create a membership but not a tag. What remains is a key substituted on an admission the owner really made (below) | [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6 |
+| plants a scope key of its own choosing in a grant | **Cannot** in the personal scope — its grant opens only if it is self-signed under the vault's own key, and the signed kind stops a group's grant posing as it — nor under a granter the recipient has already pinned. **Can** under a granter identity it fabricates, which the recipient pins on first use (below) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 |
 | installs an identity of its own on an account | **Can** — it writes the directory itself. Through the API a session or a password no longer suffices: rotation, change-password and recovery need a signature of the Secret-Key proof key ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2), which binds every caller but the operator | Key Transparency ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) (g)); until then a member who pinned the old key sees `changed` ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md)) |
 | serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Cannot** — every seal binds its purpose and the object it is stored as, and a client opens it only at the address it asked for; what remains is *which authentic version* it is served (freshness, inbox #161) and, among one node's item marks, *which entry is the caller's own* (below) | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | links a device of its own while the user links theirs | **Can** — the relay grinds either binding step in under a second | [ADR 0059](../decisions/0059-device-linking.md) §11 — inbox #161 (a) |
@@ -351,7 +352,8 @@ operator lacks can.
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:
 - a key substituted before anyone pinned it (TOFU's first-use gap, ADR 0028), which also covers a device with
-  no trust-state mark yet (Decision 7);
+  no trust-state mark yet (Decision 7), a genuine tenant invite redeemed with the operator's key (ADR 0020 move 6),
+  and a shared grant signed by a granter identity the operator fabricated (ADR 0028 Decision 6);
 - a rotation withheld from members who never saw it (a fork), and rotations queued to another key-holder, which
   know only the server's member list (ADR 0024 § Guarantee);
 - a departing member who tagged a sockpuppet with the operator's help before the removal (ADR 0020);

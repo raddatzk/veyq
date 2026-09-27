@@ -375,6 +375,132 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('admission tag (ADR 0020 move 6)', () => {
+    const a = vectors.admission_tag
+    type Case = { context: v1.Admission; statement: string; tag: string }
+    const cases: [string, Case][] = [
+      ['tenant invite (no account yet: userId absent)', a.tenant_invite],
+      ['group add (bound to the target account)', a.group_add],
+    ]
+    const epochKey = unhex(a.epoch_key)
+
+    it('derives its MAC key from the epoch key under its own info string', () => {
+      expect(hex(v1.hkdfSha256(epochKey, new Uint8Array(0), v1.utf8('veyq/v1/admission-tag'), 32))).toBe(a.tag_key)
+    })
+
+    it.each(cases)('%s: statement bytes and tag', (_name, c) => {
+      expect(hex(v1.encodeStatement({ purpose: 'admission-tag', ...c.context }))).toBe(c.statement)
+      expect(hex(v1.admissionTag(epochKey, c.context))).toBe(c.tag)
+      expect(v1.admissionTagVerifies(epochKey, c.context, unhex(c.tag))).toBe(true)
+    })
+
+    // Each bound value, moved one step, and the epoch KEY itself: every one must stop the tag from verifying — the
+    // epoch key is the one a worker at a later epoch holds, which is what makes a pre-rotation tag not admit.
+    it.each(cases)('%s: a tag answers for nothing else', (_name, c) => {
+      const tag = unhex(c.tag)
+      for (const field of ['scopeId', 'epoch', 'admissionId'] as const) {
+        const moved = { ...c.context, [field]: otherValue(c.context[field]) }
+        expect(v1.admissionTagVerifies(epochKey, moved, tag), field).toBe(false)
+      }
+      const otherUser = c.context.userId === null ? 'b0b00000-0000-4000-8000-000000000009' : null
+      expect(v1.admissionTagVerifies(epochKey, { ...c.context, userId: otherUser }, tag)).toBe(false)
+      expect(v1.admissionTagVerifies(unhex('5b'.repeat(32)), c.context, tag)).toBe(false)
+      expect(v1.admissionTagVerifies(epochKey, c.context, tag.slice(0, 31))).toBe(false)
+      // A longer "tag" whose first 32 bytes ARE the tag must not pass either — the length is part of the check.
+      expect(v1.admissionTagVerifies(epochKey, c.context, v1.concat(tag, Uint8Array.of(0)))).toBe(false)
+      const flipped = tag.slice()
+      flipped[31] ^= 1
+      expect(v1.admissionTagVerifies(epochKey, c.context, flipped)).toBe(false)
+    })
+
+    it('an absent userId is explicit: undefined is a forgotten field, not a tenant invite', () => {
+      const { userId: _u, ...rest } = a.tenant_invite.context as v1.Admission
+      expect(() => v1.admissionTag(epochKey, rest as v1.Admission)).toThrow(v1.SealContextInvalid)
+    })
+  })
+
+  describe('grant signature (ADR 0028 Decision 6)', () => {
+    const g = vectors.grant_signature
+    type Case = {
+      context: { scopeId: string; scopeKind: v1.ScopeKind; epoch: number; recipientUserId: string }
+      recipient_identity_public_key: string
+      wrapped_grant: string
+      statement: string
+      signature: string
+    }
+    const input = (c: Case): v1.GrantStatementInput => ({
+      ...c.context,
+      recipientIdentityPublicKey: unhex(c.recipient_identity_public_key),
+      wrappedGrant: unhex(c.wrapped_grant),
+    })
+    const cases: [string, Case][] = [
+      ['personal', g.personal],
+      ['group', g.group],
+    ]
+    const priv = unhex(g.sign_seed)
+    const pub = unhex(g.sign_public)
+
+    it('the signing key is the identity bundle\'s Ed25519 half', () => {
+      const id = v1.identityPublicFromPrivate({ kemX: new Uint8Array(32).fill(1), mlkemSeed: new Uint8Array(64).fill(2), sign: priv })
+      expect(hex(id.sign)).toBe(g.sign_public)
+    })
+
+    it.each(cases)('%s: statement bytes and signature', (_name, c) => {
+      const stmt = v1.grantStatement(input(c))
+      expect(hex(v1.encodeStatement(stmt))).toBe(c.statement)
+      expect(hex(v1.identitySign(priv, stmt))).toBe(c.signature)
+      expect(v1.identityVerify(pub, stmt, unhex(c.signature))).toBe(true)
+    })
+
+    it.each(cases)('%s: the signature answers for nothing else', (_name, c) => {
+      const sig = unhex(c.signature)
+      const base = input(c)
+      const flip = (b: Uint8Array) => {
+        const out = b.slice()
+        out[0] ^= 1
+        return out
+      }
+      const variants: [string, v1.GrantStatementInput][] = [
+        ['scopeId', { ...base, scopeId: otherValue(base.scopeId) as string }],
+        // The signed kind is what keeps a group's genuine grant from being presented as the personal scope.
+        ['scopeKind', { ...base, scopeKind: base.scopeKind === 'PERSONAL' ? 'GROUP' : 'PERSONAL' }],
+        ['epoch', { ...base, epoch: base.epoch + 1 }],
+        ['recipientUserId', { ...base, recipientUserId: otherValue(base.recipientUserId) as string }],
+        ['recipientIdentityPublicKey', { ...base, recipientIdentityPublicKey: flip(base.recipientIdentityPublicKey) }],
+        ['wrappedGrant', { ...base, wrappedGrant: flip(base.wrappedGrant) }],
+      ]
+      for (const [name, v] of variants) expect(v1.identityVerify(pub, v1.grantStatement(v), sig), name).toBe(false)
+      // A foreign key, and malformed key/signature bytes the server could serve: a refusal, never a throw.
+      expect(v1.identityVerify(unhex(vectors.secret_key_proof.key.public_key), v1.grantStatement(base), sig)).toBe(false)
+      expect(v1.identityVerify(pub.slice(0, 31), v1.grantStatement(base), sig)).toBe(false)
+      expect(v1.identityVerify(pub, v1.grantStatement(base), sig.slice(0, 63))).toBe(false)
+    })
+
+    it('refuses a statement whose kind is not a scope kind, or whose digests are not SHA-256 digests', () => {
+      const stmt = v1.grantStatement({
+        scopeId: g.personal.context.scopeId, scopeKind: 'PERSONAL', epoch: 0, recipientUserId: g.personal.context.recipientUserId,
+        recipientIdentityPublicKey: new Uint8Array(1), wrappedGrant: new Uint8Array(1),
+      })
+      const bad = (patch: Record<string, unknown>) => () => v1.encodeStatement({ ...stmt, ...patch } as never)
+      expect(bad({ scopeKind: 'OWNER' })).toThrow(new v1.SealContextInvalid('grant.scopeKind is not a scope kind'))
+      expect(bad({ scopeKind: 7 })).toThrow(new v1.SealContextInvalid('grant.scopeKind is not a scope kind'))
+      expect(bad({ wrappedGrantDigest: new Uint8Array(31) })).toThrow(new v1.SealContextInvalid('grant.wrappedGrantDigest is not a SHA-256 digest'))
+      expect(bad({ recipientIdentityDigest: 'x'.repeat(32) })).toThrow(new v1.SealContextInvalid('grant.recipientIdentityDigest is not a SHA-256 digest'))
+      // Every kind the product has encodes as its own name — the vectors pin PERSONAL and GROUP, this pins all three.
+      for (const kind of ['TENANT', 'GROUP', 'PERSONAL'] as const) {
+        const bytes = v1.encodeStatement({ ...stmt, scopeKind: kind })
+        expect(new TextDecoder().decode(bytes)).toContain(kind)
+      }
+    })
+
+    it('the statement\'s label domain-separates it from the admission tag and from every seal purpose', () => {
+      const stmt = v1.encodeStatement(v1.grantStatement(input(g.personal)))
+      expect(new TextDecoder().decode(stmt.slice(4, 9))).toBe('grant')
+      expect(Object.keys(vectors.seal.sym)).not.toContain('grant')
+      expect(Object.keys(vectors.seal.asym)).not.toContain('grant')
+    })
+  })
+
   it('chunked-AEAD frame (resumable upload / streaming)', () => {
     const f = vectors.chunk_frame
     const frame = v1.sealFrame(unhex(f.contentKey), f.index, f.total, unhex(f.plaintext), unhex(f.nonce))

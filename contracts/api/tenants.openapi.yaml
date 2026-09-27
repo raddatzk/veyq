@@ -325,7 +325,12 @@ paths:
         tenant admin above: this is gated on the caller holding the **OWNER membership** of `{tenantId}` (a
         code check, not the Server-Owner role). The tenant must be ACTIVE. Delivery of the scope key is
         automatic afterward (any online key-holder wraps `K_SC` to the new member — cr-0076); admission here
-        only creates the invite. Operator-blind: only the invite hash + the email (metadata) are stored.
+        only creates the invite. **Admission is a key-holder act**
+        ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6): the invite carries the
+        admission tag the owner's client computed under the tenant scope's current epoch key, and no key-holder
+        delivers to the member it admits unless that tag verifies — an owner's session alone, without the unlocked
+        vault, can mint an invite but never one that is delivered to. Operator-blind: only the invite hash, the
+        email (metadata) and the opaque admission are stored.
       security:
         - bearerAuth: []
       parameters:
@@ -335,7 +340,11 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/MemberInviteRequest" }
-            example: { email: partner@example.com }
+            example:
+              email: partner@example.com
+              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+              admissionEpoch: 0
+              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
       responses:
         "201":
           description: A MEMBER invite was minted and sent.
@@ -374,7 +383,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
         "409":
-          description: The email is already a member of this tenant, or the tenant is not ACTIVE.
+          description: The email is already a member of this tenant, the tenant is not ACTIVE, or the admission was tagged at an epoch that is no longer the tenant scope's current one (`stale_epoch` — re-tag and retry).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1427,7 +1436,7 @@ components:
 
     MemberInviteRequest:
       type: object
-      required: [email]
+      required: [email, admissionId, admissionEpoch, admissionTag]
       properties:
         email:
           x-veyq-visibility: pii
@@ -1440,6 +1449,35 @@ components:
           maxLength: 254
           example: partner@example.com
           x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Email @field:jakarta.validation.constraints.Size(max = 254)'
+        admissionId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the invite, tagged under the tenant scope's current epoch key with no user id (the invitee has no account yet). A reissued invite keeps it, and accepting copies it onto the new membership; a tag stated at an epoch that is no longer the tenant's current one is `409 stale_epoch`.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        admissionTag:
+          type: string
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     PendingMemberInvite:
       type: object
@@ -1466,6 +1504,32 @@ components:
           type: string
           format: date-time
           example: 2026-07-11T12:00:00Z
+        admissionId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the invite's, served so a rotation of the tenant scope can verify it and carry it forward (ADR 0024 §4); `null` when it carries none.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+        admissionTag:
+          type: [string, "null"]
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
 
     MemberInviteState:
       type: object
@@ -1812,6 +1876,45 @@ components:
           maxLength: 8192
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: [string, "null"]
+          description: >
+            Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite. The owner's self-signature over the tenant grant, kind `TENANT`, epoch 0. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        admissionId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the owner's own tenant membership, self-tagged at the cold birth under `E_0` (epoch 0, no user id) so a later rotation has a tag to carry forward. Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        admissionTag:
+          type: [string, "null"]
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >
@@ -1903,6 +2006,45 @@ components:
           maxLength: 8192
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: [string, "null"]
+          description: >
+            Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite. The owner's self-signature over the tenant grant, kind `TENANT`, epoch 0. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        admissionId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the owner's own tenant membership, self-tagged at the cold birth under `E_0` (epoch 0, no user id) so a later rotation has a tag to carry forward. Required with `grant` for an OWNER invite (the tenant birth), omitted for a MEMBER invite.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        admissionTag:
+          type: [string, "null"]
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: [string, "null"]
           description: >

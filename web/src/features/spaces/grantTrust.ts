@@ -1,0 +1,84 @@
+// The recipient's half of ADR 0028 Decision 6: a grant is opened only if its granter's signature verifies. A seal to
+// a public key needs only that key, so without this check the server could hand an account a scope key of its own
+// choosing — its personal scope included — and the account's next write would go under it. The one unwrap path
+// (`scopes.ts`) and the switcher's icon read call {@link verifyOwnGrant} before the key inside is ever used.
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { accountApi } from '../../api/client'
+import { withRefresh } from '../../app/sessionRefresh'
+import { checkAndPin } from '../account/identityPins'
+import { grantSignatureVerifies, type GrantScope } from './grant'
+
+/** Why a grant was not opened. The key inside is never used; the scope reads as awaiting access. */
+export type GrantRefusal = 'unsigned' | 'not_self_signed' | 'bad_signature' | 'granter_key_changed'
+
+export class GrantRefused extends Error {
+  constructor(readonly scopeId: string, readonly reason: GrantRefusal) {
+    super(`grant_refused: ${reason}`)
+    this.name = 'GrantRefused'
+  }
+}
+
+/** The caller as a grant's recipient: their account id and the identity public bundle their vault holds. */
+export type Me = { userId: string; pub: v1.Identity['pub']; pubB64: string }
+
+// The account id is the one fact the vault does not hold. Cached against the public bundle it was read for, so a
+// different identity (another account, or this one after a key rotation) reads it again rather than inheriting it.
+let cachedId: { pubB64: string; userId: string } | null = null
+
+/** The caller as a recipient, derived from the vault's private bundle — never from a directory's copy of it. */
+export async function me(priv: v1.Identity['priv']): Promise<Me> {
+  const pub = v1.identityPublicFromPrivate(priv)
+  const pubB64 = b64std(v1.serializeIdentityPublic(pub))
+  if (cachedId?.pubB64 !== pubB64) {
+    const userId = (await withRefresh(() => accountApi().getAccountKeyMaterial())).userId
+    cachedId = { pubB64, userId }
+  }
+  return { userId: cachedId.userId, pub, pubB64 }
+}
+
+// Pin writes are version-guarded read-modify-writes; several grants verified at once (the switcher opens every
+// group) would race each other's re-base. One at a time, the way the rotation's re-grant loop already pins.
+let pinQueue: Promise<unknown> = Promise.resolve()
+function pinSerially(userId: string, keyB64: string): ReturnType<typeof checkAndPin> {
+  const next = pinQueue.then(() => checkAndPin(userId, keyB64))
+  pinQueue = next.catch(() => undefined)
+  return next
+}
+
+/** A grant row as a read serves it (`ScopeSummary`, `MyTenant`). */
+export type GrantRow = {
+  granterUserId?: string | null
+  grantSignature?: string | null
+  granterIdentityPublicKey?: string | null
+}
+
+/**
+ * Verify the caller's own grant before it is opened (ADR 0028 Decision 6); throws {@link GrantRefused} otherwise.
+ * - **Self-granted** (the caller's own birth, rotation or re-key): the signature must verify under the caller's own
+ *   signing key, which comes from the vault — never from the directory.
+ * - **PERSONAL**: only a self-granted grant opens. The kind is signed, so a group's genuine grant served in the
+ *   personal scope's row does not verify as `PERSONAL`, and a foreign-signed one is refused outright.
+ * - **Shared**: the signature must verify under the granter's served key, and that key must pass the TOFU gate — a
+ *   first-seen key is pinned (only after it verified, so a forged grant pins nothing), a changed key is refused and
+ *   surfaces through the changed-key notice.
+ */
+export async function verifyOwnGrant(scope: GrantScope, wrappedGrant: string, row: GrantRow, self: Me): Promise<void> {
+  const refuse = (reason: GrantRefusal) => new GrantRefused(scope.scopeId, reason)
+  if (!row.granterUserId || !row.grantSignature) throw refuse('unsigned')
+  const to = { userId: self.userId, identityPublicKeyB64: self.pubB64 }
+  if (row.granterUserId === self.userId) {
+    if (!grantSignatureVerifies(self.pub.sign, scope, to, wrappedGrant, row.grantSignature)) throw refuse('bad_signature')
+    return
+  }
+  if (scope.kind === 'PERSONAL') throw refuse('not_self_signed')
+  if (!row.granterIdentityPublicKey) throw refuse('unsigned')
+  let granterSign: Uint8Array
+  try {
+    granterSign = v1.deserializeIdentityPublic(fromB64std(row.granterIdentityPublicKey)).sign
+  } catch {
+    throw refuse('bad_signature')
+  }
+  if (!grantSignatureVerifies(granterSign, scope, to, wrappedGrant, row.grantSignature)) throw refuse('bad_signature')
+  if ((await pinSerially(row.granterUserId, row.granterIdentityPublicKey)) === 'changed') throw refuse('granter_key_changed')
+}

@@ -71,6 +71,10 @@ object Failures {
      */
     val idTaken: HttpFailure = httpFailure("id_taken", CONFLICT)
 
+    /** A write stated an epoch that is no longer the scope's current one — a concurrent rotation moved it → 409; the
+     *  client re-reads and rebuilds against the current epoch (ADR 0024). */
+    val staleEpoch: HttpFailure = httpFailure("stale_epoch", CONFLICT)
+
     /** Slug already taken under the parent (uniqueness) → 409. */
     val slugTaken: HttpFailure = httpFailure("slug_taken", CONFLICT)
 

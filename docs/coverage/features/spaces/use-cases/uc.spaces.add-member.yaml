@@ -120,3 +120,16 @@ acceptanceCriteria:
         integration: [TasksSliceTest.grantDeliveryOriginatedOnGrantlessMembershipThenClaimedAndCompletedIdempotently]
       web:
         unit: [src/features/tasks/grantDeliveryWorker.test.ts]
+  - id: admission-needs-the-tenant-key
+    # ADR 0020 move 6: an owner's session proves a password, not a key. The invite carries a tag only a holder of
+    # K_tenant's current epoch can compute; accepting copies it onto the membership; every key-holder's worker
+    # verifies it before it wraps. The e2e is inbox #159's door end to end: a password-only session mints an invite
+    # with the bytes it can make, an attacker registers on it, and a genuine worker declines it while delivering
+    # the owner's real invite in the same run.
+    text: A tenant member receives the tenant key only if their admission carries a tag made with the tenant's current epoch key; an invite from a session without the vault is never delivered to.
+    coverage:
+      backend:
+        integration: [MemberAddSliceTest.theMailedSecretIsTheOnlyChannelAndItWorks, MemberInviteManagementSliceTest.reissueSupersedesOldSecretAndMailsAUsableFreshLink, TasksSliceTest.grantDeliveryServesTheTargetsAdmissionAndRecordsTheWorkerAsGranter, ScopesSliceTest.aTenantRotationMustCarryItsOpenMemberInvites]
+      web:
+        unit: [src/features/spaces/grant.test.ts, src/features/spaces/members.test.ts, src/features/tenant/tenantInvite.test.ts]
+        e2e: [src/features/spaces/admission.e2e.test.ts]

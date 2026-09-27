@@ -11,7 +11,8 @@ import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
-import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon } from './scopes'
+import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById } from './scopes'
+import { zeroEpochKeys } from './epochs'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { getMyProfile } from '../account/profile/profile'
@@ -68,7 +69,7 @@ const purgeDay = computed(() => (purgeAfter.value ? purgeAfter.value.toLocaleDat
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The Group load body derives ownership from
 // the directory (the group role isn't the tenant role — match my per-tenant username) and reads the lifecycle
 // (pending-deletion) state alongside the roster.
-const { members, isOwner, trust, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     addError.value = ''
     if (!props.scopeId) throw new Error('no-scope')
@@ -82,6 +83,12 @@ const { members, isOwner, trust, reviewTarget, reviewOpen, loading, loadError, r
     if (iconBytes) groupIcon.set(new Blob([iconBytes as BlobPart], { type: 'image/webp' }))
     else groupIcon.clear()
     return { rows, isOwner: !!me && rows.some((m) => m.username === me.username && m.role === 'OWNER') }
+  }, async () => {
+    // The group's current epoch key, opened for this read and zeroed after it — the key its admissions are tagged under.
+    const opened = props.scopeId ? await openScopeById(props.scopeId) : null
+    return opened
+      ? { scopeId: opened.scopeId, kind: opened.kind, key: opened.key, epoch: opened.epochs.current, release: () => zeroEpochKeys(opened.epochs) }
+      : null
   })
 watch(() => props.scopeId, () => reload())
 
@@ -108,15 +115,16 @@ async function submit() {
       // CHANGED key throws IdentityChangedError below rather than silently sealing to a possibly-substituted key.
       const sealedNameKey = await wrapGroupNameKeyForInvitee(props.scopeId, candidate.userId, candidate.identityPublicKey)
       if (!sealedNameKey) throw new Error('cannot open the group to seal the invite name-key')
-      await addGroupMember(props.scopeId, uname, sealedNameKey)
+      await addGroupMember(props.scopeId, uname, candidate.userId, sealedNameKey)
       toast.success(t('groups.invitationSent'))
     } else {
-      await addGroupMember(props.scopeId, uname)
+      await addGroupMember(props.scopeId, uname, candidate.userId)
     }
     username.value = ''
     pendingKeyChange.value = null
     members.value = await listScopeMembers(props.scopeId) // refresh — awaiting access, or the pending proposal
     await refreshTrust()
+    await refreshAdmission()
   } catch (e) {
     if (e instanceof IdentityChangedError && candidate) {
       // The invitee's security key changed since we last pinned it (a legitimate rotation, or an operator MITM).
@@ -441,6 +449,10 @@ async function onRestore() {
                      pin (a rotation or an operator substitution). Verified/recognized are intentionally not shown. -->
                 <span v-if="trust[m.userId] === 'changed'" class="veyq-badge changed">
                   <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('verify.badgeChanged') }}
+                </span>
+                <!-- Admission not verified (ADR 0020 move 6): no key-holder's worker delivers to this member. -->
+                <span v-if="unadmitted[m.userId]" class="veyq-badge changed">
+                  <i class="pi pi-exclamation-triangle" aria-hidden="true"></i>{{ t('members.badgeNotAdmitted') }}
                 </span>
               </div>
             </div>

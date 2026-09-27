@@ -15,7 +15,7 @@ import Password from 'primevue/password'
 import Checkbox from 'primevue/checkbox'
 import { useBreachCheck } from '../features/account/passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
-import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
+import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError, type TenantBirth, type TenantOwner } from '../features/tenant/tenantInvite'
 import { sealName, myUserId } from '../features/account/profile/profile'
 import EmergencyKitSave from '../features/account/emergencyKit/EmergencyKitSave.vue'
 import SecretKeyField from '../shared/ui/SecretKeyField.vue'
@@ -28,7 +28,7 @@ import { identityPrivate, vaultState } from '../app/vault'
 import { account } from '../app/account'
 import { setupApi } from '../api/client'
 import { fromB64std } from '@veyq/crypto/base64'
-import { hybridPublic } from '@veyq/crypto/v1'
+import { identityPublicFromPrivate } from '@veyq/crypto/v1'
 import { HttpStatus, isUnauthorized } from '../shared/httpError'
 
 const { t } = useI18n()
@@ -140,9 +140,10 @@ function sealedNameFor(scopeRootKey: Uint8Array, userId: string): string | undef
   return sealName(scopeRootKey, { scopeId: tenantId.value, userId }, { firstName: firstName.value, lastName: lastName.value })
 }
 
-/** The caller's own id for a name sealed by an existing account — asked only when there is a name to seal. */
-async function ownIdIfNaming(): Promise<string> {
-  return firstName.value.trim() || lastName.value.trim() ? myUserId() : ''
+/** The unlocked vault's identity as the tenant's birth needs it: the grant is sealed to its public bundle and signed
+ *  by its signing half (ADR 0028 Decision 6), under the owner's own account id. */
+function ownerOf(userId: string, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }): TenantOwner {
+  return { userId, identity: { pub: identityPublicFromPrivate(priv), priv } }
 }
 
 /** Register step 2: cold-birth the scope grant to the new identity and register-and-accept. */
@@ -155,14 +156,14 @@ async function finishRegistration() {
     // grant — and, holding K_tenant here, can seal the optional real name at join (cr-0106).
     // The new account's id is minted here, before the account exists — the optional name is sealed bound to it.
     const userId = crypto.randomUUID()
-    let grant: string | undefined
+    let birth: TenantBirth | undefined
     let sealedName: string | undefined
     if (!isMember.value) {
-      const born = bornTenantScope({ x: built.identity.pub.kemX, m: built.identity.pub.kemM }, tenantId.value)
-      grant = born.grant
+      const born = bornTenantScope({ userId, identity: built.identity }, tenantId.value)
+      birth = born.birth
       sealedName = sealedNameFor(born.scopeRootKey, userId)
     }
-    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, grant, sealedName)
+    await registerAndAccept(secret, userId, username.value.trim().toLowerCase(), built.material, birth, sealedName)
     phase.value = 'done'
   } catch (e) {
     error.value = await mapError(e)
@@ -181,14 +182,15 @@ async function signInAndAccept() {
     await unlockMasterKey(password.value, secretKey.value.trim())
     const priv = identityPrivate()
     if (!priv) throw new Error('locked')
-    let grant: string | undefined
+    let birth: TenantBirth | undefined
     let sealedName: string | undefined
     if (!isMember.value) {
-      const born = bornTenantScope(hybridPublic(priv), tenantId.value)
-      grant = born.grant
-      sealedName = sealedNameFor(born.scopeRootKey, await ownIdIfNaming())
+      const userId = await myUserId()
+      const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
+      birth = born.birth
+      sealedName = sealedNameFor(born.scopeRootKey, userId)
     }
-    await acceptInvite(secret, username.value.trim().toLowerCase(), grant, sealedName)
+    await acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName)
     phase.value = 'done'
   } catch (e) {
     error.value = await mapError(e)
@@ -202,14 +204,15 @@ async function signInAndAccept() {
 async function sealAndAccept() {
   const priv = identityPrivate()
   if (!priv) throw new Error('locked')
-  let grant: string | undefined
+  let birth: TenantBirth | undefined
   let sealedName: string | undefined
   if (!isMember.value) {
-    const born = bornTenantScope(hybridPublic(priv), tenantId.value)
-    grant = born.grant
-    sealedName = sealedNameFor(born.scopeRootKey, await ownIdIfNaming())
+    const userId = await myUserId()
+    const born = bornTenantScope(ownerOf(userId, priv), tenantId.value)
+    birth = born.birth
+    sealedName = sealedNameFor(born.scopeRootKey, userId)
   }
-  await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), grant, sealedName))
+  await withRefresh(() => acceptInvite(secret, username.value.trim().toLowerCase(), birth, sealedName))
   password.value = ''
   phase.value = 'done'
 }

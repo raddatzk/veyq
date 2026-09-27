@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.tasks.CapabilityTags
@@ -40,7 +41,7 @@ class MemberAddSliceTest {
     fun ownerMintsMemberInviteOutsiderIs404(): Unit = TestMailbox(MINT_SMTP_PORT).start().use { mail ->
         val (tenantId, owner) = seedActiveTenant("mint.example.com", "owner@mint.example.com", mail)
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@mint.example.com"}""")
+            .body("""{"email":"newbie@mint.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201).body("email", equalTo("newbie@mint.example.com"))
             .body("inviteStatus", equalTo("ACTIVE")).body("inviteExpiresAt", notNullValue())
@@ -49,7 +50,7 @@ class MemberAddSliceTest {
         // a tenant that does not exist (membership is the first guard, ADR 0042 / cr-0162).
         val outsider = seedUser("outsider@mint.example.com")
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
-            .body("""{"email":"x@mint.example.com"}""")
+            .body("""{"email":"x@mint.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -89,8 +90,9 @@ class MemberAddSliceTest {
         // the response carries no secret, and the one that arrives *in the mail* is the real, usable token.
         val (tenantId, owner) = seedActiveTenant("mailed.example.com", "owner@mailed.example.com", mail)
         val invitee = "newbie@mailed.example.com"
+        val admissionId = UUID.randomUUID().toString()
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"$invitee"}""")
+            .body("""{"email":"$invitee",${TestAdmission.json(0, admissionId)}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(201)
             .body("bootstrapSecret", nullValue())
@@ -103,6 +105,12 @@ class MemberAddSliceTest {
             .extract().path<String>("userId")
         assertEquals("MEMBER", membershipRole(newUserId, tenantId))
         assertNull(grantOf(newUserId, tenantId))
+        // ADR 0020 move 6: the admission the owner's client tagged rides the invite onto the membership it becomes.
+        val carried = QuarkusTransaction.requiringNew().call {
+            MembershipEntity.find("userId = ?1 and scopeId = ?2", newUserId, tenantId).firstResult()!!
+                .let { Triple(it.admissionId, it.admissionEpoch, it.admissionTag) }
+        }
+        assertEquals(Triple(admissionId, 0, TestAdmission.TAG), carried)
     }
 
     @Test
@@ -112,7 +120,7 @@ class MemberAddSliceTest {
         // live secret with no recipient, which is exactly what the copy-link used to paper over.
         val (tenantId, owner) = seedActiveTenant("nomail.example.com", "owner@nomail.example.com")
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@nomail.example.com"}""")
+            .body("""{"email":"newbie@nomail.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(503).body("code", equalTo("mail_unavailable"))
 
@@ -129,7 +137,7 @@ class MemberAddSliceTest {
         pointAtDeadSmtp(tenantId, "deadsmtp.example.com")
 
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"newbie@deadsmtp.example.com"}""")
+            .body("""{"email":"newbie@deadsmtp.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(503).body("code", equalTo("mail_send_failed"))
 
@@ -145,12 +153,12 @@ class MemberAddSliceTest {
         val victim = "victim@flood.example.com"
         repeat(3) {
             given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-                .body("""{"email":"$victim"}""")
+                .body("""{"email":"$victim",${TestAdmission.json()}}""")
                 .`when`().post("/api/tenants/$tenantId/member-invites")
                 .then().statusCode(201)
         }
         given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
-            .body("""{"email":"$victim"}""")
+            .body("""{"email":"$victim",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
             .then().statusCode(429).header("Retry-After", notNullValue()).body("code", equalTo("rate_limited"))
     }
@@ -260,7 +268,10 @@ class MemberAddSliceTest {
 
     private fun seedMemberInvite(tenantId: String, email: String, secret: String) =
         QuarkusTransaction.requiringNew().run {
-            store.mintMemberInvite(tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS))
+            store.mintMemberInvite(
+                tenantId, email, Tokens.hash(secret), Instant.now().plus(7, ChronoUnit.DAYS),
+                com.veyq.app.shared.membership.TestAdmission.admission(), checkEpoch = false,
+            )
         }
 
     private fun seedUser(email: String, pubkey: String = "aWRlbnRpdHktcHVibGljLWtleQ=="): String {

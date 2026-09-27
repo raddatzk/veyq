@@ -236,7 +236,7 @@ paths:
         "204":
           description: The job is done (or was already done — idempotent no-op).
         "400":
-          description: The request was malformed (e.g. a grant-delivery completion with no wrap or no `epoch`).
+          description: The request was malformed (e.g. a grant-delivery completion with no wrap, no `epoch` or no `grantSignature`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -564,6 +564,32 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: aWRlbnRpdHktcHVibGljLWtleQ==
+        admissionId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the target membership's. The worker recomputes the tag under its **own current** epoch key and declines `admission_unverified` on a mismatch, on an epoch that is not its current one, or on `null`.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+        admissionTag:
+          type: [string, "null"]
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
 
     EnqueueRequest:
       type: object
@@ -615,6 +641,17 @@ components:
           minimum: 0
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        grantSignature:
+          type: [string, "null"]
+          description: >
+            For a `grant-delivery` job (required there, `400` otherwise): the worker's signature over the grant it posts, stored on the target membership with the worker as its granter. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     FailRequest:
       type: object
@@ -635,7 +672,8 @@ components:
           type: [string, "null"]
           description: >
             Optional developer-facing decline reason; never content or secrets. For the TOFU seam this is
-            typically `identity_changed`.
+            typically `identity_changed`; a target whose admission tag does not verify under the worker's current
+            epoch key is declined `admission_unverified` (ADR 0020 move 6).
           maxLength: 256
           example: identity_changed
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256)'
