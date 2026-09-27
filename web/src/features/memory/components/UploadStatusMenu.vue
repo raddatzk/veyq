@@ -11,6 +11,8 @@ import {
   cancelAll,
   retryFile,
   acknowledgeBatch,
+  isRetryable,
+  QUOTA_EXCEEDED,
   type UploadBatch,
   type UploadFile,
 } from '../uploadQueue'
@@ -112,7 +114,7 @@ onBeforeUnmount(() => {
               <span class="pi pi-times" aria-hidden="true" />
             </button>
             <button
-              v-else-if="file.status === 'failed'"
+              v-else-if="file.status === 'failed' && isRetryable(file)"
               type="button"
               class="uploads-file-action"
               :aria-label="t('media.uploadRetry')"
@@ -121,6 +123,10 @@ onBeforeUnmount(() => {
             >
               <span class="pi pi-refresh" aria-hidden="true" />
             </button>
+            <!-- A refusal for lack of room says why, and offers no retry: none can help (ADR 0073 §6). -->
+            <span v-if="file.status === 'failed' && file.error === QUOTA_EXCEEDED" class="uploads-file-reason">
+              {{ t('media.uploadNoSpace') }}
+            </span>
           </li>
         </ul>
         <button v-if="batch.finishedAt !== null" type="button" class="uploads-dismiss" @click="acknowledgeBatch(batch.id)">
@@ -251,6 +257,10 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .uploads-file-status {
+  color: var(--app-muted);
+}
+.uploads-file-reason {
+  grid-column: 2 / -1;
   color: var(--app-muted);
 }
 .uploads-file.is-failed .uploads-file-status {

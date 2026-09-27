@@ -5,6 +5,8 @@
 // member's 403 renders a read-only notice and a non-member's 404 the generic load error (ADR 0042). Operator-blind:
 // only byte counts the server already sees, and only the tenant's total — never a figure per member or link.
 // The limit is entered in GiB and sent in bytes; `0` switches link uploads off, and there is no "unlimited".
+// Beside the usage sits the tenant's quota when the Server Owner set one (uc.admin.tenant-storage-quota): read-only
+// here — no tenant-owner operation writes it, so the owner distributes below it and cannot raise it (ADR 0073 §1).
 import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
@@ -25,12 +27,14 @@ const toast = useToast()
 const on401 = handle401(useRouter())
 
 const usedBytes = ref(0)
+const quotaBytes = ref<number | null>(null)
 // The limit as typed, in GiB (a decimal is allowed: 0.5 GiB is a real limit).
 const limitGib = ref('')
 const actionError = ref('')
 
 function applyView(s: TenantStorage) {
   usedBytes.value = s.usedBytes
+  quotaBytes.value = s.quotaBytes ?? null
   limitGib.value = String(Math.round((s.shareLinkLimitBytes / GIB) * 100) / 100)
 }
 
@@ -41,6 +45,7 @@ const { pending: loading, error: loadErr } = useAsyncData(async () => {
 const loadError = computed(() => loadErrorKind(loadErr.value))
 
 const used = computed(() => formatBytes(usedBytes.value, locale.value))
+const quota = computed(() => (quotaBytes.value === null ? null : formatBytes(quotaBytes.value, locale.value)))
 // Accepts "2", "2.5" and the German "2,5"; anything else (empty, negative, text) is not a limit.
 const limitBytes = computed<number | null>(() => {
   const n = Number(limitGib.value.trim().replace(',', '.'))
@@ -93,6 +98,13 @@ async function save() {
           <span>{{ t('storage.used') }}</span>
           <strong>{{ used }}</strong>
         </p>
+        <div v-if="quota !== null" class="storage-quota">
+          <p class="storage-used">
+            <span>{{ t('storage.quota') }}</span>
+            <strong>{{ quota }}</strong>
+          </p>
+          <small class="field-hint">{{ t('storage.quotaHint') }}</small>
+        </div>
 
         <label>
           <span>{{ t('storage.linkLimit') }}</span>
@@ -114,6 +126,10 @@ async function save() {
   gap: 0.5rem;
   align-items: baseline;
   margin: 0;
+}
+.storage-quota {
+  display: grid;
+  gap: 0.25rem;
 }
 .storage-actions {
   display: flex;

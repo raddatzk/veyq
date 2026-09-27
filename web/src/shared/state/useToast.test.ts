@@ -38,6 +38,15 @@ describe('useToast', () => {
     expect(msg.life).toBeGreaterThan(0)
   })
 
+  it('error() adds an error toast in the default region that stays until closed', () => {
+    harness(() => useToast()).error('No space left.')
+    const msg = add.mock.calls[0][0]
+    expect(msg.severity).toBe('error')
+    expect(msg.summary).toBe('No space left.')
+    expect(msg.group).toBeUndefined()
+    expect(msg.life).toBeUndefined()
+  })
+
   it('showUndo() targets the undo group and carries the summary, life, and onUndo', () => {
     const onUndo = vi.fn()
     harness(() => useToast()).showUndo({ summary: 'Moved to trash', onUndo, life: 6000 })
