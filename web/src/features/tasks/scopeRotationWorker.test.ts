@@ -4,8 +4,12 @@ vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 // The rotation crypto + directory fetch are covered by their own suites (scopes.test.ts / members.test.ts); the
-// worker just orchestrates claim → rotate → complete, so stub them and assert the wiring + arguments.
-vi.mock('../spaces/scopes', () => ({ rotateGroupForRemoval: vi.fn().mockResolvedValue(2) }))
+// worker just orchestrates claim → rotate → complete, so stub them and assert the wiring + arguments. The
+// `stale_epoch` predicate stays real: which error the worker declines on is the thing under test.
+vi.mock('../spaces/scopes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../spaces/scopes')>()),
+  rotateGroupForRemoval: vi.fn().mockResolvedValue(2),
+}))
 vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn().mockResolvedValue([{ userId: 'u2' }]) }))
 // Hoisted so the (hoisted) vi.mock factory can close over the same mutable object the tests reach into.
 const { activeSpace } = vi.hoisted(() => ({ activeSpace: { scopeId: null as string | null } }))
@@ -18,8 +22,8 @@ import { rotateGroupForRemoval } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
 
-function mockTasks(claimTask: ReturnType<typeof vi.fn>, completeTask = vi.fn(), failTask = vi.fn()) {
-  vi.mocked(tasksApi).mockReturnValue({ claimTask, completeTask, failTask } as unknown as ReturnType<typeof tasksApi>)
+function mockTasks(claimTask: ReturnType<typeof vi.fn>, completeTask = vi.fn(), failTask = vi.fn(), declineTask = vi.fn()) {
+  vi.mocked(tasksApi).mockReturnValue({ claimTask, completeTask, failTask, declineTask } as unknown as ReturnType<typeof tasksApi>)
 }
 
 beforeEach(() => {
@@ -103,5 +107,25 @@ describe('runScopeRotationWorker', () => {
 
     expect(await runScopeRotationWorker()).toBe(0)
     expect(failTask).toHaveBeenCalledWith({ jobId: 'j1', failRequest: { reason: 'rotate-failed' } })
+  })
+
+  it('declines, not fails, a job whose rotation is still stale — this worker\'s grant lags the scope', async () => {
+    // ADR 0024 §4: the rotation already re-opened and rebuilt once; still stale means this worker cannot perform
+    // it at all. Declining releases it for a current key-holder without spending an attempt (the control is the
+    // `rotate-failed` case above: any other error still fails).
+    const claimTask = vi
+      .fn()
+      .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
+      .mockResolvedValueOnce(null)
+    const failTask = vi.fn().mockResolvedValue(undefined)
+    const declineTask = vi.fn().mockResolvedValue(undefined)
+    mockTasks(claimTask, vi.fn(), failTask, declineTask)
+    vi.mocked(rotateGroupForRemoval).mockRejectedValueOnce({
+      response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }),
+    })
+
+    expect(await runScopeRotationWorker()).toBe(0)
+    expect(declineTask).toHaveBeenCalledWith({ jobId: 'j1', declineRequest: { reason: 'stale_epoch' } })
+    expect(failTask).not.toHaveBeenCalled()
   })
 })

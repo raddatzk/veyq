@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// The APIs, the vault and the scope layer are mocked; **the crypto is real** — both wraps, the identity mint
+// The APIs and the vault are mocked; the scope layer and **the crypto are real** — both wraps, the identity mint
 // and the KEK derivation all run for real (the last at a light Argon cost, see the worker mock below), so
 // these tests prove that what is posted actually opens with the credential offered, rather than that a stub
 // was called.
@@ -20,11 +20,11 @@ vi.mock('../../../app/vault', () => ({
   masterKey: vi.fn(),
   setUnlocked: vi.fn(),
   unlockOrigin: vi.fn(),
+  identityPrivate: vi.fn(),
 }))
 vi.mock('../identityPins', () => ({ resealPinsUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../deviceRegister', () => ({ resealRegisterUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(async () => {}) }))
-vi.mock('../../spaces/scopes', () => ({ openScopeById: vi.fn() }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
 // The two Argon-bearing KEK derivations run for REAL but at a light cost. They stay **input-sensitive**, which
@@ -45,10 +45,9 @@ vi.mock('@veyq/crypto/argonWorker', async () => {
 
 import { rotateKeys, RotationRefused } from './rotateKeys'
 import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
-import { masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
+import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
-import { openScopeById } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -58,6 +57,14 @@ const SECRET_KEY = v1.randomBytes(32)
 const SECRET_KEY_B64 = b64std(SECRET_KEY)
 /** The account's *current* Master Key — what the stored PASSWORD wrap opens and what the vault is holding. */
 const MK = v1.randomBytes(32)
+/** The account's *current* identity — the one its scope grants are wrapped to, and the vault still holds. */
+const OLD_ID = v1.generateIdentity()
+const oldPriv = () => ({ kemX: OLD_ID.priv.kemX.slice(), mlkemSeed: OLD_ID.priv.mlkemSeed.slice(), sign: OLD_ID.priv.sign.slice() })
+/** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity. */
+const heldAt0 = (id: string, e0: Uint8Array) => ({
+  id, kind: 'PERSONAL', tenantId: 't', grantedEpoch: 0,
+  wrappedGrant: b64std(v1.asymWrap(v1.hybridPublic(oldPriv()), e0, 'scope-grant', { nonce: v1.randomBytes(12) })),
+})
 /** The light cost the mocked worker above uses; the stored floor's KEK must be built with the same. Its WIRE
  *  profile stays `v1.ARGON` — the client refuses any other before deriving (ADR 0017 rule 5), and the mock above
  *  ignores the params it is handed. */
@@ -75,7 +82,7 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
   }
 }
 
-function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[] } = {}) {
+function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[]; held?: unknown[] } = {}) {
   const getAccountKeyMaterial = vi.fn(async () => ({
     suiteId: 'v1',
     wraps: opts.wraps ?? [storedFloor()],
@@ -102,10 +109,12 @@ function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[
 
   type RotateScopeBody = {
     scopeId: string
-    rotateScopeRequest: { wrappedPrev: string; grants: { userId: string; wrappedGrant: string }[] }
+    rotateScopeRequest: { epoch: number; wrappedPrev: string; grants: { userId: string; wrappedGrant: string }[] }
   }
-  const rotateScope = vi.fn(async (_body: RotateScopeBody) => ({ epoch: 1 }))
-  vi.mocked(scopesApi).mockReturnValue({ rotateScope } as unknown as ReturnType<typeof scopesApi>)
+  const rotateScope = vi.fn(async (body: RotateScopeBody) => ({ epoch: body.rotateScopeRequest.epoch }))
+  // The caller's own grants, wrapped to the OLD identity the vault still holds while the sole scopes re-key.
+  const listMyScopes = vi.fn(async () => opts.held ?? [])
+  vi.mocked(scopesApi).mockReturnValue({ rotateScope, listMyScopes } as unknown as ReturnType<typeof scopesApi>)
 
   return { getAccountKeyMaterial, rotateAccountKeys, rotateScope }
 }
@@ -114,7 +123,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(unlockOrigin).mockReturnValue('cold')
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
-  vi.mocked(openScopeById).mockResolvedValue(null)
+  vi.mocked(identityPrivate).mockImplementation(() => oldPriv())
   vi.mocked(listScopeMembers).mockResolvedValue([])
 })
 
@@ -271,11 +280,8 @@ describe('what a rotation leaves behind', () => {
   })
 
   it('re-keys a sole-member scope to the new identity and reports it secured', async () => {
-    const srv = fakeServer({ sole: ['scope-personal'] })
-    vi.mocked(openScopeById).mockResolvedValue({
-      scopeId: 'scope-personal',
-      epochs: { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) },
-    } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    const e0 = v1.randomBytes(32)
+    const srv = fakeServer({ sole: ['scope-personal'], held: [heldAt0('scope-personal', e0)] })
     vi.mocked(listScopeMembers).mockResolvedValue([
       { userId: 'me', identityPublicKey: 'ignored' },
     ] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
@@ -297,6 +303,11 @@ describe('what a rotation leaves behind', () => {
       'scope-grant',
     )
     expect(opened).toHaveLength(32)
+    // It states the epoch it creates — the old grant's 0, plus one — and links that new epoch back to E_0, so the
+    // new identity still reads everything already written.
+    const request = srv.rotateScope.mock.calls[0][0].rotateScopeRequest
+    expect(request.epoch).toBe(1)
+    expect(Array.from(v1.symUnwrap(opened, fromB64std(request.wrappedPrev), 'scope-epoch'))).toEqual(Array.from(e0))
     // And the vault is told this session is still cold — it was proven cold moments ago, so a rotation must
     // not leave the person unable to rotate again.
     expect(swapped[2]).toBe('cold')
@@ -305,11 +316,7 @@ describe('what a rotation leaves behind', () => {
   it('refuses to re-key a "sole" scope that turns out to have another member', async () => {
     // The server split it as sole-member; if a member appeared in between, re-granting only ourselves would
     // lock that member out. The honest answer is to leave the scope alone and say it was not secured.
-    const srv = fakeServer({ sole: ['scope-personal'] })
-    vi.mocked(openScopeById).mockResolvedValue({
-      scopeId: 'scope-personal',
-      epochs: { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) },
-    } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    const srv = fakeServer({ sole: ['scope-personal'], held: [heldAt0('scope-personal', v1.randomBytes(32))] })
     vi.mocked(listScopeMembers).mockResolvedValue([
       { userId: 'me', identityPublicKey: 'x' },
       { userId: 'someone-else', identityPublicKey: 'y' },
@@ -330,11 +337,7 @@ describe('what a rotation leaves behind', () => {
    * two result lists partition the caller's scopes, so re-sealing only one of them loses the other's pins.
    */
   it('carries the Memory pins of EVERY scope across the new Master Key', async () => {
-    fakeServer({ sole: ['scope-personal'], queued: ['scope-shared'] })
-    vi.mocked(openScopeById).mockResolvedValue({
-      scopeId: 'scope-personal',
-      epochs: { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) },
-    } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    fakeServer({ sole: ['scope-personal'], queued: ['scope-shared'], held: [heldAt0('scope-personal', v1.randomBytes(32))] })
     vi.mocked(listScopeMembers).mockResolvedValue([])
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
