@@ -8,6 +8,8 @@ import com.veyq.app.features.admin.tenant.TenantMailSender
 import com.veyq.app.features.admin.tenant.TenantStore
 import com.veyq.app.features.admin.tenant.TestMailbox
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.shared.crypto.SecretKeyProof
+import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
@@ -196,21 +198,49 @@ class RecoverySliceTest {
         assertNotNull(handler.release(second))
     }
 
-    // --- the second factor: the commitment. These are the cases that must fail. ---
+    // --- the second factor: the Secret-Key proof. These are the cases that must fail. ---
 
     @Test
     fun validTokenWithWrongSecretKeyDoesNotReset() {
+        // The mailbox factor is genuine; the proof is signed with a key this account never registered, because
+        // the caller does not hold its Secret Key. The control is the same token under the account's own proof
+        // key — which also shows the refusal did not spend the token, so a mistyped kit costs a retry, not the mail.
         val token = mintToken()
-        val outcome = handler.complete(token, "d3JvbmctdGFn", NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        val outcome = handler.complete(token, OTHER_KEY.sign(statementFor(token)), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
         assertEquals(ResetOutcome.NotProven, outcome)
         assertEquals(PW_WRAP, wrapOf("PASSWORD"), "the floor must be untouched")
         assertEquals(OLD_AUTH_KEY, authKeyOf(), "the auth key must be untouched")
+
+        assertEquals(ResetOutcome.Applied, handler.complete(token, proof(token), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+    }
+
+    @Test
+    fun aProofForAnotherTokenDoesNotReset() {
+        // The statement binds the token it spends. A signature the person made for an earlier (superseded or
+        // spent) token is no proof for this one.
+        val earlier = mintToken()
+        val token = mintToken()
+        assertEquals(ResetOutcome.NotProven, handler.complete(token, proof(earlier), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+        assertEquals(PW_WRAP, wrapOf("PASSWORD"))
+    }
+
+    @Test
+    fun aFailedProofAnswersSecretKeyProofFailedOnTheWire() {
+        val token = mintToken()
+        given().contentType(ContentType.JSON)
+            .body(
+                """{"token":"$token","secretKeyProofSignature":"${OTHER_KEY.sign(statementFor(token))}",
+                   "wrappedKey":"$NEW_WRAP","kdfParams":"$NEW_KDF","authPublicKey":"$NEW_AUTH_KEY"}""",
+            )
+            .`when`().post("/api/recovery/complete")
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertEquals(PW_WRAP, wrapOf("PASSWORD"))
     }
 
     @Test
     fun correctSecretKeyWithDeadTokenDoesNotReset() {
         val token = mintToken(expiresAt = Instant.now().minus(1, ChronoUnit.MINUTES))
-        val outcome = handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        val outcome = handler.complete(token, proof(token), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
         assertEquals(ResetOutcome.TokenNotLive, outcome)
         assertEquals(PW_WRAP, wrapOf("PASSWORD"))
     }
@@ -218,10 +248,15 @@ class RecoverySliceTest {
     @Test
     fun spentTokenCannotBeReplayed() {
         val token = mintToken()
-        assertEquals(ResetOutcome.Applied, handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+        assertEquals(ResetOutcome.Applied, handler.complete(token, proof(token), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
         assertEquals(
             ResetOutcome.TokenNotLive,
-            handler.complete(token, REC_TAG, "b3RoZXI=", NEW_KDF, "b3RoZXI="),
+            handler.complete(
+                token,
+                // A fully valid proof for DIFFERENT new material: were the reset re-run, it would visibly install it.
+                PROOF_KEY.sign(SecretKeyProof.recoveryStatement(token, "b3RoZXI=", SecretKeyProof.Wrap("b3RoZXI=", NEW_KDF))),
+                "b3RoZXI=", NEW_KDF, "b3RoZXI=",
+            ),
             "a replay must not re-run the reset",
         )
     }
@@ -233,7 +268,7 @@ class RecoverySliceTest {
         val token = mintToken()
         val identityBefore = identityOf()
 
-        assertEquals(ResetOutcome.Applied, handler.complete(token, REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
+        assertEquals(ResetOutcome.Applied, handler.complete(token, proof(token), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY))
 
         assertEquals(NEW_WRAP, wrapOf("PASSWORD"), "the floor now opens under the new password")
         assertEquals(NEW_AUTH_KEY, authKeyOf(), "login follows the same password")
@@ -252,7 +287,7 @@ class RecoverySliceTest {
         val recoveryBefore = wrapRowOf("RECOVERY")
         assertNotNull(recoveryBefore, "precondition")
 
-        handler.complete(mintToken(), REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        mintToken().let { handler.complete(it, proof(it), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY) }
 
         assertFalse(hasWrap("DEVICE"), "a DEVICE wrap mixes the old password and would merely fail")
         assertFalse(
@@ -270,7 +305,7 @@ class RecoverySliceTest {
         val issued = sessions.issue(USER)
         assertNotNull(issued)
 
-        handler.complete(mintToken(), REC_TAG, NEW_WRAP, NEW_KDF, NEW_AUTH_KEY)
+        mintToken().let { handler.complete(it, proof(it), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY) }
 
         val live = QuarkusTransaction.requiringNew().call<Long> {
             SessionFamilyEntity.count("userId = ?1 and status = ?2", USER, SessionFamilyEntity.ACTIVE)
@@ -362,6 +397,12 @@ class RecoverySliceTest {
         }
     }
 
+    /** What a legitimate client signs to complete a reset with [token] into this fixture's new password. */
+    private fun statementFor(token: String) =
+        SecretKeyProof.recoveryStatement(token, NEW_AUTH_KEY, SecretKeyProof.Wrap(NEW_WRAP, NEW_KDF))
+
+    private fun proof(token: String) = PROOF_KEY.sign(statementFor(token))
+
     private fun mintToken(expiresAt: Instant = Instant.now().plus(1, ChronoUnit.HOURS)): String {
         val token = Tokens.random()
         store.mint(USER, EMAIL, Tokens.hash(token), expiresAt)
@@ -402,11 +443,11 @@ class RecoverySliceTest {
                 // Set before persist: these columns are NOT NULL, so the insert must already carry them.
                 wrappedIdentityPrivateKey = PRIV
                 authPublicKey = OLD_AUTH_KEY
-                recoveryMasterKeyTag = REC_TAG
+                secretKeyProofPublicKey = PROOF_KEY.publicKey
             }.also { it.persist() }
             user.wrappedIdentityPrivateKey = PRIV
             user.authPublicKey = OLD_AUTH_KEY
-            user.recoveryMasterKeyTag = REC_TAG
+            user.secretKeyProofPublicKey = PROOF_KEY.publicKey
             persistWrap(userId, "PASSWORD", PW_WRAP)
             persistWrap(userId, "RECOVERY", REC_WRAP)
         }
@@ -431,8 +472,9 @@ class RecoverySliceTest {
         const val REC_WRAP = "cmVjb3Zlcnktd3JhcA=="
         const val OLD_AUTH_KEY = "b2xkLWF1dGgta2V5"
 
-        /** The commitment stored at account birth; only a client that opened the RECOVERY wrap can reproduce it. */
-        const val REC_TAG = "cmVjb3ZlcnktYXV0aC10YWc="
+        /** The Secret-Key proof key the account registered at birth; [OTHER_KEY] is a Secret Key it does not hold. */
+        val PROOF_KEY = TestProofKey()
+        val OTHER_KEY = TestProofKey()
 
         const val NEW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
         const val NEW_KDF = "bmV3LWtkZi1wYXJhbXM="

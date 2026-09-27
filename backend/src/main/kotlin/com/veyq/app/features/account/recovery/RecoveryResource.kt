@@ -62,7 +62,7 @@ class RecoveryResource(private val handler: RecoveryHandler, private val tenant:
         when (
             handler.complete(
                 recoveryCompleteRequest.token,
-                recoveryCompleteRequest.recoveryAuthTag,
+                recoveryCompleteRequest.secretKeyProofSignature,
                 recoveryCompleteRequest.wrappedKey,
                 recoveryCompleteRequest.kdfParams,
                 recoveryCompleteRequest.authPublicKey,
@@ -70,6 +70,6 @@ class RecoveryResource(private val handler: RecoveryHandler, private val tenant:
         ) {
             ResetOutcome.Applied -> Response.noContent().build()
             ResetOutcome.TokenNotLive -> httpError(httpFailure("recovery_token_invalid", NOT_FOUND))
-            ResetOutcome.NotProven -> httpError(httpFailure("recovery_proof_invalid", FORBIDDEN))
+            ResetOutcome.NotProven -> httpError(httpFailure("secret_key_proof_failed", FORBIDDEN))
         }
 }

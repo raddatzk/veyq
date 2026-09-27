@@ -42,6 +42,7 @@ class PasswordChangeResource(
                 wrappedKey = changePasswordRequest.passwordWrap.wrappedKey,
                 kdfParams = changePasswordRequest.passwordWrap.kdfParams,
                 attestationSignature = changePasswordRequest.attestationSignature,
+                secretKeyProofSignature = changePasswordRequest.secretKeyProofSignature,
             )
         ) {
             is PasswordChangeOutcome.Applied -> Response.noContent().build()

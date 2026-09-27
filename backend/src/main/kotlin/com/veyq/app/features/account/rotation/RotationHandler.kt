@@ -4,9 +4,12 @@ import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.account.pairing.PairingStore
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
+import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipStore
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -22,19 +25,22 @@ sealed interface RotationOutcome {
 
     /** The account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite — nothing was written. */
     data object Unavailable : RotationOutcome, HttpFailure by httpFailure("rotation_unavailable", CONFLICT)
+
+    /** The request did not prove the Secret Key (ADR 0060 Decision 2) — nothing was written. */
+    data object SecretKeyProofFailed : RotationOutcome, HttpFailure by httpFailure("secret_key_proof_failed", FORBIDDEN)
 }
 
 /**
  * The account-side half of key rotation after a compromise (ADR 0060, uc.account.rotate-keys).
  *
- * **What is deliberately not here: the gate.** ADR 0060 Decision 2 refuses a rotation that was not started from
- * a cold credential — the `PASSWORD` floor or the released `RECOVERY` wrap, the two that take the Secret Key a
- * phished device-link grant never hands over. That check cannot live on this side: the server holds no evidence
- * of *which* wrap opened a caller's vault, the Secret Key never reaches it, and a blind server must not
- * adjudicate a crypto claim (ADR 0028 § Consequences). It is client-enforced, at ADR 0026's usual tier — which
- * is the same tier as every other veyq confidentiality property, not a weaker one.
+ * **The gate's server half is here** (ADR 0060 Decision 2). A session is not enough to rotate: a device-link
+ * holder has one without ever seeing the password, and whoever phished the password has one too — and either
+ * could otherwise install an identity of their own, to which the next scope rotation would wrap every shared key.
+ * So the request carries a signature under the account's Secret-Key proof key over what it installs and the
+ * identity it replaces, and [SecretKeyProof] verifies it before anything is written. The password half stays on
+ * the client, which re-opens the `PASSWORD` wrap.
  *
- * What this side *does* enforce is the shape: both cold wraps rewritten together or nothing written, every
+ * What this side also enforces is the shape: both cold wraps rewritten together or nothing written, every
  * other wrap gone, every other session cut, and the exclusion that keeps the rotator off their own re-grant.
  */
 @ApplicationScoped
@@ -51,7 +57,9 @@ class RotationHandler(
     /**
      * Rotate. **One transaction, every write or none** — a partial apply is a lockout, not a degraded state.
      *
-     * The order inside it is not arbitrary. The account rewrite runs **first** and can still refuse; everything
+     * The order inside it is not arbitrary. The Secret-Key proof is checked before anything, inside the same
+     * transaction that reads the identity it binds — so the identity it was verified against is the one replaced.
+     * The account rewrite runs next and can still refuse; everything
      * after it is a consequence that must not happen for an account that was never rewritten. Then the live
      * pairing channels are superseded (their envelopes carry the *old* Master Key and a live delegated session,
      * so a later collect would hand a device a dead key and a working login), then the scope rotations are
@@ -73,10 +81,22 @@ class RotationHandler(
         wrappedIdentityPrivateKey: String,
         passwordWrap: RewrittenWrap,
         recoveryWrap: RewrittenWrap,
-        recoveryMasterKeyTag: String,
+        secretKeyProofSignature: String,
     ): RotationOutcome = QuarkusTransaction.requiringNew().call<RotationOutcome> {
+        val user = VeyqUser.findById(userId) ?: return@call RotationOutcome.Unavailable
+        val statement = SecretKeyProof.rotationStatement(
+            currentIdentityPublicKey = user.identityPublicKey,
+            identityPublicKey = identityPublicKey,
+            wrappedIdentityPrivateKey = wrappedIdentityPrivateKey,
+            passwordWrap = SecretKeyProof.Wrap(passwordWrap.wrappedKey, passwordWrap.kdfParams),
+            recoveryWrap = SecretKeyProof.Wrap(recoveryWrap.wrappedKey, recoveryWrap.kdfParams),
+        )
+        if (!SecretKeyProof.verify(user.secretKeyProofPublicKey, statement, secretKeyProofSignature)) {
+            return@call RotationOutcome.SecretKeyProofFailed
+        }
+
         val applied = store.applyRotation(
-            userId, identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, recoveryMasterKeyTag,
+            userId, identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap,
         )
         if (!applied) return@call RotationOutcome.Unavailable
 

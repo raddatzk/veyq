@@ -2,6 +2,7 @@ package com.veyq.app.features.account.password
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.crypto.Ed25519Verifier
+import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.HttpFailure
@@ -11,7 +12,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.Base64
 
-/** Outcome of a password change — applied, or the one of two refusals the server itself can make. */
+/** Outcome of a password change — applied, or one of the refusals the server itself can make. */
 sealed interface PasswordChangeOutcome {
     /** Applied. The floor + auth key are rewritten, every device wrap is gone, and every session but the
      *  caller's own is revoked. */
@@ -20,6 +21,11 @@ sealed interface PasswordChangeOutcome {
     /** The `attestationSignature` did not verify against the current `auth_public_key`. Nothing was
      *  written. */
     data object AttestationFailed : PasswordChangeOutcome, HttpFailure by httpFailure("attestation_failed", FORBIDDEN)
+
+    /** The `secretKeyProofSignature` did not verify against the account's Secret-Key proof key. Distinct from
+     *  [AttestationFailed]: "your password was wrong" and "your Emergency Kit was wrong" are different things to
+     *  tell a person. Nothing was written. */
+    data object SecretKeyProofFailed : PasswordChangeOutcome, HttpFailure by httpFailure("secret_key_proof_failed", FORBIDDEN)
 
     /** The account has no `PASSWORD` floor to rewrite — nothing was written. */
     data object Unavailable : PasswordChangeOutcome, HttpFailure by httpFailure("password_change_unavailable", CONFLICT)
@@ -30,11 +36,12 @@ sealed interface PasswordChangeOutcome {
  * live session, drop every device wrap, spare the caller's own session.
  *
  * **This mints a cold credential, so it may not be reachable without cold material** (ADR 0060 Decision 2).
- * The proof has two halves and only one of them is checkable here: the attestation, verified below against the
- * stored `auth_public_key`. The other half — that the Secret Key the new wrap is built under is this account's
- * — is ciphertext to this server, so the client proves it by opening the current `PASSWORD` wrap before it
- * sends anything. Neither half is optional, and there is **no second entry point**: someone who has forgotten
- * their password goes through recovery (ADR 0054), which proves address control instead.
+ * The proof has two halves, and both are checked here: the attestation, against the stored `auth_public_key`
+ * (the old password), and the Secret-Key proof, against the account's registered proof key (the Secret Key). A
+ * phished or cracked password buys the first and not the second. The client additionally re-opens the current
+ * `PASSWORD` wrap before it sends anything. Neither half is optional, and there is **no second entry point**:
+ * someone who has forgotten their password goes through recovery (ADR 0054), which proves address control
+ * instead.
  */
 @ApplicationScoped
 class PasswordChangeHandler(
@@ -62,12 +69,23 @@ class PasswordChangeHandler(
         wrappedKey: String,
         kdfParams: String,
         attestationSignature: String,
+        secretKeyProofSignature: String,
     ): PasswordChangeOutcome = QuarkusTransaction.requiringNew().call<PasswordChangeOutcome> {
-        val currentAuthPublicKey = VeyqUser.findById(userId)?.authPublicKey
+        val user = VeyqUser.findById(userId)
+        val currentAuthPublicKey = user?.authPublicKey
         val verified = currentAuthPublicKey != null && Ed25519Verifier.verify(
             decode(currentAuthPublicKey), decode(newAuthPublicKey), decode(attestationSignature),
         )
         if (!verified) return@call PasswordChangeOutcome.AttestationFailed
+
+        val statement = SecretKeyProof.passwordChangeStatement(
+            currentAuthPublicKey = currentAuthPublicKey!!,
+            authPublicKey = newAuthPublicKey,
+            passwordWrap = SecretKeyProof.Wrap(wrappedKey, kdfParams),
+        )
+        if (!SecretKeyProof.verify(user.secretKeyProofPublicKey, statement, secretKeyProofSignature)) {
+            return@call PasswordChangeOutcome.SecretKeyProofFailed
+        }
 
         val applied = store.applyChange(userId, wrappedKey, kdfParams, newAuthPublicKey)
         if (!applied) return@call PasswordChangeOutcome.Unavailable

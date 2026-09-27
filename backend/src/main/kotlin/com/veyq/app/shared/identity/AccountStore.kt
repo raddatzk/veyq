@@ -31,7 +31,7 @@ class AccountStore {
         identityPublicKey: String,
         wrappedIdentityPrivateKey: String,
         authPublicKey: String,
-        recoveryMasterKeyTag: String?,
+        secretKeyProofPublicKey: String,
         wraps: List<WrapData>,
     ): String {
         val userId = UUID.randomUUID().toString()
@@ -43,7 +43,7 @@ class AccountStore {
             this.identityPublicKey = identityPublicKey
             this.wrappedIdentityPrivateKey = wrappedIdentityPrivateKey
             this.authPublicKey = authPublicKey
-            this.recoveryMasterKeyTag = recoveryMasterKeyTag
+            this.secretKeyProofPublicKey = secretKeyProofPublicKey
             createdAt = Instant.now()
         }.persist()
 

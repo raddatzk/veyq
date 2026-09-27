@@ -23,7 +23,7 @@ class SetupStore(private val accounts: AccountStore) {
             identityPublicKey = registration.identityPublicKey,
             wrappedIdentityPrivateKey = registration.wrappedIdentityPrivateKey,
             authPublicKey = registration.authPublicKey,
-            recoveryMasterKeyTag = registration.recoveryMasterKeyTag,
+            secretKeyProofPublicKey = registration.secretKeyProofPublicKey,
             wraps = registration.wraps.map { WrapData(it.method, it.wrappedKey, it.kdfParams) },
         )
 

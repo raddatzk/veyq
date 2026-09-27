@@ -22,7 +22,7 @@ data class OwnerRegistration(
     val identityPublicKey: String,
     val wrappedIdentityPrivateKey: String,
     val authPublicKey: String,
-    val recoveryMasterKeyTag: String?,
+    val secretKeyProofPublicKey: String,
     val wraps: List<WrapInput>,
 )
 

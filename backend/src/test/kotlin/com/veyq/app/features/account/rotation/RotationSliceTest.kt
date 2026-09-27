@@ -7,6 +7,8 @@ import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobEntity
+import com.veyq.app.shared.crypto.SecretKeyProof
+import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
@@ -39,9 +41,10 @@ import java.util.UUID
  *  - **a co-member still can**, which is the control the exclusion needs: a rotation nobody can complete looks
  *    identical to a correctly-excluded one if only the negative is asserted.
  *
- * The cold-credential gate (Decision 2) has no assertion here on purpose. It is client-side by construction —
- * the server holds no evidence of which wrap opened a vault — so a backend test asserting it would be testing
- * a check that does not and must not exist on this side. `web/` owns that proof.
+ * The cold-credential gate (Decision 2) is asserted here for its **server** half: a session is not enough, the
+ * request must carry a signature under the account's Secret-Key proof key, and the bite is a caller who holds a
+ * valid session and signs with a key of their own — exactly what a device-link holder can do. Its password half
+ * (re-opening the `PASSWORD` wrap) is client-side and `web/` owns that proof.
  *
  * Seeds use UUID-unique ids: the H2 mem DB lives for the whole JVM and is shared across test classes.
  */
@@ -62,7 +65,7 @@ class RotationSliceTest {
 
         assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is republished")
         assertEquals(NEW_PRIV, field(user) { it.wrappedIdentityPrivateKey }, "the identity private key rides the new Master Key")
-        assertEquals(NEW_REC_TAG, field(user) { it.recoveryMasterKeyTag }, "recovery would otherwise prove possession of a key the account no longer has")
+        assertEquals(PROOF_KEY.publicKey, field(user) { it.secretKeyProofPublicKey }, "the Secret Key does not rotate, so neither does its proof key")
 
         assertEquals(NEW_PW_WRAP, wrapOf(user, "PASSWORD"), "the floor holds the new Master Key")
         assertEquals(NEW_REC_WRAP, wrapOf(user, "RECOVERY"), "so does the withheld recovery wrap — the Emergency Kit stays valid")
@@ -71,6 +74,47 @@ class RotationSliceTest {
         assertNull(wrapOf(user, "DEVICE"), "a trusted-device wrap cannot be rewritten, so it goes")
         assertNull(wrapOf(user, "DEVICE_KEY"), "and the password-less one especially — it needs no password at all")
         assertNull(wrapOf(user, "PASSKEY"), "every non-cold method goes; the survivor list is a whitelist")
+    }
+
+    @Test
+    fun aSessionWithoutTheSecretKeyCannotRotate() {
+        // inbox #159's second door, and the whole reason this check is on the server. The caller holds a valid
+        // session and a well-formed request carrying a fresh identity — everything a device-link holder has — and
+        // signs it with a key of their own, because they do not hold the Secret Key the account's proof key is
+        // derived from. The positive control is the SAME request signed by the account's proof key: without it a
+        // rotation that refused everything would pass this test just as well.
+        val user = seedAccount()
+
+        rotate(user, signature = OTHER_KEY.sign(rotationStatement()))
+            .then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+
+        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the attacker's identity is not installed")
+        assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
+        assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "nothing was written")
+
+        rotate(user).then().statusCode(200)
+        assertEquals(NEW_IDENTITY_PUB, field(user) { it.identityPublicKey }, "control: the account's own proof key rotates")
+    }
+
+    @Test
+    fun aCapturedRotationSignatureCannotBeReplayed() {
+        // The statement binds the identity it replaces. Once that rotation has applied, the same bytes — a
+        // captured request replayed against the rotated account — describe a state that no longer exists.
+        val user = seedAccount()
+        rotate(user).then().statusCode(200)
+
+        rotate(user).then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+    }
+
+    @Test
+    fun anAccountWithNoProofKeyCannotRotate() {
+        // Born before the proof key existed: nothing is migrated, so such an account can prove nothing and is
+        // refused rather than waved through (ADR 0054 § Consequences: the proof key is a correctness dependency).
+        val user = seedAccount()
+        QuarkusTransaction.requiringNew().run { VeyqUser.findById(user)!!.secretKeyProofPublicKey = null }
+
+        rotate(user).then().statusCode(403).body("code", equalTo("secret_key_proof_failed"))
+        assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey })
     }
 
     @Test
@@ -178,7 +222,6 @@ class RotationSliceTest {
 
         assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "the directory value is untouched")
         assertEquals(OLD_PRIV, field(user) { it.wrappedIdentityPrivateKey })
-        assertEquals(OLD_REC_TAG, field(user) { it.recoveryMasterKeyTag })
         assertEquals(OLD_PW_WRAP, wrapOf(user, "PASSWORD"), "the floor still opens the Master Key it always did")
     }
 
@@ -198,7 +241,7 @@ class RotationSliceTest {
         val body = """
             {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
              "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
-             "recoveryMasterKeyTag":"$NEW_REC_TAG"}
+             "secretKeyProofSignature":"${PROOF_KEY.sign(rotationStatement())}"}
         """.trimIndent()
         given().header("Authorization", "Bearer ${sessions.issue(user).accessToken}")
             .contentType(ContentType.JSON).body(body)
@@ -209,16 +252,28 @@ class RotationSliceTest {
 
     // --- helpers ---------------------------------------------------------------------------------------------
 
-    private fun rotate(userId: String, accessToken: String = sessions.issue(userId).accessToken) =
-        given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
-            .body(rotationBody()).`when`().post("/api/account/rotation")
+    private fun rotate(
+        userId: String,
+        accessToken: String = sessions.issue(userId).accessToken,
+        signature: String = PROOF_KEY.sign(rotationStatement()),
+    ) = given().header("Authorization", "Bearer $accessToken").contentType(ContentType.JSON)
+        .body(rotationBody(signature)).`when`().post("/api/account/rotation")
 
-    private fun rotationBody() = """
+    private fun rotationBody(signature: String = PROOF_KEY.sign(rotationStatement())) = """
         {"identityPublicKey":"$NEW_IDENTITY_PUB","wrappedIdentityPrivateKey":"$NEW_PRIV",
          "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
          "recoveryWrap":{"wrappedKey":"$NEW_REC_WRAP","kdfParams":"$KDF"},
-         "recoveryMasterKeyTag":"$NEW_REC_TAG"}
+         "secretKeyProofSignature":"$signature"}
     """.trimIndent()
+
+    /** What a legitimate client signs for this fixture's rotation: from the seeded identity to the new one. */
+    private fun rotationStatement() = SecretKeyProof.rotationStatement(
+        currentIdentityPublicKey = OLD_IDENTITY_PUB,
+        identityPublicKey = NEW_IDENTITY_PUB,
+        wrappedIdentityPrivateKey = NEW_PRIV,
+        passwordWrap = SecretKeyProof.Wrap(NEW_PW_WRAP, KDF),
+        recoveryWrap = SecretKeyProof.Wrap(NEW_REC_WRAP, KDF),
+    )
 
     private fun claim(userId: String, tag: String) =
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}").contentType(ContentType.JSON)
@@ -230,7 +285,7 @@ class RotationSliceTest {
             VeyqUser().apply {
                 id = userId; email = "rot-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
                 identityPublicKey = OLD_IDENTITY_PUB; wrappedIdentityPrivateKey = OLD_PRIV
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; recoveryMasterKeyTag = OLD_REC_TAG
+                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; secretKeyProofPublicKey = PROOF_KEY.publicKey
                 createdAt = Instant.now()
             }.persist()
         }
@@ -340,12 +395,14 @@ class RotationSliceTest {
         const val OLD_PRIV = "b2xkLXdyYXBwZWQtcHJpdg=="
         const val OLD_PW_WRAP = "b2xkLXBhc3N3b3JkLXdyYXA="
         const val OLD_REC_WRAP = "b2xkLXJlY292ZXJ5LXdyYXA="
-        const val OLD_REC_TAG = "b2xkLXJlY292ZXJ5LXRhZw=="
 
         const val NEW_IDENTITY_PUB = "bmV3LWlkZW50aXR5LXB1Yg=="
         const val NEW_PRIV = "bmV3LXdyYXBwZWQtcHJpdg=="
         const val NEW_PW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
         const val NEW_REC_WRAP = "bmV3LXJlY292ZXJ5LXdyYXA="
-        const val NEW_REC_TAG = "bmV3LXJlY292ZXJ5LXRhZw=="
+
+        /** The Secret-Key proof key every seeded account registers; [OTHER_KEY] is a Secret Key it does not hold. */
+        val PROOF_KEY = TestProofKey()
+        val OTHER_KEY = TestProofKey()
     }
 }

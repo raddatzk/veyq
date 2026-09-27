@@ -13,6 +13,7 @@ import io.restassured.http.ContentType
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
@@ -45,6 +46,14 @@ class TenantAcceptSliceTest {
         assert(store.findTenant(id)?.status == TenantEntity.ACTIVE)
         assert(ownerMembershipCount(id) == 1L)
         assert(userRole("newowner@example.com") == "MEMBER")
+        // The invite-gated birth registers the Secret-Key proof key too (ADR 0060 Decision 2) — a tenant owner
+        // born without it could never rotate, change their password or recover.
+        assertEquals(
+            "c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5",
+            QuarkusTransaction.requiringNew().call<String?> {
+                VeyqUser.find("email", "newowner@example.com").firstResult()?.secretKeyProofPublicKey
+            },
+        )
     }
 
     @Test
@@ -195,7 +204,7 @@ class TenantAcceptSliceTest {
            "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",
            "authPublicKey":"ZWQyNTUxOS1hdXRoLXB1Yg==",
            "masterKeyWraps":[{"method":"PASSWORD","wrappedKey":"d3JhcHBlZC1tYXN0ZXIta2V5","kdfParams":"a2RmLXBhcmFtcw=="}],
-           "recoveryMasterKeyTag":"cmVjb3ZlcnktdGFn"},
+           "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"},
          "grant":"AQ=="}
     """.trimIndent()
 }

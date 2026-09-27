@@ -2,6 +2,7 @@ package com.veyq.app.features.account.recovery
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.config.VeyqConfig
+import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.normalizeEmail
@@ -12,7 +13,6 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import io.smallrye.mutiny.infrastructure.Infrastructure
 import jakarta.enterprise.context.ApplicationScoped
 import org.jboss.logging.Logger
-import java.security.MessageDigest
 import java.time.Instant
 
 /** What a recovery request produced. The caller answers identically for all but [NO_MAIL_TRANSPORT] — this is for
@@ -28,7 +28,8 @@ sealed interface ResetOutcome {
     /** The token is unknown, expired or already spent — deliberately one case, not three. */
     data object TokenNotLive : ResetOutcome
 
-    /** The commitment did not reproduce: the caller never opened the wrap, so they do not hold the Secret Key. */
+    /** The Secret-Key proof did not verify: the caller does not hold this account's Secret Key. The token is not
+     *  spent, so a mistyped Emergency Kit costs a retry, not the mail. */
     data object NotProven : ResetOutcome
 }
 
@@ -36,8 +37,10 @@ sealed interface ResetOutcome {
  * Password recovery (cr-account-recovery, ADR 0054).
  *
  * Two factors, and this handler is the seam where they meet: address control (a token only reachable through the
- * mailbox) authorizes the *release*, and reproducing the birth-time commitment authenticates the *actor*. It
- * never sees a password, a Secret Key or a Master Key — all three stay on the device.
+ * mailbox) authorizes the *release*, and a signature under the account's Secret-Key proof key authenticates the
+ * *actor* ([SecretKeyProof], ADR 0054 Decision 1). It never sees a password, a Secret Key or a Master Key — all
+ * three stay on the device — and what it stores to check the second factor is only a public key, so neither a
+ * database dump nor a linked device's Master Key can produce the proof.
  */
 @ApplicationScoped
 class RecoveryHandler(
@@ -141,15 +144,13 @@ class RecoveryHandler(
     }
 
     /**
-     * Apply the reset, if the commitment proves the caller opened the released wrap.
-     *
-     * The comparison is constant-time out of habit rather than necessity — the tag is a non-invertible hash of 32
-     * random bytes, so a timing leak reveals nothing useful — but a proof check that leaks its progress is the
-     * kind of thing that becomes true later when someone changes what is compared.
+     * Apply the reset, if the Secret-Key proof verifies over this token, the new auth key and the new floor. The
+     * statement binds the token, which is single-use and bound to one account, so a proof made for an earlier
+     * token is no proof for this one.
      */
     fun complete(
         token: String,
-        recoveryAuthTag: String,
+        secretKeyProofSignature: String,
         wrappedKey: String,
         kdfParams: String,
         authPublicKey: String,
@@ -157,8 +158,10 @@ class RecoveryHandler(
         val row = store.findByTokenHash(Tokens.hash(token)) ?: return ResetOutcome.TokenNotLive
         if (!store.isLive(row, Instant.now())) return ResetOutcome.TokenNotLive
 
-        val expected = store.recoveryTag(row.userId) ?: return ResetOutcome.NotProven
-        if (!MessageDigest.isEqual(expected.toByteArray(), recoveryAuthTag.toByteArray())) return ResetOutcome.NotProven
+        val statement = SecretKeyProof.recoveryStatement(token, authPublicKey, SecretKeyProof.Wrap(wrappedKey, kdfParams))
+        if (!SecretKeyProof.verify(store.proofKey(row.userId), statement, secretKeyProofSignature)) {
+            return ResetOutcome.NotProven
+        }
 
         // One transaction: wrap, auth key, device wraps, sessions, token. A partial apply is a lockout.
         return QuarkusTransaction.requiringNew().call<ResetOutcome> {

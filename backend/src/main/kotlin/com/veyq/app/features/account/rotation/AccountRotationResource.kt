@@ -46,7 +46,7 @@ class AccountRotationResource(
                 wrappedIdentityPrivateKey = rotateAccountKeysRequest.wrappedIdentityPrivateKey,
                 passwordWrap = rotateAccountKeysRequest.passwordWrap.toRewritten(),
                 recoveryWrap = rotateAccountKeysRequest.recoveryWrap.toRewritten(),
-                recoveryMasterKeyTag = rotateAccountKeysRequest.recoveryMasterKeyTag,
+                secretKeyProofSignature = rotateAccountKeysRequest.secretKeyProofSignature,
             )
         ) {
             is RotationOutcome.Applied -> Response.ok(
