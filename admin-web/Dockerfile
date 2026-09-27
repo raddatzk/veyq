@@ -16,6 +16,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends default-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 COPY contracts/api /src/contracts/api
+# The generator JAR's verifier and its pin, before `npm ci` for the same reason as the specs: `prepare` runs
+# generate:api, which runs ../scripts/verify_openapi_generator_jar.mjs first (ADR 0057 §6).
+COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha256 /src/scripts/
 # Every manifest the workspace resolution reads, and nothing else, so a source edit does not bust the install
 # layer. packages/crypto/ is copied WHOLE rather than manifest-only: it is consumed as TypeScript source (no
 # build step), and npm links it into node_modules at install time, so the sources have to be there already.

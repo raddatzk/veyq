@@ -1,0 +1,22 @@
+# The OpenAPI generator JAR, pinned by SHA-256 and keyed by version (ADR 0057 §6).
+#
+# Read by scripts/verify_openapi_generator_jar.mjs, which `generate:api` in web/ and admin-web/ runs before the
+# generator: it downloads a missing JAR from Maven Central and checks the file against the line below on EVERY
+# run, including when the file was already there. The npm wrapper (@openapitools/openapi-generator-cli) checks
+# nothing — it downloads without a checksum and then trusts whatever file sits at <storageDir>/<version>.jar.
+# scripts/validate_build_input_pins.py holds this file to the one generator version the three surfaces run.
+#
+# How a line is obtained (and how the next one must be): download
+#   https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/<v>/openapi-generator-cli-<v>.jar
+# and cross-check it against Maven Central's own published checksums and signature for the same path:
+#   - `.sha1` and `.md5` must match the download (Central publishes no `.sha256` for this artifact);
+#   - `.asc` must verify with `gpg --verify` against the release key.
+# 7.23.0, done 2026-09-27: the .sha1 (4f4bb6d9c966a1e6353820b6e494a24269e9f2a5) and .md5
+# (362827fb72055ecd18de886bae04bded) matched; the .asc is a good signature by key
+# AE81EA0BD1BE2997053CC6C50D49734800E3AA0C ("William Cheng <wing328hk@gmail.com>", the project's release
+# manager), fetched from keyserver.ubuntu.com (keys.openpgp.org does not carry it). That key is not certified by
+# anyone we trust, so the signature proves only that the same key signed 7.21.0 and 7.23.0 — continuity, not
+# identity. The value below is therefore trust-on-first-write, the same trust Gradle's verification metadata has.
+#
+# Format: `<version> <sha256>`, one per line. A bump adds the new line; the old one may go once nothing names it.
+7.23.0 cb087e40001e31eb08ef6140dd5de10938dbeb89016a1fe0481eaa25cd569026
