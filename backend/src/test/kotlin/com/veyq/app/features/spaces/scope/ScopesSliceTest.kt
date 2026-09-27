@@ -2,7 +2,6 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
@@ -21,8 +20,9 @@ import com.veyq.app.shared.blobstore.RefusingStoreReclaimStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.identity.TenantProfileEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -53,9 +53,6 @@ import java.util.UUID
 class ScopesSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var purge: ScopePurge
 
     @Inject
@@ -78,7 +75,7 @@ class ScopesSliceTest {
 
     /** Add a seeded tenant member (by username) to a group via the API — returns nothing, the member is grant-less. */
     private fun addToGroup(owner: String, domain: String, groupId: String, username: String) {
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"$username",${TestAdmission.json(TestAdmission.epochOf(groupId))}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
@@ -92,19 +89,19 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner")
 
         // Promote partner → OWNER (co-owner).
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"role":"OWNER"}""")
             .`when`().patch("/api/scopes/$groupId/members/$partner")
             .then().statusCode(200).body("role", equalTo("OWNER"))
 
         // Demote the original owner → MEMBER (allowed — partner is now an owner too).
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"role":"MEMBER"}""")
             .`when`().patch("/api/scopes/$groupId/members/$owner")
             .then().statusCode(200).body("role", equalTo("MEMBER"))
 
         // partner is now the LAST owner → cannot be demoted (last-owner guard).
-        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
             .body("""{"role":"MEMBER"}""")
             .`when`().patch("/api/scopes/$groupId/members/$partner")
             .then().statusCode(409).body("code", equalTo("last_owner"))
@@ -114,7 +111,7 @@ class ScopesSliceTest {
 
     /** A removal-rotation by [caller] of [scopeId] from its current epoch, removing [removes] and granting [grantees]. */
     private fun removeRotating(caller: String, scopeId: String, removes: String, grantees: List<String>) =
-        given().header("Authorization", "Bearer ${token(caller)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":${TestAdmission.epochOf(scopeId) + 1},"wrappedPrev":"$rotPrev","grants":[""" +
                     grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}""" } +
@@ -143,7 +140,7 @@ class ScopesSliceTest {
         removeRotating(owner, groupId, removes = partner, grantees = listOf(owner)).then().statusCode(201).body("epoch", equalTo(1))
         assertTrue(!isMember(partner, groupId), "the removal-rotation deleted the membership")
         assertEquals(1, TestAdmission.epochOf(groupId))
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/members")
             .then().statusCode(200).body("find { it.username == 'partner' }", equalTo(null))
     }
@@ -198,11 +195,11 @@ class ScopesSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner")
         // Key the partner: a rotation that re-grants them.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201)
 
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId/members/$partner")
             .then().statusCode(409).body("code", equalTo("removal_requires_rotation"))
         assertTrue(isMember(partner, groupId), "the refused delete deleted nothing")
@@ -215,7 +212,7 @@ class ScopesSliceTest {
                 role = MembershipEntity.MEMBER; pendingConsent = true; createdAt = Instant.now()
             }.persist()
         }
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId/members/$invitee")
             .then().statusCode(204)
         assertTrue(!isMember(invitee, groupId), "the proposal is gone")
@@ -230,7 +227,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         rotateCarrying(owner, groupId, retagged = admissionRows(groupId).keys.toList()).then().statusCode(201)
         val create = { epoch: Int ->
-            given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+            given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
                 .body(nodeBody("stale-$epoch").dropLast(1) + ""","epoch":$epoch}""")
                 .`when`().post("/api/scopes/$groupId/nodes")
         }
@@ -245,20 +242,20 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
 
         // Initial: epoch 0.
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.currentEpoch", equalTo(0))
             .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(0))
 
         // Rotate: owner mints E1 (chain-link) + re-grants self to the new epoch.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
         // The scope now reports epoch 1, the owner re-granted (grantedEpoch 1 + the new grant).
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.currentEpoch", equalTo(1))
@@ -266,7 +263,7 @@ class ScopesSliceTest {
             .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(newGrant))
 
         // The epoch-chain link is readable (opaque ciphertext, verbatim).
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200)
             .body("[0].epoch", equalTo(1))
@@ -284,16 +281,16 @@ class ScopesSliceTest {
         // already know the group exists, so refusing them discloses nothing.
         val grantless = seedTenantMember(tenantIdOf(domain), "grantless")
         addToGroup(owner, domain, groupId, "grantless")
-        given().header("Authorization", "Bearer ${token(grantless)}")
+        given().header("Authorization", bearer(grantless))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_key_holder"))
 
         // A stranger is outside it → 404, and byte-identical to the answer for a group id that does not exist.
         val stranger = seedUser()
-        given().header("Authorization", "Bearer ${token(stranger)}")
+        given().header("Authorization", bearer(stranger))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
-        given().header("Authorization", "Bearer ${token(stranger)}")
+        given().header("Authorization", bearer(stranger))
             .`when`().get("/api/scopes/${UUID.randomUUID()}/epochs")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }
@@ -305,7 +302,7 @@ class ScopesSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner") // partner is a MEMBER, not owner
 
-        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
@@ -321,7 +318,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         val coOwner = seedTenantMember(tenantIdOf(domain), "coowner")
         addToGroup(owner, domain, groupId, "coowner")
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"role":"OWNER"}""")
             .`when`().patch("/api/scopes/$groupId/members/$coOwner").then().statusCode(200)
         val linkByOwner = "bGluay1ieS1vd25lcg==" // "link-by-owner" (symWrap(E_1, E_0))
@@ -329,7 +326,7 @@ class ScopesSliceTest {
         val coOwnerGrantFromOwner = "Y28tb3duZXItZ3JhbnQ=" // "co-owner-grant"
 
         // Control on the same predicate: a rotation stating the next epoch commits.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"$linkByOwner","grants":[""" +
                     """{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$coOwner","wrappedGrant":"$coOwnerGrantFromOwner",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""",
@@ -338,23 +335,23 @@ class ScopesSliceTest {
             .then().statusCode(201).body("epoch", equalTo(1))
 
         // The co-owner's rotation, built on epoch 0, arrives second. It must not commit.
-        given().header("Authorization", "Bearer ${token(coOwner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$linkByCoOwner","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
 
         // Nothing it carried landed: one link, the owner's; the owner's re-grants stand.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200)
             .body("size()", equalTo(1))
             .body("[0].wrappedPrev", equalTo(linkByOwner))
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.currentEpoch", equalTo(1))
             .body("find { it.id == '$groupId' }.wrappedGrant", equalTo(newGrant))
-        given().header("Authorization", "Bearer ${token(coOwner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(coOwner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.grantedEpoch", equalTo(1))
@@ -362,7 +359,7 @@ class ScopesSliceTest {
 
         // Re-opened at epoch 1 (the grant the owner's rotation gave it), the co-owner's retry commits epoch 2.
         // Without this, a scope that refused every second rotation would pass the refusal above.
-        given().header("Authorization", "Bearer ${token(coOwner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
             .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(2))
@@ -381,7 +378,7 @@ class ScopesSliceTest {
             val answers = pool.invokeAll(
                 listOf(rotPrev, newGrant).map { link ->
                     java.util.concurrent.Callable {
-                        val request = given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+                        val request = given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
                             .body("""{"epoch":1,"wrappedPrev":"$link","grants":[],${TestAdmission.openJson(groupId)}}""")
                         barrier.await() // release both commits as tightly together as possible
                         request.`when`().post("/api/scopes/$groupId/epochs").then().extract()
@@ -394,7 +391,7 @@ class ScopesSliceTest {
         } finally {
             pool.shutdownNow()
         }
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200).body("size()", equalTo(1))
     }
@@ -406,10 +403,10 @@ class ScopesSliceTest {
         // The recipient verifies before it opens, so the read hands over all three: the granter's id, their
         // signature over the grant, and their current identity key — the server verifies none of it.
         val (owner, domain) = seedMember()
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes").then().statusCode(201)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.kind == 'PERSONAL' }.granterUserId", equalTo(owner))
             .body("find { it.kind == 'PERSONAL' }.grantSignature", equalTo(TestAdmission.SIGNATURE))
@@ -428,7 +425,7 @@ class ScopesSliceTest {
         seedTenantMember(tenantIdOf(domain), "late")
         rotateCarrying(owner, groupId, retagged = admissionRows(groupId).keys.toList()).then().statusCode(201)
         val add = { epoch: Int ->
-            given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+            given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
                 .body("""{"username":"late",${TestAdmission.json(epoch)}}""").`when`().post("/api/scopes/$groupId/members")
         }
         add(0).then().statusCode(409).body("code", equalTo("stale_epoch"))
@@ -445,7 +442,7 @@ class ScopesSliceTest {
         }
 
     private fun rotateCarrying(owner: String, scopeId: String, retagged: List<String>, dropped: List<String> = emptyList()) =
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(
                 """{"epoch":1,"wrappedPrev":"$rotPrev","grants":[],"admissions":[""" +
                     retagged.joinToString(",") { """{"admissionId":"$it","admissionTag":"$retag"}""" } + "]," +
@@ -463,7 +460,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         seedTenantMember(tenantIdOf(domain), "pending")
         val pending = UUID.randomUUID().toString()
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"pending",${TestAdmission.json(0, pending)}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
         val before = admissionRows(groupId)
@@ -473,7 +470,7 @@ class ScopesSliceTest {
             .then().statusCode(409).body("code", equalTo("admissions_incomplete"))
 
         // Nothing it carried landed: no link, the epoch unmoved, both admissions exactly as they were.
-        given().header("Authorization", "Bearer ${token(owner)}").`when`().get("/api/scopes/$groupId/epochs")
+        given().header("Authorization", bearer(owner)).`when`().get("/api/scopes/$groupId/epochs")
             .then().statusCode(200).body("size()", equalTo(0))
         assertEquals(0, TestAdmission.epochOf(groupId))
         assertEquals(before, admissionRows(groupId))
@@ -491,7 +488,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         seedTenantMember(tenantIdOf(domain), "forged")
         val forged = UUID.randomUUID().toString()
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"forged",${TestAdmission.json(0, forged)}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
         val creator = (admissionRows(groupId).keys - forged).single()
@@ -534,20 +531,20 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
 
         // Born at name-epoch 0 with the creation name.
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.encryptedName", equalTo(groupName))
             .body("find { it.id == '$groupId' }.nameEpoch", equalTo(0))
 
         // Owner renames at the current epoch (0) → 204.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/name")
             .then().statusCode(204)
 
         // The row now carries the new sealed name, still at name-epoch 0.
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.encryptedName", equalTo(renamedName))
@@ -561,7 +558,7 @@ class ScopesSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner") // a MEMBER, not the name authority
 
-        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/name")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
@@ -573,12 +570,12 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
 
         // currentEpoch is 0; a rename claiming epoch 1 is stale → 409 stale_epoch.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":1}""")
             .`when`().post("/api/scopes/$groupId/name")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
 
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200).body("find { it.id == '$groupId' }.encryptedName", equalTo(groupName))
     }
@@ -590,20 +587,20 @@ class ScopesSliceTest {
         // (holding only E0) cannot derive K_name of E1 for the new name (the crypto FS itself is asserted web-side).
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A rename at the OLD epoch 0 is now stale.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/name").then().statusCode(409).body("code", equalTo("stale_epoch"))
 
         // A rename at the CURRENT epoch 1 succeeds and the row's name_epoch advances to 1.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":1}""")
             .`when`().post("/api/scopes/$groupId/name").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.encryptedName", equalTo(renamedName))
@@ -614,10 +611,10 @@ class ScopesSliceTest {
     fun renamePendingDeletionIs409() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // enters the grace period
 
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/name")
             .then().statusCode(409).body("code", equalTo("scope_deleting"))
@@ -631,41 +628,41 @@ class ScopesSliceTest {
         val tenantId = tenantIdOf(domain)
 
         // Born with no icon.
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
             .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
 
         // The tenant owner sets the icon at the current epoch (0) → 204.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$tenantId/icon").then().statusCode(204)
 
         // It shows on the tenant's own scope row.
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }.sealedIcon", equalTo(sealedIcon))
             .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
 
         // And on the widened my-tenants read (the switcher's cross-tenant path), with the caller's own grant.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/my-tenants").then().statusCode(200)
             .body("[0].sealedIcon", equalTo(sealedIcon))
             .body("[0].iconEpoch", equalTo(0))
             .body("[0].wrappedGrant", notNullValue())
 
         // Replace it (still epoch 0) → 204.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$replacedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$tenantId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }.sealedIcon", equalTo(replacedIcon))
 
         // Remove it → 204; every member falls back to the initial (sealedIcon null again).
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
             .body("find { it.id == '$tenantId' }.iconEpoch", equalTo(0))
@@ -699,7 +696,7 @@ class ScopesSliceTest {
                 createdAt = Instant.now()
             }.persist()
         }
-        given().header("Authorization", "Bearer ${token(member)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$tenantId/icon")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
@@ -710,11 +707,11 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val tenantId = tenantIdOf(domain)
         // currentEpoch is 0; a set claiming epoch 1 is stale → 409 stale_epoch.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":1}""")
             .`when`().post("/api/scopes/$tenantId/icon")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$tenantId' }.sealedIcon", nullValue())
     }
@@ -724,15 +721,15 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val tenantId = tenantIdOf(domain)
         // Idempotent: clearing an already-iconless scope → 204.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(204)
         // A plain tenant member cannot clear → 403.
         val member = seedTenantMember(tenantId, "member")
-        given().header("Authorization", "Bearer ${token(member)}")
+        given().header("Authorization", bearer(member))
             .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(403).body("code", equalTo("not_scope_owner"))
         // A non-member gets the uniform 404 (membership first, ADR 0042).
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${token(outsider)}")
+        given().header("Authorization", bearer(outsider))
             .`when`().delete("/api/scopes/$tenantId/icon").then().statusCode(404)
     }
 
@@ -743,11 +740,11 @@ class ScopesSliceTest {
         // 404 a non-member gets, never leaking that the scope exists. Reverting the guard to `!= TENANT` reds the
         // GROUP tests below; reverting it to `!= GROUP` reds this one.
         val (userId, domain) = seedMember()
-        val personalId = given().header("Authorization", "Bearer ${token(userId)}")
+        val personalId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes").then().statusCode(201).extract().path<String>("scopeId")
-        given().header("Authorization", "Bearer ${token(userId)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$personalId/icon").then().statusCode(404)
     }
@@ -758,10 +755,10 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
 
         // The group owner sets the icon at the current epoch (0) → 204, and it shows on the group's scope row.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.sealedIcon", equalTo(sealedIcon))
             .body("find { it.id == '$groupId' }.iconEpoch", equalTo(0))
@@ -770,12 +767,12 @@ class ScopesSliceTest {
         // change (isScopeOwner is true for any OWNER-role membership on the scope, the same gate renameGroup uses).
         val partner = seedTenantMember(tenantIdOf(domain), "partner")
         addToGroup(owner, domain, groupId, "partner")
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"role":"OWNER"}""").`when`().patch("/api/scopes/$groupId/members/$partner").then().statusCode(200)
-        given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(partner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$replacedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.sealedIcon", equalTo(replacedIcon))
     }
@@ -788,13 +785,13 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "member")
 
         // A plain group member (not an owner) → 403 not_scope_owner.
-        given().header("Authorization", "Bearer ${token(member)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(403).body("code", equalTo("not_scope_owner"))
 
         // A non-member gets the uniform 404 (membership first, ADR 0042) — never leaks that the group exists.
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${token(outsider)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(404)
     }
@@ -809,23 +806,23 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
 
         // Rotate 0 → 1 (owner mints E1 + re-grants self).
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A set at the OLD epoch 0 is now stale → 409; the icon stays unset.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(409).body("code", equalTo("stale_epoch"))
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.sealedIcon", nullValue())
 
         // A set at the CURRENT epoch 1 succeeds; the row reports iconEpoch 1.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":1}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.sealedIcon", equalTo(sealedIcon))
             .body("find { it.id == '$groupId' }.iconEpoch", equalTo(1))
@@ -837,9 +834,9 @@ class ScopesSliceTest {
         // ciphertext and is rejected (unlike a clear, which is allowed; see clearScopeIconOnAGroup...).
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // enters the grace period
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon")
             .then().statusCode(409).body("code", equalTo("scope_deleting"))
@@ -850,29 +847,29 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         // Set then clear → 204, back to null.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.sealedIcon", nullValue())
         // Idempotent: clearing an already-iconless group → 204.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
         // Like every write, a clear is refused once the group enters its deletion grace: the window promises that
         // nothing about the space changes, its icon included (uc.spaces.scope-access).
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // grace
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
     @Test
     fun createPersonalScopeThenListReturnsBoth() {
         val (userId, domain) = seedMember()
-        val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        val scopeId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes")
@@ -883,7 +880,7 @@ class ScopesSliceTest {
 
         // The list now shows the TENANT root + the new PERSONAL scope; the personal grant is the verbatim
         // ciphertext the client sent (operator-blind — the server stored it without interpreting it).
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
@@ -898,13 +895,13 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val memberId = seedTenantMember(tenantIdOf(domain), "partner")
 
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
             .body("find { it.kind == 'TENANT' }.role", equalTo("OWNER"))
 
-        given().header("Authorization", "Bearer ${token(memberId)}")
+        given().header("Authorization", bearer(memberId))
             .header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
@@ -914,12 +911,12 @@ class ScopesSliceTest {
     @Test
     fun secondPersonalScopeIs409() {
         val (userId, domain) = seedMember()
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes").then().statusCode(201)
 
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes")
@@ -929,7 +926,7 @@ class ScopesSliceTest {
     @Test
     fun createGroupThenListShowsItWithSealedNameAndSelfGrant() {
         val (userId, domain) = seedMember()
-        val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        val scopeId = given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/groups")
@@ -940,7 +937,7 @@ class ScopesSliceTest {
 
         // The list now carries the GROUP scope with the verbatim ciphertext name + the caller's self-grant —
         // both are exactly what the client sent (operator-blind: the server stored, never interpreted, them).
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes")
             .then().statusCode(200)
@@ -956,7 +953,7 @@ class ScopesSliceTest {
         // A tenant exists, but this caller holds no membership in it → cannot create a group there.
         val (_, domain) = seedMember()
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+        given().header("Authorization", bearer(outsider))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/groups")
@@ -971,7 +968,7 @@ class ScopesSliceTest {
 
         // The owner admits an existing tenant member by username → a grant-less MEMBER row (awaiting delivery);
         // the response never exposes email, and no key/name was touched (operator-blind admission).
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner",${TestAdmission.json(TestAdmission.epochOf(groupId))}}""")
             .`when`().post("/api/scopes/$groupId/members")
@@ -982,7 +979,7 @@ class ScopesSliceTest {
             .body("email", nullValue())
 
         // The group directory now lists the pending member — grant-less, ready for grant-delivery to wrap K_SC.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/members")
             .then().statusCode(200)
             .body("find { it.username == 'partner' }.hasGrant", equalTo(false))
@@ -997,7 +994,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         val nonMember = seedTenantMember(tenantIdOf(domain), "partner")
         seedTenantMember(tenantIdOf(domain), "third")
-        given().header("Authorization", "Bearer ${token(nonMember)}")
+        given().header("Authorization", bearer(nonMember))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"third",${TestAdmission.json(TestAdmission.epochOf(groupId))}}""")
             .`when`().post("/api/scopes/$groupId/members")
@@ -1008,7 +1005,7 @@ class ScopesSliceTest {
     fun addGroupMemberUnknownUsernameIs404() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"nobody",${TestAdmission.json(TestAdmission.epochOf(groupId))}}""")
             .`when`().post("/api/scopes/$groupId/members")
@@ -1021,7 +1018,7 @@ class ScopesSliceTest {
         val groupId = createGroupAs(owner, domain)
         seedTenantMember(tenantIdOf(domain), "partner")
         val add = {
-            given().header("Authorization", "Bearer ${token(owner)}")
+            given().header("Authorization", bearer(owner))
                 .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
                 .body("""{"username":"partner",${TestAdmission.json(TestAdmission.epochOf(groupId))}}""").`when`().post("/api/scopes/$groupId/members")
         }
@@ -1032,7 +1029,7 @@ class ScopesSliceTest {
     @Test
     fun unknownHostIs404() {
         val (userId, _) = seedMember()
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", "nobody-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes")
@@ -1044,7 +1041,7 @@ class ScopesSliceTest {
         // A tenant exists, but this caller holds no membership in it → cannot birth a personal scope there.
         val (_, domain) = seedMember()
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+        given().header("Authorization", bearer(outsider))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant",${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/scopes")
@@ -1063,7 +1060,7 @@ class ScopesSliceTest {
     fun listMyTenantsReturnsTheCallersTenants() {
         // Host-independent: lists every tenant the caller belongs to (name + domain + role), for the switcher.
         val (userId, domain) = seedMember()
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200)
             .body("size()", equalTo(1))
@@ -1073,7 +1070,7 @@ class ScopesSliceTest {
 
         // an outsider with no membership sees an empty list — only your own tenants (operator-blind).
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+        given().header("Authorization", bearer(outsider))
             .`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200).body("size()", equalTo(0))
     }
@@ -1116,7 +1113,7 @@ class ScopesSliceTest {
                 createdAt = Instant.now()
             }.persist()
         }
-        given().header("Authorization", "Bearer ${token(member)}")
+        given().header("Authorization", bearer(member))
             .`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200)
             .body("size()", equalTo(1))
@@ -1130,22 +1127,22 @@ class ScopesSliceTest {
         createNodeIn(owner, groupId, "n1") // a write, allowed while active
 
         // Owner soft-deletes → 204; the scope stays listed but now carries deletedAt + purgeAfter (pending-deletion).
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.deletedAt", notNullValue())
             .body("find { it.id == '$groupId' }.purgeAfter", notNullValue())
 
         // Read-only during grace: a content write is rejected 409 scope_deleting.
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(nodeBody("n2")).`when`().post("/api/scopes/$groupId/nodes")
             .then().statusCode(409).body("code", equalTo("scope_deleting"))
 
         // Restore → 204; the marker clears and writes work again.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().post("/api/scopes/$groupId/restore").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(owner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes").then().statusCode(200)
             .body("find { it.id == '$groupId' }.deletedAt", equalTo(null))
         createNodeIn(owner, groupId, "n3") // write allowed again
@@ -1159,16 +1156,16 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner") // partner = MEMBER
 
         // A non-owner cannot delete; restoring an active group is 409 not_deleted; deleting the TENANT scope is 409 not_group.
-        given().header("Authorization", "Bearer ${token(partner)}")
+        given().header("Authorization", bearer(partner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(403).body("code", equalTo("not_scope_owner"))
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().post("/api/scopes/$groupId/restore").then().statusCode(409).body("code", equalTo("not_deleted"))
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/${tenantIdOf(domain)}").then().statusCode(409).body("code", equalTo("not_group"))
 
         // Soft-delete, then a second delete → 409 scope_deleting: a deleting group refuses the delete like any write.
-        given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$groupId").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$groupId").then().statusCode(204)
+        given().header("Authorization", bearer(owner))
             .`when`().delete("/api/scopes/$groupId").then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
@@ -1180,7 +1177,7 @@ class ScopesSliceTest {
         val fresh = createGroupAs(owner, domain)
 
         // Soft-delete both; backdate the "expired" one past the 30-day retention window.
-        listOf(expired, fresh).forEach { given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204) }
+        listOf(expired, fresh).forEach { given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$it").then().statusCode(204) }
         QuarkusTransaction.requiringNew().run {
             ScopeEntity.findById(expired)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
         }
@@ -1231,7 +1228,7 @@ class ScopesSliceTest {
         }
 
         listOf(poisoned, clean).forEach {
-            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+            given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$it").then().statusCode(204)
         }
         QuarkusTransaction.requiringNew().run {
             listOf(poisoned, clean).forEach {
@@ -1312,7 +1309,7 @@ class ScopesSliceTest {
             }.persist()
         }
         listOf(poisoned, clean).forEach {
-            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+            given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$it").then().statusCode(204)
         }
         QuarkusTransaction.requiringNew().run {
             listOf(poisoned, clean).forEach {
@@ -1377,7 +1374,7 @@ class ScopesSliceTest {
             }.persist()
         }
 
-        given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$scopeId").then().statusCode(204)
+        given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$scopeId").then().statusCode(204)
         QuarkusTransaction.requiringNew().run {
             ScopeEntity.findById(scopeId)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
         }
@@ -1430,7 +1427,7 @@ class ScopesSliceTest {
         val freshSession = mediaStore.createSession(fresh, UploadOpener.Member(owner), freshKey, blob2.upload("d3JhcA=="))
 
         listOf(expired, fresh).forEach {
-            given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
+            given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$it").then().statusCode(204)
         }
         QuarkusTransaction.requiringNew().run {
             ScopeEntity.findById(expired)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
@@ -1452,15 +1449,13 @@ class ScopesSliceTest {
 
     // --- helpers ---
 
-    private fun token(userId: String) = sessions.issue(userId).accessToken
-
     /** A minimal FOLDER-node create body; `slug` becomes a base64 slug token (unique per parent). */
     private fun nodeBody(slug: String) =
         """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0}"""
 
     /** Create a FOLDER node in a scope (a write) → the new nodeId. */
     private fun createNodeIn(owner: String, scopeId: String, slug: String): String =
-        given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(owner)).contentType(ContentType.JSON)
             .body(nodeBody(slug)).`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(201).extract().path("nodeId")
 
@@ -1469,7 +1464,7 @@ class ScopesSliceTest {
 
     /** Create a GROUP scope as the caller (the seeded name/grant are opaque here) → the new scopeId. */
     private fun createGroupAs(userId: String, domain: String): String =
-        given().header("Authorization", "Bearer ${token(userId)}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/groups")
@@ -1531,22 +1526,5 @@ class ScopesSliceTest {
             }.persist()
         }
         return userId to domain
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }
