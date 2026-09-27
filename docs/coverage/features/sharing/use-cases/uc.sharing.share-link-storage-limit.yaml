@@ -1,20 +1,53 @@
 useCase: uc.sharing.share-link-storage-limit
 feature: sharing
 title: A share link's storage limit — no one link can fill the server
-status: planned
-# Refined 2026-09-24 (inbox #155) into ADR 0073; built by cr-share-link-storage-limit. Nothing is built yet:
-# no limit exists anywhere, and the only size check is per blob at `start`.
+# Built by cr-share-link-storage-limit (inbox #155, first half; ADR 0073). The per-link limit lives on the tenant row
+# (V55, 10 GiB default); `StorageQuota` in the media feature is the one place a total is summed, and a link start
+# locks the tenant row, checks, reserves and commits before it presigns. Each term of the link SUM is pinned by a
+# case that pins the usage EXACTLY (refused at usage + S - 1, admitted at usage + S), so a dropped term and an
+# over-reaching scope both go red. The lock is proven on H2 only: MariaDB runs the same `SELECT … FOR UPDATE`, but
+# no CI job runs the race against it. The tenant quota (uc.admin.tenant-storage-quota) is the second half.
 acceptanceCriteria:
   - id: link-usage-is-what-the-link-stored
     text: A link's usage is the declared size of every blob of the media its identities contributed, with those media's derivatives, plus every upload session its identities opened and nobody has completed or purged. A contribution a member trashed keeps counting until it is purged; a contributor's delete of their own upload frees it at once.
+    coverage:
+      backend:
+        integration:
+          - ShareLinkStorageLimitSliceTest.aTrashedContributionStillCounts
+          - ShareLinkStorageLimitSliceTest.aDerivativeCounts
+          - ShareLinkStorageLimitSliceTest.anOpenSessionCounts
+          - ShareLinkStorageLimitSliceTest.aContributorsOwnDeleteFreesAtOnce
+          - ShareLinkStorageLimitSliceTest.aSecondLinkOfTheTenantHasItsOwnRoom
+          - ShareLinkStorageLimitSliceTest.aMembersUploadIntoTheSameMemoryDoesNotCount
+          - ShareLinkStorageLimitSliceTest.anUploaderLinkIsBoundedToo
   - id: a-start-that-does-not-fit-is-refused-whole
     text: A contributor or uploader start whose admissible items would take the link over the tenant's per-link limit is refused whole — every item `quota_exceeded`, no session created, nothing presigned — while a start that fits is admitted. `0` refuses every link upload.
+    coverage:
+      backend:
+        integration:
+          - ShareLinkStorageLimitSliceTest.aLinkStartOverTheLimitIsRefusedWholeAndLeavesNoSession
+          - ShareLinkStorageLimitSliceTest.aRequestIsAdmittedWholeOrRefusedWhole
+          - ShareLinkStorageLimitSliceTest.anInadmissibleItemKeepsItsOwnCodeAndIsNotCharged
+          - ShareLinkStorageLimitSliceTest.aZeroLimitRefusesEveryLinkStart
   - id: parallel-starts-cannot-overshoot
     text: Concurrent starts through one link are serialized on the tenant, so together they admit no more than the remainder of the limit.
+    coverage:
+      backend:
+        integration: [ShareLinkStorageLimitSliceTest.parallelStartsCannotOvershoot]
   - id: the-tenant-owner-sets-the-per-link-limit
     text: The tenant owner reads the tenant's storage usage and sets the per-link limit (10 GiB until changed; a non-negative byte count, no "unlimited"); a non-owner member is `403 not_tenant_owner`, a non-member `404`. Lowering the limit below what a link holds deletes nothing and refuses that link's next start.
+    coverage:
+      backend:
+        integration:
+          - TenantStorageSliceTest.theOwnerReadsUsageAndWritesTheLimit
+          - TenantStorageSliceTest.aNegativeLimitIs400
+          - TenantStorageSliceTest.aNonOwnerMemberIs403OnReadAndWrite
+          - TenantStorageSliceTest.aNonMemberIs404OnReadAndWrite
+          - ShareLinkStorageLimitSliceTest.aLoweredLimitDeletesNothingAndRefusesTheNextStart
+      web:
+        unit: [src/features/tenant/TenantStoragePanel.test.ts]
   - id: the-visitor-is-told-only-that-the-link-is-full
     text: A visitor whose upload is refused with `quota_exceeded` sees that the link takes no more uploads right now, is offered no retry, and is never told whether the link or the tenant was full.
-gaps:
-  backend: "Not built: no per-link usage, no limit on the tenant row, no `quota_exceeded` item code, and no lock on `start` (cr-share-link-storage-limit)."
-  web: "Not built: a refused contributor upload shows the generic failed tile with a retry, and the tenant settings have no storage section (cr-share-link-storage-limit)."
+    coverage:
+      web:
+        unit: [src/features/memory/components/OptimisticTile.test.ts]

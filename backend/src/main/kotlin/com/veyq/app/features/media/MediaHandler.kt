@@ -20,6 +20,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.UUID
@@ -259,6 +260,7 @@ class MediaHandler(
     private val blobStore: BlobStore,
     private val reclaim: StoreReclaimStore,
     private val access: ScopeAccess,
+    private val quota: StorageQuota,
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
@@ -271,12 +273,46 @@ class MediaHandler(
     }
 
     /**
-     * The member-less core of [start]: reserve a session bound to [opener] + presign its first window of PUTs per
-     * declared blob, scoped only by `scopeId`. The caller does its own authorization — the member gate ([start]) or
-     * the share + contributor token gate (the CONTRIBUTOR share upload path, cr-0101). Bytes never flow through here.
+     * The member core of [start]: per declared blob, a session bound to [opener] and its first window of PUTs. Each
+     * session is its own transaction and nothing is reserved: a member start is not bounded by a total yet (the
+     * tenant quota, ADR 0073 §1, routes it through [startForLink]'s locked transaction). Bytes never flow through here.
      */
-    fun startForScope(scopeId: String, opener: UploadOpener, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
-        declares.map { startOne(scopeId, opener, it, domain) }
+    private fun startForScope(scopeId: String, opener: UploadOpener, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> {
+        val checked = admissibility(declares)
+        val opened = checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }
+        return presignOpened(checked, opened, domain)
+    }
+
+    /**
+     * The start of an upload link — CONTRIBUTOR or UPLOADER link [shareId], opened by its identity [identityId] —
+     * reserved against the tenant's per-link limit (ADR 0073 §4–§5). The caller does its own authorization (the
+     * link's gate), which runs first. One transaction:
+     *  1. lock the tenant row, so concurrent starts into the tenant serialize (A6);
+     *  2. check each item on its own, as a member start does;
+     *  3. ask [StorageQuota] whether the admissible items fit **together**. If not, every admissible item is
+     *     `quota_exceeded` and no session is inserted, so a photo never lands without its derivatives — admitting
+     *     item by item would reserve an original alone until the stale-session purge;
+     *  4. otherwise insert every admissible session, and commit.
+     * Presigning runs after the commit: the lock covers the check and the inserts only, never up to 256 × window
+     * signatures.
+     */
+    fun startForLink(scopeId: String, shareId: String, identityId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> {
+        val opener = UploadOpener.Contributor(identityId)
+        val (checked, opened) = QuarkusTransaction.requiringNew().call {
+            val tenant = ScopeEntity.findById(scopeId)?.tenantId?.let { quota.lockTenant(it) }
+            // Checked under the lock, not before it: the sessions are inserted together at the end, so a blob id
+            // two racing requests (or two items of this one) both claim would otherwise pass the check and fail
+            // the unique index at insert — a 500 instead of `id_taken`.
+            val checked = admissibility(declares)
+            val admissible = checked.filter { (_, error) -> error == null }.map { (d, _) -> d }
+            if (tenant == null || !quota.linkFits(tenant, shareId, admissible)) {
+                checked.map { (d, error) -> d to (error ?: "quota_exceeded") } to checked.map { null }
+            } else {
+                checked to checked.map { (d, error) -> if (error != null) null else openSession(scopeId, opener, d) }
+            }
+        }
+        return presignOpened(checked, opened, domain)
+    }
 
     /**
      * Sign the next window of each open session — authorized again exactly like [start], because a window is where
@@ -310,26 +346,49 @@ class MediaHandler(
     private fun presignWindow(storageKey: String, byteSize: Long, chunkCount: Int, fromChunk: Int, domain: String?): List<PresignedRef>? =
         blobStore.presignPuts(storageKey, fromChunk until minOf(fromChunk + window, chunkCount), { ChunkFrames.chunkLength(byteSize, it) }, domain)
 
-    private fun startOne(scopeId: String, opener: UploadOpener, d: UploadDeclare, domain: String?): UploadItemResult {
-        if (d.byteSize > maxBytes) {
-            return UploadItemResult(uploadId = null, presignedPuts = null, error = "budget_exceeded")
+    /**
+     * Each declared item paired with the code that refuses it on its own, or null when it is admissible (ADR 0013 §3,
+     * ADR 0072): over the per-blob cap, a shape the size does not derive, or a blob id already taken — by a blob, an
+     * open session, or an earlier item of the same request.
+     */
+    private fun admissibility(declares: List<UploadDeclare>): List<Pair<UploadDeclare, String?>> {
+        val claimed = HashSet<String>()
+        return declares.map { d ->
+            val error = when {
+                d.byteSize > maxBytes -> "budget_exceeded"
+                // The frame size fixes the shape (ADR 0013 §3): a count the size does not derive is a client bug, not a
+                // big file, so it gets its own code. The size is checked first — chunkCount() is defined only where it holds.
+                !ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize) -> "shape_invalid"
+                // The client-minted blob id (ADR 0072): taken by a blob or by another open session, anywhere → refused,
+                // and the same answer wherever it lives.
+                !claimed.add(d.blobId) || store.blobIdTaken(d.blobId) -> "id_taken"
+                else -> null
+            }
+            d to error
         }
-        // The frame size fixes the shape (ADR 0013 §3): a count the size does not derive is a client bug, not a big
-        // file, so it gets its own code. The size is checked first — chunkCount() is defined only where it holds.
-        if (!ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize)) {
-            return UploadItemResult(uploadId = null, presignedPuts = null, error = "shape_invalid")
-        }
-        // The client-minted blob id (ADR 0072): taken by a blob or by another open session, anywhere → refused, and
-        // the same answer wherever it lives.
-        if (store.blobIdTaken(d.blobId)) return UploadItemResult(uploadId = null, presignedPuts = null, error = "id_taken")
-        val storageKey = UUID.randomUUID().toString()
-        val uploadId = store.createSession(scopeId, opener, storageKey, d)
-        // The session is metadata; presigned PUTs require a transport-capable store. Only the %test in-memory stub
-        // cannot presign (puts = null) — %dev/%prod always have a real store (BlobStoreStartupCheck, ADR 0013).
-        // Only the first window: the rest is signed window by window, so the TTL never has to cover a whole file.
-        val puts = presignWindow(storageKey, d.byteSize, d.chunkCount, 0, domain)
-        return UploadItemResult(uploadId = uploadId, presignedPuts = puts, error = null)
     }
+
+    /** A session inserted for one admissible item, with the object-key prefix its chunks are stored under. */
+    private data class Opened(val uploadId: String, val storageKey: String)
+
+    /** Insert the session for one admissible item; joins the caller's transaction when there is one. */
+    private fun openSession(scopeId: String, opener: UploadOpener, d: UploadDeclare): Opened {
+        val storageKey = UUID.randomUUID().toString()
+        return Opened(store.createSession(scopeId, opener, storageKey, d), storageKey)
+    }
+
+    /**
+     * The per-item results of a start whose sessions are committed: each opened session with its first window of
+     * PUTs, each refused item with its code. The session is metadata; presigned PUTs require a transport-capable
+     * store — only the %test in-memory stub cannot presign (puts = null), %dev/%prod always have a real store
+     * (BlobStoreStartupCheck, ADR 0013). Only the first window: the rest is signed window by window, so the TTL
+     * never has to cover a whole file.
+     */
+    private fun presignOpened(checked: List<Pair<UploadDeclare, String?>>, opened: List<Opened?>, domain: String?): List<UploadItemResult> =
+        checked.mapIndexed { i, (d, error) ->
+            val o = opened[i] ?: return@mapIndexed UploadItemResult(uploadId = null, presignedPuts = null, error = error)
+            UploadItemResult(uploadId = o.uploadId, presignedPuts = presignWindow(o.storageKey, d.byteSize, d.chunkCount, 0, domain), error = null)
+        }
 
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
         access.check(userId, scopeId, WRITE)

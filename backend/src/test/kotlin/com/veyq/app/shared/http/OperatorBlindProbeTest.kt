@@ -193,6 +193,10 @@ class OperatorBlindProbeTest {
         "updateTenantMailSettings" to Probe(Address.TENANT) { s ->
             Call("PUT", "/api/tenants/${s.tenantId}/mail-settings", """{"tls":false,"enabled":false}""")
         },
+        "getTenantStorage" to Probe(Address.TENANT) { s -> Call("GET", "/api/tenants/${s.tenantId}/storage") },
+        "updateTenantStorage" to Probe(Address.TENANT) { s ->
+            Call("PUT", "/api/tenants/${s.tenantId}/storage", """{"shareLinkLimitBytes":10737418240}""")
+        },
     )
 
     /** Every operation the gate does not guard, and why. A reason is required — "not scope-addressed" is one. */

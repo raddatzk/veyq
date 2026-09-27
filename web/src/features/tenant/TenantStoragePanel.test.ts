@@ -1,0 +1,99 @@
+// @vitest-environment happy-dom
+// uc.sharing.share-link-storage-limit (web) — the owner-gated Storage rubric: the owner reads the tenant's usage and
+// saves the per-link limit, entered in GiB and sent in bytes; a 403 read renders the read-only notice, not the editor.
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { mount, flushPromises } from '@vue/test-utils'
+import { createRouter, createMemoryHistory } from 'vue-router'
+
+vi.mock('./tenantStorage', async (orig) => ({
+  ...(await orig<typeof import('./tenantStorage')>()),
+  getTenantStorage: vi.fn(),
+  updateTenantStorage: vi.fn(),
+}))
+vi.mock('../../shared/state/useToast', () => ({
+  useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }),
+}))
+
+import TenantStoragePanel from './TenantStoragePanel.vue'
+import { getTenantStorage, updateTenantStorage, GIB } from './tenantStorage'
+import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
+import { ScopeKind } from '../../api/generated/scopes'
+import { i18n } from '../../i18n'
+
+function httpError(status: number, code?: string): Error {
+  const body = code ? JSON.stringify({ code }) : ''
+  const e = new Error(`http ${status}`)
+  ;(e as unknown as { response: Response }).response = new Response(body, { status, headers: { 'content-type': 'application/json' } })
+  return e
+}
+
+const stubs = {
+  Button: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
+  Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
+  InputText: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+  },
+}
+
+async function mountPanel() {
+  const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
+  const wrapper = mount(TenantStoragePanel, { global: { plugins: [router, i18n], stubs } })
+  await flushPromises()
+  return wrapper
+}
+
+const saveButton = (w: Awaited<ReturnType<typeof mountPanel>>) =>
+  w.findAll('button').find((b) => b.text() === i18n.global.t('storage.save'))
+
+describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    i18n.global.locale.value = 'en'
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+  })
+
+  it('shows the usage in a human unit and saves the limit typed in GiB as bytes', async () => {
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, shareLinkLimitBytes: 10 * GIB })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, shareLinkLimitBytes: 2.5 * GIB })
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain('3 MB')
+    const input = wrapper.find('input')
+    expect((input.element as HTMLInputElement).value).toBe('10') // the stored bytes, shown in GiB
+
+    await input.setValue('2,5') // the German decimal comma is a decimal too
+    await saveButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(updateTenantStorage).toHaveBeenCalledWith('t-1', 2_684_354_560) // 2.5 × 1024³, in bytes on the wire
+  })
+
+  it('sends 0 as link uploads off, and refuses a limit that is not a non-negative number without calling', async () => {
+    vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 0, shareLinkLimitBytes: 10 * GIB })
+    vi.mocked(updateTenantStorage).mockResolvedValue({ usedBytes: 0, shareLinkLimitBytes: 0 })
+    const wrapper = await mountPanel()
+    const input = wrapper.find('input')
+
+    await input.setValue('-1')
+    await saveButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(updateTenantStorage).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain(i18n.global.t('storage.invalidLimit'))
+
+    await input.setValue('0')
+    await saveButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(updateTenantStorage).toHaveBeenCalledWith('t-1', 0)
+  })
+
+  it('renders a read-only notice (not the editor) when the read is owner-gated 403', async () => {
+    vi.mocked(getTenantStorage).mockRejectedValue(httpError(403, 'not_tenant_owner'))
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain(i18n.global.t('storage.notOwner'))
+    expect(saveButton(wrapper)).toBeUndefined()
+    expect(wrapper.find('input').exists()).toBe(false)
+  })
+})

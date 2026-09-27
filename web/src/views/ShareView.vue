@@ -485,6 +485,7 @@ onBeforeUnmount(() => {
             :tile="item.optimistic"
             :deletable="isUploader"
             :deleting="deletingIds.has(item.optimistic.fileId)"
+            link
             :style="{
               transform: `translate(${tile.left}px, ${tile.top}px)`,
               width: `${tile.renderedWidth}px`,

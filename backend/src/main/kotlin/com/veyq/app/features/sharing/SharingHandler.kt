@@ -364,7 +364,7 @@ class SharingHandler(
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareUploadOutcome.NotContributable
         val identity = store.findIdentity(shareId, contributorToken) ?: return ShareUploadOutcome.NotContributable
         if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
-        return ShareUploadOutcome.Results(mediaHandler.startForScope(share.scopeId, UploadOpener.Contributor(identity.id), declares, domain))
+        return ShareUploadOutcome.Results(mediaHandler.startForLink(share.scopeId, share.id, identity.id, declares, domain))
     }
 
     /**

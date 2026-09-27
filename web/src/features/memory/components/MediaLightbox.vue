@@ -33,6 +33,7 @@ import { useMapConfig } from '../../../shared/state/useMapConfig'
 import MemoryMap from './MemoryMap.vue'
 import { registerPlayback, revokePlayback, handleFromUrl } from '../../../sw/register'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
+import { formatBytes } from '../../../shared/formatBytes'
 
 const props = defineProps<{
   scopeId: string
@@ -251,14 +252,11 @@ function formatRating(stars?: number): string {
   const n = Math.max(0, Math.min(5, Math.round(stars)))
   return '★'.repeat(n) + '☆'.repeat(5 - n)
 }
-/** Byte size in the reader's locale. The PLAINTEXT size — see [plaintextSize]; `byteSize` is the ciphertext. */
-function formatBytes(bytes?: number): string {
+/** Byte size in the reader's locale, or '' when unknown. The PLAINTEXT size — see [plaintextSize]; `byteSize` is
+ *  the ciphertext. */
+function fileSize(bytes?: number): string {
   if (bytes === undefined || !Number.isFinite(bytes) || bytes <= 0) return ''
-  const units = ['B', 'kB', 'MB', 'GB']
-  let n = bytes
-  let u = 0
-  while (n >= 1024 && u < units.length - 1) { n /= 1024; u += 1 }
-  return `${new Intl.NumberFormat(locale.value === 'de' ? 'de-DE' : 'en-US', { maximumFractionDigits: u === 0 ? 0 : 1 }).format(n)} ${units[u]}`
+  return formatBytes(bytes, locale.value)
 }
 
 // GPS rides the always-listed metadata tier now (cr-0068), so coordinates show instantly from `captured` —
@@ -320,7 +318,7 @@ const metadataRows = computed(() => {
   if (e) {
     rows.push(
       { label: t('media.fileName'), value: e.name ?? '' },
-      { label: t('media.fileSize'), value: formatBytes(item.value ? plaintextSize(item.value.original) : undefined) },
+      { label: t('media.fileSize'), value: fileSize(item.value ? plaintextSize(item.value.original) : undefined) },
       { label: t('media.fileFormat'), value: captured.value?.mediaType ?? '' },
       { label: t('media.camera'), value: [e.make, e.model].filter(Boolean).join(' ').trim() },
       { label: t('media.lens'), value: e.lens ?? '' },

@@ -18,6 +18,7 @@ import ProfilePanel from '../features/account/profile/ProfilePanel.vue'
 import TenantMembersPanel from '../features/spaces/TenantMembersPanel.vue'
 import TenantTermsPanel from '../features/tenant/TenantTermsPanel.vue'
 import TenantMailSettingsPanel from '../features/tenant/TenantMailSettingsPanel.vue'
+import TenantStoragePanel from '../features/tenant/TenantStoragePanel.vue'
 import GroupMembersPanel from '../features/spaces/GroupMembersPanel.vue'
 import CreateGroupDialog from '../features/spaces/CreateGroupDialog.vue'
 import { activeSpace } from '../app/activeSpace'
@@ -93,6 +94,8 @@ const categories = computed<NavCategory[]>(() => {
       { id: 'terms', label: t('terms.navTitle'), icon: 'pi pi-file-edit' },
       // Mail settings are owner-only (the read is owner-gated); the item shows to every member, the panel gates.
       { id: 'mail', label: t('mail.navTitle'), icon: 'pi pi-envelope' },
+      // Storage is owner-only the same way (uc.sharing.share-link-storage-limit): shown to every member, the panel gates.
+      { id: 'storage', label: t('storage.navTitle'), icon: 'pi pi-database' },
     ] })
   }
   // Gruppen collection — every group I own + a create affordance (management hub, decoupled from active scope).
@@ -143,6 +146,7 @@ const activeView = computed<{ component: Component; props: Record<string, unknow
   if (id === 'tenant-members') return { component: TenantMembersPanel, props: {} }
   if (id === 'terms') return { component: TenantTermsPanel, props: {} }
   if (id === 'mail') return { component: TenantMailSettingsPanel, props: {} }
+  if (id === 'storage') return { component: TenantStoragePanel, props: {} }
   if (id.startsWith('group-')) {
     const scopeId = id.slice('group-'.length)
     return { component: GroupMembersPanel, props: { scopeId, name: ownedGroups.value.find((g) => g.scopeId === scopeId)?.name ?? '' } }

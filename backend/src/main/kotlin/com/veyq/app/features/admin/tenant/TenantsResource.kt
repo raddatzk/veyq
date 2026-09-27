@@ -22,6 +22,8 @@ import com.veyq.app.generated.model.TenantActivatedWithUser
 import com.veyq.app.generated.model.TenantCreated
 import com.veyq.app.generated.model.TenantInviteState
 import com.veyq.app.generated.model.TenantStatus
+import com.veyq.app.generated.model.TenantStorage
+import com.veyq.app.generated.model.TenantStorageUpdate
 import com.veyq.app.generated.model.TenantSummary
 import com.veyq.app.generated.model.TenantTerms
 import com.veyq.app.generated.model.TenantTermsUpdate
@@ -64,6 +66,7 @@ class TenantsResource(
     private val acceptHandler: TenantAcceptHandler,
     private val termsHandler: TenantTermsHandler,
     private val mailSettingsHandler: TenantMailSettingsHandler,
+    private val storageHandler: TenantStorageHandler,
     private val identity: SecurityIdentity,
 ) : TenantsApi {
 
@@ -319,6 +322,22 @@ class TenantsResource(
         subjectTemplate = subjectTemplate,
         bodyTemplate = bodyTemplate,
     )
+
+    // --- Storage (uc.sharing.share-link-storage-limit, ADR 0073 §4). @Authenticated (not Server-Owner): both
+    // owner-gated in the handler, exactly like the mail settings (403 not_tenant_owner; a non-member 404). ---
+    @Authenticated
+    override fun getTenantStorage(tenantId: UUID): Response =
+        storageHandler.read(identity.principal.name, tenantId.toString()).toResponse()
+
+    @Authenticated
+    override fun updateTenantStorage(tenantId: UUID, tenantStorageUpdate: TenantStorageUpdate): Response =
+        storageHandler.updateShareLinkLimit(identity.principal.name, tenantId.toString(), tenantStorageUpdate.shareLinkLimitBytes)
+            .toResponse()
+
+    private fun TenantStorageOutcome.toResponse(): Response = when (this) {
+        is TenantStorageOutcome.Ok -> Response.ok(TenantStorage(storage.usedBytes, storage.shareLinkLimitBytes)).build()
+        is HttpFailure -> httpError(this)
+    }
 
 
     private fun InviteOutcome.toResponse(): Response = when (this) {
