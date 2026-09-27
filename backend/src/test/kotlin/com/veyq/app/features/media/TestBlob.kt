@@ -1,6 +1,6 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 
 /**
@@ -20,7 +20,7 @@ data class TestBlob(val byteSize: Long) {
 
     /** Stage every chunk under [storageKey] at exactly its derived length — the objects an honest upload leaves. */
     fun stage(store: FakePresigningBlobStore, storageKey: String) =
-        (0 until chunkCount).forEach { store.statOf(chunkKey(storageKey, it), chunkLength(it)) }
+        chunkKeys(storageKey, chunkCount).forEachIndexed { i, key -> store.statOf(key, chunkLength(i)) }
 
     companion object {
         /** A blob of [plaintextBytes] plaintext, sealed as the web client seals it (at least one frame). */

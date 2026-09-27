@@ -1,6 +1,7 @@
 package com.veyq.app.shared.blobstore
 
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -92,7 +93,7 @@ class StoreReclaimSweepSliceTest {
         makeDue(refusedId)
         sweep.run()
         assertNull(row(refusedId), "once the store accepts, the retried row is settled")
-        assertTrue(recorder.deletedKeys.containsAll((0 until 2).map { chunkKey(refusedKey, it) })) {
+        assertTrue(recorder.deletedKeys.containsAll(chunkKeys(refusedKey, 2))) {
             "every chunk of the retried row must reach the store; handed: ${recorder.deletedKeys}"
         }
     }

@@ -90,8 +90,33 @@ interface BlobStore {
     companion object {
         /** The object key for chunk [index] under a blob's [storageKey] prefix. */
         fun chunkKey(storageKey: String, index: Int): String = "$storageKey/$index"
+
+        /**
+         * The object keys of chunks [indices] under [storageKey], in chunk order — the one enumeration of a blob's
+         * chunk keys that every signer, verifier and reclaimer goes through, rather than each writing its own loop.
+         */
+        fun chunkKeys(storageKey: String, indices: IntRange): List<String> = indices.map { chunkKey(storageKey, it) }
+
+        /** Every chunk key of a blob of [chunkCount] chunks under [storageKey], in chunk order. */
+        fun chunkKeys(storageKey: String, chunkCount: Int): List<String> = chunkKeys(storageKey, 0 until chunkCount)
     }
 }
+
+/** A presigned URL for one chunk object, [index] in chunk order — what every presign site hands a client. */
+data class PresignedRef(val index: Int, val url: String)
+
+/**
+ * Presigned PUTs for chunks [indices] of the blob under [storageKey], each signed for its exact [lengthOf] (ADR 0013
+ * §3) — or null when the store cannot presign. A window is any such range; `start` signs the first one.
+ */
+fun BlobStore.presignPuts(storageKey: String, indices: IntRange, lengthOf: (Int) -> Long, domain: String?): List<PresignedRef>? =
+    if (!canPresign) null
+    else indices.zip(BlobStore.chunkKeys(storageKey, indices)) { i, key -> PresignedRef(i, presignPut(key, lengthOf(i), domain)!!) }
+
+/** Presigned GETs for every chunk of a blob of [chunkCount] chunks under [storageKey] — or null when the store cannot presign. */
+fun BlobStore.presignGets(storageKey: String, chunkCount: Int, domain: String?): List<PresignedRef>? =
+    if (!canPresign) null
+    else BlobStore.chunkKeys(storageKey, chunkCount).mapIndexed { i, key -> PresignedRef(i, presignGet(key, domain)!!) }
 
 /**
  * `%test`-only store (cr-0105): holds no bytes and **cannot presign** (ADR 0013 §1). It exists purely so the

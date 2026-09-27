@@ -2,6 +2,7 @@ package com.veyq.app.features.media
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
@@ -42,6 +43,9 @@ import java.util.UUID
  * seen ([com.veyq.app.shared.blobstore.S3BlobStorePresigningTest] pins the URL shape): a `text/html` PUT → 403,
  * a GET → `application/octet-stream` + `attachment`, and that GET with its override removed → 403.
  *
+ * And it moves a blob of more than one presign window through the real store (ADR 0013 §2): `start` signs the
+ * first window, `blob-upload-windows` each next one, and every URL is a working PUT for its chunk's exact length.
+ *
  * Bring the store up with `docker compose -f infra/docker-compose.yml --profile s3 up -d` (see infra README).
  */
 @QuarkusTest
@@ -56,6 +60,8 @@ class BlobBatchE2ETest {
             "veyq.blob-store.secret-key" to (System.getenv("VEYQ_S3_SECRET_KEY") ?: DEV_SECRET),
             "veyq.blob-store.bucket" to (System.getenv("VEYQ_S3_BUCKET") ?: "veyq"),
             "veyq.blob-store.region" to (System.getenv("VEYQ_S3_REGION") ?: "us-east-1"),
+            // A window of two chunks, so a blob of a few frames crosses windows without megabytes of test data.
+            "veyq.blob.presign-window" to "$WINDOW",
         )
     }
 
@@ -146,6 +152,48 @@ class BlobBatchE2ETest {
         assertEquals(403, get(stripped).statusCode(), "a GET with its override removed must be refused")
     }
 
+    @Test
+    fun aBlobOfSeveralWindowsMovesThroughStartAndWindows() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val blob = TestBlob.ofChunks(2 * WINDOW + 1) // three windows: two full, one of a single chunk
+        val chunks = (0 until blob.chunkCount).map { i -> ByteArray(blob.chunkLength(i).toInt()) { b -> (b * 17 + i).toByte() } }
+
+        val start = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${blob.declare("d3JhcA==")}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200)
+            .body("results[0].presignedPuts.size()", equalTo(WINDOW)) // the first window only
+            .extract()
+        val uploadId: String = start.path("results[0].uploadId")
+        val urls = (0 until WINDOW).associateWith { start.path<String>("results[0].presignedPuts[$it].url") }.toMutableMap()
+        var from = WINDOW
+        while (from < blob.chunkCount) {
+            val window = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+                .body("""{"items":[{"uploadId":"$uploadId","fromChunk":$from}]}""")
+                .`when`().post("/api/scopes/$scopeId/blob-upload-windows")
+                .then().statusCode(200).body("results[0].error", org.hamcrest.CoreMatchers.nullValue())
+                .extract()
+            val n: Int = window.path("results[0].presignedPuts.size()")
+            (0 until n).forEach { k -> urls[window.path("results[0].presignedPuts[$k].index")] = window.path("results[0].presignedPuts[$k].url") }
+            from += n
+        }
+        assertEquals(blob.chunkCount, urls.size, "every chunk was signed by start or a window")
+        chunks.forEachIndexed { i, bytes -> assertEquals(200, put(urls.getValue(i), bytes, PINNED), "PUT chunk $i") }
+
+        val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
+            .`when`().post("/api/scopes/$scopeId/media-batch")
+            .then().statusCode(200).body("results[0].error", org.hamcrest.CoreMatchers.nullValue())
+            .extract().path<String>("results[0].blobId")
+        val dl = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[{"blobId":"$blobId"}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-downloads-batch")
+            .then().statusCode(200).body("results[0].presignedGets.size()", equalTo(chunks.size))
+            .extract()
+        chunks.forEachIndexed { i, expected -> assertArrayEquals(expected, get(dl.path("results[0].presignedGets[$i].url")).body(), "chunk $i bytes") }
+    }
+
     private fun put(url: String, bytes: ByteArray, contentType: String): Int = http.send(
         HttpRequest.newBuilder(URI.create(url)).header("Content-Type", contentType)
             .PUT(HttpRequest.BodyPublishers.ofByteArray(bytes)).build(),
@@ -207,6 +255,9 @@ class BlobBatchE2ETest {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
                 this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
+            // The scope-access gate wants an accepted TENANT membership for a write too (uc.spaces.scope-access);
+            // without it every upload here is a 404 — which this opt-in suite, run by no CI job, did not notice.
+            TenantRoots.join(userId, tenantId)
         }
         return userId to scopeId
     }
@@ -215,6 +266,9 @@ class BlobBatchE2ETest {
         // Deterministic dev credentials the bundled Garage imports (infra/docker-compose.yml --profile s3).
         const val DEV_KEY_ID = "GK0123456789abcdef01234567"
         const val DEV_SECRET = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
+        /** The presign window this suite runs with — small, so crossing windows costs a few frames. */
+        const val WINDOW = 2
 
         /** The one type a presigned PUT signs and a presigned GET is served as (ADR 0013 §6). */
         const val PINNED = "application/octet-stream"

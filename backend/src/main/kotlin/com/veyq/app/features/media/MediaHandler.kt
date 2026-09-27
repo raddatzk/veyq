@@ -2,9 +2,12 @@ package com.veyq.app.features.media
 
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
+import com.veyq.app.shared.blobstore.PresignedRef
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
+import com.veyq.app.shared.blobstore.presignGets
+import com.veyq.app.shared.blobstore.presignPuts
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.FailureStatus.BAD_REQUEST
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
@@ -21,8 +24,22 @@ import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import java.util.UUID
 
-/** A presigned URL for one chunk (index in chunk order). */
-data class PresignedRef(val index: Int, val url: String)
+/**
+ * Who opened an upload session (ADR 0013 §2) — the one caller who may extend it by a window or complete it. A
+ * member upload is opened by an account, a contributor upload by a share identity; never both, never neither.
+ */
+sealed interface UploadOpener {
+    /** Whether this caller opened [session]. A session from before openers were recorded answers false to both. */
+    fun opened(session: UploadSessionEntity): Boolean
+
+    data class Member(val userId: String) : UploadOpener {
+        override fun opened(session: UploadSessionEntity) = session.openerUserId == userId
+    }
+
+    data class Contributor(val shareIdentityId: String) : UploadOpener {
+        override fun opened(session: UploadSessionEntity) = session.openerShareIdentityId == shareIdentityId
+    }
+}
 
 /** One blob to start: declared shape + the K_blob wrap. */
 data class UploadDeclare(val chunkCount: Int, val byteSize: Long, val wrappedBlobKey: String)
@@ -43,6 +60,12 @@ data class CompleteItem(
 /** Per-item result of `start`: success carries the session + presigned PUTs (null when the store can't presign). */
 data class UploadItemResult(val uploadId: String?, val presignedPuts: List<PresignedRef>?, val error: String?)
 
+/** One window to sign: an open session + the first chunk of the window. */
+data class WindowRequest(val uploadId: String, val fromChunk: Int)
+
+/** Per-item result of a window request: the window's presigned PUTs, or an error code. */
+data class WindowItemResult(val presignedPuts: List<PresignedRef>?, val error: String?)
+
 /** Per-item result of `complete`. */
 data class CompleteItemResult(val blobId: String?, val mediaId: String?, val error: String?)
 
@@ -54,6 +77,13 @@ sealed interface StartOutcome {
     object Suspended : StartOutcome, HttpFailure by Failures.tenantSuspended
     object Deleting : StartOutcome, HttpFailure by Failures.scopeDeleting
     object NoScope : StartOutcome, HttpFailure by Failures.scopeNotFound
+}
+
+sealed interface WindowOutcome {
+    data class Results(val items: List<WindowItemResult>) : WindowOutcome
+    object Suspended : WindowOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : WindowOutcome, HttpFailure by Failures.scopeDeleting
+    object NoScope : WindowOutcome, HttpFailure by Failures.scopeNotFound
 }
 
 sealed interface CompleteOutcome {
@@ -200,8 +230,9 @@ sealed interface MoveMediaOutcome {
  * Use-case logic for media blobs (en.memory.media, cr-0028). Operator-blind, batch-shaped, per-item results.
  * Scope access is the one gate, [ScopeAccess], asked first (uc.spaces.scope-access): a non-member sees a top-level
  * 404, not a reveal. Direct-to-
- * store: bytes never flow through here — `start` presigns PUTs, `complete` stats the stored objects
- * (declare-then-verify), `download` presigns GETs.
+ * store: bytes never flow through here — `start` presigns a blob's first window of PUTs and `window` each next one,
+ * `complete` stats the stored objects (declare-then-verify), `download` presigns GETs. A session acts only for its
+ * [UploadOpener], and every window is authorized again, so a removed member stops at their next window (ADR 0013 §2).
  *
  * Two gates (ADR 0013 §3): the **declared** shape is checked at `start` — a size over the cap is
  * `budget_exceeded`, a `chunkCount` the size does not derive (or a size no frame sequence has) is `shape_invalid` —
@@ -218,22 +249,55 @@ class MediaHandler(
     config: VeyqConfig,
 ) {
     private val maxBytes: Long = config.blob().maxBytes()
+    private val window: Int = config.blob().presignWindow()
 
     fun start(userId: String, scopeId: String, declares: List<UploadDeclare>, domain: String?): StartOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(StartOutcome.NoScope, StartOutcome.Suspended, StartOutcome.Deleting)?.let { return it }
-        return StartOutcome.Results(startForScope(scopeId, declares, domain))
+        return StartOutcome.Results(startForScope(scopeId, UploadOpener.Member(userId), declares, domain))
     }
 
     /**
-     * The member-less core of [start]: reserve a session + presign PUTs per declared blob, scoped only by
-     * `scopeId`. The caller does its own authorization — the member gate ([start]) or the share + contributor
-     * token gate (the CONTRIBUTOR share upload path, cr-0101). Bytes never flow through here.
+     * The member-less core of [start]: reserve a session bound to [opener] + presign its first window of PUTs per
+     * declared blob, scoped only by `scopeId`. The caller does its own authorization — the member gate ([start]) or
+     * the share + contributor token gate (the CONTRIBUTOR share upload path, cr-0101). Bytes never flow through here.
      */
-    fun startForScope(scopeId: String, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
-        declares.map { startOne(scopeId, it, domain) }
+    fun startForScope(scopeId: String, opener: UploadOpener, declares: List<UploadDeclare>, domain: String?): List<UploadItemResult> =
+        declares.map { startOne(scopeId, opener, it, domain) }
 
-    private fun startOne(scopeId: String, d: UploadDeclare, domain: String?): UploadItemResult {
+    /**
+     * Sign the next window of each open session — authorized again exactly like [start], because a window is where
+     * a member removed since then must stop. The window itself is [windowForScope].
+     */
+    fun window(userId: String, scopeId: String, requests: List<WindowRequest>, domain: String?): WindowOutcome {
+        access.check(userId, scopeId, WRITE)
+            .refusal(WindowOutcome.NoScope, WindowOutcome.Suspended, WindowOutcome.Deleting)?.let { return it }
+        return WindowOutcome.Results(windowForScope(scopeId, UploadOpener.Member(userId), requests, domain))
+    }
+
+    /**
+     * The member-less core of [window]: per item, the session [opener] opened in `scopeId`, re-signed for chunks
+     * `[fromChunk, min(fromChunk + window, chunkCount))`, and marked live for the stale-session purge. An unknown
+     * session, a consumed one and another caller's are all `upload_not_found`, so a probe learns nothing; a
+     * `fromChunk` outside the blob is `range_invalid`. The caller does its own authorization.
+     */
+    fun windowForScope(scopeId: String, opener: UploadOpener, requests: List<WindowRequest>, domain: String?): List<WindowItemResult> =
+        requests.map { windowOne(scopeId, opener, it, domain) }
+
+    private fun windowOne(scopeId: String, opener: UploadOpener, r: WindowRequest, domain: String?): WindowItemResult {
+        val session = store.findSession(scopeId, r.uploadId, opener)
+            ?: return WindowItemResult(presignedPuts = null, error = "upload_not_found")
+        if (r.fromChunk !in 0 until session.chunkCount) return WindowItemResult(presignedPuts = null, error = "range_invalid")
+        if (!blobStore.canPresign) return WindowItemResult(presignedPuts = null, error = "store_unavailable")
+        store.touchWindow(session.id)
+        return WindowItemResult(presignedPuts = presignWindow(session.storageKey, session.byteSize, session.chunkCount, r.fromChunk, domain), error = null)
+    }
+
+    /** The PUTs of the window starting at [fromChunk], each signed for its chunk's exact length (ADR 0013 §3). */
+    private fun presignWindow(storageKey: String, byteSize: Long, chunkCount: Int, fromChunk: Int, domain: String?): List<PresignedRef>? =
+        blobStore.presignPuts(storageKey, fromChunk until minOf(fromChunk + window, chunkCount), { ChunkFrames.chunkLength(byteSize, it) }, domain)
+
+    private fun startOne(scopeId: String, opener: UploadOpener, d: UploadDeclare, domain: String?): UploadItemResult {
         if (d.byteSize > maxBytes) {
             return UploadItemResult(uploadId = null, presignedPuts = null, error = "budget_exceeded")
         }
@@ -243,47 +307,43 @@ class MediaHandler(
             return UploadItemResult(uploadId = null, presignedPuts = null, error = "shape_invalid")
         }
         val storageKey = UUID.randomUUID().toString()
-        val uploadId = store.createSession(scopeId, storageKey, d.chunkCount, d.byteSize, d.wrappedBlobKey)
+        val uploadId = store.createSession(scopeId, opener, storageKey, d.chunkCount, d.byteSize, d.wrappedBlobKey)
         // The session is metadata; presigned PUTs require a transport-capable store. Only the %test in-memory stub
         // cannot presign (puts = null) — %dev/%prod always have a real store (BlobStoreStartupCheck, ADR 0013).
-        val puts = if (blobStore.canPresign) {
-            (0 until d.chunkCount).map { i ->
-                PresignedRef(i, blobStore.presignPut(chunkKey(storageKey, i), ChunkFrames.chunkLength(d.byteSize, i), domain)!!)
-            }
-        } else {
-            null
-        }
+        // Only the first window: the rest is signed window by window, so the TTL never has to cover a whole file.
+        val puts = presignWindow(storageKey, d.byteSize, d.chunkCount, 0, domain)
         return UploadItemResult(uploadId = uploadId, presignedPuts = puts, error = null)
     }
 
     fun complete(userId: String, scopeId: String, items: List<CompleteItem>): CompleteOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CompleteOutcome.NoScope, CompleteOutcome.Suspended, CompleteOutcome.Deleting)?.let { return it }
-        return CompleteOutcome.Results(completeForNode(scopeId, items, null, userId)) // cr-0113: member uploader → owner_key
+        return CompleteOutcome.Results(completeForNode(scopeId, items, UploadOpener.Member(userId)))
     }
 
     /**
-     * The member-less core of [complete]: verify + attach each item, scoped only by `scopeId`, optionally
-     * stamping a **contributor `shareIdentityId`** (the CONTRIBUTOR share upload path, cr-0101). The caller does
-     * its own authorization. Each item's `nodeId` is honoured (the share path sets it to the shared root node).
+     * The member-less core of [complete]: verify + attach each item, scoped only by `scopeId`, resolving each upload
+     * only for its [opener] — who is also whom the media is attributed to: a member's `owner_key` (cr-0113), or a
+     * **contributor `shareIdentityId`** (the CONTRIBUTOR share upload path, cr-0101). The caller does its own
+     * authorization. Each item's `nodeId` is honoured (the share path sets it to the shared root node).
      */
-    fun completeForNode(scopeId: String, items: List<CompleteItem>, shareIdentityId: String?, uploaderUserId: String? = null): List<CompleteItemResult> =
-        items.map { completeOne(scopeId, it, shareIdentityId, uploaderUserId) }
+    fun completeForNode(scopeId: String, items: List<CompleteItem>, opener: UploadOpener): List<CompleteItemResult> =
+        items.map { completeOne(scopeId, it, opener) }
 
     /**
      * Complete one logical media (original + derivative uploads). The item is **atomic**: the node + every
      * upload session are resolved first, then **every** blob is declare-then-verified, and only if all pass are
      * the blobs + media + derivative rows attached. On a budget failure the item's staged objects are purged.
      */
-    private fun completeOne(scopeId: String, item: CompleteItem, shareIdentityId: String? = null, uploaderUserId: String? = null): CompleteItemResult {
+    private fun completeOne(scopeId: String, item: CompleteItem, opener: UploadOpener): CompleteItemResult {
         val node = store.findNode(scopeId, item.nodeId)
             ?: return CompleteItemResult(null, null, "node_not_found")
         if (node.kind == NodeEntity.FOLDER) return CompleteItemResult(null, null, "illegal_target")
 
-        val original = store.findSession(scopeId, item.originalUploadId)
+        val original = store.findSession(scopeId, item.originalUploadId, opener)
             ?: return CompleteItemResult(null, null, "upload_not_found")
         val derivSessions = item.derivatives.map { d ->
-            val s = store.findSession(scopeId, d.uploadId)
+            val s = store.findSession(scopeId, d.uploadId, opener)
                 ?: return CompleteItemResult(null, null, "upload_not_found")
             d.kind to s
         }
@@ -306,8 +366,8 @@ class MediaHandler(
             derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
             item.wrappedMeta,
             item.wrappedExif,
-            shareIdentityId,
-            uploaderUserId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
+            (opener as? UploadOpener.Contributor)?.shareIdentityId,
+            (opener as? UploadOpener.Member)?.userId, // cr-0113: the member uploader → owner_key "user:{id}" (null on the contributor path)
             item.bucketId,  // cr-0113: an explicit target bucket, else the uploader's primary
         )
         return CompleteItemResult(blobId, mediaId, null)
@@ -330,7 +390,7 @@ class MediaHandler(
         if (!ChunkFrames.isPossible(session.byteSize) || session.chunkCount != ChunkFrames.chunkCount(session.byteSize)) {
             return BlobVerify.Budget
         }
-        val sizes = (0 until session.chunkCount).map { blobStore.stat(chunkKey(session.storageKey, it)) }
+        val sizes = chunkKeys(session.storageKey, session.chunkCount).map { blobStore.stat(it) }
         val exact = sizes.withIndex().all { (i, size) -> size == ChunkFrames.chunkLength(session.byteSize, i) }
         return if (exact) BlobVerify.Ok(sizes.filterNotNull()) else BlobVerify.Budget
     }
@@ -441,7 +501,7 @@ class MediaHandler(
             .refusal(CoverCommitOutcome.NoTarget, CoverCommitOutcome.Suspended, CoverCommitOutcome.Deleting)?.let { return it }
         val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
         if (node.kind == NodeEntity.FOLDER) return CoverCommitOutcome.IllegalTarget
-        val session = store.findSession(scopeId, uploadId) ?: return CoverCommitOutcome.NoTarget
+        val session = store.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
         val manifest = when (val v = verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
             BlobVerify.Budget -> {
@@ -470,8 +530,8 @@ class MediaHandler(
     private fun downloadOne(scopeId: String, blobId: String, domain: String?): DownloadItemResult {
         val blob = store.findBlob(scopeId, blobId)
             ?: return DownloadItemResult(presignedGets = null, error = "upload_not_found")
-        if (!blobStore.canPresign) return DownloadItemResult(presignedGets = null, error = "store_unavailable")
-        val gets = (0 until blob.chunkCount).map { i -> PresignedRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i), domain)!!) }
+        val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain)
+            ?: return DownloadItemResult(presignedGets = null, error = "store_unavailable")
         return DownloadItemResult(presignedGets = gets, error = null)
     }
 

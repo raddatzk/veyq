@@ -16,18 +16,19 @@ import java.time.Instant
  * **The row and the bytes are one unit of work, and ADR 0062 finally makes them one transaction.** A row-only
  * delete is strictly *worse* than no GC at all — the session row is the only thing that knows the `storage_key`,
  * so dropping it alone orphans those bytes for the life of the bucket. This job therefore no longer deletes
- * objects at all: `purgeSessionsStartedBefore` writes each session's key prefix to `veyq_store_reclaim` inside
+ * objects at all: `purgeSessionsIdleSince` writes each session's key prefix to `veyq_store_reclaim` inside
  * the same transaction that deletes the row, and `StoreReclaimSweep` — the one deleter — drains that list. The
  * old shape (rows in a tx, a best-effort `blobStore.delete` after the commit) could not fail out loud: the
  * delete swallowed every per-key failure and the pointer was already gone.
  *
- * **The retention window is bounded by construction, not by taste** (`veyq.media.upload.retention`): every
- * presigned PUT of a session is signed once at `start` under `veyq.blob-store.presign-ttl-seconds` and no
- * operation re-signs one, so a client past that TTL holds only dead URLs. The window only has to outlast a PUT
- * that started inside the TTL and is still streaming. Resumable uploads would change that — they are ADR 0013
- * § Rejected's most expensive add, and would need a re-presign path before this window mattered.
+ * **It keys on a session's last issued window, not on its start** (ADR 0013 §3). An upload is signed window by
+ * window, so a large file on a slow link is legitimately open for far longer than any retention — what bounds it
+ * is that each window's PUTs are signed under `veyq.blob-store.presign-ttl-seconds`, so a session with no new
+ * window past that TTL holds only dead URLs. That is also why the retention window (`veyq.media.upload.retention`)
+ * is bounded by construction, not by taste: it only has to outlast a PUT that started inside its window's TTL and
+ * is still streaming.
  *
- * Operator-blind: this reads `created_at` + `storage_key` and deletes opaque objects. It opens nothing and
+ * Operator-blind: this reads `last_window_at` + `storage_key` and deletes opaque objects. It opens nothing and
  * needs no key.
  */
 @ApplicationScoped
@@ -42,6 +43,6 @@ class UploadSessionPurge(
         // Unconditional — NOT behind `canPresign`: a store that cannot presign still has to be told, and gating
         // would make the half this job exists for unobservable in the hermetic suite. That reasoning moved with
         // the delete itself and now governs `StoreReclaimSweep`, which is not gated either.
-        store.purgeSessionsStartedBefore(Instant.now().minus(retention))
+        store.purgeSessionsIdleSince(Instant.now().minus(retention))
     }
 }

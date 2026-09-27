@@ -12,7 +12,7 @@ import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
@@ -358,7 +358,7 @@ class NodeTrashSliceTest {
             val all = (listOf(media.blobId) + derivBlobIds + listOf(coverBlob)).map { BlobEntity.findById(it)!! }
             NodeEntity.findById(memory)!!.deletedAt =
                 Instant.now().minus(config.node().trash().retention()).minusSeconds(60)
-            all.flatMap { b -> (0 until b.chunkCount).map { chunkKey(b.storageKey, it) } }
+            all.flatMap { b -> chunkKeys(b.storageKey, b.chunkCount) }
         }
 
         // Drop the JVM-shared reclaim backlog: the sweep takes a bounded batch of the OLDEST due rows, and this

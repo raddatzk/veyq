@@ -83,22 +83,38 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }
 
     @Transactional
-    fun createSession(scopeId: String, storageKey: String, chunkCount: Int, byteSize: Long, wrappedBlobKey: String): String {
+    fun createSession(scopeId: String, opener: UploadOpener, storageKey: String, chunkCount: Int, byteSize: Long, wrappedBlobKey: String): String {
         val id = UUID.randomUUID().toString()
+        val now = Instant.now()
         UploadSessionEntity().apply {
             this.id = id
             this.scopeId = scopeId
+            openerUserId = (opener as? UploadOpener.Member)?.userId
+            openerShareIdentityId = (opener as? UploadOpener.Contributor)?.shareIdentityId
             this.storageKey = storageKey
             this.chunkCount = chunkCount
             this.byteSize = byteSize
             this.wrappedBlobKey = wrappedBlobKey
-            createdAt = Instant.now()
+            createdAt = now
+            lastWindowAt = now
         }.persist()
         return id
     }
 
-    fun findSession(scopeId: String, uploadId: String): UploadSessionEntity? =
-        UploadSessionEntity.findById(uploadId)?.takeIf { it.scopeId == scopeId }
+    /**
+     * The open session [uploadId] in [scopeId] — **only for the [opener] who started it** (ADR 0013 §2). Every
+     * operation that acts on a session (a window, a complete, a cover commit) resolves it here, so a second member
+     * or a second identity on the same link cannot finish, extend or attach another's upload by knowing its id.
+     * A session from before the opener was recorded carries none and matches nobody.
+     */
+    fun findSession(scopeId: String, uploadId: String, opener: UploadOpener): UploadSessionEntity? =
+        UploadSessionEntity.findById(uploadId)?.takeIf { it.scopeId == scopeId && opener.opened(it) }
+
+    /** Mark session [uploadId] live now: a window was issued for it, which is the stale-session purge's clock. */
+    @Transactional
+    fun touchWindow(uploadId: String) {
+        UploadSessionEntity.update("lastWindowAt = ?1 where id = ?2", Instant.now(), uploadId)
+    }
 
     /**
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
@@ -294,7 +310,8 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     }
 
     /**
-     * Hard-delete every OPEN upload session created before [cutoff], across all scopes, recording the objects
+     * Hard-delete every OPEN upload session whose last window was issued before [cutoff] (its `start` is its first
+     * window), across all scopes, recording the objects
      * its client may already have staged in the store (uc.memory.upload E2 / en.memory.media E3). The row is the
      * **only** pointer to its `storage_key`, so dropping it without recording orphans those objects permanently
      * — and the record is written **in this transaction**, which is the guarantee the old post-commit delete
@@ -305,8 +322,8 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * idempotent. Returns how many sessions were purged.
      */
     @Transactional
-    fun purgeSessionsStartedBefore(cutoff: Instant): Int {
-        val stale = UploadSessionEntity.find("createdAt < ?1", cutoff).list()
+    fun purgeSessionsIdleSince(cutoff: Instant): Int {
+        val stale = UploadSessionEntity.find("lastWindowAt < ?1", cutoff).list()
         reclaim.record(stale.map { StoreObjectRef(it.storageKey, it.chunkCount) })
         stale.forEach { UploadSessionEntity.deleteById(it.id) }
         return stale.size
