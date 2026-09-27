@@ -40,7 +40,10 @@ paths:
       summary: Start N blob uploads — reserve sessions + presign the first window of PUTs.
       description: >
         For each requested blob the client declares its `chunkCount`, total `byteSize`, and the `wrappedBlobKey`
-        (`K_blob` under `K_mem`). The server opens an upload session **bound to the caller** and returns, per
+        (`K_blob` under `K_mem`), plus the ids that wrap is sealed bound to ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)): the client-minted
+        `blobId`, the `ownerId` it belongs to (the media id `completeMedia` will carry, or the node for a cover) and
+        its `role`. A `blobId` already taken — by a blob or an open upload session, in any scope — fails that item
+        `id_taken`. The server opens an upload session **bound to the caller** and returns, per
         item, an `uploadId` plus short-TTL presigned **PUT** URLs for the blob's **first window** of chunks (the
         server's `veyq.blob.presign-window`, default 64 chunks) — or a per-item error. The caller PUTs each
         ciphertext chunk **directly to the object store**, asks `blob-upload-windows` for each next window (and to
@@ -57,7 +60,10 @@ paths:
             schema: { $ref: "#/components/schemas/BlobUploadsBatchRequest" }
             example:
               items:
-                - chunkCount: 2
+                - blobId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+                  ownerId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+                  role: ORIGINAL
+                  chunkCount: 2
                   byteSize: 400000
                   wrappedBlobKey: d3JhcHBlZC1rLWJsb2I=
       responses:
@@ -144,9 +150,13 @@ paths:
         The server verifies **every** upload session of the item, **stats the stored chunk objects** per blob
         (declare-then-verify: every chunk must be present at exactly the length its declared `byteSize` derives,
         else the objects are purged and the item fails `budget_exceeded`), records one `blob` per upload (each
-        with its own per-chunk size `manifest` and `K_blob` wrap), and one `media` row linking the original blob to `nodeId` with a
-        derivative row per derivative. Returns `{ blobId (the original), mediaId }` — or a per-item error. The
-        target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
+        with its own per-chunk size `manifest` and `K_blob` wrap), and one `media` row under the client-minted
+        `mediaId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)) linking the original blob to `nodeId` with a derivative row per derivative. Each
+        upload must have been started for this media in the role it is used in — the original as `ORIGINAL`, each
+        derivative as its `kind`, all with `ownerId = mediaId` — else the item fails `upload_mismatch`, since its
+        `K_blob` wrap would not open where it is attached. A `mediaId` already taken, in any scope, fails the item
+        `id_taken` (never overwritten, not idempotent). Returns `{ blobId (the original), mediaId }` — or a per-item
+        error. The target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER).
       security:
         - bearerAuth: []
       parameters:
@@ -158,7 +168,8 @@ paths:
             schema: { $ref: "#/components/schemas/MediaBatchRequest" }
             example:
               items:
-                - nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+                - mediaId: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+                  nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
                   originalUploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
                   derivatives:
                     - kind: THUMBNAIL
@@ -310,8 +321,9 @@ paths:
         the **caller's own primary** (lazily materialized); with `parentBucketId` (a primary's id) it nests under
         **that** root — so a member can add sub-buckets under a **contributor's** root to organize contributions —
         and the new bucket inherits **that root's** `ownerKey`. The parent must be a primary (`403` otherwise). The
-        client supplies the `sealedName` (sealed under `K_mem`); the server never sees it in clear. Sub-buckets do
-        not nest further. Operator-blind — the name is stored as ciphertext.
+        client mints the bucket's id (`bucketId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)) and supplies the `sealedName` (sealed under
+        `K_mem`, bound to that id); the server never sees it in clear. Sub-buckets do not nest further.
+        Operator-blind — the name is stored as ciphertext. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       parameters:
@@ -323,6 +335,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateBucketRequest" }
             example:
+              bucketId: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
               sealedName: YnVja2V0LW5hbWUtY2lwaGVy
       responses:
         "200":
@@ -346,7 +359,10 @@ paths:
           description: No such scope/node, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: The `bucketId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
 
   /api/scopes/{scopeId}/nodes/{nodeId}/buckets/{bucketId}:
     patch:
@@ -483,7 +499,9 @@ paths:
         deleted and its store objects go on the reclaim list, both in the same transaction). Unlike `completeMedia` this creates **no `veyq_media` row** (no gallery
         entry, no derivative tiers): the cover is a single blob the client downscaled on device. Serving reuses
         `presignBlobDownloads`. Returns the committed `BlobRef`. Guards: the caller holds a grant for the scope;
-        the target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER). Operator-blind — the
+        the target node must be a **MEMORY** or **CHAPTER** (`illegal_target` on a FOLDER); the upload must have
+        been started as this node's cover (`role: COVER`, `ownerId` = this node — `upload_mismatch` otherwise,
+        since its `K_blob` wrap is sealed bound to both, ADR 0072). Operator-blind — the
         server holds the ciphertext + the opaque `cover_blob_id` + size only, never the image, the crop, or the
         fact that this blob is "the cover" (that stays in the sealed node meta).
       security:
@@ -519,7 +537,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
         "422":
-          description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover).
+          description: The target node is a FOLDER (owns no `K_mem`, so it can carry no cover — `illegal_target`), or the upload was not started as this node's cover (`upload_mismatch`).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: illegal_target } }
     delete:
@@ -820,8 +838,24 @@ components:
 
     BlobUploadRequestItem:
       type: object
-      required: [chunkCount, byteSize, wrappedBlobKey]
+      required: [blobId, ownerId, role, chunkCount, byteSize, wrappedBlobKey]
       properties:
+        blobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of this blob (ADR 0072 Decision 3) — its `wrappedBlobKey` is sealed bound to it, so the blob is stored under exactly this id. Taken ⇒ this item fails `id_taken`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        ownerId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            What the blob belongs to — the client-minted media id `completeMedia` will carry, or the node id for a cover. The `wrappedBlobKey` is sealed bound to it; completion checks it.
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+        role:
+          $ref: "#/components/schemas/BlobRole"
         chunkCount:
           x-veyq-visibility: measure
           type: integer
@@ -885,7 +919,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `store_unavailable`); null on success.
+          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `id_taken` = the `blobId` already exists, `store_unavailable`); null on success.
           maxLength: 64
           example: null
 
@@ -964,9 +998,16 @@ components:
       type: object
       description: >
         One logical media: the original upload plus up to two role-tagged derivative uploads (THUMBNAIL,
-        PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads`.
-      required: [originalUploadId, nodeId]
+        PREVIEW). Each `*UploadId` references a session opened by `startBlobUploads` for this `mediaId`.
+      required: [mediaId, originalUploadId, nodeId]
       properties:
+        mediaId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the media (ADR 0072 Decision 3) — the `ownerId` every upload of this item was started with, and the id its metadata is sealed bound to. Taken ⇒ `id_taken`.
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         originalUploadId:
           x-veyq-visibility: id
           type: string
@@ -1035,6 +1076,14 @@ components:
           description: The upload session for this derivative blob, opened by `startBlobUploads`.
           example: 2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e
 
+    BlobRole:
+      type: string
+      description: >
+        The role a blob plays for its owner — a media's ORIGINAL and its THUMBNAIL/PREVIEW derivatives, or a node's
+        COVER. Its `K_blob` wrap is sealed bound to it (ADR 0072), so a blob attached in another role does not open.
+      enum: [ORIGINAL, THUMBNAIL, PREVIEW, COVER]
+      example: ORIGINAL
+
     MediaDerivativeKind:
       type: string
       description: The role of a derivative blob — THUMBNAIL (grid) or PREVIEW (lightbox).
@@ -1070,7 +1119,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged); null on success.
+          description: Per-item error code (`upload_not_found`, `node_not_found`, `illegal_target`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists); null on success.
           maxLength: 64
           example: null
 
@@ -1291,7 +1340,9 @@ components:
         One uploader bucket in a node. `ownerKey` is the opaque uploader key (`user:{id}` / `share:{id}`);
         `parentBucketId` is null for a **primary**. `sealedName` is the `K_mem`-sealed name — null for a member's
         primary (the client shows the operator-visible username), present for a contributor primary + every
-        sub-bucket. `mediaCount` is the live (non-trashed) media in this bucket.
+        sub-bucket. A contributor primary's name is its share identity's own sealed display name, so the row
+        carries that identity's `shareId` — the seal is bound to it (ADR 0072). `mediaCount` is the live
+        (non-trashed) media in this bucket.
       required: [bucketId, ownerKey, isPrimary, mediaCount]
       properties:
         bucketId: { type: string, format: uuid, example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a, x-veyq-visibility: id }
@@ -1306,6 +1357,16 @@ components:
           type: [string, "null"]
           format: uuid
           description: The parent primary's id for a sub-bucket, or null when this is the primary.
+          example: null
+        shareId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          description: >
+            For a **contributor primary** only: the share its contributor identity belongs to — the name there is
+            the identity's `share-identity-name` seal, bound to (scope, share, identity). Null otherwise.
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
           example: null
         isPrimary:
           x-veyq-visibility: flag
@@ -1332,9 +1393,17 @@ components:
       type: object
       description: >
         Create a sub-bucket. Without `parentBucketId` it nests under the caller's own primary; with it, under that
-        primary root (e.g. a contributor's). The name is sealed client-side under `K_mem`.
-      required: [sealedName]
+        primary root (e.g. a contributor's). The name is sealed client-side under `K_mem`, bound to the
+        client-minted `bucketId`.
+      required: [bucketId, sealedName]
       properties:
+        bucketId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the sub-bucket (ADR 0072 Decision 3) — its `sealedName` is sealed bound to it. Taken ⇒ `409 id_taken`.
+          example: 5b6c7c3f-0e2a-9b1d-4a6e-8b2c1f2d3e4a
         sealedName:
           type: string
           description: The sub-bucket's name sealed under `K_mem` (opaque base64).
@@ -1387,7 +1456,8 @@ components:
       type: object
       description: >
         Promote one upload session into the node's standalone cover blob. The blob was sealed + PUT via the
-        existing `startBlobUploads` transport; here the client hands back only its `uploadId`.
+        existing `startBlobUploads` transport — started with `role: COVER` and `ownerId` = this node; here the
+        client hands back only its `uploadId`.
       required: [uploadId]
       properties:
         uploadId:
