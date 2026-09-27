@@ -49,9 +49,11 @@ a Memory's *content* needs its `K_mem` ([ADR 0012](../../../decisions/0012-conte
 1. The client picks a name; it computes the **slug token** `HMAC/HKDF(K_SC, parentId ‖ slugify(name))` (blind;
    the server can't reverse it) and **encrypts the name** under `K_SC`.
 2. **If a Memory:** generate a fresh random **`K_mem`**, wrap it under `K_SC` (`symWrap(K_SC, K_mem)`).
-3. POST the node: `{ parentId, kind, encryptedName, slugToken, orderIndex, wrappedContentKey? }` — all
-   opaque to the server. The server enforces `UNIQUE(parentId, slugToken)` (slug uniqueness per parent) and
-   the structural rules (no cycle; no folder inside a Memory), returns the node id.
+3. POST the node: `{ nodeId, parentId, kind, encryptedName, slugToken, orderIndex, wrappedContentKey? }` — the
+   client mints `nodeId`, and the name and wrap are sealed bound to it
+   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)); all opaque to the server. The server refuses
+   a taken id (`409 id_taken`), enforces `UNIQUE(parentId, slugToken)` (slug uniqueness per parent) and the
+   structural rules (no cycle; no folder inside a Memory).
 4. The client renders the tree by **decrypting names with `K_SC`**; opening a Memory's content (later slices)
    unwraps its `K_mem` with `K_SC`.
 

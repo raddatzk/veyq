@@ -44,8 +44,19 @@ single-use pairing envelope, and the two WebCrypto seals under a non-extractable
 seals carry no AAD today, and they gain their purpose as `additionalData`.
 
 **3. The client mints the id of every sealed object it creates** (UUIDv4, carried in the create request). The
-server refuses an id that is already taken and never substitutes its own. A create that is retried with the
-same id becomes idempotent as a side effect.
+server refuses an id that is already taken — `id_taken`, the same answer wherever the taken id lives — and never
+substitutes its own or overwrites the object that holds it. A share's id is the exception to the form, not to
+the rule: it stays the 256-bit base64url token it always was, because it is half of the share's capability and a
+UUID would shrink it; the client mints that token instead.
+
+**Where the opener's address carries no id, the seal binds none.** Item favorites are read as every member's
+entry for one node, and the read deliberately names no member ([ADR 0068](0068-favorites-two-confidentiality-levels.md)
+§6 — the aggregate is anonymous in the data). So an `item-favorites` seal binds (scope, node) and not the marking
+member: an opener could not supply one. What that leaves the server is to relabel **which entry is the caller's
+own** (`self`) within one node's marks — an integrity gap, never a confidentiality one, since every member opens
+every entry anyway. It is accepted for V1; closing it needs a self-tag only the marking member can check, which
+is inbox #187. Likewise a version-carrying store (`identity-pins`, `device-register`) binds the version it is
+stored at — the write's `version + 1` — because that is the one the reader's address names.
 
 **4. Parents are not bound.** The tree's shape is server-visible metadata and stays that. Binding a node's
 parent would turn every move into a re-seal of everything below it. The harm a parent binding would prevent is
@@ -80,6 +91,12 @@ a vector with no live purpose is deleted. `journalSeal` (empty AAD, no caller) i
   stored.
 - **Eight create operations take a client-minted id.** That is a contract change on `content`, `media`,
   `sharing` and `scopes`, and the backend stops generating those ids.
+- **A public share's guest learns the shared Memory's scope id.** Every `K_mem` seal the viewer opens is bound to
+  the scope, so the id rides with the subtree; two links into one space become linkable to anyone holding both
+  ([security model](../crosscutting/security-model.md) § What is encrypted vs. server-visible).
+- **A grant states the epoch it seals.** A grant-delivery completion names its epoch, and the server records
+  exactly that and refuses one that is not current — before, it recorded the scope's current epoch, which a
+  rotation between claim and completion made a lie the binding would now turn into an unopenable grant.
 - **The group name gets its own purpose.** It used to reuse `node-name` under the derived name key, "domain
   separation lives in the key derivation" ([ADR 0027](0027-group-invite-name-shared-key.md)). A typed union has
   no reason to share a variant between two kinds of object.

@@ -11,7 +11,7 @@ title: Share a Memory as a public viewer link (web)
 # and notices are separate later slices.
 acceptanceCriteria:
   - id: create-public-share
-    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { nodeId, role VIEWER, wrap, sealedName, expiresAt? }. The server mints a 256-bit unguessable shareId and stores the record opaquely; it never sees K_share, K_mem, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
+    text: A curator turns one of their personal-scope Memories into a public share — the client generates a random K_share and a 256-bit unguessable shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role VIEWER, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id; it never sees K_share, K_mem, or the name. The link is /s/{shareId}#k=base64url(K_share) with the key in the fragment.
     coverage:
       backend:
         integration: [ShareSliceTest.createThenAnonymousResolveReturnsSealedSubtree, ShareSliceTest.listReturnsCallersSharesForTheMemory]

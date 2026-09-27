@@ -96,7 +96,11 @@ request the **user** turned on, straight to the chosen provider.
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
   bucket/uploader **names stay sealed** under `K_mem`, [ADR 0034](../decisions/0034-media-uploader-buckets.md));
-  per-parent blinded tokens; the tenant's **terms text + `terms_version`** (the operator's *public* policy,
+  per-parent blinded tokens; to a **public share's guest**, the shared Memory's **scope id** — every `K_mem` seal the
+  viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
+  subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
+  node and its media already made the subtree linkable; the scope id extends that to sibling Memories of one
+  space); the tenant's **terms text + `terms_version`** (the operator's *public* policy,
   served to everyone incl. pre-auth) and a member's **`accepted_terms_version`** (coarse acceptance metadata, like
   membership — never content, [ADR 0035](../decisions/0035-server-terms-of-service.md)); the **account email**
   (plaintext — the login identifier and the source of the deterministic auth salt,
@@ -337,7 +341,7 @@ operator lacks can.
 | reads content already stored | **Cannot** — it holds no key | — |
 | gets a scope's key through an owner's session alone: admits an account of its own, or plants a grant | **Can** | [ADR 0020](../decisions/0020-grant-distribution-invite-wrap.md) move 6, [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 6 — inbox #159 |
 | installs an identity of its own on an account | **Can** — it writes the directory itself. Through the API a session or a password no longer suffices: rotation, change-password and recovery need a signature of the Secret-Key proof key ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) Decision 2), which binds every caller but the operator | Key Transparency ([ADR 0060](../decisions/0060-key-rotation-after-compromise.md) (g)); until then a member who pinned the old key sees `changed` ([ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md)) |
-| serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Can** | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) — inbox #160 |
+| serves a ciphertext as another object's — incl. a shared Memory's key on a private one, which then takes its uploads | **Cannot** — every seal binds its purpose and the object it is stored as, and a client opens it only at the address it asked for; what remains is *which authentic version* it is served (freshness, inbox #161) and, among one node's item marks, *which entry is the caller's own* (below) | [ADR 0072](../decisions/0072-a-seal-binds-its-object.md) |
 | links a device of its own while the user links theirs | **Can** — the relay grinds either binding step in under a second | [ADR 0059](../decisions/0059-device-linking.md) §11 — inbox #161 (a) |
 | gets a removed group member re-granted by the removal's own rotation | **Can** — the rotation trusts the member list it reads afterwards | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 — inbox #161 (b) |
 | has a member seal new content under an epoch the removed member holds | **Can** — a stale grant writes under the old epoch, and no client remembers an epoch | ADR 0024 Decision 6 — inbox #161 (b) |
@@ -352,7 +356,10 @@ operator lacks can.
   know only the server's member list (ADR 0024 § Guarantee);
 - a departing member who tagged a sockpuppet with the operator's help before the removal (ADR 0020);
 - an attacker who both reads a pairing QR and runs the relay (ADR 0059 §11);
-- item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)).
+- item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)),
+  and bound to their node but not to the marking member — the read carries no member id by design — so the server
+  can relabel which entry of a node's marks is the caller's own ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)
+  § item favorites; a self-tag design is inbox #187).
 
 **A stronger unlock method does not move this boundary** ([ADR 0026](../decisions/0026-client-trust-tiers.md)
 records why): the operator ships the code that consumes whatever the unlock produces. Unlock convenience and

@@ -22,7 +22,7 @@ client-local** own-view. **v1: role UPLOADER, personal scope, direct-append.**
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Uploader** role. The client
-   mints `K_share`, wraps `K_mem`, re-seals the name, and `POST`s `{ nodeId, role: UPLOADER, wrap, sealedName }`.
+   mints `K_share`, wraps `K_mem`, re-seals the name, and `POST`s `{ shareId, nodeId, role: UPLOADER, wrap, sealedName }`.
 2. **Hand off.** The client shows the link `/s/{shareId}#k=<base64url(K_share)>` to copy.
 3. **Open + name yourself (anonymous).** The visitor opens the link; the client `GET`s `/api/shares/{shareId}`
    (**no auth**) → `{ role: UPLOADER, wrap, sealedName, media: [] }` (**no gallery** — the uploader is never handed
@@ -49,7 +49,7 @@ sequenceDiagram
   participant S as Server<br>(blind)
   participant O as Object store
   actor V as Anonymous<br>uploader
-  C->>S: POST share { nodeId, UPLOADER, wrap, sealedName }
+  C->>S: POST share { shareId (client-minted), nodeId, UPLOADER, wrap, sealedName }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…
   V->>S: GET /api/shares/{shareId}   (no auth)

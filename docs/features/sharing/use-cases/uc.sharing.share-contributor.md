@@ -23,16 +23,17 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
 ## Main flow
 
 1. **Create.** The curator opens one of their Memories → **Share** → chooses the **Contributor** role (instead of
-   Viewer). The client mints `K_share`, computes `symWrap(K_share, K_mem)`, re-seals the Memory name under
-   `K_share`, and `POST`s the share record `{ nodeId, role: CONTRIBUTOR, wrap, sealedName, expiresAt? }`. The
-   server mints a **256-bit `shareId`** and stores the record opaquely.
+   Viewer). The client mints `K_share` and a **256-bit `shareId`**, computes `symWrap(K_share, K_mem)`, re-seals
+   the Memory name under `K_share`, and `POST`s the share record `{ shareId, nodeId, role: CONTRIBUTOR, wrap,
+   sealedName, expiresAt? }`. The server stores the record opaquely under that id.
 2. **Hand off.** The client shows the link **`/s/{shareId}#k=<base64url(K_share)>`** to copy. `K_share` rides the
    fragment — never sent. The curator passes it out-of-band.
 3. **Open + name yourself (anonymous).** A visitor opens the link. The client `GET`s `/api/shares/{shareId}` (**no
    auth**) → the record + the sealed subtree; because the `role` is CONTRIBUTOR, the client shows a **mandatory
    name pre-screen**. The visitor enters a display name; the client **seals it under `K_mem`** and creates an
-   **anonymous share identity** (`POST /api/shares/{shareId}/identities { sealedDisplayName }` → `{ identityId,
-   contributorToken }`, held on device). The server stores only the ciphertext name + opaque ids.
+   **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
+   { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The server stores
+   only the ciphertext name + opaque ids.
 4. **View + contribute.** The Memory renders read-only (the shared viewer). An **Add photos** affordance lets the
    contributor pick images — through the **same picker** the curator's own gallery uses, so
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
@@ -55,13 +56,13 @@ sequenceDiagram
   participant O as Object store
   actor V as Anonymous<br>contributor
   C->>C: K_share = random#59; wrap = symWrap(K_share, K_mem)#59; sealName under K_share
-  C->>S: POST share { nodeId, CONTRIBUTOR, wrap, sealedName }
+  C->>S: POST share { shareId (client-minted), nodeId, CONTRIBUTOR, wrap, sealedName }
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
   S-->>V: record (role CONTRIBUTOR) + sealed subtree
   V->>V: K_mem = unwrap(wrap, K_share)#59; seal display name under K_mem
-  V->>S: POST /identities { sealedDisplayName }
+  V->>S: POST /identities { identityId (client-minted), sealedDisplayName }
   S-->>V: identityId + contributorToken
   V->>V: seal photo under fresh K_blob (wrapped under K_mem) + derivatives + meta
   V->>S: POST /blob-uploads (token) → presigned PUTs

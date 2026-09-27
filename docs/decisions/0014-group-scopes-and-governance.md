@@ -43,8 +43,9 @@ and which is confidential even from the tenant owner.**
 1. **Birth (warm, client-driven).** An existing, unlocked tenant member (the **GroupOwner**) mints it like a
    personal scope ([en.spaces.personal-scope](../features/spaces/enablers/en.spaces.personal-scope.md)) but
    **named + multi-member-capable**: generate a random `K_SC`, **seal the group name under `K_SC`**, and
-   `asymWrap` `K_SC` to their **own** identity public key (the self-grant). `POST` the ciphertext name + grant;
-   the server mints the `GROUP` scope + the creator's `role=OWNER` membership. No new crypto — the KEM grant of
+   `asymWrap` `K_SC` to their **own** identity public key (the self-grant). `POST` the ciphertext name + grant
+   under a scope id the client minted ([ADR 0072](0072-a-seal-binds-its-object.md));
+   the server records the `GROUP` scope under it + the creator's `role=OWNER` membership. No new crypto — the KEM grant of
    [ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md), the content keys of [ADR 0012](0012-content-key-hierarchy.md).
 
 2. **Key distribution = one grant per member.** A member holds the group iff a membership row carries `K_SC`

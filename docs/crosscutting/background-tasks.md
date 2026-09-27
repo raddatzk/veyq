@@ -22,7 +22,7 @@ reference; the decisions + rationale live in [ADR 0021](../decisions/0021-operat
 | `capabilityTag` | cleartext, **opaque** | which capability the job needs (fixed public registry in `contracts/`; a bare dump sees `0x9f3a`, not `face-recognition`) |
 | `resourceRef` | cleartext, opaque id | the resource acted on (e.g. a mediaId) |
 | `status` / `leaseHolder` / `leaseExpiry` / `attempts` | cleartext | lease + retry bookkeeping |
-| **body** (`type` + params) | **sealed** (under a `K_SC`-derived key, context `job`) | the actual task + parameters — only a scope-key-holder unseals it |
+| **body** (`type` + params) | **sealed** (under a `K_SC`-derived key) | the actual task + parameters — only a scope-key-holder unseals it. No job carries a sealed body yet; the first that does adds its purpose to the typed seal union and a vector ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)) |
 | `sealedResult` (optional) | **sealed**, opaque | a job-specific output when it is not already a normal artifact |
 
 ## Lifecycle
