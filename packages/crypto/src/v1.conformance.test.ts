@@ -501,6 +501,75 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('pairing channel (ADR 0059 §11)', () => {
+    const p = vectors.pairing_channel
+    const secret = unhex(p.secret)
+    const key = unhex(p.channel_key)
+    const answer: v1.PairingStatement = { purpose: 'pairing-answer', transportKey: unhex(p.answer.transport_key) }
+    const signIn: v1.PairingStatement = {
+      purpose: 'pairing-sign-in-answer',
+      transportKey: unhex(p.sign_in_answer.transport_key),
+      code: p.sign_in_answer.code,
+    }
+    const envelope: v1.PairingStatement = { purpose: 'pairing-envelope', envelope: unhex(p.envelope.envelope) }
+    const cases: [string, v1.PairingStatement, { statement: string; mac: string }][] = [
+      ['add-a-device answer', answer, p.answer],
+      ['sign-in answer', signIn, p.sign_in_answer],
+      ['envelope', envelope, p.envelope],
+    ]
+
+    it('derives the handle and the channel key from the secret under two labels', () => {
+      expect(hex(v1.pairingHandle(secret))).toBe(p.handle)
+      expect(hex(v1.pairingChannelKey(secret))).toBe(p.channel_key)
+      expect(p.handle).not.toBe(p.channel_key) // the handle the server sees is not the key it must not
+    })
+
+    it.each(cases)('%s: statement bytes and MAC', (_name, stmt, c) => {
+      expect(hex(v1.encodeStatement(stmt))).toBe(c.statement)
+      expect(hex(v1.pairingMac(key, stmt))).toBe(c.mac)
+      expect(v1.pairingMacVerifies(key, stmt, unhex(c.mac))).toBe(true)
+    })
+
+    // What each MAC answers for — and the relay's position: every field it could swap, and every key it holds
+    // instead of the channel key (the handle is the one derivation it does see).
+    it.each(cases)('%s: the MAC answers for nothing else', (_name, stmt, c) => {
+      const mac = unhex(c.mac)
+      const flip = (b: Uint8Array) => {
+        const out = b.slice()
+        out[0] ^= 1
+        return out
+      }
+      const moved: v1.PairingStatement =
+        stmt.purpose === 'pairing-envelope'
+          ? { ...stmt, envelope: flip(stmt.envelope) }
+          : { ...stmt, transportKey: flip(stmt.transportKey) }
+      expect(v1.pairingMacVerifies(key, moved, mac)).toBe(false)
+      expect(v1.pairingMacVerifies(unhex(p.handle), stmt, mac)).toBe(false)
+      expect(v1.pairingMacVerifies(key, stmt, mac.slice(0, 31))).toBe(false)
+      expect(v1.pairingMacVerifies(key, stmt, v1.concat(mac, Uint8Array.of(0)))).toBe(false)
+      expect(v1.pairingMacVerifies(key, stmt, flip(mac))).toBe(false)
+    })
+
+    it('binds the transcribed code, and the two answer labels are not interchangeable', () => {
+      const mac = unhex(p.sign_in_answer.mac)
+      expect(v1.pairingMacVerifies(key, { ...signIn, code: '481503' } as v1.PairingStatement, mac)).toBe(false)
+      // Same key bytes, the other direction's label: neither answer passes for the other.
+      expect(v1.pairingMacVerifies(key, answer, mac)).toBe(false)
+      expect(v1.pairingMacVerifies(key, signIn, unhex(p.answer.mac))).toBe(false)
+    })
+
+    it('refuses a code that is not six digits, and a field that is not bytes', () => {
+      for (const code of ['48150', '4815022', '48150a', '４８１５０２']) {
+        expect(() => v1.pairingMac(key, { ...signIn, code } as v1.PairingStatement)).toThrow(
+          new v1.SealContextInvalid('pairing-sign-in-answer.code is not a six-digit pairing code'),
+        )
+      }
+      expect(() => v1.pairingMac(key, { purpose: 'pairing-envelope', envelope: 'x' } as never)).toThrow(
+        new v1.SealContextInvalid('pairing-envelope.envelope is not a byte string'),
+      )
+    })
+  })
+
   it('chunked-AEAD frame (resumable upload / streaming)', () => {
     const f = vectors.chunk_frame
     const frame = v1.sealFrame(unhex(f.contentKey), f.index, f.total, unhex(f.plaintext), unhex(f.nonce))
