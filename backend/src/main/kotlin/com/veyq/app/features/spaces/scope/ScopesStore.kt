@@ -8,6 +8,7 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.MembershipStore
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -254,24 +255,30 @@ class ScopesStore(
     fun epochLinks(scopeId: String): List<Pair<Int, String>> =
         ScopeEpochEntity.find("scopeId", scopeId).list().sortedBy { it.epoch }.map { it.epoch to it.wrappedPrev }
 
-    /** Commit a rotation (ADR 0024): bump the current epoch, store the chain-link, apply the re-grants (each to the
-     *  new epoch). Client-minted; the server stores only ciphertext. Returns the new epoch.
+    /** Commit a rotation (ADR 0024 §4): if [epoch] is the scope's next one, advance to it, store the chain-link and
+     *  apply the re-grants (each to the new epoch); otherwise store nothing and return `null` (stale). Client-minted;
+     *  the server stores only ciphertext. Returns the new epoch.
      *
-     *  Dumb by design (ADR 0045 §2): the decision — the next epoch, and that a `pendingConsent` proposal is never
-     *  (re-)granted so `K_SC` stays gated before the wrap (cr-0094/cr-0095) — lives in the pure [RotationPolicy], where
-     *  it is unit-tested and mutation-verified. This method only loads the directory, asks the policy, and writes what
-     *  it returns; the `pendingConsent` skip is no longer an SQL predicate here. */
+     *  Dumb by design (ADR 0045 §2): the decision — only the next epoch commits, and a `pendingConsent` proposal is
+     *  never (re-)granted so `K_SC` stays gated before the wrap (cr-0094/cr-0095) — lives in the pure
+     *  [RotationPolicy], where it is unit-tested and mutation-verified. This method only locks the row, loads the
+     *  directory, asks the policy, and writes what it returns.
+     *
+     *  The scope row is read under `PESSIMISTIC_WRITE`, so two in-flight commits stating the same epoch serialize:
+     *  the loser reads the winner's epoch and is a clean stale. Without the lock both read the old epoch, both pass
+     *  the policy, and the loser dies on `ux_scope_epoch` — the chain still holds, but as an error the client does
+     *  not retry. */
     @Transactional
-    fun rotate(scopeId: String, wrappedPrev: String, grants: List<Pair<String, String>>): Int {
-        val scope = ScopeEntity.findById(scopeId)!!
+    fun rotate(scopeId: String, epoch: Int, wrappedPrev: String, grants: List<Pair<String, String>>): Int? {
+        val scope = ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)!!
         val members = MembershipEntity.find("scopeId", scopeId).list().map { RotationMember(it.userId, it.pendingConsent) }
-        val plan = RotationPolicy.plan(scope.currentEpoch, members, grants)
+        val plan = RotationPolicy.plan(scope.currentEpoch, epoch, members, grants) ?: return null
         scope.currentEpoch = plan.newEpoch
         scope.persist()
         ScopeEpochEntity().apply {
             id = UUID.randomUUID().toString()
             this.scopeId = scopeId
-            epoch = plan.newEpoch
+            this.epoch = plan.newEpoch
             this.wrappedPrev = wrappedPrev
             createdAt = Instant.now()
         }.persist()

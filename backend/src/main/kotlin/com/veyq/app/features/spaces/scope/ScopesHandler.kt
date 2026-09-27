@@ -104,6 +104,7 @@ sealed interface RotateOutcome {
     object Deleting : RotateOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RotateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RotateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
+    object StaleEpoch : RotateOutcome, HttpFailure by httpFailure("stale_epoch", CONFLICT)
 }
 
 /** Outcome of reading the epoch-chain links (cr-0088). */
@@ -394,15 +395,16 @@ class ScopesHandler(
     }
 
     /**
-     * Commit a scope-key rotation (cr-0088, ADR 0024): bump the epoch, store the chain-link, re-grant the listed
-     * remaining members. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
+     * Commit a scope-key rotation (cr-0088, ADR 0024 §4): commit the stated [epoch] iff it is the scope's next one,
+     * store the chain-link, re-grant the listed remaining members; any other epoch is `409 stale_epoch` with nothing
+     * stored. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
      */
-    fun rotateScope(callerId: String, scopeId: String, wrappedPrev: String, grants: List<Pair<String, String>>): RotateOutcome {
+    fun rotateScope(callerId: String, scopeId: String, epoch: Int, wrappedPrev: String, grants: List<Pair<String, String>>): RotateOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return RotateOutcome.Ok(store.rotate(scopeId, wrappedPrev, grants))
+        return store.rotate(scopeId, epoch, wrappedPrev, grants)?.let { RotateOutcome.Ok(it) } ?: RotateOutcome.StaleEpoch
     }
 
     /**
