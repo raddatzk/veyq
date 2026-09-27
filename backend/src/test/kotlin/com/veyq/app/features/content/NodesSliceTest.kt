@@ -35,10 +35,10 @@ class NodesSliceTest {
     @Test
     fun createTreeThenList() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zm9sZGVy","slugToken":"Zm9sZGVyLXNsdWc=","orderIndex":0}""")
+        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVtb3J5","slugToken":"bWVtLXNsdWc=","orderIndex":0,"wrappedContentKey":"a21lbS13cmFw"}""")
         // a chapter carries its OWN K_mem, wrapped under the parent Memory's K_mem (recursive K_mem, cr-0060 / ADR 0012)
-        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().get("/api/scopes/$scopeId/nodes")
@@ -53,9 +53,9 @@ class NodesSliceTest {
     @Test
     fun slugCollisionPerParentIs409() {
         val (userId, scopeId) = seedMemberScope()
-        createNode(userId, scopeId, """{"kind":"FOLDER","encryptedName":"YQ==","slugToken":"ZHVwZQ==","orderIndex":0}""")
+        createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"YQ==","slugToken":"ZHVwZQ==","orderIndex":0}""")
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"kind":"FOLDER","encryptedName":"Yg==","slugToken":"ZHVwZQ==","orderIndex":1}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Yg==","slugToken":"ZHVwZQ==","orderIndex":1}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(409).body("code", equalTo("slug_taken"))
     }
@@ -64,7 +64,7 @@ class NodesSliceTest {
     fun chapterAtRootIs422() {
         val (userId, scopeId) = seedMemberScope()
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Y2hhcA==","orderIndex":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Y2hhcA==","orderIndex":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(422).body("code", equalTo("illegal_structure"))
     }
@@ -74,7 +74,7 @@ class NodesSliceTest {
         val (_, scopeId) = seedMemberScope()
         val outsider = seedUser()
         given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
-            .body("""{"kind":"FOLDER","encryptedName":"Yg==","slugToken":"b3V0","orderIndex":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Yg==","slugToken":"b3V0","orderIndex":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
     }
@@ -82,7 +82,7 @@ class NodesSliceTest {
     @Test
     fun unauthenticatedIs401() {
         given().contentType(ContentType.JSON)
-            .body("""{"kind":"FOLDER","encryptedName":"Yg==","slugToken":"cw==","orderIndex":0}""")
+            .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Yg==","slugToken":"cw==","orderIndex":0}""")
             .`when`().post("/api/scopes/${UUID.randomUUID()}/nodes")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -90,8 +90,8 @@ class NodesSliceTest {
     @Test
     fun renameThenDeleteSubtree() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"b2xk","slugToken":"b2xkLXM=","orderIndex":0}""")
+        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // rename the folder (new ciphertext name + recomputed slug)
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -112,7 +112,7 @@ class NodesSliceTest {
     fun crossScopeDeleteIsRejected() {
         // victim scope B holds a Memory
         val (userB, scopeB) = seedMemberScope()
-        val victimNode = createNode(userB, scopeB, """{"kind":"MEMORY","encryptedName":"dmljdGlt","slugToken":"dmljLXM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val victimNode = createNode(userB, scopeB, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"dmljdGlt","slugToken":"dmljLXM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
         // attacker is a member of their OWN scope A, not of B (every account is a member of its personal scope)
         val (userA, scopeA) = seedMemberScope()
 
@@ -133,7 +133,7 @@ class NodesSliceTest {
         // create a Memory carrying an opaque sealed wrappedMeta blob (cr-0067) — the server never inspects it
         val memory = createNode(
             userId, scopeId,
-            """{"kind":"MEMORY","encryptedName":"bWVt","slugToken":"bWV0YS1z","orderIndex":0,"wrappedContentKey":"aw==","wrappedMeta":"bWV0YS12MQ=="}""",
+            """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVt","slugToken":"bWV0YS1z","orderIndex":0,"wrappedContentKey":"aw==","wrappedMeta":"bWV0YS12MQ=="}""",
         )
         given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)

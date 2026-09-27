@@ -65,7 +65,7 @@ class UploadSessionPurgeSliceTest {
         val scopeId = seedScope()
         val storageKey = UUID.randomUUID().toString()
         val blob3 = TestBlob.ofChunks(3)
-        val sessionId = store.createSession(scopeId, OPENER, storageKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
+        val sessionId = store.createSession(scopeId, OPENER, storageKey, blob3.upload("d3JhcA=="))
         // the client PUT its chunks, then went away: backdate past the retention window
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
@@ -89,7 +89,7 @@ class UploadSessionPurgeSliceTest {
         val storageKey = UUID.randomUUID().toString()
         // a live upload: started just now, still well inside the window
         val blob2 = TestBlob.ofChunks(2)
-        val sessionId = store.createSession(scopeId, OPENER, storageKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
+        val sessionId = store.createSession(scopeId, OPENER, storageKey, blob2.upload("d3JhcA=="))
 
         clearReclaim()
         recorder.reset()
@@ -115,7 +115,7 @@ class UploadSessionPurgeSliceTest {
         val scopeId = seedScope()
         val storageKey = UUID.randomUUID().toString()
         val blob1 = TestBlob.ofChunks(1)
-        val sessionId = store.createSession(scopeId, OPENER, storageKey, chunkCount = blob1.chunkCount, byteSize = blob1.byteSize, wrappedBlobKey = "d3JhcA==")
+        val sessionId = store.createSession(scopeId, OPENER, storageKey, blob1.upload("d3JhcA=="))
         backdate(sessionId, Instant.now().minus(config.media().upload().retention()).minusSeconds(60))
 
         clearReclaim()
@@ -139,10 +139,10 @@ class UploadSessionPurgeSliceTest {
         val blob = TestBlob.ofChunks(2)
         val longAgo = Instant.now().minus(config.media().upload().retention()).minus(Duration.ofHours(1))
         val liveKey = UUID.randomUUID().toString()
-        val live = store.createSession(scopeId, OPENER, liveKey, chunkCount = blob.chunkCount, byteSize = blob.byteSize, wrappedBlobKey = "d3JhcA==")
+        val live = store.createSession(scopeId, OPENER, liveKey, blob.upload("d3JhcA=="))
         backdate(live, startedAt = longAgo, lastWindowAt = Instant.now().minus(Duration.ofMinutes(5)))
         val idleKey = UUID.randomUUID().toString()
-        val idle = store.createSession(scopeId, OPENER, idleKey, chunkCount = blob.chunkCount, byteSize = blob.byteSize, wrappedBlobKey = "d3JhcA==")
+        val idle = store.createSession(scopeId, OPENER, idleKey, blob.upload("d3JhcA=="))
         backdate(idle, startedAt = longAgo)
 
         clearReclaim()

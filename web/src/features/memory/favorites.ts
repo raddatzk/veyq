@@ -1,5 +1,5 @@
 // Memory-pin data layer (en.memory.favorites, ADR 0068). Operator-blind: the caller's pinned-Memory id set is
-// AEAD-sealed (ctx `favorites`) and stored server-side as one opaque blob — the server never sees which
+// AEAD-sealed (purpose `favorites`, bound to the scope it pins in — ADR 0072) and stored server-side as one opaque blob — the server never sees which
 // Memories are pinned, only ciphertext + its size. Last-write-wins (the whole set is re-sealed and PUT on
 // every toggle; the set is tiny).
 //
@@ -12,7 +12,8 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { favoritesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 
-const FAV_CTX = 'favorites'
+/** The pin set of one scope — a set served under another scope's address does not open (ADR 0072). */
+const favContext = (scopeId: string) => ({ purpose: 'favorites', scopeId }) as const
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -21,7 +22,7 @@ export async function loadFavorites(scopeId: string, scopeKey: Uint8Array): Prom
   const blob = await withRefresh(() => favoritesApi().getFavorites({ scopeId }))
   if (!blob.ciphertext) return new Set()
   try {
-    const json = decoder.decode(v1.symUnwrap(scopeKey, fromB64std(blob.ciphertext), FAV_CTX))
+    const json = decoder.decode(v1.open(favContext(scopeId), scopeKey, fromB64std(blob.ciphertext)))
     const ids = JSON.parse(json)
     return Array.isArray(ids) ? new Set(ids.filter((id): id is string => typeof id === 'string')) : new Set()
   } catch {
@@ -30,7 +31,7 @@ export async function loadFavorites(scopeId: string, scopeKey: Uint8Array): Prom
     // TRAP, and it cost a bite test: because this swallows, any assertion phrased over THIS function —
     // "loading with the wrong key yields nothing" — is green before a fix, after it, and after a revert. It
     // can never redden, so it proves nothing about the seal. A test about WHICH key opens the set must assert
-    // on `v1.symUnwrap` throwing directly (src/app/favoritesPrivacy.test.ts does).
+    // on `v1.open` throwing directly (src/app/favoritesPrivacy.test.ts does).
     return new Set()
   }
 }
@@ -38,7 +39,7 @@ export async function loadFavorites(scopeId: string, scopeKey: Uint8Array): Prom
 /** Seal + store the caller's pinned-Memory id set for the scope (replaces the whole blob). */
 export async function saveFavorites(scopeId: string, scopeKey: Uint8Array, ids: Set<string>): Promise<void> {
   const json = encoder.encode(JSON.stringify([...ids]))
-  const ciphertext = b64std(v1.symWrap(scopeKey, json, FAV_CTX, v1.randomBytes(12)))
+  const ciphertext = b64std(v1.seal(favContext(scopeId), scopeKey, json))
   await withRefresh(() => favoritesApi().putFavorites({ scopeId, putFavoritesRequest: { ciphertext } }))
 }
 

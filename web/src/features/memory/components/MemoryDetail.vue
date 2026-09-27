@@ -181,7 +181,7 @@ function videoIdSet(list: readonly MediaItem[]): Set<string> {
   const key = props.memoryKey
   const set = new Set<string>()
   if (!key) return set
-  for (const it of list) if (isVideoMediaType(unsealMeta(key, it)?.mediaType)) set.add(it.mediaId)
+  for (const it of list) if (isVideoMediaType(unsealMeta(props.scopeId, key, it)?.mediaType)) set.add(it.mediaId)
   return set
 }
 const galleryVideoIds = computed(() => videoIdSet(items.value))

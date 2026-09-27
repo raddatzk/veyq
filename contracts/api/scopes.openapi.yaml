@@ -34,9 +34,10 @@ paths:
       summary: Birth the caller's personal scope in the active tenant.
       description: >
         Creates a `kind=PERSONAL` scope for the authenticated caller in the tenant resolved from the `Host`,
-        plus the caller's self-membership. The client has generated the scope key and sealed it to its own
-        identity public key; the server stores only the opaque `wrappedGrant` ciphertext and never sees the
-        key. One personal scope per (member, tenant) — a second call is `409 personal_scope_exists`.
+        plus the caller's self-membership. The client has minted the scope's id, generated the scope key and
+        sealed it to its own identity public key bound to that id ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)); the server stores only the opaque
+        `wrappedGrant` ciphertext under that id and never sees the key. One personal scope per (member, tenant) —
+        a second call is `409 personal_scope_exists`. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       requestBody:
@@ -45,6 +46,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreatePersonalScopeRequest" }
             example:
+              scopeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               wrappedGrant: AQ==
       responses:
         "201":
@@ -75,7 +77,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
         "409":
-          description: The caller already has a personal scope in this tenant.
+          description: The caller already has a personal scope in this tenant (`personal_scope_exists`), or the `scopeId` is already taken (`id_taken`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -131,8 +133,9 @@ paths:
         the caller's self-membership (`role=OWNER`). Like the personal scope, birth is **client-driven**: the
         client generated the scope key `K_SC`, sealed the group name under its derived name-key `K_name_0`
         (`encryptedName`, cr-0096/ADR 0027), and sealed `K_SC` to its own identity public key (`wrappedGrant`,
-        born at name-epoch 0). The server stores both ciphertexts verbatim and
-        never sees the key or the name — it only mints the scope id + the self-membership. Group names are **not**
+        born at name-epoch 0), both bound to the scope id the client minted ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)). The server stores both
+        ciphertexts verbatim and never sees the key or the name — it only records the scope under that id + the
+        self-membership. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads. Group names are **not**
         unique; a duplicate name is allowed (resolved client-side, ADR 0014). Adding other members is a later,
         separate operation.
       security:
@@ -143,6 +146,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateGroupRequest" }
             example:
+              scopeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               encryptedName: c2VhbGVkLW5hbWU=
               wrappedGrant: AQ==
       responses:
@@ -182,6 +186,12 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: capability_disabled }
+        "409":
+          description: The `scopeId` is already taken (`id_taken`).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: id_taken }
 
   /api/scopes/{scopeId}/members:
     get:
@@ -810,8 +820,15 @@ components:
 
     CreatePersonalScopeRequest:
       type: object
-      required: [wrappedGrant]
+      required: [scopeId, wrappedGrant]
       properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the personal scope (ADR 0072 Decision 3) — its grant is sealed bound to (this id, epoch 0). Taken ⇒ `409 id_taken`.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         wrappedGrant:
           type: string
           description: >
@@ -825,14 +842,21 @@ components:
 
     CreateGroupRequest:
       type: object
-      required: [encryptedName, wrappedGrant]
+      required: [scopeId, encryptedName, wrappedGrant]
       properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the group scope (ADR 0072 Decision 3) — its grant is sealed bound to (this id, epoch 0). Taken ⇒ `409 id_taken`.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         encryptedName:
           type: string
           description: >
             The group's name sealed under its **derived name-key `K_name_0`** at birth (cr-0096/ADR 0027):
             `K_name_0 = HKDF(E_0, "veyq/v1/group-name-key")` from the birth epoch key, then `symEncrypt(K_name_0,
-            name)` (same node-name seal) — opaque base64 the server stores verbatim and never interprets, so the
+            name)` (seal purpose `group-name`, bound to scope + name epoch) — opaque base64 the server stores verbatim and never interprets, so the
             server sees an **unnamed** group (ADR 0014). Born at name-epoch 0 (forward-secret-ready).
           contentEncoding: base64
           maxLength: 8192
@@ -858,7 +882,7 @@ components:
           description: >
             The new group name sealed under `K_name` derived from the scope's **current** content-key epoch
             (cr-0097/ADR 0027): `K_name = HKDF(E_currentEpoch, "veyq/v1/group-name-key")`, then `symEncrypt(K_name,
-            newName)` (same node-name seal) — opaque base64 the server stores verbatim and never interprets. Sealing
+            newName)` (seal purpose `group-name`, bound to scope + name epoch) — opaque base64 the server stores verbatim and never interprets. Sealing
             under the current epoch is what makes the rename forward-secret.
           contentEncoding: base64
           maxLength: 8192
@@ -1090,6 +1114,14 @@ components:
             and derives `K_icon`. 0 when no icon is set.
           minimum: 0
           example: 0
+        grantedEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The epoch the caller's own `wrappedGrant` holds — the grant is sealed bound to (tenant scope, this
+            epoch) (ADR 0072), so the switcher opens it at exactly this epoch. Null whenever `wrappedGrant` is.
+          minimum: 0
+          example: 0
 
     ScopeCreated:
       type: object
@@ -1223,7 +1255,7 @@ components:
         the derived name-key `K_name`, then `symUnwrap`s `encryptedName` (the scope's **canonical** sealed name) under
         it to show the group's name — the same blob the members hold, so a modified owner cannot show a divergent name.
         `addedBy` is the owner's per-tenant username (already visible to the invitee).
-      required: [scopeId, addedBy, sealedNameKey, encryptedName]
+      required: [scopeId, addedBy, sealedNameKey, encryptedName, nameEpoch]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -1258,6 +1290,14 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: c2VhbGVkLW5hbWU=
+        nameEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The name epoch `encryptedName` and `sealedNameKey` were sealed at — both seals are bound to (scope,
+            name epoch) (ADR 0072), so the invitee opens them at exactly this epoch.
+          minimum: 0
+          example: 0
 
     ScopeSummary:
       type: object

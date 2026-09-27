@@ -31,10 +31,11 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
       suiteId: 'v1', identityPublicKey: 'aQ==', wrappedIdentityPrivateKey: 'aQ==',
       authPublicKey: 'aQ==', masterKeyWraps: [], secretKeyProofPublicKey: 'aQ==',
     }
-    await registerAndAccept('secret', 'kevin', material as never, 'AQ==') // grant set, no name
+    const userId = '5c09e000-0000-4000-8000-0000000000a7' // client-minted: a sealed name is bound to it (ADR 0072)
+    await registerAndAccept('secret', userId, 'kevin', material as never, 'AQ==') // grant set, no name
     expect(api.registerAndAcceptTenantInvite).toHaveBeenCalledWith(
       expect.objectContaining({
-        registerAndAcceptRequest: expect.objectContaining({ username: 'kevin', grant: 'AQ==', sealedName: undefined }),
+        registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', grant: 'AQ==', sealedName: undefined }),
       }),
     )
   })

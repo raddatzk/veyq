@@ -18,7 +18,7 @@ const scopeKey = v1.randomBytes(32)
 
 function mockContent(over: Partial<Record<'createNode' | 'listNodes' | 'updateNode' | 'deleteNode' | 'listTrashedNodes' | 'restoreNode', unknown>>) {
   vi.mocked(contentApi).mockReturnValue({
-    createNode: vi.fn().mockResolvedValue({ nodeId: 'n1' }),
+    createNode: echoCreate(),
     listNodes: vi.fn().mockResolvedValue([]),
     updateNode: vi.fn(),
     deleteNode: vi.fn(),
@@ -30,21 +30,34 @@ function mockContent(over: Partial<Record<'createNode' | 'listNodes' | 'updateNo
 
 beforeEach(() => vi.clearAllMocks())
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+/** A createNode mock that echoes the client-minted node id back, as the server does (ADR 0072). */
+function echoCreate() {
+  return vi.fn().mockImplementation(async (p: { createNodeRequest: { nodeId: string } }) => ({ nodeId: p.createNodeRequest.nodeId }))
+}
+const nameCtx = (nodeId: string, epoch = 0) => ({ purpose: 'node-name', scopeId: SCOPE_ID, nodeId, epoch }) as const
+const kmemCtx = (nodeId: string, epoch = 0) => ({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId, epoch }) as const
+
 describe('createMemory', () => {
   it('seals the name, blinds the slug, and wraps a K_mem that opens back (operator-blind)', async () => {
-    const create = vi.fn().mockResolvedValue({ nodeId: 'mem-1' })
+    const create = echoCreate()
     mockContent({ createNode: create })
 
     const { nodeId, memoryKey } = await createMemory(SCOPE_ID, epochsOf(scopeKey), 'Italien 2026')
-    expect(nodeId).toBe('mem-1')
     expect(memoryKey.length).toBe(32)
 
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('MEMORY')
-    // name round-trips under K_SC; the server only ever saw ciphertext
-    expect(new TextDecoder().decode(v1.symUnwrap(scopeKey, fromB64(req.encryptedName), 'node-name'))).toBe('Italien 2026')
+    // the client mints the node id (a canonical UUID) and the returned id is the one every seal is bound to
+    expect(req.nodeId).toMatch(UUID)
+    expect(nodeId).toBe(req.nodeId)
+    // name round-trips under K_SC, bound to this node; the server only ever saw ciphertext
+    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Italien 2026')
     // wrapped K_mem opens to exactly the returned key
-    expect(Array.from(openMemory(scopeKey, { wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    expect(Array.from(openMemory(SCOPE_ID, scopeKey, { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(memoryKey))
+    // ...and is refused on any other node's row (a server moving the wrap gets no key)
+    expect(() => openMemory(SCOPE_ID, scopeKey, { id: crypto.randomUUID(), epoch: 0, wrappedContentKey: req.wrappedContentKey }))
+      .toThrow(v1.OpenRefused)
     // slug token = blinded MAC under K_SC over the root parent slot (the scope id) + the slug
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, SCOPE_ID, 'italien-2026')))
   })
@@ -52,23 +65,26 @@ describe('createMemory', () => {
 
 describe('createChapter — recursive K_mem (cr-0060)', () => {
   it('wraps the chapter K_mem under the PARENT Memory key, not K_SC', async () => {
-    const create = vi.fn().mockResolvedValue({ nodeId: 'chap-1' })
+    const create = echoCreate()
     mockContent({ createNode: create })
     const parentKey = v1.randomBytes(32) // the parent Memory's K_mem
+    const MEM = '5c09e000-0000-4000-8000-00000000000a'
 
-    const { nodeId, chapterKey } = await createChapter(SCOPE_ID, epochsOf(scopeKey), parentKey, 'Tag 1', 'mem-1')
-    expect(nodeId).toBe('chap-1')
+    const { nodeId, chapterKey } = await createChapter(SCOPE_ID, epochsOf(scopeKey), parentKey, 'Tag 1', MEM)
 
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('CHAPTER')
-    expect(req.parentId).toBe('mem-1')
+    expect(req.parentId).toBe(MEM)
+    expect(req.nodeId).toMatch(UUID)
+    expect(nodeId).toBe(req.nodeId)
     // the name is still sealed under K_SC (whole-tree navigation), the slug too
-    expect(new TextDecoder().decode(v1.symUnwrap(scopeKey, fromB64(req.encryptedName), 'node-name'))).toBe('Tag 1')
-    expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, 'mem-1', 'tag-1')))
+    expect(new TextDecoder().decode(v1.open(nameCtx(nodeId), scopeKey, fromB64(req.encryptedName)))).toBe('Tag 1')
+    expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, MEM, 'tag-1')))
+    const row = { id: nodeId, epoch: 0, wrappedContentKey: req.wrappedContentKey }
     // the K_mem opens under the PARENT key…
-    expect(Array.from(openContentKey(parentKey, { wrappedContentKey: req.wrappedContentKey })!)).toEqual(Array.from(chapterKey))
+    expect(Array.from(openContentKey(SCOPE_ID, parentKey, row)!)).toEqual(Array.from(chapterKey))
     // …and NOT under K_SC (a wrong KEK can't open it — crypto-enforced least privilege)
-    expect(() => openContentKey(scopeKey, { wrappedContentKey: req.wrappedContentKey })).toThrow()
+    expect(() => openContentKey(SCOPE_ID, scopeKey, row)).toThrow(v1.OpenRefused)
   })
 })
 
@@ -76,41 +92,58 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
   it('walks K_SC → Memory K_mem → chapter K_mem (folders are transparent)', () => {
     const memKey = v1.randomBytes(32)
     const chapKey = v1.randomBytes(32)
-    const wrap = (kek: Uint8Array, k: Uint8Array) => b64std(v1.symWrap(kek, k, 'content-key', v1.randomBytes(12)))
+    const FOLD = '5c09e000-0000-4000-8000-000000000f01'
+    const MEM = '5c09e000-0000-4000-8000-000000000e01'
+    const CHAP = '5c09e000-0000-4000-8000-000000000c01'
+    const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) => b64std(v1.seal(kmemCtx(nodeId), kek, k))
     const tree: TreeNode[] = [
-      { id: 'fold', parentId: null, kind: 'FOLDER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Trips', wrappedContentKey: null, wrappedMeta: null },
-      { id: 'mem', parentId: 'fold', kind: 'MEMORY' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Italy', wrappedContentKey: wrap(scopeKey, memKey), wrappedMeta: null },
-      { id: 'chap', parentId: 'mem', kind: 'CHAPTER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Day 1', wrappedContentKey: wrap(memKey, chapKey), wrappedMeta: null },
+      { id: FOLD, parentId: null, kind: 'FOLDER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Trips', wrappedContentKey: null, wrappedMeta: null },
+      { id: MEM, parentId: FOLD, kind: 'MEMORY' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Italy', wrappedContentKey: wrap(scopeKey, MEM, memKey), wrappedMeta: null },
+      { id: CHAP, parentId: MEM, kind: 'CHAPTER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Day 1', wrappedContentKey: wrap(memKey, CHAP, chapKey), wrappedMeta: null },
     ]
-    expect(Array.from(nodeContentKey(epochsOf(scopeKey), tree, 'chap')!)).toEqual(Array.from(chapKey))
-    expect(Array.from(nodeContentKey(epochsOf(scopeKey), tree, 'mem')!)).toEqual(Array.from(memKey))
-    expect(nodeContentKey(epochsOf(scopeKey), tree, 'fold')).toBeNull() // a folder has no content key
+    expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, CHAP)!)).toEqual(Array.from(chapKey))
+    expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, MEM)!)).toEqual(Array.from(memKey))
+    expect(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, FOLD)).toBeNull() // a folder has no content key
   })
 })
 
 describe('createFolder', () => {
   it('creates a keyless folder (no wrappedContentKey)', async () => {
-    const create = vi.fn().mockResolvedValue({ nodeId: 'f1' })
+    const create = echoCreate()
     mockContent({ createNode: create })
-    await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Trips')
+    const id = await createFolder(SCOPE_ID, epochsOf(scopeKey), 'Trips')
     const req = create.mock.calls[0][0].createNodeRequest
     expect(req.kind).toBe('FOLDER')
     expect(req.wrappedContentKey).toBeUndefined()
+    expect(req.nodeId).toMatch(UUID)
+    expect(id).toBe(req.nodeId)
+    expect(new TextDecoder().decode(v1.open(nameCtx(id), scopeKey, fromB64(req.encryptedName)))).toBe('Trips')
   })
 })
 
 describe('listTree', () => {
   it('decrypts node names under K_SC', async () => {
-    const encryptedName = b64std(v1.symWrap(scopeKey, v1.utf8('Trips'), 'node-name', v1.randomBytes(12)))
+    const F1 = '5c09e000-0000-4000-8000-0000000000f1'
+    const encryptedName = sealUnder(scopeKey, F1, 0, 'Trips')
     mockContent({
       listNodes: vi.fn().mockResolvedValue([
-        { id: 'f1', parentId: null, kind: 'FOLDER', encryptedName, slugToken: 'x', orderIndex: 0 },
+        { id: F1, parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
       ]),
     })
     const tree = await listTree(SCOPE_ID, epochsOf(scopeKey))
     expect(tree).toHaveLength(1)
     expect(tree[0].name).toBe('Trips')
     expect(tree[0].parentId).toBeNull()
+  })
+
+  it('refuses a name the server moved onto another node\'s row', async () => {
+    const encryptedName = sealUnder(scopeKey, '5c09e000-0000-4000-8000-0000000000f1', 0, 'Trips')
+    mockContent({
+      listNodes: vi.fn().mockResolvedValue([
+        { id: '5c09e000-0000-4000-8000-0000000000f2', parentId: null, kind: 'FOLDER', epoch: 0, encryptedName, slugToken: 'x', orderIndex: 0 },
+      ]),
+    })
+    await expect(listTree(SCOPE_ID, epochsOf(scopeKey))).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 })
 
@@ -127,10 +160,12 @@ describe('listTrash', () => {
     const epochs = { current: 1, keys: new Map([[0, e0], [1, e1]]) }
     const deletedAt = new Date('2026-08-17T10:15:30Z')
     const purgeAfter = new Date('2026-09-16T10:15:30Z')
+    const OLD = '5c09e000-0000-4000-8000-0000000000a1'
+    const NEW = '5c09e000-0000-4000-8000-0000000000a2'
     mockContent({
       listTrashedNodes: vi.fn().mockResolvedValue([
-        { id: 'old', parentId: null, kind: 'MEMORY', epoch: 0, encryptedName: sealUnder(e0, 'Rom 2024'), deletedAt, purgeAfter },
-        { id: 'new', parentId: 'f1', kind: 'FOLDER', epoch: 1, encryptedName: sealUnder(e1, 'Reisen'), deletedAt, purgeAfter },
+        { id: OLD, parentId: null, kind: 'MEMORY', epoch: 0, encryptedName: sealUnder(e0, OLD, 0, 'Rom 2024'), deletedAt, purgeAfter },
+        { id: NEW, parentId: 'f1', kind: 'FOLDER', epoch: 1, encryptedName: sealUnder(e1, NEW, 1, 'Reisen'), deletedAt, purgeAfter },
       ]),
     })
 
@@ -166,16 +201,17 @@ describe('restoreNode', () => {
     mockContent({ restoreNode: restore })
     const epochs = epochsOf(scopeKey)
 
-    await restoreNode(SCOPE_ID, epochs, { id: 'n1', parentId: 'f1', epoch: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
+    const N1 = '5c09e000-0000-4000-8000-0000000000b1'
+    await restoreNode(SCOPE_ID, epochs, { id: N1, parentId: 'f1', epoch: 0, name: 'Rom 2026' }, 'Rom 2026 (2)')
 
     const req = restore.mock.calls[0][0].restoreNodeRequest
     // both halves describe the NEW name, and they travel together — a node is never live carrying a slug its
     // own name does not produce
     expect(req.slugToken).toBe(b64std(v1.slugToken(scopeKey, 'f1', 'rom-2026-2')))
-    expect(new TextDecoder().decode(v1.symUnwrap(scopeKey, fromB64(req.encryptedName), 'node-name'))).toBe('Rom 2026 (2)')
+    expect(new TextDecoder().decode(v1.open(nameCtx(N1), scopeKey, fromB64(req.encryptedName)))).toBe('Rom 2026 (2)')
   })
 })
 
-function sealUnder(key: Uint8Array, name: string): string {
-  return b64std(v1.symWrap(key, v1.utf8(name), 'node-name', v1.randomBytes(12)))
+function sealUnder(key: Uint8Array, nodeId: string, epoch: number, name: string): string {
+  return b64std(v1.seal(nameCtx(nodeId, epoch), key, v1.utf8(name)))
 }

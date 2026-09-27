@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -141,7 +142,7 @@ class ShareSliceTest {
         val past = Instant.now().minusSeconds(3600).toString()
 
         val shareId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
 
@@ -167,7 +168,7 @@ class ShareSliceTest {
         val folder = seedNode(scopeId, NodeEntity.FOLDER, parent = scopeId)
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$folder","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$folder","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(422).body("code", equalTo("illegal_scope"))
     }
@@ -179,7 +180,7 @@ class ShareSliceTest {
         val outsider = seedUser()
 
         given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -188,7 +189,7 @@ class ShareSliceTest {
     fun unknownNodeCreateIs404() {
         val userId = seedUser()
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -203,7 +204,7 @@ class ShareSliceTest {
     @Test
     fun createRequiresAuth() {
         given().contentType(ContentType.JSON)
-            .body("""{"nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${UUID.randomUUID()}","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -266,7 +267,7 @@ class ShareSliceTest {
         // expired
         val past = Instant.now().minusSeconds(3600).toString()
         val expiredId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$memory","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","expiresAt":"$past"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path<String>("shareId")
         given().`when`().get("/api/shares/$expiredId/terms")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
@@ -287,7 +288,7 @@ class ShareSliceTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")

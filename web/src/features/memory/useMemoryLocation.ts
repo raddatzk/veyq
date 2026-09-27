@@ -36,10 +36,10 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
 
   const locationEditorOpen = ref(false)
   const consentDialogOpen = ref(false)
-  const storedLocation = computed(() => (ctx.memoryKey() ? unsealMemoryLocation(ctx.memoryKey()!, ctx.node()) : null))
+  const storedLocation = computed(() => (ctx.memoryKey() ? unsealMemoryLocation(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   const gpsPoints = computed(() => {
     const key = ctx.memoryKey()
-    return key ? mediaGpsPoints(ctx.items.value, key) : []
+    return key ? mediaGpsPoints(ctx.scopeId(), ctx.items.value, key) : []
   })
   const medoid = computed(() => computeMedoid(gpsPoints.value))
   // A pending auto place (armed, name deferred) is only genuinely "being determined" when there's a geotagged
@@ -91,9 +91,9 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
   async function reconcileAutoLocation() {
     const key = ctx.memoryKey()
     if (!key) return
-    const stored = unsealMemoryLocation(key, ctx.node())
+    const stored = unsealMemoryLocation(ctx.scopeId(), key, ctx.node())
     if (!stored || stored.derivedMode !== 'auto') return // no location / a `fixed` place is the user's — never moved
-    const point = computeMedoid(mediaGpsPoints(ctx.items.value, key))
+    const point = computeMedoid(mediaGpsPoints(ctx.scopeId(), ctx.items.value, key))
     if (!point) return // no GPS yet (e.g. an `auto` pre-armed at creation) — nothing to derive from
     let next: MemoryLocation = { ...stored, derived: point }
     // Materialize/refresh a geocoded name from the medoid at the stored granularity `level` (client-direct

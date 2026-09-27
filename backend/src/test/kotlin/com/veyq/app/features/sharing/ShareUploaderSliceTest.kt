@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -91,7 +92,7 @@ class ShareUploaderSliceTest {
 
         // name yourself — NO bearer (uploader path is open like CONTRIBUTOR); identity + capability token out
         val idResp = given().contentType(ContentType.JSON)
-            .body("""{"sealedDisplayName":"$sealedUploaderName"}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201)
             .body("identityId", notNullValue()).body("contributorToken", notNullValue())
@@ -105,7 +106,7 @@ class ShareUploaderSliceTest {
             .then().statusCode(200).extract().path<String>("results[0].uploadId")
 
         val mediaId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"originalUploadId":"$uploadId"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).extract().path<String>("results[0].mediaId")
 
@@ -180,7 +181,7 @@ class ShareUploaderSliceTest {
         val mediaId = seedMedia(scopeId, memory, identityId = null)
 
         // a VIEWER share accepts neither an identity (upload) nor a delete
-        given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedUploaderName"}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
         given().header("X-Contributor-Token", "notARealToken000000000000000000000000000000")
@@ -192,14 +193,14 @@ class ShareUploaderSliceTest {
 
     private fun createShare(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 
     private fun createIdentity(shareId: String): String = createIdentityWithToken(shareId).first
 
     private fun createIdentityWithToken(shareId: String): Pair<String, String> {
-        val r = given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedUploaderName"}""")
+        val r = given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
     }

@@ -156,8 +156,11 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   - **A git-native mutation tool for the backend** — none maintained exists in OSS; arcmutate is commercial. And
     it would not help, since the backend cost is the boot, not the mutant count.
 - **Do not add tamper-rejection vectors to the conformance battery — the gate measured why they buy nothing.**
-  The battery has none (a flipped tag / wrong AAD / truncated frame), and that is the decision, not an oversight:
-  a rejection has no output to record, so there is nothing to put in `contracts/`. Two facts close the case, and
+  The vector file has none (a flipped tag / wrong AAD / truncated frame), and that is the decision, not an oversight:
+  a rejection has no output to record, so there is nothing to put in `contracts/`. (The typed seal's refusal cases
+  in `v1.conformance.test.ts` — one binding field moved, one purpose swapped — are not tamper vectors: they read the
+  vectors, add none, and pin that an opener binds every field of its purpose, which is veyq's own encoder,
+  [ADR 0072](0072-a-seal-binds-its-object.md).) Two facts close the case, and
   they cover the whole surface between them. **The rejection itself is `@noble`'s**, not veyq's — GCM tag
   verification lives in `node_modules`, outside any mutate scope, so no veyq mutant can weaken it and no veyq
   test can prove it. (This does **not** condemn the RFC 5869 HKDF KAT, which runs `@noble` code too and stays:

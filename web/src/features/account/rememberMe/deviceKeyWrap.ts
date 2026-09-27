@@ -48,12 +48,19 @@ function loadRecord(): Promise<RememberRecord | null> {
  * fresh one (ADR 0005 §9). The caller records the device↔wrap join in the sealed device register — this module
  * deliberately knows nothing about the register, which is what keeps the register off every unlock path.
  */
+/**
+ * The purpose this seal authenticates, as AES-GCM `additionalData`. Outside the typed seal union on purpose
+ * (ADR 0072 Decision 2): the key is a non-extractable per-device WebCrypto `CryptoKey` that `@noble` cannot take,
+ * unique to this one wrap, so the key is the object binding and the purpose is all that is left to bind.
+ */
+const DEVICE_KEY_WRAP_AD = new TextEncoder().encode('veyq/v1/device-key-wrap')
+
 export async function enrolDeviceKey(email: string, masterKey: Uint8Array): Promise<string> {
   const prior = await loadRecord()
 
   const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
   const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, masterKey as BufferSource)
+  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: DEVICE_KEY_WRAP_AD }, key, masterKey as BufferSource)
 
   const result = await withRefresh(() =>
     accountWrapsApi().addAccountWrap({
@@ -119,7 +126,7 @@ export async function restoreDeviceKey(
   if (!wrap?.kdfParams) return null // wrap withdrawn server-side — fall back, but keep the (harmless) local key
   try {
     const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromB64std(wrap.kdfParams) as BufferSource },
+      { name: 'AES-GCM', iv: fromB64std(wrap.kdfParams) as BufferSource, additionalData: DEVICE_KEY_WRAP_AD },
       record.key,
       fromB64std(wrap.wrappedKey) as BufferSource,
     )

@@ -54,6 +54,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('media e2e (live, direct-to-store)', () =
     // the media's listed-metadata tier. `tree.map(n => n.name)` and not `tree` itself: a TreeNode still carries
     // `wrappedMeta`/`wrappedContentKey`, which ARE in the database as ciphertext.
     const tree = await listTree(scopeId, epochsOf(scopeKey))
-    recordCanaries(tree.map((n) => n.name), unsealMeta(memoryKey, items[0]))
+    recordCanaries(tree.map((n) => n.name), unsealMeta(scopeId, memoryKey, items[0]))
   })
 })

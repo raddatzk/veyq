@@ -135,7 +135,7 @@ const securityDocUrl = computed(() =>
 // --- justified grid tiles (fed to the shared MediaGrid) ---------------------
 // Newest-first by effective capture time (undated last) — mirrors the curator gallery's default order, through
 // the SAME comparator, so the two surfaces cannot drift into two orderings.
-const capturedAtOf = (si: ShareItem) => effectiveCapturedAt(unsealMeta(si.memoryKey, si.item))
+const capturedAtOf = (si: ShareItem) => effectiveCapturedAt(unsealMeta(si.scopeId, si.memoryKey, si.item))
 // The LISTED media in grid order — the lightbox's world: the tile's `openLightboxAt(sortedItems.indexOf(…))`
 // is a position in THIS list, never in the merged one, so an in-flight tile cannot shift which photo opens.
 const sortedItems = computed(() => byCaptureTime(items.value, capturedAtOf, -1))
@@ -152,7 +152,7 @@ const layoutItems = computed<ShareTileItem[]>(() =>
     [
       ...optimisticTiles.value.map((t) => ({ id: t.layoutId, aspectRatio: t.aspectRatio, kind: 'optimistic' as const, optimistic: t })),
       ...sortedItems.value.map((si) => {
-        const dims = unsealMeta(si.memoryKey, si.item)
+        const dims = unsealMeta(si.scopeId, si.memoryKey, si.item)
         return { id: si.item.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h) || FALLBACK_ASPECT, kind: 'media' as const, si }
       }),
     ],
@@ -168,6 +168,8 @@ const hasContent = computed(() => items.value.length > 0 || optimisticTiles.valu
 // The share role + the root Memory's K_mem (for a contributor/uploader to seal their name + uploads under).
 const role = ref<ShareRole>(ShareRole.Viewer)
 const rootMemoryKey = ref<Uint8Array | null>(null)
+// The shared Memory's scope — a contributor's name and uploads are sealed bound to it (ADR 0072).
+const shareScopeId = ref<string | null>(null)
 const isContributor = computed(() => role.value === ShareRole.Contributor)
 // UPLOADER (cr-0102, ADR 0031): a write-only drop-box — add photos but the resolve serves no media. The own-view
 // is the optimistic tiles themselves (local previews), session-only: on reload the in-memory queue is empty.
@@ -192,11 +194,11 @@ const naming = ref(false)
 const nameError = ref(false)
 async function submitName() {
   const name = displayName.value.trim()
-  if (!name || naming.value || !rootMemoryKey.value) return
+  if (!name || naming.value || !rootMemoryKey.value || !shareScopeId.value) return
   naming.value = true
   nameError.value = false
   try {
-    const created = await createContributorIdentity(shareId, rootMemoryKey.value, name, pwToken.value)
+    const created = await createContributorIdentity(shareId, shareScopeId.value, rootMemoryKey.value, name, pwToken.value)
     localStorage.setItem(sessionKey, JSON.stringify(created))
     session.value = created
   } catch {
@@ -225,9 +227,10 @@ function onFilesPicked() {
 function enqueueBatch(picked: File[]) {
   const s = session.value
   const key = rootMemoryKey.value
-  if (!s || !key) return
+  const scopeId = shareScopeId.value
+  if (!s || !key || !scopeId) return
   enqueueUploads(
-    { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, memoryKey: key, ...s, pwToken: pwToken.value }, source, undefined, opts) },
+    { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, scopeId, memoryKey: key, ...s, pwToken: pwToken.value }, source, undefined, opts) },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
     // CONTRIBUTOR: re-resolve so the contributed photo lists. UPLOADER: never re-resolve (the resolve serves the
     // uploader no media) — the done optimistic tile stays as the session-only own-view from its local preview.
@@ -277,11 +280,14 @@ function openLightboxAt(index: number) {
 const unusedMemoryKey = new Uint8Array()
 const previewLoader = (item: MediaItem) => openShareLightbox(shareId, shareById.value.get(item.mediaId)!, pwToken.value)
 const originalLoader = (item: MediaItem) => openShareOriginal(shareId, shareById.value.get(item.mediaId)!, pwToken.value)
-const metaResolver = (item: MediaItem) => unsealMeta(shareById.value.get(item.mediaId)!.memoryKey, item)
+const metaResolver = (item: MediaItem) => {
+  const si = shareById.value.get(item.mediaId)!
+  return unsealMeta(si.scopeId, si.memoryKey, item)
+}
 // Slice 2 (ADR 0047): the share-scoped key-free chunk provider for the SW range path — the anonymous viewer's
 // per-item K_mem + guest pwToken, over the gated share presign. The SW never learns it is the share route.
 const videoChunkProvider = (item: MediaItem) =>
-  shareChunkProvider(shareId, shareById.value.get(item.mediaId)!.memoryKey, downloadRef(item), pwToken.value)
+  shareChunkProvider(shareId, shareById.value.get(item.mediaId)!, downloadRef(item), pwToken.value)
 
 // --- resolve (on mount + after a contribution) ------------------------------
 async function load() {
@@ -292,6 +298,7 @@ async function load() {
     note.value = pickLocaleText(resolved.noteByLocale, locale.value)
     role.value = resolved.role
     rootMemoryKey.value = resolved.rootMemoryKey
+    shareScopeId.value = resolved.scopeId
     // incremental merge (no empty-flash): the pipeline drops thumbs of removed media + donates a just-uploaded
     // photo's optimistic preview (hands off with no gray gap), then decrypts each derivable item's real thumbnail.
     // Decide the terms gate BEFORE flipping to 'ready' so an ungated content flash can't slip in between resolve

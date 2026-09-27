@@ -25,7 +25,7 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
   // When the cover editor is opened from the lightbox "Set as cover", it is seeded to crop THAT photo (its already-
   // decrypted thumbnail is the crop source); null = the header "edit current cover" flow. Cleared on close.
   const coverEditorMedia = ref<{ mediaId: string; src: string } | null>(null)
-  const storedCover = computed(() => (ctx.memoryKey() ? unsealMemoryCover(ctx.memoryKey()!, ctx.node()) : null))
+  const storedCover = computed(() => (ctx.memoryKey() ? unsealMemoryCover(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   // An **upload**-source cover isn't in `thumbs` (no media row), so its standalone blob is decrypted on demand into
   // this object URL (revoked on change/unmount by the primitive). A **media**-source cover reuses the thumbnail.
   const uploadCover = useObjectUrl()

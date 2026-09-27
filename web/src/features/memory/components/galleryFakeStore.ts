@@ -3,9 +3,13 @@
 // can list a real multi-item grid and round-trip each tier (original + derivatives) through a real v1
 // seal/open under a K_blob wrapped by K_mem. Operator-blind: the "store" only ever holds ciphertext.
 // Not a test file (no test cases); imported by the *.test.ts that mount the components.
+//
+// Like the real server it keeps the ids the CLIENT minted (ADR 0072): each blob under the `blobId` it was declared
+// with, each media under the `mediaId` it was completed for — every K_blob wrap and metadata tier is sealed bound to
+// them, so a fake that invented its own ids would serve seals that (rightly) refuse to open.
 import { vi } from 'vitest'
 
-type Session = { wrappedBlobKey: string; chunkCount: number }
+type Session = { wrappedBlobKey: string; chunkCount: number; blobId: string }
 type MediaRecord = {
   mediaId: string
   originalUploadId: string
@@ -18,21 +22,25 @@ export function galleryFakeStore() {
   const objects = new Map<string, Uint8Array>()
   const sessions = new Map<string, Session>()
   const media: MediaRecord[] = []
+  /** The store keys objects by upload session; a download addresses the blob id — this maps one to the other. */
+  const uploadOfBlob = new Map<string, string>()
   let upCounter = 0
-  let mediaCounter = 0
 
   const blobOf = (uploadId: string) => {
     const s = sessions.get(uploadId)!
-    return { blobId: uploadId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
+    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
   }
-  const getsFor = (uploadId: string) =>
-    Array.from({ length: sessions.get(uploadId)!.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` }))
+  const getsFor = (blobId: string) => {
+    const uploadId = uploadOfBlob.get(blobId)!
+    return Array.from({ length: sessions.get(uploadId)!.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` }))
+  }
 
   const api = {
     startBlobUploads: vi.fn(async ({ blobUploadsBatchRequest }: any) => ({
       results: blobUploadsBatchRequest.items.map((item: any) => {
         const uploadId = `up-${upCounter++}`
-        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount })
+        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
+        uploadOfBlob.set(item.blobId, uploadId)
         return {
           uploadId,
           presignedPuts: Array.from({ length: item.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })),
@@ -42,7 +50,7 @@ export function galleryFakeStore() {
     })),
     completeMedia: vi.fn(async ({ mediaBatchRequest }: any) => ({
       results: mediaBatchRequest.items.map((item: any) => {
-        const mediaId = `media-${mediaCounter++}`
+        const mediaId: string = item.mediaId // the client-minted id every tier is sealed bound to
         media.push({
           mediaId,
           originalUploadId: item.originalUploadId,
@@ -50,7 +58,7 @@ export function galleryFakeStore() {
           wrappedMeta: item.wrappedMeta ?? null,
           wrappedExif: item.wrappedExif ?? null,
         })
-        return { blobId: `blob-${item.originalUploadId}`, mediaId, error: null }
+        return { blobId: sessions.get(item.originalUploadId)!.blobId, mediaId, error: null }
       }),
     })),
     // cr-0107: the MediaListPage envelope (delta rows + both revisions + optional id-set). This fake always
@@ -94,5 +102,9 @@ export function galleryFakeStore() {
     return { ok: true, status: 200, arrayBuffer: async () => body.buffer } as unknown as Response
   })
 
-  return { api, fetchStub, objects, media }
+  /** The client-minted blob id declared for upload session `up-N` — sessions are numbered in upload order, so a
+   *  test can still say "media 0's PREVIEW" (`up-2`) without knowing the random id. */
+  const blobIdOfUpload = (uploadId: string): string => sessions.get(uploadId)!.blobId
+
+  return { api, fetchStub, objects, media, blobIdOfUpload }
 }

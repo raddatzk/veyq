@@ -86,7 +86,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   // The effective capture time of an item (from its sealed metadata tier), or undefined when it has none.
   function capturedAtOf(item: MediaItem): number | undefined {
     const key = ctx.memoryKey()
-    return key ? effectiveCapturedAt(unsealMeta(key, item)) : undefined
+    return key ? effectiveCapturedAt(unsealMeta(ctx.scopeId(), key, item)) : undefined
   }
   const sortDirection = computed<1 | -1>(() => (sortDir.value === 'newest' ? -1 : 1))
   // The LISTED media in grid order — the lightbox's world: the `index` below and `openLightboxAt`'s snapshot are
@@ -102,7 +102,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
     const key = ctx.memoryKey()
     const m = new Map<string, number>()
     for (const item of items.value) {
-      const dims = key ? unsealMeta(key, item) : null
+      const dims = key ? unsealMeta(ctx.scopeId(), key, item) : null
       m.set(item.mediaId, galleryDisplayAspectRatio(dims?.w, dims?.h))
     }
     return m

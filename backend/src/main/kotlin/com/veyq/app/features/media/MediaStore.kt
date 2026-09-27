@@ -65,6 +65,9 @@ data class BucketRow(
     val isPrimary: Boolean,
     val sealedName: String?,
     val mediaCount: Int,
+    /** A contributor primary's share: its name is the identity's `share-identity-name` seal, bound to (scope,
+     *  share, identity) (ADR 0072). Null for every other bucket. */
+    val shareId: String? = null,
 )
 
 /**
@@ -82,8 +85,15 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     fun findNode(scopeId: String, nodeId: String): NodeEntity? =
         NodeEntity.findById(nodeId)?.takeIf { it.scopeId == scopeId && it.deletedAt == null }
 
+    /** Is the client-minted [blobId] already a blob, or promised to another open session — in any scope? */
+    fun blobIdTaken(blobId: String): Boolean =
+        BlobEntity.findById(blobId) != null || UploadSessionEntity.count("blobId", blobId) > 0
+
+    /** Is the client-minted [mediaId] already a media, live or trashed, in any scope? */
+    fun mediaIdTaken(mediaId: String): Boolean = MediaEntity.findById(mediaId) != null
+
     @Transactional
-    fun createSession(scopeId: String, opener: UploadOpener, storageKey: String, chunkCount: Int, byteSize: Long, wrappedBlobKey: String): String {
+    fun createSession(scopeId: String, opener: UploadOpener, storageKey: String, d: UploadDeclare): String {
         val id = UUID.randomUUID().toString()
         val now = Instant.now()
         UploadSessionEntity().apply {
@@ -92,9 +102,12 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             openerUserId = (opener as? UploadOpener.Member)?.userId
             openerShareIdentityId = (opener as? UploadOpener.Contributor)?.shareIdentityId
             this.storageKey = storageKey
-            this.chunkCount = chunkCount
-            this.byteSize = byteSize
-            this.wrappedBlobKey = wrappedBlobKey
+            chunkCount = d.chunkCount
+            byteSize = d.byteSize
+            wrappedBlobKey = d.wrappedBlobKey
+            blobId = d.blobId
+            ownerId = d.ownerId
+            blobRole = d.role
             createdAt = now
             lastWindowAt = now
         }.persist()
@@ -124,6 +137,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      */
     @Transactional
     fun attach(
+        mediaId: String,
         original: UploadSessionEntity,
         nodeId: String,
         originalManifest: List<Long>?,
@@ -138,7 +152,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
         val bucket = resolveAttachBucket(scopeId, nodeId, ownerKey, targetBucketId)
         val originalBlobId = persistBlob(original, originalManifest)
-        val mediaId = UUID.randomUUID().toString()
         val now = Instant.now()
         MediaEntity().apply {
             id = mediaId
@@ -186,9 +199,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
     }
 
-    /** Persist a blob row from a verified session; returns the new blob id. */
+    /** Persist a blob row from a verified session, under the client-minted id its wrap is bound to (ADR 0072).
+     *  The handler checked [UploadSessionEntity.boundTo] first, so the id is present. */
     private fun persistBlob(session: UploadSessionEntity, manifest: List<Long>?): String {
-        val blobId = UUID.randomUUID().toString()
+        val blobId = checkNotNull(session.blobId) { "a session without a blob id is refused before it is attached" }
         BlobEntity().apply {
             id = blobId
             scopeId = session.scopeId
@@ -432,6 +446,13 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             else -> OwnerKey.User("unknown")
         }.format()
 
+    /** The share a contributor primary's identity belongs to — null for any other bucket. */
+    private fun contributorShareOf(b: BucketEntity): String? {
+        if (!b.isPrimary) return null
+        val owner = OwnerKey.parse(b.ownerKey) as? OwnerKey.Share ?: return null
+        return ShareIdentityEntity.findById(owner.shareIdentityId)?.shareId
+    }
+
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */
     private fun primarySealedNameFor(ownerKey: String): String? =
         when (val owner = OwnerKey.parse(ownerKey)) {
@@ -493,17 +514,18 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
         return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt", nodeId).list().map { b ->
             val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", nodeId, b.id).toInt()
-            BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count)
+            BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count, contributorShareOf(b))
         }
     }
 
     /** Create a sub-bucket one level under `ownerKey`'s primary (materialized if needed) — the caller's own or,
      *  post-cr0123, a contributor root a member curates. */
     @Transactional
-    fun createSubBucket(scopeId: String, nodeId: String, ownerKey: String, sealedName: String): BucketRow {
+    fun createSubBucket(bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String): BucketRow? {
+        if (BucketEntity.findById(bucketId) != null) return null // taken anywhere → nothing written (ADR 0072)
         val primary = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val sub = BucketEntity().apply {
-            id = UUID.randomUUID().toString()
+            id = bucketId
             this.scopeId = scopeId
             this.nodeId = nodeId
             this.ownerKey = ownerKey

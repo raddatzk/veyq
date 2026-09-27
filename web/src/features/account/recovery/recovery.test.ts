@@ -67,18 +67,14 @@ describe('recovery — opening the withheld wrap', () => {
     // Open the floor the ordinary way and compare: one Master Key, two locks.
     const floor = built.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
     const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams))
-    const viaPassword = v1.symUnwrap(
-      v1.kekPasswordSecret(fromB64std(secretKey), PASSWORD, salt, params),
-      fromB64std(floor.wrappedKey),
-      'master-key',
-    )
+    const viaPassword = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(fromB64std(secretKey), PASSWORD, salt, params), fromB64std(floor.wrappedKey))
     expect(b64std(opened.masterKey)).toBe(b64std(viaPassword))
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('the identity key opens under the recovered Master Key', async () => {
     const { material, secretKey } = mine
     const opened = await openWithSecretKey(material, secretKey)
-    const priv = v1.symUnwrap(opened.masterKey, fromB64std(material.wrappedIdentityPrivateKey), 'identity-priv')
+    const priv = v1.open({ purpose: 'identity-priv' }, opened.masterKey, fromB64std(material.wrappedIdentityPrivateKey))
     expect(priv.length).toBeGreaterThan(0)
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 
@@ -136,15 +132,11 @@ describe('recovery — setting the new password', () => {
     const { params, salt } = v1.decodeKdfParams(fromB64std(body.kdfParams))
     const raw = fromB64std(secretKey)
 
-    const reopened = v1.symUnwrap(
-      v1.kekPasswordSecret(raw, 'a brand new password', salt, params),
-      fromB64std(body.wrappedKey),
-      'master-key',
-    )
+    const reopened = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(raw, 'a brand new password', salt, params), fromB64std(body.wrappedKey))
     expect(b64std(reopened)).toBe(b64std(opened.masterKey))
 
     expect(() =>
-      v1.symUnwrap(v1.kekPasswordSecret(raw, PASSWORD, salt, params), fromB64std(body.wrappedKey), 'master-key'),
+      v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(raw, PASSWORD, salt, params), fromB64std(body.wrappedKey)),
     ).toThrow()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 

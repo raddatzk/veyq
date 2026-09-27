@@ -2,11 +2,12 @@
 // name (first + last) **sealed under K_tenant**. The sealed-name crypto itself lives in `./memberName` (a
 // dependency-light, crypto-only module) so the dev bootstrap script can seal identically; it is re-exported here
 // so callers keep a single import site. The username is a plaintext per-tenant handle the server enforces unique on.
-import { accountProfileApi } from '../../../api/client'
+import { accountApi, accountProfileApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { openScope } from '../../spaces/scopes'
 import { ScopeKind } from '../../../api/generated/scopes'
 import type { MemberProfile } from '../../../api/generated/account'
+import type { MemberNameAddress } from './memberName'
 
 export type { MemberProfile } from '../../../api/generated/account'
 export { sealName, unsealName, type MemberName } from './memberName'
@@ -33,4 +34,23 @@ export function updateMyProfile(update: {
  */
 export async function openTenantKey(): Promise<Uint8Array | null> {
   return (await openScope(ScopeKind.Tenant))?.key ?? null
+}
+
+/** The caller's own account id, from their own key material — the one read that hands it over. */
+export async function myUserId(): Promise<string> {
+  return (await withRefresh(() => accountApi().getAccountKeyMaterial())).userId
+}
+
+/**
+ * `K_tenant` plus the address the caller's **own** name is sealed at — (the tenant scope, the caller's user id)
+ * (ADR 0072). The user id comes from the caller's own key material, the one read that hands it over; null when
+ * the caller holds no tenant grant yet.
+ */
+export async function openOwnNameKey(): Promise<{ key: Uint8Array; address: MemberNameAddress } | null> {
+  const [tenant, material] = await Promise.all([
+    openScope(ScopeKind.Tenant),
+    withRefresh(() => accountApi().getAccountKeyMaterial()),
+  ])
+  if (!tenant) return null
+  return { key: tenant.key, address: { scopeId: tenant.scopeId, userId: material.userId } }
 }

@@ -25,6 +25,8 @@ import { recoverShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 
 const props = defineProps<{
+  /** The shared Memory's scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
+  scopeId: string
   nodeId: string
   memoryKey: Uint8Array
   memoryName: string
@@ -62,13 +64,17 @@ function roleLabel(r: ShareRole | string): string {
   return t('share.roleViewer')
 }
 
+// A share's recovery copy is bound to (scope, Memory, share) (ADR 0072): the scope + Memory this dialog was opened
+// for — the address it listed by — and the row's share id, never the row's own claim of where it lives.
+const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
+
 // Decrypt each share's name + note-presence once per load (a symUnwrap per share, not per render).
 const decoded = computed(() => {
   const m = new Map<string, { name: string; hasNote: boolean }>()
   for (const s of shares.value) {
     m.set(s.shareId, {
-      name: readShareName(props.memoryKey, s.sealedShareKey, s.sealedShareName),
-      hasNote: hasLocaleText(readShareNoteMap(props.memoryKey, s.sealedShareKey, s.sealedNote)),
+      name: readShareName(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedShareName),
+      hasNote: hasLocaleText(readShareNoteMap(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedNote)),
     })
   }
   return m
@@ -76,7 +82,7 @@ const decoded = computed(() => {
 const shareLinks = computed(() => {
   const m = new Map<string, string>()
   for (const s of shares.value) {
-    const link = recoverShareLink(s.shareId, props.memoryKey, s.sealedShareKey)
+    const link = recoverShareLink(addressOf(s), props.memoryKey, s.sealedShareKey)
     if (link) m.set(s.shareId, link)
   }
   return m
@@ -227,6 +233,7 @@ function fmtDate(d: Date): string {
 
     <ShareCreateDialog
       v-if="createOpen"
+      :scope-id="scopeId"
       :node-id="nodeId"
       :memory-key="memoryKey"
       :memory-name="memoryName"

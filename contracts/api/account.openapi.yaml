@@ -241,7 +241,9 @@ paths:
       summary: Store the caller's sealed identity-pin store (optimistic concurrency).
       description: >
         Replaces the caller's sealed pin-store blob. `version` is the version the client last read; the write
-        succeeds only if it still matches the server's stored version, which is then bumped and returned. If the
+        succeeds only if it still matches the server's stored version, which is then bumped by one and returned.
+        The blob is sealed bound to the version it is stored at — `version + 1` (ADR 0072) — so a blob served
+        under another version does not open. If the
         stored version moved since the client read (another device wrote), the server responds `409
         stale_version` and the client re-reads, union-merges, and retries (en.account.identity-pinning §Sync).
         The first write of a born-empty store sends `version: 0`. Operator-blind: the server never sees the
@@ -314,8 +316,9 @@ paths:
       summary: Store the caller's sealed device register (optimistic concurrency).
       description: >
         Replaces the caller's sealed device-register blob. `version` is the version the client last read; the
-        write succeeds only if it still matches the server's stored version, which is then bumped and
-        returned. If the stored version moved since the client read (another device wrote), the server
+        write succeeds only if it still matches the server's stored version, which is then bumped by one and
+        returned; the blob is sealed bound to that stored version, `version + 1` (ADR 0072). If the stored version
+        moved since the client read (another device wrote), the server
         responds `409 stale_version` and the client re-reads, merges, and retries
         (en.account.device-register §Sync & merge — note that a family removal is applied as a frozen id-delta
         and an eviction is recomputed on the merged map; the two are not the same operation). The first write
@@ -635,8 +638,15 @@ components:
     AccountKeyMaterial:
       type: object
       description: The caller's wrapped key material, enough to unlock the Master Key on-device.
-      required: [suiteId, wraps, wrappedIdentityPrivateKey]
+      required: [userId, suiteId, wraps, wrappedIdentityPrivateKey]
       properties:
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The caller's own account id. A member's real name is sealed bound to (tenant scope, user id) (ADR 0072), so the client needs its own id to seal and open its name; the server knows it truthfully (it is the token's principal) and nothing else the client holds implies it.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
         suiteId:
           x-veyq-visibility: enum
           type: string

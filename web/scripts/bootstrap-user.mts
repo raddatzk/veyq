@@ -166,15 +166,18 @@ if (numeric) {
 // Keep the freshly-minted TENANT scope key (K_tenant): the grant wraps it, and — holding it here — we can seal
 // the optional real name at accept, exactly as TenantJoinView does at an owner cold-birth (cr-0106).
 const tenantScopeKey = v1.randomBytes(32)
-const tenantGrant = b64std(v1.asymWrap(v1.hybridPublic(built.identity.priv), tenantScopeKey, 'scope-grant', { nonce: v1.randomBytes(12) }))
-const sealedName = firstName || lastName ? sealName(tenantScopeKey, { firstName, lastName }) : undefined
+// Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0; the name to (tenant scope, our id) (ADR 0072).
+const tenantGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, v1.hybridPublic(built.identity.priv), tenantScopeKey))
+const ownerId = (await tenant('GET', '/api/account/key-material', token, domain)).body?.userId as string
+const sealedName = firstName || lastName ? sealName(tenantScopeKey, { scopeId: tenantId, userId: ownerId }, { firstName, lastName }) : undefined
 const accepted = await tenant('POST', '/api/tenants/accept', token, domain, { bootstrapSecret, username, grant: tenantGrant, ...(sealedName ? { sealedName } : {}) })
 if (accepted.status >= 300) fail(`accept failed: ${accepted.status} ${JSON.stringify(accepted.body)}`)
 console.log(`tenant: ${domain} created + accepted${sealedName ? ' + name sealed' : ''}`)
 
 // 4 — the owner's PERSONAL scope
-const personalGrant = b64std(v1.asymWrap(v1.hybridPublic(built.identity.priv), v1.randomBytes(32), 'scope-grant', { nonce: v1.randomBytes(12) }))
-const scopeRes = await tenant('POST', '/api/scopes', token, domain, { wrappedGrant: personalGrant })
+const personalScopeId = crypto.randomUUID() // client-minted: the grant is bound to it (ADR 0072)
+const personalGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: personalScopeId, epoch: 0 }, v1.hybridPublic(built.identity.priv), v1.randomBytes(32)))
+const scopeRes = await tenant('POST', '/api/scopes', token, domain, { scopeId: personalScopeId, wrappedGrant: personalGrant })
 if (scopeRes.status >= 300) fail(`createPersonalScope failed: ${scopeRes.status} ${JSON.stringify(scopeRes.body)}`)
 console.log(`scope: personal scope ${scopeRes.body?.scopeId ?? ''} created`)
 
@@ -235,6 +238,7 @@ async function onboardUser2(): Promise<void> {
   })
   const u2Accept = await post('/api/tenants/accept/register', {
     bootstrapSecret: link[1],
+    userId: crypto.randomUUID(),
     username: u2Username,
     account: {
       suiteId: u2.material.suiteId,
@@ -255,8 +259,8 @@ async function onboardUser2(): Promise<void> {
     else await sleep(400)
   }
   if (!job) throw new Error('grant-delivery job for user2 was not claimable')
-  const wrap = wrapScopeKeyToMember(tenantScopeKey, job.grantDelivery.identityPublicKey)
-  const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: wrap })
+  const wrap = wrapScopeKeyToMember(tenantScopeKey, tenantId, 0, job.grantDelivery.identityPublicKey)
+  const done = await tenant('POST', `/api/tasks/${job.jobId}/complete`, token, domain, { sealedResult: wrap, epoch: 0 })
   if (done.status >= 300) throw new Error(`grant-delivery complete failed: ${done.status} ${JSON.stringify(done.body)}`)
   u2SecretKey = u2.emergencyKit.secretKey
   u2WrappedKey = u2.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!.wrappedKey

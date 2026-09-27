@@ -68,9 +68,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
 
     // re-fetch from the server: the location AND the date both unseal (RMW kept the sibling)
     const fetched = (await listTree(scopeId, epochsOf(scopeKey))).find((n) => n.id === nodeId)!
-    const key = openContentKey(scopeKey, fetched)!
-    expect(unsealMemoryLocation(key, fetched)?.name).toBe(name)
-    expect(unsealMemoryDate(key, fetched)).toEqual(date)
+    const key = openContentKey(scopeId, scopeKey, fetched)!
+    expect(unsealMemoryLocation(scopeId, key, fetched)?.name).toBe(name)
+    expect(unsealMemoryDate(scopeId, key, fetched)).toEqual(date)
 
     // operator-blind: the stored ciphertext (echoed verbatim by listNodes) carries no plaintext name/coord
     const plain = new TextDecoder('utf-8', { fatal: false }).decode(fromB64std(fetched.wrappedMeta!))
@@ -80,15 +80,15 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
 
     // --- remove the location: place gone, date intact ---
     const removed = await setMemoryLocation(scopeId, nodeId, memoryKey, null, meta)
-    expect(unsealMemoryLocation(memoryKey, { wrappedMeta: removed })).toBeNull()
-    expect(unsealMemoryDate(memoryKey, { wrappedMeta: removed })).toEqual(date)
+    expect(unsealMemoryLocation(scopeId, memoryKey, { id: nodeId, wrappedMeta: removed })).toBeNull()
+    expect(unsealMemoryDate(scopeId, memoryKey, { id: nodeId, wrappedMeta: removed })).toEqual(date)
 
     // --- pre-arm an auto location at creation (no derived yet) ---
     const born = await createMemory(scopeId, epochsOf(scopeKey), `E2E prearm ${Date.now()}`, null, {
       name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto',
     })
     const bornNode = (await listTree(scopeId, epochsOf(scopeKey))).find((n) => n.id === born.nodeId)!
-    const bornLoc = unsealMemoryLocation(born.memoryKey, bornNode)
+    const bornLoc = unsealMemoryLocation(scopeId, born.memoryKey, bornNode)
     expect(bornLoc).toEqual({ name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto', derived: undefined, nameAnchor: undefined })
 
     // The wire assertion's derivation (ADR 0053). The assertions above already check the ONE thing each call
@@ -98,8 +98,8 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
     const tree = await listTree(scopeId, epochsOf(scopeKey))
     recordCanaries(
       tree.map((n) => n.name),
-      unsealNodeMeta(key, fetched.wrappedMeta),
-      unsealNodeMeta(born.memoryKey, bornNode.wrappedMeta),
+      unsealNodeMeta(key, { scopeId, nodeId: fetched.id }, fetched.wrappedMeta),
+      unsealNodeMeta(born.memoryKey, { scopeId, nodeId: bornNode.id }, bornNode.wrappedMeta),
     )
   })
 })

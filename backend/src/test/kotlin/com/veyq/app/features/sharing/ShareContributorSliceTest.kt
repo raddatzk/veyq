@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -50,7 +51,7 @@ class ShareContributorSliceTest {
 
         // name yourself — NO bearer; the sealed name is stored opaque, and we get an identity + a capability token
         val idResp = given().contentType(ContentType.JSON)
-            .body("""{"sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201)
             .body("identityId", notNullValue())
@@ -68,7 +69,7 @@ class ShareContributorSliceTest {
 
         // complete → attaches ONE media to the shared Memory root, stamped with the identity
         val mediaId = given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"originalUploadId":"$uploadId"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200).body("results[0].mediaId", notNullValue())
             .extract().path<String>("results[0].mediaId")
@@ -88,7 +89,7 @@ class ShareContributorSliceTest {
         val shareId = createShare(userId, memory, role = "VIEWER")
 
         given().contentType(ContentType.JSON)
-            .body("""{"sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
     }
@@ -111,7 +112,7 @@ class ShareContributorSliceTest {
         val memory = seedNode(scopeId, NodeEntity.MEMORY, parent = scopeId)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
 
@@ -119,7 +120,7 @@ class ShareContributorSliceTest {
             .`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
 
         // a revoked share is inert for the guest paths — identity-create + upload both 404 (non-enumerable)
-        given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedContributorName"}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities").then().statusCode(404)
         given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
@@ -128,7 +129,7 @@ class ShareContributorSliceTest {
 
     @Test
     fun unknownShareIdentityCreateIs404() {
-        given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedContributorName"}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/identities")
             .then().statusCode(404).body("code", equalTo("share_not_found"))
     }
@@ -141,7 +142,7 @@ class ShareContributorSliceTest {
         val memory = seedNode(scopeId, NodeEntity.MEMORY, parent = scopeId)
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
-            .body("""{"sealedDisplayName":"$sealedContributorName"}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun start(n: Int) = given().contentType(ContentType.JSON)
@@ -159,7 +160,7 @@ class ShareContributorSliceTest {
 
     private fun createShare(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

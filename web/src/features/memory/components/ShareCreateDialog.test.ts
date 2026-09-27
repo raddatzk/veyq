@@ -60,15 +60,17 @@ const stubs = {
   LocaleMarkdownEditor: true,
 }
 
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cc'
+
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
-    props: { nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom', ...props },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom', ...props },
     global: { plugins: [i18n], stubs },
   })
 }
 
 const editShareWith = (over: Record<string, unknown>) => ({
-  shareId: 's1', nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
+  shareId: 's1', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
   createdAt: new Date(0), expiresAt: null, sealedNote: null, sealedShareName: null, sealedShareKey: 'k',
   passwordRequired: false, sealedPassword: null, ...over,
 })
@@ -108,7 +110,9 @@ describe('ShareCreateDialog (cr-0116)', () => {
     await w.findAll('button').find((b) => b.text() === 'Create link')!.trigger('click')
 
     expect(createShare).toHaveBeenCalledTimes(1)
-    const expiry = createShare.mock.calls[0][4] as Date // the 5th positional arg is expiresAt
+    // the share is minted in the Memory's scope — its recovery copy of K_share is bound to (scope, node, share)
+    expect(createShare.mock.calls[0].slice(0, 2)).toEqual([SCOPE_ID, 'n1'])
+    const expiry = createShare.mock.calls[0][5] as Date // the 6th positional arg is expiresAt
     expect(expiry).toBeInstanceOf(Date)
     expect([expiry.getFullYear(), expiry.getMonth(), expiry.getDate()]).toEqual([2026, 7, 1])
     expect(expiry.getHours()).toBe(23) // end of the picked day, not its midnight
@@ -118,7 +122,7 @@ describe('ShareCreateDialog (cr-0116)', () => {
     createShare.mockClear()
     const w = mountDialog({})
     await w.findAll('button').find((b) => b.text() === 'Create link')!.trigger('click')
-    expect(createShare.mock.calls[0][4]).toBeNull()
+    expect(createShare.mock.calls[0][5]).toBeNull()
   })
 
   it('the expiry card shows on EDIT, pre-filled; an unchanged edit re-sends it (full replace)', async () => {

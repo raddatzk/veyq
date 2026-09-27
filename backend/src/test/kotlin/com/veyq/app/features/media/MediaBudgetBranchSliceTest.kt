@@ -71,7 +71,7 @@ class MediaBudgetBranchSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
-        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=", ownerId = TestBlob.ownerOf(original), role = "THUMBNAIL")
 
         // original: the store never got the declared byte — stat comes back short of nothing at all (missing)
         scriptSession(original) { _, _ -> null }
@@ -85,7 +85,7 @@ class MediaBudgetBranchSliceTest {
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","originalUploadId":"$original",""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -129,8 +129,8 @@ class MediaBudgetBranchSliceTest {
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","originalUploadId":"$short"},""" +
-                    """{"nodeId":"$memory","originalUploadId":"$exact"}]}""",
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(short)}","originalUploadId":"$short"},""" +
+                    """{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(exact)}","originalUploadId":"$exact"}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -149,7 +149,7 @@ class MediaBudgetBranchSliceTest {
     fun commitCoverOverBudgetPurgesAndReportsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "Y292ZXI=")
+        val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "Y292ZXI=", ownerId = memory, role = "COVER")
 
         // the store reports more bytes than were declared — exactly the mismatch verifyBlob's Budget case checks
         scriptSession(uploadId) { _, declared -> declared + 1 }
@@ -170,9 +170,12 @@ class MediaBudgetBranchSliceTest {
 
     // --- helpers ---
 
-    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
+    private fun startOne(
+        userId: String, scopeId: String, blob: TestBlob, wrap: String,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())

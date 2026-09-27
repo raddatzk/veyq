@@ -1,33 +1,30 @@
 // veyq v1 crypto suite (TS), shared by web/ and admin-web/. Conformance: contracts/crypto/vectors/v1.json.
+// Everything here is NOT a seal (KDFs, identity, fingerprint, tokens, frames) — plus the typed seal API
+// re-exported from ./seal.ts, which is the only way this package lets a consumer seal (ADR 0072 Decision 6).
 import { x25519, ed25519 } from '@noble/curves/ed25519.js'
 import { ml_kem768 } from '@noble/post-quantum/ml-kem.js'
 import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { argon2id } from '@noble/hashes/argon2.js'
-import { gcm } from '@noble/ciphers/aes.js'
+import { aeadOpen, aeadSeal, concat, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
 
-const te = new TextEncoder()
-export const utf8 = (s: string): Uint8Array => te.encode(s.normalize('NFC'))
-
-export function concat(...arrs: Uint8Array[]): Uint8Array {
-  const total = arrs.reduce((n, a) => n + a.length, 0)
-  const out = new Uint8Array(total)
-  let o = 0
-  for (const a of arrs) {
-    out.set(a, o)
-    o += a.length
-  }
-  return out
-}
-
-const u32be = (n: number): Uint8Array => {
-  const b = new Uint8Array(4)
-  new DataView(b.buffer).setUint32(0, n >>> 0, false)
-  return b
-}
-/** length-prefixed: u32(len) || bytes */
-export const lp = (x: Uint8Array): Uint8Array => concat(u32be(x.length), x)
+export { concat, lp, utf8, type HybridPublic, type HybridSecret }
+export {
+  seal,
+  open,
+  sealTo,
+  openAs,
+  encodeSealContext,
+  encodeSealToContext,
+  OpenRefused,
+  SealContextInvalid,
+  type BlobRole,
+  type SealContext,
+  type SealToContext,
+  type SealPurpose,
+  type SealToPurpose,
+} from './seal'
 
 export type ArgonParams = { t: number; m: number; p: number; dkLen: number }
 /** auth-path default: m in KiB = 32 MiB. Model B has no server-side verifier (ADR 0003). The one profile this
@@ -73,81 +70,6 @@ export const decodeKdfParams = (b: Uint8Array): { params: ArgonParams; salt: Uin
 export const hkdfSha256 = (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number): Uint8Array =>
   hkdf(sha256, ikm, salt, info, len)
 
-export type HybridPublic = { x: Uint8Array; m: Uint8Array }
-export type HybridSecret = { x: Uint8Array; m: Uint8Array }
-
-export const aeadSeal = (key: Uint8Array, nonce: Uint8Array, pt: Uint8Array, aad: Uint8Array): Uint8Array =>
-  gcm(key, nonce, aad).encrypt(pt)
-export const aeadOpen = (key: Uint8Array, nonce: Uint8Array, ct: Uint8Array, aad: Uint8Array): Uint8Array =>
-  gcm(key, nonce, aad).decrypt(ct)
-
-function combiner(
-  ssM: Uint8Array,
-  ssX: Uint8Array,
-  ctM: Uint8Array,
-  epkX: Uint8Array,
-  pkM: Uint8Array,
-  pkX: Uint8Array,
-): Uint8Array {
-  const ikm = concat(lp(ssM), lp(ssX))
-  const salt = sha256(concat(lp(ctM), lp(epkX), lp(pkM), lp(pkX)))
-  return hkdf(sha256, ikm, salt, utf8('veyq/v1/kem'), 32)
-}
-
-export function kemEncap(
-  pk: HybridPublic,
-  opts: { eskX?: Uint8Array; mlkemMsg?: Uint8Array } = {},
-): { ct: Uint8Array; ss: Uint8Array } {
-  const esk = opts.eskX ?? crypto.getRandomValues(new Uint8Array(32))
-  const epkX = x25519.getPublicKey(esk)
-  const ssX = x25519.getSharedSecret(esk, pk.x)
-  const enc = ml_kem768.encapsulate(pk.m, opts.mlkemMsg)
-  const ss = combiner(enc.sharedSecret, ssX, enc.cipherText, epkX, pk.m, pk.x)
-  return { ct: concat(epkX, enc.cipherText), ss }
-}
-
-export function kemDecap(sk: HybridSecret, pk: HybridPublic, ct: Uint8Array): Uint8Array {
-  const epkX = ct.slice(0, 32)
-  const ctM = ct.slice(32)
-  const ssX = x25519.getSharedSecret(sk.x, epkX)
-  const ssM = ml_kem768.decapsulate(ctM, sk.m)
-  return combiner(ssM, ssX, ctM, epkX, pk.m, pk.x)
-}
-
-// AAD binds the envelope TYPE byte (0x02 sym / 0x01 asym) alongside the suite+context, so a ciphertext
-// authenticated for one wrap type can never be reinterpreted as the other (defense in depth vs confusion).
-const SYM_TYPE = 0x02
-const ASYM_TYPE = 0x01
-const wrapAad = (type: number, context: string): Uint8Array => concat(Uint8Array.of(type), utf8('v1' + context))
-
-/** §5b symmetric wrap: 0x02 || nonce(12) || aead */
-export function symWrap(kek: Uint8Array, targetKey: Uint8Array, context: string, nonce: Uint8Array): Uint8Array {
-  return concat(Uint8Array.of(SYM_TYPE), nonce, aeadSeal(kek, nonce, targetKey, wrapAad(SYM_TYPE, context)))
-}
-export function symUnwrap(kek: Uint8Array, blob: Uint8Array, context: string): Uint8Array {
-  return aeadOpen(kek, blob.slice(1, 13), blob.slice(13), wrapAad(SYM_TYPE, context))
-}
-
-/** §5a asymmetric wrap: 0x01 || ct(1120) || nonce(12) || aead */
-export function asymWrap(
-  pk: HybridPublic,
-  targetKey: Uint8Array,
-  context: string,
-  opts: { eskX?: Uint8Array; mlkemMsg?: Uint8Array; nonce: Uint8Array },
-): Uint8Array {
-  const { ct, ss } = kemEncap(pk, opts)
-  const kek = hkdf(sha256, ss, new Uint8Array(0), utf8('veyq/v1/wrap' + context), 32)
-  return concat(Uint8Array.of(ASYM_TYPE), ct, opts.nonce, aeadSeal(kek, opts.nonce, targetKey, wrapAad(ASYM_TYPE, context)))
-}
-export function asymUnwrap(sk: HybridSecret, pk: HybridPublic, blob: Uint8Array, context: string): Uint8Array {
-  const ct = blob.slice(1, 1 + 1120)
-  const nonce = blob.slice(1 + 1120, 1 + 1120 + 12)
-  const aead = blob.slice(1 + 1120 + 12)
-  const ss = kemDecap(sk, pk, ct)
-  const kek = hkdf(sha256, ss, new Uint8Array(0), utf8('veyq/v1/wrap' + context), 32)
-  return aeadOpen(kek, nonce, aead, wrapAad(ASYM_TYPE, context))
-}
-
 /**
  * Blinded slug token (AD-26): a deterministic, keyed, one-way token of a slug, so the server can enforce
  * per-parent slug uniqueness without ever seeing the name. The slug key is derived PER PARENT —
@@ -181,28 +103,12 @@ export const sharesPwToken = (password: string, salt: Uint8Array, params: ArgonP
   argon2id(utf8(password), salt, { ...params, dkLen: 32 })
 
 /**
- * Journal sealing (live relay frames + persisted snapshot/update blobs). Each message gets a FRESH per-message
- * sub-key derived from a random 16-byte salt: salt(16) || nonce(12) || AES-256-GCM(HKDF(contentKey, salt,
- * "veyq/v1/journal"), nonce, plaintext). Because every blob carries its own salt, every GCM key is used exactly
- * once, so the random 96-bit nonce can never collide under one long-lived content key (no birthday bound, even
- * under months of keystroke-rate co-editing). Anyone with the content key derives the sub-key from the salt.
- */
-export function journalSeal(contentKey: Uint8Array, plaintext: Uint8Array): Uint8Array {
-  const salt = randomBytes(16)
-  const subkey = hkdf(sha256, contentKey, salt, utf8('veyq/v1/journal'), 32)
-  const nonce = randomBytes(12)
-  return concat(salt, nonce, aeadSeal(subkey, nonce, plaintext, new Uint8Array(0)))
-}
-export function journalOpen(contentKey: Uint8Array, blob: Uint8Array): Uint8Array {
-  const subkey = hkdf(sha256, contentKey, blob.slice(0, 16), utf8('veyq/v1/journal'), 32)
-  return aeadOpen(subkey, blob.slice(16, 28), blob.slice(28), new Uint8Array(0))
-}
-
-/**
  * Chunked-AEAD frame (resumable upload + segmented streaming): a large blob is split into independent,
  * self-contained frames so chunks resume individually and segments decrypt without the whole file. Each
  * frame = nonce(12) || AEAD(contentKey, nonce, plaintextChunk, aad) with aad = u32be(index) || u32be(total),
  * binding the chunk's position so a dropped, reordered or appended frame fails to open (anti-truncation).
+ * Outside the typed seal union on purpose (ADR 0072 Decision 2): `contentKey` here is the blob's own `K_blob`,
+ * unique to one blob, so the key already is the object binding — and the `K_blob` wrap itself is bound to its blob.
  */
 const frameAad = (index: number, total: number): Uint8Array => concat(u32be(index), u32be(total))
 export function sealFrame(contentKey: Uint8Array, index: number, total: number, plaintext: Uint8Array, nonce: Uint8Array): Uint8Array {
@@ -374,7 +280,7 @@ export type Identity = {
 }
 
 /**
- * Build a HybridSecret usable for kemDecap/asymUnwrap from a stored private bundle. noble decapsulates
+ * Build a HybridSecret usable for `openAs` from a stored private bundle. noble decapsulates
  * with the *expanded* ML-KEM secret key, so we re-derive it from the stored 64-byte seed (the other
  * stacks reconstruct from the seed directly).
  */
@@ -383,7 +289,7 @@ export const hybridSecret = (priv: Identity['priv']): HybridSecret => ({
   m: ml_kem768.keygen(priv.mlkemSeed).secretKey,
 })
 
-/** The hybrid KEM PUBLIC bundle re-derived from a stored private bundle — for sealing (asymWrap) to one's
+/** The hybrid KEM PUBLIC bundle re-derived from a stored private bundle — for sealing (`sealTo`) to one's
  *  own identity (e.g. an owner's first scope grant). Pure derivation; mirrors [hybridSecret]. */
 export const hybridPublic = (priv: Identity['priv']): HybridPublic => ({
   x: x25519.getPublicKey(priv.kemX),
@@ -442,7 +348,7 @@ export const serializeIdentityPrivate = (id: Identity): Uint8Array =>
   concat(lp(id.priv.kemX), lp(id.priv.mlkemSeed), lp(id.priv.sign))
 
 /** Inverse of serializeIdentityPublic: read three length-prefixed fields → a public identity bundle. Used to
- *  wrap a scope key to *another* member's published identity (asymWrap to a foreign identity — cr-0076). */
+ *  seal a scope key to *another* member's published identity (`sealTo` a foreign identity — cr-0076). */
 export function deserializeIdentityPublic(bytes: Uint8Array): Identity['pub'] {
   let o = 0
   const next = (): Uint8Array => {

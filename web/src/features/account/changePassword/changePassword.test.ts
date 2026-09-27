@@ -47,7 +47,7 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = OLD_PA
   return {
     id: 'w1',
     method: 'PASSWORD',
-    wrappedKey: b64std(v1.symWrap(kek, masterKeyBytes, 'master-key', v1.randomBytes(12))),
+    wrappedKey: b64std(v1.seal({ purpose: 'master-key' }, kek, masterKeyBytes)),
     kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, salt)),
   }
 }
@@ -100,19 +100,11 @@ describe('changePassword', () => {
     const body = changePasswordCall.mock.calls[0][0].changePasswordRequest
 
     const { params, salt } = v1.decodeKdfParams(fromB64std(body.passwordWrap.kdfParams))
-    const reopened = v1.symUnwrap(
-      v1.kekPasswordSecret(SECRET_KEY, NEW_PASSWORD, salt, params),
-      fromB64std(body.passwordWrap.wrappedKey),
-      'master-key',
-    )
+    const reopened = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(SECRET_KEY, NEW_PASSWORD, salt, params), fromB64std(body.passwordWrap.wrappedKey))
     expect(b64std(reopened)).toBe(b64std(MK))
 
     expect(() =>
-      v1.symUnwrap(
-        v1.kekPasswordSecret(SECRET_KEY, OLD_PASSWORD, salt, params),
-        fromB64std(body.passwordWrap.wrappedKey),
-        'master-key',
-      ),
+      v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(SECRET_KEY, OLD_PASSWORD, salt, params), fromB64std(body.passwordWrap.wrappedKey)),
     ).toThrow()
   }, PRODUCTION_ARGON_TIMEOUT_MS)
 

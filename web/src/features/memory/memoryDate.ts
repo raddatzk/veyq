@@ -12,7 +12,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
 import { openContentKey, type TreeNode } from './tree'
-import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
 
 /** The four date modes: derive from media (`auto`), a single day, a `from..to` span, or an open-ended `since`. */
 export type MemoryDateMode = 'auto' | 'single' | 'range' | 'ongoing'
@@ -37,8 +37,8 @@ function normalizeDate(raw: unknown): MemoryDate | null {
 }
 
 /** Seal a **fresh** date-only `wrappedMeta` blob under `nodeKey` (`K_mem`) → base64 (a node born with only a date). */
-export function sealMemoryDate(nodeKey: Uint8Array, date: MemoryDate): string {
-  return sealNodeMeta(nodeKey, { v: 1, date })
+export function sealMemoryDate(nodeKey: Uint8Array, node: NodeMetaAddress, date: MemoryDate): string {
+  return sealNodeMeta(nodeKey, node, { v: 1, date })
 }
 
 /**
@@ -46,8 +46,10 @@ export function sealMemoryDate(nodeKey: Uint8Array, date: MemoryDate): string {
  * node carries no meta, the wrap doesn't open, the JSON is malformed, or the mode is unrecognized — the header
  * then falls back to the neutral `auto`/no-date state rather than break.
  */
-export function unsealMemoryDate(nodeKey: Uint8Array, node: { wrappedMeta: string | null }): MemoryDate | null {
-  return normalizeDate(unsealNodeMeta(nodeKey, node.wrappedMeta).date)
+export function unsealMemoryDate(
+  scopeId: string, nodeKey: Uint8Array, node: { id: string; wrappedMeta: string | null },
+): MemoryDate | null {
+  return normalizeDate(unsealNodeMeta(nodeKey, { scopeId, nodeId: node.id }, node.wrappedMeta).date)
 }
 
 /**
@@ -64,9 +66,9 @@ export async function setMemoryDate(
   date: MemoryDate,
   currentMeta: string | null,
 ): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, currentMeta)
+  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
   meta.date = date
-  const wrappedMeta = sealNodeMeta(nodeKey, meta)
+  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
   await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
   return wrappedMeta
 }
@@ -77,10 +79,10 @@ export async function setMemoryDate(
  * file-modification-date fallback can't stretch the range (cr-0067). An empty result ⇒ `{ mode: 'auto' }` (the
  * "no date yet" state). `nodeKey` = the Memory's `K_mem` (each media's capture-time tier is sealed under it).
  */
-export function computeAutoRange(items: MediaItem[], nodeKey: Uint8Array): MemoryDate {
+export function computeAutoRange(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): MemoryDate {
   const days: number[] = []
   for (const item of items) {
-    const tier = unsealMeta(nodeKey, item)
+    const tier = unsealMeta(scopeId, nodeKey, item)
     if (!tier) continue
     const trustworthy = tier.capturedAtOverride !== undefined || tier.capturedAtSource === 'exif'
     const ms = effectiveCapturedAt(tier)
@@ -100,11 +102,11 @@ export function sameMemoryDate(a: MemoryDate | null, b: MemoryDate | null): bool
  * top-level Memory, the parent Memory's `K_mem` for a chapter), then unseal its `wrappedMeta`. Best-effort:
  * null when the key/meta is absent or won't open — **without loading the Memory's media**.
  */
-export function unsealNodeDate(parentKey: Uint8Array | null, node: TreeNode): MemoryDate | null {
+export function unsealNodeDate(scopeId: string, parentKey: Uint8Array | null, node: TreeNode): MemoryDate | null {
   if (!parentKey) return null
   try {
-    const key = openContentKey(parentKey, node)
-    return key ? unsealMemoryDate(key, node) : null
+    const key = openContentKey(scopeId, parentKey, node)
+    return key ? unsealMemoryDate(scopeId, key, node) : null
   } catch {
     return null // a key that won't open (wrong parent / malformed wrap) → no date, never a throw
   }
@@ -118,11 +120,12 @@ export function unsealNodeDate(parentKey: Uint8Array | null, node: TreeNode): Me
  * the card can show the range without a second unseal. Reads only `wrappedMeta` — never a Memory's media.
  */
 export function sortNodesByDate(
+  scopeId: string,
   keyFor: (node: TreeNode) => Uint8Array | null,
   nodes: TreeNode[],
 ): { node: TreeNode; date: MemoryDate | null }[] {
   return nodes
-    .map((node, i) => ({ node, i, date: unsealNodeDate(keyFor(node), node) }))
+    .map((node, i) => ({ node, i, date: unsealNodeDate(scopeId, keyFor(node), node) }))
     .sort((a, b) => {
       const da = a.date?.from
       const db = b.date?.from

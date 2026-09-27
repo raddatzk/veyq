@@ -1,5 +1,6 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
@@ -276,7 +277,7 @@ class ConsentGroupAddSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", "Bearer ${token(userId)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 

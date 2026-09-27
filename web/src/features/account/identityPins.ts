@@ -2,7 +2,7 @@
 // ADR 0028). A client remembers each contact's identity public key the first time it wraps to them, so a later
 // *changed* key (an active operator's MITM, or a legitimate rotation) is surfaced, never silently trusted.
 //
-// The store is ONE blob sealed under the Master Key (`symWrap(masterKey, blob, "identity-pins")`) and synced with
+// The store is ONE blob sealed under the Master Key (`seal({ purpose: "identity-pins", version }, masterKey, blob)`) and synced with
 // the account: the server relays one opaque ciphertext + a monotonic `version` for optimistic concurrency, and
 // never sees a userId, a pinned key, or the count. The sealed plaintext is `{ pins: { <userId>: { key, state,
 // firstSeenAt } } }`; `version` is the cleartext wire counter (the server's authority for concurrency — the
@@ -15,8 +15,9 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
 
-/** The AAD context binding the pin-store seal (ADR 0017, vector-pinned `sym_identity_pins`). */
-export const IDENTITY_PINS = 'identity-pins'
+/** The pin store's seal context at a stored `version` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
+ *  version the server stores it at, so a blob served under another version does not open. */
+const pinsContext = (version: number) => ({ purpose: 'identity-pins', version }) as const
 
 /** A pin's trust state. `pinned` = trust-on-first-use; `verified` = an out-of-band safety-number compare
  *  succeeded (the human ceremony, cr-0099). `verified` rides inside the same Master-Key-sealed blob. */
@@ -75,10 +76,10 @@ const decoder = new TextDecoder()
 const MAX_WRITE_ATTEMPTS = 5
 
 /** Decrypt the pin map from a sealed blob; an unreadable/absent blob is treated as an empty store (never throws). */
-function unsealPins(mk: Uint8Array, blobB64: string | null): PinMap {
+function unsealPins(mk: Uint8Array, blobB64: string | null, version: number): PinMap {
   if (!blobB64) return {}
   try {
-    const json = decoder.decode(v1.symUnwrap(mk, fromB64std(blobB64), IDENTITY_PINS))
+    const json = decoder.decode(v1.open(pinsContext(version), mk, fromB64std(blobB64)))
     const parsed = JSON.parse(json) as { pins?: unknown }
     return parsed && typeof parsed.pins === 'object' && parsed.pins !== null ? (parsed.pins as PinMap) : {}
   } catch {
@@ -86,10 +87,11 @@ function unsealPins(mk: Uint8Array, blobB64: string | null): PinMap {
   }
 }
 
-/** Seal a pin map under the Master Key with a fresh nonce → the opaque base64 blob to PUT. */
-function sealPins(mk: Uint8Array, pins: PinMap): string {
+/** Seal a pin map under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
+ *  server bumps the version it accepts by one → the opaque base64 blob to PUT. */
+function sealPins(mk: Uint8Array, pins: PinMap, storedVersion: number): string {
   const json = encoder.encode(JSON.stringify({ pins }))
-  return b64std(v1.symWrap(mk, json, IDENTITY_PINS, v1.randomBytes(12)))
+  return b64std(v1.seal(pinsContext(storedVersion), mk, json))
 }
 
 /** Fetch + open the caller's pin store (born-empty → `{ version: 0, pins: {} }`). Requires an unlocked vault. */
@@ -98,7 +100,7 @@ async function loadStore(): Promise<OpenedStore> {
   if (!mk) throw new Error('identity pin store requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-    return { version: res.version, pins: unsealPins(mk, res.blob) }
+    return { version: res.version, pins: unsealPins(mk, res.blob, res.version) }
   } finally {
     mk.fill(0)
   }
@@ -123,7 +125,7 @@ async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): 
     const mk = masterKey()
     if (!mk) throw new Error('identity pin store requires an unlocked vault')
     try {
-      const blob = sealPins(mk, next)
+      const blob = sealPins(mk, next, store.version + 1)
       await withRefresh(() =>
         accountIdentityPinsApi().putIdentityPins({ identityPinsUpdate: { blob, version: store.version } }),
       )
@@ -208,10 +210,10 @@ export async function acceptKeyChange(userId: string, identityPublicKeyB64: stri
  */
 export async function resealPinsUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
   const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-  const pins = unsealPins(oldMk, res.blob)
+  const pins = unsealPins(oldMk, res.blob, res.version)
   await withRefresh(() =>
     accountIdentityPinsApi().putIdentityPins({
-      identityPinsUpdate: { blob: sealPins(newMk, pins), version: res.version },
+      identityPinsUpdate: { blob: sealPins(newMk, pins, res.version + 1), version: res.version },
     }),
   )
 }

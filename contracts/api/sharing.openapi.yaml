@@ -42,9 +42,10 @@ paths:
         Memory name under `K_share`, and POSTs `{ nodeId, role, wrap, sealedName, expiresAt? }` — `role` is
         **VIEWER** (read-only) or **CONTRIBUTOR** (view + append photos, cr-0101). The server verifies the caller
         is a **member** of the node's scope — personal, group, or tenant (cr-0104, ADR 0029 §6); a non-MEMORY node
-        is rejected `422`, a non-member is a non-enumerable `404`. It mints a **256-bit unguessable `shareId`** and
-        stores the record opaquely. The link is `/s/{shareId}#k=base64url(K_share)` —
-        the fragment (`K_share`) is built client-side and never sent.
+        is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
+        `shareId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3 — the recovery wrap is sealed bound to it) and the server stores the record
+        opaquely under it. The link is `/s/{shareId}#k=base64url(K_share)` — the fragment (`K_share`) is built
+        client-side and never sent. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       requestBody:
@@ -53,6 +54,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateShareRequest" }
             example:
+              shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
               nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               role: VIEWER
               wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
@@ -78,7 +80,10 @@ paths:
           description: No such node, or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: The `shareId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "422":
           description: >
             Unprocessable. Two codes: `capability_disabled` — the sharing capability this role needs
@@ -339,9 +344,11 @@ paths:
       summary: Name yourself as a contributor (unauthenticated) → an anonymous share identity.
       description: >
         **No auth.** For a **CONTRIBUTOR** share (cr-0101, ADR 0030), before uploading the visitor must name
-        themselves. The client **seals the display name under `K_mem`** (which it unwrapped from the fragment key)
-        and POSTs the ciphertext; the server mints an anonymous **share identity** — an opaque `identityId` + an
-        unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. The server stores
+        themselves. The client mints the identity's id (`identityId`, ADR 0072 Decision 3), **seals the display
+        name under `K_mem`** (which it unwrapped from the fragment key) bound to scope, share and that id, and
+        POSTs the ciphertext; the server stores an anonymous **share identity** under that id and mints an
+        unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. A taken
+        `identityId`, in any share, is `409 id_taken` (never overwritten, not idempotent). The server stores
         only the sealed name (opaque) + the token hash + the `shareId`; it never sees the name or the person. A
         disabled/expired/unknown share, or a non-CONTRIBUTOR share, is a `404`/`403`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
@@ -355,7 +362,7 @@ paths:
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CreateShareIdentityRequest" }
-            example: { sealedDisplayName: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0= }
+            example: { identityId: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, sealedDisplayName: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0= }
       responses:
         "201":
           description: The anonymous share identity was created.
@@ -375,6 +382,10 @@ paths:
           description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable, identical in every case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: The `identityId` is already taken (`id_taken`).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
 
   /api/shares/{shareId}/blob-uploads:
     post:
@@ -624,8 +635,21 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [nodeId, role, wrap, sealedName]
+      required: [shareId, nodeId, role, wrap, sealedName]
       properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            The client-minted share id (ADR 0072 Decision 3): 32 fresh random bytes from the client's CSPRNG,
+            base64url without padding — the same 256-bit form the server used to mint, because it is half of the
+            share's capability and does not shrink to a UUID. Its seals (the `share-key-recovery` wrap, and every
+            contributor's `share-identity-name`) are bound to it. Taken ⇒ `409 id_taken`.
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]{43}")'
         nodeId:
           x-veyq-visibility: id
           type: string
@@ -643,7 +667,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
-          description: The Memory name re-sealed under `K_share` (opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
+          description: The Memory name re-sealed under `K_share` (seal purpose `share-memory-name`, opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
           contentEncoding: base64
           maxLength: 4096
           example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
@@ -795,7 +819,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, nodeId, role, sealedName, enabled, mine, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -809,6 +833,12 @@ components:
           format: uuid
           description: The shared Memory node (lets the curator UI group shares by Memory).
           example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The shared Memory's scope — its `sealedShareKey` is sealed bound to (scope, node, share) (ADR 0072).
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         role:
           $ref: "#/components/schemas/ShareRole"
         sealedName:
@@ -893,6 +923,14 @@ components:
           default: false
           description: True when this share needs a password token; a locked response carries only this + `pwSalt` (cr-0118).
           example: false
+        scopeId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The shared Memory's scope. Every `K_mem` seal the viewer opens — node meta, media meta, blob keys,
+            contributor names — is bound to it (ADR 0072), so it rides with the subtree. Null in a locked response.
+          example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         pwSalt:
           type: [string, "null"]
           description: The salt for `Argon2id(password, pwSalt)` (opaque base64) — present when `passwordRequired`, so the client can derive the token (cr-0118).
@@ -940,7 +978,7 @@ components:
         the share `wrap`); a descendant chapter carries its parent's id and its `K_mem` wrapped under the
         parent's `K_mem` in `wrappedContentKey`. The name is **not** returned here (it is sealed under `K_SC`,
         which a public viewer never holds — the root's name comes from `sealedName`).
-      required: [id, kind]
+      required: [id, kind, epoch]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         parentId:
@@ -955,6 +993,12 @@ components:
           x-veyq-visibility: structure
           type: integer
           format: int32
+          example: 0
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The content-key epoch the node was sealed at (as `NodeSummary.epoch`) — a descendant's `wrappedContentKey` is bound to it (ADR 0072).
+          minimum: 0
           example: 0
         wrappedContentKey:
           type: [string, "null"]
@@ -1098,8 +1142,15 @@ components:
 
     CreateShareIdentityRequest:
       type: object
-      required: [sealedDisplayName]
+      required: [identityId, sealedDisplayName]
       properties:
+        identityId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the new contributor identity (ADR 0072 Decision 3) — the display name is sealed bound to (scope, share, this id). Taken ⇒ `409 id_taken`.
+          example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c
         sealedDisplayName:
           type: string
           description: The contributor's display name sealed under `K_mem` (opaque base64) — mandatory, never in clear.
@@ -1140,8 +1191,28 @@ components:
 
     ShareBlobUploadRequestItem:
       type: object
-      required: [chunkCount, byteSize, wrappedBlobKey]
+      required: [blobId, ownerId, role, chunkCount, byteSize, wrappedBlobKey]
       properties:
+        blobId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of this blob (ADR 0072 Decision 3) — its `wrappedBlobKey` is sealed bound to it. Taken ⇒ this item fails `id_taken`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        ownerId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted media id `completeShareMedia` will carry — the `wrappedBlobKey` is sealed bound to it.
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
+        role:
+          x-veyq-visibility: enum
+          type: string
+          description: The blob's role for its media (a contributor uploads media only, never a cover).
+          enum: [ORIGINAL, THUMBNAIL, PREVIEW]
+          example: ORIGINAL
         chunkCount:
           x-veyq-visibility: measure
           type: integer
@@ -1293,8 +1364,15 @@ components:
     ShareMediaRequestItem:
       type: object
       description: One logical media — the original upload + up to two role-tagged derivative uploads. Attaches to the share's own Memory node (no `nodeId` — the server uses the shared node).
-      required: [originalUploadId]
+      required: [mediaId, originalUploadId]
       properties:
+        mediaId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the media (ADR 0072 Decision 3) — the `ownerId` each of its uploads was started with. Taken ⇒ `id_taken`.
+          example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e
         originalUploadId:
           x-veyq-visibility: id
           type: string
@@ -1362,7 +1440,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged); null on success.
+          description: Per-item error code (`upload_not_found`, `budget_exceeded` = a stored chunk is missing or not at exactly its derived length, and the item's staged objects are purged, `upload_mismatch` = an upload was not started for this `mediaId` in the role it is used in, `id_taken` = the `mediaId` already exists); null on success.
           maxLength: 64
           example: null
 

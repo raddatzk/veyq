@@ -1,0 +1,193 @@
+// The ONE way to seal in veyq (ADR 0072). Every AEAD seal binds its purpose AND the identity of the object it is
+// stored as, so the operator-blind server can no longer serve one object's ciphertext in another object's slot:
+// the AAD carries the purpose, every id the opener addresses the object by, and the epoch or version the wire
+// stores it at. The opener supplies those values from the ADDRESS it fetched the object by — the route it called,
+// the row it looked up, the scope it opened — never from fields of the response that carry the ciphertext
+// (Decision 1). Where the key is unique to one object, the key is the binding and the context names the purpose
+// only (Decision 2). Parents are not bound (Decision 4). Binding makes an epoch AUTHENTIC, not FRESH (Decision 5).
+//
+// The union below is data, not only a type: the encoder walks it (so the field ORDER is the table's order), and
+// the conformance test compares its purposes with `contracts/crypto/vectors/v1.json#seal` in both directions.
+// Adding a purpose after V1 is additive (a new row + its vector); changing a row's fields changes bytes that are
+// already stored, which is a suite v2.
+import {
+  asymUnwrap,
+  asymWrap,
+  concat,
+  lp,
+  symUnwrap,
+  symWrap,
+  utf8,
+  type HybridPublic,
+  type HybridSecret,
+} from './primitives'
+
+/**
+ * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
+ * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
+ * (epoch/version), or a blob role.
+ */
+type FieldKind = 'id' | 'shareId' | 'uint' | 'role'
+
+/** The role a sealed `K_blob` plays for its owner — a media's ORIGINAL and derivatives, or a node's COVER. */
+export type BlobRole = 'ORIGINAL' | 'THUMBNAIL' | 'PREVIEW' | 'COVER'
+
+type Schema = Readonly<Record<string, readonly (readonly [string, FieldKind])[]>>
+
+/** Symmetric purposes (`seal`/`open`), each with its binding fields in canonical order. */
+export const SEAL_PURPOSES = {
+  'node-name': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint']],
+  'content-key': [['scopeId', 'id'], ['nodeId', 'id'], ['epoch', 'uint']],
+  'node-meta': [['scopeId', 'id'], ['nodeId', 'id']],
+  // ownerId is the media id for a media's blobs, the node id for a cover.
+  'blob-key': [['scopeId', 'id'], ['ownerId', 'id'], ['blobId', 'id'], ['role', 'role']],
+  'media-meta': [['scopeId', 'id'], ['mediaId', 'id']],
+  'media-exif': [['scopeId', 'id'], ['mediaId', 'id']],
+  'bucket-name': [['scopeId', 'id'], ['nodeId', 'id'], ['bucketId', 'id']],
+  'share-identity-name': [['scopeId', 'id'], ['shareId', 'shareId'], ['identityId', 'id']],
+  'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId']],
+  // No member id: a reader addresses every member's entry by scope + node only, because the read deliberately
+  // carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA). Binding the marking member would
+  // need that id on the wire; so the server can still relabel which entry is the caller's own (`self`), an
+  // integrity gap within one Memory's marks, never a confidentiality one (every member can open every entry).
+  'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
+  favorites: [['scopeId', 'id']],
+  'member-name': [['scopeId', 'id'], ['userId', 'id']],
+  'scope-epoch': [['scopeId', 'id'], ['epoch', 'uint']],
+  'group-name': [['scopeId', 'id'], ['nameEpoch', 'uint']],
+  'space-icon': [['scopeId', 'id'], ['iconEpoch', 'uint']],
+  'identity-pins': [['version', 'uint']],
+  'device-register': [['version', 'uint']],
+  // Purpose only: sealed under the share's own K_share (ADR 0072 Decision 2).
+  'share-key': [],
+  'share-memory-name': [],
+  'share-note': [],
+  'share-name': [],
+  'share-password': [],
+  // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
+  'master-key': [],
+  'identity-priv': [],
+} as const satisfies Schema
+
+/** Asymmetric purposes (`sealTo`/`openAs`) — a seal to one identity's hybrid public key. */
+export const SEAL_TO_PURPOSES = {
+  'scope-grant': [['scopeId', 'id'], ['epoch', 'uint']],
+  'group-name-key': [['scopeId', 'id'], ['nameEpoch', 'uint']],
+  // Purpose only: a single-use pairing envelope to a fresh ephemeral key (ADR 0072 Decision 2).
+  'pairing-grant': [],
+} as const satisfies Schema
+
+type KindValue<K extends FieldKind> = K extends 'uint' ? number : K extends 'role' ? BlobRole : string
+type Simplify<T> = { [K in keyof T]: T[K] }
+type ContextOf<S extends Schema> = {
+  [P in keyof S]: Simplify<{ purpose: P } & { [F in S[P][number] as F[0]]: KindValue<F[1]> }>
+}[keyof S]
+
+/** A symmetric seal's context: the purpose and exactly its binding fields. */
+export type SealContext = ContextOf<typeof SEAL_PURPOSES>
+/** An asymmetric seal's context. */
+export type SealToContext = ContextOf<typeof SEAL_TO_PURPOSES>
+export type SealPurpose = SealContext['purpose']
+export type SealToPurpose = SealToContext['purpose']
+
+/** A context that does not describe an object: an unknown purpose, a missing/extra field, a non-canonical id. */
+export class SealContextInvalid extends Error {
+  constructor(detail: string) {
+    super(`seal_context_invalid: ${detail}`)
+    this.name = 'SealContextInvalid'
+  }
+}
+
+/** A ciphertext that does not open as the object it was asked for: wrong key, wrong slot, or tampered. */
+export class OpenRefused extends Error {
+  constructor(readonly purpose: string) {
+    super(`open_refused: ${purpose}`)
+    this.name = 'OpenRefused'
+  }
+}
+
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+const SHARE_ID = /^[A-Za-z0-9_-]{43}$/
+const ROLES: readonly string[] = ['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'] satisfies BlobRole[]
+
+const u64be = (n: number): Uint8Array => {
+  const b = new Uint8Array(8)
+  new DataView(b.buffer).setBigUint64(0, BigInt(n), false)
+  return b
+}
+
+function encodeField(purpose: string, name: string, kind: FieldKind, value: unknown): Uint8Array {
+  switch (kind) {
+    case 'id':
+      // Canonical form only: an opener that spelled the same id differently would silently mismatch its sealer.
+      if (typeof value !== 'string' || !CANONICAL_UUID.test(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a canonical lowercase UUID`)
+      }
+      return utf8(value)
+    case 'shareId':
+      if (typeof value !== 'string' || !SHARE_ID.test(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a share id`)
+      }
+      return utf8(value)
+    case 'uint':
+      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+        throw new SealContextInvalid(`${purpose}.${name} is not an unsigned integer`)
+      }
+      return u64be(value)
+    case 'role':
+      if (typeof value !== 'string' || !ROLES.includes(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a blob role`)
+      }
+      return utf8(value)
+  }
+}
+
+function encode(schema: Schema, context: { purpose: string }): Uint8Array {
+  const fields = Object.hasOwn(schema, context.purpose) ? schema[context.purpose] : undefined
+  if (!fields) throw new SealContextInvalid(`unknown purpose ${context.purpose}`)
+  const record = context as unknown as Record<string, unknown>
+  const extra = Object.keys(record).filter((k) => k !== 'purpose' && !fields.some(([name]) => name === k))
+  if (extra.length > 0) throw new SealContextInvalid(`${context.purpose} does not bind ${extra.join(', ')}`)
+  return concat(
+    lp(utf8(context.purpose)),
+    ...fields.map(([name, kind]) => lp(encodeField(context.purpose, name, kind, record[name]))),
+  )
+}
+
+/**
+ * The canonical encoding of a context: `lp(utf8(purpose)) || lp(field)…` in the table's field order, where an id
+ * is its UTF-8 canonical string, an integer is u64be, and a role is its UTF-8 name. Exposed because a signature
+ * over a bound object reuses it (a grant's admission statement), and pinned per purpose by the vectors' `aad`.
+ */
+export const encodeSealContext = (context: SealContext): Uint8Array => encode(SEAL_PURPOSES, context)
+export const encodeSealToContext = (context: SealToContext): Uint8Array => encode(SEAL_TO_PURPOSES, context)
+
+const randomNonce = (): Uint8Array => crypto.getRandomValues(new Uint8Array(12))
+
+/** Seal `plaintext` under `key` as the object `context` names. Draws its own nonce. */
+export const seal = (context: SealContext, key: Uint8Array, plaintext: Uint8Array): Uint8Array =>
+  symWrap(key, plaintext, encodeSealContext(context), randomNonce())
+
+/** Open `blob` as the object `context` names — the context built from the opener's ADDRESS, never the envelope. */
+export function open(context: SealContext, key: Uint8Array, blob: Uint8Array): Uint8Array {
+  const aad = encodeSealContext(context)
+  try {
+    return symUnwrap(key, blob, aad)
+  } catch {
+    throw new OpenRefused(context.purpose)
+  }
+}
+
+/** Seal `plaintext` to one identity's hybrid public key as the object `context` names. */
+export const sealTo = (context: SealToContext, recipient: HybridPublic, plaintext: Uint8Array): Uint8Array =>
+  asymWrap(recipient, plaintext, encodeSealToContext(context), { nonce: randomNonce() })
+
+/** Open a seal addressed to this identity as the object `context` names. */
+export function openAs(context: SealToContext, sk: HybridSecret, pk: HybridPublic, blob: Uint8Array): Uint8Array {
+  const aad = encodeSealToContext(context)
+  try {
+    return asymUnwrap(sk, pk, blob, aad)
+  } catch {
+    throw new OpenRefused(context.purpose)
+  }
+}

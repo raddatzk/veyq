@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -94,7 +95,7 @@ class SharePresignDomainSliceTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"VIEWER","wrap":"d3JhcA==","sealedName":"bmFtZQ=="}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"d3JhcA==","sealedName":"bmFtZQ=="}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")

@@ -212,8 +212,12 @@ paths:
       description: >
         Marks the job `done`. Most results are a normal sealed veyq write via an existing path; a job-specific
         output rides the optional opaque `sealedResult`. For a `grant-delivery` job the `sealedResult` **is**
-        the `wrappedGrant` — the scope key sealed to the pending member's identity public key — which the
-        backend writes onto the target membership. **Idempotent**: completing an already-`done` job, or a
+        the `wrappedGrant` — the scope key sealed to the pending member's identity public key — and `epoch` states
+        which epoch's key it is: the grant is sealed bound to (scope, that epoch) ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)), so the backend
+        records exactly that epoch on the target membership. A stated epoch that is not the scope's **current**
+        one (a rotation landed between claim and completion, or the worker holds an older grant) is refused
+        `409 stale_epoch` with nothing written; the lease is released without spending an attempt, so the job
+        re-runs at the current epoch. **Idempotent**: completing an already-`done` job, or a
         `grant-delivery` job whose target already holds a grant, is a success no-op (first-online-wins). Otherwise
         the caller must hold the job's current lease (`409 not_lease_holder`, ADR 0021 §6): idempotency makes a
         *repeated* completion harmless, it does not make an unclaimed one legitimate.
@@ -232,7 +236,7 @@ paths:
         "204":
           description: The job is done (or was already done — idempotent no-op).
         "400":
-          description: The request was malformed (e.g. a grant-delivery completion with no wrap).
+          description: The request was malformed (e.g. a grant-delivery completion with no wrap or no `epoch`).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -252,8 +256,9 @@ paths:
               example: { code: job_not_found }
         "409":
           description: >
-            The job is not currently leased to this worker (`not_lease_holder`), or its space is being deleted
-            (`scope_deleting`, uc.spaces.scope-access A5).
+            The job is not currently leased to this worker (`not_lease_holder`), its space is being deleted
+            (`scope_deleting`, uc.spaces.scope-access A5), or a grant-delivery completion states an epoch that is
+            not the scope's current one (`stale_epoch` — nothing written, the lease released, the job re-runs).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -601,6 +606,15 @@ components:
           maxLength: 65536
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        epoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            For a `grant-delivery` job (required there): the epoch whose key `sealedResult` carries — the grant is
+            sealed bound to it (ADR 0072). Must be the scope's current epoch (`409 stale_epoch` otherwise).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     FailRequest:
       type: object

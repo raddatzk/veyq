@@ -65,7 +65,7 @@ const epochs = computed(() => (activeSpace.status === 'ready' && activeSpace.epo
 // epoch's K_SC, a chapter under its parent Memory's K_mem, recursive K_mem; held on device — the server is blind).
 const memoryKey = computed(() =>
   isOpenable.value && currentNodeId.value && epochs.value
-    ? nodeContentKey(epochs.value, treeStore.nodes, currentNodeId.value)
+    ? nodeContentKey(activeSpace.scopeId!, epochs.value, treeStore.nodes, currentNodeId.value)
     : null,
 )
 
@@ -272,6 +272,7 @@ async function onDeleteDone() {
     />
     <ShareDialog
       v-if="shareVisible && currentNode && memoryKey"
+      :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
       :memory-key="memoryKey"
       :memory-name="currentNode.name"
@@ -281,6 +282,7 @@ async function onDeleteDone() {
     <ShareDialog
       v-if="uploaderVisible && currentNode && memoryKey"
       uploader
+      :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
       :memory-key="memoryKey"
       :memory-name="currentNode.name"

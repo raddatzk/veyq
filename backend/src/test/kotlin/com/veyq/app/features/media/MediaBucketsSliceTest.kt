@@ -1,5 +1,6 @@
 package com.veyq.app.features.media
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
@@ -68,7 +69,7 @@ class MediaBucketsSliceTest {
 
         // create a sub-bucket under the caller's primary (one level, owner inherited)
         val sub = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"YnVja2V0"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("isPrimary", equalTo(false))
@@ -164,7 +165,7 @@ class MediaBucketsSliceTest {
 
         // cr-0123: bob nests a sub under alice's primary root (via parentBucketId) → it inherits alice's owner_key
         given().header("Authorization", token(bob)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"c3Vi","parentBucketId":"$alicePrimary"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"$alicePrimary"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("ownerKey", equalTo("user:$alice"))
@@ -181,7 +182,7 @@ class MediaBucketsSliceTest {
 
         // a sub-bucket can't be a parent — sub-buckets nest one level under a primary → 403
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"eA==","parentBucketId":"$sub"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"eA==","parentBucketId":"$sub"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
     }
@@ -216,7 +217,7 @@ class MediaBucketsSliceTest {
 
     private fun createSub(userId: String, scopeId: String, nodeId: String, sealedName: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"$sealedName"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$sealedName"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path("bucketId")
 
@@ -228,7 +229,7 @@ class MediaBucketsSliceTest {
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, wrap)
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")

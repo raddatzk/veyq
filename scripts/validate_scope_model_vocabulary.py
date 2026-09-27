@@ -12,8 +12,8 @@ exist. A grep expresses it exactly, so a grep is the guard.
 Four invariants:
 
 1. **No scope keypair.** `K_SC` is a forward chain of random 32-byte content-key epochs (ADR 0024); a grant is
-   `asymWrap(memberIdentityPub, E_latest, "scope-grant")` — asymmetric *transport* of a **symmetric** payload,
-   pinned at 32 bytes by `contracts/crypto/vectors/v1.json` (`asym_scope_grant.plaintext`). So a "scope
+   `sealTo({ purpose: "scope-grant", scopeId, epoch }, memberIdentityPub, E_latest)` — asymmetric *transport* of
+   a **symmetric** payload, pinned at 32 bytes by `contracts/crypto/vectors/v1.json` (`seal.asym.scope-grant.plaintext`). So a "scope
    private/public key", a "scope keypair", and a `wrappedScopePrivateKey` field are all phantoms. The phrases
    have **no** legitimate use — the *identity* keypair and the *invite-wrapping* keypair are both real and both
    named differently — so this is a flat zero-hit check with no allowlist.

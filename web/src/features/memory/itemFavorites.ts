@@ -17,7 +17,13 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { itemFavoritesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 
-const ITEM_FAV_CTX = 'item-favorites'
+/**
+ * Every member's marks on one node, bound to (scope, node) (ADR 0072). Deliberately NOT to the marking member: the
+ * read carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA), so an opener could not supply
+ * one. What that leaves open is stated where the rule lives (ADR 0072): the server can relabel which entry is the
+ * caller's own (`self`) — an integrity gap within one node's marks, never a confidentiality one.
+ */
+const itemFavContext = (scopeId: string, nodeId: string) => ({ purpose: 'item-favorites', scopeId, nodeId }) as const
 const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 
@@ -42,7 +48,7 @@ export async function loadItemFavorites(
   const entries = await withRefresh(() => itemFavoritesApi().getItemFavorites({ scopeId, nodeId }))
   return entries.map((e) => {
     try {
-      const json = decoder.decode(v1.symUnwrap(scopeKey, fromB64std(e.ciphertext), ITEM_FAV_CTX))
+      const json = decoder.decode(v1.open(itemFavContext(scopeId, nodeId), scopeKey, fromB64std(e.ciphertext)))
       const ids = JSON.parse(json)
       return {
         own: e.self,
@@ -62,6 +68,6 @@ export async function saveItemFavorites(
   ids: Set<string>,
 ): Promise<void> {
   const json = encoder.encode(JSON.stringify([...ids]))
-  const ciphertext = b64std(v1.symWrap(scopeKey, json, ITEM_FAV_CTX, v1.randomBytes(12)))
+  const ciphertext = b64std(v1.seal(itemFavContext(scopeId, nodeId), scopeKey, json))
   await withRefresh(() => itemFavoritesApi().putItemFavorites({ scopeId, nodeId, putItemFavoritesRequest: { ciphertext } }))
 }

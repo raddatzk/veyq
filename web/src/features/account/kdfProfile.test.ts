@@ -62,7 +62,7 @@ function account(profile: v1.ArgonParams, salt = v1.randomBytes(16)) {
   const kek = v1.randomBytes(32)
   const secretKey = v1.randomBytes(32)
   const wrap = {
-    wrappedKey: b64std(v1.symWrap(kek, mk, 'master-key', v1.randomBytes(12))),
+    wrappedKey: b64std(v1.seal({ purpose: 'master-key' }, kek, mk)),
     kdfParams: b64std(v1.encodeKdfParams(profile, salt)),
   }
   const material = {
@@ -71,7 +71,7 @@ function account(profile: v1.ArgonParams, salt = v1.randomBytes(16)) {
       { method: 'PASSWORD', ...wrap },
       { id: WRAP_ID, method: 'DEVICE', ...wrap },
     ],
-    wrappedIdentityPrivateKey: b64std(v1.symWrap(mk, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))),
+    wrappedIdentityPrivateKey: b64std(v1.seal({ purpose: 'identity-priv' }, mk, v1.serializeIdentityPrivate(id))),
   }
   const recovery: RecoveryMaterial = { email: 'a@example.com', suiteId: 'v1', ...wrap, wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey }
   for (const spy of [unlockKekAsync, deviceKekAsync, recoveryKekAsync]) spy.mockResolvedValue(kek)

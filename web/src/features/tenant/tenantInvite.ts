@@ -35,6 +35,7 @@ export function acceptInvite(
  *  an OWNER invite (cold-births the TENANT scope) and omitted for a MEMBER invite (grant-less join). */
 export function registerAndAccept(
   bootstrapSecret: string,
+  userId: string,
   username: string,
   material: AccountMaterial,
   grant?: string,
@@ -43,6 +44,7 @@ export function registerAndAccept(
   return tenantsApi().registerAndAcceptTenantInvite({
     registerAndAcceptRequest: {
       bootstrapSecret,
+      userId,
       username,
       account: {
         suiteId: material.suiteId,
@@ -64,13 +66,14 @@ export function registerAndAccept(
  * itself**, so the owner can immediately seal their real name under it at join (cr-0106). The key never leaves
  * the device; only the sealed grant + (optional) sealed name cross the API.
  */
-export function bornTenantScope(identityPublic: HybridPublic): { grant: string; scopeRootKey: Uint8Array } {
+export function bornTenantScope(identityPublic: HybridPublic, tenantId: string): { grant: string; scopeRootKey: Uint8Array } {
   const scopeRootKey = v1.randomBytes(32)
-  const grant = b64std(v1.asymWrap(identityPublic, scopeRootKey, 'scope-grant', { nonce: v1.randomBytes(12) }))
+  // The tenant scope's id IS the tenant id, so it is known before the birth; the grant is born at epoch 0 (ADR 0072).
+  const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, identityPublic, scopeRootKey))
   return { grant, scopeRootKey }
 }
 
 /** Just the grant from a fresh tenant-scope birth (for callers that don't seal a name). */
-export function scopeGrant(identityPublic: HybridPublic): string {
-  return bornTenantScope(identityPublic).grant
+export function scopeGrant(identityPublic: HybridPublic, tenantId: string): string {
+  return bornTenantScope(identityPublic, tenantId).grant
 }

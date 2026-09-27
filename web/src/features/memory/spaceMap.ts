@@ -70,11 +70,12 @@ function inSubtree(byId: Map<string, TreeNode>, nodeId: string, rootFolderId: st
 /**
  * Collect the located pins for the subtree of `rootFolderId` (or the whole tree at the scope root, `null`): every
  * MEMORY/CHAPTER in that subtree whose `location` unseals to a `derived` position, each opened under its own
- * `nodeContentKey(epochs, tree, id)` (which resolves the top-level Memory under its epoch's `K_SC`, ADR 0024).
+ * `nodeContentKey(scopeId, epochs, tree, id)` (which resolves the top-level Memory under its epoch's `K_SC`, ADR 0024).
  * Best-effort — a node with no meta, an unresolvable key, or a pending (`derived`-less) location is skipped. The
  * result feeds `SpaceMap.vue` (a marker per pin, click → open the node).
  */
 export function collectLocatedPins(
+  scopeId: string,
   epochs: EpochKeys,
   tree: TreeNode[],
   rootFolderId: string | null,
@@ -89,10 +90,10 @@ export function collectLocatedPins(
     let location: MemoryLocation | null
     let date: MemoryDate | null = null
     try {
-      const nodeKey = nodeContentKey(epochs, tree, node.id)
+      const nodeKey = nodeContentKey(scopeId, epochs, tree, node.id)
       if (!nodeKey) continue // unchainable key — skip, never break the map
-      location = unsealMemoryLocation(nodeKey, node)
-      date = unsealMemoryDate(nodeKey, node) // same K_mem, same blob — free alongside the location
+      location = unsealMemoryLocation(scopeId, nodeKey, node)
+      date = unsealMemoryDate(scopeId, nodeKey, node) // same K_mem, same blob — free alongside the location
     } catch {
       continue // locked node — silently skipped
     }

@@ -36,7 +36,7 @@ globalThis.sessionStorage = {
 /** Server key material whose identity key is wrapped under [masterKey] (a PASSWORD wrap rounds out minItems). */
 function materialFor(masterKey: Uint8Array) {
   const id = v1.generateIdentity()
-  const wrappedPriv = v1.symWrap(masterKey, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
+  const wrappedPriv = v1.seal({ purpose: 'identity-priv' }, masterKey, v1.serializeIdentityPrivate(id))
   return {
     suiteId: 'v1',
     wraps: [

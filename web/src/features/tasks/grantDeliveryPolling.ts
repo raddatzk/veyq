@@ -13,16 +13,19 @@ const POLL_INTERVAL_MS = 45_000
 const poller = createVisibilityPoller(POLL_INTERVAL_MS)
 
 /**
- * Start polling grant-delivery for `scopeId` while it is the open scope. `currentKey` is read at each tick (not
- * captured) so the poll always wraps with the live `K_SC` and no-ops once the scope is gone. Runs once
+ * Start polling grant-delivery for `scopeId` while it is the open scope. `currentKey` — the write key and the epoch
+ * it is — is read at each tick (not captured) so the poll always wraps with the live `K_SC` and no-ops once the
+ * scope is gone. Runs once
  * immediately, then every {@link POLL_INTERVAL_MS} (skipping ticks while the tab is hidden), and once more the
  * moment the tab becomes visible again — never while the previous run is still in flight, since the worker's
  * effects land on the server. Restarts cleanly if called for a new scope.
  */
-export function startGrantDeliveryPolling(scopeId: string, currentKey: () => Uint8Array | null): void {
+export function startGrantDeliveryPolling(
+  scopeId: string, currentKey: () => { key: Uint8Array; epoch: number } | null,
+): void {
   const tick = () => {
-    const key = currentKey()
-    return key ? runGrantDeliveryWorker({ scopeId, key }).catch(() => {}) : undefined
+    const held = currentKey()
+    return held ? runGrantDeliveryWorker({ scopeId, key: held.key, epoch: held.epoch }).catch(() => {}) : undefined
   }
   poller.start(tick, { immediate: true }) // deliver immediately on entry, then keep polling
 }

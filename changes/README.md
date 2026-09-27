@@ -1290,6 +1290,15 @@ capability (the DB fingerprint tripwire) let the server *detect* a state it prev
 question is the server's knowledge, not the client's wish — name that dependency when first weighing the field,
 not a CR later.
 
+**A CR that makes a writer bind a value also owes the locator for every READER that must supply it.** The writer
+side is the easy grep (every seal site); the gap is on the other end, where the opener needs the same value from
+its own address and the read may not carry it. cr-seal-binds-its-object named one missing read field (the bucket
+row's share) and there were seven — the public share's scope, a shared chapter's epoch, the tenant switcher's
+granted epoch, an invitation's name epoch, the caller's own user id, and a member mark's author, which the read
+omits *by design* and so became an accepted gap instead of a field. Each surfaced mid-implementation as a contract
+change, and one as an owner question. Run the reader angle at refine: for every bound field, `grep` the read
+schema the opener consumes for it, and list the misses in the CR.
+
 ### A CR that changes a gate runs the opt-in suites whose fixtures pass through it
 
 **A suite no CI job runs rots between the CRs that run it, and nothing says so.** `cr-scope-access-gate` made a

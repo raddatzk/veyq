@@ -43,7 +43,7 @@ function openVault(
   label?: string,
 ): void {
   const identityPrivate = v1.deserializeIdentityPrivate(
-    v1.symUnwrap(masterKey, fromB64std(material.wrappedIdentityPrivateKey), 'identity-priv'),
+    v1.open({ purpose: 'identity-priv' }, masterKey, fromB64std(material.wrappedIdentityPrivateKey)),
   )
   setUnlocked(masterKey, identityPrivate, origin)
   noteThisDevice(label)
@@ -106,7 +106,7 @@ export async function unlockMasterKey(password: string, secretKeyB64: string): P
   const secretKey = fromB64std(secretKeyB64.trim())
   const { params, salt } = v1.decodeKdfParams(fromB64std(passwordWrap.kdfParams))
   const kek = await unlockKekAsync(secretKey, password, salt, params)
-  const masterKey = v1.symUnwrap(kek, fromB64std(passwordWrap.wrappedKey), 'master-key')
+  const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(passwordWrap.wrappedKey))
   // The 2SKD floor: password AND Secret Key. `cold` is what ADR 0060's rotation gate is looking for.
   openVault(material, masterKey, 'cold')
 }
@@ -189,7 +189,7 @@ export async function unlockWithDevice(email: string, password: string): Promise
   const deviceFactor = await device.deviceFactor(trust.cryptoKey)
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = await deviceKekAsync(deviceFactor, password, salt, params)
-  const masterKey = v1.symUnwrap(kek, fromB64std(wrap.wrappedKey), 'master-key')
+  const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(wrap.wrappedKey))
   // A DEVICE wrap mixes the password into a device-held factor — password, but no Secret Key, so not cold.
   openVault(material, masterKey, 'device')
   return true

@@ -25,10 +25,10 @@ export function useMemoryDate(ctx: MemoryDateContext) {
   const { t, locale } = useI18n()
 
   const dateEditorOpen = ref(false)
-  const storedDate = computed(() => (ctx.memoryKey() ? unsealMemoryDate(ctx.memoryKey()!, ctx.node()) : null))
+  const storedDate = computed(() => (ctx.memoryKey() ? unsealMemoryDate(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   const autoRange = computed<MemoryDate>(() => {
     const key = ctx.memoryKey()
-    return key ? computeAutoRange(ctx.items.value, key) : { mode: 'auto' }
+    return key ? computeAutoRange(ctx.scopeId(), ctx.items.value, key) : { mode: 'auto' }
   })
   // What the header shows: a manual date as sealed, else the live materialized `auto` range (before/without a seal).
   const effectiveDate = computed<MemoryDate>(() => {
@@ -42,7 +42,7 @@ export function useMemoryDate(ctx: MemoryDateContext) {
   })
   // Chapters ordered by their own sealed start date — a chapter's K_mem opens under THIS Memory's K_mem (cr-0067),
   // epoch-independent (only the top-level wrap keys off the epoch), so every chapter resolves under the one memoryKey.
-  const datedChapters = computed(() => sortNodesByDate(ctx.memoryKey, ctx.chapters() ?? []))
+  const datedChapters = computed(() => sortNodesByDate(ctx.scopeId(), ctx.memoryKey, ctx.chapters() ?? []))
 
   /** Save an edited date: re-seal under K_mem, PATCH via updateNode, and let the host update the tree. */
   async function onDateSave(date: MemoryDate) {
@@ -61,9 +61,9 @@ export function useMemoryDate(ctx: MemoryDateContext) {
   async function reconcileAuto() {
     const key = ctx.memoryKey()
     if (!key) return
-    const stored = unsealMemoryDate(key, ctx.node())
+    const stored = unsealMemoryDate(ctx.scopeId(), key, ctx.node())
     if (stored && stored.mode !== 'auto') return // a manual date is the user's — never overwritten
-    const next = computeAutoRange(ctx.items.value, key)
+    const next = computeAutoRange(ctx.scopeId(), ctx.items.value, key)
     const current: MemoryDate = stored ?? { mode: 'auto' }
     if (sameMemoryDate(current, next)) return
     if (!stored && next.from === undefined) return // absent meta already == the empty `auto` state; nothing to seal

@@ -68,7 +68,7 @@ export async function proveColdCredential(password: string, secretKeyB64: string
   const kek = await unlockKekAsync(secretKey, password, salt, params)
   let opened: Uint8Array
   try {
-    opened = v1.symUnwrap(kek, fromB64std(floor.wrappedKey), 'master-key')
+    opened = v1.open({ purpose: 'master-key' }, kek, fromB64std(floor.wrappedKey))
   } catch {
     held.fill(0)
     throw new ColdCredentialRefused('credentialRejected')

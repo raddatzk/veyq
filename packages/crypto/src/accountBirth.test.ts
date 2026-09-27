@@ -2,6 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import * as v1 from './v1'
 import { b64std, fromB64std } from './base64'
 import { buildAccount } from './accountBirth'
+import * as raw from './primitives'
+
+// The two seal contexts as HARDCODED bytes — `lp(utf8(purpose))`, the canonical encoding of a purpose-only seal
+// (ADR 0072) — never through seal.ts's encoder, so a mutated purpose or encoding in the source disagrees with these.
+const MASTER_KEY_CTX = Uint8Array.from(Buffer.from('0000000a' + '6d61737465722d6b6579', 'hex')) // 'master-key'
+const IDENTITY_PRIV_CTX = Uint8Array.from(Buffer.from('0000000d' + '6964656e746974792d70726976', 'hex')) // 'identity-priv'
 
 // A byte-exact KAT over the cold master-key birth (cr-0177, ADR 0045). buildAccount's assertion strength was
 // unmeasured (no test), and its output is RNG-nondeterministic — so we pin every source of randomness and every
@@ -24,7 +30,7 @@ const KEK_REC = new Uint8Array(32).fill(0xb2)
 const AUTH_PUB = new Uint8Array(32).fill(0xc3)
 
 // Deterministic RNG: call k returns n bytes seeded by (k, i). Pure, so the test can reconstruct exactly what
-// buildAccount consumed. buildAccount's direct v1.randomBytes calls, in order:
+// buildAccount consumed. buildAccount's platform-RNG draws, in order:
 //   #0 masterKey(32) · #1 identity-priv nonce(12) · #2 secretKey(32) · #3 pw salt(16)
 //   #4 pw-wrap nonce(12) · #5 rec salt(16) · #6 rec-wrap nonce(12)
 // (generateIdentity is mocked, so it consumes none.)
@@ -37,7 +43,13 @@ const seededBytes = (call: number, n: number): Uint8Array => {
 beforeEach(() => {
   let call = 0
   vi.spyOn(v1, 'generateIdentity').mockReturnValue(FIXED_IDENTITY)
-  vi.spyOn(v1, 'randomBytes').mockImplementation((n: number) => seededBytes(call++, n))
+  // The platform RNG itself, not v1.randomBytes: the typed seal draws its own nonce (ADR 0072), so a spy on the
+  // wrapper would miss the three wrap nonces and the expected material could no longer be reconstructed.
+  vi.spyOn(globalThis.crypto, 'getRandomValues').mockImplementation(<T extends ArrayBufferView | null>(arr: T): T => {
+    const view = arr as unknown as Uint8Array
+    view.set(seededBytes(call++, view.length))
+    return arr
+  })
   vi.spyOn(v1, 'kekPasswordSecret').mockReturnValue(KEK_PW)
   vi.spyOn(v1, 'kekRecovery').mockReturnValue(KEK_REC)
   vi.spyOn(v1, 'deriveAuthKeypair').mockReturnValue({ publicKey: AUTH_PUB, privateKey: new Uint8Array(32) })
@@ -59,10 +71,10 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
 
     // Expected wraps, built with the LITERAL AAD context — independent of buildAccount's own constants.
     const expectedPrivWrap = b64std(
-      v1.symWrap(masterKey, v1.serializeIdentityPrivate(FIXED_IDENTITY), 'identity-priv', privNonce),
+      raw.symWrap(masterKey, v1.serializeIdentityPrivate(FIXED_IDENTITY), IDENTITY_PRIV_CTX, privNonce),
     )
-    const expectedPwWrap = b64std(v1.symWrap(KEK_PW, masterKey, 'master-key', pwNonce))
-    const expectedRecWrap = b64std(v1.symWrap(KEK_REC, masterKey, 'master-key', recNonce))
+    const expectedPwWrap = b64std(raw.symWrap(KEK_PW, masterKey, MASTER_KEY_CTX, pwNonce))
+    const expectedRecWrap = b64std(raw.symWrap(KEK_REC, masterKey, MASTER_KEY_CTX, recNonce))
 
     expect(built.material).toEqual({
       suiteId: 'v1',
@@ -87,14 +99,14 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
 
     // Each wrap opens under its KEK ONLY with the exact literal 'master-key'; if the source AAD were mutated,
     // symUnwrap with the real literal throws (AEAD tag), so these lines red.
-    expect(b64std(v1.symUnwrap(KEK_PW, fromB64std(pw.wrappedKey), 'master-key'))).toBe(b64std(masterKey))
-    expect(b64std(v1.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), 'master-key'))).toBe(b64std(masterKey))
+    expect(b64std(raw.symUnwrap(KEK_PW, fromB64std(pw.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
+    expect(b64std(raw.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
   })
 
   it('binds the identity-private wrap to the AAD literal "identity-priv"', () => {
     const built = buildAccount('a@b.test', 'pw', new Uint8Array(16))
     const masterKey = seededBytes(0, 32)
-    const opened = v1.symUnwrap(masterKey, fromB64std(built.material.wrappedIdentityPrivateKey), 'identity-priv')
+    const opened = raw.symUnwrap(masterKey, fromB64std(built.material.wrappedIdentityPrivateKey), IDENTITY_PRIV_CTX)
     expect(b64std(opened)).toBe(b64std(v1.serializeIdentityPrivate(FIXED_IDENTITY)))
   })
 
@@ -120,7 +132,7 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
       const built = buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
       // The Master Key is randomBytes #0, untouched by the option (a wrap that opened to MINE would mean the
       // re-seed had collapsed the two into one secret).
-      expect(b64std(v1.symUnwrap(KEK_PW, fromB64std(built.material.masterKeyWraps[0].wrappedKey), 'master-key')))
+      expect(b64std(raw.symUnwrap(KEK_PW, fromB64std(built.material.masterKeyWraps[0].wrappedKey), MASTER_KEY_CTX)))
         .toBe(b64std(seededBytes(0, 32)))
     })
 
@@ -135,9 +147,9 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     const masterKey = seededBytes(0, 32)
     const [pw, rec] = built.material.masterKeyWraps
     // The PASSWORD wrap opens under KEK_PW (not KEK_REC) and vice-versa — pins which KEK feeds which wrap.
-    expect(() => v1.symUnwrap(KEK_REC, fromB64std(pw.wrappedKey), 'master-key')).toThrow()
-    expect(() => v1.symUnwrap(KEK_PW, fromB64std(rec.wrappedKey), 'master-key')).toThrow()
-    expect(b64std(v1.symUnwrap(KEK_PW, fromB64std(pw.wrappedKey), 'master-key'))).toBe(b64std(masterKey))
-    expect(b64std(v1.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), 'master-key'))).toBe(b64std(masterKey))
+    expect(() => raw.symUnwrap(KEK_REC, fromB64std(pw.wrappedKey), MASTER_KEY_CTX)).toThrow()
+    expect(() => raw.symUnwrap(KEK_PW, fromB64std(rec.wrappedKey), MASTER_KEY_CTX)).toThrow()
+    expect(b64std(raw.symUnwrap(KEK_PW, fromB64std(pw.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
+    expect(b64std(raw.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
   })
 })

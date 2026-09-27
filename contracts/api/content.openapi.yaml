@@ -52,10 +52,11 @@ paths:
       operationId: createNode
       summary: Create a node (folder / Memory / chapter) in the scope's tree.
       description: >
-        Adds a node under `parentId` (or the scope root if omitted). The client supplies the ciphertext name,
-        the blinded slug token, and — for a MEMORY or CHAPTER — the `wrappedContentKey` (`K_mem` under the
-        parent's content key). The server
-        stores it opaquely and enforces slug uniqueness per parent + the structural rules.
+        Adds a node under `parentId` (or the scope root if omitted). The client mints the node's id (`nodeId`,
+        [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3) and supplies the ciphertext name, the blinded slug token, and — for a MEMORY or
+        CHAPTER — the `wrappedContentKey` (`K_mem` under the parent's content key), each sealed bound to that id.
+        The server stores it opaquely under exactly that id and enforces slug uniqueness per parent + the
+        structural rules. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       parameters:
@@ -66,6 +67,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/CreateNodeRequest" }
             example:
+              nodeId: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
               parentId: null
               kind: MEMORY
               encryptedName: ZW5jcnlwdGVkLW5hbWU=
@@ -93,7 +95,7 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: A sibling already has that slug (`slug_taken`), the `nodeId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
         "422":
@@ -454,8 +456,15 @@ components:
 
     CreateNodeRequest:
       type: object
-      required: [kind, encryptedName, slugToken]
+      required: [nodeId, kind, encryptedName, slugToken]
       properties:
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the node to create (ADR 0072 Decision 3). Its name, `K_mem` wrap and meta are sealed bound to this id, so the server stores it verbatim; a taken id is `409 id_taken`.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         parentId:
           x-veyq-visibility: id
           type: [string, "null"]
@@ -504,7 +513,7 @@ components:
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         wrappedMeta:
           type: [string, "null"]
-          description: A MEMORY's or CHAPTER's curated metadata (date now, place later) — a client-versioned JSON blob AEAD-sealed under this node's `K_mem` (AAD context `node-meta`; opaque base64). Absent = the implicit `auto`-with-no-dated-media state. The server never inspects it.
+          description: A MEMORY's or CHAPTER's curated metadata (date now, place later) — a client-versioned JSON blob AEAD-sealed under this node's `K_mem` (seal purpose `node-meta`, bound to scope + node; opaque base64). Absent = the implicit `auto`-with-no-dated-media state. The server never inspects it.
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh

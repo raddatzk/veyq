@@ -66,7 +66,7 @@ class MediaResource(
 
     override fun startBlobUploads(scopeId: UUID, blobUploadsBatchRequest: BlobUploadsBatchRequest): Response {
         val declares = blobUploadsBatchRequest.items.map {
-            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey)
+            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
         }
         return when (val o = handler.start(identity.principal.name, scopeId.toString(), declares, signingDomain())) {
             is StartOutcome.Results -> Response.ok(
@@ -87,6 +87,7 @@ class MediaResource(
     override fun completeMedia(scopeId: UUID, mediaBatchRequest: MediaBatchRequest): Response {
         val items = mediaBatchRequest.items.map { item ->
             CompleteItem(
+                mediaId = item.mediaId.toString(),
                 nodeId = item.nodeId.toString(),
                 originalUploadId = item.originalUploadId.toString(),
                 derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },

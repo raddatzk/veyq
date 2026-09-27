@@ -40,6 +40,13 @@ function dropKey(): Promise<void> {
   )
 }
 
+/**
+ * The purpose this seal authenticates, as AES-GCM `additionalData`. Outside the typed seal union on purpose
+ * (ADR 0072 Decision 2): the key is a non-extractable per-device WebCrypto `CryptoKey` that `@noble` cannot take,
+ * and it is unique to this one record, so the key is the object binding and the purpose is all that is left to bind.
+ */
+const SESSION_VAULT_AD = new TextEncoder().encode('veyq/v1/session-vault')
+
 /** Seal the unlocked Master Key under a fresh non-extractable key for the browser session (best-effort — a
  *  storage failure just means the device re-asks the password on the next reload). */
 export async function cacheSessionVault(email: string, masterKey: Uint8Array): Promise<void> {
@@ -47,7 +54,7 @@ export async function cacheSessionVault(email: string, masterKey: Uint8Array): P
     const key = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt'])
     await idbRun(DB_NAME, STORE, 'readwrite', (s) => s.put(key, RECORD))
     const iv = crypto.getRandomValues(new Uint8Array(12))
-    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, masterKey as BufferSource)
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv, additionalData: SESSION_VAULT_AD }, key, masterKey as BufferSource)
     const v: StoredVault = { email: email.trim().toLowerCase(), iv: b64std(iv), ciphertext: b64std(new Uint8Array(ciphertext)) }
     sessionStorage.setItem(SS_KEY, JSON.stringify(v))
   } catch {
@@ -74,7 +81,7 @@ export async function loadSessionVault(): Promise<{ email: string; masterKey: Ui
     const key = await idbRun<CryptoKey | undefined>(DB_NAME, STORE, 'readonly', (s) => s.get(RECORD))
     if (!key) return null
     const plain = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: fromB64std(v.iv) as BufferSource },
+      { name: 'AES-GCM', iv: fromB64std(v.iv) as BufferSource, additionalData: SESSION_VAULT_AD },
       key,
       fromB64std(v.ciphertext) as BufferSource,
     )

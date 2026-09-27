@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -160,7 +161,7 @@ class ShareDeletedNodeSliceTest {
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")

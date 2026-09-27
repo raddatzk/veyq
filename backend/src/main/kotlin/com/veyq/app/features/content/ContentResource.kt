@@ -45,7 +45,7 @@ class ContentResource(
 
     override fun createNode(scopeId: UUID, createNodeRequest: CreateNodeRequest): Response {
         val outcome = handler.create(
-            identity.principal.name, scopeId.toString(), createNodeRequest.parentId?.toString(),
+            identity.principal.name, scopeId.toString(), createNodeRequest.nodeId.toString(), createNodeRequest.parentId?.toString(),
             createNodeRequest.kind.value, createNodeRequest.encryptedName, createNodeRequest.slugToken,
             createNodeRequest.orderIndex ?: 0, createNodeRequest.epoch ?: 0,
             createNodeRequest.wrappedContentKey, createNodeRequest.wrappedMeta,

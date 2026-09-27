@@ -224,7 +224,7 @@ class TenantsResource(
             wraps = a.masterKeyWraps.map { WrapData(it.method.value, it.wrappedKey, it.kdfParams) },
         )
         return when (val outcome = acceptHandler.registerAndAccept(
-            registerAndAcceptRequest.bootstrapSecret, account, registerAndAcceptRequest.grant,
+            registerAndAcceptRequest.bootstrapSecret, registerAndAcceptRequest.userId.toString(), account, registerAndAcceptRequest.grant,
             registerAndAcceptRequest.username, registerAndAcceptRequest.sealedName,
         )) {
             is RegisterAcceptOutcome.Activated -> Response.status(Response.Status.CREATED)

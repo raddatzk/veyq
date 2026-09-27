@@ -36,10 +36,10 @@ const WRAP_ID = 'device-wrap-id-1'
 function buildDeviceMaterial(password: string, deviceFactor: Uint8Array) {
   const id = v1.generateIdentity()
   const mk = v1.randomBytes(32)
-  const wrappedPriv = v1.symWrap(mk, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
+  const wrappedPriv = v1.seal({ purpose: 'identity-priv' }, mk, v1.serializeIdentityPrivate(id))
   const salt = v1.randomBytes(16)
   const kek = v1.kekDevicePassword(deviceFactor, password, salt, v1.ARGON)
-  const deviceWrap = v1.symWrap(kek, mk, 'master-key', v1.randomBytes(12))
+  const deviceWrap = v1.seal({ purpose: 'master-key' }, kek, mk)
   const kdfParams = b64std(v1.encodeKdfParams(v1.ARGON, salt))
   const material = {
     suiteId: 'v1',

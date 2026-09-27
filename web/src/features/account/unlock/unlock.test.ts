@@ -27,12 +27,12 @@ const PASSWORD = 'correct horse battery'
 function buildMaterial(password: string) {
   const id = v1.generateIdentity()
   const masterKey = v1.randomBytes(32)
-  const wrappedPriv = v1.symWrap(masterKey, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
+  const wrappedPriv = v1.seal({ purpose: 'identity-priv' }, masterKey, v1.serializeIdentityPrivate(id))
 
   const secretKey = v1.randomBytes(32)
   const salt = v1.randomBytes(16)
   const kek = v1.kekPasswordSecret(secretKey, password, salt, v1.ARGON)
-  const masterWrap = v1.symWrap(kek, masterKey, 'master-key', v1.randomBytes(12))
+  const masterWrap = v1.seal({ purpose: 'master-key' }, kek, masterKey)
 
   const material = {
     suiteId: 'v1',

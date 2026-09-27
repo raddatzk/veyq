@@ -61,7 +61,7 @@ name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape
   invisible to the blind server. New server state: a small **name-epoch index** on the scope row; the membership's
   `sealed_invite_name` column is repurposed to the wrapped `K_name` (`sealed_name_key`); `encryptedName` is
   returned in the invitation payload (a bounded, ciphertext-only read-path widening to the pending invitee). The
-  one-off `group-name` name-seal and `inviteName.ts`'s name-sealing are removed.
+  one-off per-invitee name-seal and `inviteName.ts`'s name-sealing are removed.
 - **One fail-safe edge:** if the name is **renamed** between an invite and its accept, the invitee's `K_name_e`
   no longer opens the re-sealed name — the preview shows "unnamed" and they can still accept (then see the real
   current name). A plain rotation does **not** trigger this (the name keeps its epoch). Rare and harmless.
@@ -79,7 +79,8 @@ name under `K_name` from birth (epoch 0) and the backend needs **no** dual-shape
   ([ADR 0017](0017-crypto-primitives-and-post-quantum-strategy.md)): `K_name = HKDF-SHA256(E_e, salt="",
   info=utf8("veyq/v1/group-name-key"), 32)`; the name seals under a purpose of its own, bound to the group
   ([ADR 0072](0072-a-seal-binds-its-object.md)), and `K_name` wraps under the distinct
-  **`group-name-key`** `asymWrap` context (`group_name_key` / `sym_group_name` / `asym_group_name_key` vectors).
+  **`group-name-key`** `asymWrap` context (`group_name_key` / `seal.sym.group-name` / `seal.asym.group-name-key`
+  vectors).
 - **Resolved (refined → cr-0097).** The **rename** endpoint (re-seal under the **current** epoch + bump the
   name-epoch index) is its own feature — [uc.spaces.rename-group](../features/spaces/use-cases/uc.spaces.rename-group.md),
   owner-gated, name-only (no `K_SC` rotation), server rejects a stale `nameEpoch` (`409`). cr-0096 landed the

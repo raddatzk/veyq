@@ -340,7 +340,7 @@ gaps:
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040
     admits none of its suites: a declared run is enough only on a job a run has already executed (its note on
     which rows a run has admitted). `src/v1.conformance.test.ts` pins the register's own AAD context against the
-    `sym_device_register` vector and asserts its domain separation from `identity-pins`, so a register blob can
+    `seal.sym.device-register` vector and asserts its domain separation from `identity-pins`, so a register blob can
     never be read as a pin store. On the first run whose log shows packages/crypto's suites executed, the suite
     goes under `the-device-wrap-join-never-reaches-the-server`, the criterion that rests on the register being
     sealed, and this gap goes.

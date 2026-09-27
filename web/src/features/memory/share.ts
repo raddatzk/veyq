@@ -1,6 +1,6 @@
 // uc.sharing.share-public-viewer (web) — the public viewer share data layer (cr-0100, ADR 0029). Operator-blind:
 // a curator turns ONE personal-scope Memory into a read-only, anonymous, revocable link `/s/{shareId}#k=<K_share>`.
-// The share adds an INDEPENDENT second wrap of that Memory's `K_mem` — `symWrap(K_share, K_mem)` (ADR 0012) —
+// The share adds an INDEPENDENT second wrap of that Memory's `K_mem` — sealed under `K_share` (ADR 0012) —
 // whose secret `K_share` rides the URL **fragment** (ADR 0015) and never reaches the server. The Memory name is
 // re-sealed under `K_share` so a viewer with only the fragment key can show the title without `K_SC`.
 //
@@ -9,12 +9,11 @@
 //  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
 //    chapter's `K_mem` down the subtree, and open blobs via the gated share-scoped presign endpoint.
 import * as v1 from '@veyq/crypto/v1'
-import { b64std, fromB64std, fromB64url } from '@veyq/crypto/base64'
+import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import type { LocaleMap } from '../../shared/ui/localeMap'
-import { openName, sealName } from './tree'
 import {
   gridRef,
   lightboxRef,
@@ -32,22 +31,40 @@ import {
   type AddMediaOptions,
   type MediaDeriver,
 } from './media'
-import { ShareRole, type PublicShare, type ShareMedia, type ShareNode, type ShareTerms } from '../../api/generated/sharing'
+import {
+  ShareRole,
+  type PublicShare,
+  type ShareMedia,
+  type ShareNode,
+  type ShareTerms,
+  type ShareBlobUploadRequestItemRoleEnum,
+} from '../../api/generated/sharing'
 import type { MediaDerivativeKind } from '../../api/generated/media'
 
-// The AAD context binding `symWrap(K_share, K_mem)` — a dedicated domain tag for the share second-wrap, distinct
-// from the tree's `content-key` (parent → K_mem) wrap. Sealed by the curator, opened by the viewer; both here.
-const SHARE_CTX = 'share-key'
-// The AAD context for a contributor's display name sealed under K_mem (cr-0101) — the operator never sees the name.
-const SHARE_IDENTITY_NAME_CTX = 'share-identity-name'
-// cr-0115 (ADR 0036): the AAD contexts for the editable curator note. `share-note` binds the note text under
-// `K_share`; `share-key-recovery` binds the recoverable copy of `K_share` under `K_mem`. Distinct tags, never reused.
-const SHARE_NOTE_CTX = 'share-note'
-const SHARE_KEY_RECOVERY_CTX = 'share-key-recovery'
-// cr-0116: the AAD context for a share's optional private name sealed under `K_share`.
-const SHARE_NAME_CTX = 'share-name'
-const SHARE_PASSWORD_CTX = 'share-password' // cr-0118: the reveal copy of the plaintext password, under K_share
+// The seals under `K_share` name their purpose only (ADR 0072 Decision 2): `K_share` is unique to one share, so the
+// key is the binding. `share-key` is the share's second wrap of `K_mem` (distinct from the tree's `content-key`),
+// `share-memory-name` the Memory name re-sealed for the viewer, `share-note`/`share-name`/`share-password` the
+// curator's editable fields (cr-0115/0116/0118). Sealed by the curator, opened by the viewer or the manage UI.
+const SHARE_KEY = { purpose: 'share-key' } as const
+const SHARE_MEMORY_NAME = { purpose: 'share-memory-name' } as const
+const SHARE_NOTE = { purpose: 'share-note' } as const
+const SHARE_NAME = { purpose: 'share-name' } as const
+const SHARE_PASSWORD = { purpose: 'share-password' } as const
+/** Where a share lives: the Memory it shares and that Memory's scope, plus the share's own id (ADR 0072). */
+export type ShareAddress = { scopeId: string; nodeId: string; shareId: string }
+/** The recoverable copy of `K_share` under `K_mem` — shared across the scope, so it binds the share it belongs to. */
+const shareKeyRecoveryContext = (a: ShareAddress) =>
+  ({ purpose: 'share-key-recovery', scopeId: a.scopeId, nodeId: a.nodeId, shareId: a.shareId }) as const
+/** A contributor's display name under `K_mem` (cr-0101), bound to (scope, share, identity). */
+const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
+  ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
 const noteDecoder = new TextDecoder()
+
+/** A fresh share id: 256 random bits, base64url — the unguessable half of the capability, minted by the client so
+ *  the recovery wrap can be sealed bound to it (ADR 0072). */
+export function newShareId(): string {
+  return b64url(v1.randomBytes(32))
+}
 
 /** A per-locale text map, e.g. `{ de: '…', en: '…' }` (cr-0116). Defined in `shared/ui/localeMap.ts` since the
  *  editor was lifted there — re-exported so this feature's callers keep reading it from `share.ts`. */
@@ -60,12 +77,12 @@ export function hasLocaleText(map: LocaleMap): boolean {
 
 /** Seal a per-locale curator-note map under `K_share` — the plaintext is a JSON `{locale: markdown}` map (cr-0116). */
 function sealNoteMap(kShare: Uint8Array, note: LocaleMap): string {
-  return b64std(v1.symWrap(kShare, v1.utf8(JSON.stringify(note)), SHARE_NOTE_CTX, v1.randomBytes(12)))
+  return b64std(v1.seal(SHARE_NOTE, kShare, v1.utf8(JSON.stringify(note))))
 }
 /** Open a per-locale note map sealed under `K_share`; `{}` when it can't be opened or isn't a JSON object. */
 function openNoteMap(kShare: Uint8Array, sealed: string): LocaleMap {
   try {
-    const parsed = JSON.parse(noteDecoder.decode(v1.symUnwrap(kShare, fromB64std(sealed), SHARE_NOTE_CTX)))
+    const parsed = JSON.parse(noteDecoder.decode(v1.open(SHARE_NOTE, kShare, fromB64std(sealed))))
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as LocaleMap) : {}
   } catch {
     return {}
@@ -73,15 +90,16 @@ function openNoteMap(kShare: Uint8Array, sealed: string): LocaleMap {
 }
 /** Seal a share's optional private name under `K_share` (opaque base64). */
 function sealShareName(kShare: Uint8Array, name: string): string {
-  return b64std(v1.symWrap(kShare, v1.utf8(name), SHARE_NAME_CTX, v1.randomBytes(12)))
+  return b64std(v1.seal(SHARE_NAME, kShare, v1.utf8(name)))
 }
 /** Open a share name sealed under `K_share`. */
 function openShareName(kShare: Uint8Array, sealed: string): string {
-  return noteDecoder.decode(v1.symUnwrap(kShare, fromB64std(sealed), SHARE_NAME_CTX))
+  return noteDecoder.decode(v1.open(SHARE_NAME, kShare, fromB64std(sealed)))
 }
-/** Recover `K_share` from its `K_mem`-sealed copy `symWrap(K_mem, K_share)` — the curator always holds `K_mem`. */
-export function recoverShareKey(memoryKey: Uint8Array, sealedShareKey: string): Uint8Array {
-  return v1.symUnwrap(memoryKey, fromB64std(sealedShareKey), SHARE_KEY_RECOVERY_CTX)
+/** Recover `K_share` from its `K_mem`-sealed copy — the curator always holds `K_mem`. Bound to the share it is
+ *  listed as (ADR 0072), so a recovery copy the server moved onto another share's row does not open there. */
+export function recoverShareKey(memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string): Uint8Array {
+  return v1.open(shareKeyRecoveryContext(share), memoryKey, fromB64std(sealedShareKey))
 }
 
 // --- password protection (cr-0118, ADR 0037): an operator-blind ACCESS-CONTROL gate ------------------------
@@ -100,7 +118,7 @@ function buildPasswordFields(kShare: Uint8Array, password: string): {
     passwordRequired: true,
     pwSalt: b64std(salt),
     pwVerifier: b64std(v1.sha256Digest(pwToken)),
-    sealedPassword: b64std(v1.symWrap(kShare, v1.utf8(password), SHARE_PASSWORD_CTX, v1.randomBytes(12))),
+    sealedPassword: b64std(v1.seal(SHARE_PASSWORD, kShare, v1.utf8(password))),
   }
 }
 
@@ -112,10 +130,12 @@ export function derivePasswordToken(password: string, pwSalt: string): string {
 
 /** Reveal a managed share's password (curator only): recover `K_share` via `K_mem`, open the sealed copy. '' when
  *  none / unreadable (or a share minted before cr-0118). */
-export function readSharePassword(memoryKey: Uint8Array, sealedShareKey: string | null, sealedPassword: string | null): string {
+export function readSharePassword(
+  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedPassword: string | null,
+): string {
   if (!sealedShareKey || !sealedPassword) return ''
   try {
-    return noteDecoder.decode(v1.symUnwrap(recoverShareKey(memoryKey, sealedShareKey), fromB64std(sealedPassword), SHARE_PASSWORD_CTX))
+    return noteDecoder.decode(v1.open(SHARE_PASSWORD, recoverShareKey(memoryKey, share, sealedShareKey), fromB64std(sealedPassword)))
   } catch {
     return ''
   }
@@ -123,19 +143,23 @@ export function readSharePassword(memoryKey: Uint8Array, sealedShareKey: string 
 
 /** A managed share's per-locale note, decrypted (recover `K_share` via `K_mem`, then open the map). `{}` when there
  *  is none or the ciphertext can't be opened (a share minted before cr-0115 carries no recoverable key). */
-export function readShareNoteMap(memoryKey: Uint8Array, sealedShareKey: string | null, sealedNote: string | null): LocaleMap {
+export function readShareNoteMap(
+  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedNote: string | null,
+): LocaleMap {
   if (!sealedShareKey || !sealedNote) return {}
   try {
-    return openNoteMap(recoverShareKey(memoryKey, sealedShareKey), sealedNote)
+    return openNoteMap(recoverShareKey(memoryKey, share, sealedShareKey), sealedNote)
   } catch {
     return {}
   }
 }
 /** A managed share's private name, decrypted. '' when none / unreadable. */
-export function readShareName(memoryKey: Uint8Array, sealedShareKey: string | null, sealedShareName: string | null): string {
+export function readShareName(
+  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedShareName: string | null,
+): string {
   if (!sealedShareKey || !sealedShareName) return ''
   try {
-    return openShareName(recoverShareKey(memoryKey, sealedShareKey), sealedShareName)
+    return openShareName(recoverShareKey(memoryKey, share, sealedShareKey), sealedShareName)
   } catch {
     return ''
   }
@@ -168,6 +192,7 @@ export type MintedShare = { shareId: string; kShare: Uint8Array }
  * `K_share` — it leaves this function only towards the UI, and reaches a visitor only in the link's fragment.
  */
 export async function createShare(
+  scopeId: string,
   nodeId: string,
   memoryKey: Uint8Array,
   memoryName: string,
@@ -178,20 +203,21 @@ export async function createShare(
   password = '',
 ): Promise<MintedShare> {
   const kShare = v1.randomBytes(32)
-  const wrap = b64std(v1.symWrap(kShare, memoryKey, SHARE_CTX, v1.randomBytes(12)))
-  const sealedName = sealName(kShare, memoryName) // the Memory name re-sealed under K_share (same node-name construction)
+  const shareId = newShareId() // client-minted: the recovery copy below is sealed bound to it (ADR 0072)
+  const wrap = b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
+  const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName))) // the Memory name re-sealed under K_share
   // cr-0115/cr-0116 (ADR 0036): store a recoverable copy of K_share under K_mem (so the curator can edit note + name
   // later) and seal the optional per-locale note + private name under K_share. sealedShareKey is on EVERY share, so
   // a note/name can be added later even to one minted without them.
-  const sealedShareKey = b64std(v1.symWrap(memoryKey, kShare, SHARE_KEY_RECOVERY_CTX, v1.randomBytes(12)))
+  const sealedShareKey = b64std(v1.seal(shareKeyRecoveryContext({ scopeId, nodeId, shareId }), memoryKey, kShare))
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : undefined
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
   const pw = password.trim() ? buildPasswordFields(kShare, password) : undefined
-  const { shareId } = await withRefresh(() =>
+  await withRefresh(() =>
     sharesApi().createShare({
       createShareRequest: {
-        nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareKey, sealedShareName,
+        shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareKey, sealedShareName,
         passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
       },
     }),
@@ -207,11 +233,12 @@ export async function createShare(
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
  */
 export async function updateShare(
-  shareId: string, memoryKey: Uint8Array, sealedShareKey: string, note: LocaleMap, name: string,
+  share: ShareAddress, memoryKey: Uint8Array, sealedShareKey: string, note: LocaleMap, name: string,
   expiresAt: Date | null, role?: ShareRole,
   passwordChange?: { set: string } | { remove: true },
 ): Promise<void> {
-  const kShare = recoverShareKey(memoryKey, sealedShareKey)
+  const { shareId } = share
+  const kShare = recoverShareKey(memoryKey, share, sealedShareKey)
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : null
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : null
   // cr-0118: the password tri-state. A `remove` sends only `passwordRequired: false` — the server clears the fields.
@@ -233,6 +260,8 @@ export async function updateShare(
 /** A curator's management row for one of their shares (opaque; the sealed name isn't shown — the Memory is known). */
 export type ManagedShare = {
   shareId: string
+  /** The shared Memory's scope — the recovery copy of `K_share` is bound to (scope, node, share) (ADR 0072). */
+  scopeId: string
   nodeId: string
   role: ShareRole
   enabled: boolean
@@ -259,6 +288,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
   return rows
     .map((r) => ({
       shareId: r.shareId,
+      scopeId: r.scopeId,
       nodeId: r.nodeId,
       role: r.role,
       enabled: r.enabled,
@@ -297,14 +327,16 @@ export type ContributorSession = { identityId: string; contributorToken: string 
  */
 export async function createContributorIdentity(
   shareId: string,
+  scopeId: string,
   memoryKey: Uint8Array,
   displayName: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
-  const sealedDisplayName = b64std(v1.symWrap(memoryKey, v1.utf8(displayName), SHARE_IDENTITY_NAME_CTX, v1.randomBytes(12)))
-  const { identityId, contributorToken } = await publicSharesApi().createShareIdentity({
+  const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
+  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), memoryKey, v1.utf8(displayName)))
+  const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { sealedDisplayName },
+    createShareIdentityRequest: { identityId, sealedDisplayName },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
   })
   return { identityId, contributorToken }
@@ -318,7 +350,11 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
     async reserve(declares) {
       const started = await publicSharesApi().startShareBlobUploads({
         shareId,
-        shareBlobUploadsRequest: { contributorToken, items: declares },
+        shareBlobUploadsRequest: {
+          contributorToken,
+          // A contributor uploads media only — never a cover — so ORIGINAL/THUMBNAIL/PREVIEW is the whole role set.
+          items: declares.map((d) => ({ ...d, role: d.role as ShareBlobUploadRequestItemRoleEnum })),
+        },
         xSharePassword: pwToken, // cr-0164
       })
       if (started.results.length !== declares.length) throw new Error('upload_failed')
@@ -342,6 +378,7 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
         shareMediaBatchRequest: {
           contributorToken,
           items: [{
+            mediaId: media.mediaId,
             originalUploadId: media.originalUploadId,
             derivatives: media.derivatives.map((d) => ({ kind: d.kind, uploadId: d.uploadId })),
             wrappedMeta: media.wrappedMeta,
@@ -363,12 +400,14 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
  * the curator's `addMedia`, only the transport is share-gated. Returns the new blob + media ids.
  */
 export async function addSharePhoto(
-  session: ContributorSession & { shareId: string; memoryKey: Uint8Array; pwToken?: string },
+  session: ContributorSession & { shareId: string; scopeId: string; memoryKey: Uint8Array; pwToken?: string },
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
-  return uploadMediaVia(session.memoryKey, source, deriver, shareUploadTransport(session.shareId, session.contributorToken, session.pwToken), opts)
+  return uploadMediaVia(
+    session.scopeId, session.memoryKey, source, deriver, shareUploadTransport(session.shareId, session.contributorToken, session.pwToken), opts,
+  )
 }
 
 /**
@@ -382,14 +421,23 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 
 // --- viewer (anonymous, no session) ----------------------------------------
 
-/** One shared media resolved for the read-only viewer: the media + the exact `K_mem` its blobs are sealed under. */
-export type ShareItem = { item: MediaItem; memoryKey: Uint8Array }
+/** One shared media resolved for the read-only viewer: the media + the exact `K_mem` its blobs are sealed under +
+ *  the shared Memory's scope, which every one of those seals is bound to (ADR 0072). */
+export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string }
 
 /**
  * The decrypted shared Memory, ready to render: its name, the grant `role` (VIEWER / CONTRIBUTOR), the **root**
  * `K_mem` (for a contributor to seal their name + uploads under), and every media (each with its own `K_mem`).
  */
-export type ResolvedShare = { memoryName: string; noteByLocale: LocaleMap; role: ShareRole; rootMemoryKey: Uint8Array; items: ShareItem[] }
+export type ResolvedShare = {
+  memoryName: string
+  noteByLocale: LocaleMap
+  role: ShareRole
+  /** The shared Memory's scope — a contributor seals their name and uploads bound to it (ADR 0072). */
+  scopeId: string
+  rootMemoryKey: Uint8Array
+  items: ShareItem[]
+}
 
 /** The fragment key is missing/malformed, or the share is unknown/revoked/expired (a non-enumerable 404). */
 export class ShareUnavailableError extends Error {}
@@ -453,12 +501,19 @@ export function recordTermsAccepted(tenantId: string, version: number): void {
 }
 
 function shareMediaToItem(m: ShareMedia): MediaItem {
+  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072), exactly as the authed list.
   return {
     mediaId: m.mediaId,
-    original: { blobId: m.blobId, chunkCount: m.chunkCount, byteSize: m.byteSize, wrappedBlobKey: m.wrappedBlobKey },
+    original: {
+      blobId: m.blobId, chunkCount: m.chunkCount, byteSize: m.byteSize, wrappedBlobKey: m.wrappedBlobKey,
+      ownerId: m.mediaId, role: 'ORIGINAL',
+    },
     derivatives: (m.derivatives ?? []).map((d) => ({
       kind: d.kind as MediaDerivativeKind,
-      ref: { blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey },
+      ref: {
+        blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey,
+        ownerId: m.mediaId, role: d.kind as MediaDerivativeKind,
+      },
     })),
     wrappedMeta: m.wrappedMeta ?? undefined,
   }
@@ -469,7 +524,7 @@ function shareMediaToItem(m: ShareMedia): MediaItem {
  * (unwrapped with the fragment key), each chapter's from its `wrappedContentKey` under its parent's `K_mem`
  * (recursive `K_mem`, ADR 0012). Nodes whose chain can't be opened are dropped.
  */
-function deriveSubtreeKeys(nodes: ShareNode[], rootKmem: Uint8Array): Map<string, Uint8Array> {
+function deriveSubtreeKeys(scopeId: string, nodes: ShareNode[], rootKmem: Uint8Array): Map<string, Uint8Array> {
   const keys = new Map<string, Uint8Array>()
   const byParent = new Map<string, ShareNode[]>()
   let root: ShareNode | undefined
@@ -488,7 +543,9 @@ function deriveSubtreeKeys(nodes: ShareNode[], rootKmem: Uint8Array): Map<string
     for (const child of byParent.get(parentId) ?? []) {
       if (!child.wrappedContentKey) continue
       try {
-        keys.set(child.id, v1.symUnwrap(parentKey, fromB64std(child.wrappedContentKey), 'content-key'))
+        // Bound to (scope, this chapter, its epoch) — the node the key is listed for (ADR 0072).
+        const context = { purpose: 'content-key', scopeId, nodeId: child.id, epoch: child.epoch } as const
+        keys.set(child.id, v1.open(context, parentKey, fromB64std(child.wrappedContentKey)))
         queue.push(child.id)
       } catch {
         /* a chapter whose K_mem won't open is skipped (its media then simply won't render) */
@@ -522,12 +579,14 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
   }
   // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
   if (share.passwordRequired && !share.wrap) throw new SharePasswordRequiredError(share.pwSalt ?? '')
+  if (!share.scopeId) throw new ShareUnavailableError('not_found') // an unlocked share always carries its scope
+  const scopeId = share.scopeId
 
   let rootKmem: Uint8Array
   let memoryName: string
   try {
-    rootKmem = v1.symUnwrap(kShare, fromB64std(share.wrap!), SHARE_CTX)
-    memoryName = openName(kShare, share.sealedName!)
+    rootKmem = v1.open(SHARE_KEY, kShare, fromB64std(share.wrap!))
+    memoryName = noteDecoder.decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName!)))
   } catch {
     throw new ShareUnavailableError('bad_fragment_key') // the id was valid but the fragment key doesn't match
   }
@@ -535,22 +594,22 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
   // The share page picks the viewer's locale via `pickLocaleText`.
   const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
 
-  const keys = deriveSubtreeKeys(share.nodes, rootKmem)
+  const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
   const items: ShareItem[] = []
   for (const m of share.media) {
     const memoryKey = keys.get(m.nodeId)
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
-    items.push({ item: shareMediaToItem(m), memoryKey })
+    items.push({ item: shareMediaToItem(m), memoryKey, scopeId })
   }
-  return { memoryName, noteByLocale, role: share.role, rootMemoryKey: rootKmem, items }
+  return { memoryName, noteByLocale, role: share.role, scopeId, rootMemoryKey: rootKmem, items }
 }
 
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_mem`.
  *  A password-protected share needs the same guest token (cr-0118) as the resolve. */
-async function openShareBlob(shareId: string, memoryKey: Uint8Array, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
+async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
   const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
   const getUrls = [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
-  return openBlobFromUrls(memoryKey, ref, getUrls)
+  return openBlobFromUrls(si.scopeId, si.memoryKey, ref, getUrls)
 }
 
 /**
@@ -558,16 +617,16 @@ async function openShareBlob(shareId: string, memoryKey: Uint8Array, ref: BlobRe
  * presign (`resolveShareBlob`: `shareId` + guest `pwToken`, whole-blob only). Same `openFrame` core as the authed
  * `chunkProvider`; only the presign differs, so the SW never learns which route served the bytes (ADR 0047).
  */
-export function shareChunkProvider(shareId: string, memoryKey: Uint8Array, ref: BlobRef, pwToken?: string): ChunkProvider {
-  return makeChunkProvider(memoryKey, ref, async () => {
+export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): ChunkProvider {
+  return makeChunkProvider(si.scopeId, si.memoryKey, ref, async () => {
     const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
     return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
   })
 }
 
 /** Open a shared media's grid (thumbnail) tier. */
-export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si.memoryKey, gridRef(si.item), pwToken)
+export const openShareGrid = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, gridRef(si.item), pwToken)
 /** Open a shared media's lightbox (preview) tier. */
-export const openShareLightbox = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si.memoryKey, lightboxRef(si.item), pwToken)
+export const openShareLightbox = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, lightboxRef(si.item), pwToken)
 /** Open a shared media's pristine original (download). */
-export const openShareOriginal = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si.memoryKey, downloadRef(si.item), pwToken)
+export const openShareOriginal = (shareId: string, si: ShareItem, pwToken?: string) => openShareBlob(shareId, si, downloadRef(si.item), pwToken)

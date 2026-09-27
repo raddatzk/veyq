@@ -86,21 +86,21 @@ export function normalizeCoverCrop(raw: unknown): CoverCrop {
  * cover always points at an image); the crop is normalized on-image (defaulting to the full frame). Best-effort
  * (E4): any other shape ⇒ null ⇒ the placeholder.
  */
-export function normalizeMemoryCover(raw: unknown): MemoryCover | null {
+export function normalizeMemoryCover(raw: unknown, nodeId: string): MemoryCover | null {
   if (!raw || typeof raw !== 'object') return null
   const c = raw as { source?: unknown; mediaId?: unknown; crop?: unknown }
-  const source = normalizeCoverSource(c)
+  const source = normalizeCoverSource(c, nodeId)
   if (!source) return null
   return { source, crop: normalizeCoverCrop(c.crop) }
 }
 
 /** Resolve a cover's source from either the widened `source` discriminant or the legacy flat `mediaId`. */
-function normalizeCoverSource(c: { source?: unknown; mediaId?: unknown }): MemoryCoverSource | null {
+function normalizeCoverSource(c: { source?: unknown; mediaId?: unknown }, nodeId: string): MemoryCoverSource | null {
   if (c.source && typeof c.source === 'object') {
     const s = c.source as { kind?: unknown; mediaId?: unknown; ref?: unknown }
     if (s.kind === 'media' && typeof s.mediaId === 'string' && s.mediaId) return { kind: 'media', mediaId: s.mediaId }
     if (s.kind === 'upload') {
-      const ref = normalizeBlobRef(s.ref)
+      const ref = normalizeBlobRef(s.ref, nodeId)
       return ref ? { kind: 'upload', ref } : null
     }
     return null
@@ -110,8 +110,10 @@ function normalizeCoverSource(c: { source?: unknown; mediaId?: unknown }): Memor
   return null
 }
 
-/** Normalize a loosely-typed cover-blob ref (the opaque read-back shape) — null when any required field is off. */
-function normalizeBlobRef(raw: unknown): BlobRef | null {
+/** Normalize a loosely-typed cover-blob ref (the opaque read-back shape) — null when any required field is off. The
+ *  blob's owner is the node whose meta names it, in the COVER role: taken from the node the caller addressed, never
+ *  from the sealed payload (ADR 0072), so a cover ref copied into another node's meta refuses to open there. */
+function normalizeBlobRef(raw: unknown, nodeId: string): BlobRef | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as { blobId?: unknown; chunkCount?: unknown; byteSize?: unknown; wrappedBlobKey?: unknown }
   const chunkCount = finiteNum(r.chunkCount)
@@ -119,7 +121,7 @@ function normalizeBlobRef(raw: unknown): BlobRef | null {
   if (typeof r.blobId !== 'string' || !r.blobId) return null
   if (typeof r.wrappedBlobKey !== 'string' || !r.wrappedBlobKey) return null
   if (chunkCount === undefined || byteSize === undefined) return null
-  return { blobId: r.blobId, chunkCount, byteSize, wrappedBlobKey: r.wrappedBlobKey }
+  return { blobId: r.blobId, chunkCount, byteSize, wrappedBlobKey: r.wrappedBlobKey, ownerId: nodeId, role: 'COVER' }
 }
 
 /**
@@ -127,8 +129,10 @@ function normalizeBlobRef(raw: unknown): BlobRef | null {
  * the node carries no meta/cover, the wrap doesn't open, or the payload is malformed — every surface then shows
  * the placeholder rather than break.
  */
-export function unsealMemoryCover(nodeKey: Uint8Array, node: { wrappedMeta: string | null }): MemoryCover | null {
-  return normalizeMemoryCover(unsealNodeMeta(nodeKey, node.wrappedMeta).cover)
+export function unsealMemoryCover(
+  scopeId: string, nodeKey: Uint8Array, node: { id: string; wrappedMeta: string | null },
+): MemoryCover | null {
+  return normalizeMemoryCover(unsealNodeMeta(nodeKey, { scopeId, nodeId: node.id }, node.wrappedMeta).cover, node.id)
 }
 
 /**
@@ -145,10 +149,10 @@ export async function setMemoryCover(
   cover: MemoryCover | null,
   currentMeta: string | null,
 ): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, currentMeta)
+  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
   if (cover) meta.cover = cover
   else delete meta.cover
-  const wrappedMeta = sealNodeMeta(nodeKey, meta)
+  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
   await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
   return wrappedMeta
 }
@@ -192,7 +196,7 @@ export async function loadNodeCover(
   nodeKey: Uint8Array,
   node: { id: string; wrappedMeta: string | null },
 ): Promise<DecryptedCover | null> {
-  const cover = unsealMemoryCover(nodeKey, node)
+  const cover = unsealMemoryCover(scopeId, nodeKey, node)
   if (!cover) return null
   try {
     const bytes =

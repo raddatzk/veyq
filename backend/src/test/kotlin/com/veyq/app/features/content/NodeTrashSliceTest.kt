@@ -1,5 +1,6 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -87,9 +88,9 @@ class NodeTrashSliceTest {
     @Test
     fun deleteHidesTheWholeSubtreeAndListsTheRootInTheTrash() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"kind":"FOLDER","encryptedName":"Zg==","slugToken":"Zi1z","orderIndex":0}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Yy1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"Zi1z","orderIndex":0}""")
+        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Yy1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$folder").then().statusCode(204)
@@ -113,7 +114,7 @@ class NodeTrashSliceTest {
     @Test
     fun deleteDestroysNothingUnderTheSubtree() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"a2VlcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"a2VlcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val mediaId = completeOne(userId, scopeId, memory, "b3JpZw==")
 
         given().header("Authorization", token(userId))
@@ -133,14 +134,14 @@ class NodeTrashSliceTest {
     @Test
     fun deletingFreesTheNameImmediately() {
         val (userId, scopeId) = seedMemberScope()
-        val first = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"cm9tLTIwMjY=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val first = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"cm9tLTIwMjY=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$first").then().statusCode(204)
 
         // the SAME slug in the SAME parent is immediately reusable — without `slug_token := id` this is a 409
         // (the trashed row still holds the name) or, worse, a constraint violation at flush.
-        val second = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bTI=","slugToken":"cm9tLTIwMjY=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val second = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bTI=","slugToken":"cm9tLTIwMjY=","orderIndex":0,"wrappedContentKey":"aw=="}""")
         assertTrue(second != first) { "the re-created Memory must be a new node" }
 
         // and the freed token really is the trashed node's own id
@@ -153,13 +154,13 @@ class NodeTrashSliceTest {
     @Test
     fun restoreIntoATakenNameIsACleanRejection() {
         val (userId, scopeId) = seedMemberScope()
-        val original = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val original = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$original").then().statusCode(204)
 
         // somebody re-used the name while the Memory sat in the trash
-        createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bTI=","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bTI=","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // the restore surfaces the SAME disambiguation a create does — a 409 slug_taken, never a 500
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -183,8 +184,8 @@ class NodeTrashSliceTest {
     @Test
     fun restoreReturnsTheWholeSubtreeIntact() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"cmVzdC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"cmVzdC1j","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"cmVzdC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"cmVzdC1j","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val mediaId = completeOne(userId, scopeId, chapter, "b3JpZw==")
 
         given().header("Authorization", token(userId))
@@ -224,14 +225,14 @@ class NodeTrashSliceTest {
     @Test
     fun slugTakenStillSeesTrashedRowsSoTheDatabaseNeverThrows() {
         val (userId, scopeId) = seedMemberScope()
-        val trashed = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"dHJhcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val trashed = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"dHJhcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$trashed").then().statusCode(204)
 
         // the freed token is the trashed node's own id; creating a sibling that claims it must be REJECTED,
         // cleanly, by validation — not accepted and then thrown out by the unique index.
         val outcome = handler.create(
-            userId, scopeId, null, NodeEntity.MEMORY, "bTI=", trashed, 0, 0, "aw==", null,
+            userId, scopeId, UUID.randomUUID().toString(), null, NodeEntity.MEMORY, "bTI=", trashed, 0, 0, "aw==", null,
         )
         assertTrue(outcome is CreateNodeOutcome.SlugTaken) {
             "a slug already held by a TRASHED sibling must be a clean rejection; got $outcome"
@@ -250,9 +251,9 @@ class NodeTrashSliceTest {
     @Test
     fun deletingAroundAnAlreadyTrashedSubtreeMakesTheWholeThingAgeOutTogether() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = createNode(userId, scopeId, """{"kind":"FOLDER","encryptedName":"Zg==","slugToken":"c3RyLWY=","orderIndex":0}""")
-        val memory = createNode(userId, scopeId, """{"parentId":"$folder","kind":"MEMORY","encryptedName":"bQ==","slugToken":"c3RyLW0=","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"c3RyLWM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val folder = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Zg==","slugToken":"c3RyLWY=","orderIndex":0}""")
+        val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"c3RyLW0=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"c3RyLWM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
@@ -289,7 +290,7 @@ class NodeTrashSliceTest {
     @Test
     fun reDeletingAnAlreadyTrashedSubtreeIsANoOp() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"aWRlbXA=","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"aWRlbXA=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
@@ -314,19 +315,19 @@ class NodeTrashSliceTest {
     @Test
     fun purgeReclaimsMediaDerivativesBucketsCoverAndTheStoreObjects() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"bQ==","slugToken":"cHVyZ2Utcw==","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        val survivor = createNode(userId, scopeId, """{"kind":"MEMORY","encryptedName":"cw==","slugToken":"cHVyZ2Utdg==","orderIndex":1,"wrappedContentKey":"aw=="}""")
+        val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"cHVyZ2Utcw==","orderIndex":0,"wrappedContentKey":"aw=="}""")
+        val survivor = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"cw==","slugToken":"cHVyZ2Utdg==","orderIndex":1,"wrappedContentKey":"aw=="}""")
 
         val original = startOne(userId, scopeId, TestBlob.ofChunks(2), "b3JpZw==")
-        val thumb = startOne(userId, scopeId, TestBlob.SMALL, "dGh1bWI=")
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, "dGh1bWI=", TestBlob.ownerOf(original), "THUMBNAIL")
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$memory","originalUploadId":"$original","derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""")
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original","derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
-        val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI="))
+        val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI=", memory, "COVER"))
         val subBucket = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"sealedName":"YnVja2V0"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
 
@@ -400,9 +401,12 @@ class NodeTrashSliceTest {
             .then().statusCode(201).body("nodeId", notNullValue())
             .extract().path("nodeId")
 
-    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
+    private fun startOne(
+        userId: String, scopeId: String, blob: TestBlob, wrap: String,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")
@@ -410,7 +414,7 @@ class NodeTrashSliceTest {
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap)
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")

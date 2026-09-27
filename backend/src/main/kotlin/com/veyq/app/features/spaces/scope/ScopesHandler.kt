@@ -24,6 +24,7 @@ sealed interface CreatePersonalOutcome {
     object Suspended : CreatePersonalOutcome, HttpFailure by Failures.tenantSuspended
     object NoTenant : CreatePersonalOutcome, HttpFailure by Failures.tenantNotFound
     object AlreadyExists : CreatePersonalOutcome, HttpFailure by httpFailure("personal_scope_exists", CONFLICT)
+    object IdTaken : CreatePersonalOutcome, HttpFailure by Failures.idTaken
 }
 
 /** Outcome of creating a group scope. Group names are not unique, so there is no "already exists" case. */
@@ -33,6 +34,7 @@ sealed interface CreateGroupOutcome {
     object NoTenant : CreateGroupOutcome, HttpFailure by Failures.tenantNotFound
     /** The `spaces.groups` capability is disabled instance-wide (ADR 0032) — a 422, a personal-only instance. */
     object CapabilityDisabled : CreateGroupOutcome, HttpFailure by Failures.capabilityDisabled
+    object IdTaken : CreateGroupOutcome, HttpFailure by Failures.idTaken
 }
 
 /** Outcome of listing the caller's scopes. */
@@ -189,12 +191,14 @@ class ScopesHandler(
     private val access: ScopeAccess,
 ) {
 
-    fun createPersonal(userId: String, tenantId: String?, wrappedGrant: String): CreatePersonalOutcome {
+    fun createPersonal(userId: String, tenantId: String?, scopeId: String, wrappedGrant: String): CreatePersonalOutcome {
         tenantId ?: return CreatePersonalOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
-        return CreatePersonalOutcome.Created(store.createPersonal(userId, tenantId, wrappedGrant))
+        // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it.
+        if (!store.createPersonal(scopeId, userId, tenantId, wrappedGrant)) return CreatePersonalOutcome.IdTaken
+        return CreatePersonalOutcome.Created(scopeId)
     }
 
     /**
@@ -202,14 +206,16 @@ class ScopesHandler(
      * must belong to the tenant; birth is client-driven and operator-blind — the handler persists only the
      * ciphertext name + the ciphertext self-grant, never the scope key or the plaintext name.
      */
-    fun createGroup(userId: String, tenantId: String?, encryptedName: String, wrappedGrant: String): CreateGroupOutcome {
+    fun createGroup(userId: String, tenantId: String?, scopeId: String, encryptedName: String, wrappedGrant: String): CreateGroupOutcome {
         // Instance policy first (ADR 0032): a personal-only instance disables group scopes → 422, enforced
         // server-side even if a stale client still offers the affordance.
         if (!capabilities.isActive(CapabilityIds.SPACES_GROUPS)) return CreateGroupOutcome.CapabilityDisabled
         tenantId ?: return CreateGroupOutcome.NoTenant
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
-        return CreateGroupOutcome.Created(store.createGroup(userId, tenantId, encryptedName, wrappedGrant))
+        // The client-minted scope id (ADR 0072): the self-grant and the group name are sealed bound to it.
+        if (!store.createGroup(scopeId, userId, tenantId, encryptedName, wrappedGrant)) return CreateGroupOutcome.IdTaken
+        return CreateGroupOutcome.Created(scopeId)
     }
 
     fun listMine(userId: String, tenantId: String?): ListScopesOutcome {

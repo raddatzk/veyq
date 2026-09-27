@@ -198,7 +198,7 @@ class TenantAcceptSliceTest {
         }
 
     private fun registerBody(secret: String) = """
-        {"bootstrapSecret":"$secret","username":"newowner",
+        {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newowner",
          "account":{"suiteId":"v1",
            "identityPublicKey":"aWRlbnRpdHktcHVibGljLWtleQ==",
            "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",

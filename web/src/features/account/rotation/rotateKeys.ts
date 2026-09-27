@@ -96,7 +96,7 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
 
   try {
     const wrappedPriv = b64std(
-      v1.symWrap(newMasterKey, v1.serializeIdentityPrivate(identity), 'identity-priv', v1.randomBytes(12)),
+      v1.seal({ purpose: 'identity-priv' }, newMasterKey, v1.serializeIdentityPrivate(identity)),
     )
     const pwSalt = v1.randomBytes(16)
     const recSalt = v1.randomBytes(16)
@@ -104,11 +104,11 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     const recKek = await recoveryKekAsync(secretKey, recSalt, ARGON)
     const identityPublicKey = v1.serializeIdentityPublic(identity.pub)
     const passwordWrap = {
-      wrappedKey: v1.symWrap(pwKek, newMasterKey, 'master-key', v1.randomBytes(12)),
+      wrappedKey: v1.seal({ purpose: 'master-key' }, pwKek, newMasterKey),
       kdfParams: v1.encodeKdfParams(ARGON, pwSalt),
     }
     const recoveryWrap = {
-      wrappedKey: v1.symWrap(recKek, newMasterKey, 'master-key', v1.randomBytes(12)),
+      wrappedKey: v1.seal({ purpose: 'master-key' }, recKek, newMasterKey),
       kdfParams: v1.encodeKdfParams(ARGON, recSalt),
     }
 
@@ -202,7 +202,7 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: 
  * of their own old identity, performed by the only person who can (uc.account.rotate-keys §6).
  *
  * It is `rotateGroupForRemoval`'s crypto with a one-member directory, through the same `commitRotation`: chain-link
- * `symWrap(E_{n+1}, E_n)` so the new grant still peels back to everything already written, wrap `E_{n+1}` forward,
+ * `E_n` under `E_{n+1}` so the new grant still peels back to everything already written, wrap `E_{n+1}` forward,
  * and state the epoch it creates (a stale answer rebuilds once from a fresh key, ADR 0024 §4).
  *
  * Two details that look like details and are not:
@@ -226,7 +226,7 @@ async function rekeyAlone(scopeId: string, identity: v1.Identity): Promise<boole
     const members = await listScopeMembers(scopeId)
     if (members.length !== 1) return false
     const mine = b64std(v1.serializeIdentityPublic(identity.pub))
-    await commitRotation(scopeId, async (newKey) => [{ userId: members[0].userId, wrappedGrant: wrapScopeKeyToMember(newKey, mine) }])
+    await commitRotation(scopeId, async (newKey, epoch) => [{ userId: members[0].userId, wrappedGrant: wrapScopeKeyToMember(newKey, scopeId, epoch, mine) }])
     return true
   } catch {
     return false

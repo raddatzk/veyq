@@ -37,10 +37,10 @@ const CODE_DIGITS = 6
  *  never show up in a test that only checks the shape. */
 const CODE_REJECT_AT = 250
 
-/** Wrap context of the sealed grant. Its own domain, shared with no sibling: the KEK is derived per single-use
- *  ephemeral key, the ciphertext is opened within the channel's ten minutes and nothing survives it, so a drift
- *  between two client versions fails LOUDLY at `asymUnwrap` rather than silently. */
-const PAIRING_GRANT = 'pairing-grant'
+/** Seal context of the grant. Purpose only (ADR 0072 Decision 2): the KEK is derived per single-use ephemeral key,
+ *  so the key is the binding; the ciphertext is opened within the channel's ten minutes and nothing survives it,
+ *  so a drift between two client versions fails LOUDLY at `openAs` rather than silently. */
+const PAIRING_GRANT = { purpose: 'pairing-grant' } as const
 
 const HANDLE_BYTES = 32
 const decoder = new TextDecoder()
@@ -253,20 +253,13 @@ export function sealGrant(pub: v1.Identity['pub'], grant: PairingGrant): string 
       label: grant.label,
     }),
   )
-  return b64std(
-    v1.asymWrap({ x: pub.kemX, m: pub.kemM }, plaintext, PAIRING_GRANT, { nonce: v1.randomBytes(12) }),
-  )
+  return b64std(v1.sealTo(PAIRING_GRANT, { x: pub.kemX, m: pub.kemM }, plaintext))
 }
 
 /** Open the sealed grant with the transport private bundle. Throws on a tag mismatch, an unreadable body or an
  *  unknown version — every one of which is the same thing to the caller: this envelope is not ours. */
 export function openGrant(priv: v1.Identity['priv'], envelope: string): PairingGrant {
-  const plaintext = v1.asymUnwrap(
-    v1.hybridSecret(priv),
-    v1.hybridPublic(priv),
-    fromB64std(envelope),
-    PAIRING_GRANT,
-  )
+  const plaintext = v1.openAs(PAIRING_GRANT, v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(envelope))
   const o = JSON.parse(decoder.decode(plaintext)) as Partial<Record<keyof PairingGrant | 'v', unknown>>
   if (o.v !== 1 || typeof o.email !== 'string' || typeof o.masterKey !== 'string'
     || typeof o.refreshToken !== 'string' || typeof o.label !== 'string') {

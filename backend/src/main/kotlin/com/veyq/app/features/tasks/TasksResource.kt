@@ -74,7 +74,7 @@ class TasksResource(
         }
 
     override fun completeTask(jobId: UUID, completeRequest: CompleteRequest?): Response =
-        when (val r = handler.complete(me, jobId.toString(), completeRequest?.sealedResult)) {
+        when (val r = handler.complete(me, jobId.toString(), completeRequest?.sealedResult, completeRequest?.epoch)) {
             CompleteResult.Done -> Response.noContent().build()
             is HttpFailure -> httpError(r)
         }

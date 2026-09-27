@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs'
 import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import * as v1 from './v1'
+// The raw primitives are not in the package's exports (ADR 0072 Decision 6); only this suite reaches them.
+import * as raw from './primitives'
+import { SEAL_PURPOSES, SEAL_TO_PURPOSES } from './seal'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from './testArgon'
 
 const unhex = (s: string) => Uint8Array.from(Buffer.from(s, 'hex'))
@@ -13,6 +16,25 @@ const here = dirname(fileURLToPath(import.meta.url))
 const vectors = JSON.parse(
   readFileSync(resolve(here, '../../../contracts/crypto/vectors/v1.json'), 'utf8'),
 )
+
+type SymVector = { context: Record<string, string | number>; context_bytes: string; kek: string; nonce: string; plaintext: string; blob: string }
+type AsymVector = {
+  context: Record<string, string | number>
+  context_bytes: string
+  pk_x25519: string
+  pk_mlkem: string
+  esk_x25519: string
+  mlkem_msg: string
+  nonce: string
+  plaintext: string
+  blob: string
+}
+/** A binding value one step away from `v`: another canonical id, the next integer, another blob role. */
+const otherValue = (v: string | number): string | number => {
+  if (typeof v === 'number') return v + 1
+  if (v === 'ORIGINAL' || v === 'THUMBNAIL' || v === 'PREVIEW' || v === 'COVER') return v === 'COVER' ? 'ORIGINAL' : 'COVER'
+  return v.slice(0, -1) + (v.endsWith('0') ? '1' : '0')
+}
 
 // Every Argon2id case here runs at the params the VECTORS carry (`k.params`), including an explicit
 // production-params one — that is this file's whole job, and the reason the cheap TEST_ARGON used elsewhere in
@@ -30,7 +52,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
 
   it('AES-256-GCM', () => {
     const p = vectors.primitives.aes256gcm
-    expect(hex(v1.aeadSeal(unhex(p.key), unhex(p.nonce), unhex(p.plaintext), unhex(p.aad)))).toBe(
+    expect(hex(raw.aeadSeal(unhex(p.key), unhex(p.nonce), unhex(p.plaintext), unhex(p.aad)))).toBe(
       p.ciphertext_and_tag,
     )
   })
@@ -134,7 +156,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
 
   it('KEM-v1 decap (hybrid X25519 + ML-KEM-768)', () => {
     const d = vectors.kem_v1.decap_kat
-    const ss = v1.kemDecap(
+    const ss = raw.kemDecap(
       { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) },
       { x: unhex(d.pk_x25519), m: unhex(d.pk_mlkem) },
       unhex(d.ct),
@@ -142,81 +164,131 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(ss)).toBe(d.shared_secret)
   })
 
-  it('symmetric master-key wrap', () => {
-    const w = vectors.wrap.sym_master_key
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-  })
-
-  it('symmetric wrap with the invite-temp-key context', () => {
-    const w = vectors.wrap.sym_invite_temp_key
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-  })
-
-  it('symmetric wrap with the session-token context (cr-0023)', () => {
-    const w = vectors.wrap.session_token
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('symmetric wrap with the identity-pins context (cr-0098, ADR 0028)', () => {
-    const w = vectors.wrap.sym_identity_pins
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('symmetric wrap with the device-register context (en.account.device-register)', () => {
-    const w = vectors.wrap.sym_device_register
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('symmetric wrap with the favorites context (ADR 0068 — the private Memory pin)', () => {
-    const w = vectors.wrap.sym_favorites
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('symmetric wrap with the item-favorites context (ADR 0068 — the shared item mark)', () => {
-    const w = vectors.wrap.sym_item_favorites
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('the favorites and item-favorites contexts are domain-separated', () => {
-    // The two favorite objects carry DIFFERENT audiences (ADR 0068): the pin set is private to the member,
-    // the item marks are shared with the scope. These vectors share kek, nonce and plaintext so only the
-    // context varies — without the separation a private pin blob would open in the shared slot and vice
-    // versa, which is the leak this whole split exists to close.
-    const f = vectors.wrap.sym_favorites
-    const i = vectors.wrap.sym_item_favorites
-    expect(f.kek).toBe(i.kek)
-    expect(f.nonce).toBe(i.nonce)
-    expect(f.plaintext).toBe(i.plaintext)
-    expect(f.blob).not.toBe(i.blob)
-    expect(() => v1.symUnwrap(unhex(f.kek), unhex(f.blob), i.context)).toThrow()
-    expect(() => v1.symUnwrap(unhex(i.kek), unhex(i.blob), f.context)).toThrow()
-  })
-
-  it('the device-register and identity-pins contexts are domain-separated', () => {
-    // Same kek, same nonce, same plaintext, different context ⇒ different blob, and neither opens under the
-    // other's context. Without this a register blob could be replayed into the pin store's slot.
-    const r = vectors.wrap.sym_device_register
-    const p = vectors.wrap.sym_identity_pins
-    expect(r.kek).toBe(p.kek)
-    expect(hex(v1.symWrap(unhex(r.kek), unhex(r.plaintext), p.context, unhex(r.nonce)))).not.toBe(r.blob)
-    expect(() => v1.symUnwrap(unhex(r.kek), unhex(r.blob), p.context)).toThrow()
-  })
-
-  it('asymmetric wrap round-trip (unwrap a recorded blob)', () => {
-    const a = vectors.wrap.asym_scope_grant
+  // ── Typed seal (ADR 0072) ──────────────────────────────────────────────────────────────────────────────────
+  // One vector per purpose, keyed by it. The union is data (SEAL_PURPOSES / SEAL_TO_PURPOSES), so its purposes
+  // are compared with the vector set in BOTH directions: a purpose added to the union without a vector, and a
+  // vector left behind by a deleted purpose, each redden their own case by name.
+  describe('typed seal (ADR 0072)', () => {
+    const symVectors: Record<string, SymVector> = vectors.seal.sym
+    const asymVectors: Record<string, AsymVector> = vectors.seal.asym
     const d = vectors.kem_v1.decap_kat
-    const recovered = v1.asymUnwrap(
-      { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) },
-      { x: unhex(a.pk_x25519), m: unhex(a.pk_mlkem) },
-      unhex(a.blob),
-      a.context,
-    )
-    expect(hex(recovered)).toBe(a.plaintext)
+    const sk = { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) }
+    const symCtx = (purpose: string): v1.SealContext =>
+      ({ purpose, ...symVectors[purpose].context }) as v1.SealContext
+    const asymCtx = (purpose: string): v1.SealToContext =>
+      ({ purpose, ...asymVectors[purpose].context }) as v1.SealToContext
+    const refusal = (purpose: string) => new v1.OpenRefused(purpose)
+
+    it('every purpose in the union has a vector', () => {
+      expect(Object.keys(SEAL_PURPOSES).filter((p) => !(p in symVectors))).toEqual([])
+      expect(Object.keys(SEAL_TO_PURPOSES).filter((p) => !(p in asymVectors))).toEqual([])
+    })
+
+    it('every vector names a live purpose in the union', () => {
+      expect(Object.keys(symVectors).filter((p) => !Object.hasOwn(SEAL_PURPOSES, p))).toEqual([])
+      expect(Object.keys(asymVectors).filter((p) => !Object.hasOwn(SEAL_TO_PURPOSES, p))).toEqual([])
+    })
+
+    it('every vector context carries exactly its purpose\'s binding fields, in the union\'s order', () => {
+      const table: Record<string, readonly (readonly [string, string])[]> = { ...SEAL_PURPOSES, ...SEAL_TO_PURPOSES }
+      for (const [purpose, v] of [...Object.entries(symVectors), ...Object.entries(asymVectors)]) {
+        expect(Object.keys(v.context), purpose).toEqual(table[purpose].map(([name]) => name))
+      }
+    })
+
+    describe.each(Object.keys(symVectors))('%s (symmetric)', (purpose) => {
+      const v = symVectors[purpose]
+      it('encodes its context canonically', () => {
+        expect(hex(v1.encodeSealContext(symCtx(purpose)))).toBe(v.context_bytes)
+      })
+      it('seals to the vector blob, and opens it back', () => {
+        expect(hex(raw.symWrap(unhex(v.kek), unhex(v.plaintext), unhex(v.context_bytes), unhex(v.nonce)))).toBe(v.blob)
+        expect(hex(v1.open(symCtx(purpose), unhex(v.kek), unhex(v.blob)))).toBe(v.plaintext)
+      })
+      it('seal draws a fresh nonce and round-trips through open', () => {
+        const a = v1.seal(symCtx(purpose), unhex(v.kek), unhex(v.plaintext))
+        const b = v1.seal(symCtx(purpose), unhex(v.kek), unhex(v.plaintext))
+        expect(hex(a.slice(1, 13))).not.toBe(hex(b.slice(1, 13)))
+        expect(hex(v1.open(symCtx(purpose), unhex(v.kek), a))).toBe(v.plaintext)
+      })
+      // Every binding field is load-bearing: the same blob, opened at an address one field away, is refused.
+      it.each(Object.keys(v.context))('does not open with a different %s', (field) => {
+        const moved = { ...symCtx(purpose), [field]: otherValue(v.context[field]) } as v1.SealContext
+        expect(() => v1.open(moved, unhex(v.kek), unhex(v.blob))).toThrow(refusal(purpose))
+      })
+      it('does not open as any other purpose', () => {
+        for (const other of Object.keys(symVectors).filter((p) => p !== purpose)) {
+          expect(() => v1.open(symCtx(other), unhex(v.kek), unhex(v.blob))).toThrow(refusal(other))
+        }
+      })
+    })
+
+    describe.each(Object.keys(asymVectors))('%s (asymmetric)', (purpose) => {
+      const v = asymVectors[purpose]
+      const pk = { x: unhex(v.pk_x25519), m: unhex(v.pk_mlkem) }
+      it('encodes its context canonically', () => {
+        expect(hex(v1.encodeSealToContext(asymCtx(purpose)))).toBe(v.context_bytes)
+      })
+      it('seals to the vector blob (deterministic KEM), and opens it back', () => {
+        const blob = raw.asymWrap(pk, unhex(v.plaintext), unhex(v.context_bytes), {
+          eskX: unhex(v.esk_x25519),
+          mlkemMsg: unhex(v.mlkem_msg),
+          nonce: unhex(v.nonce),
+        })
+        expect(hex(blob)).toBe(v.blob)
+        expect(hex(v1.openAs(asymCtx(purpose), sk, pk, unhex(v.blob)))).toBe(v.plaintext)
+      })
+      it('sealTo round-trips through openAs', () => {
+        expect(hex(v1.openAs(asymCtx(purpose), sk, pk, v1.sealTo(asymCtx(purpose), pk, unhex(v.plaintext))))).toBe(
+          v.plaintext,
+        )
+      })
+      it.each(Object.keys(v.context))('does not open with a different %s', (field) => {
+        const moved = { ...asymCtx(purpose), [field]: otherValue(v.context[field]) } as v1.SealToContext
+        expect(() => v1.openAs(moved, sk, pk, unhex(v.blob))).toThrow(refusal(purpose))
+      })
+      it('does not open as any other purpose', () => {
+        for (const other of Object.keys(asymVectors).filter((p) => p !== purpose)) {
+          expect(() => v1.openAs(asymCtx(other), sk, pk, unhex(v.blob))).toThrow(refusal(other))
+        }
+      })
+    })
+
+    describe('a context that does not describe an object is refused before any AEAD runs', () => {
+      const v = symVectors['node-name']
+      const base = symCtx('node-name')
+      it.each([
+        ['an upper-case id', { ...base, nodeId: (base as { nodeId: string }).nodeId.toUpperCase() }, /nodeId is not a canonical lowercase UUID/],
+        ['a non-UUID id', { ...base, scopeId: 'root' }, /scopeId is not a canonical lowercase UUID/],
+        ['a missing field', { purpose: 'node-name', scopeId: (base as { scopeId: string }).scopeId, nodeId: (base as { nodeId: string }).nodeId }, /epoch is not an unsigned integer/],
+        ['a negative epoch', { ...base, epoch: -1 }, /epoch is not an unsigned integer/],
+        ['a fractional epoch', { ...base, epoch: 1.5 }, /epoch is not an unsigned integer/],
+        ['an extra field', { ...base, parentId: (base as { nodeId: string }).nodeId }, /node-name does not bind parentId/],
+        ['an unknown purpose', { purpose: 'album-name' }, /unknown purpose album-name/],
+        ['an inherited purpose', { purpose: 'toString' }, /unknown purpose toString/],
+      ])('%s', (_name, ctx, message) => {
+        expect(() => v1.seal(ctx as v1.SealContext, unhex(v.kek), new Uint8Array(1))).toThrow(v1.SealContextInvalid)
+        expect(() => v1.open(ctx as v1.SealContext, unhex(v.kek), unhex(v.blob))).toThrow(message)
+      })
+      it('a share id that is not the 43-character token is refused', () => {
+        const r = symCtx('share-key-recovery')
+        expect(() =>
+          v1.encodeSealContext({ ...r, shareId: (r as { nodeId: string }).nodeId } as v1.SealContext),
+        ).toThrow(/shareId is not a share id/)
+      })
+      it('a blob role outside the four is refused', () => {
+        const b = symCtx('blob-key')
+        expect(() => v1.encodeSealContext({ ...b, role: 'ALBUM' } as unknown as v1.SealContext)).toThrow(
+          /role is not a blob role/,
+        )
+      })
+      it('the refusals are their own classes, so a caller can tell a bad address from a moved ciphertext', () => {
+        expect(new v1.SealContextInvalid('x').name).toBe('SealContextInvalid')
+        expect(new v1.OpenRefused('node-name').name).toBe('OpenRefused')
+        expect(new v1.OpenRefused('node-name').purpose).toBe('node-name')
+        expect(new v1.OpenRefused('node-name').message).toBe('open_refused: node-name')
+      })
+    })
   })
 
   it('group name-key derivation from the name epoch key (cr-0096, ADR 0027)', () => {
@@ -230,34 +302,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     // K_icon = HKDF-SHA256(E_e, salt="", info=utf8("veyq/v1/space-icon-key"), 32). Distinct info from
     // group_name_key (same epoch_key here) → a different okm: an icon-key wrap can never be a name-key.
     expect(hex(v1.hkdfSha256(unhex(s.epoch_key), unhex(s.salt), unhex(s.info), s.length))).toBe(s.okm)
-  })
-
-  it('symmetric wrap of the group name under K_name (node-name context, cr-0096)', () => {
-    const w = vectors.wrap.sym_group_name
-    // The canonical encryptedName: the group name sealed under its derived name-key (reusing the node-name seal).
-    expect(hex(v1.symWrap(unhex(w.kek), unhex(w.plaintext), w.context, unhex(w.nonce)))).toBe(w.blob)
-    expect(hex(v1.symUnwrap(unhex(w.kek), unhex(w.blob), w.context))).toBe(w.plaintext)
-  })
-
-  it('asymmetric wrap of K_name with the group-name-key context (cr-0096 invite name-key)', () => {
-    const a = vectors.wrap.asym_group_name_key
-    const d = vectors.kem_v1.decap_kat
-    const recovered = v1.asymUnwrap(
-      { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) },
-      { x: unhex(a.pk_x25519), m: unhex(a.pk_mlkem) },
-      unhex(a.blob),
-      a.context,
-    )
-    expect(hex(recovered)).toBe(a.plaintext) // unwraps to the 32-byte K_name
-    // domain separation: the same blob must NOT open under the scope-grant context (distinct AAD).
-    expect(() =>
-      v1.asymUnwrap(
-        { x: unhex(d.sk_x25519), m: unhex(d.sk_mlkem) },
-        { x: unhex(a.pk_x25519), m: unhex(a.pk_mlkem) },
-        unhex(a.blob),
-        'scope-grant',
-      ),
-    ).toThrow()
   })
 
   it('blinded slug token (AD-26)', () => {
@@ -329,15 +373,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         expect(new TextDecoder().decode(stmt.slice(4, 4 + v.domain.length))).toBe(v.domain)
       }
     })
-  })
-
-  it('journal seal (per-message sub-key)', () => {
-    const j = vectors.journal_open
-    expect(hex(v1.journalOpen(unhex(j.contentKey), unhex(j.blob)))).toBe(j.plaintext)
-    // round-trip the SEAL side too (randomized salt/nonce, so we can't pin a fixed blob — but our own seal
-    // must open to the same plaintext, exercising the seal-side HKDF/layout the fixed-blob vector can't).
-    const sealed = v1.journalSeal(unhex(j.contentKey), unhex(j.plaintext))
-    expect(hex(v1.journalOpen(unhex(j.contentKey), sealed))).toBe(j.plaintext)
   })
 
   it('chunked-AEAD frame (resumable upload / streaming)', () => {

@@ -76,7 +76,7 @@ class UploadWindowSliceTest {
         val scope = seedScope()
         val other = seedMember(scope)
         val memory = seedNode(scope.scopeId)
-        val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL)
+        val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL, ownerId = memory, role = "COVER")
 
         commitCover(other, scope.scopeId, memory, uploadId).statusCode(404).body("code", equalTo("node_not_found"))
         commitCover(scope.owner, scope.scopeId, memory, uploadId).statusCode(200)
@@ -156,15 +156,21 @@ class UploadWindowSliceTest {
 
     // --- helpers ---
 
-    private fun startPuts(userId: String, scopeId: String, blob: TestBlob) =
+    private fun startPuts(
+        userId: String, scopeId: String, blob: TestBlob,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ) =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare("d3JhcA==")}]}""")
+            .body("""{"items":[${blob.declare("d3JhcA==", ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
 
     /** Start [blob] as [userId] and stage every chunk at its derived length — an honest, finished upload. */
-    private fun startStaged(userId: String, scopeId: String, blob: TestBlob): String {
-        val uploadId = startPuts(userId, scopeId, blob).extract().path<String>("results[0].uploadId")
+    private fun startStaged(
+        userId: String, scopeId: String, blob: TestBlob,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ): String {
+        val uploadId = startPuts(userId, scopeId, blob, ownerId, role).extract().path<String>("results[0].uploadId")
         val storageKey = QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(uploadId)!!.storageKey }
         blob.stage(fakeStore, storageKey)
         return uploadId
@@ -178,7 +184,7 @@ class UploadWindowSliceTest {
 
     private fun complete(userId: String, scopeId: String, nodeId: String, uploadId: String) =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$nodeId","originalUploadId":"$uploadId"}]}""")
+            .body("""{"items":[{"nodeId":"$nodeId","mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
 

@@ -32,7 +32,7 @@ They look like one feature and are not. The full rule, its rejected alternatives
 | --- | --- | --- |
 | what | a node id | a `veyq_media` id |
 | audience | **private to the member** | **shared** with the scope, member-attributed |
-| seal | `symWrap(masterKey, …, "favorites")` | `symWrap(K_SC@E_0, …, "item-favorites")` |
+| seal | master key, purpose `favorites`, bound to the scope | `K_SC@E_0`, purpose `item-favorites`, bound to scope + node |
 | stored | one blob per **(user, scope)** | one blob per **(member, scope, node)** |
 | read | the caller's blob only | the scope's **per-member** blobs |
 | surfaces | sidebar Favorites, heart on card/detail | gallery filter + per-tile aggregate |
@@ -114,8 +114,11 @@ blob for that Memory; the `PUT` writes only the caller's.
 - **Two seals, two purposes.** The typed seal as everywhere else
   ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with **distinct** purposes `favorites`
   and `item-favorites` — so a blob authenticated for one can never be opened as the other — each bound to the
-  slot it is stored at (the scope, and for an item mark also the member and the node), so the server cannot
-  serve one member's or one node's blob as another's.
+  slot it is stored at (the scope, and for an item mark also the node), so the server cannot serve one scope's
+  pins or one node's marks as another's. An item mark is **not** bound to the member who made it: the read names
+  no member (ADR 0068 §6), so a reader has none to bind. The server can therefore relabel which of a node's
+  entries is the caller's own (`self`) — an integrity gap within one node's marks, accepted for V1; a self-tag
+  only the marking member can check is inbox #187 ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
 - **The pin rides the master-key rotation re-seal.** The master key rotates
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)), so the pin blob must be re-sealed from
   the old key to the new one alongside the identity-pin store and the device register — best-effort, like they

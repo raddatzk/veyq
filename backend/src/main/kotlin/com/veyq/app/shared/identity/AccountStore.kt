@@ -33,8 +33,9 @@ class AccountStore {
         authPublicKey: String,
         secretKeyProofPublicKey: String,
         wraps: List<WrapData>,
+        /** A client-minted id (register-and-accept: the sealed real name is bound to it, ADR 0072), else a fresh one. */
+        userId: String = UUID.randomUUID().toString(),
     ): String {
-        val userId = UUID.randomUUID().toString()
         VeyqUser().apply {
             id = userId
             this.email = normalizeEmail(email)

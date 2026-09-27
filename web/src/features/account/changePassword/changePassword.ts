@@ -64,7 +64,7 @@ export async function changePassword(newPassword: string, secretKeyB64: string, 
 
     const salt = v1.randomBytes(16)
     const kek = await unlockKekAsync(secretKey, newPassword, salt, ARGON)
-    const wrapped = v1.symWrap(kek, mk, 'master-key', v1.randomBytes(12))
+    const wrapped = v1.seal({ purpose: 'master-key' }, kek, mk)
     const kdfParams = v1.encodeKdfParams(ARGON, salt)
 
     const proof = v1.deriveSecretKeyProofKeypair(secretKey)

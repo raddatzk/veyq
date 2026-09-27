@@ -71,7 +71,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
 
         // Attach, so the key crosses into veyq_blob — the row the purge + presign paths read.
         val mediaId = given().header("Authorization", token(seed.userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"${seed.nodeId}","wrappedMeta":"bWV0YQ=="}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"${seed.nodeId}","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/scopes/${seed.scopeId}/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())

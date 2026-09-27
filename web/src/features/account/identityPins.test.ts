@@ -16,7 +16,6 @@ import {
   trustState,
   trustStates,
   IdentityMovedError,
-  IDENTITY_PINS,
 } from './identityPins'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { masterKey, identityPrivate } from '../../app/vault'
@@ -35,10 +34,12 @@ const unhex = (h: string) => Uint8Array.from(h.match(/../g)!.map((b) => parseInt
 const MK = v1.randomBytes(32)
 const enc = new TextEncoder()
 const dec = new TextDecoder()
-const seal = (pins: Record<string, unknown>) =>
-  b64std(v1.symWrap(MK, enc.encode(JSON.stringify({ pins })), IDENTITY_PINS, v1.randomBytes(12)))
-const unsealPins = (blob: string): Record<string, { key: string; state: string; firstSeenAt: number }> =>
-  JSON.parse(dec.decode(v1.symUnwrap(MK, fromB64std(blob), IDENTITY_PINS))).pins
+// The store is sealed bound to the version it is stored at (ADR 0072), so a fixture names its version too.
+const pinsAt = (version: number) => ({ purpose: 'identity-pins', version }) as const
+const seal = (pins: Record<string, unknown>, version: number) =>
+  b64std(v1.seal(pinsAt(version), MK, enc.encode(JSON.stringify({ pins }))))
+const unsealPins = (blob: string, version: number): Record<string, { key: string; state: string; firstSeenAt: number }> =>
+  JSON.parse(dec.decode(v1.open(pinsAt(version), MK, fromB64std(blob)))).pins
 
 // A fake server store with REAL optimistic concurrency: a PUT whose version != the stored version is a 409.
 function fakeServer(initial: { blob: string | null; version: number } = { blob: null, version: 0 }) {
@@ -81,7 +82,7 @@ describe('checkAndPin (TOFU)', () => {
     // The server now holds one opaque blob at version 1 that unseals to the pinned contact.
     expect(srv.state.version).toBe(1)
     expect(srv.state.blob).not.toBeNull()
-    const pins = unsealPins(srv.state.blob!)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
     expect(pins.u1.key).toBe(key)
     expect(pins.u1.state).toBe('pinned')
 
@@ -97,15 +98,27 @@ describe('checkAndPin (TOFU)', () => {
 
     expect(await checkAndPin('u1', 'a2V5LXR3bw==')).toBe('changed')
     expect(srv.state.version).toBe(versionAfterPin) // never re-pinned the changed key
-    expect(unsealPins(srv.state.blob!).u1.key).toBe('a2V5LW9uZQ==') // original pin intact
+    expect(unsealPins(srv.state.blob!, srv.state.version).u1.key).toBe('a2V5LW9uZQ==') // original pin intact
   })
 
   it('reads an existing pin from a previously-sealed store (cross-device round-trip)', async () => {
     // The store was written on another device (a sealed blob at version 3); this device opens it and sees the pin.
-    const srv = fakeServer({ blob: seal({ u9: { key: 'cHJlLXBpbm5lZA==', state: 'pinned', firstSeenAt: 1 } }), version: 3 })
+    const srv = fakeServer({ blob: seal({ u9: { key: 'cHJlLXBpbm5lZA==', state: 'pinned', firstSeenAt: 1 } }, 3), version: 3 })
     expect(await checkAndPin('u9', 'cHJlLXBpbm5lZA==')).toBe('match')
     expect(await checkAndPin('u9', 'ZGlmZmVyZW50')).toBe('changed')
     expect(srv.putIdentityPins).not.toHaveBeenCalled() // pure reads
+  })
+
+  it('a store sealed at one version does not open as another — a rolled-back or replayed blob reads as foreign', async () => {
+    // ADR 0072: the blob is bound to the version it is stored at. The server serving the v3 blob as v4 (or v2) is
+    // refused at the seal; the reader then degrades to an empty store, so the contact reads as a first use.
+    const blob = seal({ u9: { key: 'cHJlLXBpbm5lZA==', state: 'pinned', firstSeenAt: 1 } }, 3)
+    expect(() => v1.open(pinsAt(4), MK, fromB64std(blob))).toThrow(new v1.OpenRefused('identity-pins'))
+    fakeServer({ blob, version: 4 })
+    expect(await getPin('u9')).toBeNull()
+    // control: the same blob at its own version opens
+    fakeServer({ blob, version: 3 })
+    expect((await getPin('u9'))?.key).toBe('cHJlLXBpbm5lZA==')
   })
 
   it('union-merges on a 409 stale_version — a concurrent device pin is preserved, not clobbered', async () => {
@@ -115,7 +128,7 @@ describe('checkAndPin (TOFU)', () => {
     srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
       if (firstPut) {
         firstPut = false
-        srv.state.blob = seal({ other: { key: 'b3RoZXIta2V5', state: 'pinned', firstSeenAt: 1 } })
+        srv.state.blob = seal({ other: { key: 'b3RoZXIta2V5', state: 'pinned', firstSeenAt: 1 } }, 1)
         srv.state.version = 1
         throw srv.stale()
       }
@@ -127,7 +140,7 @@ describe('checkAndPin (TOFU)', () => {
 
     expect(await checkAndPin('mine', 'bXkta2V5')).toBe('firstUse')
     // After the re-read + re-apply + retry: BOTH contacts are pinned (the concurrent one was merged, not lost).
-    const pins = unsealPins(srv.state.blob!)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
     expect(pins.other.key).toBe('b3RoZXIta2V5')
     expect(pins.mine.key).toBe('bXkta2V5')
     expect(srv.state.version).toBe(2)
@@ -136,10 +149,10 @@ describe('checkAndPin (TOFU)', () => {
 
 describe('acceptKeyChange (human accept → re-pin)', () => {
   it('re-pins a contact to the new key, preserving firstSeenAt, so a later check matches', async () => {
-    const srv = fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }), version: 1 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }, 1), version: 1 })
 
     await acceptKeyChange('u1', 'bmV3LWtleQ==')
-    const pins = unsealPins(srv.state.blob!)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
     expect(pins.u1.key).toBe('bmV3LWtleQ==')
     expect(pins.u1.firstSeenAt).toBe(42) // preserved across the re-pin
     expect((await getPin('u1'))?.key).toBe('bmV3LWtleQ==')
@@ -151,7 +164,7 @@ describe('acceptKeyChange (human accept → re-pin)', () => {
     // the re-pin alone authorises a wrap that never happens (uc.account.rotate-keys \u00a7E6 \u2014 the failure mode that
     // strands a rotated account). The re-pin is only half of an accept.
     const clear = fakeDeclines()
-    fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }), version: 1 })
+    fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }, 1), version: 1 })
 
     await acceptKeyChange('u1', 'bmV3LWtleQ==')
 
@@ -163,11 +176,11 @@ describe('acceptKeyChange (human accept → re-pin)', () => {
     // is idempotent, so a caller that raises the error ends up in the right state; one that hides it cannot.
     const clear = fakeDeclines()
     clear.mockRejectedValueOnce(new Error('offline'))
-    const srv = fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }), version: 1 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'b2xkLWtleQ==', state: 'pinned', firstSeenAt: 42 } }, 1), version: 1 })
 
     await expect(acceptKeyChange('u1', 'bmV3LWtleQ==')).rejects.toThrow()
     // The re-pin itself landed \u2014 which is why a retry is safe rather than a second, conflicting write.
-    expect(unsealPins(srv.state.blob!).u1.key).toBe('bmV3LWtleQ==')
+    expect(unsealPins(srv.state.blob!, srv.state.version).u1.key).toBe('bmV3LWtleQ==')
   })
 })
 
@@ -206,10 +219,10 @@ describe('myIdentityPublicKeyB64', () => {
 
 describe('markVerified (out-of-band compare → verified)', () => {
   it('elevates a matching pin to verified, preserving key + firstSeenAt', async () => {
-    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }), version: 2 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 2), version: 2 })
 
     await markVerified('u1', 'a2V5')
-    const pins = unsealPins(srv.state.blob!)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
     expect(pins.u1.state).toBe('verified')
     expect(pins.u1.key).toBe('a2V5')
     expect(pins.u1.firstSeenAt).toBe(7) // untouched by the elevation
@@ -217,11 +230,11 @@ describe('markVerified (out-of-band compare → verified)', () => {
   })
 
   it('aborts (never writes) when the pinned key moved under the compare', async () => {
-    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }), version: 2 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 2), version: 2 })
 
     await expect(markVerified('u1', 'ZGlmZg==')).rejects.toBeInstanceOf(IdentityMovedError)
     expect(srv.state.version).toBe(2) // no write — verified never stamped onto an unchecked key
-    expect(unsealPins(srv.state.blob!).u1.state).toBe('pinned')
+    expect(unsealPins(srv.state.blob!, srv.state.version).u1.state).toBe('pinned')
   })
 
   it('aborts when there is no pin at all (nothing was compared)', async () => {
@@ -230,7 +243,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
   })
 
   it('verified wins a same-contact 409: re-asserts verified over a concurrent pinned, merges the other pin', async () => {
-    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }), version: 1 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 1), version: 1 })
     let firstPut = true
     srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
       if (firstPut) {
@@ -239,7 +252,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
         srv.state.blob = seal({
           u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 },
           other: { key: 'b3Ro', state: 'pinned', firstSeenAt: 1 },
-        })
+        }, 2)
         srv.state.version = 2
         throw srv.stale()
       }
@@ -250,19 +263,19 @@ describe('markVerified (out-of-band compare → verified)', () => {
     })
 
     await markVerified('u1', 'a2V5')
-    const pins = unsealPins(srv.state.blob!)
+    const pins = unsealPins(srv.state.blob!, srv.state.version)
     expect(pins.u1.state).toBe('verified') // verified wins over the concurrent pinned
     expect(pins.other.key).toBe('b3Ro') // the concurrent contact was merged, not clobbered
     expect(srv.state.version).toBe(3)
   })
 
   it('aborts on a 409 re-base if the concurrent device changed the key (moved under the compare)', async () => {
-    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }), version: 1 })
+    const srv = fakeServer({ blob: seal({ u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 7 } }, 1), version: 1 })
     let firstPut = true
     srv.putIdentityPins.mockImplementation(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
       if (firstPut) {
         firstPut = false
-        srv.state.blob = seal({ u1: { key: 'bmV3', state: 'pinned', firstSeenAt: 7 } }) // key moved
+        srv.state.blob = seal({ u1: { key: 'bmV3', state: 'pinned', firstSeenAt: 7 } }, 2) // key moved
         srv.state.version = 2
         throw srv.stale()
       }
@@ -273,7 +286,7 @@ describe('markVerified (out-of-band compare → verified)', () => {
     })
 
     await expect(markVerified('u1', 'a2V5')).rejects.toBeInstanceOf(IdentityMovedError)
-    expect(unsealPins(srv.state.blob!).u1.key).toBe('bmV3') // left as the concurrent write; not re-stamped
+    expect(unsealPins(srv.state.blob!, srv.state.version).u1.key).toBe('bmV3') // left as the concurrent write; not re-stamped
   })
 })
 
@@ -283,7 +296,7 @@ describe('trustState (badge read)', () => {
       blob: seal({
         vf: { key: 'a2V5', state: 'verified', firstSeenAt: 1 },
         pn: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 },
-      }),
+      }, 1),
       version: 1,
     })
     expect(await trustState('vf', 'a2V5')).toBe('verified')
@@ -298,7 +311,7 @@ describe('trustState (badge read)', () => {
         vf: { key: 'a2V5', state: 'verified', firstSeenAt: 1 },
         pn: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 },
         ch: { key: 'b2xk', state: 'pinned', firstSeenAt: 1 },
-      }),
+      }, 1),
       version: 1,
     })
     const states = await trustStates([

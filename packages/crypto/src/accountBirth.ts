@@ -52,14 +52,14 @@ export function buildAccount(
   if (opts?.secretKey && opts.secretKey.length !== 32) throw new Error('buildAccount: secretKey must be 32 bytes')
   const id = v1.generateIdentity()
   const masterKey = v1.randomBytes(32)
-  const wrappedPriv = v1.symWrap(masterKey, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12))
+  const wrappedPriv = v1.seal({ purpose: 'identity-priv' }, masterKey, v1.serializeIdentityPrivate(id))
 
   const secretKey = opts?.secretKey ?? v1.randomBytes(32)
   const salt = v1.randomBytes(16)
-  const masterWrap = v1.symWrap(v1.kekPasswordSecret(secretKey, password, salt, ARGON), masterKey, 'master-key', v1.randomBytes(12))
+  const masterWrap = v1.seal({ purpose: 'master-key' }, v1.kekPasswordSecret(secretKey, password, salt, ARGON), masterKey)
 
   const recSalt = v1.randomBytes(16)
-  const recWrap = v1.symWrap(v1.kekRecovery(secretKey, recSalt, ARGON), masterKey, 'master-key', v1.randomBytes(12))
+  const recWrap = v1.seal({ purpose: 'master-key' }, v1.kekRecovery(secretKey, recSalt, ARGON), masterKey)
 
   const auth = v1.deriveAuthKeypair(password, v1.deriveAuthSalt(instanceSalt, email), ARGON)
 

@@ -60,6 +60,21 @@ class UploadSessionEntity : PanacheEntityBase {
     @Column(name = "last_window_at", nullable = false)
     lateinit var lastWindowAt: Instant
 
+    /** The client-minted id the blob will be stored under — its `K_blob` wrap is sealed bound to it (ADR 0072). */
+    @Column(name = "blob_id", length = 36)
+    var blobId: String? = null
+
+    /** What the blob belongs to — the client-minted media id, or the node for a cover (ADR 0072). */
+    @Column(name = "owner_id", length = 36)
+    var ownerId: String? = null
+
+    /** ORIGINAL / THUMBNAIL / PREVIEW / COVER — the role the wrap is sealed bound to (ADR 0072). */
+    @Column(name = "blob_role", length = 16)
+    var blobRole: String? = null
+
+    /** Would this session's wrap open where it is about to be attached? Null ids (a pre-V53 session) never match. */
+    fun boundTo(ownerId: String, role: String): Boolean = this.ownerId == ownerId && blobRole == role && blobId != null
+
     companion object : PanacheCompanionBase<UploadSessionEntity, String>
 }
 

@@ -18,6 +18,7 @@ import { nodeById } from '../browse'
 import { treeStore } from '../treeStore'
 import { collectLocatedPins } from '../spaceMap'
 import { covers, ensureCovers } from '../coverStore'
+import { activeSpace } from '../../../app/activeSpace'
 import { isFavorite } from '../../../app/favoritesStore'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import MemoryCard from './MemoryCard.vue'
@@ -46,13 +47,15 @@ const { viewMode } = useViewMode()
 // Memories ordered by their sealed start date (newest first, undated last) — each opened under its own epoch's
 // K_SC (a top-level Memory's K_mem wraps under E_{node.epoch}); read from wrappedMeta, no media load.
 const datedMemories = computed(() =>
-  sortNodesByDate((node) => (props.epochs ? keyAt(props.epochs, node.epoch) : null), props.memories),
+  sortNodesByDate(activeSpace.scopeId ?? '', (node) => (props.epochs && activeSpace.scopeId ? keyAt(props.epochs, node.epoch) : null), props.memories),
 )
 
 // The Karte pins: every located node in this folder's subtree (or the whole space at root), unsealed on device
 // from the wrappedMeta `listNodes` already returned (operator-blind — no locations API). Locked ⇒ no pins.
 const pins = computed(() =>
-  props.epochs ? collectLocatedPins(props.epochs, treeStore.nodes, props.folder?.id ?? null) : [],
+  props.epochs && activeSpace.scopeId
+    ? collectLocatedPins(activeSpace.scopeId, props.epochs, treeStore.nodes, props.folder?.id ?? null)
+    : [],
 )
 
 /** A pin click carries a node id — resolve it to the TreeNode and open it, exactly like a card click. */

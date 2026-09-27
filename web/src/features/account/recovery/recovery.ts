@@ -49,7 +49,7 @@ export async function openWithSecretKey(material: RecoveryMaterial, secretKeyB64
   const secretKey = fromB64std(secretKeyB64)
   const { params, salt } = v1.decodeKdfParams(fromB64std(material.kdfParams))
   const kek = await recoveryKekAsync(secretKey, salt, params)
-  const masterKey = v1.symUnwrap(kek, fromB64std(material.wrappedKey), 'master-key')
+  const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(material.wrappedKey))
   return { masterKey }
 }
 
@@ -79,7 +79,7 @@ export async function completeRecovery(
   const salt = v1.randomBytes(16)
   // The 2SKD floor takes the password; the recovery KEK deliberately does not. Different function, on purpose.
   const kek = await unlockKekAsync(secretKey, newPassword, salt, ARGON)
-  const wrapped = v1.symWrap(kek, opened.masterKey, 'master-key', v1.randomBytes(12))
+  const wrapped = v1.seal({ purpose: 'master-key' }, kek, opened.masterKey)
 
   const challenge = await loginApi().requestLoginChallenge({ loginChallengeRequest: { email: material.email } })
   const authSalt = v1.deriveAuthSalt(fromB64std(challenge.instanceSalt), material.email)

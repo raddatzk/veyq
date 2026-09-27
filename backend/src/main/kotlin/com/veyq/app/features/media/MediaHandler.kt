@@ -42,13 +42,23 @@ sealed interface UploadOpener {
 }
 
 /** One blob to start: declared shape + the K_blob wrap. */
-data class UploadDeclare(val chunkCount: Int, val byteSize: Long, val wrappedBlobKey: String)
+/** One blob to start: its shape, its `K_blob` wrap, and the ids that wrap is sealed bound to (ADR 0072). */
+data class UploadDeclare(
+    val chunkCount: Int,
+    val byteSize: Long,
+    val wrappedBlobKey: String,
+    val blobId: String,
+    val ownerId: String,
+    val role: String,
+)
 
 /** One derivative upload of a media to complete: its role + the upload session id. */
 data class DerivativeDeclare(val kind: String, val uploadId: String)
 
 /** One logical media to complete: the original upload + role-tagged derivative uploads, attached to a node. */
 data class CompleteItem(
+    /** The client-minted media id (ADR 0072) — the `ownerId` every upload of the item was started with. */
+    val mediaId: String,
     val nodeId: String,
     val originalUploadId: String,
     val derivatives: List<DerivativeDeclare>,
@@ -137,6 +147,8 @@ sealed interface CoverCommitOutcome {
     object NoTarget : CoverCommitOutcome, HttpFailure by Failures.nodeNotFound
     /** The target node is a FOLDER (owns no `K_mem`) — a 422. */
     object IllegalTarget : CoverCommitOutcome, HttpFailure by httpFailure("illegal_target", UNPROCESSABLE)
+    /** The upload was not started as this node's cover — its wrap would not open here (ADR 0072) — a 422. */
+    object UploadMismatch : CoverCommitOutcome, HttpFailure by httpFailure("upload_mismatch", UNPROCESSABLE)
     /** The upload failed declare-then-verify (staged objects purged) — a 400. */
     object Budget : CoverCommitOutcome, HttpFailure by httpFailure("budget_exceeded", BAD_REQUEST)
 }
@@ -192,6 +204,7 @@ sealed interface CreateBucketOutcome {
     object Forbidden : CreateBucketOutcome, HttpFailure by httpFailure("illegal_target", FORBIDDEN)
     /** No such scope/node, or the caller holds no grant (a 404). */
     object NoNode : CreateBucketOutcome, HttpFailure by Failures.nodeNotFound
+    object IdTaken : CreateBucketOutcome, HttpFailure by Failures.idTaken
 }
 
 sealed interface RenameBucketOutcome {
@@ -306,8 +319,11 @@ class MediaHandler(
         if (!ChunkFrames.isPossible(d.byteSize) || d.chunkCount != ChunkFrames.chunkCount(d.byteSize)) {
             return UploadItemResult(uploadId = null, presignedPuts = null, error = "shape_invalid")
         }
+        // The client-minted blob id (ADR 0072): taken by a blob or by another open session, anywhere → refused, and
+        // the same answer wherever it lives.
+        if (store.blobIdTaken(d.blobId)) return UploadItemResult(uploadId = null, presignedPuts = null, error = "id_taken")
         val storageKey = UUID.randomUUID().toString()
-        val uploadId = store.createSession(scopeId, opener, storageKey, d.chunkCount, d.byteSize, d.wrappedBlobKey)
+        val uploadId = store.createSession(scopeId, opener, storageKey, d)
         // The session is metadata; presigned PUTs require a transport-capable store. Only the %test in-memory stub
         // cannot presign (puts = null) — %dev/%prod always have a real store (BlobStoreStartupCheck, ADR 0013).
         // Only the first window: the rest is signed window by window, so the TTL never has to cover a whole file.
@@ -348,6 +364,12 @@ class MediaHandler(
             d.kind to s
         }
         val allSessions = listOf(original) + derivSessions.map { it.second }
+        // Each blob's K_blob wrap is sealed bound to (media, role) (ADR 0072): a session started for another media or
+        // in another role would land a blob nobody can open where it is attached, so the item is refused whole.
+        if (!original.boundTo(item.mediaId, "ORIGINAL") || derivSessions.any { (kind, s) -> !s.boundTo(item.mediaId, kind) }) {
+            return CompleteItemResult(null, null, "upload_mismatch")
+        }
+        if (store.mediaIdTaken(item.mediaId)) return CompleteItemResult(null, null, "id_taken")
 
         // declare-then-verify every blob up front; a single budget failure fails (and purges) the whole item
         val manifests = HashMap<String, List<Long>?>()
@@ -362,7 +384,7 @@ class MediaHandler(
         }
 
         val (blobId, mediaId) = store.attach(
-            original, item.nodeId, manifests[original.id],
+            item.mediaId, original, item.nodeId, manifests[original.id],
             derivSessions.map { (kind, s) -> DerivativeAttach(kind, s, manifests[s.id]) },
             item.wrappedMeta,
             item.wrappedExif,
@@ -502,6 +524,8 @@ class MediaHandler(
         val node = store.findNode(scopeId, nodeId) ?: return CoverCommitOutcome.NoTarget
         if (node.kind == NodeEntity.FOLDER) return CoverCommitOutcome.IllegalTarget
         val session = store.findSession(scopeId, uploadId, UploadOpener.Member(userId)) ?: return CoverCommitOutcome.NoTarget
+        // The cover's K_blob wrap is sealed bound to (this node, COVER) (ADR 0072).
+        if (!session.boundTo(node.id, "COVER")) return CoverCommitOutcome.UploadMismatch
         val manifest = when (val v = verifyBlob(session)) {
             is BlobVerify.Ok -> v.manifest
             BlobVerify.Budget -> {
@@ -552,7 +576,7 @@ class MediaHandler(
      * be a **primary** (any owner's — so a member can add sub-buckets under a contributor's root), and the new sub
      * inherits that root's owner_key. A missing/non-primary parent → Forbidden (403). Non-member / unknown node → NoNode (404).
      */
-    fun createBucket(userId: String, scopeId: String, nodeId: String, sealedName: String, parentBucketId: String?): CreateBucketOutcome {
+    fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String, sealedName: String, parentBucketId: String?): CreateBucketOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateBucketOutcome.NoNode, CreateBucketOutcome.Suspended, CreateBucketOutcome.Deleting)?.let { return it }
         if (store.findNode(scopeId, nodeId) == null) return CreateBucketOutcome.NoNode
@@ -563,7 +587,9 @@ class MediaHandler(
         } else {
             OwnerKey.User(userId).format()
         }
-        return CreateBucketOutcome.Ok(store.createSubBucket(scopeId, nodeId, ownerKey, sealedName))
+        // The client-minted id (ADR 0072): the sealed name is bound to it.
+        return store.createSubBucket(bucketId, scopeId, nodeId, ownerKey, sealedName)
+            ?.let { CreateBucketOutcome.Ok(it) } ?: CreateBucketOutcome.IdTaken
     }
 
     /** Rename a sub-bucket (any member may — incl. a contributor's, cr-0123). A primary is not renameable (Forbidden → 403). */

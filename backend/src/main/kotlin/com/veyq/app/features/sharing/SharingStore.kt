@@ -18,6 +18,8 @@ data class ShareNodeRow(
     val parentId: String?,
     val kind: String,
     val orderIndex: Int,
+    /** The content-key epoch the node was sealed at — a chapter's `K_mem` wrap is bound to it (ADR 0072). */
+    val epoch: Int,
     val wrappedContentKey: String?,
     val wrappedMeta: String?,
 )
@@ -67,14 +69,16 @@ class SharingStore(
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
 
+    /** Persist a share under the client-minted [id] — 256 random bits, base64url, the unguessable half of the
+     *  capability (ADR 0072 keeps its form). False, nothing written, if any share already holds it. */
     @Transactional
     fun create(
-        ownerAccount: String, scopeId: String, nodeId: String, role: String,
+        id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
         wrap: String, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
         sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-    ): String {
-        val id = Tokens.random() // 256-bit random, base64url — the unguessable share id (half the capability)
+    ): Boolean {
+        if (ShareEntity.findById(id) != null) return false
         ShareEntity().apply {
             this.id = id
             this.ownerAccount = ownerAccount
@@ -94,7 +98,7 @@ class SharingStore(
             this.sealedPassword = sealedPassword
             createdAt = Instant.now()
         }.persist()
-        return id
+        return true
     }
 
     /** The 3-way result of an in-place share edit (cr-0119): applied, no such owned share, or an illegal role change. */
@@ -168,10 +172,11 @@ class SharingStore(
 
     // --- contributor identities (cr-0101) --------------------------------------
 
-    /** Create an anonymous contributor identity for a share: store the `K_mem`-sealed name + the token hash, return (identityId, token). */
+    /** Create an anonymous contributor identity under the client-minted [id]: store the `K_mem`-sealed name +
+     *  the token hash, return the token — or null, nothing written, if any identity already holds [id]. */
     @Transactional
-    fun createIdentity(shareId: String, sealedDisplayName: String): Pair<String, String> {
-        val id = UUID.randomUUID().toString()
+    fun createIdentity(id: String, shareId: String, sealedDisplayName: String): String? {
+        if (ShareIdentityEntity.findById(id) != null) return null
         val token = Tokens.random() // the unguessable contributor capability token handed to the client
         ShareIdentityEntity().apply {
             this.id = id
@@ -180,7 +185,7 @@ class SharingStore(
             this.tokenHash = Tokens.hash(token)
             createdAt = Instant.now()
         }.persist()
-        return id to token
+        return token
     }
 
     /** The contributor identity for this share whose token matches, or null (a bad/absent token → no identity). */
@@ -231,6 +236,7 @@ class SharingStore(
                 parentId = if (n.id == rootNodeId) null else n.parentId,
                 kind = n.kind,
                 orderIndex = n.orderIndex,
+                epoch = n.epoch,
                 wrappedContentKey = n.wrappedContentKey,
                 wrappedMeta = n.wrappedMeta,
             )

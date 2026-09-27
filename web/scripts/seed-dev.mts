@@ -73,8 +73,9 @@ let personal = scopes.find((s: { kind: string }) => s.kind === 'PERSONAL')
 if (!personal) {
   const priv = v1.deserializeIdentityPrivate(fromB64std(entry.identityPrivate))
   const scopeKey = v1.randomBytes(32)
-  const grant = b64std(v1.asymWrap(v1.hybridPublic(priv), scopeKey, 'scope-grant', { nonce: v1.randomBytes(12) }))
-  const created = await post('/api/scopes', { wrappedGrant: grant }, token, HOST_BASE)
+  const scopeId = crypto.randomUUID() // client-minted: the grant is bound to it at epoch 0 (ADR 0072)
+  const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId, epoch: 0 }, v1.hybridPublic(priv), scopeKey))
+  const created = await post('/api/scopes', { scopeId, wrappedGrant: grant }, token, HOST_BASE)
   if (!created.ok) { console.error('createPersonalScope failed', created.status, await created.text()); process.exit(1) }
   scopes = await json(await get('/api/scopes', token, HOST_BASE))
   personal = scopes.find((s: { kind: string }) => s.kind === 'PERSONAL')

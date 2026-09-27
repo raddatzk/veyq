@@ -57,7 +57,7 @@ class ScopesResource(
 
     override fun createPersonalScope(createPersonalScopeRequest: CreatePersonalScopeRequest): Response =
         when (val outcome = handler.createPersonal(
-            identity.principal.name, activeTenantId(), createPersonalScopeRequest.wrappedGrant,
+            identity.principal.name, activeTenantId(), createPersonalScopeRequest.scopeId.toString(), createPersonalScopeRequest.wrappedGrant,
         )) {
             is CreatePersonalOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -67,7 +67,8 @@ class ScopesResource(
 
     override fun createGroup(createGroupRequest: CreateGroupRequest): Response =
         when (val outcome = handler.createGroup(
-            identity.principal.name, activeTenantId(), createGroupRequest.encryptedName, createGroupRequest.wrappedGrant,
+            identity.principal.name, activeTenantId(), createGroupRequest.scopeId.toString(), createGroupRequest.encryptedName,
+            createGroupRequest.wrappedGrant,
         )) {
             is CreateGroupOutcome.Created ->
                 Response.status(Response.Status.CREATED)
@@ -128,7 +129,7 @@ class ScopesResource(
                 outcome.rows.map {
                     GroupInvitation(
                         scopeId = UUID.fromString(it.scopeId), addedBy = it.addedByUsername,
-                        sealedNameKey = it.sealedNameKey, encryptedName = it.encryptedName,
+                        sealedNameKey = it.sealedNameKey, encryptedName = it.encryptedName, nameEpoch = it.nameEpoch,
                     )
                 },
             ).build()
@@ -208,7 +209,7 @@ class ScopesResource(
                 MyTenant(
                     tenantId = UUID.fromString(it.tenantId), name = it.name, domain = it.domain, role = MyTenant.Role.valueOf(it.role),
                     status = TenantStatus.valueOf(it.status),
-                    wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch,
+                    wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch, grantedEpoch = it.grantedEpoch,
                 )
             },
         ).build()

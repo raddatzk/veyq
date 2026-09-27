@@ -24,7 +24,10 @@ const i18n = createI18n({
   },
 })
 
-const UPLOAD_REF = { blobId: 'b-1', chunkCount: 1, byteSize: 4096, wrappedBlobKey: 'd3JhcA==' }
+const UPLOAD_REF = {
+  blobId: 'b-1', chunkCount: 1, byteSize: 4096, wrappedBlobKey: 'd3JhcA==',
+  ownerId: '5c09e000-0000-4000-8000-0000000000c0', role: 'COVER' as const, // a cover blob is its node's, in the COVER role
+}
 
 // Stub the PrimeVue Dialog/Button shells (happy-dom can't drive the overlay) — the crop math + emits are under test.
 const stubs = {

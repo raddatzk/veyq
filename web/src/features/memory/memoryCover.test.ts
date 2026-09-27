@@ -34,10 +34,14 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)
+// The node every meta blob here belongs to — each seal is bound to it (ADR 0072).
+const NODE_ID = '5c09e000-0000-4000-8000-0000000000c1'
+const OTHER_NODE_ID = '5c09e000-0000-4000-8000-0000000000c2'
+const metaCtx = (scopeId: string, nodeId: string) => ({ purpose: 'node-meta', scopeId, nodeId }) as const
 
-/** Seal an arbitrary node-meta blob under `nodeKey` as the RMW envelope would (AAD `node-meta`). */
-function sealMeta(blob: object): string {
-  return b64std(v1.symWrap(nodeKey, new TextEncoder().encode(JSON.stringify(blob)), 'node-meta', v1.randomBytes(12)))
+/** Seal an arbitrary node-meta blob under `nodeKey` as the RMW envelope would (purpose `node-meta`, bound to the node). */
+function sealMeta(blob: object, scopeId = SCOPE_ID, nodeId = NODE_ID): string {
+  return b64std(v1.seal(metaCtx(scopeId, nodeId), nodeKey, new TextEncoder().encode(JSON.stringify(blob))))
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -64,41 +68,51 @@ describe('normalizeCoverCrop', () => {
   })
 })
 
-const UPLOAD_REF = { blobId: 'b-1', chunkCount: 1, byteSize: 4096, wrappedBlobKey: 'd3JhcA==' }
+/** A cover blob ref as it sits sealed in the meta (the opaque read-back shape)… */
+const UPLOAD_REF_RAW = { blobId: 'b-1', chunkCount: 1, byteSize: 4096, wrappedBlobKey: 'd3JhcA==' }
+/** …and as a reader addressing NODE_ID resolves it: owned by that node, in the COVER role (ADR 0072). */
+const UPLOAD_REF = { ...UPLOAD_REF_RAW, ownerId: NODE_ID, role: 'COVER' as const }
 
 describe('normalizeMemoryCover', () => {
   it('normalizes a media source + crop', () => {
-    expect(normalizeMemoryCover({ source: { kind: 'media', mediaId: 'm1' }, crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } })).toEqual({
+    expect(normalizeMemoryCover({ source: { kind: 'media', mediaId: 'm1' }, crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 } }, NODE_ID)).toEqual({
       source: { kind: 'media', mediaId: 'm1' },
       crop: { x: 0.1, y: 0.1, width: 0.5, height: 0.5 },
     })
     // missing/blank crop → full frame
-    expect(normalizeMemoryCover({ source: { kind: 'media', mediaId: 'm1' } })).toEqual({ source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME })
+    expect(normalizeMemoryCover({ source: { kind: 'media', mediaId: 'm1' } }, NODE_ID)).toEqual({ source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME })
   })
 
   it('normalizes an upload source (a standalone cover blob ref)', () => {
-    expect(normalizeMemoryCover({ source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME })).toEqual({
+    expect(normalizeMemoryCover({ source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop: FULL_FRAME }, NODE_ID)).toEqual({
       source: { kind: 'upload', ref: UPLOAD_REF },
       crop: FULL_FRAME,
     })
   })
 
+  it('takes an upload ref\'s owner + role from the addressed node, never from the sealed payload', () => {
+    // a ref that claims another owner/role (e.g. copied from a media) is re-anchored to this node's COVER slot,
+    // so its K_blob wrap — bound to where it was really sealed — refuses to open here instead of being trusted
+    const claimed = { ...UPLOAD_REF_RAW, ownerId: OTHER_NODE_ID, role: 'ORIGINAL' }
+    expect(normalizeMemoryCover({ source: { kind: 'upload', ref: claimed } }, NODE_ID)?.source).toEqual({ kind: 'upload', ref: UPLOAD_REF })
+  })
+
   it('is backward-compatible: a cr-0072 flat { mediaId, crop } seal opens as a media source', () => {
-    expect(normalizeMemoryCover({ mediaId: 'legacy', crop: { x: 0.2, y: 0, width: 0.6, height: 0.6 } })).toEqual({
+    expect(normalizeMemoryCover({ mediaId: 'legacy', crop: { x: 0.2, y: 0, width: 0.6, height: 0.6 } }, NODE_ID)).toEqual({
       source: { kind: 'media', mediaId: 'legacy' },
       crop: { x: 0.2, y: 0, width: 0.6, height: 0.6 },
     })
   })
 
   it('returns null for the "no cover" / malformed-source shapes', () => {
-    expect(normalizeMemoryCover(null)).toBeNull()
-    expect(normalizeMemoryCover({})).toBeNull()
-    expect(normalizeMemoryCover({ mediaId: '' })).toBeNull()
-    expect(normalizeMemoryCover({ mediaId: 42 })).toBeNull()
-    expect(normalizeMemoryCover({ source: { kind: 'media' } })).toBeNull() // media without a mediaId
-    expect(normalizeMemoryCover({ source: { kind: 'upload' } })).toBeNull() // upload without a ref
-    expect(normalizeMemoryCover({ source: { kind: 'upload', ref: { blobId: 'b' } } })).toBeNull() // ref missing fields
-    expect(normalizeMemoryCover({ source: { kind: 'bogus', mediaId: 'x' } })).toBeNull()
+    expect(normalizeMemoryCover(null, NODE_ID)).toBeNull()
+    expect(normalizeMemoryCover({}, NODE_ID)).toBeNull()
+    expect(normalizeMemoryCover({ mediaId: '' }, NODE_ID)).toBeNull()
+    expect(normalizeMemoryCover({ mediaId: 42 }, NODE_ID)).toBeNull()
+    expect(normalizeMemoryCover({ source: { kind: 'media' } }, NODE_ID)).toBeNull() // media without a mediaId
+    expect(normalizeMemoryCover({ source: { kind: 'upload' } }, NODE_ID)).toBeNull() // upload without a ref
+    expect(normalizeMemoryCover({ source: { kind: 'upload', ref: { blobId: 'b' } } }, NODE_ID)).toBeNull() // ref missing fields
+    expect(normalizeMemoryCover({ source: { kind: 'bogus', mediaId: 'x' } }, NODE_ID)).toBeNull()
   })
 })
 
@@ -106,29 +120,31 @@ describe('unsealMemoryCover', () => {
   it('round-trips a media cover sealed under K_mem', () => {
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-7' }, crop: { x: 0.2, y: 0.1, width: 0.6, height: 0.34 } }
     const sealed = sealMeta({ v: 1, cover })
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealed })).toEqual(cover)
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(cover)
   })
 
   it('round-trips an upload cover (standalone blob ref) sealed under K_mem', () => {
     const cover: MemoryCover = { source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME }
-    const sealed = sealMeta({ v: 1, cover })
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealed })).toEqual(cover)
+    const sealed = sealMeta({ v: 1, cover: { source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop: FULL_FRAME } })
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(cover)
   })
 
   it('opens an already-sealed cr-0072 { mediaId, crop } cover as a media source (back-compat)', () => {
     const sealed = sealMeta({ v: 1, cover: { mediaId: 'old-seal', crop: { x: 0, y: 0.1, width: 0.5, height: 0.5 } } })
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealed })).toEqual({
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual({
       source: { kind: 'media', mediaId: 'old-seal' },
       crop: { x: 0, y: 0.1, width: 0.5, height: 0.5 },
     })
   })
 
-  it('is best-effort null for absent / wrong-key / malformed meta (E3/E4)', () => {
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: null })).toBeNull()
+  it('is best-effort null for absent / wrong-key / another node\'s / malformed meta (E3/E4)', () => {
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: null })).toBeNull()
     const sealed = sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm-7' }, crop: FULL_FRAME } })
-    expect(unsealMemoryCover(v1.randomBytes(32), { wrappedMeta: sealed })).toBeNull() // wrong key
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: 'not-base64!!' })).toBeNull()
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealMeta({ v: 1 }) })).toBeNull() // no cover sub-object
+    expect(unsealMemoryCover(SCOPE_ID, v1.randomBytes(32), { id: NODE_ID, wrappedMeta: sealed })).toBeNull() // wrong key
+    // the blob served on another node's row does not open there (ADR 0072)
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: OTHER_NODE_ID, wrappedMeta: sealed })).toBeNull()
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: 'not-base64!!' })).toBeNull()
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealMeta({ v: 1 }) })).toBeNull() // no cover sub-object
   })
 
   it('is operator-blind — the sealed blob carries no plaintext mediaId', () => {
@@ -143,13 +159,13 @@ describe('setMemoryCover', () => {
     vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
-    const sealed = await setMemoryCover(SCOPE_ID, 'node-9', nodeKey, cover, null)
+    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, null)
 
     const req = updateNode.mock.calls[0][0]
     expect(req.scopeId).toBe(SCOPE_ID)
-    expect(req.nodeId).toBe('node-9')
+    expect(req.nodeId).toBe(NODE_ID)
     expect(req.updateNodeRequest.wrappedMeta).toBe(sealed)
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealed })).toEqual(cover)
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(cover)
   })
 
   it('read-modify-write: setting a cover preserves a sibling date + location', async () => {
@@ -161,9 +177,9 @@ describe('setMemoryCover', () => {
     const withSiblings = sealMeta({ v: 1, date, location })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
-    const sealed = await setMemoryCover(SCOPE_ID, 'node-9', nodeKey, cover, withSiblings)
+    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, withSiblings)
 
-    const blob = JSON.parse(new TextDecoder().decode(v1.symUnwrap(nodeKey, fromB64std(sealed), 'node-meta')))
+    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toEqual(cover)
     expect(blob.date).toEqual(date)
     expect(blob.location).toEqual(location)
@@ -177,11 +193,11 @@ describe('setMemoryCover', () => {
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
     const withCover = sealMeta({ v: 1, date, location, cover: { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME } })
 
-    const sealed = await setMemoryCover(SCOPE_ID, 'node-9', nodeKey, null, withCover)
+    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, withCover)
 
-    const blob = JSON.parse(new TextDecoder().decode(v1.symUnwrap(nodeKey, fromB64std(sealed), 'node-meta')))
+    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toBeUndefined()
-    expect(unsealMemoryCover(nodeKey, { wrappedMeta: sealed })).toBeNull()
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toBeNull()
     expect(blob.date).toEqual(date)
     expect(blob.location).toEqual(location)
   })
@@ -201,7 +217,7 @@ describe('sameMemoryCover', () => {
     const media: MemoryCover = { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME }
     const up: MemoryCover = { source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME }
     expect(sameMemoryCover(media, up)).toBe(false) // different kinds are never equal
-    expect(sameMemoryCover(up, { source: { kind: 'upload', ref: UPLOAD_REF }, crop: FULL_FRAME })).toBe(true)
+    expect(sameMemoryCover(up, { source: { kind: 'upload', ref: { ...UPLOAD_REF } }, crop: FULL_FRAME })).toBe(true)
     expect(sameMemoryCover(up, { source: { kind: 'upload', ref: { ...UPLOAD_REF, blobId: 'other' } }, crop: FULL_FRAME })).toBe(false)
   })
 })
@@ -213,7 +229,7 @@ describe('loadNodeCover', () => {
   it('an upload-source cover opens the standalone blob directly (openBlob), no media list', async () => {
     vi.mocked(openBlob).mockResolvedValue(new Uint8Array([1, 2, 3]))
     const crop = { x: 0.1, y: 0.2, width: 0.5, height: 0.28 }
-    const node = { id: 'n1', wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'upload', ref: UPLOAD_REF }, crop } }) }
+    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'upload', ref: UPLOAD_REF_RAW }, crop } }, SCOPE) }
 
     const loaded = await loadNodeCover(SCOPE, nodeKey, node)
     expect(loaded?.crop).toEqual(crop)
@@ -226,7 +242,7 @@ describe('loadNodeCover', () => {
     vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'm1' }] as never)
     vi.mocked(openGrid).mockResolvedValue(new Uint8Array([9]))
     const crop = FULL_FRAME
-    const node = { id: 'n1', wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop } }) }
+    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop } }, SCOPE) }
 
     const loaded = await loadNodeCover(SCOPE, nodeKey, node)
     expect(loaded?.crop).toEqual(crop)
@@ -237,12 +253,12 @@ describe('loadNodeCover', () => {
 
   it('a dangling media source (the chosen media is gone) falls back to null (E2, never a broken tile)', async () => {
     vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'other' }] as never)
-    const node = { id: 'n1', wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }) }
+    const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }, SCOPE) }
     expect(await loadNodeCover(SCOPE, nodeKey, node)).toBeNull()
   })
 
   it('a node with no cover is null (no transport touched)', async () => {
-    expect(await loadNodeCover(SCOPE, nodeKey, { id: 'n1', wrappedMeta: null })).toBeNull()
+    expect(await loadNodeCover(SCOPE, nodeKey, { id: NODE_ID, wrappedMeta: null })).toBeNull()
     expect(openBlob).not.toHaveBeenCalled()
     expect(listMedia).not.toHaveBeenCalled()
   })

@@ -1141,8 +1141,10 @@ paths:
       description: >
         The canonical email-invite path — the invitee has no account yet. A new MEMBER account is born on
         the device (operator-blind: the server receives only ciphertext + public keys), its **email taken
-        from the invite** (not the body, which binds it). In one atomic step the server creates the account,
-        stores the OWNER membership + grant, flips the tenant ACTIVE, and consumes the invite. Public: gated
+        from the invite** (not the body, which binds it), and its id minted by the client (`userId`, [ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md)
+        Decision 3 — the optional `sealedName` is sealed bound to (tenant scope, that id)). In one atomic step the
+        server creates the account under that id, stores the OWNER membership + grant, flips the tenant ACTIVE,
+        and consumes the invite. A taken `userId` is `409 id_taken` (never overwritten, not idempotent). Public: gated
         by the bootstrap secret. The new user logs in afterward (no session is issued here, mirroring setup).
       requestBody:
         required: true
@@ -1151,6 +1153,7 @@ paths:
             schema: { $ref: "#/components/schemas/RegisterAndAcceptRequest" }
             example:
               bootstrapSecret: 87olM0gSJLPgnKSjdNkC4pPQyuvMVguyb5kHoJyU9Cc
+              userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
               username: kevin
               account:
                 suiteId: v1
@@ -1187,8 +1190,9 @@ paths:
               example: { code: invite_not_found }
         "409":
           description: >
-            A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), or the
-            chosen `username` is already taken in this tenant (`username_taken`). The specific case is in `code`.
+            A conflict — the invited email already has an account (`email_taken`, use the sign-in accept), the
+            chosen `username` is already taken in this tenant (`username_taken`), or the `userId` is already taken
+            (`id_taken`). The specific case is in `code`.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -1852,8 +1856,15 @@ components:
 
     RegisterAndAcceptRequest:
       type: object
-      required: [bootstrapSecret, username, account]
+      required: [bootstrapSecret, userId, username, account]
       properties:
+        userId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of the new account (ADR 0072 Decision 3) — the optional `sealedName` is sealed bound to (tenant scope, this id). Taken ⇒ `409 id_taken`.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
         bootstrapSecret:
           x-veyq-visibility: token
           type: string

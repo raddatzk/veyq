@@ -38,8 +38,10 @@ const i18n = createI18n({
   },
 })
 
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
+
 const share = (over: Record<string, unknown>) => ({
-  shareId: 's', nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
+  shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null,
   sealedNote: null, sealedShareName: null, sealedShareKey: 'k', passwordRequired: false, sealedPassword: null,
   ...over,
@@ -53,7 +55,7 @@ const stubs = {
 
 const mountList = () =>
   mount(ShareDialog, {
-    props: { nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom' },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom' },
     global: { plugins: [i18n], stubs },
   })
 

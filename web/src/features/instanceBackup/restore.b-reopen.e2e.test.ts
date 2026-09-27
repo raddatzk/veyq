@@ -54,7 +54,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('restore rehearsal — reopen', () => {
     const epochs = epochsOf(scopeKey)
 
     const tree = await listTree(handoff.scopeId!, epochs)
-    const memoryKey = nodeContentKey(epochs, tree, handoff.nodeId!)
+    const memoryKey = nodeContentKey(handoff.scopeId!, epochs, tree, handoff.nodeId!)
     expect(memoryKey, 'the Memory content key re-derives from the restored tree').toBeTruthy()
 
     const items = await listMedia(handoff.scopeId!, handoff.nodeId!)
@@ -64,6 +64,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('restore rehearsal — reopen', () => {
 
     // The canary sweep now runs against the RESTORED database, which is the operator-blindness invariant
     // surviving the most privileged routine an operator has — checked rather than argued.
-    recordCanaries(tree.map((n) => n.name), unsealMeta(memoryKey!, items[0]))
+    recordCanaries(tree.map((n) => n.name), unsealMeta(handoff.scopeId!, memoryKey!, items[0]))
   })
 })

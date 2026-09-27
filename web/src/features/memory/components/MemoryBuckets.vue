@@ -79,11 +79,10 @@ const dropActive = ref(false)
 // --- load + label resolution ------------------------------------------------
 
 function labelFor(b: BucketItem, key: Uint8Array | null, members: Map<string, string>): string {
-  if (!b.isPrimary) {
-    return (key && b.sealedName && openBucketName(key, b.sealedName, 'sub')) || t('memory.buckets.contributor')
-  }
-  if (b.ownerKey.startsWith('share:')) {
-    return (key && b.sealedName && openBucketName(key, b.sealedName, 'contributor')) || t('memory.buckets.contributor')
+  // Both a sub-bucket's name and a contributor primary's are bound to their object (ADR 0072), addressed by the
+  // scope + node this panel is for; openBucketName picks the right seal from the row.
+  if (!b.isPrimary || b.ownerKey.startsWith('share:')) {
+    return (key && openBucketName(props.scopeId, props.nodeId, key, b)) || t('memory.buckets.contributor')
   }
   return members.get(b.ownerKey.slice('user:'.length)) ?? t('memory.buckets.member')
 }
@@ -181,7 +180,7 @@ const filteredMedia = computed<MediaItem[]>(() => {
 // signal (#105, from the sealed mediaType) both come from it — one unwrap, not two.
 const layoutItems = computed(() =>
   filteredMedia.value.map((m, index) => {
-    const meta = props.memoryKey ? unsealMeta(props.memoryKey, m) : null
+    const meta = props.memoryKey ? unsealMeta(props.scopeId, props.memoryKey, m) : null
     return {
       id: m.mediaId,
       aspectRatio: galleryDisplayAspectRatio(meta?.w, meta?.h),

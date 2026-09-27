@@ -35,7 +35,7 @@ const { data, pending: loading, error } = useAsyncData<InvitationRow[]>(
   async () => {
     actionError.value = ''
     const rows = await listMyGroupInvitations()
-    return rows.map((r) => ({ scopeId: r.scopeId, addedBy: r.addedBy, name: openInviteeName(r.sealedNameKey, r.encryptedName) }))
+    return rows.map((r) => ({ scopeId: r.scopeId, addedBy: r.addedBy, name: openInviteeName(r) }))
   },
   { onError: on401 },
 )

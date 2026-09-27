@@ -10,6 +10,11 @@
 // current epoch; a read opens each node's name (and a top-level Memory's `K_mem`) under **its own** epoch key,
 // so a tree spanning several epochs decrypts fully. A chapter's `K_mem` wraps under its parent Memory's `K_mem`
 // (epoch-independent) — only the top-level wrap keys off the epoch.
+//
+// **Every seal names its node (ADR 0072).** A name and a `K_mem` wrap are bound to (scope, node, epoch) — the node
+// id the client mints at creation and the epoch it is sealed at — so a server that serves one node's wrap on
+// another's row gets a refusal, never the other Memory's key (the upload chain: every upload into X would land
+// under the key of whichever Memory's wrap was served). A reader binds from the node it addresses.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { contentApi } from '../../api/client'
@@ -19,9 +24,13 @@ import { writeKey, keyAt, type EpochKeys } from '../spaces/epochs'
 import { sealNodeMeta } from './nodeMeta'
 import type { MemoryLocation } from './memoryLocation'
 import { slugify } from '../../shared/naming'
+import { expectMintedId } from './mintedId'
 
-const NAME_CTX = 'node-name'
-const KMEM_CTX = 'content-key'
+/** Which node a seal belongs to: its scope, its id, and the epoch it is sealed at (ADR 0072). */
+export type NodeAddress = { scopeId: string; nodeId: string; epoch: number }
+const nameContext = (a: NodeAddress) => ({ purpose: 'node-name', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.epoch }) as const
+const contentKeyContext = (a: NodeAddress) =>
+  ({ purpose: 'content-key', scopeId: a.scopeId, nodeId: a.nodeId, epoch: a.epoch }) as const
 const decoder = new TextDecoder()
 
 /** A decrypted tree node for the UI. `name` is decrypted client-side; the server never saw it. */
@@ -39,14 +48,14 @@ export type TreeNode = {
   wrappedMeta: string | null
 }
 
-/** Seal a name under a scope content key `K_SC` (the `node-name` construction, ADR 0012). Reused verbatim for a
- *  group's name (en.spaces.group-scope, cr-0032) — a group name is sealed exactly like a node name. */
-export function sealName(scopeKey: Uint8Array, name: string): string {
-  return b64std(v1.symWrap(scopeKey, v1.utf8(name), NAME_CTX, v1.randomBytes(12)))
+/** Seal a node's name under a scope content key `K_SC` (the `node-name` seal, ADR 0012), bound to the node. A group's
+ *  name and a share's Memory name are their own purposes now (`group-name`, `share-memory-name`, ADR 0072). */
+export function sealName(scopeKey: Uint8Array, node: NodeAddress, name: string): string {
+  return b64std(v1.seal(nameContext(node), scopeKey, v1.utf8(name)))
 }
-/** Open a name sealed under `K_SC` (the counterpart to {@link sealName}). */
-export function openName(scopeKey: Uint8Array, encryptedName: string): string {
-  return decoder.decode(v1.symUnwrap(scopeKey, fromB64std(encryptedName), NAME_CTX))
+/** Open a node's name sealed under `K_SC` (the counterpart to {@link sealName}). */
+export function openName(scopeKey: Uint8Array, node: NodeAddress, encryptedName: string): string {
+  return decoder.decode(v1.open(nameContext(node), scopeKey, fromB64std(encryptedName)))
 }
 function slugTokenFor(scopeKey: Uint8Array, parentSlot: string, name: string): string {
   return b64std(v1.slugToken(scopeKey, parentSlot, slugify(name)))
@@ -62,7 +71,7 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     kind: r.kind,
     orderIndex: r.orderIndex,
     epoch: r.epoch,
-    name: openName(keyAt(epochs, r.epoch), r.encryptedName),
+    name: openName(keyAt(epochs, r.epoch), { scopeId, nodeId: r.id, epoch: r.epoch }, r.encryptedName),
     wrappedContentKey: r.wrappedContentKey ?? null,
     wrappedMeta: r.wrappedMeta ?? null,
   }))
@@ -74,20 +83,22 @@ export async function createFolder(
 ): Promise<string> {
   const parentSlot = parentId ?? scopeId
   const scopeKey = writeKey(epochs)
+  const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current } // client-minted id (ADR 0072)
   const res = await withRefresh(() =>
     contentApi().createNode({
       scopeId,
       createNodeRequest: {
+        nodeId: node.nodeId,
         parentId: parentId ?? undefined,
         kind: NodeKind.Folder,
-        encryptedName: sealName(scopeKey, name),
+        encryptedName: sealName(scopeKey, node, name),
         slugToken: slugTokenFor(scopeKey, parentSlot, name),
         orderIndex: 0,
         epoch: epochs.current,
       },
     }),
   )
-  return res.nodeId
+  return expectMintedId(node.nodeId, res.nodeId)
 }
 
 /**
@@ -98,28 +109,31 @@ export async function createFolder(
  */
 async function createContentNode(
   scopeId: string, epochs: EpochKeys, wrapKey: Uint8Array, kind: NodeKind, name: string, parentId: string | null,
-  metaSealer?: (contentKey: Uint8Array) => string,
+  metaSealer?: (contentKey: Uint8Array, node: NodeAddress) => string,
 ): Promise<{ nodeId: string; contentKey: Uint8Array }> {
   const parentSlot = parentId ?? scopeId
   const scopeKey = writeKey(epochs)
   const contentKey = v1.randomBytes(32)
-  const wrappedContentKey = b64std(v1.symWrap(wrapKey, contentKey, KMEM_CTX, v1.randomBytes(12)))
+  // The client mints the node's id, so its name, K_mem wrap and meta are all sealed bound to it (ADR 0072).
+  const node = { scopeId, nodeId: crypto.randomUUID(), epoch: epochs.current }
+  const wrappedContentKey = b64std(v1.seal(contentKeyContext(node), wrapKey, contentKey))
   const res = await withRefresh(() =>
     contentApi().createNode({
       scopeId,
       createNodeRequest: {
+        nodeId: node.nodeId,
         parentId: parentId ?? undefined,
         kind,
-        encryptedName: sealName(scopeKey, name),
+        encryptedName: sealName(scopeKey, node, name),
         slugToken: slugTokenFor(scopeKey, parentSlot, name),
         orderIndex: 0,
         epoch: epochs.current,
         wrappedContentKey,
-        wrappedMeta: metaSealer?.(contentKey), // sealed under the just-minted K_mem (e.g. a pre-armed location)
+        wrappedMeta: metaSealer?.(contentKey, node), // sealed under the just-minted K_mem (e.g. a pre-armed location)
       },
     }),
   )
-  return { nodeId: res.nodeId, contentKey }
+  return { nodeId: expectMintedId(node.nodeId, res.nodeId), contentKey }
 }
 
 /**
@@ -131,7 +145,7 @@ export async function createMemory(
   scopeId: string, epochs: EpochKeys, name: string, parentId: string | null = null,
   location: MemoryLocation | null = null,
 ): Promise<{ nodeId: string; memoryKey: Uint8Array }> {
-  const metaSealer = location ? (key: Uint8Array) => sealNodeMeta(key, { v: 1, location }) : undefined
+  const metaSealer = location ? (key: Uint8Array, node: NodeAddress) => sealNodeMeta(key, node, { v: 1, location }) : undefined
   // A top-level Memory's K_mem wraps under the write key E_current (the scope's current epoch).
   const { nodeId, contentKey } = await createContentNode(scopeId, epochs, writeKey(epochs), NodeKind.Memory, name, parentId, metaSealer)
   return { nodeId, memoryKey: contentKey }
@@ -152,11 +166,15 @@ export async function createChapter(
 /**
  * Open a content node's `K_mem` by unwrapping `node.wrappedContentKey` under its parent's content key
  * (`parentKey` = `K_SC` for a top-level Memory, the parent Memory's `K_mem` for a chapter). Null if it carries
- * no key (a folder). For a node at arbitrary depth, resolve `parentKey` with [nodeContentKey].
+ * no key (a folder). Bound to (scope, the node's id, its epoch) — the node the caller addresses — so a wrap the
+ * server moved onto this row from another node throws `OpenRefused` instead of yielding the other node's key.
+ * For a node at arbitrary depth, resolve `parentKey` with [nodeContentKey].
  */
-export function openContentKey(parentKey: Uint8Array, node: { wrappedContentKey: string | null }): Uint8Array | null {
+export function openContentKey(
+  scopeId: string, parentKey: Uint8Array, node: { id: string; epoch: number; wrappedContentKey: string | null },
+): Uint8Array | null {
   if (!node.wrappedContentKey) return null
-  return v1.symUnwrap(parentKey, fromB64std(node.wrappedContentKey), KMEM_CTX)
+  return v1.open(contentKeyContext({ scopeId, nodeId: node.id, epoch: node.epoch }), parentKey, fromB64std(node.wrappedContentKey))
 }
 
 /** Back-compat alias: a top-level Memory's `K_mem` opens under `K_SC`. Prefer [openContentKey] / [nodeContentKey]. */
@@ -168,7 +186,7 @@ export const openMemory = openContentKey
  * parent's `K_mem`. Returns null if the node carries no key or any link in the chain can't be opened. (Recursive
  * `K_mem`, ADR 0012 — only the top-level wrap keys off the epoch; deeper links chain through `K_mem`.)
  */
-export function nodeContentKey(epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
+export function nodeContentKey(scopeId: string, epochs: EpochKeys, tree: TreeNode[], nodeId: string): Uint8Array | null {
   const byId = new Map(tree.map((n) => [n.id, n]))
   // collect the content-bearing chain from the node up to the root (nearest-last → reverse to top-down)
   const chain: TreeNode[] = []
@@ -178,7 +196,7 @@ export function nodeContentKey(epochs: EpochKeys, tree: TreeNode[], nodeId: stri
   if (!chain.length) return null
   let key = keyAt(epochs, chain[0].epoch) // the top-level Memory's K_mem is wrapped under its own epoch's K_SC
   for (const node of chain) {
-    const opened = openContentKey(key, node)
+    const opened = openContentKey(scopeId, key, node)
     if (!opened) return null
     key = opened
   }
@@ -197,7 +215,7 @@ export async function renameNode(
       scopeId,
       nodeId: node.id,
       updateNodeRequest: {
-        encryptedName: sealName(key, newName),
+        encryptedName: sealName(key, { scopeId, nodeId: node.id, epoch: node.epoch }, newName),
         slugToken: slugTokenFor(key, parentSlot, newName),
       },
     }),
@@ -234,7 +252,7 @@ export async function listTrash(scopeId: string, epochs: EpochKeys): Promise<Tra
     parentId: r.parentId ?? null,
     kind: r.kind,
     epoch: r.epoch,
-    name: openName(keyAt(epochs, r.epoch), r.encryptedName),
+    name: openName(keyAt(epochs, r.epoch), { scopeId, nodeId: r.id, epoch: r.epoch }, r.encryptedName),
     deletedAt: r.deletedAt,
     purgeAfter: r.purgeAfter,
   }))
@@ -265,7 +283,7 @@ export async function restoreNode(
       nodeId: node.id,
       restoreNodeRequest: {
         slugToken: slugTokenFor(key, parentSlot, name),
-        encryptedName: newName === undefined ? undefined : sealName(key, newName),
+        encryptedName: newName === undefined ? undefined : sealName(key, { scopeId, nodeId: node.id, epoch: node.epoch }, newName),
       },
     }),
   )

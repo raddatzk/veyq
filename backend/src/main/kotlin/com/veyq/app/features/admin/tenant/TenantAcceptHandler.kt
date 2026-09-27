@@ -58,6 +58,7 @@ sealed interface RegisterAcceptOutcome {
     data object EmailTaken : RegisterAcceptOutcome, HttpFailure by httpFailure("email_taken", FailureStatus.CONFLICT)
     data object MissingGrant : RegisterAcceptOutcome, HttpFailure by Failures.invalidRequest
     data object UsernameTaken : RegisterAcceptOutcome, HttpFailure by Failures.usernameTaken
+    data object IdTaken : RegisterAcceptOutcome, HttpFailure by Failures.idTaken
 }
 
 /**
@@ -137,7 +138,9 @@ class TenantAcceptHandler(
     /** Register-and-accept: the invited email has no account yet — born cold here (email from the invite).
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins grant-less. */
     @Transactional
-    fun registerAndAccept(bootstrapSecret: String, account: NewAccount, grant: String?, username: String, sealedName: String?): RegisterAcceptOutcome {
+    fun registerAndAccept(
+        bootstrapSecret: String, userId: String, account: NewAccount, grant: String?, username: String, sealedName: String?,
+    ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return RegisterAcceptOutcome.NotFound
@@ -147,8 +150,11 @@ class TenantAcceptHandler(
         if (accounts.findByEmail(invite.ownerEmail) != null) return RegisterAcceptOutcome.EmailTaken
         if (invite.role != TenantInviteEntity.MEMBER && grant == null) return RegisterAcceptOutcome.MissingGrant
         if (profiles.usernameTaken(tenant.id, username)) return RegisterAcceptOutcome.UsernameTaken
+        // The client-minted account id (ADR 0072): the optional sealed real name is bound to (tenant scope, it).
+        if (VeyqUser.findById(userId) != null) return RegisterAcceptOutcome.IdTaken
 
-        val userId = accounts.createAccount(
+        accounts.createAccount(
+            userId = userId,
             email = invite.ownerEmail,
             serverRole = ServerRoles.MEMBER,
             suiteId = account.suiteId,

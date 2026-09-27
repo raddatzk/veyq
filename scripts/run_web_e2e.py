@@ -73,6 +73,7 @@ Environment (all optional):
     VEYQ_JAR              Backend fast-jar. Default: backend/build/quarkus-app/quarkus-run.jar
     VEYQ_PORT             Backend HTTP port. Default: 8080
     VEYQ_ADMIN_PORT       Backend admin-listener port (ADR 0065). Default: 8090
+    VEYQ_INFRA_DIR        The `infra/` whose compose stack to use. Default: this checkout's (see [compose_up] for a worktree)
     VEYQ_HOST             Tenant domain + fetch Host. Default: veyq.localhost
     VEYQ_BOOT_SECS        Readiness timeout per boot. Default: 120
     VEYQ_TEST_MS          Default per-test timeout passed to vitest. Default: 120000
@@ -108,7 +109,9 @@ import validate_field_visibility
 
 REPO = Path(__file__).resolve().parent.parent
 WEB = REPO / "web"
-COMPOSE_FILE = REPO / "infra" / "docker-compose.yml"
+# `VEYQ_INFRA_DIR` pins the stack to another checkout's `infra/` — see the worktree note in [compose_up].
+INFRA = Path(os.environ.get("VEYQ_INFRA_DIR", REPO / "infra"))
+COMPOSE_FILE = INFRA / "docker-compose.yml"
 COMPOSE = ["docker", "compose", "-f", str(COMPOSE_FILE), "--profile", "s3", "--profile", "mail"]
 # The network a group's capture/restore containers join to reach the store by its INTERNAL name. Compose derives
 # a project name from the compose file's DIRECTORY unless the file declares one, and this one deliberately does
@@ -121,7 +124,7 @@ DOCKER_NETWORK = f"{COMPOSE_FILE.parent.name}_default"
 # hazard rather than a detail: the derivation reads the compose file's DIRECTORY, both files live in `infra/`,
 # and a capture pointed at the production file therefore resolves whatever is running out of `infra/` — which on
 # any developer's host is the stack this orchestrator just brought up. See [rehearse_production_project].
-PROD_COMPOSE_FILE = REPO / "infra" / "docker-compose.prod.yml"
+PROD_COMPOSE_FILE = INFRA / "docker-compose.prod.yml"
 
 # Where a run's artifacts land. A CONSTANT only — `main()` creates it, never module scope:
 # `scripts/validate_e2e_discovery.py` imports this module with `importlib` and *executes* it, so a module-level
@@ -188,6 +191,14 @@ class SweepError(RuntimeError):
     """
 
 
+def shown(path: Path) -> Path:
+    """A path for a log line: relative to this checkout where it is inside it — `VEYQ_INFRA_DIR` may point outside."""
+    try:
+        return path.relative_to(REPO)
+    except ValueError:
+        return path
+
+
 def log(msg: str) -> None:
     """A silent orchestrator is unreviewable in CI — every step announces itself."""
     print(f"[e2e] {msg}", flush=True)
@@ -235,12 +246,14 @@ def compose_up(workdir: Path) -> None:
     blocks about that long. That is the right trade against a first-suite flake, and the reason not to substitute
     a snappier poll of our own.
     """
-    log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE.relative_to(REPO)}")
+    log(f"compose up (--profile s3 --profile mail) from {COMPOSE_FILE}")
     # Run from a git WORKTREE, this is the same compose project (`infra`) from a different directory: bind mounts
     # resolve against THIS checkout, so every service with one gets a new config hash and is recreated onto the
     # worktree's files — the developer's own dev containers, left mounting a directory that is deleted with the
     # worktree (measured 2026-09-24: `veyq-garage` rebound to the worktree's `garage.toml`). From a worktree, run
-    # the MAIN checkout's copy of this script with `VEYQ_JAR=<worktree>/backend/build/quarkus-app/quarkus-run.jar`.
+    # THIS checkout's copy with `VEYQ_INFRA_DIR=<main checkout>/infra`: the stack stays the main checkout's while
+    # the suites, contracts and jar are the worktree's. Running the MAIN checkout's copy instead (the earlier advice
+    # here) runs the main checkout's SUITES — wrong whenever the web code changed along with the backend.
     run(COMPOSE + ["up", "-d"])
     log("waiting for mariadb to report healthy")
     run(COMPOSE + ["up", "-d", "--wait", "mariadb"])
@@ -1113,7 +1126,7 @@ def rehearse_production_project(workdir: Path) -> None:
     if probe.returncode != 0:
         raise SystemExit(
             f"[e2e] PRODUCTION-PROJECT REHEARSAL INCONCLUSIVE: "
-            f"{PROD_COMPOSE_FILE.relative_to(REPO)} does not resolve even with every `${{VAR:?}}` it declares "
+            f"{shown(PROD_COMPOSE_FILE)} does not resolve even with every `${{VAR:?}}` it declares "
             f"supplied ({probe.stderr.strip()[-300:]}). A capture against it would fail here, before Compose "
             f"resolved any project — which is indistinguishable from the verdict this rehearsal reports, and "
             f"would be scored as a pass."
@@ -1124,19 +1137,19 @@ def rehearse_production_project(workdir: Path) -> None:
     shared = ["capture", "--db-name", DECOY_DB, "--store-bucket", DECOY_BUCKET,
               "--config-secret-file", str(key)]
 
-    log(f"control: the same capture through {COMPOSE_FILE.relative_to(REPO)} must reach the decoy")
+    log(f"control: the same capture through {shown(COMPOSE_FILE)} must reach the decoy")
     control = backup_tool_result(*shared, "--compose-file", str(COMPOSE_FILE),
                                  "--into", str(home / "control"), env_extra=env_extra)
     if control.returncode != 0:
         raise SystemExit(
             f"[e2e] PRODUCTION-PROJECT REHEARSAL INCONCLUSIVE: the control capture — the same command through "
-            f"{COMPOSE_FILE.relative_to(REPO)}, which resolves the project this stack is actually running as — "
+            f"{shown(COMPOSE_FILE)}, which resolves the project this stack is actually running as — "
             f"failed with exit {control.returncode}. Nothing was reachable, so the subject below could only "
             f"have proven that. Fix the control first; a rehearsal whose control is red reports 'the project is "
             f"correctly not resolved' and 'nothing ran' identically."
         )
 
-    log(f"subject: the same capture through {PROD_COMPOSE_FILE.relative_to(REPO)} must NOT reach it")
+    log(f"subject: the same capture through {shown(PROD_COMPOSE_FILE)} must NOT reach it")
     subject = backup_tool_result(*shared, "--compose-file", str(PROD_COMPOSE_FILE),
                                  "--into", str(home / "production"), env_extra=env_extra)
     manifest = home / "production" / instance_backup.MANIFEST_NAME
@@ -1146,7 +1159,7 @@ def rehearse_production_project(workdir: Path) -> None:
             captured = ", ".join(json.loads(manifest.read_text()).get("domains") or []) or "(no domain)"
         raise SystemExit(
             f"[e2e] PRODUCTION-PROJECT REHEARSAL FAILED: a capture pointed at "
-            f"{PROD_COMPOSE_FILE.relative_to(REPO)} exited {subject.returncode} and captured database "
+            f"{shown(PROD_COMPOSE_FILE)} exited {subject.returncode} and captured database "
             f"{DECOY_DB}, domains {captured} — an instance living in the DEV project. The production file names "
             f"no project, so Compose derived one from its directory (`{PROD_COMPOSE_FILE.parent.name}`) and "
             f"handed the production procedure whatever happens to run out of it. On a production host that is a "
@@ -1154,7 +1167,7 @@ def rehearse_production_project(workdir: Path) -> None:
             f"(`name:`) so the procedure cannot be pointed at the wrong stack by standing in the wrong directory."
         )
     log(f"the production capture did not resolve the dev project (exit {subject.returncode}), "
-        f"while the control through {COMPOSE_FILE.relative_to(REPO)} reached {DECOY_DB} — the project is a "
+        f"while the control through {shown(COMPOSE_FILE)} reached {DECOY_DB} — the project is a "
         f"property of the file, not of the directory it sits in")
 
 

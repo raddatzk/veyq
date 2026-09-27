@@ -66,19 +66,19 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     // collides verbatim with the Flyway `media` migration description — the one row a pristine data-only dump
     // carries. Dropped here, at the recording site, with the reason written down — never as a silent filter in
     // the recorder. `cover.crop` is all numbers and drops by type, so the cover contributes nothing after this.
-    const envelope = unsealNodeMeta(memoryKey, withCover.wrappedMeta)
+    const envelope = unsealNodeMeta(memoryKey, { scopeId, nodeId }, withCover.wrappedMeta)
     if (envelope.cover && typeof envelope.cover === 'object') delete (envelope.cover as { source?: unknown }).source
     recordCanaries(envelope, (await listTree(scopeId, epochsOf(scopeKey))).map((n) => n.name))
 
-    expect(unsealMemoryDate(memoryKey, withCover)).toEqual(date)
-    expect(unsealMemoryLocation(memoryKey, withCover)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' })
-    expect(unsealMemoryCover(memoryKey, withCover)).toEqual(cover)
+    expect(unsealMemoryDate(scopeId, memoryKey, withCover)).toEqual(date)
+    expect(unsealMemoryLocation(scopeId, memoryKey, withCover)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' })
+    expect(unsealMemoryCover(scopeId, memoryKey, withCover)).toEqual(cover)
 
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
     await setMemoryCover(scopeId, nodeId, memoryKey, null, withCover.wrappedMeta)
     const withoutCover = await readBack()
-    expect(unsealMemoryCover(memoryKey, withoutCover)).toBeNull()
-    expect(unsealMemoryDate(memoryKey, withoutCover)).toEqual(date)
-    expect(unsealMemoryLocation(memoryKey, withoutCover)).toMatchObject({ name: 'Teneriffa' })
+    expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
+    expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)
+    expect(unsealMemoryLocation(scopeId, memoryKey, withoutCover)).toMatchObject({ name: 'Teneriffa' })
   })
 })

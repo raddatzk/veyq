@@ -219,7 +219,7 @@ class MemberInviteManagementSliceTest {
 
     /** A cold-birth register body with NO grant (a MEMBER joins grant-less). */
     private fun memberRegisterBody(secret: String) = """
-        {"bootstrapSecret":"$secret","username":"newmember",
+        {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newmember",
          "account":{"suiteId":"v1",
            "identityPublicKey":"bWVtYmVyLXB1YmxpYy1rZXk=",
            "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",

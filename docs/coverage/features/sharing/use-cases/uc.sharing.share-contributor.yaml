@@ -19,7 +19,7 @@ title: Share a Memory as a contributor link (anyone with the link can add photos
 # authenticated upload path never exercises.
 acceptanceCriteria:
   - id: create-contributor-share
-    text: A curator turns one of their personal-scope Memories into a CONTRIBUTOR share — the curator picks the Contributor role in the Share dialog; the client mints K_share, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { nodeId, role CONTRIBUTOR, wrap, sealedName, expiresAt? }. The server mints a 256-bit shareId and stores the record opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into a CONTRIBUTOR share — the curator picks the Contributor role in the Share dialog; the client mints K_share and a 256-bit shareId, computes symWrap(K_share, K_mem), re-seals the Memory name under K_share, and POSTs { shareId, nodeId, role CONTRIBUTOR, wrap, sealedName, expiresAt? }. The server stores the record opaquely under that id (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
@@ -27,7 +27,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: sealed-name-anonymous-identity
-    text: Before contributing, the visitor must enter a display name (mandatory). The client seals it under K_mem and creates an anonymous share identity via POST /api/shares/{shareId}/identities { sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
+    text: Before contributing, the visitor must enter a display name (mandatory). The client seals it under K_mem and creates an anonymous share identity under a client-minted id via POST /api/shares/{shareId}/identities { identityId, sealedDisplayName } -> { identityId, contributorToken }. The server stores only the K_mem-sealed name (ciphertext) + the token hash + shareId; it never sees the name. The sealed name -> identity is the forward-compat hook for buckets (a later slice).
     coverage:
       # The e2e proves the CROSS-ACTOR half no other layer reaches: an anonymous stranger seals a display name
       # under K_mem, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —

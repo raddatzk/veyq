@@ -39,7 +39,7 @@ export function materializeKeys(built: BuiltAccount, password: string): { master
   if (!wrap) throw new Error('account has no PASSWORD wrap')
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = v1.kekPasswordSecret(secretKey, password, salt, params)
-  const masterKey = v1.symUnwrap(kek, fromB64std(wrap.wrappedKey), 'master-key')
+  const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(wrap.wrappedKey))
   return { masterKey: b64std(masterKey), identityPrivate: b64std(v1.serializeIdentityPrivate(built.identity)) }
 }
 

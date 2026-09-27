@@ -62,7 +62,7 @@ class TasksSliceTest {
         // target membership (the first wrap to a foreign identity) and marks the job done.
         val wrap = "d3JhcC10by1mb3JlaWdu" // "wrap-to-foreign"
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$wrap"}""")
+            .body("""{"sealedResult":"$wrap","epoch":0}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
 
@@ -107,10 +107,40 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ=="}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(1, grantedEpochOf(targetMembership), "grant-delivery must record the delivered (current) epoch")
+    }
+
+    @Test
+    fun grantDeliveryStatingAnEpochBelowCurrentIsRefusedAndWritesNothing() {
+        // The grant is sealed bound to (scope, epoch) (ADR 0072), so the server must record exactly the epoch the
+        // worker sealed — and a worker whose epoch is not the current one (a rotation landed between its claim and
+        // its completion) delivers a grant the target cannot use. Refused, nothing written, the lease released
+        // without spending an attempt so the job re-runs; the control is the same job completed at the current epoch.
+        val scopeId = seedTenantScope()
+        setScopeEpoch(scopeId, 2)
+        val worker = seedUser()
+        seedGrantedMembershipRow(worker, scopeId, "owner-grant", grantedEpoch = 2)
+        val target = seedUser(pubkey = "dGFyZ2V0LXB1YmtleQ==")
+        val targetMembership = seedGrantlessMembership(target, scopeId)
+
+        val jobId = claimGrantDelivery(worker)
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1}""")
+            .`when`().post("/api/tasks/$jobId/complete")
+            .then().statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(null, grantOf(targetMembership), "a grant sealed at a stale epoch is never written")
+        assertEquals(JobEntity.PENDING, statusOf(jobId), "the job is released to run again, not done")
+        assertEquals(0, attemptsOf(jobId), "a stale completion does not spend an attempt")
+
+        assertEquals(jobId, claimGrantDelivery(worker), "the same job is claimable again")
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2}""")
+            .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
+        assertEquals("d3JhcC1FMg==", grantOf(targetMembership), "the current-epoch grant is written")
+        assertEquals(2, grantedEpochOf(targetMembership), "at exactly the epoch the worker stated")
     }
 
     @Test
@@ -127,7 +157,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker) // reconcile-on-claim originates a delivery for the stale member
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg=="}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(2, grantedEpochOf(staleMembership), "the stale member is re-granted at the current epoch")
@@ -398,7 +428,7 @@ class TasksSliceTest {
         // The attacker completes it (they hold the lease and a grant in A) — the job is marked done, but the
         // cross-scope write is refused: the victim's membership in B stays grant-less.
         given().header("Authorization", bearer(attacker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA=="}""")
+            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertNull(grantOf(victimMembership), "a cross-scope resourceRef must not receive a grant")
@@ -513,6 +543,9 @@ class TasksSliceTest {
 
     private fun statusOf(jobId: String): String =
         QuarkusTransaction.requiringNew().call { JobEntity.findById(jobId)!!.status }
+
+    private fun attemptsOf(jobId: String): Int =
+        QuarkusTransaction.requiringNew().call { JobEntity.findById(jobId)!!.attempts }
 
     /** Simulate a rotated scope: bump its current content-key epoch (cr-0093). */
     private fun setScopeEpoch(scopeId: String, epoch: Int) =
