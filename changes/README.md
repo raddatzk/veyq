@@ -927,6 +927,14 @@ red for a reason that was not theirs, and the same coupling reddened them again 
 once the fix existed. The fix was structural: the control fires on its **own**, identically seeded space. Where a
 live defect or a bite can let a negative write, give the control a fixture the negative cannot reach.
 
+**A lever that moves a secret out of its scope moves it across the code's own wipe — bite both forms.** In
+`cr-rotation-states-its-epoch` the lever for *"a retry never reuses a key whose wraps already left the device"* was
+*hoist the mint out of the loop*. Hoisted with the per-attempt `finally { newKey.fill(0) }` left in place, the
+retry wraps the wiped, all-zero buffer: a key that differs from the first attempt's and chains consistently, so
+"the two keys differ" and "the link peels" both stayed green over the worst version of the defect. Only the form
+with the wipe moved too reddened them; an assertion that the retry's key is not the zeroed buffer caught both.
+Where an injection changes a value's lifetime, the cleanup that bounded the old lifetime is part of the lever.
+
 ### Each layer of a defence in depth is tested with the other layers held off
 
 **Layers that overlap mask each other's tests, and the mask is the fix working.** `cr-inert-store-responses`

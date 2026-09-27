@@ -1,7 +1,7 @@
 ---
 id: cr-rotation-states-its-epoch
 title: A rotation states the epoch it creates, and the server commits only the next one
-status: planned
+status: done
 satisfies: [uc.spaces.manage-group-members]
 adrs: ["0024", "0021", "0072"]
 invariants: [operator-blind E2EE, API-first]
@@ -66,7 +66,7 @@ the flow is [en.spaces.scope-key-rotation](../docs/features/spaces/enablers/en.s
 
 ## Phases
 
-- [ ] 1 contracts — `RotateScopeRequest` gains a required `epoch` (integer, `minimum: 1`, annotated like
+- [x] 1 contracts — `RotateScopeRequest` gains a required `epoch` (integer, `minimum: 1`, annotated like
       `nameEpoch`), and `rotateScope` gains the `409 stale_epoch` response. Rewrite the description: it
       "commits the stated epoch iff it is the next one"; it no longer "bumps to the next index". The field is a
       shape change, so both surfaces must follow. Expected reds until phases 2–3: the web call sites that omit
@@ -74,7 +74,7 @@ the flow is [en.spaces.scope-key-rotation](../docs/features/spaces/enablers/en.s
       trust this prediction.
       · Done when: `npm run generate:api`, `./gradlew compileKotlin compileTestKotlin` and every
       `scripts/validate_*.py` are green.
-- [ ] 2 backend — **guard → red → fix → green.**
+- [x] 2 backend — **guard → red → fix → green.**
       - **Live defect:** delete the `@Disabled` line on
         `ScopesSliceTest.aRotationBuiltOnASupersededEpochIs409AndLeavesTheChainIntact`, run it, and record the
         red. The first failing assertion must be the second owner's `statusCode(409)` (today `201`). A red
@@ -96,7 +96,7 @@ the flow is [en.spaces.scope-key-rotation](../docs/features/spaces/enablers/en.s
         `grep -rln '"wrappedPrev"' backend/src/test`. The second finds `OperatorBlindProbeTest`'s probe table,
         which the first misses.
       · Done when: `./gradlew check` is green, with the red recorded above.
-- [ ] 3 web — `rotateGroupForRemoval` and `rekeyAlone` commit through **one** function. It opens, mints, builds,
+- [x] 3 web — `rotateGroupForRemoval` and `rekeyAlone` commit through **one** function. It opens, mints, builds,
       states `epoch: opened.epochs.current + 1`, commits, and on `stale_epoch` does all of that once more.
       `isStaleEpoch`'s comment stops saying "under a rename". `runScopeRotationWorker` declines a job whose
       rotation is still stale and fails any other error, as today.
@@ -111,7 +111,7 @@ the flow is [en.spaces.scope-key-rotation](../docs/features/spaces/enablers/en.s
         is the control.
       - `rotateKeys.test.ts`: `rekeyAlone` states the epoch.
       · Done when: `npm run check` (web) is green.
-- [ ] 4 coverage — `uc.spaces.manage-group-members.yaml` gains a criterion: *a rotation commits only as the
+- [x] 4 coverage — `uc.spaces.manage-group-members.yaml` gains a criterion: *a rotation commits only as the
       scope's current epoch + 1, anything else is refused with nothing stored, and the device retries once from
       a fresh key*. Refs: the two slice tests, the `RotationPolicyTest` cases, and the web cases above. It joins
       the rotation criteria already there. One of them, `queued-rotation-backstop`, is already triggered from
@@ -127,3 +127,19 @@ A retry never reuses a key whose wraps already left the device. No new guard: th
 `./gradlew check` and are the permanent proof. Inbox #177 is closed and #178 is left open.
 
 ## Retrospective
+
+- **Planning — the key-reuse lever was one form short.** "Hoist the mint out of the loop" leaves the per-attempt
+  `finally { newKey.fill(0) }` in place, and that form retries with the wiped all-zero buffer: it differs from the
+  first key and chains consistently, so both assertions the CR named stayed green. Measured by injecting both
+  forms; fixed with an "is not the zeroed buffer" assertion. Harvested into `changes/README.md` (§ A control's
+  LEVER must itself be bitten). *Next time:* a lever that moves a secret's lifetime is written with and without
+  the cleanup that bounded it.
+- **Planning — a test inventory that met a module mock.** "`rotateKeys.test.ts`: `rekeyAlone` states the epoch"
+  was unreachable as the suite stood: it mocked `spaces/scopes` wholesale, and once both callers route through
+  one function in that module the epoch is stated inside it, where a partial mock cannot reach (ESM-internal
+  call). The suite now runs the real scope layer with only API and vault mocked. *Next time:* a CR that funnels
+  call sites into one function greps the suites that `vi.mock` that function's module.
+- **Execution — a foreground bite outran its timeout.** Three sequential slice runs at 3–4 min each (the machine
+  shared with three parallel sessions) exceeded the 10-min Bash limit and spilled to the background mid-restore;
+  the restore still ran and was confirmed by bytes and `git status`. *Next time:* repeated slice-level bites are
+  backgrounded from the start.
