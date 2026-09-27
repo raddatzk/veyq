@@ -1,25 +1,18 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Test
 import java.security.MessageDigest
-import java.time.Instant
 import java.util.Base64
-import java.util.UUID
 
 /**
  * The permanent guard for cr-0164: the share-password gate fronts the guest **write** path, not only the read
@@ -41,11 +34,6 @@ import java.util.UUID
 @QuarkusTest
 class SharePasswordWriteGateTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
     private val pwSalt = "cHctc2FsdA=="
@@ -62,7 +50,7 @@ class SharePasswordWriteGateTest {
 
     private fun assertWriteGate(role: String) {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createWithPassword(userId, seedMemory(scopeId), role)
+        val shareId = createWithPassword(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY), role)
 
         // --- createShareIdentity: no token → 404, wrong token → 403, valid token → 201 (+ the real contributorToken)
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName2"}""")
@@ -122,49 +110,4 @@ class SharePasswordWriteGateTest {
             .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
-
-    private fun seedMemory(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

@@ -1,17 +1,14 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.MediaBudgetBranchSliceTest
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.media.UploadSessionEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -22,8 +19,6 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * The contributor half of windowed presigning (uc.sharing.share-contributor A2, ADR 0013 §2): a session is bound to
@@ -37,12 +32,7 @@ import java.util.UUID
 class ShareUploadWindowSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var fakeStore: FakePresigningBlobStore
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun aSecondIdentityCannotCompleteAnotherIdentitysSession() {
@@ -84,7 +74,7 @@ class ShareUploadWindowSliceTest {
         val uploadId = start(share.shareId, contributor, TestBlob.ofChunks(3))
         window(share.shareId, contributor, uploadId, fromChunk = 1).statusCode(200).body("results[0].error", nullValue())
 
-        given().header("Authorization", token(share.owner))
+        given().header("Authorization", bearer(share.owner))
             .`when`().post("/api/shares/${share.shareId}/revoke").then().statusCode(204)
 
         window(share.shareId, contributor, uploadId, fromChunk = 2).statusCode(404).body("code", equalTo("share_not_found"))
@@ -96,8 +86,8 @@ class ShareUploadWindowSliceTest {
 
     private fun contributorShare(): Share {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId)
-        val shareId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        val shareId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$memory","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
@@ -134,49 +124,4 @@ class ShareUploadWindowSliceTest {
             .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200)
-
-    private fun seedNode(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

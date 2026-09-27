@@ -1,24 +1,21 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
@@ -45,13 +42,10 @@ class SharePresignDomainSliceTest {
         override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @Test
     fun aGuestsShareBlobIsSignedForTheDomainTheGuestIsOn() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId)
+        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, blobId) = seedMedia(scopeId, memory)
         val shareId = createShare(userId, memory)
         val a = seedTenantDomain()
@@ -68,7 +62,7 @@ class SharePresignDomainSliceTest {
         // Same security property as on the media paths, restated where the caller is *unauthenticated* and so
         // has the least standing of anyone to name the origin the server signs for.
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId)
+        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
         val (_, blobId) = seedMedia(scopeId, memory)
         val shareId = createShare(userId, memory)
         val spoofed = "attacker-${UUID.randomUUID()}.example.com"
@@ -84,8 +78,6 @@ class SharePresignDomainSliceTest {
 
     // --- helpers ---
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     /** Anonymous — no Authorization header at all, which is the whole point of a public share. */
     private fun guestBlobUrl(shareId: String, blobId: String, host: String): String =
         given().header("X-Forwarded-Host", host)
@@ -94,34 +86,16 @@ class SharePresignDomainSliceTest {
             .extract().path("presignedGets[0].url")
 
     private fun createShare(userId: String, nodeId: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"d3JhcA==","sealedName":"bmFtZQ=="}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).body("shareId", notNullValue())
             .extract().path("shareId")
 
     private fun seedTenantDomain(): String {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "sp-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-        }
+        val domain = "sp-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = domain, tenantScope = false)
         return domain
-    }
-
-    private fun seedNode(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
     }
 
     /** One media (blob + row) attached to the node. Returns (mediaId, blobId). */
@@ -139,38 +113,5 @@ class SharePresignDomainSliceTest {
             }.persist()
         }
         return mediaId to blobId
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "spt-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "sp-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

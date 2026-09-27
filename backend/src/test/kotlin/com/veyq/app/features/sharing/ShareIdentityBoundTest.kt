@@ -1,25 +1,18 @@
 package com.veyq.app.features.sharing
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * The 429 proof for the per-share **contributor-identity** bound added with the declarative posture (ADR 0051):
@@ -47,16 +40,13 @@ class ShareIdentityBoundTest {
         )
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
 
     @Test
     fun theCreateAfterTheAllowanceIs429() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createShare(userId, seedMemory(scopeId))
+        val shareId = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
 
         repeat(3) { createIdentity(shareId).then().statusCode(201) }
         createIdentity(shareId).then().statusCode(429).body("code", equalTo("rate_limited"))
@@ -65,8 +55,8 @@ class ShareIdentityBoundTest {
     @Test
     fun oneExhaustedShareDoesNotSpendAnothersBudget() {
         val (userId, scopeId) = seedMemberScope()
-        val exhausted = createShare(userId, seedMemory(scopeId))
-        val other = createShare(userId, seedMemory(scopeId))
+        val exhausted = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
+        val other = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
 
         repeat(3) { createIdentity(exhausted).then().statusCode(201) }
         createIdentity(exhausted).then().statusCode(429)
@@ -77,7 +67,7 @@ class ShareIdentityBoundTest {
     @Test
     fun theIdentityBudgetIsSeparateFromTheUploadBudget() {
         val (userId, scopeId) = seedMemberScope()
-        val shareId = createShare(userId, seedMemory(scopeId))
+        val shareId = createShare(userId, seedNode(scopeId, wrappedContentKey = CONTENT_KEY))
 
         val contributorToken = createIdentity(shareId).then().statusCode(201)
             .extract().path<String>("contributorToken")
@@ -98,53 +88,8 @@ class ShareIdentityBoundTest {
             .`when`().post("/api/shares/$shareId/identities")
 
     private fun createShare(userId: String, nodeId: String): String =
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"CONTRIBUTOR","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
-
-    private fun seedMemory(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "ib-$tenantId.example.com"
-                ownerEmail = "ib-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "ib-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }
