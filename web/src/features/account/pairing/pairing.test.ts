@@ -1,28 +1,28 @@
-// uc.account.onboard-device (web, ADR 0059) — the three client-side properties the pairing ceremony rests on
-// and that no `scripts/` validator can see, because seeing them means parsing TypeScript:
+// uc.account.onboard-device (web, ADR 0059) — the client-side properties the pairing ceremony rests on and that
+// no `scripts/` validator can see, because seeing them means parsing TypeScript:
 //
-//   1. the displayed code names no server (§4) — the payload is the marker and the handle, and nothing else,
+//   1. the displayed code names no server (§4) — the payload is the marker and the secret, and nothing else,
 //      under EITHER direction's marker, and neither marker ever parses as the other's;
 //   2. the grant survives exactly one round trip through the ephemeral transport key, and nothing else opens it;
 //   3. the check number is a function of the answering key alone (§5) — same key, same digits; different key,
 //      different digits;
-//   4. the pairing code's commitment binds the code to ONE key (§6) — a different key or a different code does
-//      not verify, and the sign-in answer that carries it consumes its buffer exactly.
+//   4. both relayed values are authenticated by the channel key only the QR's secret derives (§11): an answer or
+//      an envelope made without it is refused, by name, and the transcribed code is bound into the sign-in answer.
 //
 // Every negative here carries the positive control on the same predicate, because "it returned null" and "it
-// threw" are produced just as well by a module that does nothing at all.
+// threw" are produced just as well by a module that does nothing at all — and every refusal is anchored on its
+// own reason, not on "it threw".
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import {
-  mintHandle,
+  mintPairingSecret,
+  channelKeys,
   pairingPayload,
   parsePairingPayload,
   signInPayload,
   parseSignInPayload,
   mintPairingCode,
-  codeCommitment,
-  codeProofHolds,
   signInAnswer,
   readSignInAnswer,
   mintTransportKey,
@@ -31,6 +31,8 @@ import {
   checkNumber,
   sealGrant,
   openGrant,
+  PairingRefused,
+  type PairingRefusal,
 } from './pairing'
 
 const grant = () => ({
@@ -40,21 +42,35 @@ const grant = () => ({
   label: 'Küchen-Tablet',
 })
 
+/** Anchor a refusal on its NAME: a bare `toThrow()` is satisfied by a RangeError three layers down. */
+const refusal = (fn: () => unknown): PairingRefusal | 'none' | 'other' => {
+  try {
+    fn()
+    return 'none'
+  } catch (e) {
+    return e instanceof PairingRefused ? e.reason : 'other'
+  }
+}
+
+const aChannel = () => channelKeys(mintPairingSecret())
+
 afterEach(() => vi.restoreAllMocks())
 
-describe('the pairing payload (ADR 0059 §4, D5)', () => {
-  it('round-trips a real handle unchanged — the control every negative below needs', () => {
-    const handle = mintHandle()
-    expect(parsePairingPayload(pairingPayload(handle))).toBe(handle)
+describe('the pairing payload (ADR 0059 §4, §11)', () => {
+  it('round-trips a real secret unchanged — the control every negative below needs', () => {
+    const secret = mintPairingSecret()
+    expect(parsePairingPayload(pairingPayload(secret))).toBe(secret)
   })
 
-  it('carries the marker and the handle and nothing else', () => {
-    expect(pairingPayload('SGFuZGxl')).toBe('veyqpair:SGFuZGxl')
+  it('carries the marker and the 32-byte secret and nothing else', () => {
+    const secret = b64std(new Uint8Array(32).fill(7))
+    expect(pairingPayload(secret)).toBe(`veyqpair:${secret}`)
+    expect(fromB64std(parsePairingPayload(pairingPayload(secret))!)).toHaveLength(32)
   })
 
-  it('is never URL-shaped: no scheme separator, no host, no path — over 200 minted handles', () => {
+  it('is never URL-shaped: no scheme separator, no host, no path — over 200 minted secrets', () => {
     for (let i = 0; i < 200; i++) {
-      const payload = pairingPayload(mintHandle())
+      const payload = pairingPayload(mintPairingSecret())
       expect(payload).not.toContain('://')
       expect(payload.slice('veyqpair:'.length)).not.toMatch(/^\//)
       expect(payload).not.toMatch(/https?:/)
@@ -62,10 +78,10 @@ describe('the pairing payload (ADR 0059 §4, D5)', () => {
     }
   })
 
-  // The bite for the loop in `mintHandle`. 200 random handles cannot show it: a leading '/' happens once in 64,
-  // so the sweep above passes ~4% of the time with the guard deleted. Forcing the first draw is what makes the
-  // property observable — a first byte of 0xFF encodes to '/' as base64's 63rd symbol.
-  it('re-mints a handle whose encoding would make the payload read `veyqpair://`', () => {
+  // The bite for the loop in `mintPairingSecret`. 200 random secrets cannot show it: a leading '/' happens once
+  // in 64, so the sweep above passes ~4% of the time with the guard deleted. Forcing the first draw is what makes
+  // the property observable — a first byte of 0xFF encodes to '/' as base64's 63rd symbol.
+  it('re-mints a secret whose encoding would make the payload read `veyqpair://`', () => {
     const leadingSlash = new Uint8Array(32).fill(0xff)
     const clean = new Uint8Array(32).fill(0x00)
     const draws = vi
@@ -74,28 +90,48 @@ describe('the pairing payload (ADR 0059 §4, D5)', () => {
       .mockImplementationOnce(() => clean)
 
     expect(b64std(leadingSlash)).toMatch(/^\//) // the lever is wired: this draw WOULD produce `veyqpair://`
-    const handle = mintHandle()
+    const secret = mintPairingSecret()
 
     expect(draws).toHaveBeenCalledTimes(2)
-    expect(handle).toBe(b64std(clean))
-    expect(pairingPayload(handle)).not.toContain('://')
+    expect(secret).toBe(b64std(clean))
+    expect(pairingPayload(secret)).not.toContain('://')
   })
 
-  it('refuses a payload that is not exactly the marker and a handle', () => {
+  it('refuses a payload that is not exactly the marker and a 32-byte secret', () => {
+    const secret = mintPairingSecret()
     expect(parsePairingPayload('veyqkit:eyJ2IjoxfQ')).toBeNull() // the Emergency Kit's own payload
-    expect(parsePairingPayload('veyqpair:SGFuZGxl?to=https://evil.example')).toBeNull()
-    expect(parsePairingPayload('https://evil.example/veyqpair:SGFuZGxl')).toBeNull()
+    expect(parsePairingPayload(`veyqpair:${secret}?to=https://evil.example`)).toBeNull()
+    expect(parsePairingPayload(`https://evil.example/veyqpair:${secret}`)).toBeNull()
     expect(parsePairingPayload('veyqpair:')).toBeNull()
+    expect(parsePairingPayload('veyqpair:SGFuZGxl')).toBeNull() // six bytes: not a secret this client minted
     expect(parsePairingPayload('just some text')).toBeNull()
+    expect(parsePairingPayload(`veyqpair:${secret}`)).toBe(secret)
   })
 })
 
-describe('the sealed grant (ADR 0059 §3, D4)', () => {
-  it('round-trips every field through the transport key', () => {
+describe('the channel the secret derives (ADR 0059 §11)', () => {
+  it('both devices derive the same handle and key from the same secret', () => {
+    const secret = mintPairingSecret()
+    expect(channelKeys(secret)).toEqual(channelKeys(parsePairingPayload(pairingPayload(secret))!))
+  })
+
+  it('the handle is the vector-pinned derivation, and it is not the key the server must never see', () => {
+    const secret = mintPairingSecret()
+    const { handle, key } = channelKeys(secret)
+    expect(handle).toBe(b64std(v1.pairingHandle(fromB64std(secret))))
+    expect(key).toEqual(v1.pairingChannelKey(fromB64std(secret)))
+    expect(fromB64std(handle)).not.toEqual(key)
+    expect(handle).not.toBe(secret)
+  })
+})
+
+describe('the sealed grant (ADR 0059 §3, §11)', () => {
+  it('round-trips every field through the transport key and the channel key', () => {
     const transport = mintTransportKey()
+    const { key } = aChannel()
     const original = grant()
 
-    const opened = openGrant(transport.priv, sealGrant(transport.pub, original))
+    const opened = openGrant(key, transport.priv, sealGrant(key, transport.pub, original))
 
     expect(opened.email).toBe(original.email)
     expect(opened.masterKey).toEqual(original.masterKey)
@@ -103,39 +139,95 @@ describe('the sealed grant (ADR 0059 §3, D4)', () => {
     expect(opened.label).toBe(original.label)
   })
 
-  // The negative that matters: an envelope is sealed to ONE key. Anchored on the failed open of a real
-  // envelope by a real second key — not on "it threw", which a malformed input produces just as well.
+  // An envelope is sealed to ONE key. Anchored on the failed open of a real envelope by a real second key.
   it('does not open with a different transport key, while the intended one still does', () => {
     const intended = mintTransportKey()
     const other = mintTransportKey()
-    const envelope = sealGrant(intended.pub, grant())
+    const { key } = aChannel()
+    const envelope = sealGrant(key, intended.pub, grant())
 
-    expect(() => openGrant(other.priv, envelope)).toThrow()
-    expect(openGrant(intended.priv, envelope).label).toBe('Küchen-Tablet')
+    expect(() => openGrant(key, other.priv, envelope)).toThrow(v1.OpenRefused)
+    expect(openGrant(key, intended.priv, envelope).label).toBe('Küchen-Tablet')
+  })
+
+  // §11's envelope half: anyone can seal to the new device's public key — the relay read it off the answer. The
+  // trusted device's own envelope is the control.
+  it('refuses an envelope sealed to the right key without the channel key — the relay\'s own grant', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const relayGrant = sealGrant(aChannel().key, transport.pub, grant()) // a valid seal, MACed under a key it guessed
+
+    expect(refusal(() => openGrant(key, transport.priv, relayGrant))).toBe('envelope_refused')
+    expect(refusal(() => openGrant(key, transport.priv, sealGrant(key, transport.pub, grant())))).toBe('none')
+  })
+
+  it('refuses a bare seal with no MAC at all as unreadable, by name', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const bare = b64std(v1.sealTo({ purpose: 'pairing-grant' }, { x: transport.pub.kemX, m: transport.pub.kemM }, v1.utf8('{}')))
+
+    expect(refusal(() => openGrant(key, transport.priv, bare))).toBe('envelope_unreadable')
   })
 
   it('travels as the answering key does — the trusted device reads the answer off the wire and seals to it', () => {
     const transport = mintTransportKey()
-    const asRead = readTransportAnswer(transportAnswer(transport.pub))
+    const { key } = aChannel()
+    const asRead = readTransportAnswer(key, transportAnswer(key, transport.pub))
 
-    expect(openGrant(transport.priv, sealGrant(asRead, grant())).email).toBe('someone@example.org')
+    expect(openGrant(key, transport.priv, sealGrant(key, asRead, grant())).email).toBe('someone@example.org')
   })
 
   it('stays inside the contract\'s 8192-char ceiling for a realistic grant', () => {
     const transport = mintTransportKey()
-    const envelope = sealGrant(transport.pub, { ...grant(), label: 'x'.repeat(200) })
+    const { key } = aChannel()
+    const envelope = sealGrant(key, transport.pub, { ...grant(), label: 'x'.repeat(200) })
 
     expect(envelope.length).toBeLessThan(8192)
+  })
+})
+
+describe('the add-a-device answer (ADR 0059 §5, §11)', () => {
+  it('reads back the key it carries under the channel key — the control every negative below needs', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+
+    expect(readTransportAnswer(key, transportAnswer(key, transport.pub))).toEqual(transport.pub)
+  })
+
+  // The relay's position: it knows the handle and the answer, never the channel key. Any key it could MAC under
+  // is some other key, and swapping the bundle while keeping the honest MAC breaks the MAC.
+  it('is refused when the MAC is under another key, or the key is swapped under the honest MAC', () => {
+    const honest = mintTransportKey()
+    const relay = mintTransportKey()
+    const { handle, key } = aChannel()
+    const honestAnswer = transportAnswer(key, honest.pub)
+    const honestMac = fromB64std(honestAnswer).slice(-32)
+    const swapped = b64std(v1.concat(v1.lp(v1.serializeIdentityPublic(relay.pub)), v1.lp(honestMac)))
+
+    expect(refusal(() => readTransportAnswer(key, transportAnswer(fromB64std(handle), relay.pub)))).toBe('answer_refused')
+    expect(refusal(() => readTransportAnswer(key, swapped))).toBe('answer_refused')
+    expect(refusal(() => readTransportAnswer(key, honestAnswer))).toBe('none')
+  })
+
+  it('refuses the bare key it used to be, and trailing bytes, as unreadable', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const answer = transportAnswer(key, transport.pub)
+
+    expect(refusal(() => readTransportAnswer(key, b64std(v1.serializeIdentityPublic(transport.pub))))).toBe('answer_unreadable')
+    expect(refusal(() => readTransportAnswer(key, b64std(v1.concat(fromB64std(answer), Uint8Array.of(0)))))).toBe('answer_unreadable')
+    expect(refusal(() => readTransportAnswer(key, answer))).toBe('none')
   })
 })
 
 describe('the check number (ADR 0059 §5, D2)', () => {
   it('is five digits, and both sides derive the same one from the same answering key', () => {
     const transport = mintTransportKey()
+    const { key } = aChannel()
     // The new device derives it from the bundle it minted; the trusted device from the bundle it read off the
     // wire. Same number, or the compare means nothing.
     const onTheNewDevice = checkNumber(transport.pub)
-    const onTheTrustedDevice = checkNumber(readTransportAnswer(transportAnswer(transport.pub)))
+    const onTheTrustedDevice = checkNumber(readTransportAnswer(key, transportAnswer(key, transport.pub)))
 
     expect(onTheNewDevice).toMatch(/^\d{5}$/)
     expect(onTheTrustedDevice).toBe(onTheNewDevice)
@@ -155,18 +247,19 @@ describe('the check number (ADR 0059 §5, D2)', () => {
 })
 
 describe('the sign-in payload (ADR 0059 §4, D1)', () => {
-  it('round-trips a real handle unchanged — the control every negative below needs', () => {
-    const handle = mintHandle()
-    expect(parseSignInPayload(signInPayload(handle))).toBe(handle)
+  it('round-trips a real secret unchanged — the control every negative below needs', () => {
+    const secret = mintPairingSecret()
+    expect(parseSignInPayload(signInPayload(secret))).toBe(secret)
   })
 
-  it('carries the second marker and the handle and nothing else — never the transport key', () => {
-    expect(signInPayload('SGFuZGxl')).toBe('veyqsignin:SGFuZGxl')
+  it('carries the second marker and the secret and nothing else — never the transport key', () => {
+    const secret = b64std(new Uint8Array(32).fill(7))
+    expect(signInPayload(secret)).toBe(`veyqsignin:${secret}`)
   })
 
-  it('is never URL-shaped: no scheme separator, no host, no path — over 200 minted handles', () => {
+  it('is never URL-shaped: no scheme separator, no host, no path — over 200 minted secrets', () => {
     for (let i = 0; i < 200; i++) {
-      const payload = signInPayload(mintHandle())
+      const payload = signInPayload(mintPairingSecret())
       expect(payload).not.toContain('://')
       expect(payload.slice('veyqsignin:'.length)).not.toMatch(/^\//)
       expect(payload).not.toMatch(/https?:/)
@@ -174,10 +267,9 @@ describe('the sign-in payload (ADR 0059 §4, D1)', () => {
     }
   })
 
-  // The same lever as the `veyqpair:` case, re-run under this marker: the re-mint loop lives in `mintHandle`,
-  // so it carries over ONLY as long as this direction mints its handle there and nowhere else. 200 random
-  // draws cannot show it — a leading '/' happens once in 64.
-  it('re-mints a handle whose encoding would make the payload read `veyqsignin://`', () => {
+  // The same lever as the `veyqpair:` case, re-run under this marker: the re-mint loop lives in
+  // `mintPairingSecret`, so it carries over ONLY as long as this direction mints its secret there.
+  it('re-mints a secret whose encoding would make the payload read `veyqsignin://`', () => {
     const leadingSlash = new Uint8Array(32).fill(0xff)
     const clean = new Uint8Array(32).fill(0x00)
     const draws = vi
@@ -186,32 +278,35 @@ describe('the sign-in payload (ADR 0059 §4, D1)', () => {
       .mockImplementationOnce(() => clean)
 
     expect(b64std(leadingSlash)).toMatch(/^\//) // the lever is wired: this draw WOULD produce `veyqsignin://`
-    const handle = mintHandle()
+    const secret = mintPairingSecret()
 
     expect(draws).toHaveBeenCalledTimes(2)
-    expect(handle).toBe(b64std(clean))
-    expect(signInPayload(handle)).not.toContain('://')
+    expect(secret).toBe(b64std(clean))
+    expect(signInPayload(secret)).not.toContain('://')
   })
 
-  it('refuses a payload that is not exactly the marker and a handle', () => {
+  it('refuses a payload that is not exactly the marker and a 32-byte secret', () => {
+    const secret = mintPairingSecret()
     expect(parseSignInPayload('veyqkit:eyJ2IjoxfQ')).toBeNull() // the Emergency Kit's own payload
-    expect(parseSignInPayload('veyqsignin:SGFuZGxl?to=https://evil.example')).toBeNull()
-    expect(parseSignInPayload('https://evil.example/veyqsignin:SGFuZGxl')).toBeNull()
+    expect(parseSignInPayload(`veyqsignin:${secret}?to=https://evil.example`)).toBeNull()
+    expect(parseSignInPayload(`https://evil.example/veyqsignin:${secret}`)).toBeNull()
     expect(parseSignInPayload('veyqsignin:')).toBeNull()
+    expect(parseSignInPayload('veyqsignin:SGFuZGxl')).toBeNull()
     expect(parseSignInPayload('just some text')).toBeNull()
+    expect(parseSignInPayload(`veyqsignin:${secret}`)).toBe(secret)
   })
 
   // D1's reason for a second marker at all. A sign-in code read as a pairing one would mount the join card and
   // burn the write-once answer slot before anyone saw a wrong screen — so the two must not be interchangeable,
   // in EITHER direction, and each parser's own payload is the live control that it still works.
   it('is not interchangeable with the add-a-device payload, in either direction', () => {
-    const handle = mintHandle()
+    const secret = mintPairingSecret()
 
-    expect(parsePairingPayload(signInPayload(handle))).toBeNull()
-    expect(parseSignInPayload(pairingPayload(handle))).toBeNull()
+    expect(parsePairingPayload(signInPayload(secret))).toBeNull()
+    expect(parseSignInPayload(pairingPayload(secret))).toBeNull()
 
-    expect(parsePairingPayload(pairingPayload(handle))).toBe(handle)
-    expect(parseSignInPayload(signInPayload(handle))).toBe(handle)
+    expect(parsePairingPayload(pairingPayload(secret))).toBe(secret)
+    expect(parseSignInPayload(signInPayload(secret))).toBe(secret)
   })
 })
 
@@ -245,81 +340,66 @@ describe('the pairing code (ADR 0059 §5, D5)', () => {
   })
 })
 
-describe('the code commitment and the sign-in answer (ADR 0059 §6, D2/D3)', () => {
-  it('verifies for the key and the code it was made from — the control every negative below needs', () => {
+describe('the sign-in answer (ADR 0059 §6, §11)', () => {
+  it('reads back the key for the channel key and the code it was made with — the control every negative needs', () => {
     const transport = mintTransportKey()
+    const { key } = aChannel()
     const code = mintPairingCode()
 
-    expect(codeProofHolds(transport.pub, code, codeCommitment(transport.pub, code))).toBe(true)
+    expect(readSignInAnswer(key, code, signInAnswer(key, transport.pub, code))).toEqual(transport.pub)
   })
 
-  it('does not verify over a different key, while the matching key still does', () => {
-    const intended = mintTransportKey()
-    const other = mintTransportKey()
-    const code = '481502'
-    const commitment = codeCommitment(intended.pub, code)
-
-    expect(codeProofHolds(other.pub, code, commitment)).toBe(false)
-    expect(codeProofHolds(intended.pub, code, commitment)).toBe(true)
-  })
-
-  it('does not verify over a different code, while the matching code still does', () => {
+  it('is refused for a different code, while the displayed one still reads', () => {
     const transport = mintTransportKey()
-    const commitment = codeCommitment(transport.pub, '481502')
+    const { key } = aChannel()
+    const answer = signInAnswer(key, transport.pub, '481502')
 
-    expect(codeProofHolds(transport.pub, '481503', commitment)).toBe(false)
-    expect(codeProofHolds(transport.pub, '481502', commitment)).toBe(true)
+    expect(refusal(() => readSignInAnswer(key, '481503', answer))).toBe('answer_refused')
+    expect(refusal(() => readSignInAnswer(key, '481502', answer))).toBe('none')
   })
 
-  // A commitment that is not exactly the digest, in BOTH directions of wrong length. The long case is the one
-  // the explicit length check in `codeProofHolds` exists for — the short cases already fail on the comparison
-  // itself, which is why deleting that check leaves them green and only this line red.
-  it('does not verify a commitment of the wrong length, in either direction', () => {
-    const transport = mintTransportKey()
-    const commitment = codeCommitment(transport.pub, '481502')
-    const padded = new Uint8Array(commitment.length + 1)
-    padded.set(commitment)
+  // What the relay would need, and does not have: even KNOWING the code, it cannot prove it for its own key
+  // without the channel key — the proof is no longer a function of (key, code) anybody can compute.
+  it('is refused for a relay that knows the code but not the channel key', () => {
+    const relay = mintTransportKey()
+    const { handle, key } = aChannel()
 
-    expect(codeProofHolds(transport.pub, '481502', new Uint8Array(0))).toBe(false)
-    expect(codeProofHolds(transport.pub, '481502', commitment.slice(0, 16))).toBe(false)
-    expect(codeProofHolds(transport.pub, '481502', padded)).toBe(false) // the digest, plus one byte
-    expect(codeProofHolds(transport.pub, '481502', commitment)).toBe(true)
+    expect(refusal(() => readSignInAnswer(key, '481502', signInAnswer(fromB64std(handle), relay.pub, '481502')))).toBe(
+      'answer_refused',
+    )
+    expect(refusal(() => readSignInAnswer(key, '481502', signInAnswer(key, relay.pub, '481502')))).toBe('none')
   })
 
-  it('round-trips key and commitment through the one relayed answer, and the grant seals to the key read back', () => {
+  // The two labels: the two directions' answers now have ONE shape, so what keeps them from passing for each
+  // other is the MAC's label — refused by name, in both directions, with each reader's own answer as control.
+  it('is not interchangeable with an add-a-device answer, in either direction', () => {
     const transport = mintTransportKey()
-    const code = mintPairingCode()
+    const { key } = aChannel()
+    const addAnswer = transportAnswer(key, transport.pub)
+    const signIn = signInAnswer(key, transport.pub, '481502')
 
-    const { pub, commitment } = readSignInAnswer(signInAnswer(transport.pub, code))
-
-    expect(codeProofHolds(pub, code, commitment)).toBe(true)
-    // The key the trusted device seals to is the one that came out of the answer, not a second copy.
-    expect(openGrant(transport.priv, sealGrant(pub, grant())).email).toBe('someone@example.org')
+    expect(refusal(() => readSignInAnswer(key, '481502', addAnswer))).toBe('answer_refused')
+    expect(refusal(() => readTransportAnswer(key, signIn))).toBe('answer_refused')
+    expect(refusal(() => readTransportAnswer(key, addAnswer))).toBe('none')
+    expect(refusal(() => readSignInAnswer(key, '481502', signIn))).toBe('none')
   })
 
-  // D2's whole reason for a separate reader: `deserializeIdentityPublic` asserts nothing about the end of its
-  // buffer, so without this the two directions' answers would parse as each other's, silently.
-  it('rejects a buffer with trailing bytes, while the exact one still reads', () => {
+  it('rejects a buffer with trailing bytes as unreadable, while the exact one still reads', () => {
     const transport = mintTransportKey()
-    const answer = signInAnswer(transport.pub, '481502')
+    const { key } = aChannel()
+    const answer = signInAnswer(key, transport.pub, '481502')
     const withTail = b64std(v1.concat(fromB64std(answer), new Uint8Array([0x00])))
 
-    expect(() => readSignInAnswer(withTail)).toThrow()
-    expect(readSignInAnswer(answer).commitment.length).toBe(32)
+    expect(refusal(() => readSignInAnswer(key, '481502', withTail))).toBe('answer_unreadable')
+    expect(refusal(() => readSignInAnswer(key, '481502', answer))).toBe('none')
   })
 
-  // Anchored on THIS reader's own refusal, not on "it threw": an add-a-device answer's three length-prefixed
-  // fields make the second read overshoot, and a reader without the end-of-buffer assertion still dies — as a
-  // RangeError out of `deserializeIdentityPublic`, several layers down and for an unrelated reason. Naming the
-  // message is what makes this test about the assertion under it.
-  it('refuses an add-a-device answer as unreadable, naming its own refusal', () => {
+  it('both answers have one length, and stay inside the contract\'s 8192-char ceiling', () => {
     const transport = mintTransportKey()
+    const { key } = aChannel()
+    const signIn = signInAnswer(key, transport.pub, '481502')
 
-    expect(() => readSignInAnswer(transportAnswer(transport.pub))).toThrow('sign_in_answer_unreadable')
-    expect(() => readSignInAnswer(signInAnswer(transport.pub, '481502'))).not.toThrow()
-  })
-
-  it('stays inside the contract\'s 8192-char ceiling', () => {
-    expect(signInAnswer(mintTransportKey().pub, '481502').length).toBeLessThan(8192)
+    expect(signIn.length).toBe(transportAnswer(key, transport.pub).length)
+    expect(signIn.length).toBeLessThan(8192)
   })
 })

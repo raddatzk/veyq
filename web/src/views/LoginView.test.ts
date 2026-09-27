@@ -100,7 +100,7 @@ const stubs = {
   KitScanner: true,
   // Stubbed because the real one mints a transport key and touches the channel the moment it is rendered —
   // its own behaviour is `JoinDeviceCard.test.ts`'s. What this file asserts is that it is REACHED, with the
-  // scanned handle, and that reaching it disturbs nothing else on the card.
+  // scanned secret, and that reaching it disturbs nothing else on the card.
   JoinDeviceCard: true,
   // Same reason: the real one mints a transport key and opens a channel the moment it renders. Its behaviour is
   // `SignInWithCodeCard.test.ts`'s; what this file owns is that it is REACHED without a camera and without a
@@ -119,6 +119,8 @@ function mountView(): VueWrapper {
 }
 
 const t = (key: string) => i18n.global.t(key)
+/** A pairing code's secret is exactly 32 bytes (ADR 0059 §11): bytes 0..31, standard base64. */
+const PAIRING_SECRET = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
 /** Fill in email + password and resolve the device state immediately (@change, not the debounce). */
@@ -316,22 +318,22 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
     expect(scanButton(wrapper)).toBeDefined()
     await scanButton(wrapper)!.trigger('click')
     const accepts = wrapper.findComponent({ name: 'KitScanner' }).props('accepts') as (t: string) => boolean
-    expect(accepts('veyqpair:aGFuZGxl')).toBe(true)
+    expect(accepts(`veyqpair:${PAIRING_SECRET}`)).toBe(true)
     expect(accepts('veyqkit:whatever')).toBe(true)
     // The negative, on the same predicate: a foreign QR is scanned PAST, not reported as a failure.
     expect(accepts('https://example.com/')).toBe(false)
     expect(accepts('')).toBe(false)
   })
 
-  it('a scanned pairing code opens the join card with that handle — and attempts no unlock, and no login', async () => {
+  it('a scanned pairing code opens the join card with that secret — and attempts no unlock, and no login', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
 
-    await scan(wrapper, 'veyqpair:aGFuZGxl')
+    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
 
     const join = wrapper.findComponent({ name: 'JoinDeviceCard' })
     expect(join.exists()).toBe(true)
-    expect(join.props('handle')).toBe('aGFuZGxl')
+    expect(join.props('secret')).toBe(PAIRING_SECRET)
     expect(wrapper.text()).toContain(t('pairing.joinTitle'))
     // This device is about to be handed everything by another one. Nothing here may reach for a credential it
     // does not have — a "login failed" or "unlock failed" would be the screen contradicting the code it scanned.
@@ -360,14 +362,14 @@ describe('LoginView (uc.account.sessions §E3, web)', () => {
   it('leaving the join hands the sign-in form back, and finishing it routes into the shell', async () => {
     const wrapper = mountView()
     await fillCredentials(wrapper)
-    await scan(wrapper, 'veyqpair:aGFuZGxl')
+    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
 
     wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('cancel')
     await flushPromises()
     expect(wrapper.find('form').exists()).toBe(true)
     expect(wrapper.findComponent({ name: 'JoinDeviceCard' }).exists()).toBe(false)
 
-    await scan(wrapper, 'veyqpair:aGFuZGxl')
+    await scan(wrapper, `veyqpair:${PAIRING_SECRET}`)
     wrapper.findComponent({ name: 'JoinDeviceCard' }).vm.$emit('done')
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'home' })

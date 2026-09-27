@@ -3,7 +3,7 @@
 // in. Real crypto, the real poll loop, the real card; only the wire and the shared tail are mocked.
 //
 // Four properties live here and nowhere else:
-//   - **the displayed code carries the handle under THIS direction's marker, and never the transport key**
+//   - **the displayed code carries the channel's secret under THIS direction's marker, and never the transport key**
 //     (D1) — the key is 1260 bytes and would put the code past the decoder bound `web/CLAUDE.md`'s jsQR
 //     exception rests on, and it would buy nothing: in this direction the scan authenticates nothing;
 //   - **the answer carries key AND proof as one value** (D2), because `seal` takes no code and never may;
@@ -38,8 +38,9 @@ import {
   parseSignInPayload,
   parsePairingPayload,
   readSignInAnswer,
-  codeProofHolds,
   sealGrant,
+  channelKeys,
+  PairingRefused,
   type PairingGrant,
 } from './pairing'
 import { i18n } from '../../../i18n'
@@ -86,12 +87,19 @@ const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').fin
 
 const mountCard = () => mount(SignInWithCodeCard, { global: { plugins: [i18n], stubs } })
 
+/** The secret the card's code showed — read off the screen the way the scanning device reads it. */
+let shownSecret = ''
+/** The channel that secret derives, on the card and on the device that scanned it. */
+const shownChannel = () => channelKeys(shownSecret)
+
 /** Let the channel open and the card reach its transcription step. */
 const opened = async (w: VueWrapper) => {
   await flushPromises()
   await vi.advanceTimersByTimeAsync(0)
   await flushPromises()
   await w.vm.$nextTick()
+  const qr = w.find('.qr')
+  if (qr.exists()) shownSecret = parseSignInPayload(qr.text()) ?? ''
 }
 
 /** Type the code and confirm it — the one send. */
@@ -105,7 +113,7 @@ const transcribe = async (w: VueWrapper, code = CODE) => {
 /** Seal a grant to whatever key this card actually answered with — the only key whose private half it kept,
  *  and therefore the only honest fixture. */
 const sealToTheCard = (grant: PairingGrant = GRANT) =>
-  sealGrant(readSignInAnswer(answer.mock.calls[0][1]).pub, grant)
+  sealGrant(shownChannel().key, readSignInAnswer(shownChannel().key, CODE, answer.mock.calls[0][1]), grant)
 
 const grantArrives = async (w: VueWrapper, envelope = sealToTheCard()) => {
   collect.mockResolvedValue({ envelope })
@@ -129,15 +137,16 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('SignInWithCodeCard — the device that wants in (uc.account.onboard-device, ADR 0059)', () => {
-  it('shows a code that carries the opened channel’s handle under its own marker, and no key', async () => {
+  it('shows a code that carries the channel’s secret under its own marker, and no key', async () => {
     const w = mountCard()
 
     await opened(w)
 
-    const handle = open.mock.calls[0][0]
     const shown = w.find('.qr').text()
-    expect(shown).toBe(`veyqsignin:${handle}`)
-    expect(parseSignInPayload(shown)).toBe(handle)
+    expect(shown).toBe(`veyqsignin:${shownSecret}`)
+    // Only the handle the secret derives reaches the server — never the secret, never the channel key (§11).
+    expect(open).toHaveBeenCalledExactlyOnceWith(shownChannel().handle)
+    expect(open.mock.calls[0][0]).not.toBe(shownSecret)
     // §4, as a property of the string rather than of the intent behind it.
     expect(shown).not.toContain('://')
     // D1's reason for the second marker: read as the OTHER direction's code this would mount the join card and
@@ -156,10 +165,10 @@ describe('SignInWithCodeCard — the device that wants in (uc.account.onboard-de
 
     expect(answer).toHaveBeenCalledTimes(1)
     expect(answer.mock.calls[0][0]).toBe(open.mock.calls[0][0])
-    const { pub, commitment } = readSignInAnswer(answer.mock.calls[0][1])
-    // The proof holds for the code that was typed, and for that key — which is what binds the two (D3).
-    expect(codeProofHolds(pub, CODE, commitment)).toBe(true)
-    expect(codeProofHolds(pub, '481503', commitment)).toBe(false)
+    // The proof holds for the code that was typed, under the channel key — which is what binds the two (§6, §11).
+    const posted = answer.mock.calls[0][1]
+    expect(readSignInAnswer(shownChannel().key, CODE, posted)).toBeTruthy()
+    expect(() => readSignInAnswer(shownChannel().key, '481503', posted)).toThrow(new PairingRefused('answer_refused'))
   })
 
   it('will not send until the transcription is six digits', async () => {

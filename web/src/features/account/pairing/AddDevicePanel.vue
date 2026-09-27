@@ -21,8 +21,13 @@
 // **The order delegate → seal is the server's, not a preference**: the grant is sealed here, so its plaintext
 // (the delegated refresh token) has to be in this device's hand first.
 //
-// **Declining is not a retry.** E2 abandons: no delegate, no seal, the handle is discarded and the row is left
-// to expire. Starting over mints a NEW handle, because a mismatch is the one signal that something other than
+// **Both arms verify the answer's MAC under the channel key before anything else (ADR 0059 §11).** The relay
+// carries the answer and sees whatever the binding step shows it, so without the MAC it answers with a key of its
+// own — ground to the compared number, or proven for a code it ground out of the honest proof. A refused MAC is
+// terminal, like a refused code: one attempt, and nothing to confirm past.
+//
+// **Declining is not a retry.** E2 abandons: no delegate, no seal, the channel is discarded and the row is left
+// to expire. Starting over mints a NEW secret, because a mismatch is the one signal that something other than
 // the intended device answered, and offering "try again" on the same channel invites granting past it.
 import { computed, onUnmounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -33,15 +38,17 @@ import PairingCode from './PairingCode.vue'
 import KitScanner from '../emergencyKit/KitScanner.vue'
 import SlideToConfirm from '../../../shared/ui/SlideToConfirm.vue'
 import {
-  mintHandle,
+  mintPairingSecret,
+  channelKeys,
   pairingPayload,
   parseSignInPayload,
   mintPairingCode,
   readTransportAnswer,
   readSignInAnswer,
-  codeProofHolds,
+  PairingRefused,
   checkNumber,
   sealGrant,
+  type PairingChannelKeys,
 } from './pairing'
 import {
   openPairingChannel,
@@ -58,7 +65,8 @@ import type * as v1 from '@veyq/crypto/v1'
 // whoever calls it, so this side cannot look again to see whether the other device arrived (see the poll
 // module). `gone` is every terminal server state at once — they are indistinguishable on purpose (E1).
 //
-// `awaiting`/`comparing` are the shown-code arm; `transcribing`/`proven`/`refused` the scanned one. `refused` is
+// `awaiting`/`comparing` are the shown-code arm; `transcribing`/`proven` the scanned one; `refused` is either's
+// answer failing its MAC (or, scanned, its code). `refused` is
 // terminal and deliberately offers no retry: the answer slot is write-once, so there is no second proof to
 // accept, and offering "try again" in place is the invitation to grant past the one signal there is (E2).
 type Step =
@@ -74,7 +82,11 @@ type Step =
 const { t } = useI18n()
 
 const step = ref<Step>('idle')
-const handle = ref('')
+/** The secret this device's displayed code carries (shown arm only), and the channel both arms derive. */
+const secret = ref('')
+const channel = ref<PairingChannelKeys | null>(null)
+/** Which arm is running — the refusal's copy and its way out differ between them. */
+const arm = ref<'show' | 'scan'>('show')
 const label = ref('')
 const error = ref('')
 /** The answering device's public bundle, kept from the moment the answer lands: the number on screen and the
@@ -86,7 +98,7 @@ const answeringKey = ref<v1.Identity['pub'] | null>(null)
 const pairingCode = ref('')
 const scanOpen = ref(false)
 
-const code = computed(() => pairingPayload(handle.value))
+const code = computed(() => pairingPayload(secret.value))
 const number = computed(() => (answeringKey.value ? checkNumber(answeringKey.value) : ''))
 const canConfirm = computed(() => label.value.trim().length > 0)
 /** Both arms end on the same screen: name it, then slide. `proven` is only ever reached once the proof held. */
@@ -95,7 +107,8 @@ const confirming = computed(() => step.value === 'comparing' || step.value === '
 function reset() {
   stopPairingAnswerPolling()
   step.value = 'idle'
-  handle.value = ''
+  secret.value = ''
+  channel.value = null
   label.value = ''
   answeringKey.value = null
   pairingCode.value = ''
@@ -111,20 +124,19 @@ function onGone() {
 
 const { run: runStart, pending: starting } = useAsyncAction(
   async () => {
-    const fresh = mintHandle()
-    await openPairingChannel(fresh)
-    handle.value = fresh
+    const fresh = mintPairingSecret()
+    const keys = channelKeys(fresh)
+    await openPairingChannel(keys.handle)
+    arm.value = 'show'
+    secret.value = fresh
+    channel.value = keys
     step.value = 'awaiting'
     startPairingAnswerPolling(
-      fresh,
+      keys.handle,
       (answer) => {
-        try {
-          answeringKey.value = readTransportAnswer(answer)
-          step.value = 'comparing'
-        } catch {
-          // An answer this device cannot read is not a channel to keep waiting on: nothing can be sealed to it.
-          onGone()
-        }
+        // Verified BEFORE a number exists: an answer whose MAC fails is refused without ever showing the check
+        // number the relay could have ground its own bundle towards (ADR 0059 §11).
+        acceptAnswer(() => readTransportAnswer(keys.key, answer), 'comparing')
       },
       onGone,
     )
@@ -152,7 +164,8 @@ function openScan() {
 /**
  * The scan landed. Draw the pairing code and start watching for the answer.
  *
- * No channel is opened here — the other device already opened it; this side only learned its handle. And
+ * No channel is opened here — the other device already opened it; this side only learned its secret, and from
+ * it the handle and the channel key. And
  * nothing is delegated or sealed yet: what goes on screen now is the CODE and what is being granted, which is
  * D9's "information early, commitment last".
  */
@@ -160,33 +173,45 @@ function onScanned(text: string) {
   scanOpen.value = false
   const scanned = parseSignInPayload(text)
   if (!scanned) return
-  handle.value = scanned
+  const keys = channelKeys(scanned)
+  arm.value = 'scan'
+  channel.value = keys
   pairingCode.value = mintPairingCode()
   step.value = 'transcribing'
-  startPairingAnswerPolling(scanned, onSignInAnswer, onGone)
+  startPairingAnswerPolling(keys.handle, onSignInAnswer, onGone)
 }
 
 /**
- * The other device answered with its key and a proof of the code. **This is the gate** (ADR 0059 §6): the proof
- * is checked HERE, against the code this device drew, and a failure reaches neither `delegate` nor `seal` — and
- * does not so much as offer the slide.
+ * The other device answered with its key and a proof of the code. **This is the gate** (ADR 0059 §6, §11): the
+ * proof is a MAC under the channel key over the key and the code, checked HERE against the code this device drew,
+ * and a failure reaches neither `delegate` nor `seal` — and does not so much as offer the slide.
  *
  * `answeringKey` is cleared on refusal rather than merely left unused. `runGrant` reads it and throws without
  * one, so the key nothing may be sealed to is not sitting in a ref for a later code path to find.
  */
 function onSignInAnswer(answer: string) {
   stopPairingAnswerPolling()
+  const keys = channel.value
+  if (!keys) return onGone()
+  acceptAnswer(() => readSignInAnswer(keys.key, pairingCode.value, answer), 'proven')
+}
+
+/**
+ * Both arms' gate on the answer: the key to seal to, or a refusal. A MAC that does not verify is `refused` —
+ * terminal, with nothing left to confirm past. An answer this device cannot read at all is not a channel to keep
+ * waiting on either: nothing can be sealed to it, so it ends as every other dead channel does.
+ */
+function acceptAnswer(read: () => v1.Identity['pub'], next: 'comparing' | 'proven') {
   try {
-    const { pub, commitment } = readSignInAnswer(answer)
-    if (!codeProofHolds(pub, pairingCode.value, commitment)) {
-      answeringKey.value = null
+    answeringKey.value = read()
+    step.value = next
+  } catch (e) {
+    answeringKey.value = null
+    if (e instanceof PairingRefused && e.reason === 'answer_refused') {
+      stopPairingAnswerPolling()
       step.value = 'refused'
       return
     }
-    answeringKey.value = pub
-    step.value = 'proven'
-  } catch {
-    // An answer this device cannot read is not a channel to keep waiting on: nothing can be sealed to it.
     onGone()
   }
 }
@@ -198,16 +223,17 @@ function onSignInAnswer(answer: string) {
 const { run: runGrant, pending: granting } = useAsyncAction(
   async () => {
     const pub = answeringKey.value
+    const keys = channel.value
     const mk = masterKey()
-    if (!pub || !mk) throw new Error('pairing_not_ready')
-    const refreshToken = await delegatePairingSession(handle.value)
-    const envelope = sealGrant(pub, {
+    if (!pub || !keys || !mk) throw new Error('pairing_not_ready')
+    const refreshToken = await delegatePairingSession(keys.handle)
+    const envelope = sealGrant(keys.key, pub, {
       email: account.email,
       masterKey: mk,
       refreshToken,
       label: label.value.trim(),
     })
-    await sealPairingChannel(handle.value, envelope)
+    await sealPairingChannel(keys.handle, envelope)
     step.value = 'sealed'
   },
   { onError: () => { error.value = t('pairing.grantFailed') } },
@@ -219,7 +245,7 @@ async function onConfirmed() {
 }
 
 /** E2 — the numbers do not match. Nothing is delegated, nothing is sealed, and the channel is left to expire.
- *  The screen goes back to its start, where the next attempt mints a fresh handle. */
+ *  The screen goes back to its start, where the next attempt mints a fresh secret. */
 function decline() {
   reset()
 }
@@ -293,10 +319,13 @@ onUnmounted(stopPairingAnswerPolling)
            to accept — and the refusal arrives BEFORE the user has committed anything, which is the whole point
            of taking the gesture last. -->
       <template v-else-if="step === 'refused'">
-        <Message severity="warn" :closable="false">{{ t('pairing.scanRefused') }}</Message>
-        <p class="pairing-copy">{{ t('pairing.scanRefusedHint') }}</p>
+        <Message severity="warn" :closable="false">
+          {{ arm === 'scan' ? t('pairing.scanRefused') : t('pairing.answerRefused') }}
+        </Message>
+        <p class="pairing-copy">{{ arm === 'scan' ? t('pairing.scanRefusedHint') : t('pairing.answerRefusedHint') }}</p>
         <div class="pairing-actions">
-          <Button type="button" :label="t('pairing.again')" icon="pi pi-camera" @click="openScan" />
+          <Button v-if="arm === 'scan'" type="button" :label="t('pairing.again')" icon="pi pi-camera" @click="openScan" />
+          <Button v-else type="button" :label="t('pairing.again')" icon="pi pi-qrcode" @click="start" />
         </div>
       </template>
 
