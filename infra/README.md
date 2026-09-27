@@ -239,7 +239,7 @@ The user-facing app never links to the admin surface and carries no hint that it
 
 **The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
-change-domain/revoke/suspend/reactivate, plus `release`. It is an HTTP client of the same Admin API the UI
+change-domain/revoke/suspend/reactivate/quota, plus `release`. It is an HTTP client of the same Admin API the UI
 calls, so it needs no route and no exposed port at all:
 
 ```sh

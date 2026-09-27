@@ -1320,6 +1320,10 @@ green baseline. cr-emergency-kit-codec-in-crypto asked for `npm run mutation` in
 in the new file; the file reached 100 %, and the run still exited 1 because `v1.ts` scored 78 % on untouched code
 (the manifest's `_comment` said 100 %, measured before the package split). Run the gate once during refine; if it
 is already red, the done-when names the scope it can honestly promise and the red goes to the inbox.
+The same holds for a **coverage surface**: `cr-tenant-storage-quota` asked for refs "on `backend`, `web` and
+`admin-web`", and `admin-web` refs are not admissible until a run has executed that job (ADR 0040) — the sibling
+file `uc.admin.suspend-tenant.yaml` already said so in its `gaps:`. `python3 scripts/validate_coverage.py` prints
+which surfaces are *"awaiting a first run"*; read that line at refine before promising refs on one.
 
 ### A server that insists on completeness needs a way to leave something out on purpose
 

@@ -1,19 +1,66 @@
 useCase: uc.admin.tenant-storage-quota
 feature: admin
 title: A tenant's storage quota — the ceiling is set by whoever pays for the store
-status: planned
-# Refined 2026-09-24 (inbox #155) into ADR 0073; built by cr-tenant-storage-quota, after
-# cr-share-link-storage-limit, whose usage query and lock it extends. Nothing is built yet.
+# Built by cr-tenant-storage-quota (inbox #155, second half; ADR 0073). The quota lives on the tenant row (V56,
+# nullable, none by default). `StorageQuota` in the media feature holds the one tenant SUM — asked for one tenant
+# under the lock, or grouped for every tenant by the Server Owner's list — and every start (member, cover, link)
+# goes through one locked transaction in `MediaHandler`: lock the tenant row, check the quota and (for a link) the
+# per-link limit independently, insert or refuse whole, commit, then presign. Each term of the SUM is pinned by a
+# case that pins the usage EXACTLY (refused at usage + S - 1, admitted at usage + S). The lock is proven on H2 only:
+# MariaDB runs the same `SELECT … FOR UPDATE`, but no CI job runs the race against it.
 acceptanceCriteria:
   - id: tenant-usage-counts-everything-stored
     text: A tenant's usage is the declared size of every blob in its scopes — originals, derivatives and covers, including trashed media, trashed nodes and scopes in their deletion grace until purged — plus every open upload session in them. Reclaim tombstones and database-held material (icons, share notes, job results) are not counted.
+    coverage:
+      backend:
+        integration:
+          - TenantStorageQuotaSliceTest.aCompletedUploadCounts
+          - TenantStorageQuotaSliceTest.trashedMediaCounts
+          - TenantStorageQuotaSliceTest.aTrashedNodeCounts
+          - TenantStorageQuotaSliceTest.aScopeInItsDeletionGraceCounts
+          - TenantStorageQuotaSliceTest.aCoverCounts
+          - TenantStorageQuotaSliceTest.anOpenSessionCounts
+          - TenantStorageQuotaSliceTest.aPurgeFreesTheUsage
+          - TenantStorageQuotaSliceTest.anotherTenantsObjectsDoNotCount
   - id: the-server-owner-sets-the-quota
     text: The Server Owner sets, changes and clears a tenant's quota (none by default) and sees each tenant's usage and quota, only on the admin channel (the operation carries the admin-channel marker); no tenant-owner operation writes it. Lowering it below usage deletes nothing.
+    coverage:
+      backend:
+        integration:
+          - TenantStorageQuotaSliceTest.theServerOwnerSetsTheQuotaOnTheListenerAndThePublicPortDoesNotKnowIt
+          - TenantStorageQuotaSliceTest.aTenantOwnerCannotSetTheirOwnQuota
+          - TenantStorageQuotaSliceTest.clearingTheQuotaAdmitsTheNextStart
+          - TenantStorageQuotaSliceTest.aNegativeQuotaIs400AndAnUnknownTenantIs404
+          - TenantStorageQuotaSliceTest.noQuotaIsTheDefaultAndAdmitsAnything
+          - TenantStorageQuotaSliceTest.bothReadersSeeTheQuotaBesideTheUsage
   - id: every-start-into-the-tenant-checks-the-quota
     text: Every start into the tenant's scopes — member, cover, link — whose admissible items would take the tenant over its quota is refused whole with `quota_exceeded`; concurrent starts into one tenant cannot overshoot it; a link start checks the quota and the per-link limit independently.
+    coverage:
+      backend:
+        integration:
+          - TenantStorageQuotaSliceTest.aMemberStartOverTheQuotaIsRefusedWholeAndLeavesNoSession
+          - TenantStorageQuotaSliceTest.aCoverStartOverTheQuotaIsRefused
+          - TenantStorageQuotaSliceTest.aRequestIsAdmittedWholeOrRefusedWhole
+          - TenantStorageQuotaSliceTest.aLinkStartWithinItsLimitIntoATenantOverItsQuotaIsRefused
+          - TenantStorageQuotaSliceTest.aLinkStartOverItsLimitIntoATenantWithRoomIsRefused
+          - TenantStorageQuotaSliceTest.parallelMemberStartsCannotOvershoot
   - id: the-member-is-told-there-is-no-space
     text: A member's refused upload is marked failed in the uploads tray with a no-space reason and is not retried automatically; the tenant owner sees the quota beside the tenant's usage in the tenant settings.
+    coverage:
+      backend:
+        integration: [TenantStorageQuotaSliceTest.bothReadersSeeTheQuotaBesideTheUsage]
+      web:
+        unit:
+          - src/features/memory/uploadQueue.test.ts
+          - src/features/memory/components/UploadStatusMenu.test.ts
+          - src/features/memory/useMemoryCover.test.ts
+          - src/features/tenant/TenantStoragePanel.test.ts
 gaps:
-  backend: "Not built: the tenant row carries no quota, and member starts check nothing but the per-blob ceiling (cr-tenant-storage-quota)."
-  web: "Not built: the uploads tray shows no failure reason and retries every error once (cr-tenant-storage-quota)."
-  admin-web: "Not built: the tenant list and detail show neither usage nor quota, and the CLI has no quota command (cr-tenant-storage-quota)."
+  admin-web: >-
+    The quota's Server-Owner surface lives here (ADR 0065) — the detail panel sets and clears it, the list shows
+    usage beside quota, and `veyq-admin tenant quota` sets it from a script — and its suites exist and pass
+    locally, but `admin-web`'s job (`container.yml` → `test` → "Admin surface checks") has never executed, so
+    ADR 0040 admits none of them. On the first run whose log shows admin-web's suites executed,
+    `the-server-owner-sets-the-quota` gains `src/features/tenants/TenantDetailPanel.test.ts`,
+    `src/features/tenants/tenants.test.ts`, `src/views/AdminConsoleView.test.ts` and `src/cli/cli.test.ts`, and
+    this gap goes.
