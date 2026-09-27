@@ -437,7 +437,7 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
     Two per-boot overrides carry state that must NOT be shared between boots:
       - the datasource URL, so each file gets its own schema;
       - `veyq.security.config-secret-file`, whose default resolves against the process CWD. N boots from the repo
-        root would share one KEK file and leave an untracked `0600` secret beside the repo (ADR 0050 amendment).
+        root would share one KEK file and leave an untracked `0600` secret beside the repo (ADR 0050).
 
     `bucket` is the third, and it is set ONLY for a group: every ordinary suite keeps sharing the one `veyq`
     bucket exactly as before, because only a group's hook ever destroys one.
@@ -881,8 +881,9 @@ def backup_tool_result(*args: str, env_extra: dict[str, str] | None = None) -> s
     whose only outcome for a non-zero exit is to end the process. `env_extra` is what the operator's
     `infra/.env` would supply — see [production_compose_env] for why its absence is not a neutral difference.
     """
-    cmd = [sys.executable, str(REPO / "scripts" / "instance_backup.py"), *args,
-           "--docker-network", DOCKER_NETWORK]
+    # `verify` touches no instance, so it takes no network.
+    network = [] if args[0] == "verify" else ["--docker-network", DOCKER_NETWORK]
+    cmd = [sys.executable, str(REPO / "scripts" / "instance_backup.py"), *args, *network]
     result = subprocess.run(cmd, env={**backup_env(), **(env_extra or {})}, capture_output=True, text=True)
     for line in (result.stdout + result.stderr).splitlines():
         log(f"  {line}")
@@ -948,20 +949,18 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     rehearse a procedure nobody can follow. A5's gate moved with it, from **no tables** to **no data**, and
     [assert_populated_target_is_refused] is what keeps that relaxation honest in the same run.
 
-    `with_key=False` is the leg-3 rehearsal: legs (a) and (b) arrive, leg (c) does not, and the instance that
-    comes up boots, serves content, and reports `configSecretState: MISMATCH` while refusing member invites
-    with `503 mail_unavailable`. It is produced by removing the key from the BACKUP after a full capture, not
-    by capturing badly — so the two groups differ in exactly one artifact.
+    **Both groups capture the same way — the key kept apart from the dump, as the runbook says** (ADR 0056 §1),
+    and both captures must pass `verify` with no key file in the capture directory. `with_key=False` is the
+    leg-3 rehearsal: legs (a) and (b) arrive, leg (c) does not, and the instance that comes up boots, serves
+    content, and reports `configSecretState: MISMATCH` while refusing member invites with
+    `503 mail_unavailable`. It is reached the way an operator reaches A2 — a restore told `--without-key` — not
+    by editing the capture, so the two groups differ in exactly one restore flag.
     """
     backup = group_dir / "backup"
-    backup_tool("capture", "--into", str(backup), "--db-name", source.database,
+    kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
+    backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
                 "--store-bucket", source.bucket or "veyq", "--config-secret-file", str(source.secret_file))
-    if not with_key:
-        log("leg-3 rehearsal: dropping config-secret.key from the capture")
-        (backup / instance_backup.KEY_NAME).unlink(missing_ok=True)
-        manifest = json.loads((backup / instance_backup.MANIFEST_NAME).read_text())
-        manifest["configSecret"]["present"] = False
-        (backup / instance_backup.MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
+    verify_capture(backup, kept_key)
 
     destroy(source)
 
@@ -970,10 +969,31 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     fresh_database(target.database)
     fresh_bucket(target.bucket)
     install(target, group_dir / f"backend-install-{index}.log")
-    backup_tool("restore", str(backup), "--domain", HOST, "--db-name", target.database,
-                "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file))
-    assert_populated_target_is_refused(backup, target)
+    restore = ["restore", str(backup), "--domain", HOST, "--db-name", target.database,
+               "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file)]
+    assert_unsupplied_key_is_refused(restore, target)
+    if with_key:
+        backup_tool(*restore, "--key-from", str(kept_key))
+    else:
+        log("leg-3 rehearsal: restoring knowingly without the separately kept key")
+        backup_tool(*restore, "--without-key")
+    assert_populated_target_is_refused(restore)
     return target
+
+
+def verify_capture(backup: Path, kept_key: Path) -> None:
+    """Every capture is checked by the tool's own `verify`, and must hold no key file of its own.
+
+    Exit 0 is the whole verdict: a structurally broken capture exits 1 and one missing leg (c) exits 2 — and so
+    would one whose dump or directory had loosened to group/world-readable, which is the leak `verify` exists to
+    catch now. The `test ! -e` beside it is the property the run cares about stated directly, so a `verify` that
+    stopped looking could not pass it by itself.
+    """
+    backup_tool("verify", str(backup), "--key-from", str(kept_key))
+    beside = backup / instance_backup.KEY_NAME
+    if beside.exists():
+        raise SystemExit(f"[e2e] CAPTURE LEAKS: {shown(beside)} sits beside the dump — the capture was told to keep "
+                         f"the key at {shown(kept_key)} (ADR 0056 §1)")
 
 
 def install(target: Instance, boot_log: Path) -> None:
@@ -996,18 +1016,44 @@ def install(target: Instance, boot_log: Path) -> None:
     target.secret_file.unlink(missing_ok=True)
 
 
-def assert_populated_target_is_refused(backup: Path, target: Instance) -> None:
+def assert_unsupplied_key_is_refused(restore: list[str], target: Instance) -> None:
+    """A capture that kept its key apart is not restored without it by accident (ADR 0056 §1, A2).
+
+    The restore `restore_hook` runs next, with nothing but the key flag added, is this negative's positive
+    control: same capture, same freshly installed target. It also proves the refusal wrote nothing, because
+    the emptiness gate would refuse it otherwise (A5). Asserted on the message naming the key, never on a bare
+    non-zero exit — a connection failure exits the same way.
+    """
+    log("leg (c) control: the restore without the separately kept key — must be refused, naming the key")
+    result = backup_tool_result(*restore)
+    body = result.stdout + result.stderr
+    if result.returncode == 0:
+        raise SystemExit(
+            "[e2e] KEY GATE OPEN: a capture that kept its config-secret key apart was restored without it and "
+            "without --without-key. A2 is reachable only knowingly (ADR 0056 §1)."
+        )
+    if "--key-from" not in body or "kept its config-secret key apart" not in body:
+        raise SystemExit(
+            f"[e2e] KEY GATE REFUSED FOR THE WRONG REASON: the restore failed without naming the missing key. "
+            f"Output was: {body.strip()[-500:]}"
+        )
+    if target.secret_file.exists():
+        raise SystemExit(f"[e2e] KEY GATE WROTE: the refused restore placed {shown(target.secret_file)}")
+    log("leg (c) control: refused at the gate, naming the key it needs")
+
+
+def assert_populated_target_is_refused(restore: list[str]) -> None:
     """The other half of A5's gate, on the instance the restore just populated.
 
     A relaxation is only honest if the refusal it relaxed still happens. `restore_hook` above proves the gate
     now ACCEPTS a freshly installed instance; this proves the same gate still REFUSES a populated one — the
     instance one line up, holding real restored rows. Asserted on the specific message, never on "it threw": a
     bare non-zero exit is equally produced by a connection failure, which would turn this into a check that
-    passes hardest when the tool is most broken.
+    passes hardest when the tool is most broken. `--without-key` is passed so the key gate, which runs first,
+    cannot be what refuses it.
     """
     log("A5 control: the same restore, again, onto the instance it just populated — must be refused")
-    result = backup_tool_result("restore", str(backup), "--domain", HOST, "--db-name", target.database,
-                                "--store-bucket", target.bucket, "--config-secret-file", str(target.secret_file))
+    result = backup_tool_result(*restore, "--without-key")
     body = result.stdout + result.stderr
     if result.returncode == 0:
         raise SystemExit(
@@ -1089,8 +1135,8 @@ def rehearse_production_project(workdir: Path) -> None:
     """A capture pointed at the PRODUCTION compose file must not resolve the DEV project.
 
     **What it asserts.** Two captures, one flag apart. Same decoy database, same bucket, same key file, same
-    docker network, same credentials — only `--compose-file` differs (and `--into`, which must, because a
-    capture refuses to write a second capture into a non-empty directory). The **dev** file must reach the
+    docker network, same credentials — only `--compose-file` differs (and `--into` and `--key-into`, which must,
+    because a capture refuses to write into a non-empty directory or over a kept key). The **dev** file must reach the
     decoy and complete; the **production** file must not reach it at all. That pairing is what makes a red
     readable: the control establishes that a database was reachable through this exact invocation at this exact
     moment, so a subject that fails anyway failed on the flag that differs, and a subject that *succeeds*
@@ -1138,8 +1184,8 @@ def rehearse_production_project(workdir: Path) -> None:
               "--config-secret-file", str(key)]
 
     log(f"control: the same capture through {shown(COMPOSE_FILE)} must reach the decoy")
-    control = backup_tool_result(*shared, "--compose-file", str(COMPOSE_FILE),
-                                 "--into", str(home / "control"), env_extra=env_extra)
+    control = backup_tool_result(*shared, "--compose-file", str(COMPOSE_FILE), "--into", str(home / "control"),
+                                 "--key-into", str(home / "control-kept.key"), env_extra=env_extra)
     if control.returncode != 0:
         raise SystemExit(
             f"[e2e] PRODUCTION-PROJECT REHEARSAL INCONCLUSIVE: the control capture — the same command through "
@@ -1149,9 +1195,12 @@ def rehearse_production_project(workdir: Path) -> None:
             f"correctly not resolved' and 'nothing ran' identically."
         )
 
+    verify_capture(home / "control", home / "control-kept.key")
+
     log(f"subject: the same capture through {shown(PROD_COMPOSE_FILE)} must NOT reach it")
-    subject = backup_tool_result(*shared, "--compose-file", str(PROD_COMPOSE_FILE),
-                                 "--into", str(home / "production"), env_extra=env_extra)
+    subject = backup_tool_result(*shared, "--compose-file", str(PROD_COMPOSE_FILE), "--into",
+                                 str(home / "production"), "--key-into", str(home / "production-kept.key"),
+                                 env_extra=env_extra)
     manifest = home / "production" / instance_backup.MANIFEST_NAME
     if subject.returncode == 0 or manifest.is_file():
         captured = "(no manifest)"

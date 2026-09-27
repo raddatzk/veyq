@@ -12,7 +12,7 @@ import { ScopeKind } from '../../api/generated/scopes'
 /**
  * Part A of the **leg-3 rehearsal** (`three-legs-or-it-is-not-a-backup`, ADR 0056 §1). It cannot share the
  * restore group's run: that group's whole claim is that a COMPLETE restore is complete, and this one needs a
- * restore that is deliberately missing leg (c). Same hook, one artifact removed from the capture.
+ * restore that is deliberately missing leg (c). Same hook, same capture; its restore is told `--without-key`.
  *
  * **The assertion below is a positive control, and without it the whole group would be green for the wrong
  * reason.** `ConfigSecretKeyGuard.state()` returns `MISMATCH` only when a fingerprint is *already stored*; with
