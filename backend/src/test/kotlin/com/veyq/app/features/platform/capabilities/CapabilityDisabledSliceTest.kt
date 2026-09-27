@@ -1,20 +1,17 @@
 package com.veyq.app.features.platform.capabilities
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -33,9 +30,6 @@ class CapabilityDisabledSliceTest {
         override fun getConfigOverrides() = mapOf("veyq.capabilities.disabled" to "sharing.uploader-links")
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
 
@@ -49,7 +43,7 @@ class CapabilityDisabledSliceTest {
 
     @Test
     fun createUploaderShareIsRejectedWhileViewerPassesTheGate() {
-        val bearer = "Bearer ${sessions.issue(seedUser()).accessToken}"
+        val bearer = bearer(seedUser())
         val someNode = UUID.randomUUID()
 
         // UPLOADER needs the disabled `sharing.uploader-links` → 422 capability_disabled, checked before any node
@@ -65,17 +59,5 @@ class CapabilityDisabledSliceTest {
             .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$someNode","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }
