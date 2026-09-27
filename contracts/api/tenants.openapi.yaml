@@ -1015,6 +1015,105 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: tenant_not_found }
 
+  /api/tenants/{tenantId}/storage:
+    get:
+      tags: [tenants]
+      operationId: getTenantStorage
+      summary: Read a tenant's storage usage and its per-link limit (owner-gated).
+      description: >
+        Returns what the tenant's objects occupy in the store (`usedBytes`) and the **per-link limit** every
+        CONTRIBUTOR and UPLOADER link of the tenant stores at most (`shareLinkLimitBytes`, 10 GiB until changed)
+        ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4).
+        `usedBytes` is derived when read, never counted: the declared size of every blob in the tenant's scopes
+        (originals, derivatives, covers, trash included until it is purged) plus every open upload session. It is
+        an aggregate of sizes the server already sees; no figure per member, scope or link is exposed. Owner-gated
+        like the mail settings: a member who is not the owner gets `403 not_tenant_owner`, a non-member `404`
+        (indistinguishable, ADR 0042).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      responses:
+        "200":
+          description: The tenant's storage usage and per-link limit.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantStorage" }
+              example: { usedBytes: 52428800, shareLinkLimitBytes: 10737418240 }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner reads storage). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+    put:
+      tags: [tenants]
+      operationId: updateTenantStorage
+      summary: Set the tenant's per-link storage limit (owner-gated).
+      description: >
+        The tenant **owner** sets the one per-link limit that applies to every CONTRIBUTOR and UPLOADER link of the
+        tenant separately ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)
+        §4). It binds from each link's next upload start on: a limit lowered below what a link holds deletes
+        nothing and refuses that link's next start (`quota_exceeded`). There is no "unlimited"; `0` switches link
+        uploads off. Owner-gated (`403 not_tenant_owner`; a non-member `404`).
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TenantStorageUpdate" }
+            example: { shareLinkLimitBytes: 5368709120 }
+      responses:
+        "200":
+          description: The limit was stored; the current storage state is returned.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TenantStorage" }
+              example: { usedBytes: 52428800, shareLinkLimitBytes: 5368709120 }
+        "400":
+          description: The request was malformed (a missing or negative limit).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "403":
+          description: The caller is a member of this tenant but not its owner (only the owner sets the limit). Or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: not_tenant_owner }
+        "404":
+          description: >
+            No tenant with that id — or the caller is not a member of it (deliberately indistinguishable,
+            ADR 0042: membership is the first gate).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+
   /api/tenants/accept/preview:
     post:
       tags: [tenants]
@@ -1720,6 +1819,43 @@ components:
           maxLength: 8000
           example: "You've been invited to {{domain}}. Accept: {{link}} (expires {{expiry}})."
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8000)'
+
+    TenantStorage:
+      type: object
+      description: >
+        A tenant's storage as its owner reads it (ADR 0073 §4, §6): the tenant's total usage and the per-link
+        limit. Both are operational byte counts the server already sees — an aggregate, never a figure per member,
+        scope or link.
+      required: [usedBytes, shareLinkLimitBytes]
+      properties:
+        usedBytes:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: >
+            The declared size of every blob in the tenant's scopes (trash included until purged) plus every open
+            upload session, summed when read.
+          example: 52428800
+        shareLinkLimitBytes:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          description: The most any one CONTRIBUTOR or UPLOADER link of the tenant stores. `0` = link uploads off.
+          example: 10737418240
+
+    TenantStorageUpdate:
+      type: object
+      description: The owner's per-link limit (ADR 0073 §4). There is no "unlimited"; `0` switches link uploads off.
+      required: [shareLinkLimitBytes]
+      properties:
+        shareLinkLimitBytes:
+          x-veyq-visibility: measure
+          type: integer
+          format: int64
+          minimum: 0
+          description: The most any one CONTRIBUTOR or UPLOADER link of the tenant stores, in bytes.
+          example: 5368709120
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

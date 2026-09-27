@@ -400,6 +400,10 @@ paths:
         chunks; the contributor PUTs ciphertext **direct-to-store**, asks `presignShareBlobUploadWindows` for each
         next window, and then calls `completeShareMedia`. The in-memory dev store cannot presign (`503`).
         Per-share rate-limited.
+        **Storage limit ([ADR 0073](../../docs/decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md)):**
+        the link stores at most its tenant's per-link limit. The request's admissible items are reserved together
+        against what the link already holds (its contributions with their derivatives, trash included, plus its
+        open sessions): all of them fit, or every one is refused `quota_exceeded` and no session is opened.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
         `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
       parameters:
@@ -1274,7 +1278,7 @@ components:
         error:
           x-veyq-visibility: public
           type: [string, "null"]
-          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows, `store_unavailable`); null on success.
+          description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows, `id_taken` = the `blobId` already exists, `quota_exceeded` = the request's admissible items together do not fit the link's storage limit, so every one of them is refused and no session is opened — no retry can help (ADR 0073 §5–§6), `store_unavailable`); null on success.
           maxLength: 64
           example: null
 
