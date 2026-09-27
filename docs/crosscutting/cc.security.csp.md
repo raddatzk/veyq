@@ -5,9 +5,10 @@
   surface and for the response headers of the app origin, and for the `admin-web/` console and its origin's headers (§ *admin-web*). It has no standalone end-user goal, so it is not a
   use-case, and it is not a feature substrate, so it is not an enabler. It is recorded here so that its policy,
   rationale and verification are traceable from the threat model.
-- **Status:** built as described below, by the backend's app shell
-  ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)). The one part not built is admin-web's HSTS
-  (§ *admin-web*).
+- **Status:** built as described below: by the backend's app shell
+  ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)) for the app origin, and by the admin
+  container's nginx for the admin origin (§ *admin-web*). What of the admin origin's headers is not yet
+  live-verified is named under § *Verification*.
 
 ## Protects against
 
@@ -131,8 +132,12 @@ every header of the admin origin.
   Preload is out of reach for arbitrary self-hosted domains, so a network attacker can still downgrade the first
   visit to an admin domain.
 
-  **Not yet built.** Today this nginx sends no HSTS. It is planned in `cr-admin-origin-hsts`, which follows the
-  app shell's switch.
+  The value is a literal in the template. The switch reaches nginx through the image's entrypoint hook
+  ([`30-veyq-backend-url.sh`](../../admin-web/docker-entrypoint.d/30-veyq-backend-url.sh)), which renders the
+  directive whole or commented out and stops the container on any value but `true`/`false`: a mistyped
+  security switch fails loudly rather than landing silently on or off. The header reaches every response,
+  `index.html` included, through `add_header_inherit merge` at the server level; the template's comment carries
+  the inheritance trap that makes this necessary.
 
 ## Verification
 
@@ -168,3 +173,17 @@ every header of the admin origin.
 - [`admin-web/src/shared/security/csp.test.ts`](../../admin-web/src/shared/security/csp.test.ts) pins admin-web's
   policy the same way: same-origin scripts, `connect-src` exactly `'self'` + the HIBP origin, no other
   third-party origin anywhere, no `frame-ancestors`.
+- The admin origin's headers (§ *admin-web*) have no CI test: no workflow starts the admin container. Checked
+  once on 2026-09-27 (cr-admin-origin-hsts), without nginx:
+  - the entrypoint hook, run against the template, renders the HSTS directive for the switch unset, empty and
+    `true`, renders it commented out for `false`, and exits 1 naming `VEYQ_HSTS_ENABLED` for `bogus` and
+    `TRUE`;
+  - `docker compose config` and `helm template` carry the one deployment value to the app and the admin
+    container alike, both ways;
+  - nginx 1.30.0's headers module merges `add_header_inherit` into a location that does not set it, so the
+    server-level `merge` reaches `= /index.html` (read in its source, `ngx_http_headers_merge_conf`).
+- **Not verified yet:** that the built admin image serves those headers — STS and the four others on `/`,
+  `/setup`, a hashed asset and a 502 `/api/*`, none of STS with the switch `false` — and that the image starts
+  on the 1.30 base at all. That needs the image built and run; the run is written down in
+  `cr-admin-origin-hsts`, which stays open until it is done. Nor, beyond that, that a browser records the
+  admin host as an HSTS host: that needs a trusted certificate on a real admin domain.
