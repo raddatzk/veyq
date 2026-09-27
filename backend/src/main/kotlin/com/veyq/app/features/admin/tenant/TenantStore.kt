@@ -223,6 +223,12 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             TenantEntity.SUSPENDED, tenantId, TenantEntity.ACTIVE,
         ) > 0
 
+    /** Set the tenant owner's per-link storage limit (ADR 0073 §4) — the only writer of the column. */
+    @Transactional
+    fun setShareLinkLimit(tenantId: String, shareLinkLimitBytes: Long) {
+        TenantEntity.update("shareLinkLimitBytes = ?1 where id = ?2", shareLinkLimitBytes, tenantId)
+    }
+
     /** Bring a SUSPENDED tenant back to ACTIVE — the exact inverse of [suspend], same guarded-UPDATE reasoning. */
     @Transactional
     fun reactivate(tenantId: String): Boolean =

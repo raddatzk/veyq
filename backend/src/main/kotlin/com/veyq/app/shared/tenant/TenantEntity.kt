@@ -52,7 +52,16 @@ class TenantEntity : PanacheEntityBase {
     @Column(name = "terms_version", nullable = false)
     var termsVersion: Int = 0
 
+    /** The most any one CONTRIBUTOR or UPLOADER link of this tenant stores (ADR 0073 §4), set by the tenant owner.
+     *  Read under the tenant-row lock a link start takes, so a start and a change of the limit serialize. */
+    @Column(name = "share_link_limit_bytes", nullable = false)
+    var shareLinkLimitBytes: Long = DEFAULT_SHARE_LINK_LIMIT_BYTES
+
     companion object : PanacheCompanionBase<TenantEntity, String> {
+        /** 10 GiB — enough for an event's photos, too little for a leaked link to eat a disk (ADR 0073 §4). The
+         *  column default in V55 is the same number for the tenants that existed before it. */
+        const val DEFAULT_SHARE_LINK_LIMIT_BYTES: Long = 10L * 1024 * 1024 * 1024
+
         const val PENDING = "PENDING"
         const val ACTIVE = "ACTIVE"
 
