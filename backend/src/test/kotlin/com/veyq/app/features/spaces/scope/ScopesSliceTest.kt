@@ -33,7 +33,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
@@ -148,7 +147,7 @@ class ScopesSliceTest {
 
         // Rotate: owner mints E1 (chain-link) + re-grants self to the new epoch.
         given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
-            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 
@@ -201,13 +200,12 @@ class ScopesSliceTest {
         addToGroup(owner, domain, groupId, "partner") // partner is a MEMBER, not owner
 
         given().header("Authorization", "Bearer ${token(partner)}").contentType(ContentType.JSON)
-            .body("""{"wrappedPrev":"$rotPrev","grants":[]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(403).body("code", equalTo("not_scope_owner"))
     }
 
     @Test
-    @Disabled("Red on today's code (inbox #177): cr-rotation-states-its-epoch deletes this line before its fix.")
     fun aRotationBuiltOnASupersededEpochIs409AndLeavesTheChainIntact() {
         // Two owners each build a rotation from epoch 0: a fresh key, a chain-link wrapping E_0, and re-grants.
         // The first commits epoch 1. The second link also wraps E_0, so storing it as epoch 2 would send every
@@ -262,6 +260,37 @@ class ScopesSliceTest {
             .body("""{"epoch":2,"wrappedPrev":"$linkByCoOwner","grants":[]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(2))
+    }
+
+    @Test
+    fun twoConcurrentRotationsStatingTheSameEpochCommitOnce() {
+        // The same race as above, but in flight together: both commits read the scope before either writes. The
+        // row lock serializes them, so the loser reads the winner's epoch and is a clean `409 stale_epoch` — the
+        // answer the client retries. Without the lock both pass the policy and the loser dies on `ux_scope_epoch`.
+        val (owner, domain) = seedMember()
+        val groupId = createGroupAs(owner, domain)
+        val barrier = java.util.concurrent.CyclicBarrier(2)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        try {
+            val answers = pool.invokeAll(
+                listOf(rotPrev, newGrant).map { link ->
+                    java.util.concurrent.Callable {
+                        val request = given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
+                            .body("""{"epoch":1,"wrappedPrev":"$link","grants":[]}""")
+                        barrier.await() // release both commits as tightly together as possible
+                        request.`when`().post("/api/scopes/$groupId/epochs").then().extract()
+                            .let { it.statusCode() to it.path<String?>("code") }
+                    }
+                },
+            ).map { it.get() }
+            assertEquals(1, answers.count { it.first == 201 }, "exactly one concurrent rotation may commit epoch 1, got $answers")
+            assertEquals(1, answers.count { it == (409 to "stale_epoch") }, "the loser must be a clean 409 stale_epoch, got $answers")
+        } finally {
+            pool.shutdownNow()
+        }
+        given().header("Authorization", "Bearer ${token(owner)}")
+            .`when`().get("/api/scopes/$groupId/epochs")
+            .then().statusCode(200).body("size()", equalTo(1))
     }
 
     // --- rename a group (uc.spaces.rename-group, cr-0097) ---
@@ -329,7 +358,7 @@ class ScopesSliceTest {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
-            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A rename at the OLD epoch 0 is now stale.
@@ -548,7 +577,7 @@ class ScopesSliceTest {
 
         // Rotate 0 → 1 (owner mints E1 + re-grants self).
         given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
-            .body("""{"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$rotPrev","grants":[{"userId":"$owner","wrappedGrant":"$newGrant"}]}""")
             .`when`().post("/api/scopes/$groupId/epochs").then().statusCode(201).body("epoch", equalTo(1))
 
         // A set at the OLD epoch 0 is now stale → 409; the icon stays unset.

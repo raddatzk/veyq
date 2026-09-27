@@ -335,8 +335,9 @@ export async function renameGroup(scopeId: string, newName: string): Promise<voi
   }
 }
 
-/** Whether a failed call is a `409 stale_epoch` (a concurrent rotation advanced the epoch under a rename). */
-function isStaleEpoch(e: unknown): Promise<boolean> {
+/** Whether a failed call is a `409 stale_epoch`: the epoch the call was built on is not the scope's — a rotation
+ *  advanced it under a rename or icon set, or a rotation was itself built on a superseded epoch. */
+export function isStaleEpoch(e: unknown): Promise<boolean> {
   return isCodedError(e, HttpStatus.conflict, 'stale_epoch')
 }
 
@@ -430,22 +431,18 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
 
 /**
  * Rotate a group's content key forward after a member was removed (ADR 0024, cr-0089) — the crypto half of the
- * remove: mint a fresh epoch key `E_{n+1}`, chain-link it to the current `E_n` (`symWrap(E_{n+1}, E_n)`), and
- * re-grant `E_{n+1}` to **every remaining member** (`asymWrap` to each directory pubkey), then POST the
- * rotation-commit. New content thereafter seals under `E_{n+1}`, which the removed member never holds — so they
- * read pre-removal content but never post-removal content, even against a malicious operator. Operator-blind:
- * only the opaque chain-link + per-member grants are posted. Returns the new epoch index.
+ * remove: {@link commitRotation} with every **remaining member** re-granted `E_{n+1}` (`asymWrap` to each directory
+ * pubkey). New content thereafter seals under `E_{n+1}`, which the removed member never holds — so they read
+ * pre-removal content but never post-removal content, even against a malicious operator. Operator-blind: only the
+ * opaque chain-link + per-member grants are posted. Returns the new epoch index.
  *
  * `remaining` is the directory **after** the removal (the removed member excluded); the caller passes it so this
- * grants exactly the surviving set. Requires an unlocked vault (opens the caller's own grant to derive `E_n`).
+ * grants exactly the surviving set. It is reused across a stale retry: the server drops every grant whose
+ * membership is gone or still pending at commit, so a stale list is harmless against an honest server.
+ * Requires an unlocked vault (opens the caller's own grant to derive `E_n`).
  */
 export async function rotateGroupForRemoval(scopeId: string, remaining: ScopeMember[]): Promise<number> {
-  const opened = await openScopeById(scopeId) // our grant → the current epoch keys (E_n = the write key)
-  if (!opened) throw new Error('cannot open scope to rotate')
-  const prevKey = writeKey(opened.epochs)
-  const newKey = v1.randomBytes(32)
-  try {
-    const wrappedPrev = b64std(v1.symWrap(newKey, prevKey, EPOCH_LINK, v1.randomBytes(12)))
+  return commitRotation(scopeId, async (newKey) => {
     // Never re-grant a soft consent proposal (cr-0095): a `pendingConsent` row is grant-gated until the invitee
     // accepts, so it must stay out of the rotation's re-grant set (the server enforces this too; this avoids the
     // useless wrap + keeps the client honest). The directory hands owners the pending rows, so filter here.
@@ -455,17 +452,53 @@ export async function rotateGroupForRemoval(scopeId: string, remaining: ScopeMem
     // visible anomaly, until a human accepts the change; grant-delivery likewise declines for them). The rotation
     // itself must still proceed — forward secrecy against the *removed* member cannot hinge on a surviving
     // member's changed key. Sequential so the pin store's version-guarded writes don't race each other.
-    const grants: { userId: string; wrappedGrant: string }[] = []
+    const grants: RotationGrant[] = []
     for (const m of remaining) {
       if (m.pendingConsent) continue
       if ((await checkAndPin(m.userId, m.identityPublicKey)) === 'changed') continue
       grants.push({ userId: m.userId, wrappedGrant: wrapScopeKeyToMember(newKey, m.identityPublicKey) })
     }
-    const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest: { wrappedPrev, grants } }))
-    return rotated.epoch
-  } finally {
-    newKey.fill(0)
-    zeroEpochKeys(opened.epochs)
+    return grants
+  })
+}
+
+/** One re-grant a rotation carries: the new epoch key wrapped to a member's identity. */
+export type RotationGrant = { userId: string; wrappedGrant: string }
+
+/**
+ * Commit a scope-key rotation (ADR 0024 §4) — the one path every rotation takes. Open the caller's own grant
+ * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`symWrap(E_{n+1}, E_n)`), let `buildGrants` wrap it to the
+ * members, and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's epoch, so the
+ * server takes the commit only as the scope's current epoch + 1: a rotation that lost a race or rode a lagging
+ * grant is `409 stale_epoch` with nothing stored, and would otherwise link the new epoch to a key that is not its
+ * predecessor. On that answer the whole attempt runs **once** more from a re-opened grant.
+ *
+ * The key is minted inside the attempt, never hoisted: the refused attempt's wraps already left the device, and one
+ * may be addressed to a member removed in the meantime — reusing that key would give the server a grant it could
+ * hand them. For the same reason anything else made under the new key belongs in `buildGrants`, so a retry rebuilds
+ * it. Returns the new epoch; a second stale answer (our grant still lags) is thrown, see {@link isStaleEpoch}.
+ */
+export async function commitRotation(
+  scopeId: string,
+  buildGrants: (newKey: Uint8Array) => Promise<RotationGrant[]>,
+): Promise<number> {
+  for (let attempt = 0; ; attempt++) {
+    const opened = await openScopeById(scopeId) // our grant → the epoch keys we hold (E_n = the write key)
+    if (!opened) throw new Error('cannot open scope to rotate')
+    const newKey = v1.randomBytes(32)
+    try {
+      const wrappedPrev = b64std(v1.symWrap(newKey, writeKey(opened.epochs), EPOCH_LINK, v1.randomBytes(12)))
+      const grants = await buildGrants(newKey)
+      const epoch = opened.epochs.current + 1
+      const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants } }))
+      return rotated.epoch
+    } catch (e) {
+      if (attempt === 0 && (await isStaleEpoch(e))) continue // superseded — re-open + rebuild once, fresh key
+      throw e
+    } finally {
+      newKey.fill(0)
+      zeroEpochKeys(opened.epochs)
+    }
   }
 }
 

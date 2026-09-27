@@ -43,7 +43,8 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 @RateLimitExempt(
     reason =
         "Authenticated; every method is membership- or owner-gated on a scope the caller already belongs " +
-        "to. Rotation is the costliest and is already serialized by the epoch chain.",
+        "to. Rotation is the costliest; concurrent commits are serialized by the epoch each one states — only the " +
+        "scope's next epoch commits, under a row lock, and the rest are `409 stale_epoch` with nothing stored.",
 )
 class ScopesResource(
     private val handler: ScopesHandler,
@@ -148,7 +149,7 @@ class ScopesResource(
 
     override fun rotateScope(scopeId: UUID, rotateScopeRequest: RotateScopeRequest): Response =
         when (val outcome = handler.rotateScope(
-            identity.principal.name, scopeId.toString(), rotateScopeRequest.wrappedPrev,
+            identity.principal.name, scopeId.toString(), rotateScopeRequest.epoch, rotateScopeRequest.wrappedPrev,
             rotateScopeRequest.grants.map { it.userId.toString() to it.wrappedGrant },
         )) {
             is RotateOutcome.Ok -> Response.status(Response.Status.CREATED).entity(ScopeRotated(epoch = outcome.epoch)).build()
