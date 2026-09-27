@@ -39,8 +39,7 @@ asymmetric *transport* of it, and its plaintext **is** `E_latest` — no key sit
   (which tenant it belongs to) and `scopeId` (which scope it grants a role on). Because every scope birth mints its
   creator an `OWNER` row, a role check filtered by `tenantId` **alone** answers true for any member who owns *any*
   scope in the tenant — it degrades to `isMember`. So **tenant-level authority keys on the tenant root scope**
-  (`scopeId == tenantId`, cr-0026): `isTenantOwner(u, t) = isScopeOwner(u, t)`, mirroring `tenantOwnerCount =
-  ownerCount(t)`. **Belonging keys on the root scope too:** a caller belongs to a tenant when they hold an
+  (`scopeId == tenantId`, cr-0026): `isTenantOwner(u, t) = isScopeOwner(u, t)`. **Belonging keys on the root scope too:** a caller belongs to a tenant when they hold an
   *accepted* membership on its root scope, and tenant-addressed operations ask the same gate on that scope. The
   `tenantId` column only **groups** a user's rows (the space list, the removal cascade) and never authorizes: a
   member removed from the tenant keeps rows on their own spaces for the grace window, and a proposed member holds
