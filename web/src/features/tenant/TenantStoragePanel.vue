@@ -1,0 +1,124 @@
+<script setup lang="ts">
+// uc.sharing.share-link-storage-limit (web, ADR 0073 §4, §6) — the "Storage" rubric of the tenant settings. The
+// tenant OWNER sees what the tenant occupies in the store and sets the one per-link limit every upload link
+// (CONTRIBUTOR / UPLOADER) stores at most. The mail-settings panel's shape: the read is owner-gated, so a non-owner
+// member's 403 renders a read-only notice and a non-member's 404 the generic load error (ADR 0042). Operator-blind:
+// only byte counts the server already sees, and only the tenant's total — never a figure per member or link.
+// The limit is entered in GiB and sent in bytes; `0` switches link uploads off, and there is no "unlimited".
+import { computed, ref } from 'vue'
+import { useI18n } from 'vue-i18n'
+import { useRouter } from 'vue-router'
+import Button from 'primevue/button'
+import Message from 'primevue/message'
+import InputText from 'primevue/inputtext'
+import { getTenantStorage, updateTenantStorage, GIB, type TenantStorage } from './tenantStorage'
+import { activeSpace } from '../../app/activeSpace'
+import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
+import { useAsyncAction } from '../../shared/state/useAsyncAction'
+import { useToast } from '../../shared/state/useToast'
+import { handle401 } from '../../shared/handle401'
+import { decodeHttpError, isUnauthorized, HttpStatus } from '../../shared/httpError'
+import { formatBytes } from '../../shared/formatBytes'
+
+const { t, locale } = useI18n()
+const toast = useToast()
+const on401 = handle401(useRouter())
+
+const usedBytes = ref(0)
+// The limit as typed, in GiB (a decimal is allowed: 0.5 GiB is a real limit).
+const limitGib = ref('')
+const actionError = ref('')
+
+function applyView(s: TenantStorage) {
+  usedBytes.value = s.usedBytes
+  limitGib.value = String(Math.round((s.shareLinkLimitBytes / GIB) * 100) / 100)
+}
+
+const { pending: loading, error: loadErr } = useAsyncData(async () => {
+  if (!activeSpace.tenantId) throw new Error('no-active-tenant') // no HTTP status → classified 'failed' below
+  applyView(await getTenantStorage(activeSpace.tenantId))
+}, { onError: on401 })
+const loadError = computed(() => loadErrorKind(loadErr.value))
+
+const used = computed(() => formatBytes(usedBytes.value, locale.value))
+// Accepts "2", "2.5" and the German "2,5"; anything else (empty, negative, text) is not a limit.
+const limitBytes = computed<number | null>(() => {
+  const n = Number(limitGib.value.trim().replace(',', '.'))
+  return limitGib.value.trim() !== '' && Number.isFinite(n) && n >= 0 ? Math.round(n * GIB) : null
+})
+
+const { run: runSave, pending: saving } = useAsyncAction(
+  async () => {
+    applyView(await updateTenantStorage(activeSpace.tenantId!, limitBytes.value!))
+    toast.success(t('storage.saved'))
+  },
+  {
+    onError: async (e) => {
+      on401(e)
+      if (isUnauthorized(e)) return
+      const { status } = await decodeHttpError(e)
+      actionError.value = status === HttpStatus.forbidden ? t('storage.notOwner') : t('storage.saveFailed')
+    },
+  },
+)
+
+async function save() {
+  actionError.value = ''
+  if (limitBytes.value === null) {
+    actionError.value = t('storage.invalidLimit')
+    return
+  }
+  await runSave()
+}
+</script>
+
+<template>
+  <section class="veyq-surface settings-panel">
+    <section class="settings-form">
+      <div class="settings-section-header">
+        <div>
+          <h2>{{ t('storage.navTitle') }}</h2>
+          <p>{{ t('storage.editorSub') }}</p>
+        </div>
+      </div>
+
+      <p v-if="loading" class="settings-muted">{{ t('storage.loading') }}</p>
+      <Message v-else-if="loadError === 'notAuthorized'" severity="info" :closable="false">{{ t('storage.notOwner') }}</Message>
+      <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">{{ t('storage.loadFailed') }}</Message>
+
+      <template v-else>
+        <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+
+        <p class="storage-used">
+          <span>{{ t('storage.used') }}</span>
+          <strong>{{ used }}</strong>
+        </p>
+
+        <label>
+          <span>{{ t('storage.linkLimit') }}</span>
+          <InputText v-model="limitGib" inputmode="decimal" autocomplete="off" />
+          <small class="field-hint">{{ t('storage.linkLimitHint') }}</small>
+        </label>
+
+        <div class="storage-actions">
+          <Button :label="t('storage.save')" icon="pi pi-save" :loading="saving" @click="save" />
+        </div>
+      </template>
+    </section>
+  </section>
+</template>
+
+<style scoped>
+.storage-used {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0;
+}
+.storage-actions {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+</style>

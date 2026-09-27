@@ -18,6 +18,9 @@ const props = defineProps<{
   /** cr-0102 uploader drop-box: a settled tile carries a per-tile delete (session-only own-view). */
   deletable?: boolean
   deleting?: boolean
+  /** The tile is a link visitor's upload (ShareView). A `quota_exceeded` refusal then reads as the link being full
+   *  — never which limit was reached — and offers no retry, because none can help (ADR 0073 §6). */
+  link?: boolean
 }>()
 const emit = defineEmits<{ retry: [fileId: string]; delete: [fileId: string] }>()
 
@@ -28,6 +31,7 @@ const statusLabel = () => t(`media.uploadStatus.${props.tile.status}`)
 // A settled uploader tile stays in the grid (its upload lists no media for the uploader) with a delete affordance
 // instead of the progress ring — the local preview IS the session-only own-view.
 const isDoneDeletable = () => props.deletable === true && props.tile.status === 'done'
+const isLinkFull = () => props.link === true && props.tile.status === 'failed' && props.tile.error === 'quota_exceeded'
 </script>
 
 <template>
@@ -55,6 +59,10 @@ const isDoneDeletable = () => props.deletable === true && props.tile.status === 
       >
         <span :class="deleting ? 'pi pi-spin pi-spinner' : 'pi pi-trash'" />
       </button>
+    </div>
+    <div v-else-if="isLinkFull()" class="upload-tile-state upload-tile-failed">
+      <span class="pi pi-exclamation-triangle" />
+      <span class="upload-tile-failed-label">{{ t('media.uploadTileLinkFull') }}</span>
     </div>
     <div v-else-if="tile.status === 'failed'" class="upload-tile-state upload-tile-failed">
       <span class="pi pi-exclamation-triangle" />

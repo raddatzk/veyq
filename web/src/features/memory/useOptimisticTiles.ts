@@ -24,6 +24,8 @@ export type OptimisticTileVM = {
   url: string | null
   aspectRatio: number
   status: UploadFile['status']
+  /** The code a `failed` upload stopped on (e.g. `quota_exceeded`); undefined otherwise. */
+  error?: string
   progress: number
   isVideo: boolean
   /** The grid sort key — the same one `sealMetadata` will seal for this file (EXIF date, else the file's).
@@ -58,6 +60,7 @@ export function useOptimisticTiles(key: Ref<string>, listedMediaIds: Ref<Readonl
         url: p?.url ?? null,
         aspectRatio: p?.aspectRatio ?? galleryDisplayAspectRatio(undefined, undefined),
         status: f.status,
+        error: f.error,
         progress: f.progress,
         isVideo: f.mediaType.startsWith('video/'),
         capturedAt: p?.capturedAt,
