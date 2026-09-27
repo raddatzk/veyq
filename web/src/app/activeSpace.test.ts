@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../test/httpError'
 
 vi.mock('../features/spaces/scopes', () => ({
   ensurePersonalScope: vi.fn(),
@@ -90,7 +91,7 @@ describe('enterScope — personal', () => {
   })
 
   it('maps a 404 (no tenant for this Host) to status no-tenant', async () => {
-    vi.mocked(ensurePersonalScope).mockRejectedValue({ response: { status: 404 } })
+    vi.mocked(ensurePersonalScope).mockRejectedValue(httpError(404))
     await enterScope(PERSONAL_SCOPE)
     expect(activeSpace.status).toBe('no-tenant')
     expect(activeScopeKey()).toBeNull()
@@ -194,7 +195,7 @@ describe('clearActiveSpace', () => {
 })
 
 describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => {
-  const suspended = () => ({ response: new Response(JSON.stringify({ code: 'tenant_suspended' }), { status: 403 }) })
+  const suspended = () => httpError(403, 'tenant_suspended')
 
   beforeEach(() => {
     serverState.suspended = false
@@ -219,7 +220,7 @@ describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => 
   })
 
   it('control: a 404 is still no-tenant, with neither signal', async () => {
-    vi.mocked(ensurePersonalScope).mockRejectedValue({ response: { status: 404 } })
+    vi.mocked(ensurePersonalScope).mockRejectedValue(httpError(404))
     await enterScope(PERSONAL_SCOPE)
     expect(activeSpace.status).toBe('no-tenant')
     expect(serverState.suspended).toBe(false)

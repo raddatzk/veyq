@@ -32,7 +32,6 @@ vi.mock('../uploadQueue', async (orig) => {
 })
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { addMedia, type MediaDeriver } from '../media'
@@ -42,33 +41,13 @@ import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
 import { galleryFakeStore } from './galleryFakeStore'
+import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
 /** Two capture moments, far apart, so nothing below depends on a tie-break it did not mean to test. */
 const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: {},
-      memory: { favorite: 'Favorite', unfavorite: 'Remove favorite', rename: 'Rename', delete: 'Delete', chapters: 'Chapters', gallery: 'Gallery',
-        date: { edit: 'Edit date', noDate: 'No date yet', since: 'Since {day}' },
-        place: { edit: 'Edit location', set: 'Set location', pending: 'Location pending…' },
-        cover: { set: 'Set cover', edit: 'Edit cover' } },
-      media: {
-        upload: 'Upload', gallery: 'Memory gallery', itemCount: 'No items | {count} item | {count} items',
-        openItem: 'Open item {index}', empty: 'No photos in this Memory yet.', unavailable: 'Unavailable', loading: 'Loading…',
-        sortNewest: 'Newest first', sortOldest: 'Oldest first', uploadRetry: 'Retry',
-        uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
-        uploadTilePreview: 'Uploading {name}', uploadTileFailed: 'Upload failed',
-      },
-    },
-  },
-})
 
 const node = (name: string): TreeNode => ({
   id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null,
@@ -117,7 +96,7 @@ function pushBatch(files: unknown[], nodeId = NODE_ID) {
 function mountDetail(memoryKey: Uint8Array) {
   return mount(MemoryDetail, {
     props: { node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false },
-    global: { plugins: [i18n, PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }
 
@@ -214,9 +193,9 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     await flushPromises()
 
     const tile = wrapper.find('.gallery-tile-optimistic')
-    expect(tile.attributes('aria-label')).not.toContain('Uploading')
-    expect(tile.find('.upload-tile-progress').attributes('aria-label')).not.toContain('Uploading')
-    expect(tile.text()).toContain('Queued') // and it says what it IS, visibly
+    expect(tile.attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
+    expect(tile.find('.upload-tile-progress').attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
+    expect(tile.text()).toContain(t('media.uploadStatus.queued')) // and it says what it IS, visibly
   })
 
   it('a preparing tile says preparing — the stage where the device is busy and the wire is not', async () => {
@@ -230,8 +209,8 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     await flushPromises()
 
     const tile = wrapper.find('.gallery-tile-optimistic')
-    expect(tile.text()).toContain('Preparing…')
-    expect(tile.attributes('aria-label')).not.toContain('Uploading')
+    expect(tile.text()).toContain(t('media.uploadStatus.preparing'))
+    expect(tile.attributes('aria-label')).not.toContain(t('media.uploadStatus.uploading'))
   })
 
   it('a failed upload shows an inline retry that re-runs it', async () => {
@@ -245,7 +224,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     await flushPromises()
     const failed = wrapper.find('.gallery-tile-optimistic.is-failed')
     expect(failed.exists()).toBe(true)
-    expect(failed.text()).toContain('Upload failed')
+    expect(failed.text()).toContain(t('media.uploadTileFailed'))
 
     await failed.find('.upload-tile-retry').trigger('click')
     expect(retryFile).toHaveBeenCalledWith('u1')

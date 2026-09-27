@@ -6,7 +6,6 @@
 // (pre-filled from the current share, always re-sent — an edit that drops it clears it).
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 // The dialog decrypts an editShare on mount; stub the share data layer so it mounts crypto/network-free.
 const createShare = vi.fn().mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
@@ -26,25 +25,7 @@ vi.mock('../share', () => ({
 
 import ShareCreateDialog from './ShareCreateDialog.vue'
 import { ShareRole } from '../../../api/generated/sharing'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      share: {
-        createNew: 'New share', uploaderCreate: 'New upload link', roleLabel: 'What can people do?',
-        roleViewer: 'View only', roleContributor: 'View + add photos', roleUploader: 'Add photos only',
-        roleViewerHint: 'h', roleContributorHint: 'h', roleUploaderHint: 'A drop-box.',
-        name: 'Name', nameOptional: 'opt', noteLabel: 'Message', noteHint: 'h',
-        create: 'Create link', creating: '…', noteSave: 'Save', noteSaving: '…', editTitle: 'Edit share',
-        expirySection: 'Expiry date', expirySectionHint: 'h', expiryLabel: 'Expires on',
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
@@ -65,7 +46,7 @@ const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cc'
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
     props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom', ...props },
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
 }
 
@@ -79,9 +60,9 @@ describe('ShareCreateDialog (cr-0116)', () => {
   it('normal flow: the switcher offers view-only + view+add, never the uploader', () => {
     const w = mountDialog({})
     expect(w.find('.select-button').exists()).toBe(true)
-    expect(w.text()).toContain('View only')
-    expect(w.text()).toContain('View + add photos')
-    expect(w.text()).not.toContain('Add photos only')
+    expect(w.text()).toContain(t('share.roleViewer'))
+    expect(w.text()).toContain(t('share.roleContributor'))
+    expect(w.text()).not.toContain(t('share.roleUploader'))
   })
 
   it('uploader flow: no role switcher at all (role fixed to UPLOADER)', () => {
@@ -92,22 +73,22 @@ describe('ShareCreateDialog (cr-0116)', () => {
   it('edit flow (normal): shows the switcher so the role can be re-graded in place (cr-0119)', () => {
     const w = mountDialog({ editShare: editShareWith({}) })
     expect(w.find('.select-button').exists()).toBe(true)
-    expect(w.text()).toContain('View only')
-    expect(w.text()).toContain('View + add photos')
+    expect(w.text()).toContain(t('share.roleViewer'))
+    expect(w.text()).toContain(t('share.roleContributor'))
   })
 
   it('the expiry card shows on CREATE', () => {
-    expect(mountDialog({}).find('[aria-label="Expiry date"]').exists()).toBe(true)
+    expect(mountDialog({}).find(`[aria-label="${t('share.expirySection')}"]`).exists()).toBe(true)
   })
 
   it('create with expiry: createShare gets the picked day at its END (works through that day)', async () => {
     createShare.mockClear()
     const w = mountDialog({})
-    await w.find('[aria-label="Expiry date"]').trigger('click') // enable the expiry card
+    await w.find(`[aria-label="${t('share.expirySection')}"]`).trigger('click') // enable the expiry card
     const picker = w.findComponent('.datepicker') as unknown as { vm: { $emit: (e: string, v: unknown) => void } }
     picker.vm.$emit('update:modelValue', new Date(2026, 7, 1)) // 1 Aug 2026, local midnight
     await w.vm.$nextTick()
-    await w.findAll('button').find((b) => b.text() === 'Create link')!.trigger('click')
+    await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
 
     expect(createShare).toHaveBeenCalledTimes(1)
     // the share is minted in the Memory's scope — its recovery copy of K_share is bound to (scope, node, share)
@@ -121,7 +102,7 @@ describe('ShareCreateDialog (cr-0116)', () => {
   it('create WITHOUT enabling expiry: createShare gets null', async () => {
     createShare.mockClear()
     const w = mountDialog({})
-    await w.findAll('button').find((b) => b.text() === 'Create link')!.trigger('click')
+    await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
     expect(createShare.mock.calls[0][5]).toBeNull()
   })
 
@@ -129,9 +110,9 @@ describe('ShareCreateDialog (cr-0116)', () => {
     updateShare.mockClear()
     const w = mountDialog({ editShare: editShareWith({ expiresAt: new Date(2026, 7, 1, 23, 59, 59) }) })
     await flushPromises() // let onMounted's pre-fill propagate to the stubs
-    expect(w.find('[aria-label="Expiry date"]').exists()).toBe(true) // shown on edit
+    expect(w.find(`[aria-label="${t('share.expirySection')}"]`).exists()).toBe(true) // shown on edit
 
-    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click') // save without touching expiry
+    await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click') // save without touching expiry
     const expiry = updateShare.mock.calls[0][5] as Date // updateShare arg 6 (index 5) is expiresAt
     expect([expiry.getFullYear(), expiry.getMonth(), expiry.getDate()]).toEqual([2026, 7, 1]) // preserved
   })
@@ -140,8 +121,8 @@ describe('ShareCreateDialog (cr-0116)', () => {
     updateShare.mockClear()
     const w = mountDialog({ editShare: editShareWith({ expiresAt: new Date(2026, 7, 1, 23, 59, 59) }) })
     await flushPromises() // pre-fill first, so the toggle sees modelValue=true
-    await w.find('[aria-label="Expiry date"]').trigger('click') // toggle the pre-filled expiry OFF
-    await w.findAll('button').find((b) => b.text() === 'Save')!.trigger('click')
+    await w.find(`[aria-label="${t('share.expirySection')}"]`).trigger('click') // toggle the pre-filled expiry OFF
+    await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
     expect(updateShare.mock.calls[0][5]).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 
 // The register's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so these tests
 // prove a genuine round-trip and the version-guarded merge, not a stub.
@@ -47,7 +48,7 @@ const namesOf = (liveFamilyIds: ReadonlyArray<string>, thisDeviceId = 'nobody') 
 /** A fake server with REAL optimistic concurrency: a PUT whose version != the stored version is a 409. */
 function fakeServer(initial: { blob: string | null; version: number } = { blob: null, version: 0 }) {
   const state = { ...initial }
-  const stale = () => ({ response: { status: 409, clone: () => ({ json: async () => ({ code: 'stale_version' }) }) } })
+  const stale = () => httpError(409, 'stale_version')
   const getDeviceRegister = vi.fn(async () => ({ blob: state.blob, version: state.version }))
   const putDeviceRegister = vi.fn(async ({ deviceRegisterUpdate }: { deviceRegisterUpdate: { blob: string; version: number } }) => {
     if (deviceRegisterUpdate.version !== state.version) throw stale()
@@ -70,7 +71,7 @@ function interposeWrites(server: ReturnType<typeof fakeServer>, writes: Readonly
       server.state.version += 1
       server.state.blob = seal(writes[i], server.state.version)
       i += 1
-      throw { response: { status: 409, clone: () => ({ json: async () => ({ code: 'stale_version' }) }) } }
+      throw httpError(409, 'stale_version')
     }
     return original(arg)
   })

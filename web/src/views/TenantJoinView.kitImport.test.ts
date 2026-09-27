@@ -46,7 +46,7 @@ import { previewInvite } from '../features/tenant/tenantInvite'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
-import { i18n } from '../i18n'
+import { realI18n, t } from '../test/i18n'
 
 const OWNER_EMAIL = 'owner@acme.example'
 // 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
@@ -74,7 +74,7 @@ async function mountSignInBranch(): Promise<VueWrapper> {
   vi.mocked(previewInvite).mockResolvedValue({
     tenantName: 'Acme', domain: 'acme.example', ownerEmail: OWNER_EMAIL, hasAccount: true, role: 'OWNER',
   } as never)
-  const w = mount(TenantJoinView, { global: { plugins: [i18n], stubs } })
+  const w = mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
   mounted.push(w)
   await flushPromises()
   return w
@@ -83,7 +83,7 @@ async function mountSignInBranch(): Promise<VueWrapper> {
 const secretField = (w: VueWrapper) => w.find('input[name="secret-key"]')
 const fileField = (w: VueWrapper) => w.find('input[type="file"]')
 const uploadIcon = (w: VueWrapper) =>
-  w.findAll('button').find((b) => b.attributes('aria-label') === i18n.global.t('unlock.upload'))
+  w.findAll('button').find((b) => b.attributes('aria-label') === t('unlock.upload'))
 const warnings = (w: VueWrapper) => w.findAll('.msg').filter((m) => m.attributes('data-severity') === 'warn')
 
 async function pickKit(w: VueWrapper, kit: KitData | null) {
@@ -104,7 +104,6 @@ async function acceptWith(w: VueWrapper) {
 describe('TenantJoinView — importing the Emergency Kit on the invite-accept screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
 

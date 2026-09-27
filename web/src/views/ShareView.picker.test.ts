@@ -52,22 +52,14 @@ vi.mock('../features/memory/uploadQueue', async (importOriginal) => {
 })
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import ShareView from './ShareView.vue'
 import { enqueueUploads } from '../features/memory/uploadQueue'
 import { ShareRole } from '../api/generated/sharing'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: { en: { share: { addPhotos: 'Add photos' }, media: { itemCount: 'no items | {count} item | {count} items' } } },
-})
+import { realI18n } from '../test/i18n'
 
 function mountShareView() {
   return mount(ShareView, {
-    global: { plugins: [i18n], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
+    global: { plugins: [realI18n()], stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true } },
   })
 }
 

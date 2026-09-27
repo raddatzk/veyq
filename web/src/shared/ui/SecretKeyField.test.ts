@@ -20,7 +20,7 @@ vi.mock('../../features/account/emergencyKit/emergencyKit', async (orig) => ({
 import SecretKeyField from './SecretKeyField.vue'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../../features/account/emergencyKit/emergencyKit'
-import { i18n } from '../../i18n'
+import { realI18n, t } from '../../test/i18n'
 
 // 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
 const KIT: KitData = { email: 'kevin@example.com', secretKey: 'ERERERERERERERERERERERERERERERERERERERERERE=' }
@@ -41,7 +41,7 @@ const mounted: VueWrapper[] = []
 function mountField(props: Record<string, unknown> = {}): VueWrapper {
   const w = mount(SecretKeyField, {
     props: { modelValue: '', ...props },
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
   mounted.push(w)
   return w
@@ -50,7 +50,7 @@ function mountField(props: Record<string, unknown> = {}): VueWrapper {
 const field = (w: VueWrapper) => w.find('input[name="secret-key"]')
 const fileField = (w: VueWrapper) => w.find('input[type="file"]')
 const iconLabelled = (w: VueWrapper, label: string) =>
-  w.findAll('button').find((b) => b.attributes('aria-label') === i18n.global.t(label))
+  w.findAll('button').find((b) => b.attributes('aria-label') === t(label))
 const messages = (w: VueWrapper) => w.findAll('.msg')
 
 /** Hand the hidden picker a file the way the OS dialog would — `setValue` refuses to write a file input. */
@@ -66,7 +66,6 @@ const someFile = () => new File(['irrelevant — importKitFromFile is mocked'], 
 describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     // The scan icon is capability-gated on a camera; happy-dom has none, so it would not render at all.
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
@@ -100,7 +99,7 @@ describe('SecretKeyField (uc.account.unlock § One Secret-Key control)', () => {
 
     const shown = messages(w)
     expect(shown).toHaveLength(1)
-    expect(shown[0].text()).toBe(i18n.global.t('unlock.kitUnreadable'))
+    expect(shown[0].text()).toBe(t('unlock.kitUnreadable'))
     expect(shown[0].attributes('data-severity')).toBe('error')
     // Nothing was guessed into the field, and nothing was handed up.
     expect(w.emitted('update:modelValue')).toBeUndefined()

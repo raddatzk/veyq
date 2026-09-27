@@ -5,7 +5,6 @@
 // useMyInvitations() over the existing listMyGroupInvitations (mocked here — no new server signal to exercise).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 const push = vi.fn()
 vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
@@ -15,16 +14,9 @@ vi.mock('./members', () => ({ listMyGroupInvitations: listMock }))
 
 import InvitationsBadge from './InvitationsBadge.vue'
 import { refreshMyInvitations, clearMyInvitations, useMyInvitations } from './invitations'
+import { realI18n } from '../../test/i18n'
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: { en: { shell: { invitations: 'Group invitations' } } },
-})
-
-const mountBadge = () => mount(InvitationsBadge, { global: { plugins: [i18n] } })
+const mountBadge = () => mount(InvitationsBadge, { global: { plugins: [realI18n()] } })
 const row = (scopeId: string) => ({ scopeId, addedBy: 'x', sealedNameKey: '', encryptedName: '' })
 
 describe('InvitationsBadge (cr-invitations-topbar-badge)', () => {

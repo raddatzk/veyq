@@ -14,21 +14,9 @@ vi.mock('./media', async (orig) => ({
 
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import { useMediaTrash } from './useMediaTrash'
 import { listTrash, restoreMedia, purgeMedia, type MediaItem } from './media'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      memory: {
-        trash: { restore: 'Restore', purge: 'Delete forever', selected: '{selected} of {visible} selected' },
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../test/i18n'
 
 const KEY = new Uint8Array(32)
 const item = (id: string): MediaItem => ({ mediaId: id, hasDerivatives: true }) as unknown as MediaItem
@@ -51,7 +39,7 @@ function setup() {
         return () => h('div')
       },
     }),
-    { global: { plugins: [i18n] } },
+    { global: { plugins: [realI18n()] } },
   )
   // `wrapper.vm` unwraps the exposed refs at runtime; type it as the unwrapped shape (refs → values, fns intact).
   return { vm: wrapper.vm as never as UnwrapRef<ReturnType<typeof useMediaTrash>>, reloadGallery, liftTombstone, wrapper }
@@ -115,11 +103,11 @@ describe('useMediaTrash', () => {
     await flushPromises()
     vm.toggleTrashSelect('a') // partial selection → select-all still offers "select all"
     expect(vm.allTrashSelected).toBe(false)
-    expect(vm.selectedTrashLabel).toBe('1 of 2 selected')
+    expect(vm.selectedTrashLabel).toBe(t('memory.trash.selected', { selected: 1, visible: 2 }))
     vm.toggleSelectAllTrash()
     expect(vm.selectedTrash.size).toBe(2)
     expect(vm.allTrashSelected).toBe(true)
-    expect(vm.selectedTrashLabel).toBe('2 of 2 selected')
+    expect(vm.selectedTrashLabel).toBe(t('memory.trash.selected', { selected: 2, visible: 2 }))
     vm.toggleSelectAllTrash() // all selected → the same toggle deselects
     expect(vm.selectedTrash.size).toBe(0)
     expect(vm.allTrashSelected).toBe(false)

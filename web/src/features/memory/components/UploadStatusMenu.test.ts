@@ -21,33 +21,13 @@ vi.mock('../media', () => ({
 }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import UploadStatusMenu from './UploadStatusMenu.vue'
 import { enqueueUploads, clearUploads } from '../uploadQueue'
 import { addMedia } from '../media'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      media: {
-        uploads: 'Uploads',
-        uploadActive: '{count} active',
-        uploadNone: 'No uploads',
-        uploadCancelAll: 'Cancel all',
-        uploadCancel: 'Cancel',
-        uploadRetry: 'Retry',
-        uploadNoSpace: 'No space left.',
-        close: 'Close',
-        uploadStatus: { queued: 'Queued', preparing: 'Preparing…', uploading: 'Uploading…', done: 'Done', failed: 'Failed', cancelled: 'Cancelled' },
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const photo = () => new File([new Uint8Array([1, 2, 3])], 'photo.png', { type: 'image/png' })
-const mountTray = () => mount(UploadStatusMenu, { global: { plugins: [i18n] } })
+const mountTray = () => mount(UploadStatusMenu, { global: { plugins: [realI18n()] } })
 
 beforeEach(() => {
   clearUploads()
@@ -65,7 +45,7 @@ describe('UploadStatusMenu', () => {
     expect(w.find('.uploads-badge').text()).toBe('1')
     await w.find('.uploads-trigger').trigger('click')
     expect(w.text()).toContain('photo.png')
-    expect(w.text()).toContain('Uploading')
+    expect(w.text()).toContain(t('media.uploadStatus.uploading'))
   })
 
   it('cancels the in-flight file from the tray', async () => {
@@ -79,7 +59,7 @@ describe('UploadStatusMenu', () => {
     await w.find('.uploads-file-action').trigger('click') // the cancel control
     await flushPromises()
 
-    expect(w.text()).toContain('Cancelled')
+    expect(w.text()).toContain(t('media.uploadStatus.cancelled'))
     expect(w.find('.uploads-badge').exists()).toBe(false) // no longer active
   })
 
@@ -93,8 +73,8 @@ describe('UploadStatusMenu', () => {
     await flushPromises()
     await w.find('.uploads-trigger').trigger('click')
 
-    expect(w.text()).toContain('Failed')
-    expect(w.find('.uploads-file-reason').text()).toBe('No space left.')
+    expect(w.text()).toContain(t('media.uploadStatus.failed'))
+    expect(w.find('.uploads-file-reason').text()).toBe(t('media.uploadNoSpace'))
     expect(w.find('.uploads-file-action').exists()).toBe(false)
   })
 
@@ -107,8 +87,8 @@ describe('UploadStatusMenu', () => {
     await flushPromises()
     await w.find('.uploads-trigger').trigger('click')
 
-    expect(w.text()).toContain('Failed')
+    expect(w.text()).toContain(t('media.uploadStatus.failed'))
     expect(w.find('.uploads-file-reason').exists()).toBe(false)
-    expect(w.find('.uploads-file-action').attributes('aria-label')).toBe('Retry')
+    expect(w.find('.uploads-file-action').attributes('aria-label')).toBe(t('media.uploadRetry'))
   })
 })

@@ -9,7 +9,6 @@
 // whole control rather than a convenience over a server-side one, which is why it is pinned at the boundary.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('./changePassword', () => ({
   changePassword: vi.fn().mockResolvedValue(undefined),
@@ -27,6 +26,7 @@ vi.mock('../../../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 import ChangePasswordPanel from './ChangePasswordPanel.vue'
 import { changePassword } from './changePassword'
 import { pwnedCount } from '../../../shared/pwned'
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   // The panel's only route link — recovery, where a forgotten password goes now that this screen refuses to
@@ -49,26 +49,6 @@ const stubs = {
   },
 }
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.', pwnedUnavailable: 'Not checked.' },
-      unlock: { secretKey: 'Secret Key' },
-      changePassword: {
-        title: 'Change password', sub: 's', currentLabel: 'Current', newPasswordLabel: 'New', confirmLabel: 'Repeat',
-        submit: 'Change', submitting: 'Changing', done: 'Done', mismatch: 'Passwords differ',
-        forgotLink: 'Reset by email', errorLocked: 'locked', errorAttestation: 'refused',
-        errorCredential: 'wrong credential', errorNoFloor: 'no floor', errorFailed: 'failed',
-        secretKeyHint: 'hint', rememberOffer: 'remember',
-      },
-    },
-  },
-})
-
 /** `[current, new, confirm]` — the three password fields, in template order. */
 const passwords = (w: ReturnType<typeof mount>) => w.findAll('input[type="password"]')
 const submitDisabled = (w: ReturnType<typeof mount>) =>
@@ -78,7 +58,7 @@ beforeEach(() => vi.clearAllMocks())
 
 describe('ChangePasswordPanel — the password floor', () => {
   it('refuses a new password under the floor and names it; accepts exactly at the floor', async () => {
-    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    const w = mount(ChangePasswordPanel, { global: { plugins: [realI18n()], stubs } })
     await flushPromises()
 
     const pw = passwords(w)
@@ -88,7 +68,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await flushPromises()
 
-    expect(w.text()).toContain('Use at least 10 characters.')
+    expect(w.text()).toContain(t('password.minLength'))
     expect(submitDisabled(w)).toBe(true)
     await w.find('form').trigger('submit')
     await flushPromises()
@@ -108,7 +88,7 @@ describe('ChangePasswordPanel — the password floor', () => {
   it('does not apply the floor to the CURRENT password — it is proof of knowledge, not a new choice', async () => {
     // An account whose password predates the policy must still be able to change it. Gating the field that
     // proves you know the old one is the same mistake as gating a sign-in, one screen over.
-    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    const w = mount(ChangePasswordPanel, { global: { plugins: [realI18n()], stubs } })
     await flushPromises()
 
     const pw = passwords(w)
@@ -127,7 +107,7 @@ describe('ChangePasswordPanel — the password floor', () => {
   it('with the breach check ticked, a hit stops the first submit and the second goes ahead', async () => {
     // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
     vi.mocked(pwnedCount).mockResolvedValue(3)
-    const w = mount(ChangePasswordPanel, { global: { plugins: [i18n], stubs } })
+    const w = mount(ChangePasswordPanel, { global: { plugins: [realI18n()], stubs } })
     await flushPromises()
 
     const pw = passwords(w)
@@ -141,7 +121,7 @@ describe('ChangePasswordPanel — the password floor', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(changePassword).not.toHaveBeenCalled()
-    expect(w.text()).toContain('Seen in 3.')
+    expect(w.text()).toContain(t('password.pwnedWarning', { count: 3 }))
 
     await w.find('form').trigger('submit')
     await flushPromises()

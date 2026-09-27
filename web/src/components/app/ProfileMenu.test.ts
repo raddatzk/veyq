@@ -7,33 +7,13 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 vi.mock('../../features/account/login/signOut', () => ({ signOut: vi.fn() }))
 
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import ProfileMenu from './ProfileMenu.vue'
 import { signOut } from '../../features/account/login/signOut'
 import { useThemeState, setThemePreference } from '../../shared/state/useThemeState'
 import { localePreference, setLocalePreference } from '../../i18n'
+import { realI18n, t } from '../../test/i18n'
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      shell: {
-        theme: 'Appearance',
-        themeSystem: 'System',
-        themeLight: 'Light',
-        themeDark: 'Dark',
-        systemDefault: 'System',
-        language: 'Language',
-        settings: 'Settings',
-        logout: 'Sign out',
-      },
-    },
-  },
-})
 
 // A pass-through stub for the teleporting PrimeVue TieredMenu: renders the model's top rows and, one level
 // down, each row's submenu items as buttons that run `command`. `toggle` stands in for the popup so the
@@ -57,7 +37,7 @@ const TieredMenuStub = {
 }
 
 const mountMenu = () =>
-  mount(ProfileMenu, { global: { plugins: [i18n, PrimeVue], stubs: { TieredMenu: TieredMenuStub } } })
+  mount(ProfileMenu, { global: { plugins: [realI18n(), PrimeVue], stubs: { TieredMenu: TieredMenuStub } } })
 
 const subItemsOf = (w: ReturnType<typeof mountMenu>, parent: string) =>
   w.findAll(`.sub-item[data-parent="${parent}"]`)
@@ -68,8 +48,8 @@ describe('ProfileMenu appearance quick-picker', () => {
     const { themePreference } = useThemeState()
     const w = mountMenu()
 
-    const items = subItemsOf(w, 'Appearance')
-    expect(items.map((i) => i.text())).toEqual(['System', 'Light', 'Dark'])
+    const items = subItemsOf(w, t('shell.theme'))
+    expect(items.map((i) => i.text())).toEqual([t('shell.themeSystem'), t('shell.themeLight'), t('shell.themeDark')])
 
     await items[2].trigger('click') // Dark
     expect(themePreference.value).toBe('dark')
@@ -80,8 +60,8 @@ describe('ProfileMenu appearance quick-picker', () => {
   it('marks the active entry with a check, so the submenu says which mode is on', async () => {
     setThemePreference('light')
     const w = mountMenu()
-    const checked = subItemsOf(w, 'Appearance').filter((i) => i.classes('pi-check'))
-    expect(checked.map((i) => i.text())).toEqual(['Light'])
+    const checked = subItemsOf(w, t('shell.theme')).filter((i) => i.classes('pi-check'))
+    expect(checked.map((i) => i.text())).toEqual([t('shell.themeLight')])
     setThemePreference('system')
   })
 
@@ -98,8 +78,8 @@ describe('ProfileMenu language quick-picker', () => {
     setLocalePreference('en')
     const w = mountMenu()
 
-    const items = subItemsOf(w, 'Language')
-    expect(items.map((i) => i.text())).toEqual(['System', 'English', 'Deutsch'])
+    const items = subItemsOf(w, t('shell.language'))
+    expect(items.map((i) => i.text())).toEqual([t('shell.systemDefault'), 'English', 'Deutsch'])
 
     await items[2].trigger('click') // Deutsch
     expect(localePreference().value).toBe('de')
@@ -144,7 +124,7 @@ describe('the shell offers exactly one door into the settings hub', () => {
 describe('ProfileMenu sign-out (uc.account.sign-out)', () => {
   it('runs the one sign-out sequence — the menu is one of its five entry points, not a copy of it', async () => {
     const w = mountMenu()
-    const item = w.findAll('.menu-item').find((b) => b.text() === 'Sign out')!
+    const item = w.findAll('.menu-item').find((b) => b.text() === t('shell.logout'))!
 
     await item.trigger('click')
 

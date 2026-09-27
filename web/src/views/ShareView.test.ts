@@ -7,7 +7,6 @@
 // reads and the heavy media composables are stubbed, so what's exercised is the gate itself, not resolve crypto.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 const SHARE_ID = 's1'
 const TENANT = 't-1'
@@ -48,33 +47,12 @@ vi.mock('../features/memory/share', async (importOriginal) => {
 
 import ShareView from './ShareView.vue'
 import { ShareRole } from '../api/generated/sharing'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      share: {
-        loading: 'Loading…',
-        termsTitle: 'Please accept the terms of use',
-        termsIntro: 'Accept before continuing.',
-        termsAccept: 'Accept and continue',
-        empty: 'No photos yet.',
-        readonly: 'Read-only',
-        securityFooter: 'Is my data safe?',
-        unavailable: 'Unavailable',
-      },
-      media: { itemCount: 'no items | {count} item | {count} items' },
-    },
-  },
-})
+import { realI18n } from '../test/i18n'
 
 function mountShareView() {
   return mount(ShareView, {
     global: {
-      plugins: [i18n],
+      plugins: [realI18n()],
       stubs: { MediaGrid: true, OptimisticTile: true, MediaLightbox: true },
     },
   })

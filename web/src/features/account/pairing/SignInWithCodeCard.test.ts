@@ -13,6 +13,7 @@
 //     through, so the terminal state here is the ordinary expiry, and the copy has to say *start again*
 //     rather than *keep waiting* (E2).
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./pairingChannel', () => ({
@@ -43,7 +44,7 @@ import {
   PairingRefused,
   type PairingGrant,
 } from './pairing'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const open = vi.mocked(openPairingChannel)
 const answer = vi.mocked(answerPairingChannel)
@@ -58,7 +59,6 @@ const GRANT: PairingGrant = {
   label: 'Kevin’s laptop',
 }
 
-const httpError = (status: number) => Object.assign(new Error('http'), { response: { status } })
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
@@ -82,10 +82,9 @@ const stubs = {
   PairingCode: { props: ['payload'], template: '<div class="qr">{{ payload }}</div>' },
 }
 
-const t = (key: string) => i18n.global.t(key)
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
-const mountCard = () => mount(SignInWithCodeCard, { global: { plugins: [i18n], stubs } })
+const mountCard = () => mount(SignInWithCodeCard, { global: { plugins: [realI18n()], stubs } })
 
 /** The secret the card's code showed — read off the screen the way the scanning device reads it. */
 let shownSecret = ''
@@ -125,7 +124,6 @@ const grantArrives = async (w: VueWrapper, envelope = sealToTheCard()) => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
-  i18n.global.locale.value = 'en'
   rememberSupported.mockReturnValue(true)
   capable.mockReturnValue(true)
   open.mockResolvedValue(undefined)

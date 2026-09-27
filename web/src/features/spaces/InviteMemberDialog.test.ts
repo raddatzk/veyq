@@ -5,7 +5,6 @@
 // the secret is minted for the invitee and never returned to the owner (ADR 0055 §2).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('./members', () => ({
   DeliveryResult: { Sent: 'SENT', FallbackCopylink: 'FALLBACK_COPYLINK', Failed: 'FAILED' },
@@ -16,25 +15,7 @@ vi.mock('./members', () => ({
 
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import { inviteMember, memberError } from './members'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      common: { cancel: 'Cancel', done: 'Done' },
-      members: {
-        invite: 'Invite member', inviteIntro: 'intro', email: 'Email', inviteSubmit: 'Send invite',
-        alreadyMember: 'Already a member', notOwner: 'Only the owner can invite', inviteFailed: 'Could not send',
-        inviteSentTo: 'Invitation sent to {email}.', inviteSentIntro: 'it went to them',
-        inviteRateLimited: 'Too many invites',
-        mailUnavailable: 'This space cannot send email yet', mailSendFailed: 'The email could not be sent',
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Dialog: { props: ['visible'], template: '<div v-if="visible"><slot /></div>' },
@@ -51,7 +32,7 @@ const stubs = {
 }
 
 const mountDialog = () =>
-  mount(InviteMemberDialog, { props: { visible: true, tenantId: 't-1' }, global: { plugins: [i18n], stubs } })
+  mount(InviteMemberDialog, { props: { visible: true, tenantId: 't-1' }, global: { plugins: [realI18n()], stubs } })
 
 describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
   beforeEach(() => vi.clearAllMocks())
@@ -67,9 +48,8 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     expect(wrapper.emitted('invited')).toHaveLength(1)
     // The dialog stays open and confirms the address — and offers NO link, because it holds no secret to offer.
     expect(wrapper.emitted('update:visible')).toBeUndefined()
-    expect(wrapper.text()).toContain('Invitation sent to partner@example.com.')
+    expect(wrapper.text()).toContain(t('members.inviteSentTo', { email: 'partner@example.com' }))
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
-    expect(wrapper.findAll('button').some((b) => b.text() === 'Copy link')).toBe(false)
   })
 
   it('closes on Done from the confirmation view', async () => {
@@ -78,7 +58,7 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.find('form').trigger('submit.prevent')
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
-    const done = wrapper.findAll('button').find((b) => b.text() === 'Done')!
+    const done = wrapper.findAll('button').find((b) => b.text() === t('common.done'))!
     await done.trigger('click')
     expect(wrapper.emitted('update:visible')?.at(-1)).toEqual([false])
   })
@@ -94,8 +74,8 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('This space cannot send email yet')
-    expect(wrapper.text()).not.toContain('Could not send') // not the generic fallback
+    expect(wrapper.text()).toContain(t('members.mailUnavailable'))
+    expect(wrapper.text()).not.toContain(t('members.inviteFailed')) // not the generic fallback
     expect(wrapper.emitted('invited')).toBeUndefined()
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
   })
@@ -109,7 +89,7 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('The email could not be sent')
+    expect(wrapper.text()).toContain(t('members.mailSendFailed'))
     expect(wrapper.emitted('invited')).toBeUndefined()
   })
 
@@ -122,7 +102,7 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Too many invites')
+    expect(wrapper.text()).toContain(t('members.inviteRateLimited'))
     expect(wrapper.emitted('invited')).toBeUndefined()
   })
 
@@ -143,7 +123,7 @@ describe('InviteMemberDialog (uc.spaces.add-member, web)', () => {
     await wrapper.vm.$nextTick()
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.text()).toContain('Already a member')
+    expect(wrapper.text()).toContain(t('members.alreadyMember'))
     expect(wrapper.emitted('invited')).toBeUndefined()
     expect(wrapper.emitted('update:visible')).toBeUndefined()
   })

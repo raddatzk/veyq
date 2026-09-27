@@ -13,7 +13,6 @@
 // none that would catch a bypass.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('../features/tenant/tenantInvite', () => ({
   previewInvite: vi.fn(),
@@ -46,6 +45,7 @@ import { login } from '../features/account/login/login'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { vaultState } from '../app/vault'
 import { pwnedCount } from '../shared/pwned'
+import { realI18n, t } from '../test/i18n'
 
 // PrimeVue's real components need the plugin's config injection, which this file has no reason to install:
 // what it asserts is a `:disabled` prop and a rendered hint, not PrimeVue's own rendering. Same stub set as
@@ -72,37 +72,12 @@ const stubs = {
   },
 }
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      common: { password: 'Password' },
-      unlock: { secretKey: 'Secret Key' },
-      profile: { firstName: 'First', lastName: 'Last' },
-      login: { title: 'Sign in' },
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.', pwnedUnavailable: 'Not checked.' },
-      tenant: {
-        join: {
-          title: 'Join', loading: 'Loading…', invitedTo: 'Invited', continue: 'Continue', join: 'Join',
-          username: 'Username', usernameHint: 'hint', nameHint: 'hint', registerSub: 'sub', signinSub: 'sub',
-          signinReadySub: 'sub', reauthSub: 'sub', kitSub: 'sub', kitProceed: 'Proceed', done: 'Done',
-          doneNote: 'note', failed: 'failed', expired: 'expired', invalid: 'invalid', emailTaken: 'taken',
-          usernameTaken: 'taken', wrongOwner: 'wrong',
-        },
-      },
-    },
-  },
-})
-
 /** `previewInvite` decides which branch the view renders: `hasAccount` false → register, true → sign in. */
 async function mountFor(hasAccount: boolean) {
   vi.mocked(previewInvite).mockResolvedValue({
     tenantName: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', hasAccount, role: 'OWNER',
   } as never)
-  const w = mount(TenantJoinView, { global: { plugins: [i18n], stubs } })
+  const w = mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
   await flushPromises()
   return w
 }
@@ -124,7 +99,7 @@ describe('TenantJoinView — where the password floor applies', () => {
 
     await w.find('input[type="password"]').setValue('short')  // 5 < 10
     await flushPromises()
-    expect(w.text()).toContain('Use at least 10 characters.')
+    expect(w.text()).toContain(t('password.minLength'))
     expect(submitDisabled(w)).toBe(true)
 
     // The boundary, not merely "long enough": `<` vs `<=` is an off-by-one nobody would notice by hand.
@@ -149,7 +124,7 @@ describe('TenantJoinView — where the password floor applies', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(buildAccount).not.toHaveBeenCalled()
-    expect(w.text()).toContain('Seen in 3.')
+    expect(w.text()).toContain(t('password.pwnedWarning', { count: 3 }))
 
     await w.find('form').trigger('submit')
     await flushPromises()
@@ -169,7 +144,7 @@ describe('TenantJoinView — where it must NOT apply', () => {
     await w.find('input[name="secret-key"]').setValue('the-secret-key')
     await flushPromises()
 
-    expect(w.text()).not.toContain('Use at least 10 characters.')
+    expect(w.text()).not.toContain(t('password.minLength'))
     expect(submitDisabled(w)).toBe(false)
 
     // `login` reached WITH the short password is the whole assertion: it is the first thing past the guard,

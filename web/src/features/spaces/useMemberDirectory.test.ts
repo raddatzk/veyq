@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 import { defineComponent, h } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 
@@ -29,7 +30,6 @@ function harness<T>(factory: () => T) {
 
 const member = (userId: string): ScopeMember =>
   ({ userId, username: userId, role: 'MEMBER', hasGrant: true, identityPublicKey: `pk-${userId}`, sealedName: '' }) as ScopeMember
-const httpError = (status: number) => ({ response: { status } })
 
 beforeEach(() => {
   push.mockClear()

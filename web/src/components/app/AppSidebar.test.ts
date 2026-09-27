@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 
 // The tenant list is a network call (onMounted) — hand it a single seeded tenant (a test overrides it for the
@@ -41,16 +40,7 @@ import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../features/memory/treeStore'
 import { favoritesStore } from '../../app/favoritesStore'
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      shell: { spaces: 'Spaces', personal: 'Personal', shared: 'Shared', tenantSwitch: 'Switch space', favorites: 'Favorites', menu: 'Navigation', menuOpen: 'Open navigation' },
-      members: { awaitingAccess: 'Awaiting access' },
-    },
-  },
-})
+import { realI18n, t } from '../../test/i18n'
 
 // The overview lives in a teleporting PrimeVue Popover — stub it with a pass-through that always renders its
 // slot (so the tenant list is assertable) and exposes the toggle/hide the trigger calls.
@@ -72,7 +62,7 @@ async function mountAt(hash: string) {
   await router.replace({ name: 'home', hash })
   await router.isReady()
   const wrapper = mount(AppSidebar, {
-    global: { plugins: [router, i18n], stubs: { ProfileMenu: true, Popover: PopoverStub, Dialog: DialogStub } },
+    global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, Popover: PopoverStub, Dialog: DialogStub } },
   })
   await flushPromises()
   return wrapper
@@ -90,7 +80,7 @@ describe('AppSidebar space list', () => {
     const tenant = wrapper.get('.sidebar-tenant-space-link')
     const personal = wrapper.get('.sidebar-personal-link')
     expect(tenant.text()).toContain('Familie Muster')
-    expect(personal.text()).toContain('Personal')
+    expect(personal.text()).toContain(t('shell.personal'))
   })
 
   it('highlights the Tenant space on the token-less home', async () => {
@@ -110,7 +100,7 @@ describe('AppSidebar space list', () => {
     const wrapper = await mountAt('')
     const awaiting = wrapper.find('.sidebar-tenant-awaiting')
     expect(awaiting.exists()).toBe(true)
-    expect(awaiting.text()).toContain('Awaiting access')
+    expect(awaiting.text()).toContain(t('members.awaitingAccess'))
   })
 
   it('shows the domain (no awaiting badge) once the grant is delivered', async () => {
@@ -127,7 +117,7 @@ describe('AppSidebar space list', () => {
     await router.replace({ name: 'home', hash: '' })
     await router.isReady()
     const wrapper = mount(AppSidebar, {
-      global: { plugins: [router, i18n], stubs: { ProfileMenu: true, Dialog: DialogStub, Popover: PopoverStub } },
+      global: { plugins: [router, realI18n()], stubs: { ProfileMenu: true, Dialog: DialogStub, Popover: PopoverStub } },
     })
     await flushPromises()
 
@@ -137,9 +127,9 @@ describe('AppSidebar space list', () => {
 
     const items = wrapper.findAll('.mobile-nav-item')
     const texts = items.map((i) => i.text())
-    expect(texts.some((t) => t.includes('Familie Muster'))).toBe(true) // the active tenant row
-    expect(texts.some((t) => t.includes('Personal'))).toBe(true)
-    expect(texts.every((t) => !t.includes('Shared'))).toBe(true) // folded into the tenant row; no standalone entry
+    expect(texts.some((s) => s.includes('Familie Muster'))).toBe(true) // the active tenant row
+    expect(texts.some((s) => s.includes(t('shell.personal')))).toBe(true)
+    expect(texts.every((s) => !s.includes(t('shell.shared')))).toBe(true) // folded into the tenant row; no standalone entry
 
     // The active-tenant row navigates into the shared Tenant home.
     const tenantRow = items.find((i) => i.text().includes('Familie Muster'))!
@@ -207,7 +197,7 @@ describe('AppSidebar tenant switcher', () => {
     const wrapper = await mountAt('')
 
     const rows = wrapper.findAll('.sidebar-tenant-overview-list .sidebar-tenant-link')
-    expect(rows[1].find('.sidebar-tenant-offline').text()).toBe('shell.tenantOffline')
+    expect(rows[1].find('.sidebar-tenant-offline').text()).toBe(t('shell.tenantOffline'))
     expect(rows[1].text()).not.toContain('verein.localhost')
     expect(rows[1].attributes('disabled')).toBeDefined()
     await rows[1].trigger('click')

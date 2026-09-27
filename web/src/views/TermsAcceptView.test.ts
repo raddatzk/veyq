@@ -19,7 +19,7 @@ vi.mock('vue-router', () => ({ useRouter: () => ({ push, replace: vi.fn() }) }))
 import TermsAcceptView from './TermsAcceptView.vue'
 import { signOut } from '../features/account/login/signOut'
 import { getTenantTerms, acceptTenantTerms } from '../features/tenant/tenantTerms'
-import { i18n } from '../i18n'
+import { realI18n, t } from '../test/i18n'
 
 const stubs = {
   Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
@@ -32,10 +32,8 @@ const stubs = {
   },
 }
 
-const t = (key: string) => i18n.global.t(key)
-
 async function mountReady() {
-  const w = mount(TermsAcceptView, { global: { plugins: [i18n], stubs } })
+  const w = mount(TermsAcceptView, { global: { plugins: [realI18n()], stubs } })
   await flushPromises()
   return w
 }
@@ -43,7 +41,6 @@ async function mountReady() {
 describe('TermsAcceptView — declining signs out (uc.account.sign-out)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     vi.mocked(signOut).mockResolvedValue(undefined)
     vi.mocked(getTenantTerms).mockResolvedValue({
       termsVersion: 3,

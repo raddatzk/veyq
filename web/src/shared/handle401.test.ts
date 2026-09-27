@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest'
+import { httpError } from '../test/httpError'
 import type { Router } from 'vue-router'
 import { handle401 } from './handle401'
 
 const fakeRouter = () => ({ push: vi.fn() }) as unknown as Router & { push: ReturnType<typeof vi.fn> }
-const httpError = (status: number) => ({ response: { status } })
 
 describe('handle401', () => {
   it('redirects to the login route on a 401', () => {

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
+import { httpError } from '../../test/httpError'
 import { defineComponent, h } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useAsyncAction } from './useAsyncAction'
@@ -43,7 +44,7 @@ describe('useAsyncAction', () => {
   })
 
   it('returns undefined on failure, stores the error, and calls onError', async () => {
-    const err = { response: { status: 409 } }
+    const err = httpError(409)
     const onError = vi.fn()
     const { api } = harness(() => useAsyncAction(async () => Promise.reject(err), { onError }))
     const result = await api.run()

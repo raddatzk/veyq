@@ -17,6 +17,7 @@
 //   - **The channel is not read again after the seal** (D7). A collect after the seal hands this device its own
 //     grant and leaves the other one waiting forever, with both screens still looking correct.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./pairingChannel', () => ({
@@ -59,7 +60,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const open = vi.mocked(openPairingChannel)
 const collect = vi.mocked(collectPairingChannel)
@@ -89,10 +90,9 @@ const stubs = {
   KitScanner: true,
 }
 
-const t = (key: string, named?: Record<string, unknown>) => i18n.global.t(key, named ?? {})
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
-const mountPanel = () => mount(AddDevicePanel, { global: { plugins: [i18n], stubs } })
+const mountPanel = () => mount(AddDevicePanel, { global: { plugins: [realI18n()], stubs } })
 
 /** Advance the real poll loop by one interval and let its promise chain settle. */
 const pollOnce = async () => {
@@ -159,7 +159,6 @@ const nameAndSlide = async (w: VueWrapper, label = 'Küchen-Tablet') => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
-  i18n.global.locale.value = 'en'
   account.email = 'someone@example.org'
   open.mockResolvedValue(undefined)
   collect.mockResolvedValue({})
@@ -290,7 +289,7 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     const w = mountPanel()
     await showCode(w)
 
-    collect.mockRejectedValue(Object.assign(new Error('http'), { response: { status: 404 } }))
+    collect.mockRejectedValue(httpError(404))
     await pollOnce()
     await w.vm.$nextTick()
 

@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
+import { httpError } from '../../test/httpError'
 import { defineComponent, h } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useAsyncData, loadErrorKind } from './useAsyncData'
@@ -18,7 +19,6 @@ function harness<T>(factory: () => T) {
   return { api: (wrapper.vm as unknown as { api: T }).api, wrapper }
 }
 
-const httpError = (status: number) => ({ response: { status } })
 
 describe('useAsyncData', () => {
   it('runs the loader on mount, toggling pending and exposing data', async () => {

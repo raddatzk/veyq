@@ -37,7 +37,6 @@ vi.mock('../../../sw/register', () => ({
 }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MediaLightbox from './MediaLightbox.vue'
 import { addMedia, listMedia, unsealMeta, type MediaDeriver, type MediaItem } from '../media'
 import exifr from 'exifr'
@@ -46,56 +45,10 @@ import { registerPlayback, revokePlayback } from '../../../sw/register'
 import * as v1 from '@veyq/crypto/v1'
 import { galleryFakeStore } from './galleryFakeStore'
 import { resetPlaceNameCache } from '../placeName'
+import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { save: 'Save', cancel: 'Cancel' },
-      memory: { cover: { setFromPhoto: 'Set as cover', isCover: 'Current cover' } },
-      media: {
-        itemPosition: '{index} of {count}',
-        download: 'Download original',
-        playVideo: 'Play video',
-        close: 'Close',
-        delete: 'Move to trash',
-        previous: 'Previous',
-        next: 'Next',
-        loading: 'Loading…',
-        loadError: 'This item couldn’t be loaded.',
-        information: 'Details',
-        toggleInfo: 'Toggle details',
-        noDetail: 'No details for this item.',
-        captured: 'Taken',
-        camera: 'Camera',
-        lens: 'Lens',
-        focalLength: 'Focal length',
-        aperture: 'Aperture',
-        exposure: 'Exposure',
-        iso: 'ISO',
-        dimensions: 'Dimensions',
-        location: 'Location',
-        fileName: 'File', fileSize: 'Size', fileFormat: 'Format', focalLength35: 'Equivalent',
-        exposureCompensation: 'Exposure compensation', flash: 'Flash',
-        flashFired: 'Fired', flashNotFired: 'Did not fire',
-        software: 'Software', artist: 'Author', copyright: 'Copyright', rating: 'Rating',
-        title: 'Title', description: 'Description',
-        altitude: 'Altitude', direction: 'Direction',
-        directionTrue: '{deg}° (true north)', directionMagnetic: '{deg}° (magnetic north)',
-        gpsAccuracy: 'Position accuracy', place: 'Place',
-        status: 'Status',
-        editCapturedAt: 'Edit capture time',
-        resetCapturedAt: 'Reset to original',
-        capturedAtCorrected: 'Corrected',
-        capturedAtSaveFailed: 'Could not save the capture time.',
-      },
-    },
-  },
-})
 
 function stubDeriver(): MediaDeriver {
   return {
@@ -127,7 +80,7 @@ function mountLightbox(
 ) {
   return mount(MediaLightbox, {
     props: { scopeId: SCOPE_ID, memoryKey, items, startIndex, memoryName: 'Rom 2026', coverMediaId, ...extraProps },
-    global: { plugins: [i18n] },
+    global: { plugins: [realI18n()] },
   })
 }
 
@@ -161,7 +114,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    const setCover = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === 'Set as cover')
+    const setCover = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t('memory.cover.setFromPhoto'))
     expect(setCover).toBeTruthy()
     await setCover!.trigger('click')
     expect(wrapper.emitted('setCover')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
@@ -173,7 +126,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0, items[0].mediaId) // item 0 IS the cover
     await flushPromises()
 
-    const current = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === 'Current cover')
+    const current = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t('memory.cover.isCover'))
     expect(current).toBeTruthy()
     expect(current!.attributes('aria-pressed')).toBe('true')
     await current!.trigger('click')
@@ -200,7 +153,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
     expect(presigned).toContain(store.blobIdOfUpload('up-5'))
-    expect(wrapper.find('.media-lightbox-title small').text()).toBe('2 of 2')
+    expect(wrapper.find('.media-lightbox-title small').text()).toBe(t('media.itemPosition', { index: 2, count: 2 }))
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeDefined()
   })
 
@@ -228,7 +181,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    await wrapper.find('[aria-label="Close"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.close')}"]`).trigger('click')
     expect(wrapper.emitted('close')).toHaveLength(1)
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
@@ -253,7 +206,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     await flushPromises()
     store.api.presignBlobDownloads.mockClear()
 
-    await wrapper.find('[aria-label="Download original"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
     await flushPromises()
 
     // the original (up-0), never a derivative, is fetched for download
@@ -288,7 +241,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
 
     // the video shows its poster (PREVIEW tier) with a play button — not a bare <img>, no <video> yet
     expect(wrapper.find('.media-lightbox-video-poster').exists()).toBe(true)
-    const play = wrapper.find('[aria-label="Play video"]')
+    const play = wrapper.find(`[aria-label="${t('media.playVideo')}"]`)
     expect(play.exists()).toBe(true)
     expect(wrapper.find('.media-lightbox-stage video').exists()).toBe(false)
 
@@ -311,7 +264,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const { items } = await seedVideoLike(memoryKey, 'image/png', new Uint8Array(8).fill(1))
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-    expect(wrapper.find('[aria-label="Play video"]').exists()).toBe(false)
+    expect(wrapper.find(`[aria-label="${t('media.playVideo')}"]`).exists()).toBe(false)
     expect(wrapper.find('.media-lightbox-stage img').exists()).toBe(true)
   })
 
@@ -324,7 +277,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-    await wrapper.find('[aria-label="Download original"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
     await flushPromises()
 
     // the download sniffed the original and wrote the type back — opaque on the wire, video/mp4 once unsealed
@@ -342,10 +295,10 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
 
     const wrapper = mount(MediaLightbox, {
       props: { scopeId: SCOPE_ID, memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, readonly: true },
-      global: { plugins: [i18n] },
+      global: { plugins: [realI18n()] },
     })
     await flushPromises()
-    await wrapper.find('[aria-label="Download original"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.download')}"]`).trigger('click')
     await flushPromises()
 
     expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
@@ -372,7 +325,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
     await flushPromises()
     store.api.presignBlobDownloads.mockClear()
 
-    await wrapper.find('[aria-label="Play video"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.playVideo')}"]`).trigger('click')
     await flushPromises()
 
     // registered a key-free playback with {chunkCount, byteSize, mediaType} + the page's chunk provider
@@ -398,7 +351,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
     await flushPromises()
     store.api.presignBlobDownloads.mockClear()
 
-    await wrapper.find('[aria-label="Play video"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.playVideo')}"]`).trigger('click')
     await flushPromises()
 
     // fell back: fetched the ORIGINAL (up-0) and played a decrypted blob: URL — no SW handle
@@ -418,7 +371,7 @@ describe('MediaLightbox — delete (cr-0110)', () => {
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
 
-    const del = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === 'Move to trash')
+    const del = wrapper.findAll('.media-lightbox-actions button').find((b) => b.attributes('aria-label') === t('media.delete'))
     expect(del).toBeTruthy()
     await del!.trigger('click')
     expect(wrapper.emitted('delete')?.[0]?.[0]).toEqual({ mediaId: items[0].mediaId })
@@ -439,11 +392,11 @@ describe('MediaLightbox — delete (cr-0110)', () => {
     const { items } = await seedTwo(memoryKey)
     const wrapper = mount(MediaLightbox, {
       props: { scopeId: SCOPE_ID, memoryKey, items, startIndex: 0, memoryName: 'Rom 2026', coverMediaId: null, readonly: true },
-      global: { plugins: [i18n] },
+      global: { plugins: [realI18n()] },
     })
     await flushPromises()
 
-    expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === 'Move to trash')).toBe(false)
+    expect(wrapper.findAll('.media-lightbox-actions button').some((b) => b.attributes('aria-label') === t('media.delete'))).toBe(false)
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete' }))
     expect(wrapper.emitted('delete')).toBeFalsy()
   })
@@ -514,14 +467,14 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     expect(dds).toContain('image/jpeg')
     expect(dds).toContain('75 mm') // the 35 mm equivalent, beside the native 50 mm
     expect(dds).toContain('-0.7 EV')
-    expect(dds).toContain('Fired') // Flash 9 → bit 0 set
+    expect(dds).toContain(t('media.flashFired')) // Flash 9 → bit 0 set
     expect(dds).toContain('★★★★☆')
     expect(dds).toContain('veyq fixture 1.0')
     expect(dds).toContain('A. Photographer')
     expect(dds).toContain('Marienplatz')
     expect(dds).toContain('Marienplatz at golden hour')
     expect(dds).toContain('519 m')
-    expect(dds).toContain('215° (true north)')
+    expect(dds).toContain(t('media.directionTrue', { deg: 215 }))
     expect(dds).toContain('4.8 m')
   })
 
@@ -539,7 +492,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     await flushPromises()
     const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
 
-    expect(dds).toContain('Did not fire')
+    expect(dds).toContain(t('media.flashNotFired'))
     // …and the rows this photo carries nothing for are absent, not blank
     expect(dds).not.toContain('★★★★☆')
     expect(dds.some((v) => v.includes('EV'))).toBe(false)
@@ -681,7 +634,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     await flushPromises()
 
     expect(wrapper.find('.media-lightbox-metadata').exists()).toBe(false)
-    expect(wrapper.find('.media-lightbox-no-detail').text()).toBe('No details for this item.')
+    expect(wrapper.find('.media-lightbox-no-detail').text()).toBe(t('media.noDetail'))
   })
 })
 
@@ -702,10 +655,10 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
 
     const wrapper = mountLightbox(memoryKey, items, 0)
     await flushPromises()
-    expect(wrapper.text()).not.toContain('Corrected')
+    expect(wrapper.text()).not.toContain(t('media.capturedAtCorrected'))
 
     // open the editor, set a corrected date, save
-    await wrapper.find('[aria-label="Edit capture time"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
     await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
@@ -714,16 +667,16 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
     expect(typeof sent).toBe('string')
     expect(sent).not.toContain('2019')
-    expect(wrapper.text()).toContain('Corrected')
+    expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))
 
     // reset back to the original — override removed, badge gone
-    await wrapper.find('[aria-label="Edit capture time"]').trigger('click')
-    const resetBtn = wrapper.findAll('.media-lightbox-date-actions button').find((b) => b.text() === 'Reset to original')!
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    const resetBtn = wrapper.findAll('.media-lightbox-date-actions button').find((b) => b.text() === t('media.resetCapturedAt'))!
     await resetBtn.trigger('click')
     await flushPromises()
 
     expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(2)
-    expect(wrapper.text()).not.toContain('Corrected')
+    expect(wrapper.text()).not.toContain(t('media.capturedAtCorrected'))
   })
 
   it('lets a user SET a date on a media that has no EXIF at all', async () => {
@@ -735,13 +688,13 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     // the panel has no detail, but the edit affordance is still there (set a fresh date)
     expect(wrapper.find('.media-lightbox-no-detail').exists()).toBe(true)
 
-    await wrapper.find('[aria-label="Edit capture time"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
     await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
 
     const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
     expect(typeof sent).toBe('string') // a fresh sealed tier
-    expect(wrapper.text()).toContain('Corrected')
+    expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))
   })
 })

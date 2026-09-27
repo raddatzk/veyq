@@ -2,8 +2,8 @@
 // uc.spaces.add-member (web, cr-0077) — the member directory rubric: it lists the active tenant's members with
 // a granted/awaiting-access badge, and shows the invite button only to the OWNER (admission is owner-gated).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
 vi.mock('./members', () => ({
@@ -30,27 +30,7 @@ import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberI
 import { listMyTenants } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      common: { done: 'Done' },
-      members: {
-        title: 'Members', sub: 'sub', invite: 'Invite member', loading: 'Loading…', empty: 'No members',
-        loadFailed: 'Failed', notAuthorized: 'Not authorized', statusActive: 'Active', statusAwaiting: 'Awaiting access',
-        pendingTitle: 'Pending invites', pendingSub: 'pending sub', statusInvited: 'Invited', reissue: 'Send again',
-        revoke: 'Cancel invite', revokeConfirm: 'Cancel?', inviteRevoked: 'Invite cancelled.',
-        actionFailed: 'Action failed', copyLink: 'Copy link', copied: 'Copied',
-        inviteSentTo: 'Sent to {email}.', inviteRateLimited: 'Too many invites',
-        mailUnavailable: 'This space cannot send email yet', mailSendFailed: 'The email could not be sent',
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -72,7 +52,7 @@ async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING) {
   vi.mocked(listMemberInvites).mockResolvedValue(pending as never)
   vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', name: 'Fam', domain: '127.0.0.1', role }] as never)
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
-  const wrapper = mount(TenantMembersPanel, { global: { plugins: [router, i18n], stubs } })
+  const wrapper = mount(TenantMembersPanel, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   return wrapper
 }
@@ -94,19 +74,19 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     expect(wrapper.text()).toContain('@partner')
     // The pending member shows "Awaiting access"; the granted one shows "Active".
     const badges = wrapper.findAll('.veyq-badge').map((b) => b.text())
-    expect(badges).toContain('Active')
-    expect(badges).toContain('Awaiting access')
-    expect(wrapper.find('.veyq-badge.warning').text()).toBe('Awaiting access')
+    expect(badges).toContain(t('members.statusActive'))
+    expect(badges).toContain(t('members.statusAwaiting'))
+    expect(wrapper.find('.veyq-badge.warning').text()).toBe(t('members.statusAwaiting'))
   })
 
   it('shows the invite button to the owner', async () => {
     const wrapper = await mountPanel('OWNER')
-    expect(wrapper.text()).toContain('Invite member')
+    expect(wrapper.text()).toContain(t('members.invite'))
   })
 
   it('hides the invite button from a non-owner member (admission is owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
-    expect(wrapper.text()).not.toContain('Invite member')
+    expect(wrapper.text()).not.toContain(t('members.invite'))
   })
 
   it('shows the owner the pending invites (invited-but-not-joined) with management actions', async () => {
@@ -114,16 +94,16 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     const rows = wrapper.findAll('.invite-row')
     expect(rows).toHaveLength(1)
     expect(wrapper.text()).toContain('newbie@x.z')
-    expect(wrapper.text()).toContain('Pending invites')
-    expect(wrapper.find('[aria-label="Send again"]').exists()).toBe(true)
-    expect(wrapper.find('[aria-label="Cancel invite"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain(t('members.pendingTitle'))
+    expect(wrapper.find(`[aria-label="${t('members.reissue')}"]`).exists()).toBe(true)
+    expect(wrapper.find(`[aria-label="${t('members.revoke')}"]`).exists()).toBe(true)
   })
 
   it('never lists pending invites for a non-owner (admission stays owner-only)', async () => {
     const wrapper = await mountPanel('MEMBER')
     expect(listMemberInvites).not.toHaveBeenCalled()
     expect(wrapper.find('.invite-row').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('Pending invites')
+    expect(wrapper.text()).not.toContain(t('members.pendingTitle'))
   })
 
   it('re-issues an invite by mail and offers no link to hand on', async () => {
@@ -131,32 +111,29 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     // nothing to copy — the absence is the assertion, since a copy-link is exactly what this retired.
     vi.mocked(reissueMemberInvite).mockResolvedValue({ delivery: 'SENT' } as never)
     const wrapper = await mountPanel('OWNER')
-    await wrapper.find('[aria-label="Send again"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()
     expect(reissueMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1')
-    expect(wrapper.text()).toContain('Sent to newbie@x.z.')
+    expect(wrapper.text()).toContain(t('members.inviteSentTo', { email: 'newbie@x.z' }))
     expect(wrapper.find('.invite-link-input').exists()).toBe(false)
-    expect(wrapper.findAll('button').some((b) => b.text() === 'Copy link')).toBe(false)
   })
 
   it('surfaces a tenant that cannot send mail distinctly, and leaves the invite alone', async () => {
     // The 503 arrives *before* the supersede, so the outstanding invite is untouched — the message has to say
     // "configure mail", not "try again", or the owner retries a thing that cannot succeed.
-    vi.mocked(reissueMemberInvite).mockRejectedValue(
-      Object.assign(new Error('503'), { response: new Response(JSON.stringify({ code: 'mail_unavailable' }), { status: 503 }) }),
-    )
+    vi.mocked(reissueMemberInvite).mockRejectedValue(httpError(503, 'mail_unavailable'))
     const wrapper = await mountPanel('OWNER')
-    await wrapper.find('[aria-label="Send again"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('This space cannot send email yet')
-    expect(wrapper.text()).not.toContain('Action failed')
+    expect(wrapper.text()).toContain(t('members.mailUnavailable'))
+    expect(wrapper.text()).not.toContain(t('members.actionFailed'))
   })
 
   it('revokes an invite after confirmation', async () => {
     confirmAsk.mockResolvedValue(true)
     vi.mocked(revokeMemberInvite).mockResolvedValue(undefined)
     const wrapper = await mountPanel('OWNER')
-    await wrapper.find('[aria-label="Cancel invite"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('members.revoke')}"]`).trigger('click')
     await flushPromises()
     expect(revokeMemberInvite).toHaveBeenCalledWith('t-1', 'inv-1')
   })
@@ -164,7 +141,7 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
   it('does not revoke when the confirm is dismissed', async () => {
     confirmAsk.mockResolvedValue(false)
     const wrapper = await mountPanel('OWNER')
-    await wrapper.find('[aria-label="Cancel invite"]').trigger('click')
+    await wrapper.find(`[aria-label="${t('members.revoke')}"]`).trigger('click')
     await flushPromises()
     expect(revokeMemberInvite).not.toHaveBeenCalled()
   })

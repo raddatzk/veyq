@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
@@ -476,7 +477,7 @@ describe('a scope whose grant is older than its current epoch writes nothing (AD
 })
 
 describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it creates)', () => {
-  const stale = () => ({ response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }) })
+  const stale = () => httpError(409, 'stale_epoch')
 
   /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. */
   function holdGroupAt(grantedEpoch: number, rotate: ReturnType<typeof vi.fn>, list = vi.fn()): Uint8Array[] {
@@ -544,7 +545,7 @@ describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it crea
   })
 
   it('does not retry a non-stale failure (e.g. 403) — it propagates after one commit', async () => {
-    const forbidden = { response: new Response(JSON.stringify({ code: 'not_scope_owner' }), { status: 403 }) }
+    const forbidden = httpError(403, 'not_scope_owner')
     const rotate = vi.fn().mockRejectedValue(forbidden)
     holdGroupAt(0, rotate)
 
@@ -578,7 +579,7 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
   })
 
   it('retries once on 409 stale_epoch (a concurrent rotation), then succeeds', async () => {
-    const stale = { response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }) }
+    const stale = httpError(409, 'stale_epoch')
     const rename = vi.fn().mockRejectedValueOnce(stale).mockResolvedValueOnce(undefined)
     mockGroupForRename(rename)
 
@@ -587,7 +588,7 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
   })
 
   it('does not retry on a non-stale failure (e.g. 403) — it propagates', async () => {
-    const forbidden = { response: new Response(JSON.stringify({ code: 'not_scope_owner' }), { status: 403 }) }
+    const forbidden = httpError(403, 'not_scope_owner')
     const rename = vi.fn().mockRejectedValue(forbidden)
     mockGroupForRename(rename)
 

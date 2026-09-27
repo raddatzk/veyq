@@ -4,20 +4,12 @@ import { describe, it, expect, vi } from 'vitest'
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
 
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import AppTopbar from './AppTopbar.vue'
 import { setBreadcrumb } from '../../app/breadcrumb'
+import { realI18n } from '../../test/i18n'
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: { en: { shell: { invitations: 'Invitations', uploads: 'Uploads' } } },
-})
-
-const mountTopbar = () => mount(AppTopbar, { global: { plugins: [i18n, PrimeVue] } })
+const mountTopbar = () => mount(AppTopbar, { global: { plugins: [realI18n(), PrimeVue] } })
 
 describe('AppTopbar breadcrumb', () => {
   it('renders the client-side breadcrumb trail labels', () => {

@@ -45,25 +45,11 @@ const leaflet = vi.hoisted(() => {
 vi.mock('leaflet', () => ({ default: leaflet.L }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import SpaceMap from './SpaceMap.vue'
 import { setMapsConsent } from '../../../shared/state/useMapConfig'
 import { NodeKind } from '../../../api/generated/content'
 import type { LocatedPin } from '../spaceMap'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      memory: {
-        viewMap: 'Map view',
-        place: { consentTitle: 'Enable maps for locations?', consentBody: 'Client-direct, blind server.', consentEnable: 'Enable maps' },
-        map: { empty: 'No places yet', emptyHint: 'Set a location on a Memory.' },
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   Button: { props: ['label'], template: `<button class="p-btn" @click="$emit('click', $event)">{{ label }}</button>` },
@@ -75,7 +61,7 @@ const pin = (id: string, name: string, lat: number, lng: number): LocatedPin => 
   date: null,
 })
 
-const mountMap = (pins: LocatedPin[]) => mount(SpaceMap, { props: { pins }, global: { plugins: [i18n], stubs } })
+const mountMap = (pins: LocatedPin[]) => mount(SpaceMap, { props: { pins }, global: { plugins: [realI18n()], stubs } })
 
 beforeEach(() => {
   leaflet.markers.splice(0)
@@ -102,7 +88,7 @@ describe('SpaceMap', () => {
     const wrapper = mountMap([pin('m1', 'Rome', 41.9, 12.5)])
     await flushPromises()
 
-    expect(wrapper.text()).toContain('Enable maps for locations?')
+    expect(wrapper.text()).toContain(t('memory.place.consentTitle'))
     expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
 
     await wrapper.find('.p-btn').trigger('click') // "Enable maps"
@@ -116,7 +102,7 @@ describe('SpaceMap', () => {
     const wrapper = mountMap([])
     await flushPromises()
 
-    expect(wrapper.text()).toContain('No places yet')
+    expect(wrapper.text()).toContain(t('memory.map.empty'))
     expect(wrapper.find('.space-map-canvas').exists()).toBe(false)
   })
 })

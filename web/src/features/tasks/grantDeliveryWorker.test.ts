@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
@@ -201,7 +202,7 @@ describe('runGrantDeliveryWorker', () => {
   it('stops draining on a 409 stale_epoch — the server released the job for a key-holder at the current epoch', async () => {
     const K_SC = v1.randomBytes(32)
     const claimTask = vi.fn().mockResolvedValue(job(admitted(K_SC, 0)))
-    const stale = { response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }) }
+    const stale = httpError(409, 'stale_epoch')
     const completeTask = vi.fn().mockRejectedValue(stale)
     mockTasks(claimTask, completeTask)
 
@@ -213,7 +214,7 @@ describe('runGrantDeliveryWorker', () => {
   it('a non-stale completion failure still propagates', async () => {
     const K_SC = v1.randomBytes(32)
     const claimTask = vi.fn().mockResolvedValue(job(admitted(K_SC, 0)))
-    const forbidden = { response: new Response(JSON.stringify({ code: 'not_lease_holder' }), { status: 409 }) }
+    const forbidden = httpError(409, 'not_lease_holder')
     mockTasks(claimTask, vi.fn().mockRejectedValue(forbidden))
     await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toBe(forbidden)
   })

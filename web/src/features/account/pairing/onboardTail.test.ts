@@ -12,6 +12,7 @@
 // of the spy is that it will fire the day somebody adds it (ADR 0005 §22: this device has no password to key a
 // `DEVICE` wrap with, so that call must never appear on this path).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
@@ -60,7 +61,6 @@ import type { PairingGrant } from './pairing'
 const LABEL = 'Kevin’s iPad'
 const EMAIL = 'kevin@example.com'
 
-const httpError = (status: number) => Object.assign(new Error('http'), { response: { status } })
 
 /** Exactly what the granting device sealed, plus the material the server serves the granted one. */
 function fixture(label: string = LABEL) {

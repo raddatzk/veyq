@@ -4,8 +4,8 @@
 // what the SCREEN does: which step it shows, that a wrong Secret Key keeps the person on the step instead of
 // sending them back to the start, and that the token never lingers in the address bar.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { httpError } from '../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('../features/account/recovery/recovery', () => ({
   requestRecovery: vi.fn().mockResolvedValue(undefined),
@@ -27,29 +27,7 @@ import {
 } from '../features/account/recovery/recovery'
 import { pwnedCount } from '../shared/pwned'
 import { RecoveryMaterialSuiteIdEnum, type RecoveryMaterial } from '../api/generated/auth'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      recovery: {
-        title: 'Reset', intro: 'intro', emailLabel: 'Email', requestSubmit: 'Send', requestSubmitting: 'Sending',
-        requestSent: 'If an account exists', stepKey: 'Secret Key', stepKeyIntro: 'k', forAccount: 'For {email}.',
-        continueLabel: 'Continue', stepPassword: 'New password', newPassword: 'New', confirmPassword: 'Repeat',
-        mismatch: 'Passwords differ', submit: 'Reset', submitting: 'Resetting', done: 'Done',
-        linkSpent: 'This link no longer works', keyFailed: 'That Secret Key did not open your account',
-        proofFailed: 'Refused', deviceNote: 'devices', noEscrow: 'no escrow',
-        mailUnavailable: 'This server cannot send email yet', requestFailed: 'The request did not go through',
-      },
-      unlock: { secretKey: 'Secret Key', secretKeyHint: 'hint' },
-      common: { unreachable: 'This instance can’t be reached right now' },
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count} breaches.', pwnedUnavailable: 'Not checked.' },
-    },
-  },
-})
+import { realI18n, t } from '../test/i18n'
 
 const stubs = {
   Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
@@ -77,7 +55,7 @@ const MATERIAL: RecoveryMaterial = {
 const mounted: ReturnType<typeof mount>[] = []
 
 function mountView() {
-  const w = mount(RecoverView, { global: { plugins: [i18n], stubs } })
+  const w = mount(RecoverView, { global: { plugins: [realI18n()], stubs } })
   mounted.push(w)
   return w
 }
@@ -85,13 +63,6 @@ function mountView() {
 /** Put a token in the fragment, the way the mailed link does. */
 function withToken(token = 'tok-123') {
   window.history.replaceState(null, '', `/recover#${token}`)
-}
-
-/** A thrown generated-client error carrying an HTTP response — the shape `httpError.ts` decodes. */
-function httpError(status: number): Error {
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = new Response('', { status })
-  return e
 }
 
 /** Fill in the address and press the button on step 1. */
@@ -117,7 +88,7 @@ describe('RecoverView', () => {
   it('with no token it asks for an address and says nothing about whether it exists', async () => {
     const w = mountView()
     await flushPromises()
-    expect(w.text()).toContain('Email')
+    expect(w.text()).toContain(t('recovery.emailLabel'))
     expect(releaseRecoveryMaterial).not.toHaveBeenCalled()
 
     await w.find('input').setValue('someone@example.com')
@@ -126,7 +97,7 @@ describe('RecoverView', () => {
 
     expect(requestRecovery).toHaveBeenCalledWith('someone@example.com')
     // The same confirmation regardless — the screen must not undo the endpoint's non-enumerability.
-    expect(w.text()).toContain('If an account exists')
+    expect(w.text()).toContain(t('recovery.requestSent'))
   })
 
   it('says so when the server cannot send mail at all, instead of silently redrawing the form', async () => {
@@ -138,9 +109,9 @@ describe('RecoverView', () => {
     await flushPromises()
     await submitAddress(w)
 
-    expect(w.text()).toContain('This server cannot send email yet')
+    expect(w.text()).toContain(t('recovery.mailUnavailable'))
     // And NOT the confirmation: a refused request must never read as a link on its way.
-    expect(w.text()).not.toContain('If an account exists')
+    expect(w.text()).not.toContain(t('recovery.requestSent'))
   })
 
   it('says so when the request fails for any other reason', async () => {
@@ -151,9 +122,9 @@ describe('RecoverView', () => {
     await flushPromises()
     await submitAddress(w)
 
-    expect(w.text()).toContain('The request did not go through')
-    expect(w.text()).not.toContain('This server cannot send email yet')
-    expect(w.text()).not.toContain('If an account exists')
+    expect(w.text()).toContain(t('recovery.requestFailed'))
+    expect(w.text()).not.toContain(t('recovery.mailUnavailable'))
+    expect(w.text()).not.toContain(t('recovery.requestSent'))
   })
 
   it('strips the token from the address bar as soon as it is read, keeping the router\'s history state', async () => {
@@ -176,7 +147,7 @@ describe('RecoverView', () => {
     await flushPromises()
 
     expect(releaseRecoveryMaterial).toHaveBeenCalledWith('tok-123')
-    expect(w.text()).toContain('For kevin@example.com.')
+    expect(w.text()).toContain(t('recovery.forAccount', { email: 'kevin@example.com' }))
     // Exactly one field to fill on this step: the Secret Key. The address is known, so re-typing it is a step
     // that could only go wrong. The shared control's own hidden file picker is excluded by type — it is an
     // affordance of the field, not a second field, and it is what the person clicks the upload icon to reach.
@@ -193,7 +164,7 @@ describe('RecoverView', () => {
     await w.find('input').setValue('kevin@example.com')
     await w.find('form').trigger('submit')
     await flushPromises()
-    expect(w.text()).toContain('If an account exists')
+    expect(w.text()).toContain(t('recovery.requestSent'))
 
     vi.mocked(releaseRecoveryMaterial).mockResolvedValue(MATERIAL)
     window.location.hash = 'tok-123'
@@ -204,8 +175,8 @@ describe('RecoverView', () => {
     await flushPromises()
 
     expect(releaseRecoveryMaterial).toHaveBeenCalledWith('tok-123')
-    expect(w.text()).toContain('For kevin@example.com.')
-    expect(w.text()).not.toContain('If an account exists')
+    expect(w.text()).toContain(t('recovery.forAccount', { email: 'kevin@example.com' }))
+    expect(w.text()).not.toContain(t('recovery.requestSent'))
   })
 
   it('a dead link explains that a completed reset is the likely reason', async () => {
@@ -213,7 +184,7 @@ describe('RecoverView', () => {
     vi.mocked(releaseRecoveryMaterial).mockRejectedValue(new Error('404'))
     const w = mountView()
     await flushPromises()
-    expect(w.text()).toContain('This link no longer works')
+    expect(w.text()).toContain(t('recovery.linkSpent'))
   })
 
   it('a wrong Secret Key keeps the person on the step — the token is still good', async () => {
@@ -227,8 +198,8 @@ describe('RecoverView', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(w.text()).toContain('That Secret Key did not open your account')
-    expect(w.text()).toContain('Secret Key')
+    expect(w.text()).toContain(t('recovery.keyFailed'))
+    expect(w.text()).toContain(t('recovery.stepKey'))
     expect(completeRecovery).not.toHaveBeenCalled()
   })
 
@@ -245,8 +216,8 @@ describe('RecoverView', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(w.text()).toContain('This instance can’t be reached right now')
-    expect(w.text()).not.toContain('That Secret Key did not open your account')
+    expect(w.text()).toContain(t('common.unreachable'))
+    expect(w.text()).not.toContain(t('recovery.keyFailed'))
     expect(completeRecovery).not.toHaveBeenCalled()
   })
 
@@ -268,7 +239,7 @@ describe('RecoverView', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(w.text()).toContain('Passwords differ')
+    expect(w.text()).toContain(t('recovery.mismatch'))
     expect(completeRecovery).not.toHaveBeenCalled()
   })
 
@@ -292,7 +263,7 @@ describe('RecoverView', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
 
-    expect(w.text()).toContain('Use at least 10 characters.')
+    expect(w.text()).toContain(t('password.minLength'))
     expect(completeRecovery).not.toHaveBeenCalled()
 
     // Exactly at the floor is ACCEPTED — the boundary, not just "long enough". `<` vs `<=` here is the
@@ -329,7 +300,7 @@ describe('RecoverView', () => {
       'the-secret-key',
       'a brand new password',
     )
-    expect(w.text()).toContain('Done')
+    expect(w.text()).toContain(t('recovery.done'))
   })
 
   it('with the breach check ticked, a hit stops the first submit and the second goes ahead', async () => {
@@ -352,7 +323,7 @@ describe('RecoverView', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(completeRecovery).not.toHaveBeenCalled()
-    expect(w.text()).toContain('Seen in 3 breaches.')
+    expect(w.text()).toContain(t('password.pwnedWarning', { count: 3 }))
 
     await w.find('form').trigger('submit')
     await flushPromises()

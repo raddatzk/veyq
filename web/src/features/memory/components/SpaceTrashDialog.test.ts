@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('../tree', () => ({
   listTrash: vi.fn().mockResolvedValue([]),
@@ -11,25 +11,7 @@ vi.mock('../tree', () => ({
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
 import { listTrash, restoreNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { cancel: 'Cancel', done: 'Done' },
-      memory: {
-        slugTaken: 'Taken',
-        spaceTrash: {
-          title: 'Trash', hint: 'Hint', empty: 'Nothing has been deleted here.',
-          loadFailed: 'Could not open the trash.', restore: 'Restore',
-          restoreFailed: 'Could not restore this.', deletedOn: 'Deleted {day}',
-          purgeOn: 'removed for good on {day}', retryName: 'New name', open: 'Trash',
-        },
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   Dialog: { template: '<div><slot /></div>' },
@@ -61,7 +43,7 @@ const ROW = {
 function mountDialog() {
   return mount(SpaceTrashDialog, {
     props: { scopeId: SCOPE, epochs: EPOCHS } as never,
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
 }
 
@@ -72,7 +54,7 @@ async function settle(wrapper: ReturnType<typeof mountDialog>) {
 }
 
 function restoreButton(wrapper: ReturnType<typeof mountDialog>) {
-  return wrapper.findAll('button').find((b) => b.text() === 'Restore')!
+  return wrapper.findAll('button').find((b) => b.text() === t('memory.spaceTrash.restore'))!
 }
 
 beforeEach(() => {
@@ -90,14 +72,14 @@ describe('SpaceTrashDialog', () => {
     expect(listTrash).toHaveBeenCalledWith(SCOPE, EPOCHS)
     expect(wrapper.text()).toContain('Rom 2026')
     // both dates are rendered — "you can still get it back, and until when"
-    expect(wrapper.text()).toContain('Deleted')
-    expect(wrapper.text()).toContain('removed for good on')
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.deletedOn', { day: ROW.deletedAt.toLocaleDateString('en') }))
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.purgeOn', { day: ROW.purgeAfter.toLocaleDateString('en') }))
   })
 
   it('shows the empty state when nothing was deleted', async () => {
     const wrapper = mountDialog()
     await settle(wrapper)
-    expect(wrapper.text()).toContain('Nothing has been deleted here.')
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.empty'))
   })
 
   it('restores a row, drops it from the list, and asks the host to refetch the tree', async () => {
@@ -120,16 +102,14 @@ describe('SpaceTrashDialog', () => {
    */
   it('turns a 409 slug_taken into a name field and retries under the new name', async () => {
     vi.mocked(listTrash).mockResolvedValue([ROW] as never)
-    vi.mocked(restoreNode).mockRejectedValueOnce({
-      response: { status: 409, clone: () => ({ json: async () => ({ code: 'slug_taken' }) }) },
-    })
+    vi.mocked(restoreNode).mockRejectedValueOnce(httpError(409, 'slug_taken'))
     const wrapper = mountDialog()
     await settle(wrapper)
 
     await restoreButton(wrapper).trigger('click')
     await settle(wrapper)
 
-    expect(wrapper.text()).toContain('Taken')
+    expect(wrapper.text()).toContain(t('memory.slugTaken'))
     const field = wrapper.find('input.retry-name')
     expect(field.exists()).toBe(true)
     // the field is pre-filled with the current name, so the user edits rather than retypes
@@ -147,16 +127,14 @@ describe('SpaceTrashDialog', () => {
   /** A 409 that is NOT a slug collision has no new-name remedy, so it must not offer one. */
   it('does not offer a rename for a failure a new name cannot fix', async () => {
     vi.mocked(listTrash).mockResolvedValue([ROW] as never)
-    vi.mocked(restoreNode).mockRejectedValueOnce({
-      response: { status: 409, clone: () => ({ json: async () => ({ code: 'scope_deleting' }) }) },
-    })
+    vi.mocked(restoreNode).mockRejectedValueOnce(httpError(409, 'scope_deleting'))
     const wrapper = mountDialog()
     await settle(wrapper)
 
     await restoreButton(wrapper).trigger('click')
     await settle(wrapper)
 
-    expect(wrapper.text()).toContain('Could not restore this.')
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.restoreFailed'))
     expect(wrapper.find('input.retry-name').exists()).toBe(false)
   })
 
@@ -164,7 +142,7 @@ describe('SpaceTrashDialog', () => {
     vi.mocked(listTrash).mockRejectedValue(new Error('boom'))
     const wrapper = mountDialog()
     await settle(wrapper)
-    expect(wrapper.text()).toContain('Could not open the trash.')
-    expect(wrapper.text()).not.toContain('Nothing has been deleted here.')
+    expect(wrapper.text()).toContain(t('memory.spaceTrash.loadFailed'))
+    expect(wrapper.text()).not.toContain(t('memory.spaceTrash.empty'))
   })
 })

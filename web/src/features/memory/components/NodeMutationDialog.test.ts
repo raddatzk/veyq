@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('../tree', () => ({
   createFolder: vi.fn().mockResolvedValue('node-1'),
@@ -15,21 +15,7 @@ import NodeMutationDialog from './NodeMutationDialog.vue'
 import { createFolder, createMemory, renameNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { create: 'Create', cancel: 'Cancel' },
-      memory: {
-        createFolderTitle: 'Create a folder', createMemoryTitle: 'Create a Memory', renameTitle: 'Rename',
-        nameLabel: 'Name', save: 'Save', slugTaken: 'Taken', illegalStructure: 'Illegal', saveFailed: 'Failed',
-        place: { autoOptIn: 'Determine location automatically', autoOptInHint: 'from where your photos were taken' },
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 const stubs = {
@@ -54,7 +40,7 @@ const EPOCHS = epochsOf(KEY)
 function mountDialog(props: Record<string, unknown>) {
   return mount(NodeMutationDialog, {
     props: { scopeId: SCOPE, epochs: EPOCHS, ...props } as never,
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
 }
 
@@ -118,14 +104,14 @@ describe('NodeMutationDialog', () => {
   })
 
   it('maps a 409 to the slug-taken message and stays open', async () => {
-    vi.mocked(createFolder).mockRejectedValueOnce({ response: { status: 409 } })
+    vi.mocked(createFolder).mockRejectedValueOnce(httpError(409))
     const wrapper = mountDialog({ mode: 'create-folder', parentId: null })
     await wrapper.find('input').setValue('Dupe')
     await wrapper.find('form').trigger('submit')
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(wrapper.text()).toContain('Taken')
+    expect(wrapper.text()).toContain(t('memory.slugTaken'))
     expect(wrapper.emitted('done')).toBeFalsy()
   })
 })

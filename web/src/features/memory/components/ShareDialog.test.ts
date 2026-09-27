@@ -4,7 +4,6 @@
 // lives in ShareCreateDialog.test.ts). The data layer is stubbed so the list mounts crypto/network-free.
 import { describe, it, expect, vi } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 const listSharesFor = vi.fn()
 vi.mock('../shareLink', () => ({
@@ -21,22 +20,7 @@ vi.mock('../share', () => ({
 
 import ShareDialog from './ShareDialog.vue'
 import { ShareRole } from '../../../api/generated/sharing'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      share: {
-        title: 'Shares', intro: 'i', createNew: 'New share', none: 'none',
-        roleViewer: 'View only', roleContributor: 'c', roleUploader: 'u',
-        created: 'Created {date}', expires: 'Expires {date}', copy: 'Copy', revoke: 'Revoke',
-      },
-    },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
 
@@ -56,7 +40,7 @@ const stubs = {
 const mountList = () =>
   mount(ShareDialog, {
     props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom' },
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
 
 describe('ShareDialog — expiry display (cr-share-link-expiry-ui)', () => {
@@ -69,7 +53,7 @@ describe('ShareDialog — expiry display (cr-share-link-expiry-ui)', () => {
     await flushPromises()
 
     expect(w.findAll('.share-list-expires')).toHaveLength(1)
-    expect(w.text()).toContain('Expires')
+    expect(w.text()).toContain(t('share.expires', { date: '' }).trim())
   })
 
   it('shows no expiry line when no share has one', async () => {
@@ -78,6 +62,6 @@ describe('ShareDialog — expiry display (cr-share-link-expiry-ui)', () => {
     await flushPromises()
 
     expect(w.findAll('.share-list-expires')).toHaveLength(0)
-    expect(w.text()).not.toContain('Expires')
+    expect(w.text()).not.toContain(t('share.expires', { date: '' }).trim())
   })
 })

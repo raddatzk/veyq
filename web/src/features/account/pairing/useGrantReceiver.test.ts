@@ -19,7 +19,7 @@ import { useGrantReceiver } from './useGrantReceiver'
 import { collectPairingChannel } from './pairingChannel'
 import { runOnboardTail } from './onboardTail'
 import { channelKeys, mintPairingSecret, sealGrant, type PairingGrant } from './pairing'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const collect = vi.mocked(collectPairingChannel)
 const tail = vi.mocked(runOnboardTail)
@@ -43,7 +43,7 @@ const mountReceiver = () => {
       return () => h('div')
     },
   })
-  const wrapper = mount(Host, { global: { plugins: [i18n] } })
+  const wrapper = mount(Host, { global: { plugins: [realI18n()] } })
   return { wrapper, receiver: () => receiver, done }
 }
 
@@ -56,7 +56,6 @@ const grantArrives = async (envelope: string) => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
-  i18n.global.locale.value = 'en'
   collect.mockResolvedValue({})
   tail.mockResolvedValue(undefined)
 })
@@ -74,7 +73,7 @@ describe('useGrantReceiver — the half both receiving cards share (uc.account.o
 
     // Distinct from both adoption failures (`gone`, `occupied`): a bare "an error was shown" is satisfied by all.
     expect(failing.receiver().step.value).toBe('failed')
-    expect(failing.receiver().error.value).toBe(i18n.global.t('pairing.joinFailed'))
+    expect(failing.receiver().error.value).toBe(t('pairing.joinFailed'))
     await vi.advanceTimersByTimeAsync(600_000)
     await flushPromises()
     expect(tail).toHaveBeenCalledTimes(1)
@@ -101,7 +100,7 @@ describe('useGrantReceiver — the half both receiving cards share (uc.account.o
     await grantArrives(sealGrant(channelKeys(mintPairingSecret()).key, r.receiver().transportKey.pub, GRANT))
 
     expect(tail).not.toHaveBeenCalled()
-    expect(r.receiver().error.value).toBe(i18n.global.t('pairing.joinFailed'))
+    expect(r.receiver().error.value).toBe(t('pairing.joinFailed'))
     expect(r.done).not.toHaveBeenCalled()
   })
 })
