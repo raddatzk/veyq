@@ -13,6 +13,7 @@ import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.identity.AccountStore
 import com.veyq.app.shared.identity.normalizeEmail
 import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.ScopeAccess
@@ -84,6 +85,8 @@ sealed interface MemberInviteOutcome {
     data object NotOwner : MemberInviteOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     data object NotActive : MemberInviteOutcome, HttpFailure by httpFailure("tenant_not_active", FailureStatus.CONFLICT)
     data object AlreadyMember : MemberInviteOutcome, HttpFailure by Failures.alreadyMember
+    /** The admission was tagged at an epoch that is no longer the tenant's current one (ADR 0020 move 6). */
+    data object StaleEpoch : MemberInviteOutcome, HttpFailure by Failures.staleEpoch
 
     /** The tenant cannot send mail, and a member invite has no other channel (ADR 0055 §2) — nothing is minted. */
     data object MailUnavailable : MemberInviteOutcome, HttpFailure by Failures.mailUnavailable
@@ -301,9 +304,11 @@ class TenantHandler(
      * A tenant **owner** invites a person (by email) into the ACTIVE tenant as a MEMBER (cr-0077 / ADR 0020).
      * Admission is owner-gated (the caller must hold the tenant's OWNER membership); the invitee onboards via
      * the same cold-birth accept flow with the invite's MEMBER role. The scope key is delivered afterward by a
-     * key-holder (cr-0076) — this only mints the admission token.
+     * key-holder (cr-0076) — this only mints the admission token, and stores the admission tag the owner's client
+     * computed under the tenant's epoch key (ADR 0020 move 6): opaque here, verified by every key-holder before it
+     * wraps. A session without the vault can mint an invite, but not a tag that verifies.
      */
-    fun inviteMember(callerId: String, tenantId: String, email: String): MemberInviteOutcome = commitThenSend {
+    fun inviteMember(callerId: String, tenantId: String, email: String, admission: Admission): MemberInviteOutcome = commitThenSend {
         access.check(callerId, tenantId, WRITE)
             .refusal(MemberInviteOutcome.NotFound, MemberInviteOutcome.Suspended)?.let { return@commitThenSend MintResult.Rejected(it) }
         val tenant = store.findTenant(tenantId) ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.NotFound)
@@ -320,7 +325,8 @@ class TenantHandler(
 
         val token = Tokens.random()
         val expiresAt = Instant.now().plus(inviteTtl)
-        val inviteId = store.mintMemberInvite(tenantId, normalizedEmail, Tokens.hash(token), expiresAt)
+        val inviteId = store.mintMemberInvite(tenantId, normalizedEmail, Tokens.hash(token), expiresAt, admission, checkEpoch = true)
+            ?: return@commitThenSend MintResult.Rejected(MemberInviteOutcome.StaleEpoch)
         MintResult.ToSend(tenant.id, tenant.domain, normalizedEmail, token, expiresAt) { delivery ->
             if (delivery != DeliveryResult.SENT) {
                 revokeUndelivered(inviteId)
@@ -372,8 +378,11 @@ class TenantHandler(
         inviteRateLimiter.check(tenantId, invite.ownerEmail)?.let { return@commitThenSend MintResult.Rejected(ReissueOutcome.RateLimited(it)) }
         val token = Tokens.random()
         val expiresAt = Instant.now().plus(inviteTtl)
-        // mintMemberInvite supersedes the current ACTIVE invite for this email (i.e. the one we found) + mints anew.
-        val freshId = store.mintMemberInvite(tenantId, invite.ownerEmail, Tokens.hash(token), expiresAt)
+        // mintMemberInvite supersedes the current ACTIVE invite for this email (i.e. the one we found) + mints anew,
+        // keeping its admission (ADR 0020 move 6): the owner admitted this person once, a new secret is not a new one.
+        val freshId = store.mintMemberInvite(
+            tenantId, invite.ownerEmail, Tokens.hash(token), expiresAt, invite.admission(), checkEpoch = false,
+        )!!
         MintResult.ToSend(tenant.id, tenant.domain, invite.ownerEmail, token, expiresAt) { delivery ->
             if (delivery != DeliveryResult.SENT) {
                 revokeUndelivered(freshId)

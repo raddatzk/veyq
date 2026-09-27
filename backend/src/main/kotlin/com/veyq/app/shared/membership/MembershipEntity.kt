@@ -68,6 +68,28 @@ class MembershipEntity : PanacheEntityBase {
     @Column(name = "added_by", length = 36)
     var addedBy: String? = null
 
+    /** The admission (ADR 0020 move 6): a client-minted id, the epoch whose key computed [admissionTag], and the tag —
+     *  an HMAC only a holder of that epoch key can compute. Opaque to the server, which stores, relays and never
+     *  verifies it; every client verifies it before wrapping a scope key to this member. Null = never admitted by a
+     *  key-holder (or dropped by a rotation whose rotator could not verify it) — no honest client delivers to it. */
+    @Column(name = "admission_id", length = 36)
+    var admissionId: String? = null
+
+    @Column(name = "admission_epoch")
+    var admissionEpoch: Int? = null
+
+    @Column(name = "admission_tag")
+    var admissionTag: String? = null
+
+    /** Who posted [wrappedGrant], and their Ed25519 identity signature over it (ADR 0028 Decision 6). Written with
+     *  every grant — the granter is always the authenticated caller of the write — and never verified here: the
+     *  recipient checks it before it uses the key. Null for a grant-less membership. */
+    @Column(name = "granter_user_id", length = 36)
+    var granterUserId: String? = null
+
+    @Column(name = "grant_signature")
+    var grantSignature: String? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 

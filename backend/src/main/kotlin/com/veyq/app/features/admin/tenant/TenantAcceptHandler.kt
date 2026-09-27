@@ -10,7 +10,9 @@ import com.veyq.app.shared.identity.ServerRoles
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.identity.WrapData
+import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.tenant.TenantEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
@@ -27,6 +29,19 @@ data class NewAccount(
     val secretKeyProofPublicKey: String,
     val wraps: List<WrapData>,
 )
+
+/**
+ * What an OWNER accept brings for the tenant's cold birth: the first grant with the owner's self-signature over it
+ * (ADR 0028 Decision 6), and the admission the owner self-tagged under `E_0` (ADR 0020 move 6). All or nothing —
+ * a birth missing any part is no birth, and the accept answers it as a missing grant.
+ */
+data class OwnerBirth(val grant: SignedGrant, val admission: Admission) {
+    companion object {
+        fun of(grant: String?, signature: String?, admissionId: java.util.UUID?, admissionEpoch: Int?, admissionTag: String?): OwnerBirth? =
+            if (grant == null || signature == null || admissionId == null || admissionEpoch == null || admissionTag == null) null
+            else OwnerBirth(SignedGrant(grant, signature), Admission(admissionId.toString(), admissionEpoch, admissionTag))
+    }
+}
 
 sealed interface PreviewOutcome {
     data class Found(
@@ -100,7 +115,7 @@ class TenantAcceptHandler(
      *  (cr-0077): an OWNER accept cold-activates the tenant (grant required); a MEMBER accept joins the ACTIVE
      *  tenant grant-less (no grant), the key delivered later by a key-holder (cr-0076). */
     @Transactional
-    fun accept(userId: String, bootstrapSecret: String, grant: String?, username: String, sealedName: String?): AcceptOutcome {
+    fun accept(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return AcceptOutcome.NotFound
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return AcceptOutcome.NotFound
@@ -117,18 +132,18 @@ class TenantAcceptHandler(
             } else if (profiles.find(userId, tenant.id) != null) {
                 // A member removed from the tenant and invited back: the profile outlived the removal, so they
                 // rejoin under the username they had rather than being handed a second one.
-                store.joinAsMember(tenant.id, userId, invite.id)
+                store.joinAsMember(tenant.id, userId, invite)
             } else {
                 if (profiles.usernameTaken(tenant.id, username)) return AcceptOutcome.UsernameTaken
-                store.joinAsMember(tenant.id, userId, invite.id)
+                store.joinAsMember(tenant.id, userId, invite)
                 profiles.create(userId, tenant.id, username, sealedName)
             }
             AcceptOutcome.Activated(tenant.id)
         } else {
             if (tenant.status != TenantEntity.PENDING) return AcceptOutcome.AlreadyActive
-            val g = grant ?: return AcceptOutcome.MissingGrant
+            val b = birth ?: return AcceptOutcome.MissingGrant
             if (profiles.usernameTaken(tenant.id, username)) return AcceptOutcome.UsernameTaken
-            store.activate(tenant.id, userId, g, invite.id)
+            store.activate(tenant.id, userId, b.grant, b.admission, invite.id)
             // Owner cold-birth: the caller holds K_tenant here, so an optional sealed name may ride the accept (cr-0106).
             profiles.create(userId, tenant.id, username, sealedName)
             AcceptOutcome.Activated(tenant.id)
@@ -139,7 +154,7 @@ class TenantAcceptHandler(
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins grant-less. */
     @Transactional
     fun registerAndAccept(
-        bootstrapSecret: String, userId: String, account: NewAccount, grant: String?, username: String, sealedName: String?,
+        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
         if (!isLive(invite)) return RegisterAcceptOutcome.NoLongerValid
@@ -148,7 +163,7 @@ class TenantAcceptHandler(
 
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
         if (accounts.findByEmail(invite.ownerEmail) != null) return RegisterAcceptOutcome.EmailTaken
-        if (invite.role != TenantInviteEntity.MEMBER && grant == null) return RegisterAcceptOutcome.MissingGrant
+        if (invite.role != TenantInviteEntity.MEMBER && birth == null) return RegisterAcceptOutcome.MissingGrant
         if (profiles.usernameTaken(tenant.id, username)) return RegisterAcceptOutcome.UsernameTaken
         // The client-minted account id (ADR 0072): the optional sealed real name is bound to (tenant scope, it).
         if (VeyqUser.findById(userId) != null) return RegisterAcceptOutcome.IdTaken
@@ -164,8 +179,8 @@ class TenantAcceptHandler(
             secretKeyProofPublicKey = account.secretKeyProofPublicKey,
             wraps = account.wraps,
         )
-        if (invite.role == TenantInviteEntity.MEMBER) store.joinAsMember(tenant.id, userId, invite.id)
-        else store.activate(tenant.id, userId, grant!!, invite.id)
+        if (invite.role == TenantInviteEntity.MEMBER) store.joinAsMember(tenant.id, userId, invite)
+        else store.activate(tenant.id, userId, birth!!.grant, birth.admission, invite.id)
         // The per-tenant identity: the plaintext handle, plus the optional sealed real name when the invitee
         // already holds K_tenant at accept (owner cold-birth / grant-sealed accept — ADR 0023); a grant-less
         // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).

@@ -1,6 +1,8 @@
 package com.veyq.app.features.tasks
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.admit
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
@@ -62,7 +64,7 @@ class TasksSliceTest {
         // target membership (the first wrap to a foreign identity) and marks the job done.
         val wrap = "d3JhcC10by1mb3JlaWdu" // "wrap-to-foreign"
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"$wrap","epoch":0}""")
+            .body("""{"sealedResult":"$wrap","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(204)
 
@@ -78,6 +80,39 @@ class TasksSliceTest {
             .body("""{"sealedResult":"c29tZXRoaW5nLWVsc2U="}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
         assertEquals(wrap, grantOf(targetMembership), "a second completion must not overwrite the delivered grant")
+    }
+
+    @Test
+    fun grantDeliveryServesTheTargetsAdmissionAndRecordsTheWorkerAsGranter() {
+        // ADR 0020 move 6 / ADR 0028 Decision 6: the target carries its admission so the worker can verify it
+        // before it wraps, and the grant it posts is written with the worker as granter and its signature.
+        val scopeId = seedTenantScope()
+        val worker = seedUser()
+        seedGrantedMembership(worker, scopeId, "owner-grant")
+        val targetMembership = seedGrantlessMembership(seedUser(), scopeId)
+        val admission = TestAdmission.admission()
+        QuarkusTransaction.requiringNew().run { MembershipEntity.findById(targetMembership)!!.admit(admission) }
+
+        val jobId = claim(worker, CapabilityTags.GRANT_DELIVERY).then().statusCode(200)
+            .body("grantDelivery.admissionId", equalTo(admission.id))
+            .body("grantDelivery.admissionEpoch", equalTo(0))
+            .body("grantDelivery.admissionTag", equalTo(TestAdmission.TAG))
+            .extract().path<String>("jobId")
+
+        // No signature → 400, nothing written; the same completion signed → delivered, granter recorded.
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
+            .body("""{"sealedResult":"d3JhcA==","epoch":0}""")
+            .`when`().post("/api/tasks/$jobId/complete")
+            .then().statusCode(400).body("code", equalTo("invalid_request"))
+        assertNull(grantOf(targetMembership))
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
+            .body("""{"sealedResult":"d3JhcA==","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
+            .`when`().post("/api/tasks/$jobId/complete")
+            .then().statusCode(204)
+        val (granter, signature) = QuarkusTransaction.requiringNew().call {
+            MembershipEntity.findById(targetMembership)!!.let { it.granterUserId to it.grantSignature }
+        }
+        assertEquals(worker to TestAdmission.SIGNATURE, granter to signature)
     }
 
     @Test
@@ -107,7 +142,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(1, grantedEpochOf(targetMembership), "grant-delivery must record the delivered (current) epoch")
@@ -128,7 +163,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker)
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1}""")
+            .body("""{"sealedResult":"d3JhcC1FMQ==","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete")
             .then().statusCode(409).body("code", equalTo("stale_epoch"))
         assertEquals(null, grantOf(targetMembership), "a grant sealed at a stale epoch is never written")
@@ -137,7 +172,7 @@ class TasksSliceTest {
 
         assertEquals(jobId, claimGrantDelivery(worker), "the same job is claimable again")
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
         assertEquals("d3JhcC1FMg==", grantOf(targetMembership), "the current-epoch grant is written")
         assertEquals(2, grantedEpochOf(targetMembership), "at exactly the epoch the worker stated")
@@ -157,7 +192,7 @@ class TasksSliceTest {
 
         val jobId = claimGrantDelivery(worker) // reconcile-on-claim originates a delivery for the stale member
         given().header("Authorization", bearer(worker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2}""")
+            .body("""{"sealedResult":"d3JhcC1FMg==","epoch":2,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertEquals(2, grantedEpochOf(staleMembership), "the stale member is re-granted at the current epoch")
@@ -428,7 +463,7 @@ class TasksSliceTest {
         // The attacker completes it (they hold the lease and a grant in A) — the job is marked done, but the
         // cross-scope write is refused: the victim's membership in B stays grant-less.
         given().header("Authorization", bearer(attacker)).contentType(ContentType.JSON)
-            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0}""")
+            .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA==","epoch":0,${TestAdmission.SIGNATURE_JSON}}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
 
         assertNull(grantOf(victimMembership), "a cross-scope resourceRef must not receive a grant")

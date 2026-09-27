@@ -1,5 +1,6 @@
 package com.veyq.app.features.admin.tenant
 
+import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
@@ -239,7 +240,7 @@ class TenantsSliceTest {
         val userId = UUID.randomUUID().toString()
         seedUser(userId, invitedEmail, "MEMBER")
         return given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
-            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ=="}""")
+            .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
     }
 
