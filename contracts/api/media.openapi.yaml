@@ -37,13 +37,15 @@ paths:
     post:
       tags: [media]
       operationId: startBlobUploads
-      summary: Start N blob uploads — reserve sessions + presign one PUT per chunk.
+      summary: Start N blob uploads — reserve sessions + presign the first window of PUTs.
       description: >
         For each requested blob the client declares its `chunkCount`, total `byteSize`, and the `wrappedBlobKey`
-        (`K_blob` under `K_mem`). The server opens an upload session and returns, per item, an `uploadId` plus
-        one short-TTL presigned **PUT** URL per chunk — or a per-item error. The caller then PUTs each
-        ciphertext chunk **directly to the object store** and calls `media-batch` to complete + attach. The
-        in-memory store cannot presign and answers `store_unavailable`.
+        (`K_blob` under `K_mem`). The server opens an upload session **bound to the caller** and returns, per
+        item, an `uploadId` plus short-TTL presigned **PUT** URLs for the blob's **first window** of chunks (the
+        server's `veyq.blob.presign-window`, default 64 chunks) — or a per-item error. The caller PUTs each
+        ciphertext chunk **directly to the object store**, asks `blob-upload-windows` for each next window (and to
+        re-sign one whose URLs expired), and calls `media-batch` to complete + attach. The in-memory store cannot
+        presign and answers `store_unavailable`.
       security:
         - bearerAuth: []
       parameters:
@@ -82,6 +84,54 @@ paths:
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/scopes/{scopeId}/blob-upload-windows:
+    post:
+      tags: [media]
+      operationId: presignBlobUploadWindows
+      summary: Presign the next window of PUTs for N open upload sessions.
+      description: >
+        For each item the server resolves the upload session `uploadId` and returns presigned **PUT** URLs for its
+        chunks `[fromChunk, min(fromChunk + window, chunkCount))`, each signed for its chunk's exact
+        `Content-Length` — the same URLs `startBlobUploads` would have issued, under a fresh TTL. The client asks
+        for each next window as it goes, and re-signs from the first chunk it has not sent when a window's URLs
+        expired ([ADR 0013 §2](../../docs/decisions/0013-blob-storage-presigned-direct-to-store.md#2-presigned-direct-to-store-is-the-only-transport-no-proxied-fallback)).
+        Every request is **authorized again** like `startBlobUploads` (a removed member is refused at the next
+        window), and a session resolves only for **the account that opened it**; each window marks the session
+        live for the stale-session reclaim.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ScopeId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BlobUploadWindowsRequest" }
+            example:
+              items:
+                - uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  fromChunk: 64
+      responses:
+        "200":
+          description: Per-item window results (success carries the presigned PUTs; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BlobUploadWindowsResponse" }
+        "400":
+          description: Malformed request (missing/invalid fields).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: No such scope, or the caller is not an accepted member of it (indistinguishable, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/scopes/{scopeId}/media-batch:
     post:
@@ -827,13 +877,74 @@ components:
         presignedPuts:
           type: [array, "null"]
           description: >
-            One presigned PUT URL per chunk, in chunk order. Each is signed for its chunk's exact `Content-Length`
-            (full frames, then the remainder), so the store refuses a body of any other length.
+            Presigned PUT URLs for the blob's **first window** of chunks only (chunks `0` to `min(window,
+            chunkCount) - 1`, in chunk order); every later chunk is signed by `presignBlobUploadWindows`. Each is
+            signed for its chunk's exact `Content-Length` (full frames, then the remainder), so the store refuses a
+            body of any other length.
           items: { $ref: "#/components/schemas/PresignedUrl" }
         error:
           x-veyq-visibility: public
           type: [string, "null"]
           description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows — a client bug, not a large file, `store_unavailable`); null on success.
+          maxLength: 64
+          example: null
+
+    # --- next upload window --------------------------------------------------
+    BlobUploadWindowsRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/BlobUploadWindowRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
+
+    BlobUploadWindowRequestItem:
+      type: object
+      required: [uploadId, fromChunk]
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The open upload session, as `startBlobUploads` returned it.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        fromChunk:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The first chunk index (0-based) of the window to sign; it must lie inside the blob.
+          minimum: 0
+          example: 64
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+
+    BlobUploadWindowsResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/BlobUploadWindowResultItem" }
+
+    BlobUploadWindowResultItem:
+      type: object
+      description: One per request item, in order. Success carries `presignedPuts`; failure carries `error`.
+      properties:
+        presignedPuts:
+          type: [array, "null"]
+          description: >
+            Presigned PUT URLs for chunks `fromChunk` to `min(fromChunk + window, chunkCount) - 1`, in chunk order,
+            each signed for its chunk's exact `Content-Length`.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Per-item error code; null on success. `upload_not_found` = no such session, it is no longer open, or
+            the caller did not open it — one code for all three, so a probe learns nothing. `range_invalid` =
+            `fromChunk` lies outside the blob. `store_unavailable` = the configured store cannot presign.
           maxLength: 64
           example: null
 
