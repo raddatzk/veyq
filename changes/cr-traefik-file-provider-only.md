@@ -1,7 +1,7 @@
 ---
 id: cr-traefik-file-provider-only
 title: Traefik runs the file provider only — the ingress sink renders all of compose's routing
-status: planned
+status: done
 satisfies: [uc.admin.tenant-reachability]
 adrs: ["0063", "0065", "0071"]
 invariants: [self-hostable by default]
@@ -67,7 +67,7 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
 
 ## Phases
 
-- [ ] 1 backend — `TraefikFileIngressSink` renders the complete file:
+- [x] 1 backend — `TraefikFileIngressSink` renders the complete file:
       - **Services** `veyq-app`, `veyq-blobs` (with `passHostHeader: true`, which ADR 0013 §4 needs) and
         `veyq-admin`, at upstream URLs from configuration. New `veyq.tenant.ingress.*` properties with the
         compose topology as defaults (`http://app:8080`, `http://garage:3900`, `http://admin:8080`), declared
@@ -100,7 +100,7 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
       **Bite it:** re-add the old exclusion-only behaviour, so the bootstrap pair is absent, and see the
       no-row test go red.
       · Done when: `./gradlew check` green.
-- [ ] 2 infra, production — `infra/docker-compose.prod.yml`:
+- [x] 2 infra, production — `infra/docker-compose.prod.yml`:
       - delete every `traefik.*` and `veyq.stack` label, `--providers.docker*`, and the socket mount;
       - pass the admin domain and upstreams to `app` as environment;
       - Traefik keeps `--providers.file.directory` + `watch` and the volume stays `:ro`.
@@ -123,7 +123,7 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
       **Machine hint, holds for this CR's shape:** a live `up` needs the app image. `docker build` can stall on
       this Mac's keychain credential helper (see local memory). Only `traefik:v3.6`, `mariadb:11.4` and
       `dxflrs/garage:v2.0.0` are cached here.
-- [ ] 3 infra, dev — `infra/docker-compose.yml`'s `s3`-profile Traefik also drops the Docker provider and the
+- [x] 3 infra, dev — `infra/docker-compose.yml`'s `s3`-profile Traefik also drops the Docker provider and the
       socket. The dev app runs in the IDE and projects nothing (the sink is disabled without a path), so the dev
       blob route becomes a small static file in a bind-mounted directory next to the compose file. No watch is
       needed there. Keep it representative: same router shape as the sink's blobs router, entrypoint `web`.
@@ -131,7 +131,7 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
       must be empty.
       · Done when: `curl -sI http://localhost:18080/veyq/` reaches Garage: an S3 error body from Garage, not
         Traefik's 404.
-- [ ] 4 docs — text that still says the bootstrap route is labels:
+- [x] 4 docs — text that still says the bootstrap route is labels:
       - `infra/README.md` §§ on the proxy (`grep -n -i -E 'provider|veyq\.stack|label' infra/README.md`);
       - the chart comment at `charts/veyq/templates/app-ingress.yaml:1`;
       - the `docs/coverage/features/admin/use-cases/uc.admin.tenant-reachability.yaml` criterion
@@ -157,3 +157,24 @@ first half. The container hardening that this unblocks is `cr-runtime-hardening-
 exercised here.
 
 ## Retrospective
+
+- **Planning — the CR predicted which branch survives from the old render's shape.** It said the empty-projection
+  branch "now fires only when no bootstrap domain is configured"; with the services and the store middleware
+  rendered unconditionally, `http:` is never empty any more, and the trap moved one level down to `routers:`,
+  which is empty exactly when no bootstrap domain is configured and no tenant routes. `TenantIngressEmptyProjectionTest`
+  was **kept** (the state is reachable: a mistyped `VEYQ_DOMAIN`) and reshaped onto `routers:`; ADR 0063's bullet
+  says so. Next time: a CR that changes what a render always emits re-derives which conditional sections remain.
+- **Planning — two of the four named tests could not be written in the form stated.** "The bootstrap pair with no
+  tenant row at all" is a state the shared `%test` H2 cannot reach (the sink's own KDoc already said so), so it
+  runs `render(emptyList())` on the **injected** sink (`ClientProxy.unwrap`) to keep the producer wiring under
+  test. "No service URL names the admin-listener port" is vacuous under `%test`, which binds that listener to
+  port 0; the test reads the production port off `AdminChannel.port()`'s `@WithDefault`. All three bites
+  (bootstrap pair absent, projector filter removed, app upstream on 8090) went red on the named tests only.
+- **Execution — a probe and a teardown shared one command.** After the live `up` had been read through Traefik's
+  API, a bonus request through the proxy died on zsh not word-splitting a `$VAR` of curl flags — and the same
+  command had already run `down -v`. The DoD's readout stood, the probe was lost. Next time: a destructive
+  teardown gets its own call, after the probe's output has been read.
+- **Process — what worked:** both live steps that touch shared state were asked for once, up front, with the
+  exact blast radius; the dev route file was proven first on a throwaway second Traefik in `infra_default`, so
+  the user's `veyq-traefik` is recreated exactly once, from the main checkout after the merge.
+
