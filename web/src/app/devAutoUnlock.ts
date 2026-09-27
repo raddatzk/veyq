@@ -18,10 +18,10 @@ import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { enrolDeviceKey, isRememberSupported } from '../features/account/rememberMe/deviceKeyWrap'
 import { masterKey, vaultState } from './vault'
+import { DEV_AUTOLOGIN_FLAG as OPT_IN_FLAG } from './convenienceTiers'
 
 // The sentinel the dist-backdoor guard greps for — keep this literal in sync with the guard's SENTINELS.
 const DEV_AUTOUNLOCK_MARKER = 'VEYQ_DEV_AUTOUNLOCK'
-const OPT_IN_FLAG = 'veyq.dev-autologin'
 
 /** Fire the dev auto-unlock when opted-in and still locked. Best-effort — any failure is logged, never thrown. */
 async function runDevAutoUnlock(): Promise<void> {

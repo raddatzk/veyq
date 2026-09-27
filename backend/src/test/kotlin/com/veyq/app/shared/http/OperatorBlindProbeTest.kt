@@ -141,7 +141,7 @@ class OperatorBlindProbeTest {
         "setMemberRole" to Probe(Address.SCOPE) { s -> Call("PATCH", "/api/scopes/${s.scopeId}/members/$someId", """{"role":"OWNER"}""") },
         "removeMember" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/members/$someId") },
         "listScopeEpochs" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/epochs") },
-        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"wrappedPrev":"$B64","grants":[]}""") },
+        "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[]}""") },
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
         "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0}""") },

@@ -8,7 +8,8 @@ import Checkbox from 'primevue/checkbox'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import { login, logout } from '../features/account/login/login'
+import { login } from '../features/account/login/login'
+import { signOut, takeSignOutNotice, type SignOutNotice } from '../features/account/login/signOut'
 import { unlockMasterKey, unlockWithDevice } from '../features/account/unlock/unlock'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 import { trustThisDevice, untrustThisDevice, isTrusted } from '../features/account/trustDevice/trustDevice'
@@ -27,6 +28,7 @@ import { rememberThisDeviceWrap } from '../features/account/deviceRegister'
 import LockedSignOut from '../features/account/sessions/LockedSignOut.vue'
 import { deviceId, guessDeviceLabel } from '../features/account/deviceIdentity'
 import { vaultState, masterKey } from '../app/vault'
+import { session } from '../app/session'
 import { takeAuthPrefill } from '../app/authPrefill'
 import { takeRoute } from '../app/pendingRoute'
 
@@ -51,8 +53,10 @@ const error = ref('')
 // front and only HIDE it once we positively confirm the entered email is trusted on this device. Resolved
 // against the local trust record on mount + when the email changes.
 const needsSecretKey = ref(true)
-// Login already succeeded for the current inputs → a Secret-Key retry must re-unlock, not re-login.
-const sessionReady = ref(false)
+// Login already succeeded for the current inputs → a Secret-Key retry must re-unlock, not re-login. Seeded from a
+// session boot restored without unlocking — e.g. the document a sign-out that never reached the server loads
+// (uc.account.sign-out E4): the refresh cookie is still live, and this card's sign-out is then the retry.
+const sessionReady = ref(session.accessToken !== null)
 // The single per-device choice. Drives the login cookie (on → persistent) AND which convenience wrap is
 // auto-enrolled. Only offered where IndexedDB + WebCrypto exist (a wrap can't otherwise be persisted).
 const remember = ref(false)
@@ -68,11 +72,13 @@ const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_
 const lockedEntry = ref(false)
 // Set by that entry and by its way back: this device persists NOTHING at any tier — no convenience wrap, no
 // session vault. Without it the way-back unlock would end in `enrolConvenienceWrap()` and hand a foreign machine
-// a saved key, which is the exact asset the flow protects. Cleared only by a completed sign-out here, which is
-// what puts the "this is my new laptop after all" case one ordinary sign-in away from the normal behaviour.
+// a saved key, which is the exact asset the flow protects. Cleared only by a sign-out, whose new document starts
+// this screen afresh — which is what puts the "this is my new laptop after all" case one ordinary sign-in away
+// from the normal behaviour.
 const noPersist = ref(false)
-// The confirmation the locked state leaves standing after it hands the screen back.
+// What the last sign-out in this tab left for this screen to say (see `showSignOutNotice`).
 const notice = ref('')
+const warning = ref('')
 // uc.account.onboard-device — the handle of a pairing channel this device just scanned. Non-empty means the
 // join card has replaced the form (routeless, like the locked state above it): this device is being let in from
 // one that is already signed in, so it has no email, no password and no Secret Key to type here.
@@ -188,6 +194,7 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
 async function submit() {
   error.value = ''
   notice.value = ''
+  warning.value = ''
   await runSubmit()
 }
 
@@ -219,21 +226,17 @@ const { run: runLockedEntry, pending: enteringLocked } = useAsyncAction(
 async function enterLocked() {
   error.value = ''
   notice.value = ''
+  warning.value = ''
   await runLockedEntry()
 }
 
-/** The action ran. The confirmation stands on the form it hands back to — there is nothing left to do there. */
-function onLockedDone(signedOut: boolean) {
-  lockedEntry.value = false
-  // A logout that failed leaves this session live, so `sessionReady` stays true and the form's own sign-out
-  // button (below) is the visible fallback the message points at.
-  sessionReady.value = !signedOut
-  notice.value = signedOut ? t('sessions.lockedDone') : t('sessions.lockedDoneStillHere')
-  if (signedOut) {
-    password.value = ''
-    secretKey.value = ''
-    noPersist.value = false
-  }
+/** A sign-out ends in a new document (uc.account.sign-out), so what it has to say arrives here, read once. A
+ *  sign-out that did not reach the server leaves the refresh cookie live: this card then comes back signed in,
+ *  and its own sign-out button (below) is the fallback both warnings point at. */
+function showSignOutNotice(left: SignOutNotice | null) {
+  if (left === 'everywhere') notice.value = t('sessions.lockedDone')
+  else if (left === 'everywhereUnconfirmed') warning.value = t('sessions.lockedDoneStillHere')
+  else if (left === 'unconfirmed') warning.value = t('login.signOutUnconfirmed')
 }
 
 /** The way back: reveal the Secret-Key field again on the still-live session, persisting nothing. */
@@ -294,18 +297,6 @@ function onJoinCancel() {
   joinHandle.value = ''
 }
 
-async function signOut() {
-  await logout() // revokes the session, drops tokens, and re-locks the vault (centralised in logout)
-  sessionReady.value = false
-  lockedEntry.value = false
-  noPersist.value = false
-  password.value = ''
-  secretKey.value = ''
-  error.value = ''
-  notice.value = ''
-  await resolveDeviceState()
-}
-
 // A different email is a different account. The watcher drops sessionReady on every keystroke (cheap — a
 // re-login is required the moment the email changes, even before blur). The expensive IndexedDB trust lookup
 // that decides whether to show the Secret-Key field is debounced so it runs shortly after the user pauses
@@ -331,6 +322,7 @@ onBeforeUnmount(() => clearTimeout(resolveTimer))
 onMounted(async () => {
   // Setup hands over email + Secret Key once, for the first sign-in. Both pre-fill the (adaptive) screen — the
   // device is fresh, so the Secret-Key field is shown. A returning user has no prefill.
+  showSignOutNotice(takeSignOutNotice())
   const prefill = takeAuthPrefill()
   if (prefill) {
     email.value = prefill.email
@@ -353,7 +345,7 @@ onMounted(async () => {
     <template #content>
       <!-- §E3's locked state: signed in, deliberately not unlocked, one action. It replaces the form rather than
            sitting beside it — every field here would need the Secret Key this person does not have. -->
-      <LockedSignOut v-if="lockedEntry" @done="onLockedDone" @unlock="onLockedUnlock" />
+      <LockedSignOut v-if="lockedEntry" @unlock="onLockedUnlock" />
 
       <!-- uc.account.onboard-device — the device being let in. Same shape as the locked state and for the same
            reason: routeless, replacing the form, because none of these fields applies to a device that is about
@@ -426,6 +418,7 @@ onMounted(async () => {
         />
         <Message v-if="error" severity="error" :closable="false" class="form-message">{{ error }}</Message>
         <Message v-if="notice" severity="success" :closable="false" class="form-message">{{ notice }}</Message>
+        <Message v-if="warning" severity="warn" :closable="false" class="form-message">{{ warning }}</Message>
         <!-- §E3's entry point. `type="button"` is what makes it work at all: the gate on this form is HTML5
              constraint validation, which runs on submit only, so a submit-typed control would be blocked by the
              very `required` Secret-Key field this person cannot fill. Offered exactly where that field is. -->
@@ -474,7 +467,7 @@ onMounted(async () => {
           icon="pi pi-sign-out"
           severity="secondary"
           text
-          @click="signOut"
+          @click="signOut()"
         />
       </form>
 

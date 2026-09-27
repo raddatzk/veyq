@@ -13,16 +13,15 @@
 import * as v1 from '@veyq/crypto/v1'
 import { unlockKekAsync, recoveryKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { accountRotationApi, scopesApi } from '../../../api/client'
+import { accountRotationApi } from '../../../api/client'
 import { withRefresh } from '../../../app/sessionRefresh'
 import { setUnlocked } from '../../../app/vault'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
-import { openScopeById } from '../../spaces/scopes'
+import { commitRotation } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
-import { writeKey, zeroEpochKeys, EPOCH_LINK } from '../../spaces/epochs'
 import { wrapScopeKeyToMember } from '../../spaces/grant'
 
 const ARGON = v1.ARGON
@@ -169,8 +168,9 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: 
  * Mint the next epoch of a scope the caller is alone in and grant it to their **new** identity — the exclusion
  * of their own old identity, performed by the only person who can (uc.account.rotate-keys §6).
  *
- * It is `rotateGroupForRemoval`'s crypto with a one-member directory: chain-link `symWrap(E_{n+1}, E_n)` so the
- * new grant still peels back to everything already written, and wrap `E_{n+1}` forward.
+ * It is `rotateGroupForRemoval`'s crypto with a one-member directory, through the same `commitRotation`: chain-link
+ * `symWrap(E_{n+1}, E_n)` so the new grant still peels back to everything already written, wrap `E_{n+1}` forward,
+ * and state the epoch it creates (a stale answer rebuilds once from a fresh key, ADR 0024 §4).
  *
  * Two details that look like details and are not:
  *
@@ -189,28 +189,13 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: 
  * retry re-runs exactly this step.
  */
 async function rekeyAlone(scopeId: string, identity: v1.Identity): Promise<boolean> {
-  const opened = await openScopeById(scopeId)
-  if (!opened) return false
-  const newKey = v1.randomBytes(32)
   try {
     const members = await listScopeMembers(scopeId)
     if (members.length !== 1) return false
-    const wrappedPrev = b64std(v1.symWrap(newKey, writeKey(opened.epochs), EPOCH_LINK, v1.randomBytes(12)))
     const mine = b64std(v1.serializeIdentityPublic(identity.pub))
-    await withRefresh(() =>
-      scopesApi().rotateScope({
-        scopeId,
-        rotateScopeRequest: {
-          wrappedPrev,
-          grants: [{ userId: members[0].userId, wrappedGrant: wrapScopeKeyToMember(newKey, mine) }],
-        },
-      }),
-    )
+    await commitRotation(scopeId, async (newKey) => [{ userId: members[0].userId, wrappedGrant: wrapScopeKeyToMember(newKey, mine) }])
     return true
   } catch {
     return false
-  } finally {
-    newKey.fill(0)
-    zeroEpochKeys(opened.epochs)
   }
 }

@@ -1,0 +1,24 @@
+# The dev stack's only route: the bucket path, same-origin with whatever host reaches :18080 (ADR 0013 §4).
+# Static, because the dev backend runs in the IDE and projects nothing. It mirrors the blobs router
+# TraefikFileIngressSink renders for every domain in production — prefix not stripped, Host preserved (SigV4 signs
+# host+path+query, so either rewrite breaks every presigned URL), the store-response middleware attached (ADR 0013
+# §6) — minus the Host matcher and TLS, which a local entrypoint has no use for. Change the two together.
+http:
+  routers:
+    veyq-blobs:
+      rule: "PathPrefix(`/veyq`)"
+      priority: 100
+      entryPoints: [web]
+      service: veyq-blobs
+      middlewares: [veyq-blobs-inert]
+  services:
+    veyq-blobs:
+      loadBalancer:
+        passHostHeader: true
+        servers:
+          - url: "http://garage:3900"
+  middlewares:
+    veyq-blobs-inert:
+      headers:
+        contentTypeNosniff: true
+        contentSecurityPolicy: "sandbox; default-src 'none'"

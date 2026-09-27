@@ -52,25 +52,6 @@ services:
       - veyq-garage-meta:/var/lib/garage/meta
       - veyq-garage-data:/var/lib/garage/data
       - veyq-garage-snapshots:/var/lib/garage/snapshots
-    labels:
-      # Same-origin bucket routing, over TLS. The prefix is NOT stripped and the Host header is preserved:
-      # SigV4 signs host+path+query, so either rewrite breaks every presigned URL. The rule is longer than the
-      # app's, and the explicit priority says so rather than relying on Traefik's length heuristic.
-      # `veyq-blobs-inert` marks every store response `nosniff` + a `sandbox` CSP (ADR 0013 §6): the store shares
-      # the app's origin here, so an object must never render as a page on it. The signer already pins the served
-      # type; this holds even for a presign path that forgets to. Every tenant's projected blobs router references
-      # it by this name (`TraefikFileIngressSink`), so renaming it means renaming it there.
-      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
-      - "traefik.enable=true"
-      - "traefik.http.routers.veyq-blobs.rule=Host(`${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}`) && PathPrefix(`/veyq`)"
-      - "traefik.http.routers.veyq-blobs.priority=100"
-      - "traefik.http.routers.veyq-blobs.entrypoints=websecure"
-      - "traefik.http.routers.veyq-blobs.tls.certresolver=letsencrypt"
-      - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
-      - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
-      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentSecurityPolicy=sandbox; default-src 'none'"
-      - "traefik.http.routers.veyq-blobs.middlewares=veyq-blobs-inert"
 
   app:
     image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (infra/README.md, Verifying a release)}
@@ -108,12 +89,17 @@ services:
       # quarkus-app/, and a volume mounted there would be seeded from the image once and never refreshed — an
       # upgrade would silently keep running the first image's jar. See the Dockerfile comment on runtime-jvm.
       VEYQ_SECURITY_CONFIG_SECRET_FILE: /var/lib/veyq/config-secret.key
-      # Tenant ingress projection (ADR 0063). The app regenerates the WHOLE router set for every non-suspended
-      # tenant into this file, and Traefik file-watches the directory — so creating a tenant here makes its
-      # domain route with no compose edit and no restart. The bootstrap domain is EXCLUDED from the projection
-      # because its routers are the static labels below; two routers on one Host makes Traefik drop both.
+      # ALL of this stack's routing (ADR 0063). The app renders one file into the volume Traefik file-watches:
+      # the services below, VEYQ_DOMAIN's routers, every non-suspended tenant's, and the admin router when
+      # ADMIN_DOMAIN is set. Creating a tenant makes its domain route with no compose edit and no restart.
       VEYQ_TENANT_INGRESS_DYNAMIC_CONFIG_PATH: /etc/traefik/dynamic/tenants.yml
       VEYQ_TENANT_INGRESS_BOOTSTRAP_DOMAIN: ${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}
+      VEYQ_TENANT_INGRESS_ADMIN_DOMAIN: ${ADMIN_DOMAIN:-}
+      # This file's topology, which the rendered services point at. The app upstream is its PUBLIC listener,
+      # never the admin listener on 8090 (ADR 0065).
+      VEYQ_TENANT_INGRESS_UPSTREAM_APP: http://app:8080
+      VEYQ_TENANT_INGRESS_UPSTREAM_BLOBS: http://garage:3900
+      VEYQ_TENANT_INGRESS_UPSTREAM_ADMIN: http://admin:8080
     volumes:
       # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
       # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
@@ -134,44 +120,14 @@ services:
       timeout: 5s
       retries: 20
       start_period: 60s
-    labels:
-      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
-      - "traefik.enable=true"
-      - "traefik.http.routers.veyq-app.rule=Host(`${VEYQ_DOMAIN:?set VEYQ_DOMAIN in infra/.env}`)"
-      - "traefik.http.routers.veyq-app.priority=1"
-      - "traefik.http.routers.veyq-app.entrypoints=websecure"
-      - "traefik.http.routers.veyq-app.tls.certresolver=letsencrypt"
-      - "traefik.http.services.veyq-app.loadbalancer.server.port=8080"
 
   # The Server-Owner administration surface (ADR 0065) — its own image, its own origin, and by default not
   # reachable from the internet at all.
   #
-  # TWO EXPOSURE MODES, one image, chosen by whether ADMIN_DOMAIN is set:
-  #
-  #   * unset (the DEFAULT) — no Traefik router at all. The port below binds to 127.0.0.1, so the surface is
-  #     reachable only from the host itself: `ssh -L 8443:127.0.0.1:${ADMIN_PORT} the-host` and browse
-  #     localhost. This is also what makes first-run setup independent of DNS and TLS: `docker compose up -d`
-  #     and `http://localhost:${ADMIN_PORT}` is enough to bootstrap an instance whose VEYQ_DOMAIN does not
-  #     resolve yet. Before this ADR, setup lived in the app SPA served at VEYQ_DOMAIN, so a public hostname
-  #     was a precondition for creating the first account.
-  #   * set — an own-domain router with its own certificate, the same fixed-domain pattern VEYQ_DOMAIN used
-  #     before ADR 0063. The admin surface is 1:1 with the instance, not per-tenant, so it needs none of that
-  #     ADR's dynamic multi-domain machinery.
-  #
-  # The mode switch is `${ADMIN_DOMAIN:+...}`: with ADMIN_DOMAIN unset each router label expands to the empty
-  # string, so no router rule exists and Traefik (which filters on `veyq.stack=prod`) discovers a container it
-  # has no rule for and routes nothing to it. `traefik.enable` is conditional too, so the default mode does not
-  # even advertise itself.
-  #
-  # Measured, so nobody files it as a bug: Compose does NOT drop the empty entries — it collapses them into a
-  # single `"": ""` label, which `docker inspect` shows and which Docker accepts (verified by actually running
-  # a container shaped like this). Traefik only ever reads labels prefixed `traefik.`, so it is inert. The
-  # alternative — a second compose file the operator has to remember to add for own-domain mode — trades a
-  # cosmetic artifact for a way to deploy the wrong exposure by forgetting a `-f`.
-  #
-  # The `veyq.stack=prod` label is UNCONDITIONAL on purpose, in both modes: it is the constraint the proxy
-  # filters on, and a container that carries no stack label at all is one an operator can no longer tell apart
-  # from a stranger's container on the same host.
+  # Two exposure modes, one image, chosen by whether ADMIN_DOMAIN is set. Unset (the DEFAULT): no router at all,
+  # and the port below binds to 127.0.0.1, so the surface is reachable only from the host itself —
+  # `ssh -L 8443:127.0.0.1:${ADMIN_PORT} the-host` and browse localhost. That is also what makes first-run setup
+  # independent of DNS and TLS. Set: the app renders an own-domain router with its own certificate.
   #
   # The port is bound to 127.0.0.1 explicitly — the first `ports:` entry in this file besides Traefik's own.
   # A bare "${ADMIN_PORT}:8080" would publish on 0.0.0.0 and hand the whole internet the highest-privilege
@@ -186,41 +142,24 @@ services:
     environment:
       # Where nginx proxies /api/* — the app's ADMIN LISTENER on the compose network, never the public domain
       # and never its public port 8080, which 404s every Server-Owner operation (ADR 0065). Nothing else in this
-      # file routes to 8090: Traefik's app router pins port 8080 below, and the listener is not EXPOSEd. Resolved
-      # at REQUEST time, so this container starts and stays useful even while the app is still migrating.
+      # file routes to 8090: the rendered app service points at VEYQ_TENANT_INGRESS_UPSTREAM_APP, and the listener
+      # is not EXPOSEd. Resolved at REQUEST time, so this container starts and stays useful even while the app is
+      # still migrating.
       BACKEND_URL: http://app:8090
     ports:
       - "127.0.0.1:${ADMIN_PORT:-8081}:8080"
-    labels:
-      - "veyq.stack=prod"          # the constraint the proxy filters on — see the traefik service
-      - "${ADMIN_DOMAIN:+traefik.enable=true}"
-      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.rule=Host(`${ADMIN_DOMAIN}`)}"
-      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.entrypoints=websecure}"
-      - "${ADMIN_DOMAIN:+traefik.http.routers.veyq-admin.tls.certresolver=letsencrypt}"
-      - "${ADMIN_DOMAIN:+traefik.http.services.veyq-admin.loadbalancer.server.port=8080}"
 
   # TLS is a PRECONDITION here, not a deployment preference. `veyq.session.cookie.secure=true` is the shipped
   # default, so over plain HTTP the refresh cookie is set and never sent back — "remember me" breaks silently.
   # And every invitation link is built as https://<domain>/tenant/accept#<token>, so an HTTP-only instance mails
   # links pointing at a scheme it does not answer.
   traefik:
-    # v3.6, not v3.3: v3.3's docker client cannot negotiate with Docker Engine 29 (API 1.55). It fails with an
-    # EMPTY message — `Failed to retrieve information of the docker client and server host: Error response from
-    # daemon: ` — so the provider never loads a single router and every request 404s while the proxy itself
-    # looks healthy. Measured on this host, where it had also silently broken the dev stack's bucket route.
     image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     restart: unless-stopped
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      # SCOPED to this stack. The docker provider is not project-aware: it discovers EVERY container on the
-      # host, so an internet-facing proxy would otherwise pick up whatever else the machine happens to run —
-      # and two veyq stacks on one host collide outright ("Router defined multiple times with different
-      # configurations", after which Traefik drops the router and serves 404 for both). Measured here.
-      - "--providers.docker.constraints=Label(`veyq.stack`,`prod`)"
-      # The second provider: the app's DB→routing projection (ADR 0063). The docker provider above cannot serve
-      # it — a tenant created at runtime has no container and therefore no label. `watch` is what makes a new
-      # tenant's domain live without restarting anything; the file itself is written by an atomic rename, so a
+      # The ONLY provider: the file the app renders (ADR 0063). No Docker provider, so no Docker socket — a `:ro`
+      # mount of it restricts nothing about the API, and this container faces the internet. `watch` is what makes
+      # a new tenant's domain live without restarting anything; the file is written by an atomic rename, so a
       # reload can never read half of it.
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
@@ -242,7 +181,6 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
       - veyq-acme:/acme
       # Read-only: the projector owns this file, and a proxy that could write it would be a second author of the
       # routing whose edits the next full regenerate silently discards.

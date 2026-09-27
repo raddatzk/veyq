@@ -474,6 +474,15 @@ goes back to the CR that caused it. So a CR refined for a wave **names those gua
 `cr-wrap-methods-survivor-whitelist` said "every `scripts/validate_*.py`", and its session duly ran a second
 `validate_guard_gaps.py` beside a neighbour's while a web test timed out under the load.
 
+**And a clean merge of a wave is not a semantic merge where a CR CLASSIFIES what the server answers.** A
+predicate over statuses or error codes meets a neighbour's new code only in the merged tree, and no text conflict
+points there. `cr-one-sign-out-path` ended a session on any authoritative 4xx; `cr-scope-access-gate`, in the same
+wave, made a suspended tenant's domain answer every `/api` call `403 tenant_suspended` without touching sessions —
+so the merged client would have signed a member out, and called an unrevoked family "reached", for a refusal about
+the tenant. Found only by re-reading the merged predicate. So a CR that classifies responses re-reads that
+classification against the codes the merge brought in (`git diff <before>..main -- contracts/ | grep -i code`)
+before it lands.
+
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
 session that cannot commit is a session holding that rule open across every phase it finishes.
@@ -936,6 +945,14 @@ red for a reason that was not theirs, and the same coupling reddened them again 
 once the fix existed. The fix was structural: the control fires on its **own**, identically seeded space. Where a
 live defect or a bite can let a negative write, give the control a fixture the negative cannot reach.
 
+**A lever that moves a secret out of its scope moves it across the code's own wipe — bite both forms.** In
+`cr-rotation-states-its-epoch` the lever for *"a retry never reuses a key whose wraps already left the device"* was
+*hoist the mint out of the loop*. Hoisted with the per-attempt `finally { newKey.fill(0) }` left in place, the
+retry wraps the wiped, all-zero buffer: a key that differs from the first attempt's and chains consistently, so
+"the two keys differ" and "the link peels" both stayed green over the worst version of the defect. Only the form
+with the wipe moved too reddened them; an assertion that the retry's key is not the zeroed buffer caught both.
+Where an injection changes a value's lifetime, the cleanup that bounded the old lifetime is part of the lever.
+
 ### Each layer of a defence in depth is tested with the other layers held off
 
 **Layers that overlap mask each other's tests, and the mask is the fix working.** `cr-inert-store-responses`
@@ -1141,6 +1158,21 @@ same proof was meant to exercise registers on neither screen. The finding held (
 with zero violations), but on a different screen than the one written down, and the worker went unverified. So a
 done-when that names what the browser should show also names what the instance must hold for it (a seeded
 account, a tenant on the browsed host), or it names the screen a bare instance actually reaches.
+
+**And a lever that simulates a failure must spare what the proof itself needs.** `cr-one-sign-out-path` asked for
+its E4 check "with the network offline" — but the flow ends in a document load, which devtools' offline mode
+refuses too, so the sign-in page the notice is shown on could never have loaded. Stopping the backend (the dev
+proxy then answers 502) fails exactly the calls under test and nothing else. Its other precondition, "a video
+having played", needed a tenant with media on the browsed host; the dev DB had none that day.
+
+### A constraint on a module's imports is measured on what that module must CALL
+
+"The ending imports no feature" (ADR 0070) was a sound rule and an unbuildable instruction as written: the first
+step the ending had to run — drop the convenience tiers — existed only in `features/account/rememberMe/`, whose
+`deviceKeyWrap` imports `withRefresh`, the exact cycle the rule was there to prevent. The implement session had to
+move the tiers' storage names and local drop into `app/convenienceTiers.ts`. So when a CR restricts what a module
+may import, the refine greps the imports of every function that module is told to call, and names the move if one
+is needed.
 
 ### An ADR's cost premise expires separately from its decision — re-measure it at implement time
 

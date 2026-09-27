@@ -128,11 +128,41 @@ interface VeyqConfig {
             fun dynamicConfigPath(): Optional<String>
 
             /**
-             * The deployment-time bootstrap domain (`VEYQ_DOMAIN`), which the compose file already routes with
-             * static labels. The projector **excludes** it, so it never emits a second router for a domain that
-             * already has one — and it is the domain a request that resolves to no tenant is signed against.
+             * The deployment-time bootstrap domain (`VEYQ_DOMAIN`), routable before any tenant row exists. The
+             * Traefik sink renders its router pair from this value on every regenerate; the chart's own
+             * `Ingress` routes it on Kubernetes. Either way the projector drops a tenant row carrying the same
+             * domain, because two routers on one `Host` make Traefik drop both.
              */
             fun bootstrapDomain(): Optional<String>
+
+            /**
+             * The Server-Owner surface's own domain (ADR 0065 § Own domain). Absent — the compose default — the
+             * admin surface is reachable only on its localhost port and the Traefik sink renders no router for
+             * it. Read only by that sink: on Kubernetes the chart routes the admin surface itself.
+             */
+            fun adminDomain(): Optional<String>
+
+            /**
+             * `veyq.tenant.ingress.upstream.*` — where the Traefik sink's services point. The recipe owns the
+             * topology and passes it in; the defaults are the production compose file's service names. None of
+             * them may ever be the backend's admin listener ([AdminChannel.port]): a public router in front of it
+             * would put every Server-Owner operation on the internet (ADR 0065 § admin channel).
+             */
+            fun upstream(): Upstream
+
+            interface Upstream {
+                /** The app's PUBLIC listener. */
+                @WithDefault("http://app:8080")
+                fun app(): String
+
+                /** The store's S3 API — the same-origin blob route's backend (ADR 0013 §4). */
+                @WithDefault("http://garage:3900")
+                fun blobs(): String
+
+                /** The admin container (ADR 0065) — its own nginx, which alone talks to the admin listener. */
+                @WithDefault("http://admin:8080")
+                fun admin(): String
+            }
 
             /** `veyq.tenant.ingress.kubernetes.*` — read only when [sink] is [IngressSinkType.KUBERNETES]. */
             interface Kubernetes {
@@ -153,10 +183,10 @@ interface VeyqConfig {
                 fun ingressClassName(): Optional<String>
 
                 /**
-                 * The `Service` every projected `Ingress` routes to, and its port. An `Ingress` cannot omit a
-                 * backend, and the backend is a deployment-time name the chart owns — so unlike the compose sink,
-                 * which references the compose file's own `veyq-app@docker`, this one has to be told. The
-                 * defaults are the chart's own names; an operator who renames the Service sets these.
+                 * The `Service` every projected `Ingress` routes to, and its port — this sink's counterpart of
+                 * [Upstream.app]. An `Ingress` cannot omit a backend, and the backend is a deployment-time name
+                 * the chart owns. The defaults are the chart's own names; an operator who renames the Service
+                 * sets these.
                  */
                 @WithDefault("veyq-app")
                 fun serviceName(): String

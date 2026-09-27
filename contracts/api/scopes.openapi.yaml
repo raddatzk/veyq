@@ -491,11 +491,14 @@ paths:
       operationId: rotateScope
       summary: Commit a scope-key rotation — a new epoch + re-grants to the remaining members.
       description: >
-        Commits a forward rotation of the scope content key (ADR 0024): bumps the scope's **current epoch** to the
-        next index, stores the chain-link `wrappedPrev` = `symWrap(E_new, E_{prev})`, and applies the `grants`
-        (each remaining member's `wrappedGrant` re-wrapped to the **new** epoch, updating their granted-epoch). The
-        client mints the new epoch on-device; the server stores only ciphertext. Owner-gated (`403`). Grants for
-        members not listed here are delivered afterwards by grant-delivery (stale-epoch reconcile, ADR 0020/0021).
+        Commits a forward rotation of the scope content key (ADR 0024 §4): commits the stated `epoch` **iff** it is
+        the scope's current epoch + 1, stores the chain-link `wrappedPrev` = `symWrap(E_new, E_{prev})` at it, and
+        applies the `grants` (each remaining member's `wrappedGrant` re-wrapped to the **new** epoch, updating their
+        granted-epoch). Any other `epoch` means the rotation was built on a superseded epoch — it lost a race, or the
+        caller's grant lags the scope — and is `409 stale_epoch` with nothing stored; the client re-opens its grant
+        and rebuilds once from a **fresh** key. The client mints the new epoch on-device; the server stores only
+        ciphertext. Owner-gated (`403`). Grants for members not listed here are delivered afterwards by
+        grant-delivery (stale-epoch reconcile, ADR 0020/0021).
       security:
         - bearerAuth: []
       parameters:
@@ -506,6 +509,7 @@ paths:
           application/json:
             schema: { $ref: "#/components/schemas/RotateScopeRequest" }
             example:
+              epoch: 1
               wrappedPrev: AQ==
               grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ== }]
       responses:
@@ -519,7 +523,7 @@ paths:
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
 
   /api/scopes/{scopeId}:
     delete:
@@ -987,8 +991,19 @@ components:
 
     RotateScopeRequest:
       type: object
-      required: [wrappedPrev, grants]
+      required: [epoch, wrappedPrev, grants]
       properties:
+        epoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The epoch this rotation creates — the caller's own granted epoch + 1, since `wrappedPrev` wraps that
+            grant's key. The server commits it only if it is the scope's **current** epoch + 1 (else
+            `409 stale_epoch`, nothing stored), so a link can never chain to a key that is not its predecessor
+            (ADR 0024 §4). Mirrors `ScopeRotated.epoch`.
+          minimum: 1
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(1)'
         wrappedPrev:
           type: string
           description: >

@@ -116,7 +116,7 @@ acceptanceCriteria:
         unit:
           - S3BlobStorePresigningTest.everyPresignedGetSignsTheInertResponseOverrides
           - S3BlobStorePresigningTest.everyPresignedPutSignsTheContentTypeHeader
-        integration: [TenantIngressProjectorTest.aTenantsBlobsRouterMarksStoreResponsesInert]
+        integration: [TenantIngressProjectorTest.everyBlobsRouterMarksStoreResponsesInert]
       web:
         unit: [src/features/memory/media.test.ts]
     gaps:
@@ -126,8 +126,8 @@ acceptanceCriteria:
           `attachment` (a planted `text/html` object included), a GET with its override stripped refused — is
           measured only by `BlobBatchE2ETest`, which needs a real Garage and runs when `VEYQ_S3_E2E=1`. No CI job
           sets it, so it makes no coverage claim (ADR 0040) and is named here instead. The unit refs prove what is
-          SIGNED; that the store honours it is that opt-in run's evidence. The compose labels themselves are
-          measured by hand through the dev Traefik, not by any test.
+          SIGNED; that the store honours it is that opt-in run's evidence. That Traefik applies the rendered
+          middleware is measured by hand through a live proxy, not by any test.
   - id: declared-shape-follows-from-size
     text: >-
       The declared shape of a blob follows from its size (ADR 0013 §3) — the frame size is the crypto vectors'

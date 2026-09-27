@@ -318,6 +318,84 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
   })
 })
 
+describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotation states the epoch it creates)', () => {
+  const stale = () => ({ response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }) })
+
+  /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. */
+  function holdGroupAt(grantedEpoch: number, rotate: ReturnType<typeof vi.fn>, list = vi.fn()): Uint8Array[] {
+    const keys = Array.from({ length: grantedEpoch + 1 }, () => v1.randomBytes(32))
+    const links = keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: b64std(v1.symWrap(k, keys[i], 'scope-epoch', v1.randomBytes(12))) }))
+    const grant = b64std(v1.asymWrap(v1.hybridPublic(copyPriv()), keys[grantedEpoch], 'scope-grant', { nonce: v1.randomBytes(12) }))
+    list.mockResolvedValue([{ id: 'g1', kind: 'GROUP', tenantId: 't', wrappedGrant: grant, grantedEpoch }])
+    vi.mocked(scopesApi).mockReturnValue({
+      listMyScopes: list, listScopeEpochs: vi.fn().mockResolvedValue(links), rotateScope: rotate,
+    } as unknown as ReturnType<typeof scopesApi>)
+    return keys
+  }
+
+  /** The caller re-grants itself, so every payload's own grant opens to that attempt's new epoch key. */
+  const self: ScopeMember[] = [{ userId: 'me', username: 'me', role: 'OWNER', identityPublicKey: b64std(v1.serializeIdentityPublic(ID.pub)), hasGrant: true }]
+  const newKeyOf = (call: unknown[]) => {
+    const { grants } = (call[0] as { rotateScopeRequest: { grants: { wrappedGrant: string }[] } }).rotateScopeRequest
+    return Array.from(v1.asymUnwrap(v1.hybridSecret(ID.priv), v1.hybridPublic(ID.priv), fromB64std(grants[0].wrappedGrant), 'scope-grant'))
+  }
+
+  it('states the epoch it creates: the caller\'s own granted epoch + 1', async () => {
+    const rotate = vi.fn().mockResolvedValue({ epoch: 3 })
+    holdGroupAt(2, rotate)
+
+    await rotateGroupForRemoval('g1', self)
+
+    expect(rotate).toHaveBeenCalledTimes(1)
+    expect(rotate.mock.calls[0][0].rotateScopeRequest.epoch).toBe(3)
+  })
+
+  it('on a first 409 stale_epoch re-opens its grant and commits again, from a FRESH key', async () => {
+    // Another rotation committed epoch 1 first and re-granted us: the re-open finds grant 1, so the retry states 2.
+    const rotate = vi.fn()
+    holdGroupAt(0, rotate)
+    let reopened: Uint8Array[] = []
+    rotate
+      .mockImplementationOnce(async () => {
+        reopened = holdGroupAt(1, rotate) // the winner's re-grant, visible to our re-open
+        throw stale()
+      })
+      .mockResolvedValueOnce({ epoch: 2 })
+
+    expect(await rotateGroupForRemoval('g1', self)).toBe(2)
+
+    expect(rotate).toHaveBeenCalledTimes(2)
+    expect(rotate.mock.calls.map((c) => c[0].rotateScopeRequest.epoch)).toEqual([1, 2])
+    // The refused attempt's wraps already left the device: the retry must not reuse its key.
+    expect(newKeyOf(rotate.mock.calls[1])).not.toEqual(newKeyOf(rotate.mock.calls[0]))
+    // Nor its buffer: a mint hoisted out of the attempt is wiped by the first attempt's `finally`, so the retry would
+    // wrap an all-zero key — different from the first, and still self-consistent, so only this line catches it.
+    expect(newKeyOf(rotate.mock.calls[1]).some((b) => b !== 0)).toBe(true)
+    // And the retry is built on the re-opened grant: its link peels, under its own new key, to E_1.
+    const retry = rotate.mock.calls[1][0].rotateScopeRequest
+    const peeled = v1.symUnwrap(Uint8Array.from(newKeyOf(rotate.mock.calls[1])), fromB64std(retry.wrappedPrev), 'scope-epoch')
+    expect(Array.from(peeled)).toEqual(Array.from(reopened[1]))
+  })
+
+  it('throws after exactly two commits when the second answer is still stale (our grant lags)', async () => {
+    const second = stale()
+    const rotate = vi.fn().mockRejectedValueOnce(stale()).mockRejectedValueOnce(second)
+    holdGroupAt(0, rotate)
+
+    await expect(rotateGroupForRemoval('g1', self)).rejects.toBe(second)
+    expect(rotate).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry a non-stale failure (e.g. 403) — it propagates after one commit', async () => {
+    const forbidden = { response: new Response(JSON.stringify({ code: 'not_scope_owner' }), { status: 403 }) }
+    const rotate = vi.fn().mockRejectedValue(forbidden)
+    holdGroupAt(0, rotate)
+
+    await expect(rotateGroupForRemoval('g1', self)).rejects.toBe(forbidden)
+    expect(rotate).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', () => {
   function mockGroupForRename(rename: ReturnType<typeof vi.fn>, currentEpoch = 0, grantedEpoch = 0) {
     const key = v1.randomBytes(32) // E_grantedEpoch = the write key the caller holds

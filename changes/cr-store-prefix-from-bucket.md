@@ -96,10 +96,11 @@ Inbox #151.
       - **The literals that cannot read the setting.** Each becomes `blobs`, and its comment says the value is the
         backend's default:
         - the proxy key in `web/vite.config.ts`;
-        - the dev route file from `cr-traefik-file-provider-only` phase 3, with the trailing slash;
+        - the dev route file from `cr-traefik-file-provider-only` phase 3, `infra/traefik-dev/blobs.yml` (landed), with
+          the trailing slash;
         - the `/veyq` comments in `backend/src/main/resources/application-dev.properties`,
           `application-e2e.properties`, `.run/Run Backend.run.xml` and `infra/docker-compose.yml`
-          (`grep -rn '/veyq' backend/src/main/resources .run infra/docker-compose.yml web/vite.config.ts`).
+          (`grep -rn '/veyq' backend/src/main/resources .run infra/docker-compose.yml infra/traefik-dev web/vite.config.ts`).
 
         No guard: a mismatch breaks dev media on the first page load.
       - **The scripts:** `scripts/run_web_e2e.py`'s `STORE_BUCKET` and its fallbacks, and

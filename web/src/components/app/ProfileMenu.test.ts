@@ -4,11 +4,13 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock('../../features/account/login/signOut', () => ({ signOut: vi.fn() }))
 
 import { mount } from '@vue/test-utils'
 import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import ProfileMenu from './ProfileMenu.vue'
+import { signOut } from '../../features/account/login/signOut'
 import { useThemeState, setThemePreference } from '../../shared/state/useThemeState'
 import { localePreference, setLocalePreference } from '../../i18n'
 
@@ -136,5 +138,16 @@ describe('the shell offers exactly one door into the settings hub', () => {
       .filter((f) => DOOR.test(readFileSync(f, 'utf8')))
       .map((f) => relative(SRC, f))
     expect(doors).toEqual(['components/app/ProfileMenu.vue'])
+  })
+})
+
+describe('ProfileMenu sign-out (uc.account.sign-out)', () => {
+  it('runs the one sign-out sequence — the menu is one of its five entry points, not a copy of it', async () => {
+    const w = mountMenu()
+    const item = w.findAll('.menu-item').find((b) => b.text() === 'Sign out')!
+
+    await item.trigger('click')
+
+    expect(signOut).toHaveBeenCalledExactlyOnceWith()
   })
 })
