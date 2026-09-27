@@ -53,7 +53,12 @@ RUN npm run build && npm run build:cli
 # /etc/nginx/conf.d writable by 101 — which is all the entrypoint hook below needs, measured before switching.
 # Under compose nothing changes except the container-side port; scripts/validate_images_run_unprivileged.py
 # holds every runtime stage in this repository to this.
-FROM nginxinc/nginx-unprivileged:1.29-alpine@sha256:0c79d56aee561a1d81c63f00eee5fb5fe29279560cdc55e91425133104c7fbe6 AS runtime-nginx
+#
+# The minor is nginx's current STABLE branch (even minor), and it moves when nginx cuts the next one. Not the
+# mainline branch (odd minor): the tag of a mainline minor stops receiving builds once the next mainline opens
+# (1.29-alpine was last pushed 2026-05-11). admin-web/nginx.conf.template needs
+# `add_header_inherit` (nginx 1.29.3+), so the floor is 1.30. The digest is the tag's multi-arch index (ADR 0057 §6).
+FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:4714e0b1b2577eaa1a6131d07c958b67f0eb68e6d0521e90c6e5287db8cf0bc5 AS runtime-nginx
 # The base ends on `USER 101`, and `apk add` as 101 fails (measured) — so root for the build steps, and back
 # to 101 at the very end of this stage. BOTH switches are load-bearing: without the first the build dies on
 # its first RUN, without the second the image silently runs as root again, with a green build on top.

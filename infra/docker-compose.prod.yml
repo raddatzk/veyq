@@ -212,6 +212,9 @@ services:
       # is not EXPOSEd. Resolved at REQUEST time, so this container starts and stays useful even while the app is
       # still migrating.
       BACKEND_URL: http://app:8090
+      # The deployment's HSTS switch, the same key and default as the app's above — one value for both origins
+      # (docs/crosscutting/cc.security.csp.md § admin-web). The image's entrypoint refuses anything but true/false.
+      VEYQ_HSTS_ENABLED: ${VEYQ_HSTS_ENABLED:-true}
     ports:
       - "127.0.0.1:${ADMIN_PORT:-8081}:8080"
 
