@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
+  tenantsApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
   sessionApi: vi.fn(),
@@ -21,12 +22,13 @@ vi.mock('../account/identityPins', () => ({
 
 import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon } from './scopes'
 import { ScopeKind, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
-import { scopesApi } from '../../api/client'
+import { scopesApi, tenantsApi, accountApi } from '../../api/client'
 import { checkAndPin } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
 import { epochLinkContext } from './epochs'
 import { deriveGroupNameKey, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon } from './spaceIcon'
+import { grantSignatureVerifies, signGrant, tagAdmission, admissionVerifies } from './grant'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -34,6 +36,24 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 // the copy it receives), while we keep this master to verify the grants it produces.
 const ID = v1.generateIdentity()
 const copyPriv = () => ({ kemX: ID.priv.kemX.slice(), mlkemSeed: ID.priv.mlkemSeed.slice(), sign: ID.priv.sign.slice() })
+const ID_PUB = b64std(v1.serializeIdentityPublic(ID.pub))
+/** The caller's account id, as its own key material names it. */
+const ME = '0e000000-0000-4000-8000-0000000000e0'
+const pubOf = (id: v1.Identity) => b64std(v1.serializeIdentityPublic(id.pub))
+
+type Row = { id: string; kind: string; wrappedGrant: string; grantedEpoch?: number; [k: string]: unknown }
+/** A row as the server serves the caller's grant: signed by `granter` (the caller itself by default) over exactly
+ *  this grant — its scope, kind and epoch, the caller as recipient (ADR 0028 Decision 6). */
+type Signed = { granterUserId: string; grantSignature: string; granterIdentityPublicKey: string }
+function signed<R extends Row>(row: R, granter: { userId: string; identity: v1.Identity } = { userId: ME, identity: ID }): R & Signed {
+  const scope = { scopeId: row.id, kind: row.kind as v1.ScopeKind, epoch: row.grantedEpoch ?? 0 }
+  return {
+    ...row,
+    granterUserId: granter.userId,
+    grantSignature: signGrant(granter.identity.priv.sign, scope, { userId: ME, identityPublicKeyB64: ID_PUB }, row.wrappedGrant),
+    granterIdentityPublicKey: pubOf(granter.identity),
+  }
+}
 
 // Canonical scope ids — every grant, group name, icon and chain link is sealed bound to its scope (ADR 0072).
 const T = '5c09e000-0000-4000-8000-000000000e01'
@@ -65,13 +85,14 @@ function mockScopes(list: ReturnType<typeof vi.fn>, create: ReturnType<typeof vi
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
+  vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial: vi.fn().mockResolvedValue({ userId: ME }) } as unknown as ReturnType<typeof accountApi>)
   // Default: every contact is new/unchanged → the rotation re-grants them (TOFU). Overridden per test.
   vi.mocked(checkAndPin).mockResolvedValue('firstUse')
 })
 
 describe('ensurePersonalScope', () => {
   it('births a personal scope (operator-blind grant that opens back to a 32-byte key) when none exists', async () => {
-    const list = vi.fn().mockResolvedValue([{ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }])
+    const list = vi.fn().mockResolvedValue([signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' })])
     const create = vi.fn().mockResolvedValue({ scopeId: 's', kind: 'PERSONAL' })
     mockScopes(list, create)
 
@@ -86,7 +107,7 @@ describe('ensurePersonalScope', () => {
   })
 
   it('is a no-op when a personal scope already exists', async () => {
-    const list = vi.fn().mockResolvedValue([{ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' }])
+    const list = vi.fn().mockResolvedValue([signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' })])
     const create = vi.fn()
     mockScopes(list, create)
 
@@ -100,8 +121,8 @@ describe('openPersonalScope', () => {
     const scopeKey = v1.randomBytes(32)
     const grant = ownGrant(P, scopeKey, 0)
     const list = vi.fn().mockResolvedValue([
-      { id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' },
-      { id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: grant, grantedEpoch: 0 },
+      signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }),
+      signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: grant, grantedEpoch: 0 }),
     ])
     mockScopes(list, vi.fn())
 
@@ -111,7 +132,7 @@ describe('openPersonalScope', () => {
   })
 
   it('returns null when there is no personal scope', async () => {
-    mockScopes(vi.fn().mockResolvedValue([{ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }]), vi.fn())
+    mockScopes(vi.fn().mockResolvedValue([signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' })]), vi.fn())
     expect(await openPersonalScope()).toBeNull()
   })
 })
@@ -121,8 +142,8 @@ describe('openScope', () => {
     const scopeKey = v1.randomBytes(32)
     const grant = ownGrant(TN, scopeKey, 0)
     const list = vi.fn().mockResolvedValue([
-      { id: TN, kind: 'TENANT', tenantId: 't', wrappedGrant: grant, grantedEpoch: 0 },
-      { id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' },
+      signed({ id: TN, kind: 'TENANT', tenantId: 't', wrappedGrant: grant, grantedEpoch: 0 }),
+      signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' }),
     ])
     const create = vi.fn()
     mockScopes(list, create)
@@ -137,14 +158,14 @@ describe('openScope', () => {
   })
 
   it('returns null when the caller holds no scope of that kind (→ the shell falls back to Personal)', async () => {
-    mockScopes(vi.fn().mockResolvedValue([{ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' }]), vi.fn())
+    mockScopes(vi.fn().mockResolvedValue([signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: 'AQ==' })]), vi.fn())
     expect(await openScope(ScopeKind.Tenant)).toBeNull()
   })
 })
 
 describe('createGroup', () => {
   it('posts a self-grant + a name sealed under K_name_0 derived from the birth K_SC (operator-blind — only ciphertext leaves)', async () => {
-    const list = vi.fn().mockResolvedValue([{ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }])
+    const list = vi.fn().mockResolvedValue([signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' })])
     const createGroupFn = vi.fn().mockResolvedValue({ scopeId: G1, kind: 'GROUP' })
     mockScopes(list, vi.fn(), createGroupFn)
 
@@ -169,8 +190,8 @@ describe('listMyGroups', () => {
     const grant = ownGrant(G1, key, 0)
     const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew') // sealed under K_name_0
     const list = vi.fn().mockResolvedValue([
-      { id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' },
-      { id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 },
+      signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }),
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 }),
     ])
     mockScopes(list, vi.fn())
 
@@ -188,7 +209,7 @@ describe('listMyGroups', () => {
     const sealedIcon = sealIcon(deriveSpaceIconKey(e0), { scopeId: G1, iconEpoch: 0 }, image) // K_icon of E_0, iconEpoch 0
     const encryptedName = sealGroupName(deriveGroupNameKey(e0), G1, 0, 'Alte Crew') // name also at epoch 0
     const list = vi.fn().mockResolvedValue([
-      { id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, encryptedName, nameEpoch: 0, grantedEpoch: 1, iconEpoch: 0, sealedIcon },
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, encryptedName, nameEpoch: 0, grantedEpoch: 1, iconEpoch: 0, sealedIcon }),
     ])
     const epochs = vi.fn().mockResolvedValue([{ epoch: 1, wrappedPrev }])
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, listScopeEpochs: epochs } as unknown as ReturnType<typeof scopesApi>)
@@ -210,8 +231,8 @@ describe('openGroupIcon (the settings-panel single-scope read)', () => {
     const image = new Uint8Array([1, 2, 3, 4, 5])
     const sealedIcon = sealIcon(deriveSpaceIconKey(e0), { scopeId: G1, iconEpoch: 0 }, image)
     const list = vi.fn().mockResolvedValue([
-      { id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 0, grantedEpoch: 1, iconEpoch: 0, sealedIcon },
-      { id: G2, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, nameEpoch: 0, grantedEpoch: 0 }, // no icon
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant1, nameEpoch: 0, grantedEpoch: 1, iconEpoch: 0, sealedIcon }),
+      signed({ id: G2, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, nameEpoch: 0, grantedEpoch: 0 }), // no icon
     ])
     const epochs = vi.fn().mockResolvedValue([{ epoch: 1, wrappedPrev }])
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, listScopeEpochs: epochs } as unknown as ReturnType<typeof scopesApi>)
@@ -228,7 +249,7 @@ describe('openScopeById', () => {
     const grant = ownGrant(G1, key, 0)
     const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew')
     const list = vi.fn().mockResolvedValue([
-      { id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 },
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName, nameEpoch: 0, grantedEpoch: 0 }),
     ])
     mockScopes(list, vi.fn())
 
@@ -240,7 +261,7 @@ describe('openScopeById', () => {
   })
 
   it('returns null when the caller holds no scope with that id', async () => {
-    mockScopes(vi.fn().mockResolvedValue([{ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' }]), vi.fn())
+    mockScopes(vi.fn().mockResolvedValue([signed({ id: T, kind: 'TENANT', tenantId: 't', wrappedGrant: 'AQ==' })]), vi.fn())
     expect(await openScopeById('missing')).toBeNull()
   })
 })
@@ -249,7 +270,7 @@ describe('openGroupByToken (cr-0120 — resolve a group from its `#@<slug|id>` f
   const groupRow = (id: string, name: string) => {
     const key = v1.randomBytes(32)
     const grant = ownGrant(id, key, 0)
-    return { id, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), id, 0, name), nameEpoch: 0, grantedEpoch: 0 }
+    return signed({ id, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), id, 0, name), nameEpoch: 0, grantedEpoch: 0 })
   }
 
   it('resolves a readable slug to its group by decrypting + slugifying each name on-device', async () => {
@@ -273,28 +294,33 @@ describe('openGroupByToken (cr-0120 — resolve a group from its `#@<slug|id>` f
 })
 
 describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)', () => {
+  const A = 'a0000000-0000-4000-8000-0000000000a0'
+  const B = 'b0000000-0000-4000-8000-0000000000b0'
+  /** A remaining member admitted to G1 by a genuine key-holder of `e0`, at epoch 0 (a group add binds the member). */
+  const admittedMember = (userId: string, who: v1.Identity, e0: Uint8Array): ScopeMember => ({
+    userId, username: userId.slice(0, 1), role: 'MEMBER', identityPublicKey: pubOf(who), hasGrant: true,
+    ...tagAdmission(e0, { scopeId: G1, kind: 'GROUP' }, 0, userId),
+  })
+
   it('mints a fresh epoch, chain-links the old one under it, and re-grants it to every remaining member', async () => {
     // The caller holds the group at epoch 0 (E_0). rotateGroupForRemoval opens that grant to derive E_0.
     const e0 = v1.randomBytes(32)
     const grant0 = ownGrant(G1, e0, 0)
-    const list = vi.fn().mockResolvedValue([{ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, grantedEpoch: 0 }])
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, grantedEpoch: 0 })])
     const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
 
     // Two surviving members with real identities (the removed one is simply absent from this list).
     const memberA = v1.generateIdentity()
     const memberB = v1.generateIdentity()
-    const remaining: ScopeMember[] = [
-      { userId: 'a', username: 'a', role: 'OWNER', identityPublicKey: b64std(v1.serializeIdentityPublic(memberA.pub)), hasGrant: true },
-      { userId: 'b', username: 'b', role: 'MEMBER', identityPublicKey: b64std(v1.serializeIdentityPublic(memberB.pub)), hasGrant: true },
-    ]
+    const remaining: ScopeMember[] = [admittedMember(A, memberA, e0), admittedMember(B, memberB, e0)]
 
     const newEpoch = await rotateGroupForRemoval(G1, remaining)
     expect(newEpoch).toBe(1)
     expect(rotate).toHaveBeenCalledTimes(1)
 
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
-    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual(['a', 'b'])
+    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A, B])
 
     // Each member's grant opens (with their OWN identity) to the same fresh epoch key E_1 — operator-blind: only
     // ciphertext was posted, and every remaining member can read forward.
@@ -310,6 +336,70 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
 
     // Forward-confidentiality: the new epoch differs from the old, so content sealed under E_1 is unreadable with E_0.
     expect(Array.from(e1a)).not.toEqual(Array.from(e0))
+
+    // Every re-grant carries the rotator's signature over it (ADR 0028 Decision 6)…
+    const next = { scopeId: G1, kind: 'GROUP' as const, epoch: 1 }
+    for (const [g, who] of [[payload.grants[0], memberA], [payload.grants[1], memberB]] as const) {
+      expect(grantSignatureVerifies(ID.pub.sign, next, { userId: g.userId, identityPublicKeyB64: pubOf(who) }, g.wrappedGrant, g.grantSignature)).toBe(true)
+    }
+    // …and every admission is carried forward under the NEW epoch, same id (ADR 0020 move 6): verifiable at 1 with E_1.
+    expect(payload.droppedAdmissions).toEqual([])
+    for (const m of remaining) {
+      const carried = payload.admissions.find((a: { admissionId: string }) => a.admissionId === m.admissionId)
+      expect(admissionVerifies(e1a, 1, { scopeId: G1, kind: 'GROUP' }, m.userId, { ...carried, admissionEpoch: 1 })).toBe(true)
+    }
+  })
+
+  it('does not re-grant a member whose old admission tag fails, and drops that admission (ADR 0020 move 6)', async () => {
+    // A membership the server invented, or one an owner's session made without the vault, carries a tag that does
+    // not verify under E_n. The rotator must not carry it into the new epoch — nor wrap E_{n+1} to that member.
+    const e0 = v1.randomBytes(32)
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), grantedEpoch: 0 })])
+    const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
+    const memberA = v1.generateIdentity()
+    const forged = v1.generateIdentity()
+    const bad = { ...admittedMember(B, forged, e0), admissionTag: b64std(v1.randomBytes(32)) }
+
+    await rotateGroupForRemoval(G1, [admittedMember(A, memberA, e0), bad])
+
+    const payload = rotate.mock.calls[0][0].rotateScopeRequest
+    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A]) // the forged one is not re-granted
+    expect(payload.droppedAdmissions).toEqual([bad.admissionId]) // …and its admission is dropped on purpose
+    expect(payload.admissions.map((a: { admissionId: string }) => a.admissionId)).not.toContain(bad.admissionId)
+  })
+
+  it('control: a member whose tag verifies is re-granted and re-tagged', async () => {
+    const e0 = v1.randomBytes(32)
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), grantedEpoch: 0 })])
+    const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
+    const good = admittedMember(B, v1.generateIdentity(), e0)
+
+    await rotateGroupForRemoval(G1, [good])
+
+    const payload = rotate.mock.calls[0][0].rotateScopeRequest
+    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([B])
+    expect(payload.admissions.map((a: { admissionId: string }) => a.admissionId)).toEqual([good.admissionId])
+    expect(payload.droppedAdmissions).toEqual([])
+  })
+
+  it('a TENANT rotation carries its open member invites forward too — and drops a forged one', async () => {
+    const e0 = v1.randomBytes(32)
+    const list = vi.fn().mockResolvedValue([signed({ id: T1, kind: 'TENANT', tenantId: T1, wrappedGrant: ownGrant(T1, e0, 0), grantedEpoch: 0 })])
+    const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
+    const genuine = tagAdmission(e0, { scopeId: T1, kind: 'TENANT' }, 0, null)
+    const forged = { ...tagAdmission(v1.randomBytes(32), { scopeId: T1, kind: 'TENANT' }, 0, null) }
+    vi.mocked(tenantsApi).mockReturnValue({
+      listMemberInvites: vi.fn().mockResolvedValue([{ inviteId: 'i1', email: 'a@x', ...genuine }, { inviteId: 'i2', email: 'b@x', ...forged }]),
+    } as unknown as ReturnType<typeof tenantsApi>)
+
+    await rotateGroupForRemoval(T1, [])
+
+    const payload = rotate.mock.calls[0][0].rotateScopeRequest
+    expect(payload.admissions.map((a: { admissionId: string }) => a.admissionId)).toEqual([genuine.admissionId])
+    expect(payload.droppedAdmissions).toEqual([forged.admissionId])
   })
 
   it('excludes a member whose identity key CHANGED from the re-grant, but still rotates for the others (cr-0098)', async () => {
@@ -318,23 +408,20 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
     // against the removed member must not hinge on one contact's changed key. The excluded member stays awaiting-access.
     const e0 = v1.randomBytes(32)
     const grant0 = ownGrant(G1, e0, 0)
-    const list = vi.fn().mockResolvedValue([{ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, grantedEpoch: 0 }])
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, grantedEpoch: 0 })])
     const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
 
     const memberA = v1.generateIdentity()
     const memberB = v1.generateIdentity()
-    const remaining: ScopeMember[] = [
-      { userId: 'a', username: 'a', role: 'OWNER', identityPublicKey: b64std(v1.serializeIdentityPublic(memberA.pub)), hasGrant: true },
-      { userId: 'b', username: 'b', role: 'MEMBER', identityPublicKey: b64std(v1.serializeIdentityPublic(memberB.pub)), hasGrant: true },
-    ]
+    const remaining: ScopeMember[] = [admittedMember(A, memberA, e0), admittedMember(B, memberB, e0)]
     // b's key changed since it was pinned → exclude b, keep a.
-    vi.mocked(checkAndPin).mockImplementation(async (userId: string) => (userId === 'b' ? 'changed' : 'match'))
+    vi.mocked(checkAndPin).mockImplementation(async (userId: string) => (userId === B ? 'changed' : 'match'))
 
     const newEpoch = await rotateGroupForRemoval(G1, remaining)
     expect(newEpoch).toBe(1)
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
-    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual(['a']) // b excluded, a still re-granted
+    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A]) // b excluded, a still re-granted
   })
 })
 
@@ -346,7 +433,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
     const keys = Array.from({ length: grantedEpoch + 1 }, () => v1.randomBytes(32))
     const links = keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(G1, i + 1, k, keys[i]) }))
     const grant = ownGrant(G1, keys[grantedEpoch], grantedEpoch)
-    list.mockResolvedValue([{ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, grantedEpoch }])
+    list.mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, grantedEpoch })])
     vi.mocked(scopesApi).mockReturnValue({
       listMyScopes: list, listScopeEpochs: vi.fn().mockResolvedValue(links), rotateScope: rotate,
     } as unknown as ReturnType<typeof scopesApi>)
@@ -354,7 +441,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
   }
 
   /** The caller re-grants itself, so every payload's own grant opens to that attempt's new epoch key. */
-  const self: ScopeMember[] = [{ userId: 'me', username: 'me', role: 'OWNER', identityPublicKey: b64std(v1.serializeIdentityPublic(ID.pub)), hasGrant: true }]
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
   const newKeyOf = (call: unknown[]) => {
     const { grants } = (call[0] as { rotateScopeRequest: { grants: { wrappedGrant: string }[] } }).rotateScopeRequest
     return Array.from(openOwn(G1, (call[0] as { rotateScopeRequest: { epoch: number } }).rotateScopeRequest.epoch, grants[0].wrappedGrant, ID.priv))
@@ -421,7 +508,7 @@ describe('renameGroup (cr-0097 — re-seal the name under the current epoch)', (
     const key = v1.randomBytes(32) // E_grantedEpoch = the write key the caller holds
     const grant = ownGrant(G1, key, grantedEpoch)
     const list = vi.fn().mockResolvedValue([
-      { id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), G1, 0, 'Alt'), nameEpoch: 0, grantedEpoch, currentEpoch },
+      signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant, encryptedName: sealGroupName(deriveGroupNameKey(key), G1, 0, 'Alt'), nameEpoch: 0, grantedEpoch, currentEpoch }),
     ])
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, renameGroup: rename } as unknown as ReturnType<typeof scopesApi>)
     return key
@@ -484,6 +571,10 @@ describe('listMyTenants', () => {
 })
 
 describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
+  const signedTenant = (t: MyTenant): MyTenant => {
+    const r = signed({ id: t.tenantId, kind: 'TENANT', wrappedGrant: t.wrappedGrant!, grantedEpoch: t.grantedEpoch ?? 0 })
+    return { ...t, granterUserId: r.granterUserId, grantSignature: r.grantSignature, granterIdentityPublicKey: r.granterIdentityPublicKey }
+  }
   // Seal an icon under K_icon derived from a tenant scope key, wrap that key as the caller's OWN grant, and hand
   // both to openMyTenantIcon as a MyTenant row — it must open our grant transiently and return the encoded bytes.
   // This is the per-tenant grant-open the switcher runs once per tenant (en.spaces.tenant-scope), exercised without
@@ -493,7 +584,7 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const iconKey = deriveSpaceIconKey(scopeKey)
     const sealedIcon = sealIcon(iconKey, { scopeId: T1, iconEpoch: 0 }, encoded)
     const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
-    return { tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon }
+    return signedTenant({ tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon })
   }
 
   it('opens the caller’s own grant and returns the encoded icon bytes', async () => {
@@ -513,7 +604,86 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const scopeKey = v1.randomBytes(32)
     const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
     const foreign = sealIcon(deriveSpaceIconKey(v1.randomBytes(32)), { scopeId: T1, iconEpoch: 0 }, new Uint8Array([9, 9, 9]))
-    const tenant: MyTenant = { tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon: foreign }
+    const tenant: MyTenant = signedTenant({ tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon: foreign })
     expect(await openMyTenantIcon(tenant)).toBeNull()
+  })
+})
+
+describe('a grant opens only if its granter\'s signature verifies (ADR 0028 Decision 6)', () => {
+  const foreigner = v1.generateIdentity()
+  const FOREIGNER = 'f0000000-0000-4000-8000-0000000000f0'
+  const serve = (rows: Row[]) => mockScopes(vi.fn().mockResolvedValue(rows), vi.fn())
+
+  it('refuses a PERSONAL grant sealed and signed by a foreign identity — the key inside is never used', async () => {
+    // The server plants a personal scope key of its own choosing: sealed to our key (which needs only our PUBLIC
+    // key) and signed by an identity it controls. Opening it would put our next write under the server's key.
+    const planted = v1.randomBytes(32)
+    serve([signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: ownGrant(P, planted, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })])
+    expect(await openScope(ScopeKind.Personal)).toBeNull()
+  })
+
+  it('control: our own self-signed personal grant opens', async () => {
+    const key = v1.randomBytes(32)
+    serve([signed({ id: P, kind: 'PERSONAL', tenantId: 't', wrappedGrant: ownGrant(P, key, 0), grantedEpoch: 0 })])
+    expect(Array.from((await openScope(ScopeKind.Personal))!.key)).toEqual(Array.from(key))
+  })
+
+  it('refuses a group\'s genuine grant served as the caller\'s personal scope — on the signed kind', async () => {
+    // A group we created ourselves: its grant is genuine, self-signed, and sealed bound to the group's id. Served in
+    // a row that says PERSONAL (same id, so the seal still opens), it must not become our personal scope.
+    const key = v1.randomBytes(32)
+    const genuine = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 })
+    serve([{ ...genuine, kind: 'PERSONAL' }])
+    expect(await openScope(ScopeKind.Personal)).toBeNull()
+  })
+
+  it('control: the same grant in its own group row opens', async () => {
+    const key = v1.randomBytes(32)
+    serve([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 })])
+    expect(Array.from((await openScopeById(G1))!.key)).toEqual(Array.from(key))
+  })
+
+  it('refuses a shared grant whose granter key differs from that granter\'s pin', async () => {
+    const key = v1.randomBytes(32)
+    serve([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })])
+    vi.mocked(checkAndPin).mockResolvedValue('changed')
+    expect(await openScopeById(G1)).toBeNull()
+    expect(checkAndPin).toHaveBeenCalledWith(FOREIGNER, pubOf(foreigner))
+  })
+
+  it('control: a shared grant whose granter key matches the pin opens', async () => {
+    const key = v1.randomBytes(32)
+    serve([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })])
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+    expect(Array.from((await openScopeById(G1))!.key)).toEqual(Array.from(key))
+  })
+
+  it('refuses a shared grant whose signature does not verify under the key it names — and pins nothing', async () => {
+    const key = v1.randomBytes(32)
+    const row = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 }, { userId: FOREIGNER, identity: foreigner })
+    serve([{ ...row, granterIdentityPublicKey: pubOf(v1.generateIdentity()) }])
+    expect(await openScopeById(G1)).toBeNull()
+    expect(checkAndPin).not.toHaveBeenCalled() // a forged grant must not get to pin the key it names
+  })
+
+  it('refuses an unsigned grant (written before grants were signed)', async () => {
+    serve([{ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, v1.randomBytes(32), 0), grantedEpoch: 0 }])
+    expect(await openScopeById(G1)).toBeNull()
+  })
+
+  it('the birth producers sign: a new personal scope and a new group carry our signature over their own grant', async () => {
+    const create = vi.fn().mockResolvedValue({ scopeId: 's', kind: 'PERSONAL' })
+    const createGroupFn = vi.fn().mockResolvedValue({ scopeId: 'g', kind: 'GROUP' })
+    mockScopes(vi.fn().mockResolvedValue([]), create, createGroupFn)
+    await ensurePersonalScope()
+    await createGroup('Alt')
+    const p = create.mock.calls[0][0].createPersonalScopeRequest
+    const g = createGroupFn.mock.calls[0][0].createGroupRequest
+    const me = { userId: ME, identityPublicKeyB64: ID_PUB }
+    expect(grantSignatureVerifies(ID.pub.sign, { scopeId: p.scopeId, kind: 'PERSONAL', epoch: 0 }, me, p.wrappedGrant, p.grantSignature)).toBe(true)
+    expect(grantSignatureVerifies(ID.pub.sign, { scopeId: g.scopeId, kind: 'GROUP', epoch: 0 }, me, g.wrappedGrant, g.grantSignature)).toBe(true)
+    // The group's creator self-tags its own membership under E_0, bound to itself (ADR 0020 move 6).
+    const e0 = openOwn(g.scopeId, 0, g.wrappedGrant)
+    expect(admissionVerifies(e0, 0, { scopeId: g.scopeId, kind: 'GROUP' }, ME, g)).toBe(true)
   })
 })

@@ -3,12 +3,13 @@
 // one has its control: the same read of the object's own ciphertext, which must open.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-vi.mock('../../api/client', () => ({ scopesApi: vi.fn() }))
+vi.mock('../../api/client', () => ({ scopesApi: vi.fn(), accountApi: vi.fn() }))
 vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { scopesApi } from '../../api/client'
+import { scopesApi, accountApi } from '../../api/client'
+import { signGrant } from '../spaces/grant'
 import { identityPrivate } from '../../app/vault'
 import { nodeContentKey, type TreeNode } from './tree'
 import { summaryToItem, gridRef, makeChunkProvider } from './media'
@@ -89,11 +90,18 @@ describe('a scope grant served in another scope\'s row', () => {
   const grantOf = (key: Uint8Array) =>
     b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: SCOPE, epoch: 0 }, v1.hybridPublic(ID.priv), key))
   const keyA = v1.randomBytes(32)
+  const ME = '0e000000-0000-4000-8000-0000000000e8'
+  const PUB = b64std(v1.serializeIdentityPublic(ID.pub))
+  // Each row carries a signature that VERIFIES for that row — the signature layer (ADR 0028 Decision 6) held off, so
+  // what refuses the moved grant below is the seal's own binding (ADR 0072), the layer this block is about.
   const row = (id: string, wrappedGrant: string) => ({
     id, kind: ScopeKind.Group, tenantId: SCOPE, role: 'OWNER', wrappedGrant, grantedEpoch: 0, nameEpoch: 0, iconEpoch: 0, currentEpoch: 0,
+    granterUserId: ME, granterIdentityPublicKey: PUB,
+    grantSignature: signGrant(ID.priv.sign, { scopeId: id, kind: 'GROUP', epoch: 0 }, { userId: ME, identityPublicKeyB64: PUB }, wrappedGrant),
   })
   beforeEach(() => {
     vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
+    vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial: vi.fn().mockResolvedValue({ userId: ME }) } as unknown as ReturnType<typeof accountApi>)
   })
   const serve = (rows: unknown[]) =>
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: vi.fn().mockResolvedValue(rows) } as unknown as ReturnType<typeof scopesApi>)

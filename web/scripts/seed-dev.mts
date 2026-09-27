@@ -12,6 +12,7 @@ import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std, b64std } from '@veyq/crypto/base64'
+import { sealGrant } from '../src/features/spaces/grant'
 import { readSeed, writeTenant, removeTenant, seedFilePath, type SeedEntry } from './devSeed.mts'
 
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
@@ -74,8 +75,11 @@ if (!personal) {
   const priv = v1.deserializeIdentityPrivate(fromB64std(entry.identityPrivate))
   const scopeKey = v1.randomBytes(32)
   const scopeId = crypto.randomUUID() // client-minted: the grant is bound to it at epoch 0 (ADR 0072)
-  const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId, epoch: 0 }, v1.hybridPublic(priv), scopeKey))
-  const created = await post('/api/scopes', { scopeId, wrappedGrant: grant }, token, HOST_BASE)
+  // Self-signed, kind PERSONAL (ADR 0028 Decision 6) — the only personal grant the client will open.
+  const me = (await json(await get('/api/account/key-material', token, HOST_BASE))).userId as string
+  const pub = b64std(v1.serializeIdentityPublic(v1.identityPublicFromPrivate(priv)))
+  const grant = sealGrant(scopeKey, { scopeId, kind: 'PERSONAL', epoch: 0 }, { userId: me, identityPublicKeyB64: pub }, priv.sign)
+  const created = await post('/api/scopes', { scopeId, ...grant }, token, HOST_BASE)
   if (!created.ok) { console.error('createPersonalScope failed', created.status, await created.text()); process.exit(1) }
   scopes = await json(await get('/api/scopes', token, HOST_BASE))
   personal = scopes.find((s: { kind: string }) => s.kind === 'PERSONAL')

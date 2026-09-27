@@ -6,9 +6,9 @@
 import { tenantsApi } from '../../api/client'
 import type { InvitePreview, TenantActivated, TenantActivatedWithUser } from '../../api/generated/tenants'
 import * as v1 from '@veyq/crypto/v1'
-import type { HybridPublic } from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 import type { AccountMaterial } from '@veyq/crypto/accountBirth'
+import { sealGrant, tagAdmission } from '../spaces/grant'
 
 export type { InvitePreview } from '../../api/generated/tenants'
 export { tenantError } from './tenantError'
@@ -19,14 +19,14 @@ export function previewInvite(bootstrapSecret: string): Promise<InvitePreview> {
 }
 
 /** Accept as an existing (signed-in) user, choosing a `username` for this tenant (ADR 0023). An OWNER invite
- *  carries the cold-born grant; a MEMBER invite omits it (grant-less; a key-holder delivers the key, cr-0076). */
+ *  carries the cold birth; a MEMBER invite omits it (grant-less; a key-holder delivers the key, cr-0076). */
 export function acceptInvite(
   bootstrapSecret: string,
   username: string,
-  grant?: string,
+  birth?: TenantBirth,
   sealedName?: string,
 ): Promise<TenantActivated> {
-  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, grant, sealedName } })
+  return tenantsApi().acceptTenantInvite({ acceptInviteRequest: { bootstrapSecret, username, ...birth, sealedName } })
 }
 
 /** Register a new account cold and accept in one step (public — the email comes from the invite). `username` is
@@ -38,7 +38,7 @@ export function registerAndAccept(
   userId: string,
   username: string,
   material: AccountMaterial,
-  grant?: string,
+  birth?: TenantBirth,
   sealedName?: string,
 ): Promise<TenantActivatedWithUser> {
   return tenantsApi().registerAndAcceptTenantInvite({
@@ -54,26 +54,45 @@ export function registerAndAccept(
         masterKeyWraps: material.masterKeyWraps,
         secretKeyProofPublicKey: material.secretKeyProofPublicKey,
       },
-      grant,
+      ...birth,
       sealedName,
     },
   })
 }
 
-/**
- * Cold-birth the TENANT scope: mint a fresh scope root key (`K_tenant`), and return **both** the first grant
- * (the key `asymWrap`'d to the owner's own identity public key — opaque ciphertext to the server) **and the key
- * itself**, so the owner can immediately seal their real name under it at join (cr-0106). The key never leaves
- * the device; only the sealed grant + (optional) sealed name cross the API.
- */
-export function bornTenantScope(identityPublic: HybridPublic, tenantId: string): { grant: string; scopeRootKey: Uint8Array } {
-  const scopeRootKey = v1.randomBytes(32)
-  // The tenant scope's id IS the tenant id, so it is known before the birth; the grant is born at epoch 0 (ADR 0072).
-  const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, identityPublic, scopeRootKey))
-  return { grant, scopeRootKey }
+/** What an OWNER accept carries for the tenant's cold birth: the first grant, the owner's self-signature over it
+ *  (ADR 0028 Decision 6), and the owner's own admission self-tagged under `E_0` (ADR 0020 move 6) so the tenant's
+ *  first rotation has a tag to carry forward. */
+export type TenantBirth = {
+  grant: string
+  grantSignature: string
+  admissionId: string
+  admissionEpoch: number
+  admissionTag: string
 }
 
-/** Just the grant from a fresh tenant-scope birth (for callers that don't seal a name). */
-export function scopeGrant(identityPublic: HybridPublic, tenantId: string): string {
-  return bornTenantScope(identityPublic, tenantId).grant
+/** The owner an OWNER accept births the tenant for: their account id and their identity (the signing half signs the
+ *  grant, the public bundle is what the grant is sealed to). */
+export type TenantOwner = { userId: string; identity: { pub: v1.Identity['pub']; priv: { sign: Uint8Array } } }
+
+/**
+ * Cold-birth the TENANT scope: mint a fresh scope root key (`K_tenant`), and return **both** the birth (the key
+ * sealed to the owner's own identity and signed by it, plus the owner's self-tagged admission — opaque to the
+ * server) **and the key itself**, so the owner can immediately seal their real name under it at join (cr-0106).
+ * The key never leaves the device; only the sealed grant, its signature, the tag + (optional) sealed name cross
+ * the API.
+ */
+export function bornTenantScope(owner: TenantOwner, tenantId: string): { birth: TenantBirth; scopeRootKey: Uint8Array } {
+  const scopeRootKey = v1.randomBytes(32)
+  // The tenant scope's id IS the tenant id, so it is known before the birth; the grant is born at epoch 0 (ADR 0072).
+  const scope = { scopeId: tenantId, kind: 'TENANT', epoch: 0 } as const
+  const to = { userId: owner.userId, identityPublicKeyB64: b64std(v1.serializeIdentityPublic(owner.identity.pub)) }
+  const signed = sealGrant(scopeRootKey, scope, to, owner.identity.priv.sign)
+  const admission = tagAdmission(scopeRootKey, scope, 0, null)
+  return { birth: { grant: signed.wrappedGrant, grantSignature: signed.grantSignature, ...admission }, scopeRootKey }
+}
+
+/** Just the birth from a fresh tenant-scope birth (for callers that don't seal a name). */
+export function scopeGrant(owner: TenantOwner, tenantId: string): TenantBirth {
+  return bornTenantScope(owner, tenantId).birth
 }

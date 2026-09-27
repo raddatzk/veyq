@@ -26,6 +26,7 @@ import { Configuration as TenantsConfiguration, TenantsApi } from '../api/genera
 import { updateTenantMailSettings } from '../features/tenant/tenantMailSettings'
 import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
 import { inviteMember } from '../features/spaces/members'
+import { myUserId } from '../features/account/profile/profile'
 import { clearMailbox, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
 
 /** Tenant domain and API base — see the module header for why this exact host. */
@@ -100,8 +101,12 @@ export async function become(a: Actor): Promise<void> {
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = v1.kekPasswordSecret(fromB64std(a.built.emergencyKit.secretKey), a.password, salt, params)
   const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(wrap.wrappedKey))
-  // It opened the PASSWORD wrap with password + Secret Key, so `cold` is what actually happened here.
-  setUnlocked(masterKey, a.built.identity.priv, 'cold')
+  // It opened the PASSWORD wrap with password + Secret Key, so `cold` is what actually happened here. The vault
+  // takes ownership of what it is handed and zeroes it on `clearVault()` — so it gets a COPY of the actor's
+  // identity, or a suite that locks the vault (a password-only session) would wipe the actor for every later
+  // `become()`, and its grants would stop verifying under an all-zero key.
+  const p = a.built.identity.priv
+  setUnlocked(masterKey, { kemX: p.kemX.slice(), mlkemSeed: p.mlkemSeed.slice(), sign: p.sign.slice() }, 'cold')
 }
 
 export type BirthedInstance = {
@@ -140,7 +145,9 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
   await createServerOwner(owner.built.material, owner.email)
   await become(owner)
   const tenant = await createTenant(tenantName, HOST, owner.email)
-  await acceptInvite(tenant.bootstrapSecret, owner.username, scopeGrant(v1.hybridPublic(owner.built.identity.priv), tenant.tenantId))
+  // The owner's birth is signed by its identity and names its account (ADR 0028 Decision 6) — read it first.
+  owner.userId = await myUserId()
+  await acceptInvite(tenant.bootstrapSecret, owner.username, scopeGrant({ userId: owner.userId, identity: owner.built.identity }, tenant.tenantId))
   await updateTenantMailSettings(tenant.tenantId, {
     host: HOST,
     port: MAILPIT_SMTP_PORT,

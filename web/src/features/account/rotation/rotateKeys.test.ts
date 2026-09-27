@@ -51,6 +51,7 @@ import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import { grantSignatureVerifies, signGrant, tagAdmission } from '../../spaces/grant'
 
 const PASSWORD = 'correct horse battery staple'
 const SECRET_KEY = v1.randomBytes(32)
@@ -63,11 +64,19 @@ const oldPriv = () => ({ kemX: OLD_ID.priv.kemX.slice(), mlkemSeed: OLD_ID.priv.
 /** Two scopes the caller holds — canonical ids, since every grant and chain link is sealed bound to its scope. */
 const SCOPE_PERSONAL = '5c09e000-0000-4000-8000-0000000000e1'
 const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
-/** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity. */
-const heldAt0 = (id: string, e0: Uint8Array) => ({
-  id, kind: 'PERSONAL', tenantId: 't', grantedEpoch: 0,
-  wrappedGrant: b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: id, epoch: 0 }, v1.hybridPublic(oldPriv()), e0)),
-})
+/** The caller's account id, as its own key material names it. */
+const ME = '0e000000-0000-4000-8000-0000000000e9'
+const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
+/** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028
+ *  Decision 6), since the caller birthed it. */
+const heldAt0 = (id: string, e0: Uint8Array) => {
+  const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: id, epoch: 0 }, v1.hybridPublic(oldPriv()), e0))
+  return {
+    id, kind: 'PERSONAL', tenantId: 't', grantedEpoch: 0, wrappedGrant,
+    granterUserId: ME, granterIdentityPublicKey: OLD_PUB,
+    grantSignature: signGrant(OLD_ID.priv.sign, { scopeId: id, kind: 'PERSONAL', epoch: 0 }, { userId: ME, identityPublicKeyB64: OLD_PUB }, wrappedGrant),
+  }
+}
 /** The light cost the mocked worker above uses; the stored floor's KEK must be built with the same. Its WIRE
  *  profile stays `v1.ARGON` — the client refuses any other before deriving (ADR 0017 rule 5), and the mock above
  *  ignores the params it is handed. */
@@ -87,6 +96,7 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
 
 function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[]; held?: unknown[] } = {}) {
   const getAccountKeyMaterial = vi.fn(async () => ({
+    userId: ME,
     suiteId: 'v1',
     wraps: opts.wraps ?? [storedFloor()],
     wrappedIdentityPrivateKey: 'aWdub3JlZA==',
@@ -112,7 +122,12 @@ function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[
 
   type RotateScopeBody = {
     scopeId: string
-    rotateScopeRequest: { epoch: number; wrappedPrev: string; grants: { userId: string; wrappedGrant: string }[] }
+    rotateScopeRequest: {
+      epoch: number
+      wrappedPrev: string
+      grants: { userId: string; wrappedGrant: string; grantSignature: string }[]
+      admissions: { admissionId: string; admissionTag: string }[]
+    }
   }
   const rotateScope = vi.fn(async (body: RotateScopeBody) => ({ epoch: body.rotateScopeRequest.epoch }))
   // The caller's own grants, wrapped to the OLD identity the vault still holds while the sole scopes re-key.
@@ -296,8 +311,10 @@ describe('what a rotation leaves behind', () => {
   it('re-keys a sole-member scope to the new identity and reports it secured', async () => {
     const e0 = v1.randomBytes(32)
     const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
+    // The caller's own membership carries the admission it self-tagged at birth — a rotation carries it forward.
+    const own = tagAdmission(e0, { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' }, 0, ME)
     vi.mocked(listScopeMembers).mockResolvedValue([
-      { userId: 'me', identityPublicKey: 'ignored' },
+      { userId: ME, identityPublicKey: 'ignored', ...own },
     ] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
@@ -305,7 +322,7 @@ describe('what a rotation leaves behind', () => {
     expect(result.scopes).toEqual([{ scopeId: SCOPE_PERSONAL, status: 'secured' }])
     const grants = srv.rotateScope.mock.calls[0][0].rotateScopeRequest.grants
     expect(grants).toHaveLength(1)
-    expect(grants[0].userId).toBe('me')
+    expect(grants[0].userId).toBe(ME)
     // The grant opens with the NEW identity private key the vault was just handed — which is the whole point:
     // the old identity, the one the compromise holds, no longer reads this scope's next epoch.
     const swapped = vi.mocked(setUnlocked).mock.calls[0]
@@ -318,6 +335,15 @@ describe('what a rotation leaves behind', () => {
       fromB64std(grants[0].wrappedGrant),
     )
     expect(opened).toHaveLength(32)
+    // Signed by the NEW identity (ADR 0028 Decision 6): it is opened later under that one, and must verify there —
+    // a signature by the old, compromised identity would not.
+    const newPub = v1.identityPublicFromPrivate(priv)
+    const to = { userId: ME, identityPublicKeyB64: b64std(v1.serializeIdentityPublic(newPub)) }
+    const next = { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' as const, epoch: 1 }
+    expect(grantSignatureVerifies(newPub.sign, next, to, grants[0].wrappedGrant, grants[0].grantSignature)).toBe(true)
+    expect(grantSignatureVerifies(OLD_ID.pub.sign, next, to, grants[0].wrappedGrant, grants[0].grantSignature)).toBe(false)
+    // …and its own admission is carried into the new epoch.
+    expect(srv.rotateScope.mock.calls[0][0].rotateScopeRequest.admissions.map((a: { admissionId: string }) => a.admissionId)).toEqual([own.admissionId])
     // It states the epoch it creates — the old grant's 0, plus one — and links that new epoch back to E_0, so the
     // new identity still reads everything already written.
     const request = srv.rotateScope.mock.calls[0][0].rotateScopeRequest

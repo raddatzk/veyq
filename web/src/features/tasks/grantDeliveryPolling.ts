@@ -6,6 +6,7 @@
 // tabs/members polling is harmless. This is the interim; an SSE push from the same backend is the eventual
 // zero-latency answer (ADR 0021, deferred).
 import { runGrantDeliveryWorker } from './grantDeliveryWorker'
+import type { ScopeKind } from '../../api/generated/scopes'
 import { createVisibilityPoller } from '../../shared/state/visibilityPoller'
 
 const POLL_INTERVAL_MS = 45_000
@@ -21,11 +22,11 @@ const poller = createVisibilityPoller(POLL_INTERVAL_MS)
  * effects land on the server. Restarts cleanly if called for a new scope.
  */
 export function startGrantDeliveryPolling(
-  scopeId: string, currentKey: () => { key: Uint8Array; epoch: number } | null,
+  scopeId: string, kind: ScopeKind, currentKey: () => { key: Uint8Array; epoch: number } | null,
 ): void {
   const tick = () => {
     const held = currentKey()
-    return held ? runGrantDeliveryWorker({ scopeId, key: held.key, epoch: held.epoch }).catch(() => {}) : undefined
+    return held ? runGrantDeliveryWorker({ scopeId, kind, key: held.key, epoch: held.epoch }).catch(() => {}) : undefined
   }
   poller.start(tick, { immediate: true }) // deliver immediately on entry, then keep polling
 }

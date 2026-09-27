@@ -139,7 +139,7 @@ export async function enterScope(token: string): Promise<void> {
     // As a key-holder, keep delivering the scope key to any pending member (cr-0076/cr-0077, first-online-wins):
     // deliver on entry and then poll in the background so "awaiting access" closes without a re-entry (cr-0079).
     // A shared TENANT/GROUP scope may have grant-less members; Personal never does, so it just stops any poll.
-    if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, activeWriteKey)
+    if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, opened.kind, activeWriteKey)
     else stopGrantDeliveryPolling()
     // Also drain any queued group-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — a
     // remaining key-holder completes a queued rotation for ANY group they hold, without opening it. Session-level

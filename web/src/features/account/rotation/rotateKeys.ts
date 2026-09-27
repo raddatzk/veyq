@@ -22,7 +22,6 @@ import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
 import { commitRotation } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
-import { wrapScopeKeyToMember } from '../../spaces/grant'
 
 const ARGON = v1.ARGON
 
@@ -226,7 +225,10 @@ async function rekeyAlone(scopeId: string, identity: v1.Identity): Promise<boole
     const members = await listScopeMembers(scopeId)
     if (members.length !== 1) return false
     const mine = b64std(v1.serializeIdentityPublic(identity.pub))
-    await commitRotation(scopeId, async (newKey, epoch) => [{ userId: members[0].userId, wrappedGrant: wrapScopeKeyToMember(newKey, scopeId, epoch, mine) }])
+    // Signed by the NEW identity (ADR 0028 Decision 6): the vault still holds the old one, which is what opens the
+    // current grant — but the grant this writes is opened later under the new one, so it must verify there. The
+    // caller's own admission is carried forward like any other (ADR 0020 move 6).
+    await commitRotation(scopeId, members, { userId: members[0].userId, identityPublicKeyB64: mine, signPrivateKey: identity.priv.sign })
     return true
   } catch {
     return false

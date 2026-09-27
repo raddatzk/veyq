@@ -5,6 +5,7 @@
 import { tenantsApi, scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { decodeHttpError } from '../../shared/httpError'
+import { admissionFor } from './scopes'
 import type { MemberInviteState, PendingMemberInvite } from '../../api/generated/tenants'
 import { SetMemberRoleRequestRoleEnum, type ScopeMember, type ResolvedGroupCandidate, type GroupInvitation } from '../../api/generated/scopes'
 
@@ -15,9 +16,15 @@ export type { MemberInviteState, PendingMemberInvite } from '../../api/generated
 // signal the invite dialogs branch on so the owner always knows whether the mail actually went out.
 export { DeliveryResult } from '../../api/generated/tenants'
 
-/** Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). */
-export function inviteMember(tenantId: string, email: string): Promise<MemberInviteState> {
-  return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest: { email } }))
+/**
+ * Invite a person (by email) into the active tenant as a MEMBER — owner-gated (403 `not_tenant_owner`). The invite
+ * carries an admission tag made under the tenant's current epoch key (ADR 0020 move 6), so this needs the unlocked
+ * vault and a tenant grant: an owner's session alone can reach the endpoint but cannot make an invite anyone
+ * delivers to.
+ */
+export async function inviteMember(tenantId: string, email: string): Promise<MemberInviteState> {
+  const admission = await admissionFor(tenantId, null)
+  return withRefresh(() => tenantsApi().inviteTenantMember({ tenantId, memberInviteRequest: { email, ...admission } }))
 }
 
 /** List the tenant's pending member invites (invited-but-not-joined) — owner-gated (uc.spaces.manage-member-invites). */
@@ -63,8 +70,13 @@ export function removeTenantMember(tenantId: string, userId: string): Promise<vo
  * becomes a soft `pendingConsent` proposal grant-delivery skips until they accept. Omitting it for a consent-on
  * target is rejected `400 consent_required` (resolve first to learn whether it is required).
  */
-export function addGroupMember(scopeId: string, username: string, sealedNameKey?: string): Promise<ScopeMember> {
-  return withRefresh(() => scopesApi().addGroupMember({ scopeId, addGroupMemberRequest: { username, sealedNameKey } }))
+export async function addGroupMember(
+  scopeId: string, username: string, targetUserId: string, sealedNameKey?: string,
+): Promise<ScopeMember> {
+  // Admission is a key-holder act (ADR 0020 move 6): the tag binds the resolved target's account, under the
+  // group's current epoch key — the same for a consent proposal, which is delivered to only once accepted.
+  const admission = await admissionFor(scopeId, targetUserId)
+  return withRefresh(() => scopesApi().addGroupMember({ scopeId, addGroupMemberRequest: { username, sealedNameKey, ...admission } }))
 }
 
 /**
@@ -74,7 +86,7 @@ export function addGroupMember(scopeId: string, username: string, sealedNameKey?
  * to seal a name-proposal (consent on) or direct-add (consent off).
  */
 export function resolveGroupMember(scopeId: string, username: string): Promise<ResolvedGroupCandidate> {
-  return withRefresh(() => scopesApi().resolveGroupMember({ scopeId, addGroupMemberRequest: { username } }))
+  return withRefresh(() => scopesApi().resolveGroupMember({ scopeId, resolveGroupMemberRequest: { username } }))
 }
 
 /** The caller's pending group-consent proposals in the active tenant (cr-0094) — the invitee's Accept/Decline inbox. */

@@ -4,6 +4,8 @@ vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
   tenantsApi: vi.fn(),
 }))
+// The admission tag is computed under the scope's epoch key (scopes.ts, tested there); here only its threading.
+vi.mock('./scopes', () => ({ admissionFor: vi.fn() }))
 
 import {
   addGroupMember,
@@ -14,8 +16,13 @@ import {
   SetMemberRoleRequestRoleEnum,
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
+import { admissionFor } from './scopes'
 
-beforeEach(() => vi.clearAllMocks())
+const ADMISSION = { admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 2, admissionTag: 'dGFn' }
+beforeEach(() => {
+  vi.clearAllMocks()
+  vi.mocked(admissionFor).mockResolvedValue(ADMISSION)
+})
 
 describe('addGroupMember (cr-0086)', () => {
   it('posts the username to the scope members endpoint and returns the grant-less directory row', async () => {
@@ -24,9 +31,11 @@ describe('addGroupMember (cr-0086)', () => {
     const addGroupMemberFn = vi.fn().mockResolvedValue(row)
     vi.mocked(scopesApi).mockReturnValue({ addGroupMember: addGroupMemberFn } as unknown as ReturnType<typeof scopesApi>)
 
-    const result = await addGroupMember('g1', 'partner')
+    const result = await addGroupMember('g1', 'partner', 'u1')
 
-    expect(addGroupMemberFn).toHaveBeenCalledWith({ scopeId: 'g1', addGroupMemberRequest: { username: 'partner' } })
+    // The admission is tagged for the resolved target (ADR 0020 move 6) and rides the add.
+    expect(admissionFor).toHaveBeenCalledWith('g1', 'u1')
+    expect(addGroupMemberFn).toHaveBeenCalledWith({ scopeId: 'g1', addGroupMemberRequest: { username: 'partner', sealedNameKey: undefined, ...ADMISSION } })
     expect(result).toEqual(row)
     expect(result.hasGrant).toBe(false)
   })
