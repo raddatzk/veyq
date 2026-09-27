@@ -1182,6 +1182,15 @@ have caught it; only `node dist-cli/cli.js` did. So the "Done when" for any phas
 artifact (a bundle, a binary, a container) names **running it**, never just building it — and shell quoting
 inside a JSON string is a specific place to look first, because it fails silently in exactly this way.
 
+### A generated pin file is written from the substrate the release builds on
+
+**A pin file a tool writes records the run that wrote it, not the build.** cr-build-inputs-pinned said to write
+Gradle's verification metadata "over every task", and it did — from a warm `~/.gradle`, which had no reason to
+fetch `okhttp-bom-5.3.2.module`. Every clean build (the Dockerfile's, a fresh CI runner's) does fetch it, so each
+of them would have been red on the first run. A cold Linux container found the gap, and a cold macOS write
+reproduced it. So a done-when that writes one names its **substrate**: an empty cache, and the OS the release
+builds on. Otherwise it names only a command.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and

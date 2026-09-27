@@ -1,7 +1,7 @@
 ---
 id: cr-build-inputs-pinned
 title: What builds the release is checked before it runs — generator JAR, Gradle distribution, backend dependencies
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0057"]
 invariants: [API-first, self-hostable by default]
@@ -50,7 +50,7 @@ holds the pins together. This is inbox #163's build-time half, with the three it
 
 ## Phases
 
-- [ ] 1 generator JAR — one verifier, used by both `web` and `admin-web` (one copy, reachable from both Docker
+- [x] 1 generator JAR — one verifier, used by both `web` and `admin-web` (one copy, reachable from both Docker
       build stages before their `npm ci`; check the `COPY` lines with `grep -n COPY Dockerfile admin-web/Dockerfile`).
       Its behaviour:
       - it fixes the generator's `storageDir` in both `openapitools.json` files;
@@ -68,12 +68,12 @@ holds the pins together. This is inbox #163's build-time half, with the three it
       any other file. Both must make `npm run generate:api` fail, and the second is the case the wrapper alone
       never catches.
       · Done when: `npm ci` from the root plus `npm run check` in `web/` and `admin-web/` are green.
-- [ ] 2 one generator version — raise `backend/gradle/openapi.gradle.kts:4` to the version the clients use, or
+- [x] 2 one generator version — raise `backend/gradle/openapi.gradle.kts:4` to the version the clients use, or
       move all three to one newer version. Generated code is untracked, so generate the backend models before
       and after and diff the two trees: a changed server interface is reviewed, not waved through.
       · Done when: `./gradlew check` green, and the diff of the generated trees is read and summarised in the
         retro.
-- [ ] 3 Gradle distribution — `distributionSha256Sum` in `backend/gradle/wrapper/gradle-wrapper.properties`,
+- [x] 3 Gradle distribution — `distributionSha256Sum` in `backend/gradle/wrapper/gradle-wrapper.properties`,
       from Gradle's published `.sha256` for the exact `distributionUrl`. **Bite it:** a wrong sum makes
       `./gradlew help` refuse, with an empty `~/.gradle/wrapper/dists/gradle-9.5.1*` so it actually downloads.
       Snapshot and restore that directory rather than deleting your cache blind.
@@ -87,7 +87,7 @@ holds the pins together. This is inbox #163's build-time half, with the three it
       a manual step, and the retro says it was done. **Bite it:** alter one checksum and see `./gradlew check`
       refuse, naming the artifact.
       · Done when: `./gradlew check` and `./gradlew quarkusBuild` green with verification on.
-- [ ] 5 guard — `scripts/validate_build_input_pins.py` asserts:
+- [x] 5 guard — `scripts/validate_build_input_pins.py` asserts:
       - the generator version in both `openapitools.json` files and in `openapi.gradle.kts` is one value;
       - the JAR pin file has an entry for that value;
       - the wrapper carries a `distributionSha256Sum`;
@@ -108,3 +108,39 @@ and `docker build` can stall on this Mac's keychain credential helper (local mem
 shape). The local `npm ci` and Gradle runs exercise the same scripts.
 
 ## Retrospective
+
+**State at hand-off (2026-09-27, on main 2e74f97):** phases 1, 2, 3 and 5 are done; phase 4 is done except its
+one manual step. Every bite was seen red, and every gate is green on the merged tree. **Open, and the reason
+this file still exists:** the owner's IntelliJ *Reload Gradle Project* against the new metadata. The
+implementing session could not perform it. What stands in for it is a command-line proof: an init script ran an
+`ArtifactResolutionQuery` for sources and javadoc over the compile classpaths, which is what an IDE sync
+issues. With the trust rule, 372 components and 726 files resolved with 0 failures. With the rule removed, the
+same query failed: `726 artifacts failed verification`. That proves the rule is load-bearing. It does not prove
+that IntelliJ issues nothing else. Tick phase 4 and delete this file once the owner's reload is clean.
+
+- **Phase 2's diff, read:** generator 7.21.0 → 7.23.0 changes no server interface. The `openapi-api/` tree
+  differs only in blank lines and the `@Generated(... "Generator version")` stamp (`diff -r -B -w -I 'Generator
+  version'` → only the `VERSION` file). In the models, 7.23.0 adds a KDoc description where a `$ref` property
+  carries a sibling `description:`. It also corrects every enum's `decode` KDoc: `decode` already threw, and the
+  old KDoc claimed it returned null. And it adds an unused lenient `decodeOrNull`. `admin-channel/` is
+  byte-identical. Maven Central's newest release is 7.25.0. All three surfaces moved to 7.23.0, because 7.23.0
+  touched only one surface's generated code, while 7.25.0 would have touched all three. Bumping to 7.25.0 is a
+  release act, not part of this CR.
+- **Native stage, run rather than just shown, with one limit.** The real Dockerfile native command ran in the
+  pinned Mandrel image with a cold Gradle home. Every Gradle step finished, and `native-image` then died of OOM
+  (exit 137) at 5 GB inside this Mac's 8 GB Docker VM. That is a machine limit, not a verification failure. The
+  same image then ran `-Dquarkus.native.sources-only=true` to BUILD SUCCESSFUL in write mode, and the metadata
+  was unchanged. So the native path resolves nothing the JVM build does not.
+- **What went wrong — the CR's "run it over every task" was necessary, not sufficient.** The first write came
+  from a warm `~/.gradle` and missed `okhttp-bom-5.3.2.module`, which a cold cache fetches. A clean Linux
+  container found it first. A cold macOS write reproduced it, so the cause is the cold cache and not the OS.
+  Every Docker build and fresh CI runner would have been red. Conversely, a cold write over only `help check
+  quarkusBuild pitest` produced the identical 1670 artifacts as the resolve-every-configuration write. The
+  worry that the owner's `quarkusDev` classpaths were uncovered was measured away, not assumed away. Root
+  cause: the CR named the tasks and not the cache state. **Next time:** a CR that writes a lockfile-like
+  artifact names the substrate it is written from (empty cache, the release's OS) as part of the done-when.
+  Harvested: the command is in `backend/CLAUDE.md`, and the general rule is in `changes/README.md`.
+- **Process:** commit signing (1Password) failed at the probe before phase 1 and at every later probe, so
+  nothing is committed. The per-phase path lists went to the coordinating session. And `cp`'s interactive alias
+  hung one background step on an overwrite prompt, the trap the local memory already names. `command cp -f`
+  would have avoided it; the rule existed and was not applied.
