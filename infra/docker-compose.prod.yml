@@ -163,7 +163,7 @@ services:
     volumes:
       # THE reason this file exists. Without it every `up -d --force-recreate` regenerates the KEK, the
       # veyq_instance fingerprint reports configSecretState: MISMATCH, and the instance refuses member invites
-      # and password resets with 503 mail_unavailable (ADR 0050 amendment, ADR 0055, ADR 0056 § Consequences).
+      # and password resets with 503 mail_unavailable (ADR 0050, ADR 0055, ADR 0056 § Consequences).
       - veyq-config-secret:/var/lib/veyq
       # Routing config only — never a secret, never content (ADR 0063 § Consequences). Read-write here because
       # the app is the only writer; read-only on traefik, which only ever reads it.

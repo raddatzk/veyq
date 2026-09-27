@@ -100,7 +100,7 @@ AUTH over plain (dev only) and exposes an HTTP API, so a harness can read what a
   the sealed-password path, so an auth-less send needs neither a stored password nor an openable KEK. `npm run
   bootstrap:user` writes exactly these settings for the dev tenant, so a hand-seeded instance can invite members
   out of the box. Sealing the SMTP password needs the **config-secret KEK**
-  ([ADR 0050](../docs/decisions/0050-operator-config-secret-encryption.md) + amendment): the server **generates
+  ([ADR 0050](../docs/decisions/0050-operator-config-secret-encryption.md)): the server **generates
   and manages** this key as a `0600` file on first start (default `config-secret.key` in the process CWD — a local
   `quarkusDev` drops one there, gitignored), so a fresh instance can seal secrets with **no** operator setup. To
   supply your own key (e.g. a mounted K8s/Docker secret), point `VEYQ_SECURITY_CONFIG_SECRET_FILE` at it. **In a
@@ -476,11 +476,18 @@ to this target.
   statement stays accurate). Until it is, § *Backup & restore*'s capture runs against this cluster through
   `kubectl port-forward` to MariaDB and Garage and `kubectl cp` of the key file, with the app **scaled to
   zero** for the duration (`kubectl -n veyq scale deploy/veyq-app --replicas=0`) — *cold* means the writer is
-  stopped, and that is the precondition you own.
+  stopped, and that is the precondition you own. The key is copied out before the scale-down, because only the
+  app pod mounts its claim, and the capture then puts it on a medium of its own, never in the capture directory
+  (§ Capture).
 
 ```sh
+# 0. leg (c) out of the pod first, while it still mounts the claim, to a file only you can read
+(umask 077; kubectl -n veyq cp "$(kubectl -n veyq get pod -l app.kubernetes.io/component=app \
+  -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key ./veyq-config-secret.key)
 kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application, and only it
-# 2. capture and verify — § Backup & restore, through port-forwards
+# 2. capture and verify — § Backup & restore, through port-forwards, with
+#    --config-secret-file ./veyq-config-secret.key --key-into /media/usb-stick/veyq-<stamp>.key;
+#    then delete ./veyq-config-secret.key — the key now lives on its own medium, never in the capture
 helm upgrade veyq ./charts/veyq -n veyq -f my-values.yaml \
   --set image.tag=<new> --set image.digest="${app_digest}" \
   --set admin.image.tag=<new> --set admin.image.digest="${admin_digest}"   # from § Verifying a release
@@ -523,16 +530,30 @@ export VEYQ_BLOB_STORE_ENDPOINT=http://garage:3900
 export VEYQ_BLOB_STORE_ACCESS_KEY=GK0123456789abcdef01234567
 export VEYQ_BLOB_STORE_SECRET_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
 
-# 3. Capture all three legs into infra/backups/<UTC-ISO8601>/ (gitignored).
+# 3. Capture legs (a) and (b) into infra/backups/<UTC-ISO8601>/ (gitignored), and leg (c) somewhere ELSE.
 python3 scripts/instance_backup.py capture \
     --docker-network infra_default \
-    --config-secret-file backend/config-secret.key
+    --config-secret-file backend/config-secret.key \
+    --key-into /media/usb-stick/veyq-<stamp>.key
 
-# 4. CHECK it — the store leg is captured logically precisely so this is possible at all.
-python3 scripts/instance_backup.py verify infra/backups/<stamp>
+# 4. CHECK both — the store leg is captured logically precisely so this is possible at all.
+python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
 
 # 5. Start the application again. The downtime was the capture, and nothing else.
 ```
+
+**Leg (c) never goes beside the dump.** The dump plus the key opens every tenant's SMTP password, so a capture
+directory holding both is exactly the leaked backup the key exists to defend against (ADR 0056 §1). `capture`
+therefore refuses a `--key-into` inside the capture directory, refuses to run with a key found and no destination
+for it, and never overwrites an existing file there. `--key-beside-dump` puts it in the capture anyway — knowingly,
+and the manifest records that it did. Everything the tool writes is owner-only (`0700` directories, `0600` files),
+and `verify` checks it.
+
+**Before a capture leaves this host, encrypt it, and keep the key on another medium.** The tool encrypts nothing:
+the dump holds the members' emails and the password wraps an attacker can grind offline even without the key.
+Pack the capture directory and encrypt the archive for a recipient whose private key is not on this host — for
+example `tar -C infra/backups -c <stamp> | age -r <recipient> > veyq-<stamp>.tar.age` — and carry the
+`--key-into` file on a different medium from that archive.
 
 `--docker-network` is the network the pinned `rclone` container joins, and it must be one the store is on. For the
 **dev** stack above it is `infra_default`: that file names no networks and declares no project, so Compose derives
@@ -556,7 +577,8 @@ themselves are reclaimed — `V11__media.sql:9`'s "a later slice" note is a hist
 migration.) A **row with no object** is fatal (A4): it
 restores as a Memory whose picture yields a valid presigned URL and a `404`, with no server-side error anywhere
 — so `verify` names every missing object and exits non-zero. It exits `2`, with a different headline, when the
-backup is structurally intact but carries no leg (c).
+backup is structurally intact but carries no leg (c). A key kept apart is checked only when `--key-from` names it,
+and `verify` says so when it did not.
 
 ### Restore — onto a freshly installed instance
 
@@ -575,14 +597,19 @@ make the store usable, and the same start migrates the schema, so the two go tog
 docker compose -f infra/docker-compose.yml --profile s3 up -d
 #    …start the application, wait for GET /api/instance/store-provisioning to report PROVISIONED, stop it.
 
-# 2. Load all three legs.
+# 2. Load all three legs — leg (c) from wherever you kept it.
 python3 scripts/instance_backup.py restore infra/backups/<stamp> \
     --domain veyq.localhost \
     --docker-network infra_default \
-    --config-secret-file backend/config-secret.key
+    --config-secret-file backend/config-secret.key \
+    --key-from /media/usb-stick/veyq-<stamp>.key
 
 # 3. Start the application, then VERIFY — this is the step that separates a restore from a hope.
 ```
+
+The restore takes the key from where the capture's manifest says it went. A capture that kept it apart is
+**refused** without `--key-from`, before anything is written: restoring without leg (c) is A2 — an instance that
+boots and refuses invites and password resets — and it happens only when you pass `--without-key` on purpose.
 
 The store's **configuration** is not restored because it was never state: bucket, access key and single-node
 layout are recreated idempotently by the app itself, on every start. This has no "fresh node only" limit — the
@@ -645,18 +672,20 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    differ here from the dev examples there. The network is `veyq_edge`, the one the store is on: the production
    compose file declares `name: veyq`, so that is the project, and nothing has to be passed on the command line to
    make it so. And
-   leg (c) lives on a **volume**, not on your filesystem, so it has to be addressed there:
+   leg (c) lives on a **volume**, not on your filesystem, so it has to be addressed there — and it is copied to a
+   destination of its own, never into the capture:
 
    ```sh
    python3 scripts/instance_backup.py capture \
        --compose-file infra/docker-compose.prod.yml \
        --docker-network veyq_edge \
-       --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key"
-   python3 scripts/instance_backup.py verify infra/backups/<stamp>
+       --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
+       --key-into /media/usb-stick/veyq-<stamp>.key
+   python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
    ```
 
    Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
-   the day you need it, which is the day you find out.
+   the day you need it, which is the day you find out. Encrypt it before it leaves this host (§ Capture).
 
 3. **Confirm the backup can name the release you are leaving.** Read `app.version` in the capture's
    `manifest.json`. A release is `<major>.<minor>`, and a publish onto an existing tag **fails** rather than

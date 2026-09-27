@@ -4,7 +4,7 @@ import com.veyq.app.shared.instance.InstanceStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
-/** Whether the server's config-secret KEK can actually open the stored secrets (ADR 0050 amendment). */
+/** Whether the server's config-secret KEK can actually open the stored secrets (ADR 0050). */
 enum class ConfigSecretKeyState {
     /** A KEK is available and matches the fingerprint that sealed the stored secrets. */
     OK,
@@ -19,7 +19,7 @@ enum class ConfigSecretKeyState {
 }
 
 /**
- * The config-secret KEK tripwire (ADR 0050 amendment). Turns a lost/changed key file from a **silent** unseal
+ * The config-secret KEK tripwire (ADR 0050). Turns a lost/changed key file from a **silent** unseal
  * failure into a **detected** [ConfigSecretKeyState.MISMATCH] by comparing the active KEK's [ConfigSecretSeal.fingerprint]
  * against the one stored on the [veyq_instance][InstanceStore] singleton. DB-touching, so it lives here rather
  * than in the pure-JVM [ConfigSecretSeal].

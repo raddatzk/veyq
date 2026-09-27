@@ -108,8 +108,8 @@ request the **user** turned on, straight to the chosen provider.
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —
   operator-visible operational config) and the **send-fact** of an invite mail (recipient + coarse timing, once a
   tenant has configured SMTP), while the SMTP **password is a server-held secret sealed at rest** (AES-256-GCM
-  under a server-managed KEK — ciphertext + nonce only, [ADR 0050](../decisions/0050-operator-config-secret-encryption.md)
-  + amendment: the KEK is a `0600` key **file** generated on first start, plus a non-invertible HKDF **fingerprint**
+  under a server-managed KEK — ciphertext + nonce only, [ADR 0050](../decisions/0050-operator-config-secret-encryption.md):
+  the KEK is a `0600` key **file** generated on first start, plus a non-invertible HKDF **fingerprint**
   of it on the instance singleton so a lost/changed key is detected, never a silent unseal — the fingerprint is a
   hash of a full-entropy key, not the key, so the "no usable secret in a DB dump" property holds); a mail itself
   carries only link + domain + expiry + neutral copy, never sealed metadata

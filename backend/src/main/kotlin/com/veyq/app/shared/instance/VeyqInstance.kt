@@ -8,7 +8,7 @@ import jakarta.persistence.Id
 import jakarta.persistence.Table
 
 /** Instance-wide constants that exist from first boot. Exactly one row (id = 1). Holds the public instance salt
- *  (ADR 0003) and the config-secret KEK fingerprint (ADR 0050 amendment). */
+ *  (ADR 0003) and the config-secret KEK fingerprint (ADR 0050). */
 @Entity
 @Table(name = "veyq_instance")
 class VeyqInstance : PanacheEntityBase {
@@ -19,7 +19,7 @@ class VeyqInstance : PanacheEntityBase {
     @Column(name = "instance_salt", nullable = false)
     lateinit var instanceSalt: String
 
-    /** HKDF fingerprint of the config-secret KEK that sealed the stored secrets (ADR 0050 amendment); null until
+    /** HKDF fingerprint of the config-secret KEK that sealed the stored secrets (ADR 0050); null until
      *  the first configured read adopts the current key. A hash, never the key — safe at rest. */
     @Column(name = "config_secret_fingerprint")
     var configSecretFingerprint: String? = null

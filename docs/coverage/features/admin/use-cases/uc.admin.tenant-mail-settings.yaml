@@ -20,7 +20,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: password-sealed-at-rest
-    text: The SMTP password is sealed at rest under the operator env KEK (AES-256-GCM, ADR 0050) — the stored columns hold only ciphertext + nonce, never the plaintext input; omitting the password on a later update keeps the stored one rather than clearing it. The web form drives that "omit to keep" contract (an empty field sends no password; a typed one is sent and then cleared from state).
+    text: The SMTP password is sealed at rest under the config-secret KEK (AES-256-GCM, ADR 0050) — the stored columns hold only ciphertext + nonce, never the plaintext input; omitting the password on a later update keeps the stored one rather than clearing it. The web form drives that "omit to keep" contract (an empty field sends no password; a typed one is sent and then cleared from state).
     coverage:
       backend:
         integration: [TenantMailSettingsSliceTest.theSmtpPasswordIsSealedAtRestNotPlaintext, TenantMailSettingsSliceTest.omittingThePasswordOnUpdateKeepsTheStoredOne]
@@ -59,7 +59,7 @@ acceptanceCriteria:
       web:
         unit: [src/features/tenant/TenantMailSettingsPanel.test.ts]
   - id: config-secret-kek-managed-as-a-file
-    text: The config-secret KEK (ADR 0050 amendment) is a server-managed key file — generated (32 random bytes, 0600) on first construction when absent, and read rather than regenerated when present. The env value channel is gone; an operator supplies their own key via a file path override.
+    text: The config-secret KEK (ADR 0050) is a server-managed key file — generated (32 random bytes, 0600) on first construction when absent, and read rather than regenerated when present. The env value channel is gone; an operator supplies their own key via a file path override.
     coverage:
       backend:
         unit: [ConfigSecretSealTest.generatesAKeyFileOnFirstConstructionWith0600Perms, ConfigSecretSealTest.readsAnExistingKeyFileRatherThanRegenerating, ConfigSecretSealTest.anUnavailableKekIsAnErrorNotAPlaintextLeak]

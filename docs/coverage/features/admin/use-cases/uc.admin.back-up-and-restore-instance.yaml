@@ -8,7 +8,7 @@ title: Back up an instance and restore it onto an empty one
 # The capture/restore machinery itself is a Python script and an orchestrator extension, neither of which is a
 # coverage surface; what is claimable here is what a test can observe about a restored instance.
 #
-# `status: planned` stays, and it is not a formality: four criteria are out of every surface's reach — their
+# `status: planned` stays, and it is not a formality: five criteria are out of every surface's reach — their
 # observable is a stopped app, the operator tool's exit, or a second store no harness stands up — the same
 # shape as uc.admin.identify-instance-release's manifest criterion. `docs/coverage/README.md` § Rules gives such
 # a criterion no other legal home, so each says on itself how it is proven instead. (Until 2026-09-24 this file
@@ -24,10 +24,11 @@ acceptanceCriteria:
       the key seals operator config, never content — which is exactly why the failure is invisible until someone
       tries to invite or reset. Restoring the key file, or re-entering each tenant's SMTP password, resolves it.
     coverage:
-      # `legthree.*` does the `restore.*` restore minus the key file — removed from the BACKUP after a full
-      # capture, not captured badly, so the two groups differ in exactly one artifact — and asserts MISMATCH plus
-      # a 503 `mail_unavailable` invite while the Memory still opens, with a pre-capture `OK` as its positive
-      # control. `restore.b-reopen` is the other remedy's half: with the key file restored, the state reads `OK`.
+      # `legthree.*` does the `restore.*` restore minus the key file — the same capture, restored with
+      # `--without-key` as an operator reaches A2, so the two groups differ in exactly one flag — and asserts
+      # MISMATCH plus a 503 `mail_unavailable` invite while the Memory still opens, with a pre-capture `OK` as its
+      # positive control. `restore.b-reopen` is the other remedy's half: with the key file restored, the state
+      # reads `OK`.
       web:
         e2e:
           - src/features/instanceBackup/legthree.a-capture.e2e.test.ts
@@ -88,6 +89,23 @@ acceptanceCriteria:
       widened what the gate accepts, and a gate whose entire job is refusal is not demonstrated by the case it
       accepts. Nothing reconciles two populated instances (A5), and the refusal is asserted by its own message
       rather than by a non-zero exit, which a connection failure produces equally well.
+  - id: the-key-is-kept-apart-and-nothing-is-readable-by-others
+    # No coverage on a surface: the observable is the operator tool's exit and message, like
+    # `a-populated-target-is-refused-rather-than-reconciled` above, and it rides in the same `web-e2e` hook.
+    # `scripts/run_web_e2e.py` captures with `--key-into` a path outside the capture, runs `verify` (exit 0, which
+    # includes the owner-only check) and asserts no key file sits in the capture directory
+    # (`verify_capture`); then `assert_unsupplied_key_is_refused` restores WITHOUT the key and requires the refusal
+    # to name it (`--key-from`), before the same restore with the key — its positive control, against the same
+    # freshly installed target — succeeds, which also proves the refusal wrote nothing (A5 would refuse otherwise).
+    # The capture-side refusal of a key destination inside the capture was run by hand, not by the hook.
+    text: >-
+      A capture writes the config-secret key to a destination of its own and refuses one inside the capture
+      directory, unless explicitly told to put it beside the dump; the manifest records which happened. Nothing
+      the capture writes is readable by another local user. A restore of a capture whose key was kept apart
+      refuses, naming the key, when it is not supplied — before anything is written — unless the operator
+      explicitly accepts restoring without it (A2). The dump plus the key opens every tenant's SMTP password, so
+      this is what keeps a leaked capture from being the leak the key file exists to defend against (ADR 0056 §1,
+      ADR 0050).
   - id: the-store-leg-is-verifiable-before-the-restore
     # No coverage, and none to come: the observable is the exit code of `scripts/instance_backup.py verify`, and a
     # Python operator tool is not a coverage surface (ADR 0040). Proven by that tool's own asymmetry (stated on

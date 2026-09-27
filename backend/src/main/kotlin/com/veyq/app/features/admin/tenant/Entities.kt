@@ -42,7 +42,7 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
  * invites and password recovery are refused with `503` (ADR 0055 §2/§4); only the Server-Owner's tenant-bootstrap
  * invite still falls back to a copy-link (§3), where a PENDING tenant has no settings by construction. The SMTP
  * **password is never stored in plaintext**: [passwordCiphertext] + [passwordNonce] hold the `ConfigSecretSeal`
- * output (AES-256-GCM under the env KEK, ADR 0050); null ciphertext = no password. [subjectTemplate] /
+ * output (AES-256-GCM under the config-secret KEK, ADR 0050); null ciphertext = no password. [subjectTemplate] /
  * [bodyTemplate] are the owner-authored invite templates (null = veyq's bilingual EN+DE default), rendered over
  * the closed variable set `{{link}}`/`{{domain}}`/`{{expiry}}` (ADR 0049) — operator-visible config, not content.
  */

@@ -52,8 +52,10 @@ A veyq backup has **two halves**, and the server only holds one of them.
 1. **The server's half** — and it is *three* things, not two. The database, the object store's contents, and a
    small **key file** the server manages for itself. The third is the one that gets forgotten, and its absence
    is the one that hides: an instance restored without it starts up, serves every page, and then refuses to
-   invite anybody or send a password-reset link. All three are ciphertext or keys to ciphertext; none of it
-   lets you read anything.
+   invite anybody or send a password-reset link. Nothing in it lets anyone read your members' memories. But
+   the database plus the key file do unlock the SMTP passwords you configured, and the database alone holds your
+   members' email addresses. So the backup tool keeps the key file apart from the rest, and you should too:
+   encrypt the backup before it leaves the server, and keep the key file on a different stick or disk.
 2. **The users' half** — their passwords and Emergency Kits. You do not have these and cannot back them up.
 
 A perfectly restored server whose users lost their keys is not a recovered instance. It is unreadable data.

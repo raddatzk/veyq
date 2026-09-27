@@ -678,7 +678,7 @@ interface VeyqConfig {
     /** `veyq.security.*` — operator-side security knobs. */
     interface Security {
         /** Path to the file holding the base64 32-byte KEK that seals server-held config secrets at rest
-         *  ([ADR 0050](../../../../../../../docs/decisions/0050-operator-config-secret-encryption.md) amendment).
+         *  ([ADR 0050](../../../../../../../docs/decisions/0050-operator-config-secret-encryption.md)).
          *  The server **generates and manages** this file on first start (`0600`, base64 32-byte key) if it does
          *  not exist; an operator supplying their own key mounts it and points this at it (the K8s/Docker-secret
          *  shape). Default `config-secret.key` (relative to the process CWD) — put it on a **persisted volume** in
