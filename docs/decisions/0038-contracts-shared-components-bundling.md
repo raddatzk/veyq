@@ -25,7 +25,7 @@ The audit asks to extract a shared `_common.openapi.yaml` and `$ref` it. **Both 
 | Consumer | Resolves cross-file `$ref`? | Note |
 |---|---|---|
 | web (openapi-generator typescript-fetch) | **yes** | swagger-parser resolves relative refs in place |
-| backend (openapi-generator 7.21, Quarkus) | **yes** | reads specs in place |
+| backend (openapi-generator kotlin + jaxrs-spec, Quarkus) | **yes** | reads specs in place |
 
 **This decision originally rested on a blocker that no longer exists.** It was taken when a generator that
 could not resolve external references at all was a consumer: extraction would have needed a bundler plus a
@@ -53,7 +53,7 @@ guard.** The revisit trigger below fired (F6, 2026-07-21); the components split 
    (`GetAccountKeyMaterial401Response`), *losing* the `ErrorResponse` type — not a pure refactor. The fix that
    keeps generation byte-identical is a **local `$ref` alias**: each spec keeps
    `components.schemas.ErrorResponse: {$ref: '_common…'}`, so every response still references the local name.
-   Backend output is then byte-identical; web (openapi-generator 7.23) additionally emits one *unreferenced,
+   Backend output is then byte-identical; web (typescript-fetch) additionally emits one *unreferenced,
    unexported* inline clone per module — harmless dead code in the gitignored generated tree, not worth fighting.
    `_common` is excluded from the backend spec glob (`openapi.gradle.kts` — it is a `$ref` target, not a spec) and
    unlisted in web's `generate:api`.

@@ -1,7 +1,7 @@
 buildscript {
     repositories { mavenCentral() }
     dependencies {
-        classpath("org.openapitools:openapi-generator:7.21.0")
+        classpath("org.openapitools:openapi-generator:7.23.0")
     }
 }
 
