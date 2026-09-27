@@ -52,7 +52,11 @@ import {
   pairingPayload,
   signInPayload,
   signInAnswer,
+  channelKeys,
+  mintPairingSecret,
 } from './pairing'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
@@ -64,7 +68,6 @@ const seal = vi.mocked(sealPairingChannel)
 
 const REFRESH_TOKEN = 'ZGVsZWdhdGVkLXJlZnJlc2gtdG9rZW4'
 const transport = mintTransportKey()
-const ANSWER = transportAnswer(transport.pub)
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
@@ -97,28 +100,39 @@ const pollOnce = async () => {
   await flushPromises()
 }
 
+/** The secret the last shown code carried — read off the screen the way the scanning device reads it. */
+let shownSecret = ''
+
 const showCode = async (w: VueWrapper) => {
   await buttonLabelled(w, t('pairing.start'))!.trigger('click')
   await flushPromises()
   await vi.advanceTimersByTimeAsync(0)
   await flushPromises()
+  const qr = w.find('.qr')
+  if (qr.exists()) shownSecret = parsePairingPayload(qr.text()) ?? ''
 }
 
+/** The channel the shown code's secret derives — what the device that scans it derives too. */
+const shownChannel = () => channelKeys(shownSecret)
+
+/** The honest new device answers the shown code: its transport key, MACed under the channel key. */
 const answerArrives = async (w: VueWrapper) => {
-  collect.mockResolvedValue({ answer: ANSWER })
+  collect.mockResolvedValue({ answer: transportAnswer(shownChannel().key, transport.pub) })
   await pollOnce()
   await w.vm.$nextTick()
 }
 
-const SCANNED_HANDLE = 'c2Nhbm5lZC1oYW5kbGU='
+const SCANNED_SECRET = mintPairingSecret()
+const SCANNED = channelKeys(SCANNED_SECRET)
 
-/** Take the *scan a code* arm and hand the scanner the other device's payload, the way the camera would. */
-const scanCode = async (w: VueWrapper, handle = SCANNED_HANDLE) => {
+/** Take the *scan a code* arm and hand the scanner the other device's payload, the way the camera would. Returns
+ *  the handle the scanned secret derives — the only thing that reaches the server. */
+const scanCode = async (w: VueWrapper) => {
   await buttonLabelled(w, t('pairing.scanStart'))!.trigger('click')
-  w.findComponent({ name: 'KitScanner' }).vm.$emit('found', signInPayload(handle))
+  w.findComponent({ name: 'KitScanner' }).vm.$emit('found', signInPayload(SCANNED_SECRET))
   await flushPromises()
   await w.vm.$nextTick()
-  return handle
+  return SCANNED.handle
 }
 
 /** The six digits this device drew and is asking the account holder to transcribe. */
@@ -129,7 +143,7 @@ const someOtherCode = (code: string) => String((Number(code) + 1) % 1_000_000).p
 
 /** The other device answers with its key and a proof of `code`. */
 const proofArrives = async (w: VueWrapper, code: string, key = mintTransportKey()) => {
-  collect.mockResolvedValue({ answer: signInAnswer(key.pub, code) })
+  collect.mockResolvedValue({ answer: signInAnswer(SCANNED.key, key.pub, code) })
   await pollOnce()
   await w.vm.$nextTick()
   return key
@@ -156,14 +170,16 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers())
 
 describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 0059)', () => {
-  it('shows a code that carries the opened channel’s handle and nothing else', async () => {
+  it('shows a code that carries the channel’s secret and nothing else — and opens the channel under its handle', async () => {
     const w = mountPanel()
 
     await showCode(w)
 
-    const handle = open.mock.calls[0][0]
-    expect(w.find('.qr').text()).toBe(`veyqpair:${handle}`)
-    expect(parsePairingPayload(w.find('.qr').text())).toBe(handle)
+    const secret = parsePairingPayload(w.find('.qr').text())!
+    expect(w.find('.qr').text()).toBe(`veyqpair:${secret}`)
+    // Only the handle the secret derives reaches the server — never the secret, never the channel key (§11).
+    expect(open).toHaveBeenCalledExactlyOnceWith(channelKeys(secret).handle)
+    expect(open.mock.calls[0][0]).not.toBe(secret)
   })
 
   it('shows the same check number the answering device derives, once the answer lands', async () => {
@@ -203,7 +219,7 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     expect(handle).toBe(open.mock.calls[0][0])
     // Opened with the private half the answering device kept — the only proof that the envelope went to the
     // key whose number was on screen, rather than to some other key the panel happened to hold.
-    expect(openGrant(transport.priv, envelope)).toEqual({
+    expect(openGrant(shownChannel().key, transport.priv, envelope)).toEqual({
       email: 'someone@example.org',
       masterKey: MASTER_KEY,
       refreshToken: REFRESH_TOKEN,
@@ -236,6 +252,8 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
 
     await buttonLabelled(w, t('pairing.mismatch'))!.trigger('click')
     await flushPromises()
+    // The abandoned channel's answer is not the new one's: MACed under the old channel key, it would be refused.
+    collect.mockResolvedValue({})
     await showCode(w)
 
     const restarted = open.mock.calls[1][0]
@@ -293,7 +311,7 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     // The control on the same predicate: the ceremony really completed, so "nothing was written" is not
     // satisfied by a run that never got as far as granting anything.
     expect(seal).toHaveBeenCalledTimes(1)
-    expect(openGrant(transport.priv, seal.mock.calls[0][1]).label).toBe('Arbeitslaptop')
+    expect(openGrant(shownChannel().key, transport.priv, seal.mock.calls[0][1]).label).toBe('Arbeitslaptop')
 
     expect(rememberThisDevice).not.toHaveBeenCalled()
     expect(rememberThisDeviceWrap).not.toHaveBeenCalled()
@@ -323,10 +341,10 @@ describe('AddDevicePanel — the scanned arm (sign in with a QR code, ADR 0059 �
     await buttonLabelled(w, t('pairing.scanStart'))!.trigger('click')
 
     const accepts = w.findComponent({ name: 'KitScanner' }).props('accepts') as (s: string) => boolean
-    expect(accepts(signInPayload('aGFuZGxl'))).toBe(true)
+    expect(accepts(signInPayload(SCANNED_SECRET))).toBe(true)
     // A `veyqpair:` code is one THIS device showed. Accepting it here would have the panel pair with itself —
     // and on the sign-in card the mirror-image mis-scan burns the write-once answer slot (D1).
-    expect(accepts(pairingPayload('aGFuZGxl'))).toBe(false)
+    expect(accepts(pairingPayload(SCANNED_SECRET))).toBe(false)
     expect(accepts('veyqkit:whatever')).toBe(false)
     // The negative on the same predicate: a foreign QR is scanned PAST, not reported as a failure.
     expect(accepts('https://example.com/')).toBe(false)
@@ -405,11 +423,11 @@ describe('AddDevicePanel — the scanned arm (sign in with a QR code, ADR 0059 �
     // Sealed to the key that carried the proof, and to no other. Anchored on a real second key failing to open
     // a real envelope — not on "it threw", which a malformed input produces just as well.
     const envelope = seal.mock.calls[0][1]
-    const opened = openGrant(answering.priv, envelope)
+    const opened = openGrant(SCANNED.key, answering.priv, envelope)
     expect(opened.masterKey).toEqual(MASTER_KEY)
     expect(opened.refreshToken).toBe(REFRESH_TOKEN)
     expect(opened.label).toBe('Küchen-Tablet')
-    expect(() => openGrant(mintTransportKey().priv, envelope)).toThrow()
+    expect(() => openGrant(SCANNED.key, mintTransportKey().priv, envelope)).toThrow(v1.OpenRefused)
 
     // The channel is never read again after the seal: a collect from ANY caller returns the envelope and marks
     // the row COLLECTED, so this device would eat its own grant and the other one would wait forever.
@@ -422,8 +440,8 @@ describe('AddDevicePanel — the scanned arm (sign in with a QR code, ADR 0059 �
   it('an unreadable answer is the ordinary terminal state, and seals nothing', async () => {
     const w = mountPanel()
     await scanCode(w)
-    // The other direction's answer shape: a key with no proof at all. Nothing can be sealed against it.
-    collect.mockResolvedValue({ answer: transportAnswer(mintTransportKey().pub) })
+    // A bare key with no proof at all — not a shape this client writes. Nothing can be sealed against it.
+    collect.mockResolvedValue({ answer: b64std(v1.serializeIdentityPublic(mintTransportKey().pub)) })
     await pollOnce()
     await w.vm.$nextTick()
 
@@ -447,3 +465,97 @@ describe('AddDevicePanel — the scanned arm (sign in with a QR code, ADR 0059 �
     expect(seal).not.toHaveBeenCalled()
   })
 })
+
+// ADR 0059 §11 — the relay is the one party that sees both halves of each binding step. Each relay below is a
+// test double that knows ONLY what crossed the channel (the handle, the honest answer) and posts in the honest
+// device's place. The completed ceremonies above are the live controls.
+describe('AddDevicePanel — a relay that substitutes its own key (ADR 0059 §11)', () => {
+  it('SIGN IN — a relay that grinds the code off the honest answer and proves it for its own key seals nothing', async () => {
+    const w = mountPanel()
+    await scanCode(w)
+    const shown = shownCode(w)
+    const honest = mintTransportKey()
+    const honestAnswer = signInAnswer(SCANNED.key, honest.pub, shown)
+
+    // The relay's lever: a candidate list that contains the right code (a list keeps the test fast; the full
+    // 10⁶ is the same loop, longer), tried against what crossed it.
+    const candidates = Array.from({ length: 2_000 }, (_, i) => String((Number(shown) + 997 * i) % 1_000_000).padStart(6, '0'))
+    const relay = mintTransportKey()
+    collect.mockResolvedValue({ answer: relayForgesASignInAnswer(honestAnswer, candidates, relay.pub) })
+    await pollOnce()
+    await w.vm.$nextTick()
+
+    // Refused on the answer, before the name field or the slide exists: there is nothing to confirm past.
+    expect(w.text()).toContain(t('pairing.scanRefused'))
+    expect(w.findComponent(SlideToConfirm).exists()).toBe(false)
+    expect(delegate).not.toHaveBeenCalled()
+    expect(seal).not.toHaveBeenCalled()
+  })
+
+  it('ADD A DEVICE — a relay that grinds its own bundle to the honest check number is refused before any number is shown', async () => {
+    const w = mountPanel()
+    await showCode(w)
+    const honest = mintTransportKey()
+    const honestAnswer = transportAnswer(shownChannel().key, honest.pub)
+
+    const relay = mintTransportKey()
+    const forged = relayGrindsTheCheckNumber(honestAnswer, relay.pub)
+    // The lever is wired: the relay's bundle really does show the honest device's number.
+    expect(checkNumber(forged.pub)).toBe(checkNumber(honest.pub))
+
+    collect.mockResolvedValue({ answer: forged.answer })
+    await pollOnce()
+    await w.vm.$nextTick()
+
+    expect(w.find('[data-testid="check-number"]').exists()).toBe(false)
+    expect(w.findComponent(SlideToConfirm).exists()).toBe(false)
+    expect(w.text()).toContain(t('pairing.answerRefused'))
+    expect(delegate).not.toHaveBeenCalled()
+    expect(seal).not.toHaveBeenCalled()
+  })
+})
+
+const PAIRING_CODE_DOMAIN = v1.utf8('veyq/v1/pairing-code')
+
+/** Split an answer the way the relay can: `lp(first) || lp(second)`. */
+function splitAnswer(answer: string): { first: Uint8Array; second: Uint8Array } {
+  const bytes = fromB64std(answer)
+  const len = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, false)
+  return { first: bytes.slice(4, 4 + len), second: bytes.slice(8 + len) }
+}
+
+/**
+ * The sign-in relay: grind every candidate code against the proof that crossed it, with the one function of
+ * (key, code) anybody can compute — and post its own key with whatever it can make of that. Where the grind
+ * finds nothing, the best it has is the honest proof, replayed beside its own key.
+ */
+function relayForgesASignInAnswer(honestAnswer: string, candidates: string[], relayPub: v1.Identity['pub']): string {
+  const { first: honestKey, second: honestProof } = splitAnswer(honestAnswer)
+  const unkeyed = (key: Uint8Array, code: string) =>
+    v1.sha256Digest(v1.concat(PAIRING_CODE_DOMAIN, v1.lp(key), v1.utf8(code)))
+  const ground = candidates.find((c) => b64std(unkeyed(honestKey, c)) === b64std(honestProof)) ?? null
+  const relayKey = v1.serializeIdentityPublic(relayPub)
+  const proof = ground === null ? honestProof : unkeyed(relayKey, ground)
+  return b64std(v1.concat(v1.lp(relayKey), v1.lp(proof)))
+}
+
+/**
+ * The add-a-device relay: vary the Ed25519 half of its own bundle — which the wrap never uses — until its
+ * check number is the honest device's, read off the honest answer. About 10⁵ hashes (measured 0.5–2 s here, so
+ * the grind runs in full rather than from a known-good seed). It keeps the honest answer's MAC beside its own key:
+ * that is the best it can do without the channel key.
+ */
+function relayGrindsTheCheckNumber(honestAnswer: string, relayPub: v1.Identity['pub']): { pub: v1.Identity['pub']; answer: string } {
+  const { first: honestKey, second: honestMac } = splitAnswer(honestAnswer)
+  const target = checkNumber(v1.deserializeIdentityPublic(honestKey))
+  const sign = new Uint8Array(32)
+  const view = new DataView(sign.buffer)
+  for (let i = 0; ; i++) {
+    view.setUint32(0, i, false)
+    const pub = { ...relayPub, sign }
+    if (checkNumber(pub) === target) {
+      const found = { ...relayPub, sign: sign.slice() }
+      return { pub: found, answer: b64std(v1.concat(v1.lp(v1.serializeIdentityPublic(found)), v1.lp(honestMac))) }
+    }
+  }
+}

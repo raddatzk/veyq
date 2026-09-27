@@ -40,8 +40,8 @@ client, so features (consent-add, sharing, key exchange) place cleanly and we ne
 | **A client the operator does not serve** (a web client you serve yourself against someone else's server; the native apps, once they ship) | **Yes, by design.** |
 
 **"Yes" in the last two rows is the design, and the build has not reached all of it.** On such a client every
-remaining gap is protocol, not code delivery — a relay that can grind a pairing code, a rotation that trusts the
-server's member list, trust state the server can roll back. Which attacks hold today and what closes the rest
+remaining gap is protocol, not code delivery — a rotation that trusts the server's member list, trust state the
+server can roll back. Which attacks hold today and what closes the rest
 is kept in one place, [security-model § What holds today](../crosscutting/security-model.md#what-holds-today-on-a-client-the-operator-does-not-serve),
 and nowhere else.
 

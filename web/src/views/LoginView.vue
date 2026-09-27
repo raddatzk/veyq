@@ -78,10 +78,10 @@ const noPersist = ref(false)
 // What the last sign-out in this tab left for this screen to say (see `showSignOutNotice`).
 const notice = ref('')
 const warning = ref('')
-// uc.account.onboard-device — the handle of a pairing channel this device just scanned. Non-empty means the
+// uc.account.onboard-device — the secret of a pairing channel this device just scanned. Non-empty means the
 // join card has replaced the form (routeless, like the locked state above it): this device is being let in from
 // one that is already signed in, so it has no email, no password and no Secret Key to type here.
-const joinHandle = ref('')
+const joinSecret = ref('')
 // uc.account.onboard-device § Main flow — sign in with a QR code. The OTHER direction's entry, and the other
 // routeless card: this device displays a code and the signed-in one scans it. Deliberately NOT gated on
 // `scanSupported` — a camera-less laptop is precisely this direction's case, and ADR 0059 §1's "no direction is
@@ -267,13 +267,13 @@ function acceptsScan(text: string): boolean {
 /** The half of that dispatch the shared control cannot own: a decoded string it accepted but did not
  *  recognise as a kit is this screen's pairing payload. */
 function onForeignScan(text: string) {
-  joinHandle.value = parsePairingPayload(text) ?? ''
+  joinSecret.value = parsePairingPayload(text) ?? ''
 }
 
 /** The join completed: this device now holds its own session and an open vault, so it leaves like any other
  *  successful unlock does. */
 async function onJoinDone() {
-  joinHandle.value = ''
+  joinSecret.value = ''
   await finishAndRoute()
 }
 
@@ -293,7 +293,7 @@ function onSignInWithCodeCancel() {
 /** Back to the sign-in form. Nothing was granted, or nothing more can be done on that channel — the next
  *  attempt is a fresh ceremony on the other device, started by a fresh scan. */
 function onJoinCancel() {
-  joinHandle.value = ''
+  joinSecret.value = ''
 }
 
 // A different email is a different account. The watcher drops sessionReady on every keystroke (cheap — a
@@ -329,7 +329,7 @@ onMounted(async () => {
     <template #title>
       {{
         lockedEntry ? t('sessions.lockedTitle')
-        : joinHandle ? t('pairing.joinTitle')
+        : joinSecret ? t('pairing.joinTitle')
         : signInWithCode ? t('pairing.signInTitle')
         : t('login.title')
       }}
@@ -343,8 +343,8 @@ onMounted(async () => {
            reason: routeless, replacing the form, because none of these fields applies to a device that is about
            to be handed everything by another one. No route is added for it anywhere. -->
       <JoinDeviceCard
-        v-else-if="joinHandle"
-        :handle="joinHandle"
+        v-else-if="joinSecret"
+        :secret="joinSecret"
         @done="onJoinDone"
         @cancel="onJoinCancel"
       />

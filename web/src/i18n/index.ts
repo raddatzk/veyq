@@ -256,6 +256,10 @@ const en = {
     // D9: the refusal arrives BEFORE anything was committed, so it is one honest sentence and not a retry.
     scanRefused: 'That number came back wrong — nothing was given away.',
     scanRefusedHint: 'Either it was mistyped, or something other than the device in front of you answered. Nothing was granted and this code is finished. Start again on the other device, then scan the new code.',
+    // ADR 0059 §11, the shown-code arm: an answer that does not carry the code's secret is not from the device
+    // that scanned it. Refused before any number is shown, so there is nothing to compare past.
+    answerRefused: 'Something other than the device that scanned this code answered — nothing was given away.',
+    answerRefusedHint: 'Nothing was granted and this code is finished. Start over and scan the new code with the device you want to add.',
     scanProven: 'That is the right device. Name it and confirm to give it access.',
     scanHint: 'Scan this with the device you want to add. The code is good for about ten minutes.',
     waiting: 'Waiting for your other device…',
@@ -1179,6 +1183,8 @@ const de: typeof en = {
     scanWaiting: 'Warten darauf, dass das andere Gerät sie zurückschickt…',
     scanRefused: 'Die Zahl kam falsch zurück — es wurde nichts weitergegeben.',
     scanRefusedHint: 'Entweder wurde sie vertippt, oder es hat etwas anderes geantwortet als das Gerät vor dir. Es wurde nichts freigegeben und dieser Code ist verbraucht. Fang am anderen Gerät neu an und scanne dann den neuen Code.',
+    answerRefused: 'Geantwortet hat etwas anderes als das Gerät, das diesen Code gescannt hat — es wurde nichts weitergegeben.',
+    answerRefusedHint: 'Es wurde nichts freigegeben und dieser Code ist verbraucht. Fang neu an und scanne den neuen Code mit dem Gerät, das du hinzufügen möchtest.',
     scanProven: 'Das ist das richtige Gerät. Gib ihm einen Namen und bestätige, um Zugriff zu geben.',
     scanHint: 'Scanne das mit dem Gerät, das du hinzufügen möchtest. Der Code gilt etwa zehn Minuten.',
     waiting: 'Warten auf dein anderes Gerät…',

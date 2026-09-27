@@ -41,10 +41,13 @@ tags:
       obtain by itself — it never learns the password, and the auth keypair is password-derived (ADR 0003).
 
       The server relays three opaque values and interprets none of them: the routing handle, one `answer` and
-      one sealed grant. `answer` means different things in the two directions — the new device's ephemeral
-      transport key when *adding a device*, the commitment to the transcribed code when *signing in with a QR
-      code* — and the server must not be able to tell them apart: checking a code server-side would put a
-      malicious operator past the only barrier there is (ADR 0059 §6, ADR 0026).
+      one sealed grant. `answer` means slightly different things in the two directions — the new device's
+      ephemeral transport key when *adding a device*, that key bound to the transcribed code when *signing in
+      with a QR code* — and the server must not be able to tell them apart: checking a code server-side would put
+      a malicious operator past the only barrier there is (ADR 0059 §6, ADR 0026). Both the answer and the grant
+      carry a MAC under a channel key derived from a secret the displayed code carries and the server never
+      receives (ADR 0059 §11); the handle is derived from that same secret, so the relay holds the address and
+      not the key.
 
       Nothing on this wire carries a URL or names a server (ADR 0059 §4), and no request from the device
       being onboarded names an account.
@@ -484,11 +487,12 @@ paths:
     post:
       tags: [pairing]
       operationId: openPairingChannel
-      summary: Open a pairing channel under a client-minted handle.
+      summary: Open a pairing channel under a client-derived handle.
       description: >
         Opens the short-lived, single-use relay one device-linking ceremony runs over (ADR 0059 §8). The
-        handle is minted by the client; only its SHA-256 hash is stored, so the server recognises it at use
-        and can never reproduce it — the recovery token's posture, one flow over.
+        handle is derived by the client from the secret its displayed code carries (ADR 0059 §11); only its
+        SHA-256 hash is stored, so the server recognises it at use and can never reproduce it — the recovery
+        token's posture, one flow over.
 
         Unauthenticated, and it names no account. In the *sign in with a QR code* direction the channel is
         opened by a device with no session at all, so an account here is not merely unnecessary, it is
@@ -522,12 +526,12 @@ paths:
       summary: Post the one opaque answer this channel relays.
       description: >
         Writes the channel's single `answer`. The server stores it verbatim and derives nothing from it: it is
-        the new device's ephemeral transport public key when *adding a device*, and that same key **together
-        with** a commitment to the transcribed pairing code when *signing in with a QR code* (ADR 0059 §5, §6).
-        The key travels in both directions because the trusted device has to seal to it either way; what the
-        second direction adds is the proof binding it to the code, and it rides in this one slot because the
-        seal takes no code and never may (§6). One shape for both, so the relay cannot tell the two ceremonies
-        apart.
+        the new device's ephemeral transport public key and a MAC over it under the channel key (ADR 0059 §11) —
+        a MAC that, when *signing in with a QR code*, also binds the transcribed pairing code (§5, §6). The key
+        travels in both directions because the trusted device has to seal to it either way; the code rides in
+        this one slot because the seal takes no code and never may (§6). One shape and one length for both, so
+        the relay cannot tell the two ceremonies apart — and cannot swap the key, because it never holds the
+        channel key.
 
         Unauthenticated on purpose — in the *add a device* direction the caller is the device being onboarded,
         which has no session and must not have to name an account before it has one (ADR 0059 §3).
@@ -1058,10 +1062,11 @@ components:
         handle:
           type: string
           description: >
-            The client-minted routing secret for this channel (opaque base64). Only its SHA-256 hash is
+            The client-derived routing secret for this channel (opaque base64) — derived from the secret the
+            displayed code carries, which never reaches the server (ADR 0059 §11). Only its SHA-256 hash is
             stored, so the server recognises it at use and can never reproduce it — and it is sent in the
-            body, never in a path or query, to keep it out of logs and referrers. It is deliberately not the
-            ephemeral transport key: that key has a cryptographic job, this one a routing job.
+            body, never in a path or query, to keep it out of logs and referrers. It is deliberately neither the
+            ephemeral transport key nor the channel key: those have a cryptographic job, this one a routing job.
           contentEncoding: base64
           maxLength: 128
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
@@ -1073,7 +1078,7 @@ components:
       properties:
         handle:
           type: string
-          description: The channel's routing handle (opaque base64), as minted at open.
+          description: The channel's routing handle (opaque base64), as derived at open.
           contentEncoding: base64
           maxLength: 128
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
@@ -1082,10 +1087,10 @@ components:
           type: string
           description: >
             The one opaque answer this channel relays — the answering device's ephemeral transport public key
-            when *adding a device*, and that key together with a commitment to the transcribed pairing code
-            when *signing in with a QR code* (ADR 0059 §5, §6). Both directions carry the key, because the
-            grant is sealed to it either way; the second adds the proof that binds it to the displayed code.
-            The server stores the value verbatim and must not be able to tell the two forms apart.
+            and a MAC over it under the channel key the displayed code's secret derives, which when *signing in
+            with a QR code* also binds the transcribed pairing code (ADR 0059 §5, §6, §11). Both directions carry
+            the key, because the grant is sealed to it either way. The server stores the value verbatim and must
+            not be able to tell the two forms apart.
           contentEncoding: base64
           maxLength: 8192
           example: ZXBoZW1lcmFsLXRyYW5zcG9ydC1wdWJsaWMta2V5
@@ -1137,7 +1142,9 @@ components:
           type: string
           description: >
             The sealed grant of ADR 0059 §3 — the Master Key, the delegated refresh token and the device's
-            label, wrapped to the answering device's ephemeral transport public key. Ciphertext to the server
+            label, wrapped to the answering device's ephemeral transport public key, and a MAC over that
+            ciphertext under the channel key (ADR 0059 §11) — anyone can seal to a public key, so the MAC is what
+            says this grant came from the device that showed or scanned the code. Ciphertext to the server
             in the strict sense: it holds it, relays it once, and cannot open it. (Unrelated to ADR 0021's job
             envelope, which is a different mechanism that happens to share the word.)
           contentEncoding: base64
@@ -1170,9 +1177,9 @@ components:
         answer:
           type: string
           description: >
-            The relayed answer, once posted — an ephemeral transport public key, or that key together with a
-            commitment to the transcribed code, depending on the direction the server cannot see (ADR 0059 §5,
-            §6). One opaque value either way; the two forms differ only in length.
+            The relayed answer, once posted — an ephemeral transport public key and its MAC under the channel
+            key, which binds the transcribed code too in the direction that has one (ADR 0059 §5, §6, §11). One
+            opaque value of one shape either way, so the server cannot see the direction.
           contentEncoding: base64
           maxLength: 8192
           example: ZXBoZW1lcmFsLXRyYW5zcG9ydC1wdWJsaWMta2V5

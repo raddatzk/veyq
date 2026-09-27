@@ -31,14 +31,26 @@ vi.mock('../../../shared/state/useCapabilities', () => ({
 import JoinDeviceCard from './JoinDeviceCard.vue'
 import { answerPairingChannel, collectPairingChannel } from './pairingChannel'
 import { runOnboardTail, OnboardTailError } from './onboardTail'
-import { readTransportAnswer, checkNumber, sealGrant, type PairingGrant } from './pairing'
+import { readTransportAnswer, checkNumber, sealGrant, channelKeys, mintPairingSecret, type PairingGrant } from './pairing'
 import { i18n } from '../../../i18n'
+import * as v1 from '@veyq/crypto/v1'
+import { b64std, fromB64std } from '@veyq/crypto/base64'
+
+/** What the relay reads off the card's answer — `lp(transport key) || lp(mac)`: the key, and nothing it could
+ *  not see. */
+const relayReadsTheKey = (posted: string): v1.Identity['pub'] => {
+  const bytes = fromB64std(posted)
+  const len = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength).getUint32(0, false)
+  return v1.deserializeIdentityPublic(bytes.slice(4, 4 + len))
+}
 
 const answer = vi.mocked(answerPairingChannel)
 const collect = vi.mocked(collectPairingChannel)
 const tail = vi.mocked(runOnboardTail)
 
-const HANDLE = 'aGFuZGxlLXZhbHVl'
+/** The secret the scanned code carried, and the channel it derives on this card and on the device that showed it. */
+const SECRET = mintPairingSecret()
+const CHANNEL = channelKeys(SECRET)
 const MASTER_KEY = new Uint8Array(32).fill(9)
 const GRANT: PairingGrant = {
   email: 'kevin@example.com',
@@ -67,7 +79,7 @@ const stubs = {
 const t = (key: string) => i18n.global.t(key)
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
-const mountCard = () => mount(JoinDeviceCard, { props: { handle: HANDLE }, global: { plugins: [i18n], stubs } })
+const mountCard = () => mount(JoinDeviceCard, { props: { secret: SECRET }, global: { plugins: [i18n], stubs } })
 
 /** Let the answer POST settle and the poll arm. */
 const started = async (w: VueWrapper) => {
@@ -80,7 +92,7 @@ const started = async (w: VueWrapper) => {
 /** Seal a grant to whatever key this card actually answered with — the only way the envelope can be opened by
  *  the private half the card kept, and therefore the only honest fixture. */
 const sealToTheCard = (grant: PairingGrant = GRANT) =>
-  sealGrant(readTransportAnswer(answer.mock.calls[0][1]), grant)
+  sealGrant(CHANNEL.key, readTransportAnswer(CHANNEL.key, answer.mock.calls[0][1]), grant)
 
 const grantArrives = async (w: VueWrapper, envelope = sealToTheCard()) => {
   collect.mockResolvedValue({ envelope })
@@ -113,8 +125,9 @@ describe('JoinDeviceCard — the device being let in (uc.account.onboard-device,
     // The number is local, so a channel that never answered — or one an attacker answered first — cannot move
     // it. That is the whole reason the comparison means anything.
     expect(answer).toHaveBeenCalledTimes(1)
-    expect(answer.mock.calls[0][0]).toBe(HANDLE)
-    expect(checkNumber(readTransportAnswer(answer.mock.calls[0][1]))).toBe(shown)
+    // Only the handle reaches the server; the answer is MACed under the key the same secret derives (§11).
+    expect(answer.mock.calls[0][0]).toBe(CHANNEL.handle)
+    expect(checkNumber(readTransportAnswer(CHANNEL.key, answer.mock.calls[0][1]))).toBe(shown)
   })
 
   it('opens the grant with the private half it kept, and runs the tail with it', async () => {
@@ -216,18 +229,33 @@ describe('JoinDeviceCard — the device being let in (uc.account.onboard-device,
     }
   })
 
-  it('reports an unclassified failure as its own message, and still does not retry', async () => {
-    tail.mockRejectedValue(new Error('offline'))
-    const w = mountCard()
-    await started(w)
-    await grantArrives(w)
+  // The unclassified tail failure (`pairing.joinFailed`, no retry) is pinned once for both cards, in
+  // `useGrantReceiver.test.ts` — both run that one function.
 
-    // Distinct from both terminal states above: a bare "an error was shown" would be satisfied by all three.
-    expect(w.find('.msg').text()).toBe(t('pairing.joinFailed'))
-    await vi.advanceTimersByTimeAsync(600_000)
-    await flushPromises()
-    expect(tail).toHaveBeenCalledTimes(1)
-  })
+  // ADR 0059 §11 — anyone can seal to the new device's public key, and the relay has read it off the answer. An
+  // envelope it made itself would hand this device a session and a Master Key of the relay's choosing. The
+  // honest envelope above (`opens the grant with the private half it kept`) is the live control.
+  // Two relays: a bare seal (the envelope as it was before §11 — refused as `envelope_unreadable`), and a seal
+  // with a MAC under the one derived value the relay does hold, the handle (refused as `envelope_refused`; the
+  // named refusals are pinned in `pairing.test.ts`). Either would hand this device the relay's session and key.
+  it.each(['bare seal', 'seal MACed under the handle'] as const)(
+    'RELAY — refuses an envelope the relay sealed to this device itself (%s), and runs no tail',
+    async (variant) => {
+      const w = mountCard()
+      await started(w)
+
+      const relayGrant = { v: 1, email: 'kevin@example.com', masterKey: b64std(new Uint8Array(32).fill(6)), refreshToken: 'the-relays-token', label: 'x' }
+      const pub = relayReadsTheKey(answer.mock.calls[0][1])
+      const sealed = v1.sealTo({ purpose: 'pairing-grant' }, { x: pub.kemX, m: pub.kemM }, v1.utf8(JSON.stringify(relayGrant)))
+      const tag = v1.pairingMac(fromB64std(CHANNEL.handle), { purpose: 'pairing-envelope', envelope: sealed })
+      const envelope = variant === 'bare seal' ? b64std(sealed) : b64std(v1.concat(v1.lp(sealed), v1.lp(tag)))
+      await grantArrives(w, envelope)
+
+      expect(tail).not.toHaveBeenCalled()
+      expect(w.find('.msg').text()).toBe(t('pairing.joinFailed'))
+      expect(w.emitted('done')).toBeUndefined()
+    },
+  )
 
   it('stops polling when it is dismissed, so an abandoned card cannot eat the envelope', async () => {
     const w = mountCard()

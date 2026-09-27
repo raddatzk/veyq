@@ -25,10 +25,11 @@ import {
 /**
  * What a binding field is: a canonical lowercase UUID, a share id (the 43-character base64url bearer token a share
  * is addressed by — a capability, so it keeps its 256-bit form rather than becoming a UUID), an unsigned integer
- * (epoch/version), or a blob role. Statements (below) add three kinds a seal never binds: an id that may be absent
- * (encoded as the empty field), a scope kind, and a 32-byte SHA-256 digest.
+ * (epoch/version), or a blob role. Statements (below) add five kinds a seal never binds: an id that may be absent
+ * (encoded as the empty field), a scope kind, a 32-byte SHA-256 digest, an opaque byte string bound whole, and a
+ * six-digit pairing code (its ASCII digits).
  */
-type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest'
+type FieldKind = 'id' | 'shareId' | 'uint' | 'role' | 'optionalId' | 'scopeKind' | 'digest' | 'bytes' | 'pairingCode'
 
 /** The role a sealed `K_blob` plays for its owner — a media's ORIGINAL and derivatives, or a node's COVER. */
 export type BlobRole = 'ORIGINAL' | 'THUMBNAIL' | 'PREVIEW' | 'COVER'
@@ -89,7 +90,7 @@ type KindValue<K extends FieldKind> = K extends 'uint'
       ? string | null
       : K extends 'scopeKind'
         ? ScopeKind
-        : K extends 'digest'
+        : K extends 'digest' | 'bytes'
           ? Uint8Array
           : string
 type Simplify<T> = { [K in keyof T]: T[K] }
@@ -124,6 +125,7 @@ const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 const SHARE_ID = /^[A-Za-z0-9_-]{43}$/
 const ROLES: readonly string[] = ['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'] satisfies BlobRole[]
 const SCOPE_KINDS: readonly string[] = ['TENANT', 'GROUP', 'PERSONAL'] satisfies ScopeKind[]
+const PAIRING_CODE = /^[0-9]{6}$/
 
 const u64be = (n: number): Uint8Array => {
   const b = new Uint8Array(8)
@@ -168,6 +170,14 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
         throw new SealContextInvalid(`${purpose}.${name} is not a SHA-256 digest`)
       }
       return value
+    case 'bytes':
+      if (!(value instanceof Uint8Array)) throw new SealContextInvalid(`${purpose}.${name} is not a byte string`)
+      return value
+    case 'pairingCode':
+      if (typeof value !== 'string' || !PAIRING_CODE.test(value)) {
+        throw new SealContextInvalid(`${purpose}.${name} is not a six-digit pairing code`)
+      }
+      return utf8(value)
   }
 }
 
@@ -200,6 +210,10 @@ export const encodeSealToContext = (context: SealToContext): Uint8Array => encod
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext.
+ *   - `pairing-answer`, `pairing-sign-in-answer`, `pairing-envelope` (ADR 0059 §11): what the pairing channel key
+ *     MACs over the two values the relay carries — the new device's serialized transport public bundle (and, when
+ *     signing in with a QR code, the transcribed code), and the sealed grant's DECODED ciphertext. Two answer labels
+ *     keep one direction's answer from passing for the other's.
  */
 export const STATEMENT_PURPOSES = {
   'admission-tag': [['scopeId', 'id'], ['epoch', 'uint'], ['admissionId', 'id'], ['userId', 'optionalId']],
@@ -211,6 +225,9 @@ export const STATEMENT_PURPOSES = {
     ['recipientIdentityDigest', 'digest'],
     ['wrappedGrantDigest', 'digest'],
   ],
+  'pairing-answer': [['transportKey', 'bytes']],
+  'pairing-sign-in-answer': [['transportKey', 'bytes'], ['code', 'pairingCode']],
+  'pairing-envelope': [['envelope', 'bytes']],
 } as const satisfies Schema
 
 /** A statement's context: its label and exactly its fields. */

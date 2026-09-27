@@ -298,11 +298,44 @@ export function admissionTag(epochKey: Uint8Array, a: Admission): Uint8Array {
 
 /** Whether `tag` is the admission tag of `a` under `epochKey`. Constant-time over the tag bytes. The CALLER decides
  *  which epoch key it holds — a worker passes its own current one, so a tag made before a rotation does not admit. */
-export function admissionTagVerifies(epochKey: Uint8Array, a: Admission, tag: Uint8Array): boolean {
-  const expected = admissionTag(epochKey, a)
-  if (tag.length !== expected.length) return false
-  return expected.reduce((diff, byte, i) => diff | (byte ^ tag[i]), 0) === 0
+export const admissionTagVerifies = (epochKey: Uint8Array, a: Admission, tag: Uint8Array): boolean =>
+  macEquals(admissionTag(epochKey, a), tag)
+
+/** Constant-time over the expected MAC's bytes; a MAC of any other length is refused first. */
+function macEquals(expected: Uint8Array, mac: Uint8Array): boolean {
+  if (mac.length !== expected.length) return false
+  return expected.reduce((diff, byte, i) => diff | (byte ^ mac[i]), 0) === 0
 }
+
+// ── Pairing channel (ADR 0059 §11) ──────────────────────────────────────────────────────────────────────
+// The pairing relay sees both halves of each binding step, so the QR carries a secret the relay never sees: 32
+// random bytes, from which both devices derive the routing handle (the ONLY value the server receives) and a
+// channel key. The channel key MACs the two values the relay carries — the answer and the sealed grant — in the
+// typed-statement encoding, so a relay that substitutes its own transport key (or its own grant) cannot make the
+// MAC verify, however many codes or check numbers it grinds. It does not cover an attacker who both reads the QR
+// and runs the relay: they hold the channel key. Conformance: contracts/crypto/vectors/v1.json#pairing_channel.
+
+/** The MACed statements of the pairing channel. */
+export type PairingStatement = Extract<
+  StatementContext,
+  { purpose: 'pairing-answer' | 'pairing-sign-in-answer' | 'pairing-envelope' }
+>
+
+/** `HKDF-SHA256(secret, salt = "", info = "veyq/v1/pairing-handle", 32)` — the channel's routing handle. */
+export const pairingHandle = (secret: Uint8Array): Uint8Array =>
+  hkdf(sha256, secret, new Uint8Array(0), utf8('veyq/v1/pairing-handle'), 32)
+
+/** `HKDF-SHA256(secret, salt = "", info = "veyq/v1/pairing-channel", 32)` — the key only the QR's holders derive. */
+export const pairingChannelKey = (secret: Uint8Array): Uint8Array =>
+  hkdf(sha256, secret, new Uint8Array(0), utf8('veyq/v1/pairing-channel'), 32)
+
+/** `HMAC-SHA256(channelKey, statement)`. */
+export const pairingMac = (channelKey: Uint8Array, statement: PairingStatement): Uint8Array =>
+  hmac(sha256, channelKey, encodeStatement(statement))
+
+/** Whether `mac` is the pairing MAC of `statement` under `channelKey`. Constant-time over the MAC bytes. */
+export const pairingMacVerifies = (channelKey: Uint8Array, statement: PairingStatement, mac: Uint8Array): boolean =>
+  macEquals(pairingMac(channelKey, statement), mac)
 
 // ── Grant signature (ADR 0028 Decision 6) ───────────────────────────────────────────────────────────────
 // A seal to a public key needs only that key, so without a signature the server can plant a scope key of its own
