@@ -22,11 +22,20 @@ import TenantDetailPanel from '../features/tenants/TenantDetailPanel.vue'
 import ReleaseVersionPanel from '../features/instance/ReleaseVersionPanel.vue'
 import StoreProvisioningPanel from '../features/instance/StoreProvisioningPanel.vue'
 import { listTenants, type TenantSummary } from '../features/tenants/tenants'
+import { formatBytes } from '../shared/formatBytes'
 import { probeServerRole, serverRole } from '../app/serverRole'
 import { logout } from '../features/auth/login'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t, locale } = useI18n()
+
+/** A tenant's usage beside its quota, for the list (uc.admin.tenant-storage-quota): "3 MB of 10 GB", or no quota. */
+function storageLine(tn: TenantSummary): string {
+  const used = formatBytes(tn.storageUsedBytes, locale.value)
+  return tn.storageQuotaBytes == null
+    ? t('admin.storageNoQuota', { used })
+    : t('admin.storageOfQuota', { used, quota: formatBytes(tn.storageQuotaBytes, locale.value) })
+}
 
 const tenants = ref<TenantSummary[]>([])
 const createOpen = ref(false)
@@ -117,7 +126,11 @@ async function signOut() {
               :class="{ 'is-active': selected === tn.tenantId && !serverPanel }"
               @click="selected = tn.tenantId; serverPanel = null"
             >
-              <span class="pi pi-server" aria-hidden="true" /> {{ tn.name }}
+              <span class="pi pi-server" aria-hidden="true" />
+              <span class="admin-shell__tenant">
+                {{ tn.name }}
+                <small class="admin-shell__storage">{{ storageLine(tn) }}</small>
+              </span>
             </button>
           </li>
         </ul>
@@ -213,6 +226,13 @@ async function signOut() {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+.admin-shell__tenant {
+  display: grid;
+}
+.admin-shell__storage {
+  color: var(--app-muted);
+  font-weight: 400;
 }
 .admin-shell__nav button:hover {
   background: var(--app-hover);

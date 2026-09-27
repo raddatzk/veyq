@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // `features/tenant/` with the surfaces an ordinary user reaches — see `tenantInvite.test.ts` (ADR 0065).
 vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 
-import { createTenant, listTenants, reassignInvite, resendInvite, revokeTenant } from './tenants'
+import { createTenant, listTenants, parseQuotaGib, reassignInvite, resendInvite, revokeTenant, setTenantStorageQuota } from './tenants'
 import { tenantsApi } from '../../api/client'
 
 describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
@@ -15,6 +15,7 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
     resendTenantInvite: vi.fn().mockResolvedValue({}),
     reassignTenantInvite: vi.fn().mockResolvedValue({}),
     revokeTenant: vi.fn().mockResolvedValue(undefined),
+    setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
   }
 
   beforeEach(() => {
@@ -45,6 +46,21 @@ describe('tenants facade (uc.admin.create-tenant, web Slice A)', () => {
       tenantId: 't1',
       reassignOwnerRequest: { ownerEmail: 'new@example.com' },
     })
+  })
+
+  it('setTenantStorageQuota wraps the bytes (or null to clear) in a TenantStorageQuotaUpdate', async () => {
+    await setTenantStorageQuota('t1', 1024)
+    expect(api.setTenantStorageQuota).toHaveBeenCalledWith({ tenantId: 't1', tenantStorageQuotaUpdate: { quotaBytes: 1024 } })
+    await setTenantStorageQuota('t1', null)
+    expect(api.setTenantStorageQuota).toHaveBeenLastCalledWith({ tenantId: 't1', tenantStorageQuotaUpdate: { quotaBytes: null } })
+  })
+
+  it('parseQuotaGib reads GiB as bytes, none as null, and anything else as not a quota', () => {
+    expect(parseQuotaGib('2')).toBe(2 * 1024 ** 3)
+    expect(parseQuotaGib('2,5')).toBe(2_684_354_560)
+    expect(parseQuotaGib(' 0 ')).toBe(0)
+    expect(parseQuotaGib('None')).toBeNull()
+    for (const bad of ['', '-1', 'ten', 'Infinity']) expect(parseQuotaGib(bad)).toBeUndefined()
   })
 
   it('revoke passes the tenant id', async () => {

@@ -6,9 +6,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // The facades stand in for the network, exactly as the view tests mock them — the assertion is that the CLI
 // reaches the SAME operation with the SAME arguments the UI does, which is the entire point of the CLI being
 // a Node program (ADR 0065: the same generated client, not a second implementation).
-vi.mock('../features/tenants/tenants', () => ({
+// `parseQuotaGib` stays real: the GiB → bytes conversion is what `tenant quota` is asserted on.
+vi.mock('../features/tenants/tenants', async (importOriginal) => ({
+  parseQuotaGib: (await importOriginal<typeof import('../features/tenants/tenants')>()).parseQuotaGib,
+  setTenantStorageQuota: vi.fn().mockResolvedValue(undefined),
   createTenant: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'PENDING' }),
-  listTenants: vi.fn().mockResolvedValue([{ tenantId: 't1' }]),
+  listTenants: vi.fn().mockResolvedValue([{ tenantId: 't1', storageUsedBytes: 5, storageQuotaBytes: null }]),
   resendInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
   reassignInvite: vi.fn().mockResolvedValue({ state: 'ACTIVE' }),
   changeTenantDomain: vi.fn().mockResolvedValue(undefined),
@@ -54,7 +57,8 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
   it('tenant list prints the tenants as JSON a script can read', async () => {
     const r = await invoke(['tenant', 'list'])
     expect(tenants.listTenants).toHaveBeenCalledOnce()
-    expect(JSON.parse(r.out)).toEqual([{ tenantId: 't1' }])
+    // both storage figures ride along, in bytes; null is "no quota" (uc.admin.tenant-storage-quota)
+    expect(JSON.parse(r.out)).toEqual([{ tenantId: 't1', storageUsedBytes: 5, storageQuotaBytes: null }])
     expect(r.code).toBe(0)
   })
 
@@ -83,6 +87,22 @@ describe('veyq-admin — command dispatch (uc.admin.create-tenant, uc.admin.susp
     expect(tenants.reactivateTenant).toHaveBeenCalledWith('t2')
   })
 
+  it('tenant quota sets the quota typed in GiB as bytes, and none clears it (uc.admin.tenant-storage-quota)', async () => {
+    const r = await invoke(['tenant', 'quota', '--tenant-id', 't1', '--gib', '2.5'])
+    expect(tenants.setTenantStorageQuota).toHaveBeenCalledWith('t1', 2_684_354_560)
+    expect(JSON.parse(r.out)).toEqual({ ok: true })
+    expect(r.code).toBe(0)
+    expect((await invoke(['tenant', 'quota', '--tenant-id', 't1', '--gib', 'none'])).code).toBe(0)
+    expect(tenants.setTenantStorageQuota).toHaveBeenLastCalledWith('t1', null)
+  })
+
+  it('tenant quota refuses a value that is not a number of GiB or none, and calls nothing', async () => {
+    const r = await invoke(['tenant', 'quota', '--tenant-id', 't1', '--gib', 'lots'])
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--gib must be a number of GiB')
+    expect(tenants.setTenantStorageQuota).not.toHaveBeenCalled()
+  })
+
   it('release prints the running instance release (uc.admin.identify-instance-release)', async () => {
     const r = await invoke(['release'])
     expect(getInstanceRelease).toHaveBeenCalledOnce()
@@ -95,7 +115,7 @@ describe('veyq-admin — usage and refusals', () => {
   it('--help lists every command and exits 0 without signing in', async () => {
     const r = await invoke(['--help'])
     expect(r.code).toBe(0)
-    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'release']) {
+    for (const c of ['tenant create', 'tenant change-domain', 'tenant reactivate', 'tenant quota', 'release']) {
       expect(r.out).toContain(c)
     }
     // Help must not cost an Argon2id derivation, nor require a credential to be present at all.

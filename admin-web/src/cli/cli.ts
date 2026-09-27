@@ -2,7 +2,7 @@
 // tenant administration is scriptable, and it is a thin one on purpose: parse arguments, sign in, call the
 // same facade the UI calls, print the result, exit 0 or 1.
 //
-// `node:util.parseArgs`, not commander/yargs: nine subcommands over flat string flags is comfortably inside
+// `node:util.parseArgs`, not commander/yargs: ten subcommands over flat string flags is comfortably inside
 // what Node core handles, and a framework here would be a dependency bought for nothing.
 import { parseArgs } from 'node:util'
 import { COMMANDS, type Command } from './commands'

@@ -56,6 +56,30 @@ export function reactivateTenant(tenantId: string): Promise<void> {
   return tenantsApi().reactivateTenant({ tenantId })
 }
 
+/** One GiB — the unit a quota is entered in, in the UI and the CLI alike; the wire carries bytes. */
+export const GIB = 1024 ** 3
+
+/**
+ * A quota as the Server Owner types it, in GiB ("2", "2.5", the German "2,5"), or `none` for no quota — as bytes,
+ * `null` for none, or `undefined` for input that is neither. One parser for the detail panel and `tenant quota`, so
+ * the two cannot disagree about what "2,5" means.
+ */
+export function parseQuotaGib(input: string): number | null | undefined {
+  const s = input.trim().toLowerCase()
+  if (s === 'none') return null
+  const n = Number(s.replace(',', '.'))
+  return s !== '' && Number.isFinite(n) && n >= 0 ? Math.round(n * GIB) : undefined
+}
+
+/**
+ * Set, change or clear (`null`) a tenant's storage quota (uc.admin.tenant-storage-quota, ADR 0073 §1): the most the
+ * tenant may hold in this instance's store. Every upload start into the tenant is reserved against it from then on;
+ * a quota below the current usage deletes nothing, it refuses the next upload. No quota is the default.
+ */
+export function setTenantStorageQuota(tenantId: string, quotaBytes: number | null): Promise<void> {
+  return tenantsApi().setTenantStorageQuota({ tenantId, tenantStorageQuotaUpdate: { quotaBytes } })
+}
+
 
 /**
  * Decode a failed tenant call into `{ status, code }` for UI mapping (401 → re-login, 403 → not owner,
