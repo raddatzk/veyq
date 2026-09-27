@@ -77,7 +77,7 @@ const accepted = await post('/api/tenants/accept/register', {
     wrappedIdentityPrivateKey: built.material.wrappedIdentityPrivateKey,
     authPublicKey: built.material.authPublicKey,
     masterKeyWraps: built.material.masterKeyWraps,
-    recoveryMasterKeyTag: built.material.recoveryMasterKeyTag,
+    secretKeyProofPublicKey: built.material.secretKeyProofPublicKey,
   },
   grant,
 })

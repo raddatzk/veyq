@@ -1,6 +1,7 @@
 // Cold account birth (operator-blind, Model B) — the one place the client mints a new account's key
-// material: an identity keypair, the Master Key with a PASSWORD floor + RECOVERY wrap, and the Ed25519 auth
-// keypair (ADR 0003, derived from password + the account's auth salt). Shared by first-run setup (the Server
+// material: an identity keypair, the Master Key with a PASSWORD floor + RECOVERY wrap, the Ed25519 auth
+// keypair (ADR 0003, derived from password + the account's auth salt), and the Secret-Key proof key's public
+// half (ADR 0060 Decision 2, derived from the Secret Key alone). Shared by first-run setup (the Server
 // Owner) and invite-gated registration (a tenant owner, cr-0010). The raw password is NEVER sent — only the
 // derived public key + ciphertext leave the device.
 import * as v1 from './v1'
@@ -16,7 +17,9 @@ export type AccountMaterial = {
   wrappedIdentityPrivateKey: string
   authPublicKey: string
   masterKeyWraps: { method: 'PASSWORD' | 'RECOVERY'; wrappedKey: string; kdfParams: string }[]
-  recoveryMasterKeyTag: string
+  /** The Secret-Key proof key (ADR 0060 Decision 2). Rotation, change-password and recovery must each carry a
+   *  signature under it, so it is registered here, at the one birth both clients share. */
+  secretKeyProofPublicKey: string
 }
 
 export type BuiltAccount = {
@@ -72,7 +75,7 @@ export function buildAccount(
         { method: 'PASSWORD', wrappedKey: b64std(masterWrap), kdfParams: b64std(v1.encodeKdfParams(ARGON, salt)) },
         { method: 'RECOVERY', wrappedKey: b64std(recWrap), kdfParams: b64std(v1.encodeKdfParams(ARGON, recSalt)) },
       ],
-      recoveryMasterKeyTag: b64std(v1.recoveryAuthTag(masterKey)),
+      secretKeyProofPublicKey: b64std(v1.deriveSecretKeyProofKeypair(secretKey).publicKey),
     },
   }
 }

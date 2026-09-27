@@ -34,7 +34,7 @@ export function buildCreateServerOwnerRequest(
       wrappedKey: w.wrappedKey,
       kdfParams: w.kdfParams,
     })),
-    recoveryMasterKeyTag: material.recoveryMasterKeyTag,
+    secretKeyProofPublicKey: material.secretKeyProofPublicKey,
   }
   return { request, emergencyKit }
 }

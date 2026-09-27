@@ -142,7 +142,7 @@ const m = built.material
 const ownerRes = await post('/api/setup/owner', {
   email,
   suiteId: m.suiteId, identityPublicKey: m.identityPublicKey, wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey,
-  authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, recoveryMasterKeyTag: m.recoveryMasterKeyTag,
+  authPublicKey: m.authPublicKey, masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
 }, undefined, ADMIN_BASE)
 if (!ownerRes.ok) fail(`setup/owner failed: ${ownerRes.status} ${await ownerRes.text()}`)
 console.log(`owner: created ${email}`)
@@ -242,7 +242,7 @@ async function onboardUser2(): Promise<void> {
       wrappedIdentityPrivateKey: u2.material.wrappedIdentityPrivateKey,
       authPublicKey: u2.material.authPublicKey,
       masterKeyWraps: u2.material.masterKeyWraps,
-      recoveryMasterKeyTag: u2.material.recoveryMasterKeyTag,
+      secretKeyProofPublicKey: u2.material.secretKeyProofPublicKey,
     },
   })
   if (!u2Accept.ok) throw new Error(`user2 accept/register failed: ${u2Accept.status} ${await u2Accept.text()}`)

@@ -225,11 +225,6 @@
     "content": "89504e470d0a1a0affd8",
     "token": "c6d49ddc86b90925a28a252eecf41b3aaad81f314b326618cd52b02c43296e5b"
   },
-  "recovery_auth_tag": {
-    "masterKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-    "tag": "f6f9414c68f5577ba6724e0f390284bccf14d8995a660dbcd91132872fd4fc79",
-    "note": "Password-reset recovery commitment: SHA-256(\"veyq/v1/recovery-auth\" || masterKey). Stored server-side; a reset must reproduce it (needs the Secret Key)."
-  },
   "journal_open": {
     "contentKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "blob": "101112131415161718191a1b1c1d1e1f202122232425262728292a2b04562167a882e1c3428a9604418c1a18717d48d7c226be378758ffbb3b",

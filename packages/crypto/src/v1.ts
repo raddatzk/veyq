@@ -181,16 +181,6 @@ export const sharesPwToken = (password: string, salt: Uint8Array, params: ArgonP
   argon2id(utf8(password), salt, { ...params, dkLen: 32 })
 
 /**
- * Recovery commitment (AD: password reset). A domain-separated hash of the master key, stored server-side
- * when the RECOVERY wrap is written. Password reset must reproduce it — which needs the master key, i.e. the
- * Secret Key — so an email-token-only attacker cannot hijack the server account. Not a secret: the master key
- * is 32 random bytes and the hash is not invertible.
- */
-export function recoveryAuthTag(masterKey: Uint8Array): Uint8Array {
-  return sha256(concat(utf8('veyq/v1/recovery-auth'), masterKey))
-}
-
-/**
  * Journal sealing (live relay frames + persisted snapshot/update blobs). Each message gets a FRESH per-message
  * sub-key derived from a random 16-byte salt: salt(16) || nonce(12) || AES-256-GCM(HKDF(contentKey, salt,
  * "veyq/v1/journal"), nonce, plaintext). Because every blob carries its own salt, every GCM key is used exactly
@@ -303,6 +293,10 @@ export const authVerify = (publicKey: Uint8Array, message: Uint8Array, signature
 // cannot be replayed once that state has moved. Every field is the DECODED bytes of the wire value, never its
 // base64 text — so both stacks rebuild it from bytes, not from an encoding either could spell differently. The
 // backend rebuilds the same bytes itself; `secret_key_proof` in the vectors pins both stacks to one encoding.
+//
+// There is deliberately no user id in them: the web client does not know its own (no read hands it over), and
+// nothing is lost — the server verifies under the CALLER's stored proof key, so a statement cannot be carried to
+// another account, and the replaced state it binds (identity, auth key, token) is already that account's alone.
 
 /** `seed = HKDF-SHA256(ikm = secretKey, salt = "", info = "veyq/v1/secret-key-proof")`, and from it an Ed25519
  *  keypair. Deterministic: the Secret Key never changes in these flows, so neither does this key. */

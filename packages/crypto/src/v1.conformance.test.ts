@@ -270,11 +270,6 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.dedupToken(unhex(d.contentKey), unhex(d.content)))).toBe(d.token)
   })
 
-  it('recovery commitment (password reset)', () => {
-    const r = vectors.recovery_auth_tag
-    expect(hex(v1.recoveryAuthTag(unhex(r.masterKey)))).toBe(r.tag)
-  })
-
   describe('Secret-Key proof key (ADR 0060 Decision 2)', () => {
     const p = vectors.secret_key_proof
     const wrap = (w: { wrapped_key: string; kdf_params: string }) => ({

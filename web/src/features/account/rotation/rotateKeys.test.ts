@@ -18,6 +18,7 @@ vi.mock('../../../api/client', () => ({
 vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../../app/vault', () => ({
   masterKey: vi.fn(),
+  identityPrivate: vi.fn(),
   setUnlocked: vi.fn(),
   unlockOrigin: vi.fn(),
 }))
@@ -45,7 +46,7 @@ vi.mock('@veyq/crypto/argonWorker', async () => {
 
 import { rotateKeys, RotationRefused } from './rotateKeys'
 import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
-import { masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
+import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { openScopeById } from '../../spaces/scopes'
@@ -56,6 +57,8 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 const PASSWORD = 'correct horse battery staple'
 const SECRET_KEY = v1.randomBytes(32)
 const SECRET_KEY_B64 = b64std(SECRET_KEY)
+/** The identity the vault holds now — the one a rotation replaces, and so the one its proof statement binds. */
+const CURRENT = v1.generateIdentity()
 /** The account's *current* Master Key — what the stored PASSWORD wrap opens and what the vault is holding. */
 const MK = v1.randomBytes(32)
 /** The light cost the mocked worker above uses; the stored floor's KEK must be built with the same. Its WIRE
@@ -89,7 +92,7 @@ function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[
       wrappedIdentityPrivateKey: string
       passwordWrap: { wrappedKey: string; kdfParams: string }
       recoveryWrap: { wrappedKey: string; kdfParams: string }
-      recoveryMasterKeyTag: string
+      secretKeyProofSignature: string
     }
   }
   const rotateAccountKeys = vi.fn(async (_body: RotateBody) => ({
@@ -114,6 +117,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(unlockOrigin).mockReturnValue('cold')
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  vi.mocked(identityPrivate).mockReturnValue(CURRENT.priv)
   vi.mocked(openScopeById).mockResolvedValue(null)
   vi.mocked(listScopeMembers).mockResolvedValue([])
 })
@@ -225,12 +229,27 @@ describe('what a rotation posts', () => {
     // stored salt is not even readable from here (ADR 0054 withholds it), so fresh is the only shape available.
     expect(body.passwordWrap.kdfParams).not.toBe(body.recoveryWrap.kdfParams)
 
-    // The identity private key rides the new Master Key, and the commitment is re-derived from it — without
-    // that, a later recovery proves possession of a key the account no longer has and is refused.
+    // The identity private key rides the new Master Key.
     expect(() =>
       v1.symUnwrap(newMk, fromB64std(body.wrappedIdentityPrivateKey), 'identity-priv'),
     ).not.toThrow()
-    expect(body.recoveryMasterKeyTag).toBe(b64std(v1.recoveryAuthTag(newMk)))
+
+    // The server's check, run here (ADR 0060 Decision 2): the statement rebuilt from what was SENT, from the
+    // identity the vault held, verifies under the proof key the Secret Key derives — and under no other.
+    const wrap = (w: { wrappedKey: string; kdfParams: string }) => ({
+      wrappedKey: fromB64std(w.wrappedKey),
+      kdfParams: fromB64std(w.kdfParams),
+    })
+    const stmt = v1.rotationProofStatement({
+      currentIdentityPublicKey: v1.serializeIdentityPublic(CURRENT.pub),
+      identityPublicKey: fromB64std(body.identityPublicKey),
+      wrappedIdentityPrivateKey: fromB64std(body.wrappedIdentityPrivateKey),
+      passwordWrap: wrap(body.passwordWrap),
+      recoveryWrap: wrap(body.recoveryWrap),
+    })
+    const sig = fromB64std(body.secretKeyProofSignature)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(SECRET_KEY).publicKey, stmt, sig)).toBe(true)
+    expect(v1.authVerify(v1.deriveSecretKeyProofKeypair(v1.randomBytes(32)).publicKey, stmt, sig)).toBe(false)
   })
 
   it('carries no mode, no identityOnly and no scope subset — there is one rotation', async () => {
@@ -242,8 +261,8 @@ describe('what a rotation posts', () => {
     expect(Object.keys(srv.rotateAccountKeys.mock.calls[0][0].rotateAccountKeysRequest).sort()).toEqual([
       'identityPublicKey',
       'passwordWrap',
-      'recoveryMasterKeyTag',
       'recoveryWrap',
+      'secretKeyProofSignature',
       'wrappedIdentityPrivateKey',
     ])
   })

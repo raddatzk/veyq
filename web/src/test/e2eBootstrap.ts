@@ -50,7 +50,7 @@ function createServerOwner(m: BuiltAccount['material'], email: string) {
     createServerOwnerRequest: {
       email, suiteId: m.suiteId, identityPublicKey: m.identityPublicKey,
       wrappedIdentityPrivateKey: m.wrappedIdentityPrivateKey, authPublicKey: m.authPublicKey,
-      masterKeyWraps: m.masterKeyWraps, recoveryMasterKeyTag: m.recoveryMasterKeyTag,
+      masterKeyWraps: m.masterKeyWraps, secretKeyProofPublicKey: m.secretKeyProofPublicKey,
     },
   })
 }

@@ -36,7 +36,7 @@ const config = {
   // throw; value mutants fail decryption), so one decayed assertion does not move the score either way.
   // Bite-proven: `describe.skip`-ing the KAT conformance suite drops v1.ts to 86.57% -> Stryker exits 1. The
   // battery uniquely detects ~18 mutants — in the functions no feature round-trip exercises end-to-end
-  // (journalSeal/Open, dedupToken, recoveryAuthTag, kekRecovery, deriveAuthSalt, slugToken) plus the three
+  // (journalSeal/Open, dedupToken, kekRecovery, deriveAuthSalt, slugToken) plus the three
   // decodeKdfParams length-guard mutants, whose only test lives in this same suite.
   // `high`/`low` only colour the report.
   thresholds: { high: 100, low: 95, break: 95 },

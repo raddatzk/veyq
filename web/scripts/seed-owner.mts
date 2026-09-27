@@ -33,7 +33,7 @@ const body = {
   wrappedIdentityPrivateKey: material.wrappedIdentityPrivateKey,
   authPublicKey: material.authPublicKey,
   masterKeyWraps: material.masterKeyWraps,
-  recoveryMasterKeyTag: material.recoveryMasterKeyTag,
+  secretKeyProofPublicKey: material.secretKeyProofPublicKey,
 }
 
 const res = await fetch(`${ADMIN_BASE}/api/setup/owner`, {

@@ -3,13 +3,13 @@
 // replacing, then it is replaced (ADR 0003's auth keypair, the same PASSWORD-wrap KEK recovery uses).
 //
 // **This screen mints a cold credential, so it is gated exactly as rotation is** (ADR 0060 Decision 2). The
-// proof has two halves and they are checked in two places, because only one of them is checkable by a blind
-// server: the attestation below — an Ed25519 signature the server verifies against the stored
-// `auth_public_key` — and `proveColdCredential`, which opens the account's current `PASSWORD` floor with what
-// was typed *now*. Without the second half a `DEVICE_KEY` holder wraps the victim's Master Key under their
-// OWN Secret Key and walks away with a cold credential; that was this flow's shipped defect, and the "I don't
-// remember my current password" entry point was its door. There is no such entry point any more: a forgotten
-// password goes through uc.account.recover-access, which proves address control instead.
+// server checks two signatures: the attestation below, against the stored `auth_public_key` (the old password),
+// and the Secret-Key proof, against the proof key registered at birth (the Secret Key) — a phished password buys
+// the first and not the second. `proveColdCredential` additionally opens the account's current `PASSWORD` floor
+// with what was typed *now*. Without the Secret-Key half a `DEVICE_KEY` holder wraps the victim's Master Key under
+// their OWN Secret Key and walks away with a cold credential; that was this flow's shipped defect, and the "I
+// don't remember my current password" entry point was its door. There is no such entry point any more: a
+// forgotten password goes through uc.account.recover-access, which proves address control instead.
 import * as v1 from '@veyq/crypto/v1'
 import { deriveAuthKeypairAsync, unlockKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -65,13 +65,28 @@ export async function changePassword(newPassword: string, secretKeyB64: string, 
     const salt = v1.randomBytes(16)
     const kek = await unlockKekAsync(secretKey, newPassword, salt, ARGON)
     const wrapped = v1.symWrap(kek, mk, 'master-key', v1.randomBytes(12))
+    const kdfParams = v1.encodeKdfParams(ARGON, salt)
+
+    const proof = v1.deriveSecretKeyProofKeypair(secretKey)
+    const secretKeyProofSignature = b64std(
+      v1.secretKeyProofSign(
+        proof.privateKey,
+        v1.passwordChangeProofStatement({
+          currentAuthPublicKey: oldAuth.publicKey,
+          authPublicKey: newAuth.publicKey,
+          passwordWrap: { wrappedKey: wrapped, kdfParams },
+        }),
+      ),
+    )
+    proof.privateKey.fill(0)
 
     await withRefresh(() =>
       accountPasswordApi().changePassword({
         changePasswordRequest: {
-          passwordWrap: { wrappedKey: b64std(wrapped), kdfParams: b64std(v1.encodeKdfParams(ARGON, salt)) },
+          passwordWrap: { wrappedKey: b64std(wrapped), kdfParams: b64std(kdfParams) },
           authPublicKey: b64std(newAuth.publicKey),
           attestationSignature,
+          secretKeyProofSignature,
         },
       }),
     )

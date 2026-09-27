@@ -73,7 +73,8 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
         { method: 'PASSWORD', wrappedKey: expectedPwWrap, kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, pwSalt)) },
         { method: 'RECOVERY', wrappedKey: expectedRecWrap, kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, recSalt)) },
       ],
-      recoveryMasterKeyTag: b64std(v1.recoveryAuthTag(masterKey)),
+      // Derived from the kit's Secret Key and nothing else — the Master Key would be one a linked device holds.
+      secretKeyProofPublicKey: b64std(v1.deriveSecretKeyProofKeypair(secretKey).publicKey),
     })
     expect(built.emergencyKit).toEqual({ secretKey: b64std(secretKey) })
     expect(built.identity).toBe(FIXED_IDENTITY)
@@ -111,6 +112,8 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
       // One fewer randomBytes call than the default path, so the salts shift down by one: #2 pw salt, #4 rec salt.
       expect(v1.kekPasswordSecret).toHaveBeenCalledWith(MINE, 'pw', seededBytes(2, 16), v1.ARGON)
       expect(v1.kekRecovery).toHaveBeenCalledWith(MINE, seededBytes(4, 16), v1.ARGON)
+      // And the proof key, or the re-seeded account could never rotate, change its password or recover.
+      expect(built.material.secretKeyProofPublicKey).toBe(b64std(v1.deriveSecretKeyProofKeypair(MINE).publicKey))
     })
 
     it('still births everything else fresh — the Master Key is random, not derived from the kit', () => {
