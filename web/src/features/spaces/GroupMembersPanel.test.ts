@@ -5,7 +5,6 @@
 // the sidebar (bumpSpaceIcon).
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('./members', () => ({
   listScopeMembers: vi.fn(),
@@ -44,21 +43,7 @@ import { listScopeMembers, removeGroupMember } from './members'
 import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval } from './scopes'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      spaceIcon: { add: 'Add icon', change: 'Change icon', remove: 'Remove icon', saved: 'Saved', removed: 'Removed', removeConfirm: 'Remove?', stale: 'Stale', failed: 'Failed' },
-      groups: { rename: 'Rename', untitled: 'Untitled', members: 'Members', membersSub: 'sub', dangerZone: 'Danger', deleteSub: 's', deleteGroup: 'Delete', addMember: 'Add', addMemberIntro: 'i', usernamePlaceholder: 'u', remove: 'Remove', removeConfirm: 'Remove?', removeConfirmYes: 'Remove member', removeMemberFailed: 'Removing failed', promote: 'Promote', demote: 'Demote' },
-      members: { loading: 'Loading', empty: 'No members', statusActive: 'Active', statusAwaiting: 'Awaiting', statusPendingConsent: 'Pending' },
-      common: { save: 'Save', cancel: 'Cancel' },
-    },
-  },
-})
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
@@ -81,7 +66,7 @@ async function mountPanel(opts: { me: string; icon?: Uint8Array | null } = { me:
   vi.mocked(listScopeMembers).mockResolvedValue(OWNER_ROW as never)
   vi.mocked(getMyProfile).mockResolvedValue({ username: opts.me } as never)
   vi.mocked(openGroupIcon).mockResolvedValue(opts.icon ?? null)
-  const wrapper = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [i18n], stubs } })
+  const wrapper = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
   await flushPromises()
   return wrapper
 }
@@ -98,20 +83,20 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
 
   it('shows the owner an "add icon" control when the group has no icon (and no remove)', async () => {
     const w = await mountPanel({ me: 'owner' })
-    expect(button(w, 'Add icon')).toBeTruthy()
-    expect(button(w, 'Remove icon')).toBeFalsy()
+    expect(button(w, t('spaceIcon.add'))).toBeTruthy()
+    expect(button(w, t('spaceIcon.remove'))).toBeFalsy()
   })
 
   it('hides all icon controls from a non-owner member', async () => {
     const w = await mountPanel({ me: 'stranger' }) // not in the OWNER_ROW → isOwner false
-    expect(button(w, 'Add icon')).toBeFalsy()
-    expect(button(w, 'Change icon')).toBeFalsy()
-    expect(button(w, 'Remove icon')).toBeFalsy()
+    expect(button(w, t('spaceIcon.add'))).toBeFalsy()
+    expect(button(w, t('spaceIcon.change'))).toBeFalsy()
+    expect(button(w, t('spaceIcon.remove'))).toBeFalsy()
   })
 
   it('owner sets an icon: the dialog save seals via setSpaceIcon and signals the sidebar', async () => {
     const w = await mountPanel({ me: 'owner' })
-    await button(w, 'Add icon')!.trigger('click') // open the dialog
+    await button(w, t('spaceIcon.add'))!.trigger('click') // open the dialog
     expect(w.find('.icon-dialog').exists()).toBe(true)
     await w.find('.dialog-save').trigger('click') // the stub emits save(bytes)
     await flushPromises()
@@ -121,8 +106,8 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
 
   it('owner with an existing icon sees change + remove; remove clears via clearSpaceIcon', async () => {
     const w = await mountPanel({ me: 'owner', icon: new Uint8Array([9, 9, 9]) })
-    expect(button(w, 'Change icon')).toBeTruthy()
-    const remove = button(w, 'Remove icon')
+    expect(button(w, t('spaceIcon.change'))).toBeTruthy()
+    const remove = button(w, t('spaceIcon.remove'))
     expect(remove).toBeTruthy()
     await remove!.trigger('click')
     await flushPromises()
@@ -147,11 +132,11 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
     vi.mocked(getMyProfile).mockResolvedValue({ username: 'owner' } as never)
     vi.mocked(openGroupIcon).mockResolvedValue(null)
     vi.mocked(rotateGroupForRemoval).mockResolvedValue(1)
-    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [i18n], stubs } })
+    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [realI18n()], stubs } })
     await flushPromises()
-    await button(w, 'Remove')!.trigger('click') // bob's row — the owner cannot remove themselves here
+    await button(w, t('groups.remove'))!.trigger('click') // bob's row — the owner cannot remove themselves here
     await flushPromises()
-    await button(w, 'Remove member')!.trigger('click') // the inline confirm
+    await button(w, t('groups.removeConfirmYes'))!.trigger('click') // the inline confirm
     await flushPromises()
     return w
   }

@@ -27,7 +27,7 @@ import { TERMS_TEMPLATE } from './termsTemplate'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
 import { confirmRequest, settleConfirm } from '../../shared/state/useConfirm'
-import { i18n } from '../../i18n'
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Button: {
@@ -39,14 +39,12 @@ const stubs = {
   Dialog: { props: ['visible', 'header'], emits: ['update:visible'], template: '<div class="dlg"><h2>{{ header }}</h2><slot /></div>' },
 }
 
-const t = (k: string, named?: Record<string, unknown>) => i18n.global.t(k, named ?? {})
-
 async function mountPanel() {
   const router = createRouter({
     history: createMemoryHistory(),
     routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }],
   })
-  const wrapper = mount(TenantTermsPanel, { global: { plugins: [router, i18n], stubs } })
+  const wrapper = mount(TenantTermsPanel, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   return wrapper
 }
@@ -72,7 +70,6 @@ async function answer(w: VueWrapper, accepted: boolean) {
 describe('TenantTermsPanel — the languages that carry terms', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     if (confirmRequest.value) settleConfirm(false)
     clearActiveSpace()
     activeSpace.kind = ScopeKind.Tenant
@@ -153,7 +150,6 @@ describe('TenantTermsPanel — the languages that carry terms', () => {
 describe('TenantTermsPanel — the starter template asks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     if (confirmRequest.value) settleConfirm(false)
     clearActiveSpace()
     activeSpace.kind = ScopeKind.Tenant

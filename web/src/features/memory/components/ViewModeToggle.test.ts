@@ -2,18 +2,12 @@
 // cr-0063 — the toggle reflects the current view mode and switches it on click.
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import ViewModeToggle from './ViewModeToggle.vue'
 import { setViewMode } from '../../../shared/state/useViewMode'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: { en: { memory: { viewMode: 'View', viewGrid: 'Grid view', viewList: 'List view', viewMap: 'Map view' } } },
-})
+import { realI18n } from '../../../test/i18n'
 
 const mountToggle = (props: Record<string, unknown> = {}) =>
-  mount(ViewModeToggle, { props, global: { plugins: [i18n], directives: { tooltip: {} } } })
+  mount(ViewModeToggle, { props, global: { plugins: [realI18n()], directives: { tooltip: {} } } })
 
 beforeEach(() => {
   localStorage.clear()

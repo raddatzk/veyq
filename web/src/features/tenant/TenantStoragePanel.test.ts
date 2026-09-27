@@ -3,6 +3,7 @@
 // saves the per-link limit, entered in GiB and sent in bytes; a 403 read renders the read-only notice, not the editor.
 // uc.admin.tenant-storage-quota (web) — the Server Owner's quota shows beside the usage when set, and not at all when null.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
 
@@ -19,14 +20,7 @@ import TenantStoragePanel from './TenantStoragePanel.vue'
 import { getTenantStorage, updateTenantStorage, GIB } from './tenantStorage'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
-import { i18n } from '../../i18n'
-
-function httpError(status: number, code?: string): Error {
-  const body = code ? JSON.stringify({ code }) : ''
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = new Response(body, { status, headers: { 'content-type': 'application/json' } })
-  return e
-}
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Button: { props: ['label', 'loading'], emits: ['click'], template: '<button :disabled="loading" @click="$emit(\'click\')">{{ label }}</button>' },
@@ -40,18 +34,17 @@ const stubs = {
 
 async function mountPanel() {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
-  const wrapper = mount(TenantStoragePanel, { global: { plugins: [router, i18n], stubs } })
+  const wrapper = mount(TenantStoragePanel, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   return wrapper
 }
 
 const saveButton = (w: Awaited<ReturnType<typeof mountPanel>>) =>
-  w.findAll('button').find((b) => b.text() === i18n.global.t('storage.save'))
+  w.findAll('button').find((b) => b.text() === t('storage.save'))
 
 describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     clearActiveSpace()
     activeSpace.kind = ScopeKind.Tenant
     activeSpace.scopeId = 't-1'
@@ -82,7 +75,7 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     await saveButton(wrapper)!.trigger('click')
     await flushPromises()
     expect(updateTenantStorage).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(i18n.global.t('storage.invalidLimit'))
+    expect(wrapper.text()).toContain(t('storage.invalidLimit'))
 
     await input.setValue('0')
     await saveButton(wrapper)!.trigger('click')
@@ -93,7 +86,7 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
   it('shows the quota beside the usage when one is set, read-only', async () => {
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: 5 * GIB, shareLinkLimitBytes: 10 * GIB })
     const wrapper = await mountPanel()
-    expect(wrapper.text()).toContain(i18n.global.t('storage.quota'))
+    expect(wrapper.text()).toContain(t('storage.quota'))
     expect(wrapper.text()).toContain('5 GB') // 5 GiB, in formatBytes' binary steps
     expect(wrapper.findAll('input')).toHaveLength(1) // the per-link limit only: the owner cannot edit the quota
   })
@@ -102,13 +95,13 @@ describe('TenantStoragePanel (uc.sharing.share-link-storage-limit, web)', () => 
     vi.mocked(getTenantStorage).mockResolvedValue({ usedBytes: 3 * 1024 ** 2, quotaBytes: null, shareLinkLimitBytes: 10 * GIB })
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain('3 MB') // control: the panel rendered its figures
-    expect(wrapper.text()).not.toContain(i18n.global.t('storage.quota'))
+    expect(wrapper.text()).not.toContain(t('storage.quota'))
   })
 
   it('renders a read-only notice (not the editor) when the read is owner-gated 403', async () => {
     vi.mocked(getTenantStorage).mockRejectedValue(httpError(403, 'not_tenant_owner'))
     const wrapper = await mountPanel()
-    expect(wrapper.text()).toContain(i18n.global.t('storage.notOwner'))
+    expect(wrapper.text()).toContain(t('storage.notOwner'))
     expect(saveButton(wrapper)).toBeUndefined()
     expect(wrapper.find('input').exists()).toBe(false)
   })

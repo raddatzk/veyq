@@ -21,7 +21,7 @@ vi.mock('../../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: c
 import LockedSignOut from './LockedSignOut.vue'
 import { revokeOtherSessionFamilies } from './sessions'
 import { signOut } from '../login/signOut'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
@@ -34,19 +34,18 @@ const stubs = {
   },
 }
 
-const mountLocked = () => mount(LockedSignOut, { global: { plugins: [i18n], stubs } })
+const mountLocked = () => mount(LockedSignOut, { global: { plugins: [realI18n()], stubs } })
 
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
 const pressAction = async (w: VueWrapper) => {
-  await buttonLabelled(w, i18n.global.t('sessions.lockedAction'))!.trigger('click')
+  await buttonLabelled(w, t('sessions.lockedAction'))!.trigger('click')
   await flushPromises()
 }
 
 describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     vi.mocked(revokeOtherSessionFamilies).mockResolvedValue(undefined)
     vi.mocked(signOut).mockResolvedValue(undefined)
     confirmAsk.mockResolvedValue(true)
@@ -73,7 +72,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     await pressAction(wrapper)
 
     expect(signOut).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
+    expect(wrapper.text()).toContain(t('sessions.revokeFailed'))
   })
 
   it('does nothing when the confirmation is declined', async () => {
@@ -87,7 +86,7 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
 
   it('offers the way back to unlocking, and touches no session doing it', async () => {
     const wrapper = mountLocked()
-    await buttonLabelled(wrapper, i18n.global.t('sessions.lockedBack'))!.trigger('click')
+    await buttonLabelled(wrapper, t('sessions.lockedBack'))!.trigger('click')
     await flushPromises()
 
     expect(wrapper.emitted('unlock')).toHaveLength(1)
@@ -100,6 +99,6 @@ describe('LockedSignOut (uc.account.sessions §E3, web)', () => {
     // device". That control is visible on the form this screen was reached from, so its copy must be corrected
     // here or it silently lies.
     const wrapper = mountLocked()
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.lockedScopeNote'))
+    expect(wrapper.text()).toContain(t('sessions.lockedScopeNote'))
   })
 })

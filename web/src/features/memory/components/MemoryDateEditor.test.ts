@@ -1,26 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MemoryDateEditor from './MemoryDateEditor.vue'
 import type { MemoryDate } from '../memoryDate'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { save: 'Save', cancel: 'Cancel' },
-      memory: {
-        date: {
-          title: 'Date', noDate: 'No date yet', autoHint: 'Derived from your photos.', autoEmpty: 'Add dated photos.',
-          day: 'Day', from: 'From', to: 'To', start: 'Start', invalidRange: 'The end can’t be before the start.',
-          mode: { auto: 'Automatic', single: 'Single day', range: 'Range', ongoing: 'Ongoing' },
-        },
-      },
-    },
-  },
-})
+import { realI18n } from '../../../test/i18n'
 
 // Stub the PrimeVue pieces so the editor's own logic (mode switch → fitting inputs, validation, buildDate) is
 // what's under test — not the DatePicker overlay, which happy-dom can't drive.
@@ -46,7 +29,7 @@ const stubs = {
 const AUTO: MemoryDate = { mode: 'auto', from: '2021-05-01', to: '2021-05-03' }
 
 function mountEditor(date: MemoryDate | null, autoRange: MemoryDate = AUTO) {
-  return mount(MemoryDateEditor, { props: { date, autoRange }, global: { plugins: [i18n], stubs } })
+  return mount(MemoryDateEditor, { props: { date, autoRange }, global: { plugins: [realI18n()], stubs } })
 }
 
 const pickMode = async (w: ReturnType<typeof mountEditor>, mode: string) =>

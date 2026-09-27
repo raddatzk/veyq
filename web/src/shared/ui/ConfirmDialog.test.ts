@@ -9,7 +9,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 import ConfirmDialog from './ConfirmDialog.vue'
 import { useConfirm, confirmRequest, settleConfirm } from '../state/useConfirm'
-import { i18n } from '../../i18n'
+import { realI18n, t } from '../../test/i18n'
 
 const REQUEST = {
   header: 'Sign this device out',
@@ -35,13 +35,12 @@ const stubs = {
   },
 }
 
-const mountDialog = () => mount(ConfirmDialog, { global: { plugins: [i18n], stubs } })
+const mountDialog = () => mount(ConfirmDialog, { global: { plugins: [realI18n()], stubs } })
 const accept = (w: VueWrapper) => w.findAll('button').find((b) => b.text() === REQUEST.acceptLabel)
-const cancel = (w: VueWrapper) => w.findAll('button').find((b) => b.text() === i18n.global.t('common.cancel'))
+const cancel = (w: VueWrapper) => w.findAll('button').find((b) => b.text() === t('common.cancel'))
 
 describe('ConfirmDialog', () => {
   beforeEach(() => {
-    i18n.global.locale.value = 'en'
     if (confirmRequest.value) settleConfirm(false)
   })
 

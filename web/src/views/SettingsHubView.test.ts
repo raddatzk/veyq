@@ -5,7 +5,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { createRouter, createMemoryHistory } from 'vue-router'
-import { createI18n } from 'vue-i18n'
 
 vi.mock('../features/spaces/scopes', () => ({ listMyGroups: vi.fn().mockResolvedValue([]) }))
 vi.mock('../features/settings/AppearancePanel.vue', () => ({ default: { template: '<div class="stub-appearance" />' } }))
@@ -18,25 +17,7 @@ import SettingsHubView from './SettingsHubView.vue'
 import { listMyGroups } from '../features/spaces/scopes'
 import { activeSpace, clearActiveSpace } from '../app/activeSpace'
 import { ScopeKind } from '../api/generated/scopes'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: {
-    en: {
-      members: { title: 'Members' },
-      groups: { members: 'Members', noneOwned: 'No groups yet' },
-      profile: { title: 'Profile' },
-      shell: { groups: 'Groups', groupCreate: 'New group' },
-      settings: {
-        title: 'Settings', back: 'Back', personal: 'Personal', tenant: 'Shared space', group: 'Group',
-        appearance: 'Appearance', appearanceTitle: 'A', appearanceSub: 's', sessions: 'Devices and sessions',
-      },
-    },
-  },
-})
+import { realI18n, t } from '../test/i18n'
 
 async function mountHub(path = '/settings') {
   const router = createRouter({
@@ -45,7 +26,7 @@ async function mountHub(path = '/settings') {
   })
   await router.replace(path)
   await router.isReady()
-  const wrapper = mount(SettingsHubView, { global: { plugins: [router, i18n] } })
+  const wrapper = mount(SettingsHubView, { global: { plugins: [router, realI18n()] } })
   await flushPromises()
   return wrapper
 }
@@ -74,8 +55,8 @@ describe('SettingsHubView — section filtering by scope × role', () => {
     activeSpace.tenantId = 't-1'
     activeSpace.kind = ScopeKind.Tenant
     const nav = navText(await mountHub())
-    expect(nav).toContain('Personal')
-    expect(nav).toContain('Members')
+    expect(nav).toContain(t('settings.personal'))
+    expect(nav).toContain(t('members.title'))
   })
 
   it('a Group scope: entering the hub opens that group’s detail page, and the Gruppen collection lists owned groups by name', async () => {
@@ -112,8 +93,8 @@ describe('SettingsHubView — section filtering by scope × role', () => {
   it('with no tenant context, only Personal shows', async () => {
     activeSpace.tenantId = null
     const nav = navText(await mountHub())
-    expect(nav).toContain('Personal')
-    expect(nav).not.toContain('Members')
+    expect(nav).toContain(t('settings.personal'))
+    expect(nav).not.toContain(t('members.title'))
   })
 })
 
@@ -151,7 +132,7 @@ describe('SettingsHubView — split view index vs detail', () => {
     // stub — rather than that one — is what says the route actually resolved.
     clearActiveSpace()
     const w = await mountHub('/settings/sessions')
-    expect(navText(w)).toContain('Devices and sessions')
+    expect(navText(w)).toContain(t('settings.sessions'))
     expect(w.find('.stub-sessions').exists()).toBe(true)
     expect(w.find('.stub-appearance').exists()).toBe(false)
   })
@@ -161,7 +142,7 @@ describe('SettingsHubView — split view index vs detail', () => {
     // falls through to the unresolved-id default, which is the appearance panel.
     clearActiveSpace()
     const w = await mountHub('/settings/device')
-    expect(navText(w)).not.toContain('This device')
+    expect(navText(w)).not.toContain(t('sessions.thisDevice'))
     expect(w.find('.stub-sessions').exists()).toBe(false)
     expect(w.find('.stub-appearance').exists()).toBe(true)
   })

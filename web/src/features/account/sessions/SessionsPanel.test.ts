@@ -67,6 +67,7 @@ import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { vaultState } from '../../../app/vault'
 import { account } from '../../../app/account'
 import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const CURRENT = { id: 'aaaaaaaa-1111-4111-8111-111111111111', createdAt: new Date('2026-08-01T09:12:00Z'), lastUsedAt: new Date('2026-08-12T07:45:00Z'), current: true }
 const OTHER = { id: 'bbbbbbbb-2222-4222-8222-222222222222', createdAt: new Date('2026-07-03T18:30:00Z'), lastUsedAt: new Date('2026-08-10T21:02:00Z'), current: false }
@@ -93,7 +94,7 @@ const stubs = {
 
 async function mountPanel(): Promise<VueWrapper> {
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
-  const wrapper = mount(SessionsPanel, { global: { plugins: [router, i18n], stubs } })
+  const wrapper = mount(SessionsPanel, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
   return wrapper
 }
@@ -105,7 +106,7 @@ const EMPTY_VIEW = { names: {}, wrapsOfFamily: {}, savedKeyDevices: [] }
 
 /** The escalation button of a row, found by its aria-label rather than by position. */
 const escalateButton = (w: VueWrapper, row: number) =>
-  w.findAll('.session-row')[row].findAll('button').find((b) => b.attributes('aria-label') === i18n.global.t('sessions.escalate'))
+  w.findAll('.session-row')[row].findAll('button').find((b) => b.attributes('aria-label') === t('sessions.escalate'))
 
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
@@ -113,16 +114,16 @@ const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').fin
 const revokeButton = (w: VueWrapper, row: number) =>
   w.findAll('.session-row')[row]
     .findAll('button')
-    .find((b) => b.attributes('aria-label') === i18n.global.t(row === 0 ? 'sessions.revokeSelf' : 'sessions.revoke'))
+    .find((b) => b.attributes('aria-label') === t(row === 0 ? 'sessions.revokeSelf' : 'sessions.revoke'))
 
 /** The FORGET action of the current device's row — labelled, not positional, so it cannot be confused with a revoke. */
 const forgetButton = (w: VueWrapper) =>
-  w.findAll('.session-row')[0].findAll('button').find((b) => b.text() === i18n.global.t('unlock.untrust'))
+  w.findAll('.session-row')[0].findAll('button').find((b) => b.text() === t('unlock.untrust'))
 
 describe('SessionsPanel (uc.account.sessions, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
+    realI18n()
     vaultState.unlocked = true
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT, OTHER])
     vi.mocked(revokeSessionFamily).mockResolvedValue(undefined)
@@ -151,8 +152,8 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     // from a locally-remembered id. Without this the sign-out-everywhere-else button below is unanchored.
     const badges = wrapper.findAll('.veyq-badge.success')
     expect(badges).toHaveLength(1)
-    expect(rows[0].text()).toContain(i18n.global.t('sessions.thisDevice'))
-    expect(rows[1].text()).toContain(i18n.global.t('sessions.otherDevice'))
+    expect(rows[0].text()).toContain(t('sessions.thisDevice'))
+    expect(rows[1].text()).toContain(t('sessions.otherDevice'))
 
     // The dates are the whole content of an unnamed row, so their absence is a broken screen, not a cosmetic gap.
     expect(rows[0].text()).toContain('Aug')
@@ -192,22 +193,22 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await rowButtons(wrapper)[0].trigger('click')
     await flushPromises()
     expect(confirmAsk.mock.calls[0][0]).toMatchObject({
-      message: i18n.global.t('sessions.revokeSelfConfirm'),
-      acceptLabel: i18n.global.t('sessions.revokeSelf'),
+      message: t('sessions.revokeSelfConfirm'),
+      acceptLabel: t('sessions.revokeSelf'),
     })
 
     const other = await mountPanel()
     await rowButtons(other)[1].trigger('click')
     await flushPromises()
     expect(confirmAsk.mock.calls[1][0]).toMatchObject({
-      message: i18n.global.t('sessions.revokeConfirm'),
-      acceptLabel: i18n.global.t('sessions.revoke'),
+      message: t('sessions.revokeConfirm'),
+      acceptLabel: t('sessions.revoke'),
     })
   })
 
   it('signs out everywhere else through the one endpoint that spares the caller', async () => {
     const wrapper = await mountPanel()
-    const others = wrapper.findAll('button').find((b) => b.text() === i18n.global.t('sessions.revokeOthers'))
+    const others = wrapper.findAll('button').find((b) => b.text() === t('sessions.revokeOthers'))
     await others!.trigger('click')
     await flushPromises()
 
@@ -221,12 +222,12 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
   it('offers no sign-out-everywhere-else when this is the only session', async () => {
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT])
     const wrapper = await mountPanel()
-    expect(wrapper.findAll('button').some((b) => b.text() === i18n.global.t('sessions.revokeOthers'))).toBe(false)
+    expect(wrapper.findAll('button').some((b) => b.text() === t('sessions.revokeOthers'))).toBe(false)
     // The live control on the same predicate: with a second session it IS offered, so the assertion above is
     // about "nothing else to end" and not about a button that never renders.
     vi.mocked(listSessionFamilies).mockResolvedValue([CURRENT, OTHER])
     const withOthers = await mountPanel()
-    expect(withOthers.findAll('button').some((b) => b.text() === i18n.global.t('sessions.revokeOthers'))).toBe(true)
+    expect(withOthers.findAll('button').some((b) => b.text() === t('sessions.revokeOthers'))).toBe(true)
   })
 
   it('renders and revokes with the vault LOCKED — the security action never waits on the cosmetic half', async () => {
@@ -248,9 +249,9 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     // reads as "nothing to cut off" on the one screen that exists to find a device.
     vi.mocked(listSessionFamilies).mockRejectedValue(new Error('boom'))
     const wrapper = await mountPanel()
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.loadFailed'))
+    expect(wrapper.text()).toContain(t('sessions.loadFailed'))
     expect(wrapper.findAll('.session-row')).toHaveLength(0)
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.empty'))
+    expect(wrapper.text()).not.toContain(t('sessions.empty'))
   })
 
   it('surfaces a failed revoke instead of silently pretending the session ended', async () => {
@@ -258,7 +259,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const wrapper = await mountPanel()
     await rowButtons(wrapper)[1].trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
+    expect(wrapper.text()).toContain(t('sessions.revokeFailed'))
   })
 
   it('does nothing when the confirmation is declined', async () => {
@@ -278,7 +279,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(wrapper.text()).toContain('Arbeitslaptop')
     // The control: the family the register does NOT know still renders, under its fallback heading. Without it,
     // a panel that dropped unnamed rows entirely would satisfy the assertion above perfectly.
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.thisDevice'))
+    expect(wrapper.text()).toContain(t('sessions.thisDevice'))
     expect(rowButtons(wrapper).length).toBeGreaterThanOrEqual(2)
   })
 
@@ -309,7 +310,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(readRegisterView).mockRejectedValue(new Error('register unreachable'))
     const wrapper = await mountPanel()
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.loadFailed'))
+    expect(wrapper.text()).not.toContain(t('sessions.loadFailed'))
     await rowButtons(wrapper)[1].trigger('click')
     await flushPromises()
     expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
@@ -393,7 +394,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await flushPromises()
 
     expect(removeSavedKey).not.toHaveBeenCalled()
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.revokeFailed'))
+    expect(wrapper.text()).toContain(t('sessions.revokeFailed'))
   })
 
   it('says exactly what did and did not happen when only the wrap deletion fails (E5)', async () => {
@@ -406,7 +407,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
     // The trap is a message that reads as either total success or total failure. The half-success has to name
     // both halves, because the user's next move (retry below) depends on knowing which one is outstanding.
-    expect(wrapper.text()).toContain(i18n.global.t('sessions.escalateHalfFailed'))
+    expect(wrapper.text()).toContain(t('sessions.escalateHalfFailed'))
   })
 
   it('offers the escalation only where the register names a served wrap for that device', async () => {
@@ -439,8 +440,8 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const wrapper = await mountPanel()
     const button = escalateButton(wrapper, 1)!
 
-    expect(button.text()).toContain(i18n.global.t('sessions.escalateShort'))
-    expect(button.attributes('aria-label')).toBe(i18n.global.t('sessions.escalate'))
+    expect(button.text()).toContain(t('sessions.escalateShort'))
+    expect(button.attributes('aria-label')).toBe(t('sessions.escalate'))
   })
 
   it('quotes in the hint exactly the label that is on the button — in both locales', async () => {
@@ -449,7 +450,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     // is the likely half — so both are checked, and the check is the same one twice.
     for (const locale of ['en', 'de'] as const) {
       i18n.global.locale.value = locale
-      expect(i18n.global.t('sessions.hint')).toContain(i18n.global.t('sessions.escalateShort'))
+      expect(t('sessions.hint')).toContain(t('sessions.escalateShort'))
     }
   })
 
@@ -480,7 +481,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
       { id: 'w-b', method: 'DEVICE_KEY' },
     ])
     const wrapper = await mountPanel()
-    await buttonLabelled(wrapper, i18n.global.t('sessions.removeOtherKeys'))!.trigger('click')
+    await buttonLabelled(wrapper, t('sessions.removeOtherKeys'))!.trigger('click')
     await flushPromises()
 
     expect(removeSavedKey).toHaveBeenCalledWith('w-a')
@@ -497,7 +498,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
       { id: 'w-b', method: 'DEVICE_KEY' },
     ])
     const wrapper = await mountPanel()
-    await buttonLabelled(wrapper, i18n.global.t('sessions.removeOtherKeys'))!.trigger('click')
+    await buttonLabelled(wrapper, t('sessions.removeOtherKeys'))!.trigger('click')
     await flushPromises()
 
     // Excluding nothing is correct — a device with no saved key has none to spare — and it is not a self-inflicted
@@ -511,11 +512,11 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(localWrapId).mockResolvedValue('w-mine')
     vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-mine', method: 'DEVICE' }])
     const wrapper = await mountPanel()
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    expect(wrapper.text()).not.toContain(t('sessions.savedKeysTitle'))
     // The live control on the same predicate: one foreign saved key and the section IS there.
     vi.mocked(listSavedKeyWraps).mockResolvedValue([{ id: 'w-mine', method: 'DEVICE' }, { id: 'w-a', method: 'DEVICE' }])
     const withForeign = await mountPanel()
-    expect(withForeign.text()).toContain(i18n.global.t('sessions.savedKeysTitle'))
+    expect(withForeign.text()).toContain(t('sessions.savedKeysTitle'))
   })
 
   it('a locked panel offers neither wrap action, and still lists and revokes', async () => {
@@ -526,7 +527,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const wrapper = await mountPanel()
 
     expect(escalateButton(wrapper, 1)).toBeUndefined()
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    expect(wrapper.text()).not.toContain(t('sessions.savedKeysTitle'))
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
     await rowButtons(wrapper)[1].trigger('click')
     await flushPromises()
@@ -546,7 +547,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
       'Firefox · macOS',
       CURRENT.id,
     )
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.savedKeysTitle'))
+    expect(wrapper.text()).not.toContain(t('sessions.savedKeysTitle'))
     // …and the naming half is untouched by it: the list still renders and still revokes.
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
   })
@@ -556,10 +557,10 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(isTrusted).mockResolvedValue(true)
     const wrapper = await mountPanel()
     const rows = wrapper.findAll('.session-row')
-    expect(rows[0].text()).toContain(i18n.global.t('sessions.deviceTrusted'))
+    expect(rows[0].text()).toContain(t('sessions.deviceTrusted'))
     // The control on the same predicate: the status is a fact about THIS device, so no other row may carry it.
     // Without it, a status rendered once per row would satisfy the line above perfectly.
-    expect(rows[1].text()).not.toContain(i18n.global.t('sessions.deviceTrusted'))
+    expect(rows[1].text()).not.toContain(t('sessions.deviceTrusted'))
   })
 
   it('shows the password-LESS tier when a device somehow holds both, and offers nothing on a plain one', async () => {
@@ -568,21 +569,21 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(isRemembered).mockResolvedValue(true)
     vi.mocked(isTrusted).mockResolvedValue(true)
     const both = await mountPanel()
-    expect(both.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceRemembered'))
-    expect(both.findAll('.session-row')[0].text()).not.toContain(i18n.global.t('sessions.deviceTrusted'))
+    expect(both.findAll('.session-row')[0].text()).toContain(t('sessions.deviceRemembered'))
+    expect(both.findAll('.session-row')[0].text()).not.toContain(t('sessions.deviceTrusted'))
 
     // …and a device on the PASSWORD floor says so and offers nothing to forget — there is nothing here to drop.
     vi.mocked(isRemembered).mockResolvedValue(false)
     vi.mocked(isTrusted).mockResolvedValue(false)
     const plain = await mountPanel()
-    expect(plain.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    expect(plain.findAll('.session-row')[0].text()).toContain(t('sessions.deviceUntrusted'))
     expect(forgetButton(plain)).toBeUndefined()
   })
 
   it('forgets this device from its row: both tiers dropped, the session untouched', async () => {
     vi.mocked(isRemembered).mockResolvedValueOnce(true).mockResolvedValue(false) // before -> after
     const wrapper = await mountPanel()
-    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceRemembered'))
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(t('sessions.deviceRemembered'))
 
     await forgetButton(wrapper)!.trigger('click') // open the dialog
     await flushPromises()
@@ -591,7 +592,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
 
     expect(untrustThisDevice).toHaveBeenCalledWith('me@x.z')
     expect(clearDeviceKey).toHaveBeenCalled()
-    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(t('sessions.deviceUntrusted'))
     // The line that keeps forgetting from becoming the escalation: forgetting is not a sign-out (ADR 0058).
     expect(revokeSessionFamily).not.toHaveBeenCalled()
     expect(signOut).not.toHaveBeenCalled()
@@ -603,7 +604,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(isTrusted).mockRejectedValue(new Error('idb gone'))
     const wrapper = await mountPanel()
 
-    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUntrusted'))
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(t('sessions.deviceUntrusted'))
     expect(forgetButton(wrapper)).toBeUndefined()
     // The live control on the same predicate: a read that SUCCEEDS with a tier does offer it, so the line above
     // is about the catch path and not about a button that never renders from this mount point at all.
@@ -616,7 +617,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     vi.mocked(isTrustSupported).mockReturnValue(false)
     vi.mocked(isTrusted).mockResolvedValue(true)
     const wrapper = await mountPanel()
-    expect(wrapper.findAll('.session-row')[0].text()).toContain(i18n.global.t('sessions.deviceUnsupported'))
+    expect(wrapper.findAll('.session-row')[0].text()).toContain(t('sessions.deviceUnsupported'))
     expect(forgetButton(wrapper)).toBeUndefined()
   })
 
@@ -629,7 +630,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const wrapper = await mountPanel()
 
     expect(wrapper.findAll('.session-row')).toHaveLength(2)
-    expect(wrapper.text()).not.toContain(i18n.global.t('sessions.loading'))
+    expect(wrapper.text()).not.toContain(t('sessions.loading'))
     expect(rowButtons(wrapper).every((b) => b.attributes('disabled') === undefined)).toBe(true)
 
     await revokeButton(wrapper, 1)!.trigger('click')
@@ -647,7 +648,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     // Two distinct labels on the same row.
     expect(forgetButton(wrapper)).toBeDefined()
     expect(escalateButton(wrapper, 0)).toBeDefined()
-    expect(i18n.global.t('unlock.untrust')).not.toBe(i18n.global.t('sessions.escalate'))
+    expect(t('unlock.untrust')).not.toBe(t('sessions.escalate'))
 
     // Two distinct confirmations, through two distinct MECHANISMS: the escalation asks the app's shared dialog,
     // the forget owns its own (it carries the mutation, its busy state and its inline error, which the shared one
@@ -655,9 +656,9 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await escalateButton(wrapper, 0)!.trigger('click')
     await flushPromises()
     expect(confirmAsk).toHaveBeenCalledWith(
-      expect.objectContaining({ message: i18n.global.t('sessions.escalateConfirm') }),
+      expect.objectContaining({ message: t('sessions.escalateConfirm') }),
     )
-    expect(i18n.global.t('sessions.escalateConfirm')).not.toBe(i18n.global.t('sessions.untrustConfirmBody'))
+    expect(t('sessions.escalateConfirm')).not.toBe(t('sessions.untrustConfirmBody'))
 
     // …and the two do different things: the escalation ended a session, the forget never does.
     expect(revokeSessionFamily).toHaveBeenCalledWith(CURRENT.id)
@@ -667,7 +668,7 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     confirmAsk.mockClear()
     await forgetButton(fresh)!.trigger('click')
     await flushPromises()
-    expect(fresh.find('.dialog').text()).toContain(i18n.global.t('sessions.untrustConfirmTitle'))
+    expect(fresh.find('.dialog').text()).toContain(t('sessions.untrustConfirmTitle'))
     // …and it did NOT route through the shared one. This is the half that keeps the two from quietly becoming
     // one control: a forget folded into `ask()` would lose the busy state and the inline error it needs.
     expect(confirmAsk).not.toHaveBeenCalled()
@@ -679,6 +680,6 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     const otherRow = wrapper.findAll('.session-row')[1]
     // A remote device's local key is unreachable from here by construction; offering "forget" there would be a
     // promise the client cannot keep.
-    expect(otherRow.findAll('button').some((b) => b.text() === i18n.global.t('unlock.untrust'))).toBe(false)
+    expect(otherRow.findAll('button').some((b) => b.text() === t('unlock.untrust'))).toBe(false)
   })
 })

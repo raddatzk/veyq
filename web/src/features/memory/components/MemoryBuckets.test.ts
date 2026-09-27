@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 // The buckets data layer is mocked — this test drives the component's selection / delete-to-trash+undo / move-gating
 // UX (cr-0122), not the crypto/network layer. Names come back via a stubbed openBucketName.
@@ -30,28 +29,7 @@ vi.mock('../../../shared/state/useToast', () => ({
 
 import MemoryBuckets from './MemoryBuckets.vue'
 import { listBuckets, deleteMedia, restoreMedia, type MediaItem, type BucketItem } from '../media'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { save: 'Save', cancel: 'Cancel' },
-      media: { loading: 'Loading…', unavailable: 'Unavailable', openItem: 'Open item {index}' },
-      memory: {
-        buckets: {
-          title: 'Contributions', contributor: 'Contribution', member: 'Member', you: 'You',
-          emptyBucket: 'Nothing here.', options: 'Options', upload: 'Upload', createBucket: 'New sub-bucket',
-          rename: 'Rename', delete: 'Delete', move: 'Move', moveMedia: 'Move item', moveTitle: 'Move selection',
-          deleteMediaAction: 'Move item to trash', selectAllVisible: 'Select all', deselectAll: 'Deselect all',
-          selected: '{selected} of {visible} selected', undo: 'Undo',
-          deletedToTrash: '{count} item moved to trash | {count} items moved to trash',
-          dropTitle: 'Upload into “{bucket}”', dropCopy: 'Drop here',
-        },
-      },
-    },
-  },
-})
+import { realI18n } from '../../../test/i18n'
 
 // Stub the PrimeVue Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -76,7 +54,7 @@ const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedNa
 function mountBuckets(mediaItems: MediaItem[]) {
   return mount(MemoryBuckets, {
     props: { scopeId: 's-1', nodeId: 'n-1', memoryKey: new Uint8Array(32), media: mediaItems, thumbs: new Map() },
-    global: { plugins: [i18n], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub } },
+    global: { plugins: [realI18n()], stubs: { Select: SelectStub, Menu: MenuStub, MediaGrid: MediaGridStub } },
   })
 }
 

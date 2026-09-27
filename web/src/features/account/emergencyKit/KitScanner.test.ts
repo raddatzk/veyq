@@ -17,7 +17,7 @@ const decode = vi.fn<(...args: unknown[]) => { data: string } | null>()
 vi.mock('jsqr', () => ({ default: (...args: unknown[]) => decode(...args) }))
 
 import KitScanner from './KitScanner.vue'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
@@ -46,11 +46,10 @@ async function tick() {
 }
 
 const mountScanner = (accepts?: (text: string) => boolean) =>
-  mount(KitScanner, { props: accepts ? { accepts } : {}, global: { plugins: [i18n], stubs } })
+  mount(KitScanner, { props: accepts ? { accepts } : {}, global: { plugins: [realI18n()], stubs } })
 
 beforeEach(() => {
   vi.clearAllMocks()
-  i18n.global.locale.value = 'en'
   frames = []
   track = { stop: vi.fn() }
   getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [track] } as unknown as MediaStream)
@@ -144,7 +143,7 @@ describe('KitScanner (uc.account.unlock + uc.account.onboard-device, web)', () =
     const w = mountScanner()
     await flushPromises()
 
-    expect(w.find('.msg').text()).toBe(i18n.global.t('unlock.scanError'))
+    expect(w.find('.msg').text()).toBe(t('unlock.scanError'))
     expect(emittedFound(w)).toBeUndefined()
   })
 

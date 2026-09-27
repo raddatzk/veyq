@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
 // withRefresh just runs the call once in these unit tests (no token refresh under test).
@@ -120,9 +121,7 @@ describe('runScopeRotationWorker', () => {
     const failTask = vi.fn().mockResolvedValue(undefined)
     const declineTask = vi.fn().mockResolvedValue(undefined)
     mockTasks(claimTask, vi.fn(), failTask, declineTask)
-    vi.mocked(commitRotation).mockRejectedValueOnce({
-      response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }),
-    })
+    vi.mocked(commitRotation).mockRejectedValueOnce(httpError(409, 'stale_epoch'))
 
     expect(await runScopeRotationWorker()).toBe(0)
     expect(declineTask).toHaveBeenCalledWith({ jobId: 'j1', declineRequest: { reason: 'stale_epoch' } })

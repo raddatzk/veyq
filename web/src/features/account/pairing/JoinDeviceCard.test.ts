@@ -11,6 +11,7 @@
 //     every failure after the envelope arrives is terminal — a screen that offered a retry would revoke the
 //     family of the device standing in front of the user.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 vi.mock('./pairingChannel', () => ({
@@ -32,7 +33,7 @@ import JoinDeviceCard from './JoinDeviceCard.vue'
 import { answerPairingChannel, collectPairingChannel } from './pairingChannel'
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { readTransportAnswer, checkNumber, sealGrant, channelKeys, mintPairingSecret, type PairingGrant } from './pairing'
-import { i18n } from '../../../i18n'
+import { realI18n, t } from '../../../test/i18n'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -59,7 +60,6 @@ const GRANT: PairingGrant = {
   label: 'Kevin’s iPad',
 }
 
-const httpError = (status: number) => Object.assign(new Error('http'), { response: { status } })
 
 const stubs = {
   Message: { props: ['severity'], template: '<div class="msg"><slot /></div>' },
@@ -76,10 +76,9 @@ const stubs = {
   },
 }
 
-const t = (key: string) => i18n.global.t(key)
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 
-const mountCard = () => mount(JoinDeviceCard, { props: { secret: SECRET }, global: { plugins: [i18n], stubs } })
+const mountCard = () => mount(JoinDeviceCard, { props: { secret: SECRET }, global: { plugins: [realI18n()], stubs } })
 
 /** Let the answer POST settle and the poll arm. */
 const started = async (w: VueWrapper) => {
@@ -104,7 +103,6 @@ const grantArrives = async (w: VueWrapper, envelope = sealToTheCard()) => {
 beforeEach(() => {
   vi.clearAllMocks()
   vi.useFakeTimers()
-  i18n.global.locale.value = 'en'
   rememberSupported.mockReturnValue(true)
   capable.mockReturnValue(true)
   answer.mockResolvedValue(undefined)

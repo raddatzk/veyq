@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../test/httpError'
 
 // The pin store's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so the tests
 // prove a genuine round-trip and the version-guarded union-merge, not a stub.
@@ -44,7 +45,7 @@ const unsealPins = (blob: string, version: number): Record<string, { key: string
 // A fake server store with REAL optimistic concurrency: a PUT whose version != the stored version is a 409.
 function fakeServer(initial: { blob: string | null; version: number } = { blob: null, version: 0 }) {
   const state = { ...initial }
-  const stale = () => ({ response: { status: 409, clone: () => ({ json: async () => ({ code: 'stale_version' }) }) } })
+  const stale = () => httpError(409, 'stale_version')
   const getIdentityPins = vi.fn(async () => ({ blob: state.blob, version: state.version }))
   const putIdentityPins = vi.fn(async ({ identityPinsUpdate }: { identityPinsUpdate: { blob: string; version: number } }) => {
     if (identityPinsUpdate.version !== state.version) throw stale()

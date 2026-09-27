@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../test/httpError'
 
 vi.mock('../features/account/instance/instance', () => ({ getSetupStatus: vi.fn() }))
 
@@ -16,9 +17,7 @@ beforeEach(() => {
 // like every API call (uc.spaces.scope-access A7): that is the offline notice, not "unreachable".
 describe('boot on a suspended tenant’s own domain', () => {
   it('a 403 tenant_suspended marks the domain suspended, not unreachable', async () => {
-    vi.mocked(getSetupStatus).mockRejectedValue({
-      response: new Response(JSON.stringify({ code: 'tenant_suspended' }), { status: 403 }),
-    })
+    vi.mocked(getSetupStatus).mockRejectedValue(httpError(403, 'tenant_suspended'))
     await boot()
     expect(serverState.suspended).toBe(true)
     expect(serverState.unreachable).toBe(false)

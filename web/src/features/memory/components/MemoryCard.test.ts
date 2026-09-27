@@ -1,21 +1,16 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MemoryCard from './MemoryCard.vue'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
+import { realI18n, t } from '../../../test/i18n'
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: { en: { memory: { favorite: 'Favorite', unfavorite: 'Remove favorite', date: { since: 'Since {day}' } } } },
-})
 
 const memory: TreeNode = { id: 'm1', kind: NodeKind.Memory, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null }
 
 const mountCard = (favorite: boolean) =>
-  mount(MemoryCard, { props: { memory, favorite }, global: { plugins: [i18n] } })
+  mount(MemoryCard, { props: { memory, favorite }, global: { plugins: [realI18n()] } })
 
 describe('MemoryCard favorite pin', () => {
   it('shows an outline heart when not favorited', () => {
@@ -47,7 +42,7 @@ describe('MemoryCard favorite pin', () => {
 
 describe('MemoryCard cover (cr-0072)', () => {
   it('shows the placeholder images tile when no cover is set', () => {
-    const w = mount(MemoryCard, { props: { memory }, global: { plugins: [i18n] } })
+    const w = mount(MemoryCard, { props: { memory }, global: { plugins: [realI18n()] } })
     expect(w.find('.memory-card-cover .memory-card-icon.pi-images').exists()).toBe(true)
     expect(w.find('.memory-card-cover img').exists()).toBe(false)
   })
@@ -55,7 +50,7 @@ describe('MemoryCard cover (cr-0072)', () => {
   it('renders the decrypted cover with the crop-offset styles when set', () => {
     const w = mount(MemoryCard, {
       props: { memory, coverSrc: 'blob:cover', coverCrop: { x: 0.1, y: 0.2, width: 0.8, height: 0.6 } } as never,
-      global: { plugins: [i18n] },
+      global: { plugins: [realI18n()] },
     })
     const img = w.find('.memory-card-cover img')
     expect(img.exists()).toBe(true)
@@ -67,7 +62,7 @@ describe('MemoryCard cover (cr-0072)', () => {
 
 describe('MemoryCard sealed date (cr-0067)', () => {
   const mountWithDate = (date: unknown) =>
-    mount(MemoryCard, { props: { memory, date } as never, global: { plugins: [i18n] } })
+    mount(MemoryCard, { props: { memory, date } as never, global: { plugins: [realI18n()] } })
 
   it('shows no date line when the node carries none', () => {
     expect(mountWithDate(null).find('.memory-card-date').exists()).toBe(false)
@@ -85,6 +80,6 @@ describe('MemoryCard sealed date (cr-0067)', () => {
 
   it('renders an ongoing “since …”', () => {
     const w = mountWithDate({ mode: 'ongoing', from: '2026-01-01' })
-    expect(w.find('.memory-card-date').text()).toBe('Since 01/01/2026')
+    expect(w.find('.memory-card-date').text()).toBe(t('memory.date.since', { day: '01/01/2026' }))
   })
 })

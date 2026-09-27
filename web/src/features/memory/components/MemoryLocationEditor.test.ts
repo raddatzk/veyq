@@ -4,11 +4,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocode')>()), reverseGeocode: vi.fn() }))
 
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MemoryLocationEditor from './MemoryLocationEditor.vue'
 import { reverseGeocode, type GeoLevel } from '../geocode'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import type { LatLng, MemoryLocation } from '../memoryLocation'
+import { realI18n, t } from '../../../test/i18n'
 
 const HIERARCHY: GeoLevel[] = [
   { key: 'road', name: 'Musterstraße 12' },
@@ -16,23 +16,6 @@ const HIERARCHY: GeoLevel[] = [
   { key: 'city', name: 'Düsseldorf' },
   { key: 'state', name: 'Nordrhein-Westfalen' },
 ]
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { save: 'Save', cancel: 'Cancel' },
-      memory: {
-        place: {
-          title: 'Location', name: 'Name', namePlaceholder: 'Name this place', level: 'Level',
-          followsPhotos: 'Follows your photos', customPlace: 'Your own spot', followAgain: 'follow photos',
-          remove: 'Remove location', geocodeNote: 'Sent to a third party.',
-        },
-      },
-    },
-  },
-})
 
 const fitPointsSpy = vi.fn()
 const setViewSpy = vi.fn()
@@ -62,7 +45,7 @@ const MEDOID: LatLng = { lat: 28.27, lng: -16.61 }
 const POINTS: LatLng[] = [MEDOID, { lat: 28.47, lng: -16.25 }]
 
 function mountEditor(location: MemoryLocation | null, medoid: LatLng | null = MEDOID, points: LatLng[] = POINTS) {
-  return mount(MemoryLocationEditor, { props: { location, medoid, points }, global: { plugins: [i18n], stubs, directives: { tooltip: {} } } })
+  return mount(MemoryLocationEditor, { props: { location, medoid, points }, global: { plugins: [realI18n()], stubs, directives: { tooltip: {} } } })
 }
 const saved = (w: ReturnType<typeof mountEditor>) => w.emitted('save')?.[0]?.[0] as MemoryLocation | null | undefined
 const pill = (w: ReturnType<typeof mountEditor>) => w.find('.memory-location-pill').text()
@@ -81,7 +64,7 @@ describe('MemoryLocationEditor (intent-first)', () => {
     await flushPromises()
 
     expect(fitPointsSpy).toHaveBeenCalledWith(POINTS) // framed to the photo spread
-    expect(pill(w)).toContain('Follows your photos')
+    expect(pill(w)).toContain(t('memory.place.followsPhotos'))
     expect((w.find('.level-select').element as HTMLSelectElement).value).toBe('city') // default level = city
     await w.find('form').trigger('submit')
 
@@ -97,7 +80,7 @@ describe('MemoryLocationEditor (intent-first)', () => {
     await w.find('.ev-pan').trigger('click') // user pans → {40,10}
     await flushPromises()
 
-    expect(pill(w)).toContain('Your own spot')
+    expect(pill(w)).toContain(t('memory.place.customPlace'))
     await w.find('form').trigger('submit')
     expect(saved(w)).toMatchObject({ derivedMode: 'fixed', derived: { lat: 40, lng: 10 } })
   })
@@ -111,7 +94,7 @@ describe('MemoryLocationEditor (intent-first)', () => {
     await flushPromises()
 
     expect(setViewSpy).toHaveBeenCalledWith(MEDOID, expect.any(Number))
-    expect(pill(w)).toContain('Follows your photos')
+    expect(pill(w)).toContain(t('memory.place.followsPhotos'))
     await w.find('form').trigger('submit')
     expect(saved(w)).toMatchObject({ derivedMode: 'auto', derived: MEDOID })
   })
@@ -137,7 +120,7 @@ describe('MemoryLocationEditor (intent-first)', () => {
     const existing: MemoryLocation = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed', derived: MEDOID }
     const w = mountEditor(existing)
     await flushPromises()
-    await w.findAll('button').find((b) => b.text() === 'Remove location')!.trigger('click')
+    await w.findAll('button').find((b) => b.text() === t('memory.place.remove'))!.trigger('click')
     expect(w.emitted('save')?.[0]?.[0]).toBeNull()
   })
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { httpError } from '../test/httpError'
 
 vi.mock('../api/client', () => ({ tokenApi: vi.fn() }))
 // The ending runs for real — its has-a-session check is half of what E1/E2 assert here — with only the two steps
@@ -32,16 +33,15 @@ function refreshFails(failure: unknown) {
   } as unknown as ReturnType<typeof tokenApi>)
 }
 
-const rejected = (status: number) => ({ response: { status } })
-
 describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () => {
   it('a 401 in a tab that holds a session drops the tokens and runs the ending', async () => {
     session.accessToken = 'a1'
     session.refreshToken = 'r1'
     session.familyId = 'f1'
-    refreshFails(rejected(401))
+    const unauthorized = httpError(401)
+    refreshFails(unauthorized)
 
-    await expect(refreshSession()).rejects.toEqual(rejected(401))
+    await expect(refreshSession()).rejects.toBe(unauthorized)
 
     // tokens dropped → the next authed call won't loop 401→refresh→throw
     expect(session.accessToken).toBeNull()
@@ -52,7 +52,7 @@ describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () 
 
   it.each([
     ['a network failure', new TypeError('Failed to fetch')],
-    ['a 503', rejected(503)],
+    ['a 503', httpError(503)],
   ])('%s keeps the session and its tokens, and ends nothing', async (_, failure) => {
     // Losing the connection for a moment must not cost an unlock: the next call tries again.
     session.accessToken = 'a1'
@@ -71,12 +71,7 @@ describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () 
     // deliberately touches no session (uc.spaces.scope-access A7). Ending here would drop the convenience tiers
     // of a session the server never refused; the app shows the suspension notice instead.
     session.accessToken = 'a1'
-    const suspended = {
-      response: new Response(JSON.stringify({ code: 'tenant_suspended' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json' },
-      }),
-    }
+    const suspended = httpError(403, 'tenant_suspended')
     refreshFails(suspended)
 
     await expect(refreshSession()).rejects.toBe(suspended)
@@ -87,9 +82,10 @@ describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () 
 
   it('a 401 at boot, before this tab holds a session, is the ordinary not-signed-in path (E2)', async () => {
     // Without this the sign-in page would reload itself forever: every boot there refreshes with no cookie.
-    refreshFails(rejected(401))
+    const unauthorized = httpError(401)
+    refreshFails(unauthorized)
 
-    await expect(refreshSession()).rejects.toEqual(rejected(401))
+    await expect(refreshSession()).rejects.toBe(unauthorized)
 
     expect(replace).not.toHaveBeenCalled()
   })
@@ -113,7 +109,7 @@ describe('session refresh (uc.account.login)', () => {
       },
     } as unknown as ReturnType<typeof tokenApi>)
 
-    const unauthorized = { response: { status: 401 } }
+    const unauthorized = httpError(401)
     let inner = 0
     const call = () => {
       inner++
@@ -183,7 +179,7 @@ describe('session refresh (uc.account.login)', () => {
 describe('withRefresh — a suspended tenant mid-session (uc.spaces.scope-access A7)', () => {
   it('hands a 403 to the suspension handler and still rethrows it to the caller', async () => {
     const spy = vi.spyOn(await import('./tenantSuspension'), 'handleTenantSuspended').mockResolvedValue('other-tenant')
-    const refused = { response: new Response(JSON.stringify({ code: 'tenant_suspended' }), { status: 403 }) }
+    const refused = httpError(403, 'tenant_suspended')
     await expect(withRefresh(() => Promise.reject(refused))).rejects.toBe(refused)
     expect(spy).toHaveBeenCalledWith(refused)
     spy.mockRestore()

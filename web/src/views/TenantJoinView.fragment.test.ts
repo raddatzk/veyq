@@ -5,7 +5,6 @@
 // with no secret at all; that case must not claim the (still working) link is invalid.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 
 const route = vi.hoisted(() => ({ hash: '' }))
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }), useRoute: () => route }))
@@ -22,6 +21,7 @@ vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
 
 import TenantJoinView from './TenantJoinView.vue'
 import { previewInvite } from '../features/tenant/tenantInvite'
+import { realI18n, t } from '../test/i18n'
 
 const stubs = {
   Card: { template: '<div><slot name="title" /><slot name="content" /></div>' },
@@ -32,16 +32,8 @@ const stubs = {
   Checkbox: { template: '<input type="checkbox" />' },
 }
 
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  missingWarn: false,
-  fallbackWarn: false,
-  messages: { en: { tenant: { join: { missing: 'MISSING', invalid: 'INVALID', loading: 'LOADING' } } } },
-})
-
 function mountView() {
-  return mount(TenantJoinView, { global: { plugins: [i18n], stubs } })
+  return mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
 }
 
 beforeEach(() => {
@@ -70,8 +62,8 @@ describe('TenantJoinView — the invite secret in the address bar', () => {
     route.hash = ''
     const w = mountView()
     await flushPromises()
-    expect(w.text()).toContain('MISSING')
-    expect(w.text()).not.toContain('INVALID')
+    expect(w.text()).toContain(t('tenant.join.missing'))
+    expect(w.text()).not.toContain(t('tenant.join.invalid'))
     expect(previewInvite).not.toHaveBeenCalled()
   })
 
@@ -82,7 +74,7 @@ describe('TenantJoinView — the invite secret in the address bar', () => {
     vi.mocked(previewInvite).mockRejectedValue(new Error('404'))
     const w = mountView()
     await flushPromises()
-    expect(w.text()).toContain('INVALID')
-    expect(w.text()).not.toContain('MISSING')
+    expect(w.text()).toContain(t('tenant.join.invalid'))
+    expect(w.text()).not.toContain(t('tenant.join.missing'))
   })
 })

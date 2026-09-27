@@ -12,7 +12,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 
 import LocaleMarkdownEditor from './LocaleMarkdownEditor.vue'
 import type { LocaleMap } from './localeMap'
-import { i18n } from '../../i18n'
+import { realI18n, t } from '../../test/i18n'
 
 const stubs = {
   Dialog: {
@@ -31,16 +31,13 @@ const stubs = {
 
 type Props = InstanceType<typeof LocaleMarkdownEditor>['$props']
 const mountEditor = (props: Props, slots: Record<string, string> = {}) =>
-  mount(LocaleMarkdownEditor, { props, slots, global: { plugins: [i18n], stubs } })
+  mount(LocaleMarkdownEditor, { props, slots, global: { plugins: [realI18n()], stubs } })
 
-const t = (k: string, named?: Record<string, unknown>) => i18n.global.t(k, named ?? {})
 const rows = (w: VueWrapper) => w.findAll('.locale-md-row')
 const langs = (w: VueWrapper) => rows(w).map((r) => r.find('.locale-md-lang').text())
 const button = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
 const emitted = (w: VueWrapper) => w.emitted('update:modelValue') as LocaleMap[][] | undefined
 const lastMap = (w: VueWrapper) => emitted(w)!.at(-1)![0]
-
-i18n.global.locale.value = 'en'
 
 describe('LocaleMarkdownEditor — the map is the language list', () => {
   it('renders one row per language the map carries, and none for the rest', () => {

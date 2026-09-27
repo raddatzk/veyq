@@ -2,6 +2,7 @@
 // family is revoked WHILE the session works, the ending runs after them whether or not they succeeded, and a
 // revoke that never reached the server is carried to the sign-in page as one word, read once.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { httpError } from '../../../test/httpError'
 
 const { endSession, clearSessionVault, clearDeviceKey, logout } = vi.hoisted(() => ({
   endSession: vi.fn(),
@@ -32,7 +33,6 @@ function fakeSessionStorage() {
 }
 
 const order: string[] = []
-const status = (s: number) => ({ response: { status: s } })
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -71,7 +71,7 @@ describe('signOut (uc.account.sign-out)', () => {
   })
 
   it('treats a 5xx like an unreachable server — the cookie is still live', async () => {
-    logout.mockRejectedValue(status(503))
+    logout.mockRejectedValue(httpError(503))
 
     await signOut()
 
@@ -81,7 +81,7 @@ describe('signOut (uc.account.sign-out)', () => {
 
   it('leaves no notice when the server answered that the session is already gone (a 4xx)', async () => {
     // Revoked or expired: what signing out wanted, so the sign-in page has nothing to warn about.
-    logout.mockRejectedValue(status(401))
+    logout.mockRejectedValue(httpError(401))
 
     await signOut()
 
@@ -92,12 +92,7 @@ describe('signOut (uc.account.sign-out)', () => {
   it('does not count a suspended tenant’s refusal as a revoke — the family is still live (E4)', async () => {
     // A suspended tenant's own domain answers every /api call `403 tenant_suspended` and touches no session, so
     // the logout never reached the family and the cookie still works: that is E4, not "already gone".
-    logout.mockRejectedValue({
-      response: new Response(JSON.stringify({ code: 'tenant_suspended' }), {
-        status: 403,
-        headers: { 'content-type': 'application/json' },
-      }),
-    })
+    logout.mockRejectedValue(httpError(403, 'tenant_suspended'))
 
     await signOut()
 

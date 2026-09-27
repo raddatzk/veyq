@@ -22,19 +22,19 @@ vi.mock('./useOptimisticTiles', async () => {
   const { computed } = await import('vue')
   return { useOptimisticTiles: () => ({ optimisticTiles: computed(() => []), donorPreviewFor: () => null }) }
 })
-// The undo affordance is now a global toast (cr-0157) + i18n summary: stub both so the isolated composable runs and
+// The undo affordance is now a global toast (cr-0157) + i18n summary: stub the toast so the isolated composable runs and
 // the test can capture the `showUndo({ onUndo })` call to drive the restore (the toast surface lives in App.vue).
 const { showUndo, dismissUndo } = vi.hoisted(() => ({ showUndo: vi.fn(), dismissUndo: vi.fn() }))
 vi.mock('../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), showUndo, dismissUndo }),
   UNDO_GROUP: 'undo',
 }))
-vi.mock('vue-i18n', () => ({ useI18n: () => ({ t: (k: string) => k }) }))
 
 import { defineComponent, h, type UnwrapRef } from 'vue'
 import { mount, flushPromises } from '@vue/test-utils'
 import { useMediaGalleryLive } from './useMediaGalleryLive'
 import { listMediaPage, deleteMedia, restoreMedia, type MediaItem } from './media'
+import { realI18n } from '../../test/i18n'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -63,6 +63,7 @@ function setup() {
         return () => h('div')
       },
     }),
+    { global: { plugins: [realI18n()] } },
   )
   return { vm: wrapper.vm as never as UnwrapRef<ReturnType<typeof useMediaGalleryLive>>, onSettle, wrapper }
 }

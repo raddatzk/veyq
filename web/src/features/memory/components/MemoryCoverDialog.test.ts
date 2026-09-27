@@ -1,27 +1,13 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MemoryCoverDialog from './MemoryCoverDialog.vue'
 import type { CoverSaveIntent, MemoryCover } from '../memoryCover'
+import { realI18n, t } from '../../../test/i18n'
 
 // happy-dom has no real object-URL registry; the dialog only needs a stable string + a no-op revoke.
 beforeAll(() => {
   vi.stubGlobal('URL', { ...URL, createObjectURL: () => 'blob:upload', revokeObjectURL: () => {} })
-})
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { cancel: 'Cancel' },
-      memory: {
-        zoom: 'Zoom',
-        cover: { choose: 'Choose a cover', copy: 'copy', copyNoMedia: 'copy-no-media', upload: 'Upload a photo', remove: 'Remove cover', save: 'Save cover' },
-      },
-    },
-  },
 })
 
 const UPLOAD_REF = {
@@ -42,7 +28,7 @@ type Props = { cover?: MemoryCover | null; existingSrc?: string | null; hasMedia
 function mountDialog(p: Props = {}) {
   return mount(MemoryCoverDialog, {
     props: { cover: p.cover ?? null, existingSrc: p.existingSrc ?? null, hasMedia: p.hasMedia ?? false, mediaSource: p.mediaSource ?? null },
-    global: { plugins: [i18n], stubs },
+    global: { plugins: [realI18n()], stubs },
   })
 }
 
@@ -76,7 +62,7 @@ describe('MemoryCoverDialog', () => {
     await input.trigger('change')
     await loadCropper(w, 800, 450) // a 16:9 upload
 
-    await btn(w, 'Save cover').trigger('click')
+    await btn(w, t('memory.cover.save')).trigger('click')
     const intent = w.emitted('save')?.[0]?.[0] as CoverSaveIntent
     expect(intent.kind).toBe('upload')
     if (intent.kind !== 'upload') throw new Error('expected upload')
@@ -89,7 +75,7 @@ describe('MemoryCoverDialog', () => {
   it('remove emits a remove intent', async () => {
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm1' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.5 } }
     const w = mountDialog({ cover })
-    await btn(w, 'Remove cover').trigger('click')
+    await btn(w, t('memory.cover.remove')).trigger('click')
     expect((w.emitted('save')?.[0]?.[0] as CoverSaveIntent).kind).toBe('remove')
     expect(w.emitted('close')).toBeTruthy()
   })
@@ -102,7 +88,7 @@ describe('MemoryCoverDialog', () => {
     expect(w.find('.memory-cover-cropper img').attributes('src')).toBe('blob:cover-thumb')
     await loadCropper(w, 3200, 1800)
 
-    await btn(w, 'Save cover').trigger('click')
+    await btn(w, t('memory.cover.save')).trigger('click')
     const intent = w.emitted('save')?.[0]?.[0] as CoverSaveIntent
     expect(intent.kind).toBe('keep')
     if (intent.kind !== 'keep') throw new Error('expected keep')
@@ -117,7 +103,7 @@ describe('MemoryCoverDialog', () => {
     expect(w.find('.memory-cover-cropper img').attributes('src')).toBe('blob:photo-thumb')
     await loadCropper(w, 3200, 1800) // a 16:9 source → default centre crop == the full frame
 
-    await btn(w, 'Save cover').trigger('click')
+    await btn(w, t('memory.cover.save')).trigger('click')
     const intent = w.emitted('save')?.[0]?.[0] as CoverSaveIntent
     expect(intent.kind).toBe('media')
     if (intent.kind !== 'media') throw new Error('expected media')
@@ -135,7 +121,7 @@ describe('MemoryCoverDialog', () => {
     })
     await loadCropper(w, 3200, 1800)
 
-    await btn(w, 'Save cover').trigger('click')
+    await btn(w, t('memory.cover.save')).trigger('click')
     const intent = w.emitted('save')?.[0]?.[0] as CoverSaveIntent
     expect(intent.kind).toBe('media')
     if (intent.kind !== 'media') throw new Error('expected media')
@@ -152,7 +138,7 @@ describe('MemoryCoverDialog', () => {
     expect(w.find('.memory-cover-cropper img').attributes('src')).toBe('blob:existing-cover')
     await loadCropper(w, 3200, 1800)
 
-    await btn(w, 'Save cover').trigger('click')
+    await btn(w, t('memory.cover.save')).trigger('click')
     const intent = w.emitted('save')?.[0]?.[0] as CoverSaveIntent
     expect(intent.kind).toBe('keep')
     if (intent.kind !== 'keep') throw new Error('expected keep')

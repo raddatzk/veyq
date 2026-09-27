@@ -69,7 +69,7 @@ import { enrolDeviceKey, clearDeviceKey } from '../features/account/rememberMe/d
 import { cacheSessionVault, clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { revokeOtherSessionFamilies } from '../features/account/sessions/sessions'
 import { LoginVerifyRequestSessionScopeEnum } from '../api/generated/auth'
-import { i18n } from '../i18n'
+import { realI18n, t } from '../test/i18n'
 import { KdfProfileRefused } from '@veyq/crypto/v1'
 
 const stubs = {
@@ -113,12 +113,11 @@ const stubs = {
 const mounted: VueWrapper[] = []
 
 function mountView(): VueWrapper {
-  const w = mount(LoginView, { global: { plugins: [i18n], stubs } })
+  const w = mount(LoginView, { global: { plugins: [realI18n()], stubs } })
   mounted.push(w)
   return w
 }
 
-const t = (key: string) => i18n.global.t(key)
 /** A pairing code's secret is exactly 32 bytes (ADR 0059 §11): bytes 0..31, standard base64. */
 const PAIRING_SECRET = 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8='
 const buttonLabelled = (w: VueWrapper, label: string) => w.findAll('button').find((b) => b.text() === label)
@@ -157,7 +156,6 @@ async function scan(w: VueWrapper, text: string) {
 describe('LoginView (uc.account.sessions §E3, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    i18n.global.locale.value = 'en'
     // `clearAllMocks` clears calls, not implementations, so every resolved value is restated per test.
     vi.mocked(isTrusted).mockResolvedValue(false)
     vi.mocked(login).mockResolvedValue(undefined)

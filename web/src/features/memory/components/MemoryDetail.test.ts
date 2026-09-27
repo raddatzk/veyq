@@ -17,7 +17,6 @@ vi.mock('../geocode', async (orig) => ({ ...(await orig<typeof import('../geocod
 
 import { mount, flushPromises } from '@vue/test-utils'
 import exifr from 'exifr'
-import { createI18n } from 'vue-i18n'
 import PrimeVue from 'primevue/config'
 import MemoryDetail from './MemoryDetail.vue'
 import { addMedia, type MediaDeriver } from '../media'
@@ -32,66 +31,12 @@ import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
 import { galleryFakeStore } from './galleryFakeStore'
+import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
 /** The node every meta fixture here belongs to — node-meta seals are bound to it (ADR 0072). */
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: {
-      common: { save: 'Save', cancel: 'Cancel' },
-      memory: {
-        favorite: 'Favorite', unfavorite: 'Remove favorite', rename: 'Rename', delete: 'Delete', addChapter: 'Add chapter', chapters: 'Chapters', gallery: 'Gallery', noChapters: 'No chapters yet.',
-        date: {
-          title: 'Date', edit: 'Edit date', noDate: 'No date yet', since: 'Since {day}', autoHint: 'Derived from your photos.', autoEmpty: 'Add dated photos, or set a date manually.',
-          day: 'Day', from: 'From', to: 'To', start: 'Start', invalidRange: 'The end can’t be before the start.', saveFailed: 'Could not save the date.',
-          mode: { auto: 'Automatic', single: 'Single day', range: 'Range', ongoing: 'Ongoing' },
-        },
-        place: {
-          title: 'Location', edit: 'Edit location', set: 'Set location', noPlace: 'No location yet', name: 'Name',
-          pending: 'Location pending…', none: 'No location detected', remove: 'Remove location', consentTitle: 'Enable maps?', consentBody: 'Third-party tiles + geocoder.', consentEnable: 'Enable maps',
-        },
-      },
-      media: {
-        marks: {
-          mark: 'Mark this photo — everyone in this space sees it', unmark: 'Remove your mark',
-          filterLabel: 'Show marked photos',
-          filter: { all: 'All', everyone: "Everyone's", mine: 'Only mine' },
-          emptyMine: 'You have not marked anything in this Memory yet.',
-          emptyEveryone: 'Nobody has marked anything in this Memory yet.',
-        },
-        upload: 'Upload',
-        information: 'Details',
-        toggleInfo: 'Toggle details',
-        noDetail: 'No details for this item.',
-        captured: 'Taken',
-        status: 'Status',
-        editCapturedAt: 'Edit capture time',
-        resetCapturedAt: 'Reset to original',
-        capturedAtCorrected: 'Corrected',
-        capturedAtSaveFailed: 'Could not save the capture time.',
-        gallery: 'Memory gallery',
-        itemCount: 'No items | {count} item | {count} items',
-        openItem: 'Open item {index}',
-        empty: 'No photos in this Memory yet.',
-        unavailable: 'This Memory can’t be opened right now.',
-        loading: 'Loading…',
-        itemPosition: '{index} of {count}',
-        download: 'Download original',
-        close: 'Close',
-        previous: 'Previous',
-        next: 'Next',
-        loadError: 'This item couldn’t be loaded.',
-        sortNewest: 'Newest first',
-        sortOldest: 'Oldest first',
-      },
-    },
-  },
-})
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => ({
   id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta,
@@ -111,7 +56,7 @@ function stubDeriver(): MediaDeriver {
 function mountDetail(memoryKey: Uint8Array, props: Partial<Record<string, unknown>> = {}) {
   return mount(MemoryDetail, {
     props: { node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false, ...props },
-    global: { plugins: [i18n, PrimeVue], directives: { tooltip: {} } },
+    global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} } },
   })
 }
 
@@ -176,7 +121,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     await flushPromises()
     expect(group.find('.gallery-mark-filter').exists()).toBe(true)
-    expect(group.findAll('.gallery-mark-filter-option').map((o) => o.text())).toEqual(["All", "Everyone's", 'Only mine'])
+    expect(group.findAll('.gallery-mark-filter-option').map((o) => o.text())).toEqual([t('media.marks.filter.all'), t('media.marks.filter.everyone'), t('media.marks.filter.mine')])
   })
 
   /**
@@ -197,7 +142,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
 
     const mark = wrapper.find('.media-tile-mark')
     expect(mark.exists()).toBe(true)
-    expect(mark.attributes('aria-label')).toBe('Mark this photo — everyone in this space sees it')
+    expect(mark.attributes('aria-label')).toBe(t('media.marks.mark'))
     expect(mark.attributes('aria-pressed')).toBe('false')
     // no member id anywhere in the rendered gallery
     expect(wrapper.html()).not.toMatch(/member-?id/i)
@@ -289,15 +234,15 @@ describe('MemoryDetail (gallery grid + header)', () => {
     // open the lightbox, correct the capture time
     await wrapper.find('.media-tile-open').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).not.toContain('Corrected')
-    await wrapper.find('[aria-label="Edit capture time"]').trigger('click')
+    expect(wrapper.text()).not.toContain(t('media.capturedAtCorrected'))
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
     await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
     await wrapper.find('.media-lightbox-date-form').trigger('submit')
     await flushPromises()
-    expect(wrapper.text()).toContain('Corrected')
+    expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))
 
     // close the lightbox
-    await wrapper.find('.media-lightbox [aria-label="Close"]').trigger('click')
+    await wrapper.find(`.media-lightbox [aria-label="${t('media.close')}"]`).trigger('click')
     await flushPromises()
     expect(wrapper.find('.media-lightbox').exists()).toBe(false)
 
@@ -305,7 +250,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     // The regression: an in-lightbox edit updated only the sort order, so reopening unsealed the stale tier.
     await wrapper.find('.media-tile-open').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Corrected')
+    expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))
   })
 
   it('shows the empty state for a Memory with no media', async () => {
@@ -316,7 +261,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
 
-    expect(wrapper.find('.veyq-empty').text()).toBe('No photos in this Memory yet.')
+    expect(wrapper.find('.veyq-empty').text()).toBe(t('media.empty'))
     expect(wrapper.findAll('.media-tile')).toHaveLength(0)
   })
 
@@ -341,7 +286,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
   it('shows the unavailable state when K_mem is absent (E2: locked / not openable)', async () => {
     const wrapper = mountDetail(null as unknown as Uint8Array, { memoryKey: null })
     await flushPromises()
-    expect(wrapper.find('.veyq-empty').text()).toBe('This Memory can’t be opened right now.')
+    expect(wrapper.find('.veyq-empty').text()).toBe(t('media.unavailable'))
   })
 
   it('renders the Memory’s chapters and emits open/create (cr-0060)', async () => {
@@ -356,7 +301,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
 
     // switch to the Chapters tab (the gallery is the default tab)
-    const chaptersTab = wrapper.findAll('[role="tab"]').find((t) => t.text().includes('Chapters'))
+    const chaptersTab = wrapper.findAll('[role="tab"]').find((tab) => tab.text().includes(t('memory.chapters')))
     expect(chaptersTab).toBeTruthy()
     await chaptersTab!.trigger('click')
     await flushPromises()
@@ -414,7 +359,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     emptyStore()
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
-    expect(wrapper.find('.memory-date-chip').text()).toContain('No date yet')
+    expect(wrapper.find('.memory-date-chip').text()).toContain(t('memory.date.noDate'))
     expect(updateNode).not.toHaveBeenCalled() // absent meta already == empty auto; nothing to seal
   })
 
@@ -472,7 +417,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     }
     const wrapper = mount(MemoryDetail, {
       props: { node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey, favorite: false },
-      global: { plugins: [i18n, PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
+      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryDateEditor: DateEditorStub } },
     })
     await flushPromises()
     await wrapper.find('.memory-date-chip').trigger('click') // open the editor
@@ -508,7 +453,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setMapsConsent(true) // skip the consent dialog — go straight into the (stubbed) editor
     return mount(MemoryDetail, {
       props: { node: node('Rom 2026', wrappedMeta), scopeId: SCOPE_ID, memoryKey, favorite: false },
-      global: { plugins: [i18n, PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
+      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub } },
     })
   }
 
@@ -516,7 +461,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     emptyStore()
     const wrapper = mountWithLocationStub(v1.randomBytes(32), null)
     await flushPromises()
-    expect(wrapper.find('.memory-location-chip').text()).toContain('Set location')
+    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.set'))
   })
 
   it('renders the stored location name in the chip', async () => {
@@ -593,7 +538,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
     // No GPS media ⇒ the armed auto place can never resolve, so the chip says so rather than imply an in-progress lookup.
-    expect(wrapper.find('.memory-location-chip').text()).toContain('No location detected')
+    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.none'))
   })
 
   it('shows the “pending” placeholder for an armed auto location while a geotagged medium exists but no name yet', async () => {
@@ -608,7 +553,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
     await flushPromises()
-    expect(wrapper.find('.memory-location-chip').text()).toContain('Location pending')
+    expect(wrapper.find('.memory-location-chip').text()).toContain(t('memory.place.pending'))
   })
 
   it('materializes a pending auto location — geocodes the medoid name on the first geotagged media (self-heal)', async () => {
@@ -641,12 +586,12 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const DialogStub = { props: ['visible'], template: '<div v-if="visible" class="dlg"><slot /></div>' }
     const wrapper = mount(MemoryDetail, {
       props: { node: node('Rom 2026'), scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), favorite: false },
-      global: { plugins: [i18n, PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
+      global: { plugins: [realI18n(), PrimeVue], directives: { tooltip: {} }, stubs: { MemoryLocationEditor: LocationEditorStub, Dialog: DialogStub } },
     })
     await flushPromises()
     await wrapper.find('.memory-location-chip').trigger('click')
     await flushPromises()
     expect(wrapper.find('.loc-editor').exists()).toBe(false) // no editor
-    expect(wrapper.find('.dlg').text()).toContain('Third-party tiles') // the consent dialog body
+    expect(wrapper.find('.dlg').text()).toContain(t('memory.place.consentBody')) // the consent dialog body
   })
 })

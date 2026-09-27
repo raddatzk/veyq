@@ -6,7 +6,6 @@ import { vi } from 'vitest'
 vi.mock('leaflet', () => ({ default: {} }))
 
 import { mount } from '@vue/test-utils'
-import { createI18n } from 'vue-i18n'
 import MemoryBrowse from './MemoryBrowse.vue'
 import { NodeKind } from '../../../api/generated/content'
 import { treeStore } from '../treeStore'
@@ -18,14 +17,7 @@ import { epochsOf } from '../../spaces/epochsTestUtil'
 import { activeSpace } from '../../../app/activeSpace'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
-
-const i18n = createI18n({
-  legacy: false,
-  locale: 'en',
-  messages: {
-    en: { memory: { memories: 'Memories', folders: 'Folders', memoryEmpty: 'No Memories', folderEmpty: 'No folders' } },
-  },
-})
+import { realI18n, t } from '../../../test/i18n'
 
 // A stub for the Leaflet map — captures the pins it received and re-emits `open` on demand.
 const SpaceMapStub = {
@@ -64,7 +56,7 @@ const folderOf = (label: string, name: string): TreeNode => ({ ...node(label, No
 const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
-  mount(MemoryBrowse, { props, global: { plugins: [i18n], stubs: { SpaceMap: SpaceMapStub } } })
+  mount(MemoryBrowse, { props, global: { plugins: [realI18n()], stubs: { SpaceMap: SpaceMapStub } } })
 
 beforeEach(() => {
   setViewMode('grid')
@@ -90,8 +82,8 @@ describe('MemoryBrowse', () => {
 
   it('shows the empty states when a level has no folders/Memories', () => {
     const wrapper = mountBrowse({ folders: [], memories: [] })
-    expect(wrapper.text()).toContain('No Memories')
-    expect(wrapper.text()).toContain('No folders')
+    expect(wrapper.text()).toContain(t('memory.memoryEmpty'))
+    expect(wrapper.text()).toContain(t('memory.folderEmpty'))
   })
 
   it('in map mode replaces the card grids with the subtree map and pins located nodes', () => {

@@ -7,6 +7,7 @@
 // Its control is on the same predicate: before the answer it DID poll, or "it stopped" is satisfied by a loop
 // that never ran.
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest'
+import { httpError } from '../../../test/httpError'
 
 vi.mock('./pairingChannel', () => ({ collectPairingChannel: vi.fn() }))
 
@@ -17,7 +18,6 @@ const HANDLE = 'aGFuZGxl'
 const ANSWER = 'YW5zd2Vy'
 
 const collect = vi.mocked(collectPairingChannel)
-const httpError = (status: number) => Object.assign(new Error('http'), { response: { status } })
 
 const setVisibility = (state: 'visible' | 'hidden') =>
   Object.defineProperty(document, 'visibilityState', { value: state, configurable: true })
