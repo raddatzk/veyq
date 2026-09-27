@@ -1151,6 +1151,16 @@ obvious CDI-based enumeration in cr-ratelimit-posture's posture sweep red-flagge
 is a **named blind spot**, not a silent filter. A refine that lists the guard being built but not the guards
 standing next to it hands that collision to implement time.
 
+### A test migration is accounted for per assertion, not by the suite's test count
+
+A sweep that rewrites dozens of test files (a helper swap, a fixture move) can keep every `it` and quietly lose an
+`expect` — vitest's *"Tests N passed"* is unchanged either way, so the one number the DoD reads cannot see it.
+cr-web-test-support rewrote 67 files through five parallel subagents; what proved nothing was dropped was a
+per-file count of `expect(` and `it(` at `HEAD` against the tree, with the only deltas being the two assertions
+the CR named for deletion. Run that count before trusting the migration, and name every delta. The same CR's
+negative assertions (`not.toContain(…)`) were the other risk: left on a stub string the app never renders, they
+stay green on every tree, so each one was resolved through the real source and read back.
+
 ### A test that mutates shared singleton/global state writes its restore in the same edit
 
 **As the mutation, not after a flake.** The `%test` H2 mem DB — and any generated file like the config-secret key — is **JVM-shared
