@@ -3,7 +3,10 @@ package com.veyq.app.shared.tenant
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.adminchannel.givenAdminChannel
+import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.identity.VeyqUser
+import io.smallrye.config.WithDefault
+import io.quarkus.arc.ClientProxy
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -13,6 +16,7 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
@@ -26,11 +30,10 @@ import java.util.UUID
  *
  * Two different things are proved here and they fail for different reasons, which is why they are not merged:
  *
- *  - **The predicate** — [suspendedTenantsAreExcluded], [theBootstrapDomainIsNeverProjected]. Who belongs in the
- *    file. The bootstrap-domain exclusion is the one a wrong predicate passes every other case of: that domain
- *    satisfies `status != SUSPENDED` exactly like any other tenant and is nevertheless the one row that must not
- *    appear, because `infra/docker-compose.prod.yml` already routes it with static labels and two routers on one
- *    Host is how Traefik drops both.
+ *  - **The predicate** — [suspendedTenantsAreExcluded], [theBootstrapDomainIsRoutedOnceFromConfiguration]. Who
+ *    belongs in the file. The bootstrap domain is the case a wrong predicate gets wrong both ways: it must be
+ *    there with no tenant row at all (it is routed from configuration, and Traefik runs no other provider), and a
+ *    row carrying it must not add a second pair, because two routers of one name is how Traefik drops both.
  *  - **The triggers** — [everyRoutabilityChangingOperationReprojects]. *When* the file is rewritten, driven
  *    through the real HTTP endpoints rather than by calling the projector, because the defect being guarded
  *    against is a `TenantHandler` method that forgot to call it. Comment out any one of the five
@@ -62,6 +65,10 @@ class TenantIngressProjectorTest {
     @Inject
     lateinit var sessions: SessionService
 
+    /** The sink the producer built from this profile's configuration — its defaults are the ones under test. */
+    @Inject
+    lateinit var sink: TenantIngressSink
+
     // --- the predicate: who belongs in the file ---
 
     @Test
@@ -82,19 +89,76 @@ class TenantIngressProjectorTest {
     }
 
     @Test
-    fun theBootstrapDomainIsNeverProjected() {
-        // The exclusion no other case can catch. This row is ACTIVE and well-formed; it is skipped purely because
-        // the compose file already carries a static router for it, and a second router on the same Host makes
-        // Traefik drop *both* ("Router defined multiple times"). The other tenant is the positive control: the
-        // file is being written and does contain routers — the bootstrap domain is the one thing missing from it.
+    fun theBootstrapPairIsRenderedWithNoTenantRowAtAll() {
+        // Traefik runs the file provider only, so the domain the operator opens first — before any tenant exists —
+        // routes from this file or from nowhere. `render` with no tenant domains is the "no row" state, which the
+        // shared %test database cannot reach through the table (see TraefikFileIngressSink.render).
+        val file = configuredSink().render(emptyList())
+
+        assertEquals(listOf("veyq-app", "veyq-blobs"), routerNames(file), "exactly the bootstrap pair:\n$file")
+        assertTrue(file.contains("rule: \"Host(`$BOOTSTRAP_DOMAIN`)\""), "the bootstrap app router")
+        assertTrue(file.contains("rule: \"Host(`$BOOTSTRAP_DOMAIN`) && PathPrefix(`/veyq`)\""), "the bootstrap blobs router")
+    }
+
+    @Test
+    fun theBootstrapDomainIsRoutedOnceFromConfiguration() {
+        // The deduplication no other case can catch. This row is ACTIVE and well-formed; it must not add a pair,
+        // because the bootstrap pair is already rendered from configuration and a second router on the same Host
+        // makes Traefik drop *both* ("Router defined multiple times"). The other tenant is the positive control:
+        // the file is being written and does contain tenant routers.
         val other = seedTenant(TenantEntity.ACTIVE)
         seedTenant(TenantEntity.ACTIVE, domain = BOOTSTRAP_DOMAIN)
 
         projector.regenerate()
 
-        val hosts = projectedHosts()
-        assertTrue(hosts.contains(other), "control: an ordinary tenant is projected")
-        assertFalse(hosts.contains(BOOTSTRAP_DOMAIN), "the bootstrap domain is statically routed and must not be projected twice")
+        val file = Files.readString(Path.of(CONFIG_PATH))
+        val names = routerNames(file)
+        assertTrue(projectedHosts().contains(other), "control: an ordinary tenant is projected")
+        assertEquals(names.distinct(), names, "every router name appears once:\n$file")
+        assertEquals(2, HOST_RULE.findAll(file).count { it.groupValues[1] == BOOTSTRAP_DOMAIN }, "one pair for the bootstrap domain")
+        assertTrue(names.containsAll(listOf("veyq-app", "veyq-blobs")), "…and it is the configured pair")
+    }
+
+    @Test
+    fun theFileDefinesEveryServiceItsRoutersReference() {
+        // Traefik runs no Docker provider, so a router naming `<x>@docker` — or any service this file does not
+        // define — is a router Traefik rejects, with its route. The services point at the configured upstreams.
+        seedTenant(TenantEntity.ACTIVE)
+        projector.regenerate()
+
+        val file = Files.readString(Path.of(CONFIG_PATH))
+        assertFalse(file.contains("@"), "no provider suffix anywhere — every name resolves within this file:\n$file")
+        val services = file.substringAfter("\n  services:\n").substringBefore("\n  middlewares:\n")
+        assertEquals(listOf("veyq-app", "veyq-blobs", "veyq-admin"), SECTION_KEY.findAll(services).map { it.groupValues[1] }.toList())
+        val referenced = Regex("service: (\\S+)").findAll(file).map { it.groupValues[1] }.toSet()
+        assertTrue(referenced.isNotEmpty() && services.let { s -> referenced.all { "    $it:\n" in s } }, "referenced $referenced")
+        assertTrue(services.substringAfter("    veyq-blobs:\n").substringBefore("    veyq-admin:").contains("passHostHeader: true"),
+            "SigV4 signs the host, so the store must see the one the browser sent (ADR 0013 §4)")
+        assertEquals(listOf("http://app:8080", "http://garage:3900", "http://admin:8080"), serviceUrls(file))
+    }
+
+    @Test
+    fun noServiceEverPointsAtTheAdminListener() {
+        // ADR 0065: the Server-Owner operations answer only on the backend's admin listener, and a public router
+        // in front of it would put them on the internet. %test binds that listener to a random port, so the port
+        // asserted against is the production one — read off the config mapping's own default, not retyped here.
+        val adminPort = VeyqConfig.AdminChannel::class.java.getMethod("port").getAnnotation(WithDefault::class.java).value.toInt()
+        val urls = serviceUrls(configuredSink().render(emptyList()))
+
+        assertEquals(3, urls.size, "control: the services are read")
+        urls.forEach { assertNotEquals(adminPort, java.net.URI(it).port, "a rendered service names the admin listener: $it") }
+    }
+
+    @Test
+    fun theAdminRouterAppearsOnlyWithAnAdminDomain() {
+        val without = configuredSink().render(emptyList())
+        val with = traefikSink(adminDomain = "admin.example.com").render(emptyList())
+
+        assertFalse(routerNames(without).contains("veyq-admin"), "no admin domain, no admin router:\n$without")
+        assertTrue(routerNames(with).contains("veyq-admin"), "an admin domain gets its router:\n$with")
+        val admin = with.substringAfter("    veyq-admin:\n").substringBefore("\n  services:")
+        assertTrue(admin.contains("rule: \"Host(`admin.example.com`)\"") && admin.contains("service: veyq-admin"), admin)
+        assertTrue(admin.contains("certResolver: letsencrypt"), "its own certificate")
     }
 
     @Test
@@ -109,26 +173,33 @@ class TenantIngressProjectorTest {
         val file = Files.readString(Path.of(CONFIG_PATH))
         assertTrue(file.contains("rule: \"Host(`$domain`)\""), "the app router")
         assertTrue(file.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "the same-origin blobs router")
-        assertTrue(file.contains("service: veyq-app@docker"), "routers reference the compose file's own services")
-        assertTrue(file.contains("service: veyq-blobs@docker"))
+        val slug = "veyq-tenant-${domain.replace('.', '-')}"
+        val app = routerBlock(file, "$slug-app")
+        assertTrue(app.contains("service: veyq-app") && app.contains("priority: 1\n"), app)
+        val blobs = routerBlock(file, "$slug-blobs")
+        assertTrue(blobs.contains("service: veyq-blobs") && blobs.contains("priority: 100\n"), blobs)
+        listOf(app, blobs).forEach {
+            assertTrue(it.contains("entryPoints: [websecure]") && it.contains("certResolver: letsencrypt"), it)
+        }
     }
 
     @Test
-    fun aTenantsBlobsRouterMarksStoreResponsesInert() {
-        // ADR 0013 §6: where the store shares the app's origin — every projected tenant domain, not only the
-        // bootstrap one — the proxy sets `nosniff` + a `sandbox` CSP on store responses, a belt under the signer's
-        // overrides. The middleware is DEFINED once, as labels on the compose file's store service, and referenced
-        // here across providers. Asserted inside the blobs router's own block; the control is that block's own
-        // rule, which proves the slice is the blobs router and not the whole file.
-        val domain = seedTenant(TenantEntity.ACTIVE)
+    fun everyBlobsRouterMarksStoreResponsesInert() {
+        // ADR 0013 §6: where the store shares the app's origin — the bootstrap domain and every projected tenant
+        // domain — the proxy sets `nosniff` + a `sandbox` CSP on store responses, a belt under the signer's
+        // overrides. The middleware is DEFINED in the same file its routers reference it from, so no router can
+        // name one Traefik has not loaded. Asserted per blobs router block; the control is the block count.
+        seedTenant(TenantEntity.ACTIVE)
 
         projector.regenerate()
 
-        val slug = "veyq-tenant-${domain.replace('.', '-')}"
-        val blobs = Files.readString(Path.of(CONFIG_PATH))
-            .substringAfter("    $slug-blobs:\n").substringBefore("\n    veyq-tenant-")
-        assertTrue(blobs.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "control: the blobs router's block")
-        assertTrue(blobs.contains("middlewares: [veyq-blobs-inert@docker]"), "the store-response middleware: $blobs")
+        val file = Files.readString(Path.of(CONFIG_PATH))
+        val blobs = routerNames(file).filter { it.endsWith("-blobs") }
+        assertTrue(blobs.contains("veyq-blobs") && blobs.size >= 2, "control: the bootstrap and a tenant blobs router: $blobs")
+        blobs.forEach { assertTrue(routerBlock(file, it).contains("middlewares: [veyq-blobs-inert]"), "$it carries the middleware") }
+        val inert = file.substringAfter("\n  middlewares:\n    veyq-blobs-inert:\n")
+        assertTrue(inert.contains("contentTypeNosniff: true"), "the middleware is defined here:\n$file")
+        assertTrue(inert.contains("contentSecurityPolicy: \"sandbox; default-src 'none'\""), inert)
     }
 
     @Test
@@ -250,6 +321,25 @@ class TenantIngressProjectorTest {
 
     // --- helpers ---
 
+    private fun configuredSink() = ClientProxy.unwrap(sink) as TraefikFileIngressSink
+
+    /** A sink rendering this profile's shape with one knob turned — for a configuration no profile here sets. */
+    private fun traefikSink(adminDomain: String? = null) = TraefikFileIngressSink(
+        Path.of("build/test-tenant-ingress-render-only/tenants.yml"), BOOTSTRAP_DOMAIN, adminDomain,
+        TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
+    )
+
+    /** The router names, in file order — duplicates kept, since a duplicate is what some tests look for. */
+    private fun routerNames(file: String): List<String> =
+        if ("\n  routers:\n" !in file) emptyList()
+        else SECTION_KEY.findAll(file.substringAfter("\n  routers:\n").substringBefore("\n  services:\n")).map { it.groupValues[1] }.toList()
+
+    private fun routerBlock(file: String, name: String): String =
+        file.substringAfter("\n    $name:\n").split(Regex("\n    (?=\\S)|\n  (?=\\S)")).first()
+
+    private fun serviceUrls(file: String): List<String> =
+        Regex("- url: \"([^\"]+)\"").findAll(file).map { it.groupValues[1] }.toList()
+
     /** Every `Host(...)` the generated file routes, read back from disk. */
     private fun projectedHosts(): List<String> =
         HOST_RULE.findAll(Files.readString(Path.of(CONFIG_PATH))).map { it.groupValues[1] }.distinct().toList()
@@ -301,5 +391,7 @@ class TenantIngressProjectorTest {
         const val CONFIG_PATH = "build/test-tenant-ingress/tenants.yml"
         const val BOOTSTRAP_DOMAIN = "bootstrap.example.com"
         val HOST_RULE = Regex("Host\\(`([^`]+)`\\)")
+        /** A key at the depth of a router, service or middleware name. */
+        val SECTION_KEY = Regex("(?m)^    ([a-z0-9-]+):$")
     }
 }
