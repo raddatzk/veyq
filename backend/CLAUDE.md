@@ -7,6 +7,16 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
 - **Run the app (`quarkusDev`) on a persistent MariaDB** (`%dev`): `docker compose -f infra/docker-compose.yml
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
+- **Every dependency is checksum-verified** (`gradle/verification-metadata.xml`, ADR 0057 §6), and so is the
+  wrapper's distribution (`distributionSha256Sum`). A dependency, plugin or Quarkus bump therefore regenerates
+  the metadata by hand (Dependabot is remembered not to): `GRADLE_USER_HOME=$(mktemp -d) ./gradlew
+  --write-verification-metadata sha256 help check quarkusBuild pitest`. **The empty Gradle home is the point** —
+  a warm cache hides what a cold one fetches: the first write, from a warm cache, missed
+  `okhttp-bom-5.3.2.module`, which every clean build (the Dockerfile's, a fresh CI runner's) resolves. Those four
+  tasks were measured to cover everything else, `quarkusDev`'s classpaths and the native build included. Read the
+  diff before committing it; its checksums are trusted on first write. The only trust rules are for the
+  `-sources`/`-javadoc` jars an IntelliJ sync fetches and nothing runs. `scripts/validate_build_input_pins.py`
+  holds all of this, plus the one generator version the three surfaces run.
 
 ## Conventions (see [developer styleguide](../docs/crosscutting/developer-styleguide.md))
 - **API-first.** Edit the spec in `../contracts/api/*.openapi.yaml`; the Gradle build generates Kotlin
