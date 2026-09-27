@@ -54,8 +54,8 @@ describe('setMemberRole (cr-0088)', () => {
   })
 })
 
-describe('removeGroupMember (cr-0089)', () => {
-  it('deletes the membership via the member endpoint (the rotation is a separate call the caller makes next)', async () => {
+describe('removeGroupMember — the consent rescind (cr-0094)', () => {
+  it('deletes a pending proposal via the member endpoint (a keyed member is removed by the removal-rotation instead)', async () => {
     const removeFn = vi.fn().mockResolvedValue(undefined)
     vi.mocked(scopesApi).mockReturnValue({ removeMember: removeFn } as unknown as ReturnType<typeof scopesApi>)
 

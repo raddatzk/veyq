@@ -2,14 +2,14 @@
 // (cr-0092, ADR 0025). When a tenant owner removes a member co-sharing a GROUP the owner doesn't hold, the
 // backend queues a SCOPE_ROTATION job (it can't rotate — it holds no key there). The next remaining key-holder
 // online completes it on-device: mint E_{n+1}, chain-link E_n, re-grant the surviving members (reusing
-// `rotateGroupForRemoval`, cr-0089), then complete. Claimed **globally across every held scope** — a key-holder
+// `commitRotation`, cr-0089), then complete. Claimed **globally across every held scope** — a key-holder
 // sitting anywhere (even their own personal scope) drains queued rotations WITHOUT opening the group. Requires
 // an unlocked vault (the rotation opens the caller's own grant on-device). Idempotent + first-online-wins: the
 // backend leases each job to one worker and coalesces multiple removals into one rotation, so a second
 // key-holder simply finds nothing to claim.
 import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isStaleEpoch, rotateGroupForRemoval } from '../spaces/scopes'
+import { commitRotation, isStaleEpoch } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { SCOPE_ROTATION } from './capabilityTags'
@@ -34,8 +34,12 @@ export async function runScopeRotationWorker(): Promise<number> {
     try {
       // The directory AFTER the cut (the ex-member's membership is already deleted server-side), so the rotation
       // re-grants exactly the surviving set — coalesced removals collapse into one forward-secure rotation.
+      // This is the server's word on who remains: unlike a group owner's removal (`rotateGroupForRemoval`, which
+      // excludes the member it removes by its own choice), this worker did not remove anyone and has nothing of its
+      // own to exclude by, so a server that re-lists a cut member gets them re-granted and re-tagged. That holds
+      // against an honest operator only — ADR 0024 § Guarantee names it — and is not closed here.
       const remaining = await listScopeMembers(job.scopeId)
-      await rotateGroupForRemoval(job.scopeId, remaining)
+      await commitRotation(job.scopeId, remaining)
       await completeJob(job.jobId)
       // If the rotated group is the scope we're actively viewing, swap in the fresh epoch so our next write seals
       // under E_{n+1}, not the stale E_n (mirrors the synchronous remove flow, cr-0089).

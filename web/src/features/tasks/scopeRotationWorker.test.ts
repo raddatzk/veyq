@@ -8,7 +8,7 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => 
 // `stale_epoch` predicate stays real: which error the worker declines on is the thing under test.
 vi.mock('../spaces/scopes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../spaces/scopes')>()),
-  rotateGroupForRemoval: vi.fn().mockResolvedValue(2),
+  commitRotation: vi.fn().mockResolvedValue(2),
 }))
 vi.mock('../spaces/members', () => ({ listScopeMembers: vi.fn().mockResolvedValue([{ userId: 'u2' }]) }))
 // Hoisted so the (hoisted) vi.mock factory can close over the same mutable object the tests reach into.
@@ -18,7 +18,7 @@ vi.mock('../../app/activeSpace', () => ({ activeSpace, refreshActiveScope: vi.fn
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION, GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
-import { rotateGroupForRemoval } from '../spaces/scopes'
+import { commitRotation } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
 
@@ -47,7 +47,7 @@ describe('runScopeRotationWorker', () => {
     expect(claimTask).toHaveBeenNthCalledWith(1, { claimRequest: { capabilityTags: [SCOPE_ROTATION] } })
     // Rotate the surviving directory (fetched post-cut) forward, then close the job with no sealedResult.
     expect(listScopeMembers).toHaveBeenCalledWith('g1')
-    expect(rotateGroupForRemoval).toHaveBeenCalledWith('g1', [{ userId: 'u2' }])
+    expect(commitRotation).toHaveBeenCalledWith('g1', [{ userId: 'u2' }])
     expect(completeTask).toHaveBeenCalledWith({ jobId: 'j1', completeRequest: {} })
   })
 
@@ -56,7 +56,7 @@ describe('runScopeRotationWorker', () => {
     mockTasks(claimTask)
 
     expect(await runScopeRotationWorker()).toBe(0)
-    expect(rotateGroupForRemoval).not.toHaveBeenCalled()
+    expect(commitRotation).not.toHaveBeenCalled()
   })
 
   it('refreshes the active scope when the rotated group is the one being viewed', async () => {
@@ -92,7 +92,7 @@ describe('runScopeRotationWorker', () => {
     mockTasks(claimTask, vi.fn(), failTask)
 
     expect(await runScopeRotationWorker()).toBe(0)
-    expect(rotateGroupForRemoval).not.toHaveBeenCalled()
+    expect(commitRotation).not.toHaveBeenCalled()
     expect(failTask).toHaveBeenCalledWith({ jobId: 'j9', failRequest: { reason: 'not-scope-rotation' } })
   })
 
@@ -103,7 +103,7 @@ describe('runScopeRotationWorker', () => {
       .mockResolvedValueOnce(null)
     const failTask = vi.fn().mockResolvedValue(undefined)
     mockTasks(claimTask, vi.fn(), failTask)
-    vi.mocked(rotateGroupForRemoval).mockRejectedValueOnce(new Error('cannot open scope to rotate'))
+    vi.mocked(commitRotation).mockRejectedValueOnce(new Error('cannot open scope to rotate'))
 
     expect(await runScopeRotationWorker()).toBe(0)
     expect(failTask).toHaveBeenCalledWith({ jobId: 'j1', failRequest: { reason: 'rotate-failed' } })
@@ -120,7 +120,7 @@ describe('runScopeRotationWorker', () => {
     const failTask = vi.fn().mockResolvedValue(undefined)
     const declineTask = vi.fn().mockResolvedValue(undefined)
     mockTasks(claimTask, vi.fn(), failTask, declineTask)
-    vi.mocked(rotateGroupForRemoval).mockRejectedValueOnce({
+    vi.mocked(commitRotation).mockRejectedValueOnce({
       response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }),
     })
 

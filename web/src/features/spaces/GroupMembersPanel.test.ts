@@ -40,8 +40,8 @@ const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
 vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
 
 import GroupMembersPanel from './GroupMembersPanel.vue'
-import { listScopeMembers } from './members'
-import { setSpaceIcon, clearSpaceIcon, openGroupIcon } from './scopes'
+import { listScopeMembers, removeGroupMember } from './members'
+import { setSpaceIcon, clearSpaceIcon, openGroupIcon, rotateGroupForRemoval } from './scopes'
 import { getMyProfile } from '../account/profile/profile'
 import { bumpSpaceIcon } from './spaceIconSignal'
 
@@ -53,7 +53,7 @@ const i18n = createI18n({
   messages: {
     en: {
       spaceIcon: { add: 'Add icon', change: 'Change icon', remove: 'Remove icon', saved: 'Saved', removed: 'Removed', removeConfirm: 'Remove?', stale: 'Stale', failed: 'Failed' },
-      groups: { rename: 'Rename', untitled: 'Untitled', members: 'Members', membersSub: 'sub', dangerZone: 'Danger', deleteSub: 's', deleteGroup: 'Delete', addMember: 'Add', addMemberIntro: 'i', usernamePlaceholder: 'u' },
+      groups: { rename: 'Rename', untitled: 'Untitled', members: 'Members', membersSub: 'sub', dangerZone: 'Danger', deleteSub: 's', deleteGroup: 'Delete', addMember: 'Add', addMemberIntro: 'i', usernamePlaceholder: 'u', remove: 'Remove', removeConfirm: 'Remove?', removeConfirmYes: 'Remove member', removeMemberFailed: 'Removing failed', promote: 'Promote', demote: 'Demote' },
       members: { loading: 'Loading', empty: 'No members', statusActive: 'Active', statusAwaiting: 'Awaiting', statusPendingConsent: 'Pending' },
       common: { save: 'Save', cancel: 'Cancel' },
     },
@@ -61,7 +61,7 @@ const i18n = createI18n({
 })
 
 const stubs = {
-  Button: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
+  Button: { props: ['label', 'icon', 'ariaLabel'], emits: ['click'], template: '<button :aria-label="ariaLabel" @click="$emit(\'click\')">{{ label }}</button>' },
   Message: { template: '<div class="msg"><slot /></div>' },
   InputText: { props: ['modelValue'], template: '<input :value="modelValue" />' },
   TenantAvatar: { props: ['name', 'icon'], template: '<span class="avatar" :data-icon="icon">{{ name }}</span>' },
@@ -128,5 +128,41 @@ describe('GroupMembersPanel — space icon (GROUP slice)', () => {
     await flushPromises()
     expect(clearSpaceIcon).toHaveBeenCalledWith('g-1')
     expect(bumpSpaceIcon).toHaveBeenCalled()
+  })
+})
+
+describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decision 4)', () => {
+  const BOB = { userId: 'u-bob', username: 'bob', role: 'MEMBER', hasGrant: true, pendingConsent: false }
+  const PICKED = [...OWNER_ROW, BOB]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    globalThis.URL.createObjectURL = vi.fn(() => 'blob:mock')
+    globalThis.URL.revokeObjectURL = vi.fn()
+  })
+
+  async function removeBob() {
+    // The server lists bob before the removal — and keeps listing him after it.
+    vi.mocked(listScopeMembers).mockResolvedValue(PICKED as never)
+    vi.mocked(getMyProfile).mockResolvedValue({ username: 'owner' } as never)
+    vi.mocked(openGroupIcon).mockResolvedValue(null)
+    vi.mocked(rotateGroupForRemoval).mockResolvedValue(1)
+    const w = mount(GroupMembersPanel, { props: { scopeId: 'g-1', name: 'Familie' }, global: { plugins: [i18n], stubs } })
+    await flushPromises()
+    await button(w, 'Remove')!.trigger('click') // bob's row — the owner cannot remove themselves here
+    await flushPromises()
+    await button(w, 'Remove member')!.trigger('click') // the inline confirm
+    await flushPromises()
+    return w
+  }
+
+  it('rotates once, naming the member it removes, over the list the owner picked from — and deletes nothing on its own', async () => {
+    const w = await removeBob()
+    expect(removeGroupMember).not.toHaveBeenCalled()
+    expect(rotateGroupForRemoval).toHaveBeenCalledTimes(1)
+    expect(rotateGroupForRemoval).toHaveBeenCalledWith('g-1', PICKED, 'u-bob')
+    // A re-listing server does not bring the removed member back into view.
+    expect(w.text()).not.toContain('@bob')
+    expect(w.text()).toContain('@owner') // control: the remaining member is still listed
   })
 })

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
+  contentApi: vi.fn(),
   tenantsApi: vi.fn(),
   loginApi: vi.fn(),
   tokenApi: vi.fn(),
@@ -20,9 +21,10 @@ vi.mock('../account/identityPins', () => ({
   },
 }))
 
-import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon } from './scopes'
+import { ensurePersonalScope, openPersonalScope, openScope, openScopeById, openGroupByToken, listMyTenants, createGroup, listMyGroups, rotateGroupForRemoval, commitRotation, renameGroup, deleteGroup, restoreGroup, openMyTenantIcon, openGroupIcon } from './scopes'
 import { ScopeKind, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
-import { scopesApi, tenantsApi, accountApi } from '../../api/client'
+import { scopesApi, contentApi, tenantsApi, accountApi } from '../../api/client'
+import { createFolder } from '../memory/tree'
 import { checkAndPin } from '../account/identityPins'
 import { identityPrivate } from '../../app/vault'
 import { epochLinkContext } from './epochs'
@@ -293,7 +295,7 @@ describe('openGroupByToken (cr-0120 — resolve a group from its `#@<slug|id>` f
   })
 })
 
-describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)', () => {
+describe('commitRotation / rotateGroupForRemoval (cr-0089 — the client-side forward rotation)', () => {
   const A = 'a0000000-0000-4000-8000-0000000000a0'
   const B = 'b0000000-0000-4000-8000-0000000000b0'
   /** A remaining member admitted to G1 by a genuine key-holder of `e0`, at epoch 0 (a group add binds the member). */
@@ -303,7 +305,7 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
   })
 
   it('mints a fresh epoch, chain-links the old one under it, and re-grants it to every remaining member', async () => {
-    // The caller holds the group at epoch 0 (E_0). rotateGroupForRemoval opens that grant to derive E_0.
+    // The caller holds the group at epoch 0 (E_0). commitRotation opens that grant to derive E_0.
     const e0 = v1.randomBytes(32)
     const grant0 = ownGrant(G1, e0, 0)
     const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: grant0, grantedEpoch: 0 })])
@@ -315,7 +317,7 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
     const memberB = v1.generateIdentity()
     const remaining: ScopeMember[] = [admittedMember(A, memberA, e0), admittedMember(B, memberB, e0)]
 
-    const newEpoch = await rotateGroupForRemoval(G1, remaining)
+    const newEpoch = await commitRotation(G1, remaining)
     expect(newEpoch).toBe(1)
     expect(rotate).toHaveBeenCalledTimes(1)
 
@@ -361,7 +363,7 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
     const forged = v1.generateIdentity()
     const bad = { ...admittedMember(B, forged, e0), admissionTag: b64std(v1.randomBytes(32)) }
 
-    await rotateGroupForRemoval(G1, [admittedMember(A, memberA, e0), bad])
+    await commitRotation(G1, [admittedMember(A, memberA, e0), bad])
 
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
     expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A]) // the forged one is not re-granted
@@ -376,7 +378,7 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
     vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
     const good = admittedMember(B, v1.generateIdentity(), e0)
 
-    await rotateGroupForRemoval(G1, [good])
+    await commitRotation(G1, [good])
 
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
     expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([B])
@@ -395,7 +397,7 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
       listMemberInvites: vi.fn().mockResolvedValue([{ inviteId: 'i1', email: 'a@x', ...genuine }, { inviteId: 'i2', email: 'b@x', ...forged }]),
     } as unknown as ReturnType<typeof tenantsApi>)
 
-    await rotateGroupForRemoval(T1, [])
+    await commitRotation(T1, [])
 
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
     expect(payload.admissions.map((a: { admissionId: string }) => a.admissionId)).toEqual([genuine.admissionId])
@@ -418,14 +420,62 @@ describe('rotateGroupForRemoval (cr-0089 — the client-side forward rotation)',
     // b's key changed since it was pinned → exclude b, keep a.
     vi.mocked(checkAndPin).mockImplementation(async (userId: string) => (userId === B ? 'changed' : 'match'))
 
-    const newEpoch = await rotateGroupForRemoval(G1, remaining)
+    const newEpoch = await commitRotation(G1, remaining)
     expect(newEpoch).toBe(1)
     const payload = rotate.mock.calls[0][0].rotateScopeRequest
     expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A]) // b excluded, a still re-granted
   })
+
+  it('never wraps the new epoch to the member it removes, whatever list it is handed (ADR 0024 Decision 4)', async () => {
+    // The server re-lists the removed member — and twice, as a duplicate row. The removal names them, and the
+    // exclusion is the remover's own choice: no row with their id reaches the grants.
+    const e0 = v1.randomBytes(32)
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, e0, 0), grantedEpoch: 0 })])
+    const rotate = vi.fn().mockResolvedValue({ epoch: 1 })
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, rotateScope: rotate } as unknown as ReturnType<typeof scopesApi>)
+    const R = 'c0000000-0000-4000-8000-0000000000c0'
+    const removed = admittedMember(R, v1.generateIdentity(), e0)
+    const pickedFrom: ScopeMember[] = [admittedMember(A, v1.generateIdentity(), e0), removed, admittedMember(B, v1.generateIdentity(), e0), { ...removed }]
+
+    await rotateGroupForRemoval(G1, pickedFrom, R)
+
+    const payload = rotate.mock.calls[0][0].rotateScopeRequest
+    // Every remaining member is named (the control on the same predicate); the removed one is not.
+    expect(payload.grants.map((g: { userId: string }) => g.userId)).toEqual([A, B])
+    expect(payload.admissions.map((a: { admissionId: string }) => a.admissionId)).not.toContain(removed.admissionId)
+    expect(payload.removesUserId).toBe(R)
+  })
 })
 
-describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotation states the epoch it creates)', () => {
+describe('a scope whose grant is older than its current epoch writes nothing (ADR 0024 Decision 6)', () => {
+  /** Open G1 as the app does, then create a folder in it the way the tree does — under the opened write key. */
+  async function openAndCreate(grantedEpoch: number, currentEpoch: number) {
+    const keys = Array.from({ length: grantedEpoch + 1 }, () => v1.randomBytes(32))
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, keys[grantedEpoch], grantedEpoch), grantedEpoch, currentEpoch })])
+    const links = keys.slice(1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(G1, i + 1, k, keys[i]) }))
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, listScopeEpochs: vi.fn().mockResolvedValue(links) } as unknown as ReturnType<typeof scopesApi>)
+    const createNode = vi.fn(async ({ createNodeRequest }: { createNodeRequest: { nodeId: string } }) => ({ nodeId: createNodeRequest.nodeId }))
+    vi.mocked(contentApi).mockReturnValue({ createNode } as unknown as ReturnType<typeof contentApi>)
+    const opened = await openScopeById(G1)
+    if (opened) await createFolder(G1, opened.epochs, 'Neu')
+    return { opened, createNode }
+  }
+
+  it('a member granted epoch 0 of a scope now at epoch 1 reads as awaiting the current key, and creates nothing', async () => {
+    const { opened, createNode } = await openAndCreate(0, 1)
+    expect(opened).toBeNull() // the awaiting-access state, as for a refused or absent grant
+    expect(createNode).not.toHaveBeenCalled()
+  })
+
+  it('control: a member holding the current epoch creates, tagged with it', async () => {
+    const { opened, createNode } = await openAndCreate(1, 1)
+    expect(opened?.epochs.current).toBe(1)
+    expect(createNode).toHaveBeenCalledTimes(1)
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+  })
+})
+
+describe('commitRotation (ADR 0024 §4 — the rotation states the epoch it creates)', () => {
   const stale = () => ({ response: new Response(JSON.stringify({ code: 'stale_epoch' }), { status: 409 }) })
 
   /** The caller's grant at `grantedEpoch`, with the chain-links down to E_0 — what `openScopeById` peels. */
@@ -451,7 +501,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
     const rotate = vi.fn().mockResolvedValue({ epoch: 3 })
     holdGroupAt(2, rotate)
 
-    await rotateGroupForRemoval(G1, self)
+    await commitRotation(G1, self)
 
     expect(rotate).toHaveBeenCalledTimes(1)
     expect(rotate.mock.calls[0][0].rotateScopeRequest.epoch).toBe(3)
@@ -469,7 +519,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
       })
       .mockResolvedValueOnce({ epoch: 2 })
 
-    expect(await rotateGroupForRemoval(G1, self)).toBe(2)
+    expect(await commitRotation(G1, self)).toBe(2)
 
     expect(rotate).toHaveBeenCalledTimes(2)
     expect(rotate.mock.calls.map((c) => c[0].rotateScopeRequest.epoch)).toEqual([1, 2])
@@ -489,7 +539,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
     const rotate = vi.fn().mockRejectedValueOnce(stale()).mockRejectedValueOnce(second)
     holdGroupAt(0, rotate)
 
-    await expect(rotateGroupForRemoval(G1, self)).rejects.toBe(second)
+    await expect(commitRotation(G1, self)).rejects.toBe(second)
     expect(rotate).toHaveBeenCalledTimes(2)
   })
 
@@ -498,7 +548,7 @@ describe('commitRotation via rotateGroupForRemoval (ADR 0024 §4 — the rotatio
     const rotate = vi.fn().mockRejectedValue(forbidden)
     holdGroupAt(0, rotate)
 
-    await expect(rotateGroupForRemoval(G1, self)).rejects.toBe(forbidden)
+    await expect(commitRotation(G1, self)).rejects.toBe(forbidden)
     expect(rotate).toHaveBeenCalledTimes(1)
   })
 })
