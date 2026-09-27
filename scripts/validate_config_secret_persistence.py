@@ -18,7 +18,7 @@ across all of `infra/` is a failure, not a green run over nothing.
 **The defect that bought it.** ADR 0056 § Consequences surfaced it and this guard's CR fixed it: no image
 declared a volume for the key file and no compose file mounted one, so a recreated app container regenerated
 its KEK, the `veyq_instance` fingerprint reported `configSecretState: MISMATCH`, and the instance refused
-member invites and password resets with `503 mail_unavailable` (ADR 0050 amendment, ADR 0055) — an instance
+member invites and password resets with `503 mail_unavailable` (ADR 0050, ADR 0055) — an instance
 that boots, serves every page, and cannot admit a member. The stale `VeyqConfig.kt:224` line reference in the
 `Dockerfile` comment that described the trap is itself the argument for a guard over prose: a line number in a
 comment rots silently, a resolution rule does not.

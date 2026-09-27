@@ -47,7 +47,7 @@ class TenantMailSender(
      * Mirrors [deliver]: SMTP auth is keyed on `username`, so an auth-less MTA (a trusted LAN relay) sends with
      * no login and needs neither a stored password nor an openable KEK. With a username set, both are required —
      * `state() != OK` means the KEK is ABSENT or MISMATCHed, so the stored password cannot be unsealed
-     * (ADR 0050 amendment).
+     * (ADR 0050).
      */
     fun sendable(s: MailSettingsRow?): Boolean =
         s != null && s.enabled && !s.host.isNullOrBlank() &&

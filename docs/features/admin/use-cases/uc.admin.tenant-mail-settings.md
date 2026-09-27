@@ -22,8 +22,9 @@
 Per-tenant mail configuration ([ADR 0048](../../../decisions/0048-provider-neutral-smtp-mail-transport.md)):
 generic SMTP (no vendor SDK), configured the way the owner already configures
 [Terms](uc.admin.tenant-terms.md) — owner-gated runtime data, not deployment properties. The **password** is a
-server-held secret encrypted at rest under the operator's env KEK (ADR 0050): the DB holds only ciphertext + nonce,
-the field is **write-only** over the API (a read exposes only `passwordSet`), and it is decrypted only at send time.
+server-held secret encrypted at rest under the server-managed config-secret KEK (ADR 0050): the DB holds only
+ciphertext + nonce, the field is **write-only** over the API (a read exposes only `passwordSet`), and it is
+decrypted only at send time.
 
 The **subject/body template** is owner-authored and rendered by a minimal, logic-less `{{variable}}` substituter
 over a **closed set — `{{link}}`, `{{domain}}`, `{{expiry}}` only** (ADR 0048 §6). veyq's machinery interpolates
@@ -39,8 +40,8 @@ channel, stated honestly.
 2. They enter SMTP host, port, from-address, username, password, and toggle TLS + `enabled`.
 3. Optionally they edit the invite **subject/body** template, using `{{link}}`, `{{domain}}`, `{{expiry}}`.
 4. On **save** the server validates the template against the closed variable set (an unknown `{{tag}}` ⇒
-   `400 invalid_mail_template`), **seals** the password under the env KEK (ADR 0050), and stores the row. The
-   password is never returned or logged; a re-read shows only `passwordSet`.
+   `400 invalid_mail_template`), **seals** the password under the config-secret KEK (ADR 0050), and stores the
+   row. The password is never returned or logged; a re-read shows only `passwordSet`.
 5. From then on, a new **member** invite ([uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md)) is
    rendered from the tenant's template (or veyq's default) over `{link, domain, expiry}` and sent from the tenant's
    own address; the raw link still rides the URL **fragment** ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).

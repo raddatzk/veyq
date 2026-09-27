@@ -157,7 +157,7 @@ class SmtpInviteMailSendTest {
     @Test
     fun aConfiguredTenantWhoseConfigSecretKeyChangedCannotSendAndAttemptsNoSmtp() {
         // Enabled + fully-configured SMTP, but the config-secret key no longer matches the one that sealed the
-        // password (the key file changed/was lost ⇒ MISMATCH, ADR 0050 amendment). The stored password can't be
+        // password (the key file changed/was lost ⇒ MISMATCH, ADR 0050). The stored password can't be
         // unsealed, so the port must never attempt a send with a bad key.
         //
         // What FALLBACK_COPYLINK means here is the **port's** "cannot send" answer, not a channel: on a member

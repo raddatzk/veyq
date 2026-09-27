@@ -16,7 +16,7 @@ import jakarta.transaction.Transactional
 
 /** A tenant's mail settings **as they leave the server** — the SMTP password redacted to [passwordSet] (ADR 0050).
  *  [configSecretState] is the server's config-secret KEK state so the owner sees honestly whether a stored password
- *  can actually be used (ADR 0050 amendment). */
+ *  can actually be used (ADR 0050). */
 data class MailSettingsView(
     val host: String?,
     val port: Int?,
@@ -46,7 +46,7 @@ sealed interface MailSettingsUpdateOutcome {
     data object NotOwner : MailSettingsUpdateOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     // A subject/body template referencing a {{tag}} outside the closed set (ADR 0049) — rejected, never stored.
     data object InvalidTemplate : MailSettingsUpdateOutcome, HttpFailure by httpFailure("invalid_mail_template", FailureStatus.BAD_REQUEST)
-    // A password was supplied but no env KEK is configured to seal it (ADR 0050) — we refuse rather than store it in the clear.
+    // A password was supplied but no config-secret KEK could be loaded to seal it (ADR 0050) — we refuse rather than store it in the clear.
     data object SealUnavailable : MailSettingsUpdateOutcome, HttpFailure by httpFailure("mail_secret_unavailable", FailureStatus.SERVICE_UNAVAILABLE)
 }
 
@@ -113,7 +113,7 @@ class TenantMailSettingsHandler(
             return MailSettingsUpdateOutcome.InvalidTemplate
         }
 
-        // Password: seal a freshly-supplied one (needs the env KEK); keep the stored ciphertext when omitted.
+        // Password: seal a freshly-supplied one (needs the config-secret KEK); keep the stored ciphertext when omitted.
         val existing = store.mailSettingsFor(tenantId)
         val supplied = password.blankToNull()
         val ciphertext: String?

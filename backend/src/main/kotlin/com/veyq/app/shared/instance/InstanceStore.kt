@@ -20,7 +20,7 @@ class InstanceStore {
         VeyqInstance.findById(VeyqInstance.SINGLETON_ID)?.instanceSalt
             ?: error("instance salt not seeded")
 
-    /** The stored config-secret KEK fingerprint, or null if not adopted yet (ADR 0050 amendment). */
+    /** The stored config-secret KEK fingerprint, or null if not adopted yet (ADR 0050). */
     fun configSecretFingerprint(): String? =
         VeyqInstance.findById(VeyqInstance.SINGLETON_ID)?.configSecretFingerprint
 

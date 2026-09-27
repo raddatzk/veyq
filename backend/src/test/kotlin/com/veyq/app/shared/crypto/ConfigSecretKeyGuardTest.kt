@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 
 /**
- * The config-secret KEK tripwire (ADR 0050 amendment). Proves the load-bearing behaviour: a key that no longer
+ * The config-secret KEK tripwire (ADR 0050). Proves the load-bearing behaviour: a key that no longer
  * matches the one that sealed the stored secrets is **detected** ([ConfigSecretKeyState.MISMATCH]) rather than
  * silently producing unseal garbage, and a reseal under the current key recovers to OK.
  *

@@ -16,7 +16,7 @@ import java.util.Base64
 import javax.crypto.AEADBadTagException
 
 /**
- * Guards for the at-rest config-secret seal (ADR 0050 + amendment). The load-bearing properties: a sealed secret
+ * Guards for the at-rest config-secret seal (ADR 0050). The load-bearing properties: a sealed secret
  * is only ever opaque ciphertext (tampering or a wrong KEK fails GCM auth), an unavailable KEK is an error not a
  * plaintext fallback, the KEK is a **server-managed key file** (generated `0600` on first construction), and its
  * DB **fingerprint is a hash, never the key** (so a DB dump stays useless).

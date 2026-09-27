@@ -27,7 +27,7 @@ data class SealedSecret(val ciphertext: String, val nonce: String)
  * under a Key-Encryption-Key. AES-256-GCM via JCA — standard primitives, no home-grown crypto. The DB holds only
  * ciphertext + nonce, so a database dump *alone* yields no usable secret (ADR 0050); opening needs the KEK.
  *
- * **KEK source (ADR 0050 amendment): a server-managed key file**, not an env value. On construction the server
+ * **KEK source (ADR 0050): a server-managed key file**, not an env value. On construction the server
  * reads the base64 32-byte key from [VeyqConfig.Security.configSecretFile]; if that file does not exist it
  * **generates** one (32 random bytes), writes it `0600`, and logs loudly to back it up. An operator supplying
  * their own key mounts it and points the path at it. A read/generate **IO** failure (unwritable path) degrades to
@@ -40,8 +40,8 @@ data class SealedSecret(val ciphertext: String, val nonce: String)
  * client-side content E2EE the server never touches (ADR 0012).
  *
  * [fingerprint] derives a stable, non-invertible HKDF fingerprint of the active KEK; the startup guard stores it
- * in the DB so a lost/changed key becomes a **detected** state instead of a silent unseal failure (ADR 0050
- * amendment). A 256-bit full-entropy key is not brute-forceable from its hash, so the fingerprint leaks nothing.
+ * in the DB so a lost/changed key becomes a **detected** state instead of a silent unseal failure (ADR 0050).
+ * A 256-bit full-entropy key is not brute-forceable from its hash, so the fingerprint leaks nothing.
  */
 @ApplicationScoped
 class ConfigSecretSeal(config: VeyqConfig) {
@@ -109,7 +109,7 @@ class ConfigSecretSeal(config: VeyqConfig) {
         } catch (e: Exception) {
             // An IO failure (unwritable/unreadable path) must not crash the operator-blind rest of veyq, which needs
             // no KEK. Degrade: configured=false → password-authenticated SMTP is unsendable, so the send paths
-            // refuse (ADR 0050 amendment; ADR 0055 §2/§4). Only the ServerOwner bootstrap still copy-links (§3).
+            // refuse (ADR 0050; ADR 0055 §2/§4). Only the ServerOwner bootstrap still copy-links (§3).
             log.errorf(
                 "Could not read or generate the config-secret key at %s (%s) — config-secret sealing is UNAVAILABLE; " +
                     "any tenant whose SMTP needs a password cannot send, so member invites and password recovery " +
