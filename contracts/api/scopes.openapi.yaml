@@ -274,6 +274,13 @@ paths:
         membership — grant-delivery skips it, so `K_SC` is gated **before** the wrap — until the invitee accepts
         (`…/invitations/accept`). The owner learns consent is required from the prior member-resolve; a
         `requiresConsent` target added **without** `sealedNameKey` is rejected `400 consent_required`.
+
+
+        **Admission is a key-holder act ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6).**
+        Both paths carry the admission tag the owner's client computed under the scope's current epoch key, bound to
+        the resolved target's `userId`; no group key-holder wraps `K_SC` to a member whose tag does not verify. The
+        server stores it and never verifies it; it only refuses a tag stated at an epoch that is no longer the
+        scope's current one (`409 stale_epoch`), because a rotation that committed in between could not carry it.
       security:
         - bearerAuth: []
       parameters:
@@ -289,6 +296,9 @@ paths:
             schema: { $ref: "#/components/schemas/AddGroupMemberRequest" }
             example:
               username: partner
+              admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+              admissionEpoch: 0
+              admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
       responses:
         "201":
           description: >
@@ -337,7 +347,7 @@ paths:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: member_not_found }
         "409":
-          description: That user is already a member of the group or already has an open proposal (`already_member`), or the group is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: That user is already a member of the group or already has an open proposal (`already_member`), the admission was tagged at an epoch that is no longer the scope's current one (`stale_epoch` — re-tag and retry), or the group is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
@@ -371,7 +381,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/AddGroupMemberRequest" }
+            schema: { $ref: "#/components/schemas/ResolveGroupMemberRequest" }
             example:
               username: partner
       responses:
@@ -521,7 +531,8 @@ paths:
             example:
               epoch: 1
               wrappedPrev: AQ==
-              grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ== }]
+              grants: [{ userId: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a, wrappedGrant: AQ==, grantSignature: c2lnbmF0dXJl }]
+              admissions: [{ admissionId: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d, admissionTag: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg= }]
       responses:
         "201":
           description: The scope rotated; the new current epoch.
@@ -533,7 +544,7 @@ paths:
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
-        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
+        "409": { description: "The stated `epoch` is not the scope's current epoch + 1 (the rotation was built on a superseded epoch — `stale_epoch`, nothing stored, re-open + rebuild from a fresh key), the rotation leaves an open admission of the scope neither re-tagged nor dropped (`admissions_incomplete`, nothing stored — re-read the directory and rebuild), or the group is being deleted and read-only (`scope_deleting`).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } } } }
 
   /api/scopes/{scopeId}:
     delete:
@@ -820,7 +831,7 @@ components:
 
     CreatePersonalScopeRequest:
       type: object
-      required: [scopeId, wrappedGrant]
+      required: [scopeId, wrappedGrant, grantSignature]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -839,10 +850,21 @@ components:
           maxLength: 8192
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: >
+            The caller's self-signature over this grant, kind `PERSONAL` — its client opens a personal grant only if it is self-signed. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     CreateGroupRequest:
       type: object
-      required: [scopeId, encryptedName, wrappedGrant]
+      required: [scopeId, encryptedName, wrappedGrant, grantSignature, admissionId, admissionEpoch, admissionTag]
       properties:
         scopeId:
           x-veyq-visibility: id
@@ -872,6 +894,46 @@ components:
           maxLength: 8192
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: >
+            The creator's self-signature over this grant, kind `GROUP`. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        admissionId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the creator's own membership, self-tagged at birth under `E_0` (so `admissionEpoch` is 0) and bound to the creator's user id, so a later rotation has a tag to carry forward.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        admissionTag:
+          type: string
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RenameGroupRequest:
       type: object
@@ -929,9 +991,28 @@ components:
           example: 0
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
 
-    AddGroupMemberRequest:
+    ResolveGroupMemberRequest:
       type: object
       required: [username]
+      properties:
+        username:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The lookup key a group-add resolves to an identity (ADR 0023) — a sealed handle could not be resolved
+            server-side.
+          type: string
+          pattern: '^[A-Za-z0-9_.-]+$'
+          description: >
+            The **per-tenant username** of the candidate to resolve (ADR 0023) — within the scope's own tenant;
+            trimmed + lowercased server-side.
+          minLength: 2
+          maxLength: 32
+          example: partner
+          x-field-extra-annotation: '@field:com.fasterxml.jackson.databind.annotation.JsonDeserialize(using = com.veyq.app.shared.validation.TrimmingStringDeserializer::class) @field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(min = 2, max = 32) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_.-]+")'
+
+    AddGroupMemberRequest:
+      type: object
+      required: [username, admissionId, admissionEpoch, admissionTag]
       properties:
         username:
           x-veyq-visibility: pii
@@ -964,6 +1045,35 @@ components:
           maxLength: 8192
           example: Z3JvdXAtbmFtZS1rZXktc2VhbGVkLXRvLWludml0ZWU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        admissionId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: the group add, bound to the resolved target's user id — the same for a consent proposal.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        admissionTag:
+          type: string
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     SetMemberRoleRequest:
       type: object
@@ -997,7 +1107,7 @@ components:
 
     ScopeGrantEntry:
       type: object
-      required: [userId, wrappedGrant]
+      required: [userId, wrappedGrant, grantSignature]
       properties:
         userId:
           x-veyq-visibility: id
@@ -1012,10 +1122,43 @@ components:
           maxLength: 8192
           example: AQ==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        grantSignature:
+          type: string
+          description: >
+            The rotator's signature over this re-grant. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ScopeAdmissionEntry:
+      type: object
+      required: [admissionId, admissionTag]
+      properties:
+        admissionId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: An open admission of the scope — a membership's or an open tenant invite's `admissionId`.
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotNull'
+        admissionTag:
+          type: string
+          description: >
+            The admission re-tagged under the rotation's **new** epoch key, after the rotator verified its old tag
+            under the old one (ADR 0020 move 6, ADR 0024 §4). The server stores it with `admissionEpoch` = the new
+            epoch and never verifies it.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     RotateScopeRequest:
       type: object
-      required: [epoch, wrappedPrev, grants]
+      required: [epoch, wrappedPrev, grants, admissions]
       properties:
         epoch:
           x-veyq-visibility: structure
@@ -1042,6 +1185,24 @@ components:
           description: The remaining members re-granted the new epoch (any not listed are re-granted later by grant-delivery).
           items: { $ref: "#/components/schemas/ScopeGrantEntry" }
           x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        admissions:
+          type: array
+          description: >
+            A new tag for **every open admission** of the scope — each membership's (granted, pending, or a consent
+            proposal) and, for a TENANT scope, each open member invite's — computed under the new epoch key
+            (ADR 0020 move 6, ADR 0024 §4). The server refuses a rotation that leaves any open admission out of both
+            this list and `droppedAdmissions` (`409 admissions_incomplete`, nothing stored): an admission a rotation
+            forgot could never be delivered to again.
+          items: { $ref: "#/components/schemas/ScopeAdmissionEntry" }
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        droppedAdmissions:
+          x-veyq-visibility: id
+          type: [array, "null"]
+          description: >
+            Open admissions whose **old** tag did not verify under the old epoch key, so the rotator did not carry
+            them. The server clears each one's tag — no client will deliver to that membership or invite again
+            unless an owner re-admits it — and the rotator surfaces it. Omitted = none.
+          items: { type: string, format: uuid, example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d }
 
     ScopeRotated:
       type: object
@@ -1122,6 +1283,33 @@ components:
             epoch) (ADR 0072), so the switcher opens it at exactly this epoch. Null whenever `wrappedGrant` is.
           minimum: 0
           example: 0
+        granterUserId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The account that posted the caller's grant — its signature is `grantSignature` (ADR 0028 Decision 6).
+            Null whenever `wrappedGrant` is, and for a grant written before grants were signed — which the client refuses to open.
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        grantSignature:
+          type: [string, "null"]
+          description: >
+            The signature over the caller's grant. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        granterIdentityPublicKey:
+          type: [string, "null"]
+          description: >
+            The granter's current identity public bundle (opaque base64), served here so the recipient needs no
+            directory call. For a shared scope the client runs the TOFU gate on it (a changed key is refused and
+            surfaced); for its own grants the client ignores it and verifies under its own vault key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
 
     ScopeCreated:
       type: object
@@ -1206,6 +1394,32 @@ components:
             accepts. **Owner-visible only** — the directory omits `pendingConsent` rows for non-owners, so ordinary
             members see a proposed person only once they accept. `false`/absent for an ordinary member.
           example: false
+        admissionId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The client-minted UUIDv4 id of an admission (ADR 0072 Decision 3), bound into its `admissionTag`
+            ([ADR 0020](../../docs/decisions/0020-grant-distribution-invite-wrap.md) move 6). Here: this membership's, served so a rotation can verify it before carrying it forward. All three are `null` when the membership carries none (never admitted by a key-holder, or dropped by a rotation).
+          example: ad6e8b2c-1f2d-4e4a-8b6c-7c3f0e2a9b1d
+        admissionEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope epoch whose key computed `admissionTag`. A worker admits only a tag at its own current epoch, so
+            a tag made before a rotation does not admit (ADR 0020 move 6).
+          minimum: 0
+          example: 0
+        admissionTag:
+          type: [string, "null"]
+          description: >
+            `HMAC-SHA256(HKDF(E_admissionEpoch, "veyq/v1/admission-tag"), encode(admission-tag: scopeId, epoch,
+            admissionId, userId?))` — only a holder of the scope's epoch key can compute it, so a session without an
+            unlocked vault cannot admit anyone (ADR 0020 move 6). Opaque base64 the server stores and relays and never
+            verifies (it holds no key); every client verifies it before wrapping a scope key to anyone but itself.
+          contentEncoding: base64
+          maxLength: 64
+          example: 88EIUGAHsCDogfZhvV7MYpQw2hEWWL6ClJP2OcAj6Wg=
 
     ResolvedGroupCandidate:
       type: object
@@ -1388,6 +1602,33 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: AQ==
+        granterUserId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The account that posted the caller's grant — its signature is `grantSignature` (ADR 0028 Decision 6).
+            Null for a grant written before grants were signed — which the client refuses to open (the scope reads as awaiting access).
+          example: 9b1d4a6e-8b2c-1f2d-3e4a-5b6c7c3f0e2a
+        grantSignature:
+          type: [string, "null"]
+          description: >
+            The signature over the caller's grant. The granter's Ed25519 **identity** signature over `encode(grant: scopeId, scopeKind, epoch,
+            recipientUserId, sha256(recipientIdentityPublicKey), sha256(wrappedGrant))`
+            ([ADR 0028](../../docs/decisions/0028-identity-authenticity-tofu-verification.md) Decision 6). Opaque base64
+            the server stores and relays and never verifies; the recipient checks it before the key inside is used.
+          contentEncoding: base64
+          maxLength: 128
+          example: c2lnbmF0dXJl
+        granterIdentityPublicKey:
+          type: [string, "null"]
+          description: >
+            The granter's current identity public bundle (opaque base64), served here so the recipient needs no
+            directory call. For a shared scope the client runs the TOFU gate on it (a changed key is refused and
+            surfaced); for its own grants the client ignores it and verifies under its own vault key.
+          contentEncoding: base64
+          maxLength: 8192
+          example: aWRlbnRpdHktcHVibGljLWtleQ==
         deletedAt:
           x-veyq-visibility: time
           type: [string, "null"]
