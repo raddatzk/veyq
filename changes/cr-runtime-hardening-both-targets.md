@@ -1,7 +1,7 @@
 ---
 id: cr-runtime-hardening-both-targets
 title: Every container runs unprivileged on both targets, and reaches only the peers it serves
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0071", "0064", "0063"]
 invariants: [self-hostable by default]
@@ -52,7 +52,7 @@ the Docker socket.
 
 ## Phases
 
-- [ ] 1 compose — `infra/docker-compose.prod.yml`. Locator for the services:
+- [ ] 1 compose — **built and statically green; only the live `up` is open (§ Open below).** `infra/docker-compose.prod.yml`. Locator for the services:
       `grep -n -E '^  [a-z-]+:$' infra/docker-compose.prod.yml` (five today, plus the init service after this).
       - **Posture on every service:** `cap_drop: [ALL]`, `security_opt: [no-new-privileges:true]`,
         `read_only: true`, plus a `tmpfs:` for each scratch path the process writes. Measured for MariaDB:
@@ -93,7 +93,7 @@ the Docker socket.
 
       **Machine hint, holds for this CR's shape:** the live `up` needs the app and admin images, and
       `docker build` can stall on this Mac's keychain credential helper (local memory).
-- [ ] 2 helm — `charts/veyq/`.
+- [x] 2 helm — `charts/veyq/`.
       - **`readOnlyRootFilesystem: true`** in the shared container context, and an `emptyDir` for each scratch
         path phase 1 measured, per pod. Extend `chart_meta_check.py` (v) to require it.
       - **`templates/networkpolicy.yaml`**, per ADR 0071 §3:
@@ -125,7 +125,7 @@ the Docker socket.
       **Bite each** by editing the template, snapshot-and-restore.
       · Done when: `python3 scripts/chart_meta_check.py` green (it needs `helm`, and runs outside the
         `validate_*` glob by design).
-- [ ] 3 docs —
+- [x] 3 docs —
       - `infra/README.md`: compose's posture and networks in a few lines. Point at ADR 0071; do not restate it.
       - The backup commands' network names. The rclone container must join the network the store is on, which
         is no longer `veyq_default`. Locator from two angles:
@@ -148,4 +148,47 @@ the Docker socket.
 this repository has no cluster (`kubectl` has no reachable context on this machine). `helm template` proves
 what is rendered, and nothing more.
 
+## Open — the live production `up` (not run)
+
+Everything else in the Definition of done is met (2026-09-27). The implement session was told not to bring up the
+production recipe, because another session held port 8080 and the dev stack that wave. What it did measure,
+per container rather than per recipe: every pinned image ran with this posture on a private internal network
+with no published port. MariaDB, Garage, the app (the `veyq-cr152:local` image) and the admin image all ran,
+Traefik as uid 65532 created `acme.json` owned by 65532, and the `volume-ownership` step ran twice through
+`docker compose run` (chowned, then a no-op). That is evidence for each scratch path and uid. It is not the
+recipe's `up`, and none of the checks below has run against it. To close it, on a host where nothing else binds
+`:80`/`:443`/`:8081` (stop the dev stack's Traefik first), with `infra/.env` filled and
+`VEYQ_ACME_CASERVER` on Let's Encrypt staging:
+
+```sh
+docker build -t veyq:cr162 . && docker build -t veyq-admin:cr162 -f admin-web/Dockerfile .   # VEYQ_IMAGE / VEYQ_ADMIN_IMAGE
+docker compose -f infra/docker-compose.prod.yml up -d --wait     # --wait fails on an unhealthy service
+docker compose -f infra/docker-compose.prod.yml ps -a            # all up/healthy; volume-ownership "Exited (0)"
+docker run --rm -v veyq_veyq-acme:/a traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d ls -ln /a   # acme.json 65532
+docker compose -f infra/docker-compose.prod.yml logs traefik | grep -i 'permission denied'   # expect no output
+curl -fsS http://127.0.0.1:8081/api/setup                        # through the admin container
+docker compose -f infra/docker-compose.prod.yml exec traefik nc -w 3 mariadb 3306 </dev/null; echo "rc=$?"   # expect non-zero (bad address)
+docker run --rm --network veyq_db --entrypoint nc traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d -w 3 mariadb 3306 </dev/null | head -c 20; echo   # control: same tool on veyq_db reaches the greeting
+```
+
+Then tick phase 1, harvest (below), delete this file, and mark inbox #162 done.
+
 ## Retrospective
+
+- **The CR missed a third silent failure, and a guard's docstring had already named where it would be.** A
+  non-root Traefik cannot read `tenants.yml`: `createTempFile` makes it 0600, and the file provider fails with
+  `permission denied` while the proxy stays up. `validate_app_volume_ownership.py`'s limit said so in words:
+  *"a mode narrow enough to break a reader (traefik reads this one) would be a different guard"*. The refine
+  read ADR 0071's two measured failures and not the reader of the one file that crosses the uid boundary. Fixed
+  in the backend with a test that was seen red. **Next time:** when a refine changes a process's uid, list every
+  file it reads that another process writes, and check the writer's mode.
+- **ADR 0071 §3 was unbuildable as written.** "The admin container shares a network with the app alone" leaves
+  the `ADMIN_DOMAIN` router with no path from Traefik to the admin container. The fix puts the proxy on the
+  admin network, and it adds no reachability: the proxy already reached the app. The ADR was corrected in place.
+  **Next time:** check a network split against every upstream the ingress sink renders
+  (`VEYQ_TENANT_INGRESS_UPSTREAM_*`), not only against the ones the ADR names.
+- **Process.** The "no live `up`" constraint was right for a shared machine, but it leaves the one proof ADR 0071
+  says must be live to the owner. Per-container probes on a private network got most of the evidence without
+  touching the shared stack. The worktree sandbox refused shell loops and pipes around `docker`/`helm`, so each
+  measurement went through a Python driver in the scratchpad. That worked, but it cost several round trips before
+  the pattern settled.
