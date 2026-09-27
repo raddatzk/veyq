@@ -1,7 +1,7 @@
 ---
 id: cr-one-sign-out-path
 title: One sign-out, one ending — a new document, a rejected refresh, and every other tab
-status: in-progress
+status: done
 satisfies: [uc.account.sign-out]
 adrs: ["0070", "0004", "0047", "0058"]
 invariants: [operator-blind E2EE]
@@ -143,4 +143,31 @@ After this CR, [ADR 0070](../docs/decisions/0070-a-session-ends-with-a-new-docum
   screenshot, and wait for a state, not a duration.
 
 ## Retrospective
+
+- **Planning — the CR constrained the ending's imports without checking the imports of what it must call.**
+  "The ending imports no feature" was right, but step 1 (drop the convenience tiers) lived only in
+  `features/account/rememberMe/`, and `deviceKeyWrap` imports `withRefresh` — the very cycle the rule exists to
+  avoid. Found at implement time; resolved by moving the tiers' storage names and local drop into
+  `app/convenienceTiers.ts`. Root cause: the refine measured the stores and the triggers, not the call graph of
+  the module it was constraining. Next time: a CR that restricts a module's imports runs one `grep "^import"` over
+  each function that module is told to call.
+- **Planning — the live done-when named states the instance could not reach.** "A video having played" needed a
+  tenant with media, and the dev DB had none for the host (`tenant_not_found`); "network offline" in devtools
+  would also have blocked the sign-in page's own document load, which the proof needs. The coordinating session
+  ran it with a reset instance and the backend stopped instead — the lever that spares the page. The rule
+  already existed (*a live proof names the instance state its screen needs*) and was not applied at refine.
+- **Execution — my first live run read a dead substrate as a result.** Vite restarted itself on a dependency
+  re-optimisation and failed to rebind, and the backend on 8080 went down in the same minutes; I waited on
+  `pathname === '/login'`, which an in-app `handle401` push satisfies before any document load. A per-document
+  marker caught it, and the run was discarded rather than reported. Next time: wait on document identity, and
+  check both servers are up immediately before the action, not at session start.
+- **Execution — a semantic conflict arrived through a clean-ish merge.** `cr-scope-access-gate` (same wave) made
+  a suspended tenant's domain answer every `/api` call `403 tenant_suspended`; my "a 4xx refuses the session"
+  would then end a session the server never refused, and report a sign-out as reached when the family was still
+  live. No text conflict pointed at it — I found it reading the merged `sessionRefresh.ts`. Fixed before landing
+  (`isSessionRefusal`, red first). Next time: a CR that classifies server responses re-reads the classification
+  against the error codes the merged wave added (`git diff main@{before}..main -- contracts/ | grep code`).
+- **Process.** The brief asked for the whole guard glob per session, while `changes/README` says a wave session
+  runs only its own guards and the coordinator runs the glob once. I ran the coverage/changes guards per phase
+  and the glob once, on the final merged tree. Worth settling in one place which of the two binds.
 

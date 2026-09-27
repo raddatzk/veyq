@@ -474,6 +474,15 @@ goes back to the CR that caused it. So a CR refined for a wave **names those gua
 `cr-wrap-methods-survivor-whitelist` said "every `scripts/validate_*.py`", and its session duly ran a second
 `validate_guard_gaps.py` beside a neighbour's while a web test timed out under the load.
 
+**And a clean merge of a wave is not a semantic merge where a CR CLASSIFIES what the server answers.** A
+predicate over statuses or error codes meets a neighbour's new code only in the merged tree, and no text conflict
+points there. `cr-one-sign-out-path` ended a session on any authoritative 4xx; `cr-scope-access-gate`, in the same
+wave, made a suspended tenant's domain answer every `/api` call `403 tenant_suspended` without touching sessions —
+so the merged client would have signed a member out, and called an unrevoked family "reached", for a refusal about
+the tenant. Found only by re-reading the merged predicate. So a CR that classifies responses re-reads that
+classification against the codes the merge brought in (`git diff <before>..main -- contracts/ | grep -i code`)
+before it lands.
+
 **Which makes "can I commit at all?" a precondition of the first phase, not a question for the first commit.**
 A phased CR ends each phase with the repo in a verifiable state, and *verifiable* is the committed tree — so a
 session that cannot commit is a session holding that rule open across every phase it finishes.
@@ -1132,6 +1141,21 @@ same proof was meant to exercise registers on neither screen. The finding held (
 with zero violations), but on a different screen than the one written down, and the worker went unverified. So a
 done-when that names what the browser should show also names what the instance must hold for it (a seeded
 account, a tenant on the browsed host), or it names the screen a bare instance actually reaches.
+
+**And a lever that simulates a failure must spare what the proof itself needs.** `cr-one-sign-out-path` asked for
+its E4 check "with the network offline" — but the flow ends in a document load, which devtools' offline mode
+refuses too, so the sign-in page the notice is shown on could never have loaded. Stopping the backend (the dev
+proxy then answers 502) fails exactly the calls under test and nothing else. Its other precondition, "a video
+having played", needed a tenant with media on the browsed host; the dev DB had none that day.
+
+### A constraint on a module's imports is measured on what that module must CALL
+
+"The ending imports no feature" (ADR 0070) was a sound rule and an unbuildable instruction as written: the first
+step the ending had to run — drop the convenience tiers — existed only in `features/account/rememberMe/`, whose
+`deviceKeyWrap` imports `withRefresh`, the exact cycle the rule was there to prevent. The implement session had to
+move the tiers' storage names and local drop into `app/convenienceTiers.ts`. So when a CR restricts what a module
+may import, the refine greps the imports of every function that module is told to call, and names the move if one
+is needed.
 
 ### An ADR's cost premise expires separately from its decision — re-measure it at implement time
 

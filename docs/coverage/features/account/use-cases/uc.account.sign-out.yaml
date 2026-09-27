@@ -9,7 +9,11 @@ title: Sign out — and every other way a session ends
 #
 # What these unit suites cannot claim: that the new document really takes every decrypted store with it, and that
 # a real service worker in a real browser drops a playback another tab registered. jsdom has neither a document
-# load nor a worker; that half needs a live check, two tabs on the dev app, and no CI run repeats it.
+# load nor a worker. That half was checked live on 2026-09-27 (two tabs on the dev app with S3): an H.264 clip
+# played through the service worker in one tab, a sign-out from the profile menu landed both tabs on /login, and
+# the same /__media/<handle> fetch then answered 404 with the worker still in control; with the backend stopped,
+# the sign-out still ran and the sign-in page showed E4's notice, and after a restart the card came back signed in
+# and its own sign-out completed the revoke. No CI run repeats it.
 acceptanceCriteria:
   - id: one-sign-out-sequence
     text: Every sign-out entry point (profile menu, revoking your own session, declining the terms, the sign-in
