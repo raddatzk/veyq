@@ -201,7 +201,7 @@ const { run: runRevoke, pending: busy } = useAsyncAction(
     await revokeSessionFamily(family.id)
     // E2 — revoking the family you are sitting on means "sign me out here too", so the response is treated as a
     // logout rather than left to the next request to discover with dead tokens.
-    if (family.current) return void (await signOut(router))
+    if (family.current) return void (await signOut())
     toast.success(t('sessions.revoked'))
     await reload()
   },

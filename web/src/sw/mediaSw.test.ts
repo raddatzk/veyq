@@ -221,7 +221,7 @@ describe('every shim response is inert (ADR 0047 / ADR 0013 §6)', () => {
   it('on a refused navigation', () => inert(handleFetch(live(), origin, navigation(`${origin}/__media/h1`))))
 })
 
-describe('handleMessage — handshake / register / revoke', () => {
+describe('handleMessage — handshake / register / revoke / end-session', () => {
   it('answers a handshake with an ack carrying the protocol version', () => {
     const reg = makeRegistry()
     const reply = { postMessage: vi.fn() } as unknown as MessagePort
@@ -250,6 +250,27 @@ describe('handleMessage — handshake / register / revoke', () => {
     const { a } = portPair()
     handleMessage(reg, { type: 'veyq-register-playback', handle: 'h', chunkCount: 1, byteSize: 28, mediaType }, [a])
     expect(reg.get('h')).toBeUndefined()
+  })
+
+  // uc.account.sign-out § The ending, step 2. The SW outlives every page, so a session that ended in one tab must
+  // take the playbacks OTHER tabs registered with it too — and their pending reads, which would otherwise still
+  // be answered with plaintext by a page that has not reloaded yet.
+  it('drops every playback on end-session, rejects their pending reads, and acks', async () => {
+    const reg = makeRegistry()
+    const first = portPair()
+    const second = portPair()
+    first.a.postMessage = () => {} // never answered — the read stays pending until the session ends
+    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h1', chunkCount: 1, byteSize: 28, mediaType: 'video/mp4' }, [first.a])
+    handleMessage(reg, { type: 'veyq-register-playback', handle: 'h2', chunkCount: 1, byteSize: 28, mediaType: 'video/mp4' }, [second.a])
+    const pending = reg.get('h1')!.chunk(0)
+    const reply = { postMessage: vi.fn() } as unknown as MessagePort
+
+    handleMessage(reg, { type: 'veyq-end-session' }, [reply])
+
+    expect(reg.get('h1')).toBeUndefined()
+    expect(reg.get('h2')).toBeUndefined()
+    await expect(pending).rejects.toThrow(/playback_revoked/)
+    expect(reply.postMessage).toHaveBeenCalledWith({ type: 'veyq-end-session-ack' })
   })
 
   it('ignores a message that is not one of ours', () => {

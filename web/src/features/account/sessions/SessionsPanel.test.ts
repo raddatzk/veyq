@@ -180,8 +180,9 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await flushPromises()
 
     expect(revokeSessionFamily).toHaveBeenCalledWith(CURRENT.id)
-    // E2: continuing on this screen with dead tokens is the failure mode; the full sign-out is the behaviour.
-    expect(signOut).toHaveBeenCalledTimes(1)
+    // E2: continuing on this screen with dead tokens is the failure mode; the one sign-out sequence is the
+    // behaviour (uc.account.sign-out — this panel is one of its five entry points).
+    expect(signOut).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('asks with the sentence that belongs to the row — your own device is not the general case', async () => {

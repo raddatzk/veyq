@@ -433,6 +433,8 @@ const en = {
     rememberMeHint:
       'On, this device opens straight to your memories next time; off, just your password — either way your Secret Key is never needed again here.',
     signOut: 'Sign out',
+    signOutUnconfirmed:
+      'Your sign-out did not reach the server, so this browser may still be signed in. Once you are back online, use “Sign out” here.',
   },
   unlock: {
     secretKey: 'Secret Key',
@@ -1358,6 +1360,8 @@ const de: typeof en = {
     rememberMeHint:
       'An öffnet dieses Gerät beim nächsten Mal direkt deine Erinnerungen; aus brauchst du nur dein Passwort — deinen Secret Key brauchst du hier so oder so nie wieder.',
     signOut: 'Abmelden',
+    signOutUnconfirmed:
+      'Die Abmeldung hat den Server nicht erreicht, deshalb kann dieser Browser noch angemeldet sein. Sobald du wieder online bist, nutze hier „Abmelden“.',
   },
   unlock: {
     secretKey: 'Secret Key',

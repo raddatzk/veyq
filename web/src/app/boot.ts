@@ -12,6 +12,7 @@ import { restoreVaultFromCache } from '../features/account/unlock/unlock'
 import { clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../features/account/rememberMe/sessionVault'
 import { maybeDevAutoUnlock } from './devAutoUnlock'
+import { listenForSessionEnd } from './sessionEnd'
 import { isTenantSuspended } from './tenantSuspension'
 
 /**
@@ -19,6 +20,9 @@ import { isTenantSuspended } from './tenantSuspension'
  * state, which the router + App shell read to land on the right view.
  */
 export async function boot(): Promise<void> {
+  // Another tab of this instance may end the session at any moment from here on (uc.account.sign-out E3). The
+  // listener ignores the message while this tab holds no session, so installing it first costs nothing.
+  listenForSessionEnd()
   const { serverState, setSetupCompleted, setUnreachable, setSuspended } = useServerState()
   const { incompatibility } = useCapabilities()
   setUnreachable(false)
