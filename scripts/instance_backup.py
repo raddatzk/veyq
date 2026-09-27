@@ -22,16 +22,34 @@ precondition the operator owns.
 
 Three subcommands, one file, because they share the layout, the manifest and the credential plumbing:
 
-    python3 scripts/instance_backup.py capture  [--into DIR]
-    python3 scripts/instance_backup.py verify   DIR
-    python3 scripts/instance_backup.py restore  DIR --domain <d>
+    python3 scripts/instance_backup.py capture  [--into DIR] (--key-into FILE | --key-beside-dump)
+    python3 scripts/instance_backup.py verify   DIR [--key-from FILE]
+    python3 scripts/instance_backup.py restore  DIR --domain <d> [--key-from FILE | --without-key]
 
 A backup is a directory, defaulting to `infra/backups/<UTC-ISO8601>/`:
 
-    manifest.json      # domains, app+schema version, object count/bytes, the blob index, capture window
+    manifest.json      # domains, app+schema version, object count/bytes, the blob index, capture window,
+                       # and where leg (c) went: `configSecret.placement` = separate | beside | absent
     database.sql       # mariadb-dump WITH DDL and the flyway history
     objects/           # the rclone mirror of the bucket, one file per object key
-    config-secret.key  # leg (c), 0600
+
+**Leg (c) is captured, but never beside legs (a) and (b)** (ADR 0056 §1). ADR 0050's key file defends a leaked
+database backup only while the key is somewhere else: the dump plus the key opens every tenant's SMTP password.
+So `capture` writes the key to `--key-into FILE`, a destination of its own, and refuses one that resolves inside
+the capture directory — before anything is dumped, so a refused run leaves no half-capture. `--key-beside-dump`
+is the explicit, old placement (`config-secret.key` in the capture). `restore` reads the key from wherever the
+manifest says it went; a `separate` key that is not supplied is refused at the gates, before any write, unless
+`--without-key` knowingly accepts A2.
+
+**Everything this tool writes is owner-only.** The whole run is under `umask 077`, and the capture root is
+chmodded `0700` even when it pre-existed empty — which also means the key is born `0600` rather than copied and
+chmodded after a world-readable moment. `verify` checks the root, the files the tool wrote, and the key per the
+manifest. What it does **not** check is inside `objects/`: that tree is written by the rclone container through a
+bind mount, so its owner and modes are the container's, not this process's. Measured with the pinned image: it
+runs as root (the image declares no `USER`) under the container's own `umask 022`, so on a Linux filesystem the
+mirror is `root:root`, files `0644`, directories `0755` — which this process can neither chmod nor rely on. On
+Docker Desktop for macOS the bind mount maps the owner to the invoking user, with the same modes. Either way the
+capture root's `0700` is what keeps another local user out of `objects/`, and it is checked.
 
 **Why the manifest is not decoration.** It is what lets `verify` and `restore` refuse before doing damage:
 `restore` demands `--domain` and refuses unless it names a tenant this backup actually held (ADR 0056 §4 —
@@ -106,9 +124,20 @@ DUMP_NAME = "database.sql"
 OBJECTS_DIR = "objects"
 KEY_NAME = "config-secret.key"
 
+# Where leg (c) went, as `manifest.json` records it (ADR 0056 §1). `separate` is the default and the only one
+# that keeps ADR 0050's leaked-backup defence true; `beside` is the explicit `--key-beside-dump`; `absent` is a
+# capture that found no key to take.
+SEPARATE, BESIDE, ABSENT = "separate", "beside", "absent"
+PLACEMENTS = (SEPARATE, BESIDE, ABSENT)
+
 # Bumped only when an older directory can no longer be read by this file. `verify` and `restore` refuse an
-# unknown one rather than guessing, because guessing is how a restore half-works.
-BACKUP_FORMAT = 1
+# unknown one rather than guessing, because guessing is how a restore half-works. 2: `configSecret.present`
+# became `configSecret.placement`.
+BACKUP_FORMAT = 2
+
+# Owner-only, for everything this process creates. Set once in [main], so no write in any subcommand can be born
+# group- or world-readable — including the key, which a copy-then-chmod would leave readable for a moment.
+OWNER_ONLY_UMASK = 0o077
 
 
 class BackupError(RuntimeError):
@@ -493,6 +522,39 @@ def present_keys(objects: Path) -> set[str]:
     return {p.relative_to(objects).as_posix() for p in objects.rglob("*") if p.is_file()}
 
 
+def is_within(path: Path, root: Path) -> bool:
+    """Whether `path` resolves to `root` or anything under it — symlinks and `..` included, existing or not."""
+    path, root = path.resolve(), root.resolve()
+    return path == root or root in path.parents
+
+
+def loose_bits(path: Path) -> int:
+    """The group/other permission bits `path` carries — `0` is owner-only."""
+    return path.stat().st_mode & 0o077
+
+
+def write_key(source: Path, dest: Path) -> None:
+    """Copy leg (c) to `dest`, born `0600` and never over an existing file.
+
+    `O_EXCL` because a key destination that already holds a file is most likely an earlier capture's key, and
+    silently replacing it would leave that capture unrestorable. The mode is given at creation, not chmodded
+    after, so there is no moment at which the key is readable by anyone else.
+    """
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "wb") as out:
+        out.write(source.read_bytes())
+
+
+def require_key_from_fits(args: argparse.Namespace, manifest: dict) -> None:
+    """`--key-from` names where a SEPARATELY kept key is. For any other placement it would be a second source
+    competing with the one the manifest names, so it is refused rather than silently preferred or ignored."""
+    placement = manifest["configSecret"]["placement"]
+    if args.key_from and placement != SEPARATE:
+        raise BackupError(f"--key-from is for a capture that kept its key separately; this one's leg (c) is "
+                          f"{placement!r} (manifest configSecret.placement)")
+
+
 def read_manifest(backup: Path) -> dict:
     path = backup / MANIFEST_NAME
     if not path.is_file():
@@ -507,6 +569,9 @@ def read_manifest(backup: Path) -> dict:
             f"{path} declares backupFormat {fmt!r}; this tool writes and reads {BACKUP_FORMAT}. Refusing to "
             f"guess at a layout it does not know."
         )
+    placement = (manifest.get("configSecret") or {}).get("placement")
+    if placement not in PLACEMENTS:
+        raise BackupError(f"{path} records configSecret.placement {placement!r}, which is none of {PLACEMENTS}")
     return manifest
 
 
@@ -522,11 +587,43 @@ def cmd_capture(args: argparse.Namespace) -> int:
     if backup.exists() and any(backup.iterdir()):
         raise BackupError(f"{backup} already exists and is not empty — refusing to write a second capture into it")
 
+    # Leg (c)'s destination, decided BEFORE anything is written: a refusal here leaves no half-capture behind.
+    key_source = Path(args.config_secret_file)
+    key_present = key_source.is_file()
+    if args.key_beside_dump:
+        key_dest: Path | None = backup / KEY_NAME
+    elif args.key_into:
+        key_dest = Path(args.key_into)
+        if is_within(key_dest, backup):
+            raise BackupError(
+                f"--key-into {key_dest} is inside the capture directory {backup}. The dump plus the key opens "
+                f"every tenant's SMTP password, so a capture directory holding both is exactly the leaked backup "
+                f"the key file exists to defend against (ADR 0056 §1, ADR 0050). Give it a destination of its "
+                f"own, ideally on a different medium, or pass --key-beside-dump to put it there knowingly."
+            )
+        if key_dest.exists():
+            raise BackupError(
+                f"--key-into {key_dest} already exists. It is most likely an earlier capture's key, and "
+                f"replacing it would leave that capture unrestorable. Name a new file."
+            )
+    else:
+        key_dest = None
+        if key_present:
+            raise BackupError(
+                f"leg (c) needs a destination of its own, and none was given. Pass --key-into FILE, outside the "
+                f"capture directory and ideally on a different medium: the dump plus the key opens every "
+                f"tenant's SMTP password (ADR 0056 §1). --key-beside-dump puts it in the capture directory, "
+                f"knowingly."
+            )
+
     started = utc_now()
     log(f"capturing into {backup}")
     log("NOTE: the application must be STOPPED. With it running, a client can complete an upload between the "
         "dump and the mirror, producing a row whose object was never captured (ADR 0056 §2, A1).")
     backup.mkdir(parents=True, exist_ok=True)
+    # Even when it pre-existed empty: its mode is what keeps other local users out of `objects/`, whose files
+    # the rclone container writes with its own owner and modes (module docstring).
+    backup.chmod(0o700)
 
     log(f"reading instance facts from {db.describe()}")
     domains = db.domains()
@@ -557,13 +654,13 @@ def cmd_capture(args: argparse.Namespace) -> int:
         log(f"WARNING: this capture cannot name the release it came from ({release_source}). The backup is "
             f"still valid; what it cannot tell you is which image to restore it under.")
 
-    key_source = Path(args.config_secret_file)
-    key_present = key_source.is_file()
-    if key_present:
-        log(f"copying the config-secret key from {key_source}")
-        shutil.copyfile(key_source, backup / KEY_NAME)
-        (backup / KEY_NAME).chmod(0o600)
+    if key_present and key_dest is not None:
+        placement = BESIDE if args.key_beside_dump else SEPARATE
+        where = "BESIDE THE DUMP, as asked" if placement == BESIDE else "apart from the capture"
+        log(f"copying the config-secret key from {key_source} to {key_dest} ({where})")
+        write_key(key_source, key_dest)
     else:
+        placement = ABSENT
         # Not fatal, and loudly not fatal: a capture that refused here would leave the operator with nothing,
         # where a capture that records the absence leaves them with two thirds and a stated defect.
         log(f"WARNING: no config-secret key at {key_source} — this backup has TWO legs, not three. A restore "
@@ -583,14 +680,19 @@ def cmd_capture(args: argparse.Namespace) -> int:
             "blobs": blobs,
             "openUploadSessions": sessions,
         },
-        "configSecret": {"present": key_present},
+        "configSecret": {"placement": placement},
         "capture": {"startedAt": started, "finishedAt": utc_now()},
     }
     (backup / MANIFEST_NAME).write_text(json.dumps(manifest, indent=2) + "\n")
 
     log(f"captured: {len(domains)} domain(s) {domains}, schema V{schema}, {count} object(s) / {byte_total} B, "
-        f"{len(blobs)} blob row(s), leg (c) {'present' if key_present else 'MISSING'}")
-    log(f"now check it:  python3 scripts/instance_backup.py verify {backup}")
+        f"{len(blobs)} blob row(s), leg (c) {'MISSING' if placement == ABSENT else placement}")
+    if placement == SEPARATE:
+        log(f"the key is at {key_dest}. Keep it apart from this capture: a copy of both together is a copy of "
+            f"every tenant's SMTP password. Encrypt the capture before it leaves this host.")
+        log(f"now check both:  python3 scripts/instance_backup.py verify {backup} --key-from {key_dest}")
+    else:
+        log(f"now check it:  python3 scripts/instance_backup.py verify {backup}")
     return 0
 
 
@@ -602,6 +704,7 @@ def cmd_capture(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     backup = Path(args.backup)
     manifest = read_manifest(backup)
+    require_key_from_fits(args, manifest)
     problems: list[str] = []
 
     dump = backup / DUMP_NAME
@@ -651,12 +754,41 @@ def cmd_verify(args: argparse.Namespace) -> int:
             f"the mirror is not the one this manifest describes"
         )
 
+    # Owner-only: the root, and every file the tool itself wrote. Not what is inside `objects/` — the rclone
+    # container writes that with its own owner and modes, which is why the root's 0700 is the check that counts.
+    if loose_bits(backup):
+        problems.append(f"the capture directory is group/world-accessible "
+                        f"({backup.stat().st_mode & 0o777:o}) — it must be 0700")
+    for name in (MANIFEST_NAME, DUMP_NAME, OBJECTS_DIR, KEY_NAME):
+        written = backup / name
+        if written.exists() and loose_bits(written):
+            problems.append(f"{name} is group/world-readable ({written.stat().st_mode & 0o777:o}) — it must be "
+                            f"{'0700' if written.is_dir() else '0600'}")
+
+    placement = manifest["configSecret"]["placement"]
     key_file = backup / KEY_NAME
-    claims_key = manifest["configSecret"]["present"]
-    if claims_key and not key_file.is_file():
-        problems.append(f"the manifest records leg (c) as captured but {KEY_NAME} is not here")
-    if key_file.is_file() and (key_file.stat().st_mode & 0o077):
-        problems.append(f"{KEY_NAME} is group/world-readable ({key_file.stat().st_mode & 0o777:o}) — it must be 0600")
+    key_note = ""
+    if placement == BESIDE:
+        if not key_file.is_file():
+            problems.append(f"the manifest records leg (c) as captured beside the dump but {KEY_NAME} is not here")
+    elif key_file.exists():
+        problems.append(f"{KEY_NAME} sits beside the dump, but the manifest records leg (c) as {placement} — the "
+                        f"dump plus the key opens every tenant's SMTP password (ADR 0056 §1)")
+    if placement == SEPARATE:
+        if args.key_from:
+            kept = Path(args.key_from)
+            if not kept.is_file() or kept.stat().st_size == 0:
+                problems.append(f"--key-from {kept} is missing or empty — leg (c) is not where you said")
+            elif loose_bits(kept):
+                problems.append(f"--key-from {kept} is group/world-readable ({kept.stat().st_mode & 0o777:o}) — "
+                                f"it must be 0600")
+            key_note = f"kept separately, checked at {kept}"
+        else:
+            key_note = "kept separately — NOT checked here; pass --key-from FILE to check it"
+    elif placement == BESIDE:
+        key_note = "beside the dump, as the capture was told — keep this directory as secret as the key"
+    else:
+        key_note = "ABSENT — this backup has two legs, not three"
 
     if problems:
         print(f"BACKUP VERIFY FAILED for {backup}:")
@@ -666,7 +798,8 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
     # Two headlines, two exit codes, one predicate: leg (c). "Structurally intact" and "restorable" are not the
     # same claim, and a backup missing the key file is exactly the one that looks fine and is not (A2).
-    log(f"backup OK: {backup}" if claims_key else f"backup INCOMPLETE (leg (c) missing): {backup}")
+    complete = placement != ABSENT
+    log(f"backup OK: {backup}" if complete else f"backup INCOMPLETE (leg (c) missing): {backup}")
     log(f"  domains            {manifest['domains']}")
     log(f"  schema             V{manifest['database']['schemaVersion']}")
     # The rollback target, stated or explicitly absent — never a bare `null` that reads as data (ADR 0057 §5).
@@ -682,8 +815,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
     # what keeps "0 orphans" from being the only shape a reader recognises as healthy.
     log(f"  orphaned objects   {orphans} (tolerated — ADR 0056 § Context 2)")
     log(f"  open upload sess.  {manifest['store']['openUploadSessions']}")
-    log(f"  config-secret key  {'present' if claims_key else 'ABSENT — this backup has two legs, not three'}")
-    return 0 if claims_key else 2
+    log(f"  config-secret key  {key_note}")
+    log(f"  permissions        owner-only (the root and every file this tool wrote)")
+    return 0 if complete else 2
 
 
 # --------------------------------------------------------------------------------------------------------
@@ -707,6 +841,34 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"and recovery link already mailed. Restore onto one of {domains}, or treat the target as a new "
             f"instance."
         )
+
+    # The key gate, also before anything is touched: leg (c) comes from wherever the manifest says it went
+    # (ADR 0056 §1). A key kept separately that is not supplied is refused, never warned about — reaching A2 is
+    # the operator's knowing choice (--without-key), not what a forgotten flag produces.
+    require_key_from_fits(args, manifest)
+    placement = manifest["configSecret"]["placement"]
+    key_source: Path | None = None
+    if placement == SEPARATE and args.key_from:
+        key_source = Path(args.key_from)
+        if not key_source.is_file():
+            raise BackupError(f"--key-from {key_source} is not a file — leg (c) is not where you said")
+    elif placement == SEPARATE and not args.without_key:
+        raise BackupError(
+            f"this capture kept its config-secret key apart from the dump (manifest configSecret.placement = "
+            f"{SEPARATE!r}), and no --key-from was given. Pass --key-from FILE with the key you kept for it. "
+            f"Without it the instance starts, serves content, reports configSecretState: MISMATCH, and refuses "
+            f"member invites and password resets with 503 mail_unavailable (ADR 0055, A2) — if that is what you "
+            f"want, say so with --without-key."
+        )
+    elif placement == BESIDE:
+        key_source = backup / KEY_NAME
+        if not key_source.is_file() and not args.without_key:
+            raise BackupError(
+                f"the manifest records leg (c) as captured beside the dump, but {key_source} is not there. "
+                f"Find the key, or restore without it knowingly with --without-key (A2)."
+            )
+        if not key_source.is_file():
+            key_source = None
 
     db = Database(args, require_db_password())
     store = Store(args)
@@ -748,16 +910,20 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"restore. A partial restore is not repaired in place."
         ) from e
 
-    key_file = backup / KEY_NAME
     target_key = Path(args.config_secret_file)
-    if key_file.is_file():
-        log(f"placing the config-secret key at {target_key}")
+    if key_source is not None:
+        log(f"placing the config-secret key from {key_source} at {target_key}")
         target_key.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(key_file, target_key)
-        target_key.chmod(0o600)
+        # Over the key a fresh install generated, which is expected; chmodded BEFORE the bytes land, so an
+        # existing file's looser mode never holds the restored key.
+        fd = os.open(target_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "wb") as out:
+            out.write(key_source.read_bytes())
     else:
-        log(f"WARNING: this backup carries no {KEY_NAME}. The instance will start and serve content, report "
-            f"configSecretState: MISMATCH, and refuse member invites and password resets with "
+        log(f"WARNING: this restore places no config-secret key (leg (c) {placement}"
+            f"{', and --without-key was given' if args.without_key else ''}). The instance will start and serve "
+            f"content, report configSecretState: MISMATCH, and refuse member invites and password resets with "
             f"503 mail_unavailable until the key is restored or each tenant owner re-enters their SMTP "
             f"password (ADR 0055, A2).")
 
@@ -838,21 +1004,37 @@ def main(argv: list[str]) -> int:
     capture = sub.add_parser("capture", help="capture the three legs into a backup directory (app STOPPED)")
     capture.add_argument("--into", default=None,
                          help=f"backup directory (default: {DEFAULT_BACKUP_ROOT.relative_to(REPO)}/<UTC-ISO8601>)")
+    key_to = capture.add_mutually_exclusive_group()
+    key_to.add_argument("--key-into", default=None, metavar="FILE",
+                        help="where leg (c) is copied: a new file OUTSIDE the capture directory, ideally on another "
+                             "medium (ADR 0056 §1). Required whenever a key is found, unless --key-beside-dump")
+    key_to.add_argument("--key-beside-dump", action="store_true",
+                        help="put leg (c) in the capture directory, beside the dump — which together open every "
+                             "tenant's SMTP password. Only knowingly")
     add_common(capture)
     capture.set_defaults(func=cmd_capture, needs_store=True)
 
     verify = sub.add_parser("verify", help="check a backup directory without touching any instance")
     verify.add_argument("backup")
+    verify.add_argument("--key-from", default=None, metavar="FILE",
+                        help="the separately kept key of this capture, to check it too")
     verify.set_defaults(func=cmd_verify, needs_store=False)
 
     restore = sub.add_parser("restore", help="restore a backup onto an EMPTY instance")
     restore.add_argument("backup")
     restore.add_argument("--domain", required=True,
                          help="the domain this instance will serve — must be one the backup held (ADR 0056 §4)")
+    key_from = restore.add_mutually_exclusive_group()
+    key_from.add_argument("--key-from", default=None, metavar="FILE",
+                          help="the separately kept key of this capture (manifest configSecret.placement = separate)")
+    key_from.add_argument("--without-key", action="store_true",
+                          help="restore without leg (c), knowingly: the instance reports MISMATCH and refuses "
+                               "invites and resets until the key or each SMTP password is back (A2)")
     add_common(restore)
     restore.set_defaults(func=cmd_restore, needs_store=True)
 
     args = parser.parse_args(argv)
+    os.umask(OWNER_ONLY_UMASK)
     try:
         if args.needs_store:
             check_store_args(args)
