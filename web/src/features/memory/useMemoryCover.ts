@@ -98,7 +98,7 @@ export function useMemoryCover(ctx: MemoryCoverContext) {
       let cover: MemoryCover | null
       if (intent.kind === 'upload') {
         const ref = await uploadCoverBlob(ctx.scopeId(), nodeId, key, {
-          bytes: new Uint8Array(await intent.file.arrayBuffer()),
+          blob: intent.file,
           mediaType: intent.file.type,
           lastModified: intent.file.lastModified,
           name: intent.file.name,

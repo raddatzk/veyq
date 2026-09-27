@@ -36,6 +36,7 @@ import {
   EXIF_TIER_MAX_B64,
   EXIF_TEXT_MAX_BYTES,
   CHUNK_SIZE,
+  PUMP_IN_FLIGHT,
   COVER_SPEC,
   TIER_SPECS,
   type MediaDeriver,
@@ -59,10 +60,23 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
  * MediaSummary from what `completeMedia` saw (blobId == uploadId in this fake). Operator-blind: the "store"
  * only ever holds ciphertext.
  */
-function fakeStore() {
+/**
+ * `window` models the server's `veyq.blob.presign-window` (ADR 0013 §2): `startBlobUploads` signs only that many
+ * chunks and `presignBlobUploadWindows` each next range — unbounded by default, so a test that is not about the
+ * pump sees every URL at start. `events` logs every window request and every PUT, in order, as `window:<from>` /
+ * `put:<index>`; `forbidFirstPut` makes the first PUT of those chunk indices answer 403, as an expired URL does;
+ * `putDelayMs` holds each PUT open so concurrency is observable (`inFlight.max`).
+ */
+function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayMs?: number } = {}) {
+  const window = opts.window ?? Number.POSITIVE_INFINITY
   const objects = new Map<string, Uint8Array>()
   const sessions = new Map<string, { wrappedBlobKey: string; chunkCount: number }>()
+  const events: string[] = []
+  const inFlight = { now: 0, max: 0 }
+  const forbidden = new Set(opts.forbidFirstPut ?? [])
   let upCounter = 0
+  const putsOf = (uploadId: string, from: number, chunkCount: number) =>
+    Array.from({ length: Math.max(0, Math.min(from + window, chunkCount) - from) }, (_, k) => ({ index: from + k, url: `mem://${uploadId}/${from + k}` }))
   const captured = { startItems: [] as any[], completeItem: undefined as any, updatedMeta: undefined as any, coverUpload: undefined as any, coverDeletedNode: undefined as any }
 
   const blobOf = (uploadId: string) => {
@@ -76,11 +90,16 @@ function fakeStore() {
         const uploadId = `up-${upCounter++}`
         sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount })
         captured.startItems.push(item)
-        const presignedPuts = Array.from({ length: item.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` }))
-        return { uploadId, presignedPuts, error: null }
+        return { uploadId, presignedPuts: putsOf(uploadId, 0, item.chunkCount), error: null }
       })
       return { results }
     }),
+    presignBlobUploadWindows: vi.fn(async ({ blobUploadWindowsRequest }: any) => ({
+      results: blobUploadWindowsRequest.items.map(({ uploadId, fromChunk }: any) => {
+        events.push(`window:${fromChunk}`)
+        return { presignedPuts: putsOf(uploadId, fromChunk, sessions.get(uploadId)!.chunkCount), error: null }
+      }),
+    })),
     completeMedia: vi.fn(async ({ mediaBatchRequest }: any) => {
       const item = mediaBatchRequest.items[0]
       captured.completeItem = item
@@ -134,6 +153,12 @@ function fakeStore() {
       if (new Headers(init.headers).get('Content-Type') !== 'application/octet-stream') {
         return { ok: false, status: 403 } as Response
       }
+      const index = Number(url.split('/').pop())
+      events.push(`put:${index}`)
+      if (forbidden.delete(index)) return { ok: false, status: 403 } as Response
+      inFlight.max = Math.max(inFlight.max, ++inFlight.now)
+      if (opts.putDelayMs !== undefined) await new Promise((r) => setTimeout(r, opts.putDelayMs))
+      inFlight.now--
       objects.set(url, new Uint8Array(init.body as Uint8Array))
       return { ok: true, status: 200 } as Response
     }
@@ -142,7 +167,7 @@ function fakeStore() {
     return { ok: true, status: 200, arrayBuffer: async () => body.buffer } as unknown as Response
   })
 
-  return { api, fetchStub, objects, captured }
+  return { api, fetchStub, objects, captured, events, inFlight }
 }
 
 /**
@@ -202,7 +227,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
 
     const memoryKey = v1.randomBytes(32)
     const data = new Uint8Array(10).fill(7)
-    const { blobId, mediaId } = await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: data, mediaType: 'image/png' }, deriver)
+    const { blobId, mediaId } = await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: 'image/png' }, deriver)
 
     expect(mediaId).toBe('media-1')
     expect(blobId).toBe('blob-up-0') // original is upload index 0
@@ -250,7 +275,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
 
     const memoryKey = v1.randomBytes(32)
     const data = new Uint8Array(64).fill(5)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: data, mediaType: 'image/jpeg' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 
     expect(deriver.imageSources.filter((n) => n === data.length)).toHaveLength(1) // ONE decode of the original
     expect(probe).not.toHaveBeenCalled() // nothing re-measured what that decode already knew
@@ -270,7 +295,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     const deriver = stubDeriver()
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(20).fill(3), mediaType: 'video/mp4' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(20).fill(3) as BlobPart]), mediaType: 'video/mp4' }, deriver)
 
     expect(deriver.posters).toBe(1) // decoded once
     expect(deriver.images).toBe(0)
@@ -290,7 +315,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
-    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array([1, 2, 3]), mediaType: 'application/pdf' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/pdf' }, deriver)
 
     expect(deriver.images + deriver.posters).toBe(0)
     expect(store.captured.startItems).toHaveLength(1)
@@ -303,7 +328,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     } as unknown as ReturnType<typeof mediaApi>)
 
     await expect(
-      addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array([1]), mediaType: 'application/pdf' }, stubDeriver()),
+      addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver()),
     ).rejects.toThrow('store_unavailable')
   })
 })
@@ -315,7 +340,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const seen: number[] = []
 
-    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array(20).fill(1), mediaType: 'image/png' }, stubDeriver(), {
+    await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array(20).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver(), {
       onProgress: (f) => seen.push(f),
     })
 
@@ -332,7 +357,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
     ac.abort()
 
     await expect(
-      addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array([1]), mediaType: 'image/png' }, stubDeriver(), {
+      addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'image/png' }, stubDeriver(), {
         signal: ac.signal,
       }),
     ).rejects.toMatchObject({ name: 'AbortError' })
@@ -348,7 +373,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
       throw new Error('decode_failed') // browser can't decode this codec (HEIC off Safari)
     })
 
-    const { mediaId } = await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/heic' }, deriver)
+    const { mediaId } = await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/heic' }, deriver)
 
     expect(mediaId).toBe('media-1')
     expect(store.captured.startItems).toHaveLength(1) // original only — no derivative blobs
@@ -373,7 +398,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT), Make: 'Canon' } as never)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(10).fill(7), mediaType: 'image/png' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/png' }, deriver)
 
     // the wire carries only opaque ciphertext — never the plaintext dimensions
     const sealed = store.captured.completeItem.wrappedMeta
@@ -399,7 +424,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     } as never)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(10).fill(7), mediaType: 'image/jpeg' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
 
     // the capture time + GPS are sealed in the always-listed metadata tier (opaque — no plaintext on the wire)
     const sealedMeta = store.captured.completeItem.wrappedMeta
@@ -453,7 +478,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     const memoryKey = v1.randomBytes(32)
     const FILENAME = 'IMG_0042_holiday.HEIC'
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg', name: FILENAME }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', name: FILENAME }, deriver)
 
     // B1.1 + B1.3 — the lazy tier carries every new field, the filename included
     const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(store.captured.completeItem.wrappedExif), 'media-exif')))
@@ -494,7 +519,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
       DateTimeOriginal: new Date(CAPTURED_AT), latitude: 48.137, longitude: 11.575, Make: 'Canon',
     } as never)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     const meta = unsealMeta(memoryKey, item)!
     const withOverride = { ...meta, capturedAtOverride: Date.UTC(2019, 7, 15) }
@@ -537,7 +562,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
       description: { lang: 'x-default', value: 'ä'.repeat(20_000) },
     } as never)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     const sealed = store.captured.completeItem.wrappedExif as string
     expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
@@ -560,7 +585,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
       Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
     } as never)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(12).fill(4), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     const sealed = store.captured.completeItem.wrappedExif as string
     expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
@@ -582,7 +607,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const FILE_MTIME = Date.UTC(2020, 0, 2, 3, 4, 5)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/png', lastModified: FILE_MTIME }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/png', lastModified: FILE_MTIME }, deriver)
 
     expect(store.captured.completeItem.wrappedExif ?? null).toBeNull() // no EXIF bundle
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
@@ -608,7 +633,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // (a) the file carries a real EXIF date → both sides take it, and the file date is ignored by both
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) } as never)
     const keyA = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, keyA, { bytes, mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, keyA, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const sealedA = unsealMeta(keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
     const tileA = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
     expect(tileA.capturedAt).toBe(sealedA?.capturedAt)
@@ -618,7 +643,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // (b) no readable EXIF → both fall back to the file's own date. This is the half the lever removes.
     vi.mocked(exifr.parse).mockResolvedValue(undefined as never)
     const keyB = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, keyB, { bytes, mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, keyB, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const listed = await listMedia(SCOPE_ID, NODE_ID)
     const sealedB = unsealMeta(keyB, listed[listed.length - 1])
     const tileB = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
@@ -635,7 +660,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     deriver.probeDimensions = vi.fn(async () => ({ w: 640, h: 480 }))
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'image/png' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/png' }, deriver)
 
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     const meta = unsealMeta(memoryKey, item)
@@ -652,7 +677,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     const memoryKey = v1.randomBytes(32)
     // The tier still seals — the persisted mediaType signal (#104/#105) rides it even with no derivable metadata.
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'application/pdf' }, deriver)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/pdf' }, deriver)
 
     expect(store.captured.completeItem.wrappedExif ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
@@ -669,7 +694,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1]), mediaType: 'image/png' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     expect(unsealMeta(memoryKey, item)).toMatchObject({ mediaType: 'image/png' })
   })
@@ -680,7 +705,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1]), mediaType: '' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: '' }, stubDeriver())
     expect(store.captured.completeItem.wrappedMeta ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     expect(unsealMeta(memoryKey, item)).toBeNull()
@@ -791,7 +816,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'text/html' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'text/html' }, stubDeriver())
 
     const puts = store.fetchStub.mock.calls.filter(([, init]) => init?.method === 'PUT')
     expect(puts.length).toBeGreaterThan(0)
@@ -806,7 +831,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     vi.stubGlobal('fetch', store.fetchStub)
 
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1, 2, 3]), mediaType: 'video/mp4' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
 
     // the wire is opaque ciphertext — the MIME never crosses in the clear
     expect(store.captured.completeItem.wrappedMeta).not.toContain('video/mp4')
@@ -843,6 +868,71 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
   })
 })
 
+describe('the upload pump — read, seal and send one frame at a time (ADR 0013 §2 + Consequences)', () => {
+  /** A typed source of `chunks` frames (the last one short), with spies on the two ways to read it. */
+  function spiedSource(chunks: number, mediaType = 'application/pdf') {
+    const blob = new Blob([new Uint8Array((chunks - 1) * CHUNK_SIZE + 7).fill(5)], { type: mediaType })
+    return { blob, slice: vi.spyOn(blob, 'slice'), arrayBuffer: vi.spyOn(blob, 'arrayBuffer') }
+  }
+  const upload = (store: ReturnType<typeof fakeStore>, blob: Blob, mediaType = 'application/pdf') => {
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    return addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob, mediaType }, stubDeriver())
+  }
+
+  it('reads the original as one slice per frame and never as a whole', async () => {
+    const source = spiedSource(3)
+    await upload(fakeStore(), source.blob)
+    expect(source.arrayBuffer).not.toHaveBeenCalled()
+    expect(source.slice.mock.calls).toEqual([0, 1, 2].map((i) => [i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE]))
+  })
+
+  it('never has more than PUMP_IN_FLIGHT PUTs in flight for a many-chunk blob', async () => {
+    const store = fakeStore({ putDelayMs: 5 })
+    await upload(store, spiedSource(12).blob)
+    expect(store.events.filter((e) => e.startsWith('put:'))).toHaveLength(12)
+    expect(store.inFlight.max).toBeLessThanOrEqual(PUMP_IN_FLIGHT)
+    expect(store.inFlight.max).toBeGreaterThan(1) // control: the bound is a bound, not a sequential pump
+  })
+
+  it('asks for the next window before the signed range runs out', async () => {
+    // Slow PUTs make the order a property of the pump, not of the event loop: a pump that asked only once it held
+    // no URL would reach `window:10` after `put:6` (it needs seven PUTs done to pick chunk 10). Asked AHEAD, the
+    // window is on its way while a whole in-flight's worth of signed chunks is still unsent.
+    const store = fakeStore({ window: 10, putDelayMs: 2 })
+    await upload(store, spiedSource(25).blob)
+    const at = (e: string) => store.events.indexOf(e)
+    expect(store.events.filter((e) => e.startsWith('window:'))).toEqual(['window:10', 'window:20'])
+    expect(at('window:10')).toBeLessThan(at(`put:${10 - PUMP_IN_FLIGHT}`))
+    expect(at('window:20')).toBeLessThan(at(`put:${20 - PUMP_IN_FLIGHT}`))
+  })
+
+  it('re-signs from a chunk whose PUT answers 403, and retries that chunk once', async () => {
+    const store = fakeStore({ window: 10, forbidFirstPut: [3] })
+    const key = v1.randomBytes(32)
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const data = new Uint8Array(4 * CHUNK_SIZE + 9).map((_, i) => i % 251)
+    await addMedia(SCOPE_ID, NODE_ID, key, { blob: new Blob([data]), mediaType: 'application/pdf' }, stubDeriver())
+    expect(store.events.filter((e) => e === 'window:3')).toHaveLength(1)
+    expect(store.events.filter((e) => e === 'put:3')).toHaveLength(2)
+    // and what landed is the file: the retried frame is the same sealed frame, at its own index
+    const [item] = await listMedia(SCOPE_ID, NODE_ID)
+    expect(await openOriginal(SCOPE_ID, key, item)).toEqual(data)
+  })
+
+  it('pumps a cover through the same windows — it has no PUT loop of its own', async () => {
+    const store = fakeStore({ window: 2 })
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    const key = v1.randomBytes(32)
+    const data = new Uint8Array(2 * CHUNK_SIZE + 3).fill(9) // not an image: sealed as it is, three frames
+    const ref = await uploadCoverBlob(SCOPE_ID, NODE_ID, key, { blob: new Blob([data]), mediaType: 'application/octet-stream' }, stubDeriver())
+    expect(store.events.filter((e) => e.startsWith('window:'))).toEqual(['window:2'])
+    expect(await openBlob(SCOPE_ID, key, ref)).toEqual(data)
+  })
+})
+
 describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)', () => {
   it('downscales an image to one cover-sized JPEG, seals it, commits it, and round-trips via openBlob', async () => {
     const store = fakeStore()
@@ -851,7 +941,7 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
     const deriver = stubDeriver()
 
     const memoryKey = v1.randomBytes(32)
-    const ref = await uploadCoverBlob(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(10).fill(7), mediaType: 'image/png' }, deriver)
+    const ref = await uploadCoverBlob(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/png' }, deriver)
 
     // exactly one downscale at the cover spec (no THUMBNAIL/PREVIEW split), one blob started, no media completed
     expect(deriver.images).toBe(1)
@@ -871,7 +961,7 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
 
-    await uploadCoverBlob(SCOPE_ID, NODE_ID, v1.randomBytes(32), { bytes: new Uint8Array([1, 2, 3]), mediaType: 'application/octet-stream' }, deriver)
+    await uploadCoverBlob(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'application/octet-stream' }, deriver)
     expect(deriver.images).toBe(0) // non-image ⇒ no downscale attempt
     expect(store.captured.startItems).toHaveLength(1)
   })
@@ -896,7 +986,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     const data = new Uint8Array(600 * 1024)
     for (let i = 0; i < data.length; i++) data[i] = (i * 31 + 7) & 0xff
 
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: data, mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     // operator-blind: the first stored object is ciphertext (nonce+ct+tag), never the plaintext chunk
     const original = store.objects.get('mem://up-0/0')!
@@ -915,7 +1005,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
 
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(5).fill(9), mediaType: 'image/webp' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(5).fill(9) as BlobPart]), mediaType: 'image/webp' }, stubDeriver())
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
 
     expect(downloadRef(item).blobId).toBe('up-0')
@@ -946,7 +1036,7 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
 
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array([1]), mediaType: 'application/pdf' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver())
     const wrap = store.captured.startItems[0].wrappedBlobKey
     const blobKey = v1.symUnwrap(memoryKey, fromB64std(wrap), 'blob-key')
     expect(blobKey.length).toBe(32)

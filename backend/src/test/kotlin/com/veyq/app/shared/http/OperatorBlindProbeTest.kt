@@ -98,6 +98,9 @@ class OperatorBlindProbeTest {
         "startBlobUploads" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/blob-uploads-batch", """{"items":[${TestBlob.SMALL.declare(B64)}]}""")
         },
+        "presignBlobUploadWindows" to Probe(Address.SCOPE) { s ->
+            Call("POST", "/api/scopes/${s.scopeId}/blob-upload-windows", """{"items":[{"uploadId":"${s.uploadId}","fromChunk":0}]}""")
+        },
         "completeMedia" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/scopes/${s.scopeId}/media-batch", """{"items":[{"nodeId":"${s.nodeId}","originalUploadId":"${s.uploadId}","derivatives":[]}]}""")
         },
@@ -202,7 +205,7 @@ class OperatorBlindProbeTest {
             "openPairingChannel", "answerPairingChannel", "collectPairingChannel",
             "getSetupStatus", "createServerOwner",
             "resolveShare", "getShareTerms", "resolveShareBlob", "createShareIdentity", "startShareBlobUploads",
-            "completeShareMedia", "deleteShareMedia",
+            "presignShareBlobUploadWindows", "completeShareMedia", "deleteShareMedia",
             "previewTenantInvite", "acceptTenantInvite", "registerAndAcceptTenantInvite",
         )
         reason(

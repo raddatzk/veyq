@@ -44,11 +44,14 @@ direct-append, personal scope.**
    token** returned to the client. The server **never** sees the name. This is the **anonymous share identity**
    ADR 0029 named, and the **buckets hook**: name → sealed identity → (later) the per-contributor primary bucket.
 
-3. **A share-scoped, unauthenticated upload path (the presign mirror + blind capability).** Two endpoints mirror
+3. **A share-scoped, unauthenticated upload path (the presign mirror + blind capability).** Three endpoints mirror
    the authed media control plane, gated **only** on share state — a parallel authz path, never a relaxed member
-   filter: `POST /api/shares/{shareId}/blob-uploads` (presign one PUT per chunk, [ADR 0013](0013-blob-storage-presigned-direct-to-store.md))
-   and `POST /api/shares/{shareId}/media` (complete + attach). Both require the share to **exist + be `enabled` +
-   have role CONTRIBUTOR**, and a **valid contributor token** (the blind upload-capability). The contributor
+   filter: `POST /api/shares/{shareId}/blob-uploads` (open sessions + presign their first window of PUTs,
+   [ADR 0013](0013-blob-storage-presigned-direct-to-store.md) §2), `POST /api/shares/{shareId}/blob-upload-windows`
+   (each next window) and `POST /api/shares/{shareId}/media` (complete + attach). Each requires the share to
+   **exist + be `enabled` + have role CONTRIBUTOR**, and a **valid contributor token** (the blind upload-capability)
+   — checked on every request, so a revoked link stops an upload in flight at its next window — and a session acts
+   only for the identity that opened it. The contributor
    seals the blob's `K_blob`, its derivatives, and the listed metadata **under `K_mem`** — byte-for-byte the
    curator's upload, only the transport is share-gated.
 

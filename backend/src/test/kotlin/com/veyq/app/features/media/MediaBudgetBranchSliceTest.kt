@@ -7,6 +7,7 @@ import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.identity.VeyqUser
@@ -59,8 +60,8 @@ class MediaBudgetBranchSliceTest {
     private fun scriptSession(uploadId: String, chunkStat: (index: Int, declaredSize: Long) -> Long?) {
         QuarkusTransaction.requiringNew().run {
             val session = UploadSessionEntity.findById(uploadId)!!
-            (0 until session.chunkCount).forEach { i ->
-                fakeStore.statOf(chunkKey(session.storageKey, i), chunkStat(i, session.byteSize))
+            chunkKeys(session.storageKey, session.chunkCount).forEachIndexed { i, key ->
+                fakeStore.statOf(key, chunkStat(i, session.byteSize))
             }
         }
     }

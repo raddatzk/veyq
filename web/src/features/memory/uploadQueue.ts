@@ -7,10 +7,11 @@
 import { reactive, computed } from 'vue'
 import { addMedia, type AddMediaSource, type AddMediaOptions } from './media'
 
-// `preparing` = picked up, but still in the pre-network phase (read into memory, derive poster/dimensions, seal).
-// For a video this can take a visible moment — especially the on-device frame decode — so it gets its own state
-// instead of masquerading as a stuck 0% `uploading`. It flips to `uploading` the instant the first PUT progress
-// arrives (media.ts `onProgress?.(0)`, right before the chunk PUTs).
+// `preparing` = picked up, but still in the pre-network phase (derive poster/dimensions, read the metadata). For a
+// video this can take a visible moment — especially the on-device frame decode — so it gets its own state instead
+// of masquerading as a stuck 0% `uploading`. Sealing is not part of it: the file is read and sealed one frame at a
+// time as it is sent. It flips to `uploading` the instant the first PUT progress arrives (media.ts `onProgress?.(0)`,
+// right before the chunk PUTs).
 export type UploadStatus = 'queued' | 'preparing' | 'uploading' | 'done' | 'failed' | 'cancelled'
 
 /** How one file is sealed + uploaded — the authed `addMedia` (default) or a share-scoped transport (cr-0101). */
@@ -187,16 +188,16 @@ function finalize(batch: UploadBatch): void {
 async function uploadOne(file: UploadFile): Promise<void> {
   const batch = batches.find((b) => b.files.includes(file))
   if (!batch) return
-  file.status = 'preparing' // pre-network: read + derive + seal; flips to 'uploading' on the first PUT progress
+  file.status = 'preparing' // pre-network: derive + metadata; flips to 'uploading' on the first PUT progress
   file.progress = 0
   file.attempts += 1
   try {
-    const bytes = new Uint8Array(await file.file.arrayBuffer())
     const t = batch.target
     // the batch's transport: the share-scoped upload fn, or the authed addMedia over scope/node/K_mem (default).
     // the file's creation date is passed so a source with no EXIF date can fall back to it (cr-0066).
     const upload: UploadFn = t.upload ?? ((source, opts) => addMedia(t.scopeId!, t.nodeId!, t.memoryKey!, source, undefined, opts))
-    const { mediaId } = await upload({ bytes, mediaType: file.mediaType, lastModified: file.file.lastModified, name: file.name }, {
+    // the File itself, never its bytes: the pump reads and seals it a frame at a time (ADR 0013 Consequences)
+    const { mediaId } = await upload({ blob: file.file, mediaType: file.mediaType, lastModified: file.file.lastModified, name: file.name }, {
       onProgress: (p) => {
         if (file.status === 'preparing') file.status = 'uploading' // first PUT progress → the network phase began
         file.progress = p

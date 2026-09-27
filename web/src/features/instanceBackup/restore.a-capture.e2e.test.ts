@@ -35,7 +35,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('restore rehearsal — capture', () => {
     const data = testBytes()
     // No MIME ⇒ the original-only path. The byte transport is what has to survive the restore; a derivative
     // would only add a second copy of the same question.
-    const { blobId } = await addMedia(scopeId, nodeId, memoryKey, { bytes: data, mediaType: '' })
+    const { blobId } = await addMedia(scopeId, nodeId, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: '' })
     expect(blobId).toBeTruthy()
 
     // The POSITIVE CONTROL for leg 3, asserted here rather than only in the leg-3 group. ConfigSecretKeyGuard

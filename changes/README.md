@@ -907,6 +907,15 @@ has no behaviour of its own — it is asserted only where some test compares it 
 writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
 before touching either the lever or the design.
 
+**An ORDER assertion over async work can be satisfied by the event loop instead of the code.**
+`cr-upload-windowed-presign` asserted that its upload pump asks for the next presign window *before* the signed
+range runs out (`window:10` logged before `put:9`), and removing the look-ahead left it green: every fake answered
+at once, so a pump that asked only when it held no URL still reached chunk 10 while chunk 9 sat in its own
+`await` of the seal. The order was a property of the microtask queue. What made it bite was a fake that takes
+**time** (each PUT held a few ms) and an assertion with room in it (`window:10` before `put:6`, a whole in-flight
+of signed chunks still unsent) — then the lever reddened and the fix did not. Where the claim is an order between
+concurrent steps, run the lever once before trusting the green; an instant fake orders things for you.
+
 **A structured config file has its own way of swallowing a lever: the duplicate key.** Injecting into YAML or
 JSON by inserting a block near an anchor can produce a second `properties:` (or any key) beside the real one,
 and a loader keeps exactly one of them — `yaml.safe_load` keeps the last. The file looks injected, the diff
@@ -1280,6 +1289,16 @@ cr-config-secret-key-file-and-fingerprint then *added* `configSecretState` — n
 capability (the DB fingerprint tripwire) let the server *detect* a state it previously could not. The deciding
 question is the server's knowledge, not the client's wish — name that dependency when first weighing the field,
 not a CR later.
+
+### A CR that changes a gate runs the opt-in suites whose fixtures pass through it
+
+**A suite no CI job runs rots between the CRs that run it, and nothing says so.** `cr-scope-access-gate` made a
+write require an accepted **tenant** membership; every slice test's seed already had one, and `BlobBatchE2ETest`
+(`VEYQ_S3_E2E=1`, run by hand) did not — so from that merge on its uploads were a `404`, found only when
+`cr-upload-windowed-presign` ran it two CRs later. The fix was one seed line; the cost was that the one proof of
+the real byte path was dead for a wave without anyone knowing. So a CR that tightens a gate greps the opt-in
+suites (`grep -rln 'EnabledIfEnvironmentVariable' backend/src/test`) for fixtures that seed through it, and runs
+the ones it can.
 
 ### A done-when that names a gate records that gate's exit code on `main`, measured at refine
 

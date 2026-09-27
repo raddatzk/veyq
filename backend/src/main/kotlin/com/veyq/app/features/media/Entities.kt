@@ -9,9 +9,16 @@ import jakarta.persistence.Table
 import java.time.Instant
 
 /**
- * An OPEN upload session (cr-0028): opened by `start` (which presigns a PUT per chunk under `storageKey`),
- * consumed by `complete` (stat + attach). Operator-blind: `wrappedBlobKey` is opaque ciphertext; `storageKey`
- * is a random object-key prefix. There is no status column: a row exists ⇒ the session is OPEN.
+ * An OPEN upload session (cr-0028): opened by `start` (which presigns the first window of PUTs under
+ * `storageKey`), extended by a window request per further window, consumed by `complete` (stat + attach).
+ * Operator-blind: `wrappedBlobKey` is opaque ciphertext; `storageKey` is a random object-key prefix. There is no
+ * status column: a row exists ⇒ the session is OPEN.
+ *
+ * **Bound to its opener** (ADR 0013 §2): exactly one of [openerUserId] (a member upload) and
+ * [openerShareIdentityId] (a contributor upload) is set, and every read that acts on the session —
+ * [MediaStore.findSession] — matches it. A row from before the columns existed has neither and matches nobody.
+ * [lastWindowAt] is the session's liveness: set at `start`, touched by every window, and what the stale-session
+ * purge keys on.
  *
  * This row is the **only** pointer to its `storage_key`, so nothing else can find the chunks a client staged
  * under it — reclaiming it and reclaiming those objects is one job, and it is [UploadSessionPurge]'s
@@ -43,6 +50,15 @@ class UploadSessionEntity : PanacheEntityBase {
 
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
+
+    @Column(name = "opener_user_id", length = 36)
+    var openerUserId: String? = null
+
+    @Column(name = "opener_share_identity_id", length = 36)
+    var openerShareIdentityId: String? = null
+
+    @Column(name = "last_window_at", nullable = false)
+    lateinit var lastWindowAt: Instant
 
     companion object : PanacheCompanionBase<UploadSessionEntity, String>
 }

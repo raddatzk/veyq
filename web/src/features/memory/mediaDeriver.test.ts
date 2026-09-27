@@ -61,7 +61,7 @@ describe('firstPresentedFrame — waits for a genuinely decoded frame, timeout-g
 })
 
 describe('deriveTiers — an undecodable/hanging video degrades to original-only (no upload hang)', () => {
-  const videoSource: AddMediaSource = { bytes: new Uint8Array([0, 1, 2]), mediaType: 'video/mp4' }
+  const videoSource: AddMediaSource = { blob: new Blob([new Uint8Array([0, 1, 2]) as BlobPart]), mediaType: 'video/mp4' }
 
   it('returns [] (original only) when the poster derive rejects — via the catch, never re-thrown', async () => {
     const deriver: MediaDeriver = {

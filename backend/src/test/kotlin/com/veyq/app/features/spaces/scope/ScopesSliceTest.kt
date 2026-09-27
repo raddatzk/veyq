@@ -7,6 +7,7 @@ import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaStore
+import com.veyq.app.features.media.UploadOpener
 import com.veyq.app.features.media.UploadSessionEntity
 import com.veyq.app.features.sharing.ShareEntity
 import com.veyq.app.features.sharing.ShareIdentityEntity
@@ -1192,9 +1193,9 @@ class ScopesSliceTest {
         val expiredKey = UUID.randomUUID().toString()
         val freshKey = UUID.randomUUID().toString()
         val blob3 = TestBlob.ofChunks(3)
-        val expiredSession = mediaStore.createSession(expired, expiredKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
+        val expiredSession = mediaStore.createSession(expired, UploadOpener.Member(owner), expiredKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
         val blob2 = TestBlob.ofChunks(2)
-        val freshSession = mediaStore.createSession(fresh, freshKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
+        val freshSession = mediaStore.createSession(fresh, UploadOpener.Member(owner), freshKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
 
         listOf(expired, fresh).forEach {
             given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)

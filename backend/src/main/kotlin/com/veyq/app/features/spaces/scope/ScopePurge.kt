@@ -95,9 +95,9 @@ class ScopePurge(
     private fun eraseScope(scopeId: String) {
         val blobs = BlobEntity.find("scopeId", scopeId).list()
         reclaim.record(blobs.map { StoreObjectRef(it.storageKey, it.chunkCount) })
-        // An upload still OPEN in the scope — started inside `veyq.media.upload.retention`, so its own sweep has
+        // An upload still OPEN in the scope — last windowed inside `veyq.media.upload.retention`, so its own sweep has
         // not reached it — may already have chunks in the store, and its row is their only pointer. Recorded
-        // exactly as `MediaStore.purgeSessionsStartedBefore` does; a session a budget rejection already recorded
+        // exactly as `MediaStore.purgeSessionsIdleSince` does; a session a budget rejection already recorded
         // is recorded twice, which the reclaim list tolerates (no unique key, idempotent object delete).
         val sessions = UploadSessionEntity.find("scopeId", scopeId).list()
         reclaim.record(sessions.map { StoreObjectRef(it.storageKey, it.chunkCount) })
