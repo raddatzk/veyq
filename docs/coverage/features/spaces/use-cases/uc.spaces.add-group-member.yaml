@@ -37,3 +37,15 @@ acceptanceCriteria:
     text: The server sees only the membership row, identity public keys, and opaque grant ciphertext — never K_SC, never the group's plaintext name; the add response never exposes email.
     coverage:
       backend: { integration: [ScopesSliceTest.addGroupMemberByUsernameRecordsGrantlessMember] }
+  - id: admission-needs-the-group-key
+    # ADR 0020 move 6 / ADR 0014: the group add — direct or a consent proposal — carries a tag the owner's client
+    # computed under the group's current epoch key, bound to the resolved target's account; a worker declines
+    # `admission_unverified` on a mismatch, on a tag from before a rotation, or on none. The server stores the tag
+    # blind and only refuses one stated at an epoch a rotation already left.
+    text: A group member receives the group key only if their admission carries a tag made with the group's current epoch key and bound to their account; an add without the vault is never delivered to.
+    coverage:
+      backend:
+        integration: [ScopesSliceTest.aGroupAddTaggedAtAStaleEpochIsRefused]
+      web:
+        unit: [src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts]
+        e2e: [src/features/tasks/scopeRotation.e2e.test.ts]

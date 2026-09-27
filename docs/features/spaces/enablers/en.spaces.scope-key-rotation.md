@@ -41,8 +41,11 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
    the epoch `n+1` it creates. `E_n` is the device's own grant, so the server commits only if that is the scope's
    current epoch + 1 (E3).
 2. It carries each remaining membership's **admission tag** forward — verified under `E_n`, re-tagged under
-   `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6) — and **re-grants**
-   `E_{n+1}` to the remaining members it can reach (`asymWrap` to each identity); the
+   `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6); for a tenant scope its
+   open member invites too. A tag that fails is **dropped** on purpose and its member is not re-granted. The server
+   refuses a rotation that leaves any open admission neither re-tagged nor dropped (`409 admissions_incomplete`),
+   because one it forgot could never be delivered to again. It then **re-grants**
+   `E_{n+1}`, signed by the rotator, to the remaining members it can reach (`asymWrap` to each identity); the
    **grant-delivery** reconciler finishes the rest — its trigger widened from *grant-less* to *grant-less or
    stale-epoch*, first-online-wins, idempotent ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)).
 3. New content (names, `slug_token`s, `K_mem`-wraps) seals under `E_{n+1}`; each new node carries epoch index `n+1`.

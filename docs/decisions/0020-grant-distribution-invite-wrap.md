@@ -114,6 +114,16 @@ key, wraps, or unwraps.** Concretely:
      worker (the tag's epoch must be the worker's own current epoch, so a tag computed before a rotation does not
      admit) and the rotation re-grant. A membership whose tag does not verify is skipped and surfaced, like a
      changed key ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 2).
+   - **What the server checks — presence, never the tag.** It holds no epoch key, so it stores, copies (an
+     accepted invite's admission becomes the membership's; a reissued invite keeps its admission) and relays tags.
+     It refuses two things only. A rotation that leaves any **open admission** of the scope — every membership's,
+     and for a tenant scope every open member invite's — neither re-tagged under the new epoch nor explicitly
+     **dropped** by the rotator: a tag left at the old epoch admits nobody again, so its member would wait forever.
+     And an admission stated at an epoch that is no longer the scope's current one, read under the rotation's own
+     lock, because a rotation that committed in between could not have carried it. A dropped admission is one whose
+     old tag failed the rotator's check; the server clears it and no client delivers to that membership again
+     unless an owner re-admits it — dropping it rather than refusing the whole rotation is what keeps a forged
+     admission from blocking every future rotation of the scope.
    - **What it deliberately does not bind.** Not the **role** — role gates management, the grant gates content
      ([ADR 0007](0007-membership-role-grant-relation.md)); binding it would make every role change a key-holder
      act for no confidentiality gain. Not the **identity key** — whether a key is the one this membership had is
