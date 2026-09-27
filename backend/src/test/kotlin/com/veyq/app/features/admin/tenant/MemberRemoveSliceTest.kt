@@ -1,13 +1,13 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.spaces.scope.ScopePurge
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -34,12 +34,11 @@ import java.util.UUID
 @QuarkusTest
 class MemberRemoveSliceTest {
 
-    @Inject lateinit var sessions: SessionService
     @Inject lateinit var purge: ScopePurge
 
     @Test
     fun ownerRemovesMemberCutsSharedButKeepsOwnScopeReadable() {
-        val (tenantId, owner) = seedTenant("rm-main.example.com", "owner@rm-main.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-main.example.com", "owner@rm-main.example.com")
         val member = seedTenantMember(tenantId, "m@rm-main.example.com")
         val personal = seedPersonal(tenantId, member)
         val group = seedGroup(tenantId, owner)   // the owner owns a group
@@ -62,7 +61,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun soleOwnedGroupWithMembersTransfersToOldestRemaining() {
-        val (tenantId, owner) = seedTenant("rm-orphan.example.com", "owner@rm-orphan.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-orphan.example.com", "owner@rm-orphan.example.com")
         val member = seedTenantMember(tenantId, "m@rm-orphan.example.com")
         val elder = seedTenantMember(tenantId, "elder@rm-orphan.example.com")
         val junior = seedTenantMember(tenantId, "junior@rm-orphan.example.com")
@@ -82,7 +81,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun soloGroupIsGraceTombstonedWithMembershipKept() {
-        val (tenantId, owner) = seedTenant("rm-solo.example.com", "owner@rm-solo.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-solo.example.com", "owner@rm-solo.example.com")
         val member = seedTenantMember(tenantId, "m@rm-solo.example.com")
         val solo = seedGroup(tenantId, member)   // the member is the only member
 
@@ -96,7 +95,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun lastTenantOwnerCannotBeRemoved() {
-        val (tenantId, owner) = seedTenant("rm-last.example.com", "owner@rm-last.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-last.example.com", "owner@rm-last.example.com")
         given().header("Authorization", bearer(owner))
             .`when`().delete("/api/tenants/$tenantId/members/$owner")
             .then().statusCode(409).body("code", equalTo("last_owner"))
@@ -105,7 +104,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun nonOwnerForbiddenAndUnknownMemberNotFound() {
-        val (tenantId, owner) = seedTenant("rm-guard.example.com", "owner@rm-guard.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-guard.example.com", "owner@rm-guard.example.com")
         val member = seedTenantMember(tenantId, "m@rm-guard.example.com")
         val outsider = seedTenantMember(tenantId, "out@rm-guard.example.com")
 
@@ -116,7 +115,7 @@ class MemberRemoveSliceTest {
         assertTrue(hasMembership(member, tenantId), "the member is untouched by a forbidden attempt")
 
         // The owner removing a non-member → 404.
-        val stranger = seedUser("stranger@rm-guard.example.com")
+        val stranger = seedUser(email = "stranger@rm-guard.example.com")
         given().header("Authorization", bearer(owner))
             .`when`().delete("/api/tenants/$tenantId/members/$stranger")
             .then().statusCode(404).body("code", equalTo("member_not_found"))
@@ -124,7 +123,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun scopePurgeErasesTheGraceTombstonedOwnScope() {
-        val (tenantId, owner) = seedTenant("rm-purge.example.com", "owner@rm-purge.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-purge.example.com", "owner@rm-purge.example.com")
         val member = seedTenantMember(tenantId, "m@rm-purge.example.com")
         val personal = seedPersonal(tenantId, member)
 
@@ -142,7 +141,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant() {
-        val (tenantId, owner) = seedTenant("rm-rot1.example.com", "owner@rm-rot1.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-rot1.example.com", "owner@rm-rot1.example.com")
         val keyholder = seedTenantMember(tenantId, "kh@rm-rot1.example.com")
         val member = seedTenantMember(tenantId, "m@rm-rot1.example.com")
         val coShared = seedGroup(tenantId, keyholder) // owned by a remaining key-holder, not the removing owner
@@ -162,7 +161,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt() {
-        val (tenantId, owner) = seedTenant("rm-rot2.example.com", "owner@rm-rot2.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-rot2.example.com", "owner@rm-rot2.example.com")
         val keyholder = seedTenantMember(tenantId, "kh@rm-rot2.example.com")
         val member = seedTenantMember(tenantId, "m@rm-rot2.example.com")
         val group = seedGroup(tenantId, keyholder)
@@ -193,7 +192,7 @@ class MemberRemoveSliceTest {
 
     @Test
     fun secondRemovalCoalescesIntoTheOneLiveRotationJob() {
-        val (tenantId, owner) = seedTenant("rm-rot3.example.com", "owner@rm-rot3.example.com")
+        val (tenantId, owner) = seedActiveTenant("rm-rot3.example.com", "owner@rm-rot3.example.com")
         val keyholder = seedTenantMember(tenantId, "kh@rm-rot3.example.com")
         val first = seedTenantMember(tenantId, "a@rm-rot3.example.com")
         val second = seedTenantMember(tenantId, "b@rm-rot3.example.com")
@@ -214,8 +213,6 @@ class MemberRemoveSliceTest {
 
     // --- helpers ---
 
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     private fun claimRotation(userId: String) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["${CapabilityTags.SCOPE_ROTATION}"]}""")
@@ -231,25 +228,14 @@ class MemberRemoveSliceTest {
         }
 
     /** An ACTIVE tenant + its TENANT scope + a granted OWNER. Returns (tenantId, ownerUserId). */
-    private fun seedTenant(domain: String, ownerEmail: String): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val ownerId = seedUser(ownerEmail)
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-            membership(ownerId, tenantId, tenantId, MembershipEntity.OWNER)
-        }
-        return tenantId to ownerId
+    private fun seedActiveTenant(domain: String, ownerEmail: String): Pair<String, String> {
+        val ownerId = seedUser(email = ownerEmail)
+        return seedTenant(domain = domain, ownerEmail = ownerEmail, owner = ownerId) to ownerId
     }
 
     /** A tenant member: a tenant-scope membership (scopeId == tenantId). */
     private fun seedTenantMember(tenantId: String, email: String, role: String = MembershipEntity.MEMBER): String {
-        val id = seedUser(email)
+        val id = seedUser(email = email)
         QuarkusTransaction.requiringNew().run { membership(id, tenantId, tenantId, role) }
         return id
     }
@@ -292,18 +278,6 @@ class MemberRemoveSliceTest {
             id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
             this.scopeId = scopeId; this.role = role; wrappedGrant = "Z3JhbnQ="; this.createdAt = createdAt
         }.persist()
-    }
-
-    private fun seedUser(email: String, pubkey: String = "aWRlbnRpdHktcHVibGljLWtleQ=="): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = pubkey; wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 
     private fun hasMembership(userId: String, scopeId: String): Boolean =

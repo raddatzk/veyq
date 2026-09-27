@@ -1,11 +1,10 @@
 package com.veyq.app.features.admin.instance
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.admin.instance.InstanceReleaseSliceTest.Companion.seedUser
 import com.veyq.app.shared.adminchannel.givenAdminChannel
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
@@ -26,13 +25,10 @@ import org.junit.jupiter.api.Test
 @QuarkusTest
 class InstanceStoreProvisioningSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "store-prov-owner@example.com", "SERVER_OWNER")
-        seedUser(MEMBER_ID, "store-prov-member@example.com", "MEMBER")
+        ensureUser(OWNER_ID, "store-prov-owner@example.com", "SERVER_OWNER")
+        ensureUser(MEMBER_ID, "store-prov-member@example.com", "MEMBER")
     }
 
     @Test
@@ -68,9 +64,9 @@ class InstanceStoreProvisioningSliceTest {
             .body("code", equalTo("authentication_failed"))
     }
 
-    private fun ownerToken() = "Bearer ${sessions.issue(OWNER_ID).accessToken}"
+    private fun ownerToken() = bearer(OWNER_ID)
 
-    private fun memberToken() = "Bearer ${sessions.issue(MEMBER_ID).accessToken}"
+    private fun memberToken() = bearer(MEMBER_ID)
 
     private companion object {
         /** Distinct from every other class's: the `%test` H2 mem DB is JVM-shared across test classes. */

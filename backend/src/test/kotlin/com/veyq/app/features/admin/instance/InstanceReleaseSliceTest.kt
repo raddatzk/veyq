@@ -1,20 +1,17 @@
 package com.veyq.app.features.admin.instance
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.adminchannel.givenAdminChannel
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.restassured.RestAssured.given
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.Instant
 
 /**
  * Slice tests for the Server Owner's read of the running release (uc.admin.identify-instance-release,
@@ -43,13 +40,10 @@ class InstanceReleaseSliceTest {
         override fun getConfigOverrides() = mapOf("veyq.release.version" to STAMPED_RELEASE)
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "release-owner@example.com", "SERVER_OWNER")
-        seedUser(MEMBER_ID, "release-member@example.com", "MEMBER")
+        ensureUser(OWNER_ID, "release-owner@example.com", "SERVER_OWNER")
+        ensureUser(MEMBER_ID, "release-member@example.com", "MEMBER")
     }
 
     @Test
@@ -94,35 +88,14 @@ class InstanceReleaseSliceTest {
             .body("code", equalTo("authentication_failed"))
     }
 
-    private fun ownerToken() = "Bearer ${sessions.issue(OWNER_ID).accessToken}"
+    private fun ownerToken() = bearer(OWNER_ID)
 
-    private fun memberToken() = "Bearer ${sessions.issue(MEMBER_ID).accessToken}"
+    private fun memberToken() = bearer(MEMBER_ID)
 
     companion object {
         const val STAMPED_RELEASE = "77.13"
         private const val OWNER_ID = "instance-release-owner"
         private const val MEMBER_ID = "instance-release-member"
-
-        /**
-         * Distinct ids and emails per class: the `%test` H2 mem DB is JVM-shared across test classes, so a
-         * shared seed bleeds (cr-email-invite-send-hardening's `token_hash` collision, same trap).
-         */
-        fun seedUser(userId: String, email: String, role: String) {
-            QuarkusTransaction.requiringNew().run {
-                if (VeyqUser.findById(userId) == null) {
-                    VeyqUser().apply {
-                        id = userId
-                        this.email = email
-                        serverRole = role
-                        suiteId = "v1"
-                        identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                        wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                        authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                        createdAt = Instant.now()
-                    }.persist()
-                }
-            }
-        }
     }
 }
 
@@ -144,17 +117,14 @@ class InstanceReleaseUnstampedSliceTest {
         override fun getConfigOverrides() = mapOf("veyq.release.version" to "")
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @BeforeEach
     fun seed() {
-        InstanceReleaseSliceTest.seedUser(OWNER_ID, "unstamped-owner@example.com", "SERVER_OWNER")
+        ensureUser(OWNER_ID, "unstamped-owner@example.com", "SERVER_OWNER")
     }
 
     @Test
     fun anUnstampedBuildReportsAbsenceNotANumber() {
-        givenAdminChannel().header("Authorization", "Bearer ${sessions.issue(OWNER_ID).accessToken}")
+        givenAdminChannel().header("Authorization", bearer(OWNER_ID))
             .`when`().get("/api/instance/release")
             .then().statusCode(200)
             // The field is PRESENT and null — "no release stamp", not "the read is missing".

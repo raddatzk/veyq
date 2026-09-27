@@ -1,14 +1,13 @@
 package com.veyq.app.shared.adminchannel
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.admin.instance.InstanceReleaseSliceTest.Companion.seedUser
 import com.veyq.app.generated.AdminChannelOperations
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
 import io.restassured.specification.RequestSpecification
-import jakarta.inject.Inject
 import jakarta.ws.rs.HttpMethod
 import jakarta.ws.rs.Path
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -33,15 +32,12 @@ import java.util.UUID
 @QuarkusTest
 class AdminChannelGateSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "admin-gate-owner@example.com", "SERVER_OWNER")
+        ensureUser(OWNER_ID, "admin-gate-owner@example.com", "SERVER_OWNER")
     }
 
-    private fun owner() = "Bearer ${sessions.issue(OWNER_ID).accessToken}"
+    private fun owner() = bearer(OWNER_ID)
 
     /** What the public port answers for an `/api` path no resource declares — the shape a refusal must equal. */
     private fun unknownRoute(): Response = given().header("Authorization", owner()).`when`().get("/api/no-such-route")

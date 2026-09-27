@@ -1,17 +1,17 @@
 package com.veyq.app.shared.membership
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.TenantInviteEntity
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.JOB_TAG
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.Matchers.equalTo
 import org.hamcrest.Matchers.hasItem
 import org.hamcrest.Matchers.not
@@ -29,16 +29,14 @@ import java.util.UUID
 @QuarkusTest
 class ScopeAccessSliceTest {
 
-    @Inject lateinit var sessions: SessionService
-
-    private fun world() = ScopeAccessWorld(sessions).build()
+    private fun world() = ScopeAccessWorld().build()
 
     @Test
     fun claimHandsOutNoJobInASuspendedTenantOrADeletingGroup() {
         val w = world()
         val (live, deleting, suspended) = listOf(w.live, w.deleting, w.suspended).map { pendingJob(it.scopeId) }
 
-        fun claim(s: ScopeAccessWorld.Space) = given().header("Authorization", w.token(s.ownerId)).contentType(ContentType.JSON)
+        fun claim(s: ScopeAccessWorld.Space) = given().header("Authorization", bearer(s.ownerId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["$JOB_TAG"],"scopeId":"${s.scopeId}"}""").`when`().post("/api/tasks/claim")
 
         claim(w.suspended).then().statusCode(204)
@@ -55,13 +53,13 @@ class ScopeAccessSliceTest {
         QuarkusTransaction.requiringNew().run {
             listOf(w.live.tenantId, w.suspended.tenantId).forEach { ScopeEntity.update("sealedIcon = ?1 where id = ?2", B64, it) }
         }
-        given().header("Authorization", w.token(w.suspended.ownerId)).`when`().get("/api/scopes/my-tenants")
+        given().header("Authorization", bearer(w.suspended.ownerId)).`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200)
             .body("find { it.tenantId == '${w.suspended.tenantId}' }.status", equalTo("SUSPENDED"))
             .body("find { it.tenantId == '${w.suspended.tenantId}' }.wrappedGrant", nullValue())
             .body("find { it.tenantId == '${w.suspended.tenantId}' }.sealedIcon", nullValue())
         // control: an active tenant carries both
-        given().header("Authorization", w.token(w.live.ownerId)).`when`().get("/api/scopes/my-tenants")
+        given().header("Authorization", bearer(w.live.ownerId)).`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200)
             .body("find { it.tenantId == '${w.live.tenantId}' }.status", equalTo("ACTIVE"))
             .body("find { it.tenantId == '${w.live.tenantId}' }.wrappedGrant", notNullValue())
@@ -80,7 +78,7 @@ class ScopeAccessSliceTest {
         given().`when`().get("/api/shares/${w.live.shareId}").then().statusCode(200)
         given().`when`().get("/api/shares/${w.live.shareId}/terms").then().statusCode(200)
         // and nothing was written onto the share: restoring the group brings its link back unchanged
-        given().header("Authorization", w.token(w.deleting.ownerId)).`when`().post("/api/scopes/${w.deleting.scopeId}/restore").then().statusCode(204)
+        given().header("Authorization", bearer(w.deleting.ownerId)).`when`().post("/api/scopes/${w.deleting.scopeId}/restore").then().statusCode(204)
         given().`when`().get("/api/shares/${w.deleting.shareId}").then().statusCode(200)
     }
 
@@ -99,16 +97,16 @@ class ScopeAccessSliceTest {
     fun myShareListDropsSharesInSpacesTheCallerMayNoLongerRead() {
         val w = world()
         // the suspended tenant's own member no longer sees its share in "my shares" …
-        given().header("Authorization", w.token(w.suspended.ownerId)).`when`().get("/api/shares")
+        given().header("Authorization", bearer(w.suspended.ownerId)).`when`().get("/api/shares")
             .then().statusCode(200).body("shareId", not(hasItem(w.suspended.shareId)))
         // … nor does a creator who left the group
         QuarkusTransaction.requiringNew().run {
             MembershipEntity.delete("userId = ?1 and scopeId = ?2", w.deleting.ownerId, w.deleting.scopeId)
         }
-        given().header("Authorization", w.token(w.deleting.ownerId)).`when`().get("/api/shares")
+        given().header("Authorization", bearer(w.deleting.ownerId)).`when`().get("/api/shares")
             .then().statusCode(200).body("shareId", not(hasItem(w.deleting.shareId)))
         // control: a current member of a live group still does
-        given().header("Authorization", w.token(w.live.ownerId)).`when`().get("/api/shares")
+        given().header("Authorization", bearer(w.live.ownerId)).`when`().get("/api/shares")
             .then().statusCode(200).body("shareId", hasItem(w.live.shareId))
     }
 
@@ -116,7 +114,7 @@ class ScopeAccessSliceTest {
     fun onlyTheLeaseHolderCompletesOrFailsAJobAndADoneJobStaysANoOp() {
         val w = world()
         val other = keyHolderIn(w.live) // a member holding the key, but not the lease
-        fun post(user: String, verb: String) = given().header("Authorization", w.token(user)).contentType(ContentType.JSON)
+        fun post(user: String, verb: String) = given().header("Authorization", bearer(user)).contentType(ContentType.JSON)
             .body("{}").`when`().post("/api/tasks/${w.live.jobId}/$verb")
 
         post(other, "complete").then().statusCode(409).body("code", equalTo("not_lease_holder"))
@@ -131,9 +129,9 @@ class ScopeAccessSliceTest {
     fun aFormerTenantMemberReadsTheirGraceSpaceButCannotRestoreIt() {
         val w = world()
         // the tenant owner removes the deleting group's owner from the tenant: their solo group stays readable to them
-        given().header("Authorization", w.token(w.live.ownerId))
+        given().header("Authorization", bearer(w.live.ownerId))
             .`when`().delete("/api/tenants/${w.live.tenantId}/members/${w.deleting.ownerId}").then().statusCode(204)
-        val former = w.token(w.deleting.ownerId)
+        val former = bearer(w.deleting.ownerId)
 
         given().header("Authorization", former).`when`().get("/api/scopes/${w.deleting.scopeId}/nodes").then().statusCode(200)
         given().header("Authorization", former).`when`().post("/api/scopes/${w.deleting.scopeId}/restore")
@@ -141,7 +139,7 @@ class ScopeAccessSliceTest {
         given().header("Authorization", former).`when`().get("/api/tenants/${w.live.tenantId}/terms")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
         // control: an owner who still belongs to the tenant restores a deleting group
-        val stillMember = w.token(w.live.ownerId)
+        val stillMember = bearer(w.live.ownerId)
         given().header("Authorization", stillMember).`when`().delete("/api/scopes/${w.live.scopeId}").then().statusCode(204)
         given().header("Authorization", stillMember).`when`().post("/api/scopes/${w.live.scopeId}/restore").then().statusCode(204)
     }
@@ -159,12 +157,8 @@ class ScopeAccessSliceTest {
 
     /** A MEMBER of the space (and its tenant) who holds the key — accepted and granted. */
     private fun keyHolderIn(s: ScopeAccessWorld.Space): String {
-        val userId = UUID.randomUUID().toString()
+        val userId = seedUser()
         QuarkusTransaction.requiringNew().run {
-            com.veyq.app.shared.identity.VeyqUser().apply {
-                id = userId; email = "k-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
-                identityPublicKey = B64; wrappedIdentityPrivateKey = B64; authPublicKey = B64; createdAt = Instant.now()
-            }.persist()
             listOf(s.tenantId, s.scopeId).forEach { scope ->
                 MembershipEntity().apply {
                     id = UUID.randomUUID().toString(); this.userId = userId; tenantId = s.tenantId; scopeId = scope

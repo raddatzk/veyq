@@ -1,6 +1,7 @@
 package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.Instant
 
 /**
  * Slice tests for `POST /api/token/adopt` — the verb that converts a device-linking grant into the same cookie
@@ -42,19 +42,13 @@ class TokenAdoptSliceTest {
     lateinit var sessions: SessionService
 
     @BeforeEach
-    fun seedUser() {
+    fun seedAccount() {
         QuarkusTransaction.requiringNew().run(Runnable {
             if (VeyqUser.find("email", EMAIL).firstResult() == null) {
-                VeyqUser().apply {
-                    id = USER_ID
-                    email = EMAIL
-                    serverRole = "SERVER_OWNER"
-                    suiteId = "v1"
-                    identityPublicKey = "YWRvcHQtaWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "YWRvcHQtd3JhcHBlZC1pZGVudGl0eS1wcml2YXRl"
-                    authPublicKey = "YWRvcHQtYXV0aC1wdWJsaWMta2V5LTMyLWJ5dGVzISE="
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(
+                    id = USER_ID, email = EMAIL, serverRole = "SERVER_OWNER",
+                    authPublicKey = "YWRvcHQtYXV0aC1wdWJsaWMta2V5LTMyLWJ5dGVzISE=",
+                ).persist()
             }
         })
     }

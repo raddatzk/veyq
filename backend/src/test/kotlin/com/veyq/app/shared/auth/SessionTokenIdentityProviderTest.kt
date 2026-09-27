@@ -4,7 +4,7 @@ import com.veyq.app.features.account.login.AccessTokenEntity
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.crypto.Tokens
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.security.AuthenticationFailedException
 import io.quarkus.security.credential.TokenCredential
@@ -37,8 +37,8 @@ class SessionTokenIdentityProviderTest {
 
     @BeforeEach
     fun seed() {
-        seedUser(OWNER, "owner-idp@example.com", "SERVER_OWNER")
-        seedUser(MEMBER, "member-idp@example.com", "MEMBER")
+        ensureUser(OWNER, "owner-idp@example.com", "SERVER_OWNER")
+        ensureUser(MEMBER, "member-idp@example.com", "MEMBER")
     }
 
     @Test
@@ -83,23 +83,6 @@ class SessionTokenIdentityProviderTest {
     private fun authenticate(token: String): SecurityIdentity =
         identities.authenticate(TokenAuthenticationRequest(TokenCredential(token, "bearer")))
             .await().indefinitely()
-
-    private fun seedUser(userId: String, email: String, role: String) {
-        QuarkusTransaction.requiringNew().run {
-            if (VeyqUser.findById(userId) == null) {
-                VeyqUser().apply {
-                    id = userId
-                    this.email = email
-                    serverRole = role
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "cHJpdg=="
-                    authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                    createdAt = Instant.now()
-                }.persist()
-            }
-        }
-    }
 
     companion object {
         private const val OWNER = "idp-user-owner"

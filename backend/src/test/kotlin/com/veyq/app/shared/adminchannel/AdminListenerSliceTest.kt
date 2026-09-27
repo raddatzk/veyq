@@ -1,7 +1,7 @@
 package com.veyq.app.shared.adminchannel
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.admin.instance.InstanceReleaseSliceTest.Companion.seedUser
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured
 import io.restassured.RestAssured.given
@@ -21,14 +21,11 @@ import org.junit.jupiter.api.Test
 class AdminListenerSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var listener: AdminListener
 
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "admin-listener-owner@example.com", "SERVER_OWNER")
+        ensureUser(OWNER_ID, "admin-listener-owner@example.com", "SERVER_OWNER")
     }
 
     @Test
@@ -46,7 +43,7 @@ class AdminListenerSliceTest {
 
     @Test
     fun theListenerServesARoleGatedOperationWithAnOwnerSession() {
-        givenAdminChannel().header("Authorization", "Bearer ${sessions.issue(OWNER_ID).accessToken}")
+        givenAdminChannel().header("Authorization", bearer(OWNER_ID))
             .`when`().get("/api/instance/release")
             .then().statusCode(200)
     }

@@ -1,6 +1,7 @@
 package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -27,16 +28,7 @@ class SessionPurgeTest {
 
         QuarkusTransaction.requiringNew().run {
             if (VeyqUser.findById(PURGE_USER) == null) {
-                VeyqUser().apply {
-                    id = PURGE_USER
-                    email = "purge-user@example.com"
-                    serverRole = "MEMBER"
-                    suiteId = "v1"
-                    identityPublicKey = "aWQ="
-                    wrappedIdentityPrivateKey = "aWQ="
-                    authPublicKey = "YXV0aA=="
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(id = PURGE_USER, email = "purge-user@example.com").persist()
             }
             // A live session: unexpired access + refresh → kept, family kept.
             family(FAM_LIVE)

@@ -1,6 +1,5 @@
 package com.veyq.app.shared.membership
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
@@ -11,12 +10,12 @@ import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.bearer
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.specification.RequestSpecification
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -38,18 +37,15 @@ import kotlin.test.assertEquals
 @QuarkusTest
 class ClientMintedIdSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
     private lateinit var w: ScopeAccessWorld
 
     @BeforeEach
     fun seed() {
-        w = ScopeAccessWorld(sessions).build()
+        w = ScopeAccessWorld().build()
     }
 
     private fun asOwner(): RequestSpecification =
-        given().header("Authorization", w.token(w.live.ownerId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(w.live.ownerId)).contentType(ContentType.JSON)
 
     private fun asOwnerOnTenant(): RequestSpecification = asOwner().header("X-Forwarded-Host", w.live.domain)
 
@@ -239,7 +235,7 @@ class ClientMintedIdSliceTest {
             .then().statusCode(200).body("find { it.shareId == '${w.live.shareId}' }.scopeId", equalTo(w.live.scopeId))
         asOwner().`when`().get("/api/scopes/my-tenants")
             .then().statusCode(200).body("find { it.tenantId == '${w.live.tenantId}' }.grantedEpoch", equalTo(0))
-        given().header("Authorization", w.token(w.proposal)).header("X-Forwarded-Host", w.live.domain)
+        given().header("Authorization", bearer(w.proposal)).header("X-Forwarded-Host", w.live.domain)
             .`when`().get("/api/scopes/invitations")
             .then().statusCode(200).body("find { it.scopeId == '${w.live.scopeId}' }.nameEpoch", equalTo(0))
     }

@@ -1,21 +1,17 @@
 package com.veyq.app.shared.ratelimit
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.security.Authenticated
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
-import jakarta.inject.Inject
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.core.Response
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Test
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Proves [UserRateLimitFilter] actually enforces `@RateLimit(key = USER)`: the window keys on the **principal**,
@@ -49,12 +45,9 @@ class UserRateLimitTest {
         )
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     @Test
     fun aPrincipalIsThrottledPastItsAllowance() {
-        val bearer = bearerFor(seedUser())
+        val bearer = bearer(seedUser())
         repeat(3) { probe(bearer).then().statusCode(200) }
         probe(bearer).then().statusCode(429)
             .body("code", equalTo("rate_limited"))
@@ -63,8 +56,8 @@ class UserRateLimitTest {
 
     @Test
     fun onePrincipalTrippingTheLimitDoesNotThrottleAnother() {
-        val tripped = bearerFor(seedUser())
-        val bystander = bearerFor(seedUser())
+        val tripped = bearer(seedUser())
+        val bystander = bearer(seedUser())
         repeat(3) { probe(tripped).then().statusCode(200) }
         probe(tripped).then().statusCode(429) // this principal is now throttled...
         probe(bystander).then().statusCode(200) // ...but a different one is unaffected, from the same address.
@@ -78,21 +71,6 @@ class UserRateLimitTest {
     }
 
     private fun probe(bearer: String) = given().header("Authorization", bearer).`when`().get(PATH)
-
-    private fun bearerFor(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "user-rate-limit-$userId@example.com"
-                serverRole = "MEMBER"; suiteId = "v1"; identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="; authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private companion object {
         const val PATH = "/test/user-rate-limited-probe"

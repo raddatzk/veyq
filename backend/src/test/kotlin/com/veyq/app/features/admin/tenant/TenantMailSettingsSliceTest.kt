@@ -1,12 +1,11 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.crypto.ConfigSecretSeal
 import com.veyq.app.shared.crypto.SealedSecret
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -31,11 +30,8 @@ import kotlin.test.assertTrue
 @QuarkusTest
 class TenantMailSettingsSliceTest {
 
-    @Inject lateinit var sessions: SessionService
     @Inject lateinit var store: TenantStore
     @Inject lateinit var seal: ConfigSecretSeal
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     private fun settingsBody(
         host: String? = "smtp.example.com",
@@ -125,7 +121,7 @@ class TenantMailSettingsSliceTest {
     @Test
     fun nonOwnerMemberIsForbidden() {
         val (tenantId, _) = seedActiveTenant("mail-authz.example.com", "owner@mail-authz.example.com")
-        val member = seedUser("member@mail-authz.example.com")
+        val member = seedUser(email = "member@mail-authz.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
 
         given().header("Authorization", bearer(member))
@@ -140,7 +136,7 @@ class TenantMailSettingsSliceTest {
     @Test
     fun aNonMemberIs404() {
         val (tenantId, _) = seedActiveTenant("mail-outsider.example.com", "owner@mail-outsider.example.com")
-        val outsider = seedUser("outsider@mail-outsider.example.com")
+        val outsider = seedUser(email = "outsider@mail-outsider.example.com")
         given().header("Authorization", bearer(outsider))
             .`when`().get("/api/tenants/$tenantId/mail-settings")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
@@ -149,19 +145,8 @@ class TenantMailSettingsSliceTest {
     // --- helpers (mirror TenantTermsSliceTest) ---
 
     private fun seedActiveTenant(domain: String, ownerEmail: String): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val ownerId = seedUser(ownerEmail)
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-        }
-        seedMembership(tenantId, ownerId, MembershipEntity.OWNER)
-        return tenantId to ownerId
+        val ownerId = seedUser(email = ownerEmail)
+        return seedTenant(domain = domain, ownerEmail = ownerEmail, owner = ownerId) to ownerId
     }
 
     private fun seedMembership(tenantId: String, userId: String, role: String) =
@@ -171,17 +156,4 @@ class TenantMailSettingsSliceTest {
                 scopeId = tenantId; this.role = role; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
         }
-
-    private fun seedUser(email: String): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

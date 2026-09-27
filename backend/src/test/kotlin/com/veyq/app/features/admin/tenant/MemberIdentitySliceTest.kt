@@ -1,12 +1,11 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.TenantProfileStore
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -29,10 +28,7 @@ import java.util.UUID
 @QuarkusTest
 class MemberIdentitySliceTest {
 
-    @Inject lateinit var sessions: SessionService
     @Inject lateinit var profiles: TenantProfileStore
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun twoMembersCannotShareAUsernameInOneTenant() {
@@ -144,26 +140,12 @@ class MemberIdentitySliceTest {
     // --- helpers ---
 
     private fun seedActiveTenant(domain: String, ownerEmail: String): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val ownerId = seedUser(ownerEmail)
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); userId = ownerId; this.tenantId = tenantId
-                scopeId = tenantId; role = MembershipEntity.OWNER; wrappedGrant = "b3duZXItZ3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-        }
-        return tenantId to ownerId
+        val ownerId = seedUser(email = ownerEmail)
+        return seedTenant(domain = domain, ownerEmail = ownerEmail, owner = ownerId) to ownerId
     }
 
     private fun seedGrantedMember(tenantId: String, email: String, pubkey: String): String {
-        val userId = seedUser(email, pubkey)
+        val userId = seedUser(email = email, identityPublicKey = pubkey)
         QuarkusTransaction.requiringNew().run {
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
@@ -185,18 +167,6 @@ class MemberIdentitySliceTest {
                 expiresAt = Instant.now().plus(7, ChronoUnit.DAYS); createdAt = Instant.now()
             }.persist()
         }
-
-    private fun seedUser(email: String, pubkey: String = "aWRlbnRpdHktcHVibGljLWtleQ=="): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = pubkey; wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private fun memberRegisterBody(secret: String, username: String, sealedName: String? = null): String {
         val nameField = sealedName?.let { ""","sealedName":"$it"""" } ?: ""

@@ -1,11 +1,11 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.shared.membership.TestAdmission
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -33,19 +33,14 @@ import java.util.UUID
 class TenantOwnerGateTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var tenantStore: TenantStore
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun ordinaryMemberWhoOwnsScopesIsRefusedAtEveryOwnerGatedEndpoint() {
         val tenantId = seedActiveTenant("gate.example.com")
         // the escalation actor: belongs to the tenant, OWNER of a personal scope AND a self-made group, but has NO
         // OWNER row on the root scope — a tenant *member*, not a tenant *owner*.
-        val actor = seedUser("actor@gate.example.com")
+        val actor = seedUser(email = "actor@gate.example.com")
         membership(actor, tenantId, tenantId, MembershipEntity.MEMBER)
         seedScope(tenantId, ScopeEntity.PERSONAL).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
         val group = seedScope(tenantId, ScopeEntity.GROUP).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
@@ -73,7 +68,7 @@ class TenantOwnerGateTest {
 
         // --- listScopeMembers (ADR 0023 email gate): the actor is a member+grant-holder of their own group, so they
         // pass the scope-member/grant gates, but as a non-tenant-owner they must see NO member emails.
-        val other = seedUser("other@gate.example.com").also { membership(it, tenantId, group, MembershipEntity.MEMBER) }
+        val other = seedUser(email = "other@gate.example.com").also { membership(it, tenantId, group, MembershipEntity.MEMBER) }
         given().header("Authorization", a)
             .`when`().get("/api/scopes/$group/members")
             .then().statusCode(200)
@@ -88,11 +83,11 @@ class TenantOwnerGateTest {
         // The mint below is the proof that the owner gate *passes*, so this tenant has to be able to send:
         // since ADR 0055 §2 a member invite with no mailer is a 503, which would say nothing about authz.
         val tenantId = seedActiveTenant("owner.example.com", mail)
-        val owner = seedUser("owner@owner.example.com")
+        val owner = seedUser(email = "owner@owner.example.com")
         membership(owner, tenantId, tenantId, MembershipEntity.OWNER) // OWNER on the root scope — a real tenant owner
         // a group the owner belongs to, with another member carrying an email
         val group = seedScope(tenantId, ScopeEntity.GROUP).also { membership(owner, tenantId, it, MembershipEntity.OWNER) }
-        val member = seedUser("m@owner.example.com").also { membership(it, tenantId, group, MembershipEntity.MEMBER) }
+        val member = seedUser(email = "m@owner.example.com").also { membership(it, tenantId, group, MembershipEntity.MEMBER) }
 
         val o = bearer(owner)
         // passes the owner gate: mint succeeds (201), list succeeds (200) — not the 403 the escalation actor gets
@@ -113,16 +108,7 @@ class TenantOwnerGateTest {
     // --- seed helpers ---
 
     private fun seedActiveTenant(domain: String, mailbox: TestMailbox? = null): String {
-        val tenantId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; ownerEmail = "o@$domain"
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-        }
+        val tenantId = seedTenant(domain = domain, ownerEmail = "o@$domain")
         mailbox?.receiveFor(tenantStore, tenantId, domain)
         return tenantId
     }
@@ -149,17 +135,5 @@ class TenantOwnerGateTest {
                 this.scopeId = scopeId; this.role = role; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
         }
-    }
-
-    private fun seedUser(email: String): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

@@ -3,6 +3,7 @@ package com.veyq.app.features.account.pairing
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -140,16 +141,7 @@ class PairingPurgeTest {
 
         fun seed(userId: String, email: String) {
             if (VeyqUser.findById(userId) != null) return
-            VeyqUser().apply {
-                id = userId
-                this.email = email
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
+            newUser(id = userId, email = email).persist()
         }
     }
 }

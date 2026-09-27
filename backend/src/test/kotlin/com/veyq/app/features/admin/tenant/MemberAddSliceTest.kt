@@ -1,13 +1,12 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.shared.membership.TestAdmission
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.shared.crypto.Tokens
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -33,9 +32,6 @@ import java.util.UUID
 class MemberAddSliceTest {
 
     @Inject lateinit var store: TenantStore
-    @Inject lateinit var sessions: SessionService
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun ownerMintsMemberInviteOutsiderIs404(): Unit = TestMailbox(MINT_SMTP_PORT).start().use { mail ->
@@ -48,7 +44,7 @@ class MemberAddSliceTest {
 
         // An outsider (not a member of the tenant at all) cannot admit members — and gets the same answer as for
         // a tenant that does not exist (membership is the first guard, ADR 0042 / cr-0162).
-        val outsider = seedUser("outsider@mint.example.com")
+        val outsider = seedUser(email = "outsider@mint.example.com")
         given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"email":"x@mint.example.com",${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/$tenantId/member-invites")
@@ -171,7 +167,7 @@ class MemberAddSliceTest {
         val (tenantId, _) = seedActiveTenant("existing.example.com", "owner@existing.example.com")
         val secret = "existing-member-secret"
         seedMemberInvite(tenantId, "existing@existing.example.com", secret)
-        val existing = seedUser("existing@existing.example.com") // already registered before the invite
+        val existing = seedUser(email = "existing@existing.example.com") // already registered before the invite
 
         given().header("Authorization", bearer(existing)).contentType(ContentType.JSON)
             .body("""{"bootstrapSecret":"$secret","username":"existingmbr"}""") // no grant — an existing-account member joins grant-less
@@ -198,7 +194,7 @@ class MemberAddSliceTest {
     @Test
     fun memberDirectoryListsMembersWithGrantStatus() {
         val (tenantId, owner) = seedActiveTenant("dir.example.com", "owner@dir.example.com")
-        val pending = seedUser("pending@dir.example.com", pubkey = "cGVuZGluZy1wdWJrZXk=")
+        val pending = seedUser(email = "pending@dir.example.com", identityPublicKey = "cGVuZGluZy1wdWJrZXk=")
         QuarkusTransaction.requiringNew().run {
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString(); userId = pending; this.tenantId = tenantId
@@ -216,7 +212,7 @@ class MemberAddSliceTest {
 
         // A non-member cannot read the directory, and gets the same answer as for a scope that does not exist
         // (membership is the first guard, ADR 0042 / cr-0162 — no scope enumeration).
-        val outsider = seedUser("nope@dir.example.com")
+        val outsider = seedUser(email = "nope@dir.example.com")
         given().header("Authorization", bearer(outsider))
             .`when`().get("/api/scopes/$tenantId/members")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
@@ -247,21 +243,8 @@ class MemberAddSliceTest {
     /** An ACTIVE tenant + its TENANT scope + a granted OWNER. Returns (tenantId, ownerUserId).
      *  Pass a [mailbox] whenever the test actually invites someone — without a sendable mailer that is now a 503. */
     private fun seedActiveTenant(domain: String, ownerEmail: String, mailbox: TestMailbox? = null): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val ownerId = seedUser(ownerEmail)
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); userId = ownerId; this.tenantId = tenantId
-                scopeId = tenantId; role = MembershipEntity.OWNER; wrappedGrant = "b3duZXItZ3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-        }
+        val ownerId = seedUser(email = ownerEmail)
+        val tenantId = seedTenant(domain = domain, ownerEmail = ownerEmail, owner = ownerId)
         mailbox?.receiveFor(store, tenantId, domain)
         return tenantId to ownerId
     }
@@ -273,18 +256,6 @@ class MemberAddSliceTest {
                 com.veyq.app.shared.membership.TestAdmission.admission(), checkEpoch = false,
             )
         }
-
-    private fun seedUser(email: String, pubkey: String = "aWRlbnRpdHktcHVibGljLWtleQ=="): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = pubkey; wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private fun membershipRole(userId: String, tenantId: String): String? =
         QuarkusTransaction.requiringNew().call {

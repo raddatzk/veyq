@@ -1,18 +1,17 @@
 package com.veyq.app.shared.http
 
 import com.veyq.app.shared.membership.TestAdmission
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.membership.ScopeAccessWorld
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.JOB_TAG
+import com.veyq.app.testing.TestFixtures.bearer
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
-import jakarta.inject.Inject
 import jakarta.ws.rs.DELETE
 import jakarta.ws.rs.GET
 import jakarta.ws.rs.PATCH
@@ -53,8 +52,6 @@ import java.util.jar.JarFile
  */
 @QuarkusTest
 class OperatorBlindProbeTest {
-
-    @Inject lateinit var sessions: SessionService
 
     /** How an operation names the space it acts on — which id a stranger would have to guess. */
     private enum class Address { SCOPE, NODE, SHARE, JOB, TENANT, HOST }
@@ -292,7 +289,7 @@ class OperatorBlindProbeTest {
     }
 
     private fun probeOne(id: String, probe: Probe, write: Boolean) {
-        val w = ScopeAccessWorld(sessions).build()
+        val w = ScopeAccessWorld().build()
         probe.prepare(w)
         val checks = mutableListOf<Executable>()
 
@@ -353,7 +350,7 @@ class OperatorBlindProbeTest {
     }
 
     private fun fire(w: ScopeAccessWorld, userId: String, call: Call): Response {
-        val spec = given().header("Authorization", w.token(userId)).header("X-Forwarded-Host", call.host ?: w.unclaimedHost)
+        val spec = given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", call.host ?: w.unclaimedHost)
         call.body?.let { spec.contentType(ContentType.JSON).body(it) }
         return when (call.method) {
             "GET" -> spec.`when`().get(call.path)
@@ -373,11 +370,11 @@ class OperatorBlindProbeTest {
     }
 
     private fun trashNode(w: ScopeAccessWorld, s: ScopeAccessWorld.Space) {
-        given().header("Authorization", w.token(s.ownerId)).`when`().delete("/api/scopes/${s.scopeId}/nodes/${s.nodeId}").then().statusCode(204)
+        given().header("Authorization", bearer(s.ownerId)).`when`().delete("/api/scopes/${s.scopeId}/nodes/${s.nodeId}").then().statusCode(204)
     }
 
     private fun trashMedia(w: ScopeAccessWorld, s: ScopeAccessWorld.Space) {
-        given().header("Authorization", w.token(s.ownerId)).`when`().delete("/api/scopes/${s.scopeId}/media/${s.mediaId}").then().statusCode(204)
+        given().header("Authorization", bearer(s.ownerId)).`when`().delete("/api/scopes/${s.scopeId}/media/${s.mediaId}").then().statusCode(204)
     }
 
     // --- the operation set, derived from the generated API interfaces ---------------------------------------

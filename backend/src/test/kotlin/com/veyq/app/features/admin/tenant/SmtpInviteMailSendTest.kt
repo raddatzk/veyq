@@ -8,12 +8,12 @@ import com.veyq.app.shared.crypto.ConfigSecretKeyGuard
 import com.veyq.app.shared.crypto.ConfigSecretSeal
 import com.veyq.app.shared.instance.InstanceStore
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
 import org.junit.jupiter.api.Test
 import java.time.Instant
-import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -42,7 +42,7 @@ class SmtpInviteMailSendTest {
         try {
             greenMail.setUser("smtpuser", "smtppass") // Vert.x AUTHs with the unsealed password against this user
             val domain = "send.example.com"
-            seedTenant(domain)
+            seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
             val sealed = seal.seal("smtppass")
             QuarkusTransaction.requiringNew().run {
                 store.saveMailSettings(
@@ -85,7 +85,7 @@ class SmtpInviteMailSendTest {
             // Deliberately no mail-settings row ⇒ the port's "cannot send" answer. Whether that becomes an actual
             // copy-link is the CALLER's business: only the ServerOwner bootstrap invite still has one (ADR 0055
             // §3); a member invite is refused with 503 before it ever reaches this port (§2).
-            seedTenant(domain)
+            seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
 
             val delivery = mailer.sendInvite(tenantIdByDomain(domain), domain, "x@elsewhere.example", "TOKEN-xyz", Instant.parse("2026-07-31T12:00:00Z"))
 
@@ -106,7 +106,7 @@ class SmtpInviteMailSendTest {
         greenMail.start()
         try {
             val domain = "authless.example.com"
-            seedTenant(domain)
+            seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
             QuarkusTransaction.requiringNew().run {
                 store.saveMailSettings(
                     tenantIdByDomain(domain),
@@ -136,7 +136,7 @@ class SmtpInviteMailSendTest {
         // errors (connection refused) and must surface as FAILED — no longer silently swallowed. The owner still
         // holds the returned copy-link (the mint already committed, in the real flow, before this send ran).
         val domain = "dead-smtp.example.com"
-        seedTenant(domain)
+        seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
         val sealed = seal.seal("smtppass")
         QuarkusTransaction.requiringNew().run {
             store.saveMailSettings(
@@ -169,7 +169,7 @@ class SmtpInviteMailSendTest {
         try {
             greenMail.setUser("smtpuser", "smtppass")
             val domain = "key-changed.example.com"
-            seedTenant(domain)
+            seedTenant(domain = domain, ownerEmail = "owner@$domain", tenantScope = false)
             val sealed = seal.seal("smtppass") // sealed under the CURRENT (OK) key
             QuarkusTransaction.requiringNew().run {
                 store.saveMailSettings(
@@ -192,15 +192,6 @@ class SmtpInviteMailSendTest {
         } finally {
             keyState.recordReseal() // restore OK for the rest of the JVM-shared suite
             greenMail.stop()
-        }
-    }
-
-    private fun seedTenant(domain: String) {
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = UUID.randomUUID().toString(); name = "Fam"; this.domain = domain
-                ownerEmail = "owner@$domain"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
         }
     }
 

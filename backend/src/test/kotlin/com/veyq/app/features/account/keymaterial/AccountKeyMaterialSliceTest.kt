@@ -6,6 +6,7 @@ import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -33,8 +34,8 @@ class AccountKeyMaterialSliceTest {
 
     @BeforeEach
     fun seed() {
-        seedUser(USER_A, "a-keymat@example.com", A_PW_WRAP, A_REC_WRAP, A_PRIV)
-        seedUser(USER_B, "b-keymat@example.com", B_PW_WRAP, B_REC_WRAP, B_PRIV)
+        seedAccount(USER_A, "a-keymat@example.com", A_PW_WRAP, A_REC_WRAP, A_PRIV)
+        seedAccount(USER_B, "b-keymat@example.com", B_PW_WRAP, B_REC_WRAP, B_PRIV)
     }
 
     @Test
@@ -76,16 +77,10 @@ class AccountKeyMaterialSliceTest {
         val userId = "6b65796d-6174-4000-8000-00000000b065"
         QuarkusTransaction.requiringNew().run {
             if (VeyqUser.findById(userId) == null) {
-                VeyqUser().apply {
-                    id = userId
-                    email = "bogus-keymat@example.com"
-                    serverRole = "SERVER_OWNER"
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "QS1pZGVudGl0eS1wcml2"
-                    authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(
+                    id = userId, email = "bogus-keymat@example.com", serverRole = "SERVER_OWNER",
+                    wrappedIdentityPrivateKey = "QS1pZGVudGl0eS1wcml2",
+                ).persist()
                 persistWrap(userId, "PASSWORD", A_PW_WRAP)
                 persistWrap(userId, "FUTURE_METHOD", A_REC_WRAP) // not in the enum → must be skipped, not 500
             }
@@ -135,19 +130,11 @@ class AccountKeyMaterialSliceTest {
     private fun get(token: String) =
         given().header("Authorization", "Bearer $token").`when`().get(PATH)
 
-    private fun seedUser(userId: String, email: String, pwWrap: String, recWrap: String, priv: String) {
+    private fun seedAccount(userId: String, email: String, pwWrap: String, recWrap: String, priv: String) {
         QuarkusTransaction.requiringNew().run {
             if (VeyqUser.findById(userId) == null) {
-                VeyqUser().apply {
-                    id = userId
-                    this.email = email
-                    serverRole = "SERVER_OWNER"
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = priv
-                    authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(id = userId, email = email, serverRole = "SERVER_OWNER", wrappedIdentityPrivateKey = priv)
+                    .persist()
                 persistWrap(userId, "PASSWORD", pwWrap)
                 persistWrap(userId, "RECOVERY", recWrap)
             }

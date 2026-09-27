@@ -1,8 +1,7 @@
 package com.veyq.app.features.account.identitypins
 
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -10,7 +9,6 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -103,23 +101,6 @@ class IdentityPinsSliceTest {
             .contentType(ContentType.JSON)
             .body("""{"blob":"$blob","version":$version}""")
             .`when`().put(PATH)
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     companion object {
         private const val PATH = "/api/account/identity-pins"

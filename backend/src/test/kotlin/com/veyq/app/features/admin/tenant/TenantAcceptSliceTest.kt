@@ -1,12 +1,13 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.shared.membership.TestAdmission
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -31,9 +32,6 @@ class TenantAcceptSliceTest {
 
     @Inject
     lateinit var store: TenantStore
-
-    @Inject
-    lateinit var sessions: SessionService
 
     @Test
     fun registerAndAcceptActivatesTenant() {
@@ -61,8 +59,8 @@ class TenantAcceptSliceTest {
     fun existingUserAcceptActivatesTenant() {
         val secret = "acc-secret-1"
         val id = seedPendingTenant("acc.example.com", "owner2@example.com", secret)
-        val userId = seedUser("owner2@example.com")
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        val userId = seedUser(email = "owner2@example.com")
+        given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(200).body("status", equalTo("ACTIVE"))
@@ -75,8 +73,8 @@ class TenantAcceptSliceTest {
         // cr-0106: the existing-account OWNER accept threads the optional sealedName onto the fresh profile row.
         val secret = "acc-name-secret"
         val id = seedPendingTenant("accname.example.com", "owner-name@example.com", secret)
-        val userId = seedUser("owner-name@example.com")
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        val userId = seedUser(email = "owner-name@example.com")
+        given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON)
             .body("""{"bootstrapSecret":"$secret","username":"named","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()},"sealedName":"c2VhbGVkLW5hbWU="}""")
             .`when`().post("/api/tenants/accept")
@@ -86,8 +84,8 @@ class TenantAcceptSliceTest {
         // And a plain accept (no name) leaves it null — a grant-less join or an owner who skipped the field.
         val secret2 = "acc-noname-secret"
         val id2 = seedPendingTenant("accnoname.example.com", "owner-noname@example.com", secret2)
-        val userId2 = seedUser("owner-noname@example.com")
-        given().header("Authorization", "Bearer ${sessions.issue(userId2).accessToken}")
+        val userId2 = seedUser(email = "owner-noname@example.com")
+        given().header("Authorization", bearer(userId2))
             .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret2","username":"noname","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept").then().statusCode(200)
         assert(profileSealedName(id2, userId2) == null)
@@ -121,8 +119,8 @@ class TenantAcceptSliceTest {
     fun emailMismatchIsForbidden() {
         val secret = "mm-secret-1"
         seedPendingTenant("mm.example.com", "intended@example.com", secret)
-        val otherId = seedUser("other@example.com")
-        given().header("Authorization", "Bearer ${sessions.issue(otherId).accessToken}")
+        val otherId = seedUser(email = "other@example.com")
+        given().header("Authorization", bearer(otherId))
             .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"accowner","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
             .then().statusCode(403).body("code", equalTo("not_invited_owner"))
@@ -132,7 +130,7 @@ class TenantAcceptSliceTest {
     fun registerWhenEmailTakenIs409() {
         val secret = "taken-secret-1"
         seedPendingTenant("taken.example.com", "taken@example.com", secret)
-        seedUser("taken@example.com")
+        seedUser(email = "taken@example.com")
         given().contentType(ContentType.JSON).body(registerBody(secret))
             .`when`().post("/api/tenants/accept/register")
             .then().statusCode(409).body("code", equalTo("email_taken"))
@@ -167,23 +165,6 @@ class TenantAcceptSliceTest {
         QuarkusTransaction.requiringNew().call {
             store.createPendingTenant("Fam", domain, ownerEmail, Tokens.hash(secret), Instant.now().plus(ttl, ChronoUnit.DAYS)).first
         }
-
-    private fun seedUser(email: String, role: String = "MEMBER"): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                this.email = email
-                serverRole = role
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private fun ownerMembershipCount(tenantId: String): Long =
         QuarkusTransaction.requiringNew().call {

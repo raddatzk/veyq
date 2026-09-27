@@ -3,6 +3,7 @@ package com.veyq.app.features.account.keymaterial
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -13,7 +14,6 @@ import org.hamcrest.CoreMatchers.hasItems
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -205,16 +205,7 @@ class AccountWrapsSliceTest {
     private fun seedUserWithPasswordWrap(userId: String, email: String) {
         QuarkusTransaction.requiringNew().run {
             if (VeyqUser.findById(userId) == null) {
-                VeyqUser().apply {
-                    id = userId
-                    this.email = email
-                    serverRole = "SERVER_OWNER"
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                    authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(id = userId, email = email, serverRole = "SERVER_OWNER").persist()
                 MasterKeyWrapEntity().apply {
                     id = UUID.nameUUIDFromBytes("$userId-pw".toByteArray()).toString()
                     this.userId = userId

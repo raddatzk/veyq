@@ -1,7 +1,7 @@
 package com.veyq.app.shared.adminchannel
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.admin.instance.InstanceReleaseSliceTest.Companion.seedUser
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
@@ -35,19 +35,16 @@ class AdminChannelForgedHeadersSliceTest {
     }
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var listener: AdminListener
 
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "admin-forged-owner@example.com", "SERVER_OWNER")
+        ensureUser(OWNER_ID, "admin-forged-owner@example.com", "SERVER_OWNER")
     }
 
     private fun forged(spec: RequestSpecification): RequestSpecification {
         val admin = "localhost:${listener.port()}"
-        return spec.header("Authorization", "Bearer ${sessions.issue(OWNER_ID).accessToken}")
+        return spec.header("Authorization", bearer(OWNER_ID))
             .header("Forwarded", "for=10.0.0.1;host=$admin;proto=http")
             .header("X-Forwarded-Host", admin)
             .header("X-Forwarded-Port", listener.port().toString())
