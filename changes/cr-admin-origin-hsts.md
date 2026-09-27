@@ -1,7 +1,7 @@
 ---
 id: cr-admin-origin-hsts
 title: The admin origin sends HSTS under the app's switch, from an nginx that is still maintained
-status: planned
+status: in-progress
 satisfies: [cc.security.csp]
 adrs: ["0069", "0065", "0064"]
 invariants: [self-hostable by default]
@@ -119,6 +119,58 @@ receiving builds, onto the maintained 1.30 stable branch. Inbox #176.
         flipped renders it into both Deployments;
       - the guards that read those files are green:
         `grep -ln "charts/veyq\|docker-compose.prod\|\.env\.example\|admin-web/Dockerfile" scripts/validate_*.py`.
+
+      **Record, 2026-09-27 — built; the live half NOT run** (that session had no Docker runs allowed, and this
+      Mac has no nginx). Measured:
+      - [x] The base. Registry API (anonymous token, `HEAD /v2/nginxinc/nginx-unprivileged/manifests/<tag>`,
+        OCI index accept): `1.30-alpine` → `sha256:4714e0b1…0bc5`; `1.29-alpine` → `sha256:0c79d56a…fbe6`, the
+        old pin, which is the control on the method. The amd64 config blob of `1.30-alpine`: `User 101`,
+        `ExposedPorts 8080/tcp`, entrypoint `/docker-entrypoint.sh`, `NGINX_VERSION=1.30.5` — the same shape as
+        `1.29-alpine` (`1.29.8`). The pid path and `conf.d` ownership are inside layers and stay a live-build
+        fact.
+      - [x] The merge reaches the location. nginx `release-1.30.0` `ngx_http_headers_filter_module.c`,
+        `ngx_http_headers_merge_conf`: `ngx_conf_merge_uint_value(conf->headers_inherit, prev->headers_inherit,
+        ON)`, then the parent's headers are appended when the result is `MERGE`. A location that does not set
+        the directive takes the server's `merge`, so it is declared once. The "believed, not measured" above is
+        now read in the source; the bite below is what proves it served.
+      - [x] The hook. A one-shot run of the real hook against the real template, its two `/etc/nginx` paths
+        redirected to a temp dir (macOS `sh`, not busybox `ash`): unset, empty and `true` render
+        `add_header Strict-Transport-Security "max-age=15552000" always;`; `false` renders it with a leading
+        `#`; `bogus` and `TRUE` exit 1 with `veyq-admin: VEYQ_HSTS_ENABLED must be 'true' or 'false', got '…'`
+        on stderr and render no file. The image's `docker-entrypoint.sh` runs hooks under `set -e` (read in
+        `nginxinc/docker-nginx-unprivileged` `stable/alpine-slim`), so that exit stops the container.
+      - [x] `python3 scripts/validate_images_run_unprivileged.py` → OK (3 runtime stages);
+        `python3 scripts/validate_image_pins.py` → OK (19 references).
+      - [x] `docker compose --env-file <scratch> -f infra/docker-compose.prod.yml config -q` → exit 0; `config
+        --format json` with the key unset / `false` / `true`: app `VEYQ_HTTP_HSTS_ENABLED` and admin
+        `VEYQ_HSTS_ENABLED` are `true`/`true`, `false`/`false`, `true`/`true`.
+      - [x] `helm lint charts/veyq -f charts/veyq/ci/lint-values.yaml` → 0 failed; `helm template` default and
+        `--set hsts.enabled=false` render `"true"`/`"false"` into both Deployments; `--set-string
+        hsts.enabled=bogus` is refused by the schema (`got string, want boolean`).
+      - [x] The guards that read those files: `validate_images_run_unprivileged`, `validate_image_pins`,
+        `validate_compose_posture`, `validate_app_volume_ownership`, `validate_release_identity`,
+        `validate_tenant_ingress_triggers`, `chart_meta_check` → all exit 0.
+      - [ ] **OPEN — the three runs and the bite.** From the repo root, on port 18081 (never 8080):
+        ```sh
+        docker build -f admin-web/Dockerfile -t veyq-admin:hsts .
+        # run 1: switch unset. Run 2: the same, with `-e VEYQ_HSTS_ENABLED=false` on the `docker run`.
+        docker run -d --name vah -p 127.0.0.1:18081:8080 veyq-admin:hsts
+        A=$(docker exec vah sh -c 'ls /usr/share/nginx/html/assets | grep "\.js$" | head -1')
+        for p in / /setup "/assets/$A" /api/setup; do echo "== $p"; curl -sI "http://127.0.0.1:18081$p"; done
+        docker rm -f vah
+        # run 3: must exit non-zero and name VEYQ_HSTS_ENABLED
+        docker run --rm -e VEYQ_HSTS_ENABLED=bogus veyq-admin:hsts; echo "exit=$?"
+        # bite: injected into a copy mounted over the image's template, so the tree is never touched
+        grep -v 'add_header_inherit merge;' admin-web/nginx.conf.template > /tmp/vah-bite.template
+        docker run -d --name vah -p 127.0.0.1:18081:8080 \
+          -v /tmp/vah-bite.template:/etc/nginx/veyq.conf.template:ro veyq-admin:hsts
+        for p in /setup "/assets/$A"; do echo "== $p"; curl -sI "http://127.0.0.1:18081$p"; done
+        docker rm -f vah
+        ```
+        Expected: run 1, all four paths carry STS and the four headers, `/` and `/setup` also `no-store`, and
+        `/api/setup` is a 502; run 2, no STS anywhere and the four headers still there; run 3, exit ≠ 0 with
+        the message above; bite, `/setup` keeps only `Cache-Control` while the asset keeps all five. Run 1 is
+        also the first proof that the 1.30 image builds and starts at all (`apk add nodejs`, uid 101, `conf.d`).
 - [ ] 2 docs — **built stops reading as decided.**
       - cc.security.csp § *admin-web*: its "not yet built" line goes. § *Verification* gains the live proof and
         names what it does not cover (below).
@@ -129,6 +181,12 @@ receiving builds, onto the maintained 1.30 stable branch. Inbox #176.
       Locator:
       `git grep -n -i "hsts\|Strict-Transport\|#176\|add_header" -- docs infra charts admin-web wiki ':!docs/inbox.md'`.
       · Done when: the trust-chain guards are green (`for f in scripts/validate_*.py; do python3 "$f"; done`).
+
+      **Record, 2026-09-27 — done except the DONE flip.** cc.security.csp: the status line and § *admin-web*
+      describe what is built, and § *Verification* records the checks above and names the served-header proof
+      as not yet run. `infra/README.md`: the switch sentence covers both origins and the refusal. Inbox #176 is
+      **in progress** with the live runs named as open. It becomes DONE, and § *Verification*'s "not verified
+      yet" bullet becomes the record of those runs, once phase 1's open item is run.
 
 ## Definition of done
 
@@ -147,3 +205,19 @@ receiving builds, onto the maintained 1.30 stable branch. Inbox #176.
   cc.security.csp § *Verification* (phase 2).
 
 ## Retrospective
+
+- **The CR's whole proof was one Docker session, and this session could run no Docker.** Every served-header
+  check hung on `docker build`/`run`, so the CR cannot close here, though the code is finished. Two of its
+  "believed" points did not need Docker at all. The merge semantics were one function in nginx's headers module
+  (`ngx_http_headers_merge_conf`), and the hook's three switch values were a one-shot run of the real hook with its
+  paths redirected. Root cause: the refine wrote only the most expensive proof, not the cheap one ahead of it.
+  **Next time:** where a refine leaves a tool's semantics "believed, not measured" and the docs are silent,
+  read the tool's source at refine. Then split the proof so that its no-daemon half can run anywhere.
+- **envsubst rewrites comments, and the template's header comment spelled its own placeholders.** The
+  rendered config printed the backend URL and resolvers into that comment. That was harmless for two values.
+  With a third placeholder that renders `#`, it would have left a stray fragment. The comment now names them
+  without the dollar-brace form and says why. The trap lives at that comment, which is where it bites.
+- **Process.** Signing was locked (1Password), so there are no commits, and the per-phase path lists went to the
+  coordinating session. The worktree sandbox also refused shell loops that pass a variable to `docker`, `helm`
+  or `sed`, so each one-shot check became a short Python script in the scratchpad. That also meets the "scripts
+  in Python" rule.

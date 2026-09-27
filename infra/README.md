@@ -272,9 +272,12 @@ certificates are not browser-trusted, so switch back before anyone uses the inst
 **HSTS is on by default, and one switch turns it off — on both targets.** The app sends
 `Strict-Transport-Security: max-age=15552000` (180 days, no `includeSubDomains`, no `preload`) itself, alongside
 its CSP and the other security headers ([ADR 0069](../docs/decisions/0069-backend-serves-the-web-app-shell.md)),
-so neither Traefik nor an Ingress carries anything for it. The switch is `VEYQ_HSTS_ENABLED=false` in
-`infra/.env` under compose and `hsts.enabled: false` in the Helm values; it belongs to the deployment rather
-than to one container, so every origin the deployment serves answers to the same value. Turn it off for one of
+and the admin container's nginx sends the same value on the admin origin
+([cc.security.csp § admin-web](../docs/crosscutting/cc.security.csp.md#admin-web)), so neither Traefik nor an
+Ingress carries anything for it. The switch is `VEYQ_HSTS_ENABLED=false` in `infra/.env` under compose and
+`hsts.enabled: false` in the Helm values; it belongs to the deployment rather than to one container, so both
+origins answer to the same value. The admin container accepts exactly `true` or `false` and refuses to start on
+anything else, naming the variable. Turn it off for one of
 two reasons only: a hostname of this instance is **also** served over plain HTTP somewhere, or a proxy of your
 own in front of it already sets the header. Know the cost of having had it on: a browser that saw the header
 keeps it for the whole 180 days, switched off or not.

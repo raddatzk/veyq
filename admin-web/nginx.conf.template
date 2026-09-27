@@ -8,9 +8,10 @@
 # operator reaches this container at, including plain `http://localhost:<port>` with no DNS at all, which is
 # what lets first-run setup happen before VEYQ_DOMAIN resolves anywhere.
 #
-# ${BACKEND_URL} and ${VEYQ_RESOLVERS} are the only substituted values; see
-# /docker-entrypoint.d/30-veyq-backend-url.sh, which passes exactly those two names to envsubst so nginx's own
-# `$host`/`$uri` variables survive.
+# BACKEND_URL, VEYQ_RESOLVERS and VEYQ_HSTS_OFF are the only substituted values; see
+# /docker-entrypoint.d/30-veyq-backend-url.sh, which passes exactly those three names to envsubst so nginx's own
+# `$host`/`$uri` variables survive. (Named here without the dollar-brace form on purpose: envsubst rewrites
+# comments too, so spelling them that way would print their rendered values into this text.)
 
 server {
     # 8080, not 80: the image runs as uid 101 (nginx-unprivileged, see admin-web/Dockerfile), and a non-root
@@ -31,15 +32,25 @@ server {
     # policy ignores frame-ancestors, so X-Frame-Options here is not a second layer but the whole of it. The
     # robots noindex is belt-and-braces with the page's own <meta name="robots">.
     #
-    # TRAP, measured here: `add_header` does NOT merge across levels. A location that declares even one
-    # `add_header` of its own inherits NONE of the server-level ones. So these four have to be repeated in the
-    # `= /index.html` location below, which sets `Cache-Control` — and that location is not an edge case, it is
-    # where `try_files` sends every SPA route via an internal redirect. Without the repeat the headers were
-    # measurably absent from the one response that matters most.
+    # TRAP, and why `add_header_inherit merge` is here: by default `add_header` does NOT merge across levels — a
+    # location that declares even one `add_header` of its own inherits NONE of the server-level ones. That bit
+    # here: `= /index.html` sets `Cache-Control`, and it is where `try_files` sends every SPA route, so the
+    # security headers were measurably absent from the one response that matters most until they were repeated
+    # there by hand. `merge` (nginx 1.29.3+) appends this level's set to every location's own instead. It is set
+    # once, here: a location that does not declare the directive takes the server's value (the headers module
+    # merges it like any other setting), so a future location's `add_header` ADDS to this set, never replaces it.
+    add_header_inherit merge;
     add_header X-Frame-Options DENY always;
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy no-referrer always;
     add_header X-Robots-Tag "noindex, nofollow" always;
+    # HSTS — the app's value under the app's switch; docs/crosscutting/cc.security.csp.md § admin-web owns both
+    # the decision and the value (180 days, no includeSubDomains, no preload). The entrypoint hook renders the
+    # VEYQ_HSTS_OFF placeholder as nothing when VEYQ_HSTS_ENABLED is `true` (its default) and as `#` when `false`,
+    # so the directive is either rendered whole or commented out — never sent with an empty value, whose effect
+    # the nginx docs do not define. Sent whatever the scheme: this nginx listens on plain 8080 behind whatever
+    # terminates TLS and cannot tell which case it is in; a browser ignores the header over plain HTTP.
+    ${VEYQ_HSTS_OFF}add_header Strict-Transport-Security "max-age=15552000" always;
 
     location /api/ {
         # Resolve the upstream at REQUEST time, not at config-parse time. A literal `proxy_pass http://app:8090`
@@ -74,12 +85,8 @@ server {
 
     # index.html must never be cached: it is the only file whose name is stable, so a cached copy pins the
     # operator to a previous build's hashed assets after an upgrade. The hashed assets themselves are immutable.
-    # The four security headers are REPEATED, not forgotten — see the add_header trap noted above.
+    # Only `Cache-Control` here: the server-level headers are merged in (`add_header_inherit merge` above).
     location = /index.html {
         add_header Cache-Control "no-store" always;
-        add_header X-Frame-Options DENY always;
-        add_header X-Content-Type-Options nosniff always;
-        add_header Referrer-Policy no-referrer always;
-        add_header X-Robots-Tag "noindex, nofollow" always;
     }
 }

@@ -1,10 +1,11 @@
 #!/bin/sh
-# Render nginx.conf.template with the ONE value an operator sets: where the backend lives.
+# Render nginx.conf.template with the two values an operator sets: where the backend lives, and the deployment's
+# HSTS switch.
 #
 # Not the nginx image's built-in template mechanism (/etc/nginx/templates + 20-envsubst-on-templates.sh): that
 # one substitutes every environment variable it finds unless NGINX_ENVSUBST_FILTER is set, and an nginx config
 # is full of `$host`, `$uri`, `$remote_addr` — a blanket envsubst blanks them and produces a config that starts
-# and then proxies to nowhere. Naming the one variable explicitly is both narrower and self-evident. The
+# and then proxies to nowhere. Naming the variables explicitly is both narrower and self-evident. The
 # template therefore lives OUTSIDE /etc/nginx/templates so the built-in script never sees it.
 set -eu
 
@@ -23,5 +24,23 @@ VEYQ_RESOLVERS=$(awk '/^nameserver/ { print ($2 ~ /:/) ? "[" $2 "]" : $2 }' /etc
 : "${VEYQ_RESOLVERS:=127.0.0.11}"
 export VEYQ_RESOLVERS
 
-envsubst '${BACKEND_URL} ${VEYQ_RESOLVERS}' < /etc/nginx/veyq.conf.template > /etc/nginx/conf.d/default.conf
-echo "veyq-admin: proxying /api/* to ${BACKEND_URL} (resolver: ${VEYQ_RESOLVERS})"
+# The deployment's HSTS switch — fed from the same key as the app's (`VEYQ_HSTS_ENABLED` in infra/.env,
+# `hsts.enabled` in the chart; infra/README.md § Running in production), so one value governs both origins;
+# docs/crosscutting/cc.security.csp.md § admin-web says why there is one and not two. Exactly `true` (the default
+# when unset or empty) or `false`. Anything else stops the container here, naming the variable — the image's
+# entrypoint runs hooks under `set -e` — because a mistyped security switch must fail loudly, never land silently
+# on or silently off. The template holds the directive itself; this only decides whether it is rendered whole or
+# commented out.
+: "${VEYQ_HSTS_ENABLED:=true}"
+case "$VEYQ_HSTS_ENABLED" in
+  true) VEYQ_HSTS_OFF='' ;;
+  false) VEYQ_HSTS_OFF='#' ;;
+  *)
+    echo "veyq-admin: VEYQ_HSTS_ENABLED must be 'true' or 'false', got '${VEYQ_HSTS_ENABLED}'" >&2
+    exit 1
+    ;;
+esac
+export VEYQ_HSTS_OFF
+
+envsubst '${BACKEND_URL} ${VEYQ_RESOLVERS} ${VEYQ_HSTS_OFF}' < /etc/nginx/veyq.conf.template > /etc/nginx/conf.d/default.conf
+echo "veyq-admin: proxying /api/* to ${BACKEND_URL} (resolver: ${VEYQ_RESOLVERS}); HSTS: ${VEYQ_HSTS_ENABLED}"

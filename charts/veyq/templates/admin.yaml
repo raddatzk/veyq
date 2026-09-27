@@ -39,6 +39,10 @@ spec:
             # entrypoint hook defaults this to the compose service name (`app:8090`), which does not exist here.
             - name: BACKEND_URL
               value: http://veyq-app-admin:8090
+            # The deployment's HSTS switch, rendered from the same value as the app Deployment's — one switch for
+            # both origins (docs/crosscutting/cc.security.csp.md § admin-web).
+            - name: VEYQ_HSTS_ENABLED
+              value: {{ .Values.hsts.enabled | quote }}
           readinessProbe:
             httpGet:
               path: /
