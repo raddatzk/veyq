@@ -47,7 +47,7 @@ spec:
               containerPort: 8080
             # The admin listener (veyq.admin-channel.port, ADR 0065): the only door the Server-Owner operations
             # answer on. Reached through `veyq-app-admin` alone, and by policy from the admin pod alone
-            # (app-networkpolicy.yaml) — never through `veyq-app`, which every Ingress may aim at.
+            # (networkpolicy.yaml) — never through `veyq-app`, which every Ingress may aim at.
             - name: admin
               containerPort: 8090
           env:
@@ -69,6 +69,11 @@ spec:
             # Behind an ingress controller the per-IP rate limiter must key on the real client.
             - name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
               value: "true"
+            {{- with .Values.app.trustedProxies }}
+            # Only when set, and with no default (ADR 0071 §4) — see app.trustedProxies in values.yaml.
+            - name: QUARKUS_HTTP_PROXY_TRUSTED_PROXIES
+              value: {{ . | quote }}
+            {{- end }}
             # HSTS on the app's responses (ADR 0069) — the deployment's switch, `hsts.enabled` in values.yaml.
             - name: VEYQ_HTTP_HSTS_ENABLED
               value: {{ .Values.hsts.enabled | quote }}
@@ -116,6 +121,9 @@ spec:
             - name: config
               mountPath: /etc/veyq
               readOnly: true
+            # The JVM's scratch (hsperfdata, the Vert.x cache) under the read-only root.
+            - name: tmp
+              mountPath: /tmp
           startupProbe:
             httpGet:
               path: /api/setup
@@ -146,3 +154,5 @@ spec:
         - name: config
           configMap:
             name: veyq-app
+        - name: tmp
+          emptyDir: {}

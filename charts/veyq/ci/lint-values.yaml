@@ -15,6 +15,14 @@ admin:
   image:
     repository: ghcr.io/example/veyq-admin
     digest: "sha256:0000000000000000000000000000000000000000000000000000000000000002"
+networkPolicy:
+  ingressFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: ingress-nginx
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ingress-nginx
 secrets:
   mariadbPassword: ci-only-not-a-password
   mariadbRootPassword: ci-only-not-a-password

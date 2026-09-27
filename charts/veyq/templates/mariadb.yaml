@@ -81,8 +81,18 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/mysql
+            # Under the read-only root: the socket/pid directory and the server's scratch.
+            - name: run
+              mountPath: /run/mysqld
+            - name: tmp
+              mountPath: /tmp
           resources:
             {{- toYaml .Values.mariadb.resources | nindent 12 }}
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: data

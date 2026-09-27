@@ -44,8 +44,19 @@ spec:
               path: /
               port: http
             periodSeconds: 10
+          # Under the read-only root: nginx's pid and temp paths, and the site the entrypoint renders.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: conf
+              mountPath: /etc/nginx/conf.d
           resources:
             {{- toYaml .Values.admin.resources | nindent 12 }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: conf
+          emptyDir: {}
 ---
 # ClusterIP and nothing more by default: `kubectl -n <ns> port-forward svc/veyq-admin 8081:8080` is this
 # target's `127.0.0.1:${ADMIN_PORT}`.

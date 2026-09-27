@@ -19,7 +19,7 @@ spec:
 # The admin listener's own Service (ADR 0065) — deliberately NOT a second port on `veyq-app` above. That Service is
 # what the chart's Ingress, every projected tenant Ingress and any operator's own Ingress aim at, so a port on it is
 # a port behind all of them. Nothing but the admin Deployment's BACKEND_URL names this one, and
-# app-networkpolicy.yaml admits only the admin pod to the port behind it (scripts/chart_meta_check.py (xii)/(xiii)).
+# networkpolicy.yaml admits only the admin pod to the port behind it (scripts/chart_meta_check.py (xii)/(xiii)).
 apiVersion: v1
 kind: Service
 metadata:

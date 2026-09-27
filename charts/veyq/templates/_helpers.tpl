@@ -20,11 +20,16 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end }}
 
-{{/* The `restricted` PodSecurity standard's container half, identical on every container this chart runs. */}}
+{{/*
+The `restricted` PodSecurity standard's container half, identical on every container this chart runs, plus a
+read-only root (ADR 0071 §1): what a container still writes is a claim or an `emptyDir` of its own pod, each the
+scratch path measured by running its image read-only under compose.
+*/}}
 {{- define "veyq.containerSecurityContext" -}}
 allowPrivilegeEscalation: false
 capabilities:
   drop: ["ALL"]
+readOnlyRootFilesystem: true
 runAsNonRoot: true
 seccompProfile:
   type: RuntimeDefault
