@@ -2,11 +2,11 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.platform.capabilities.CapabilityIds
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
-import com.veyq.app.features.sharing.SharingStore
 import com.veyq.app.shared.http.FailureStatus.BAD_REQUEST
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
+import com.veyq.app.shared.http.FailureStatus.UNPROCESSABLE
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
@@ -92,7 +92,7 @@ sealed interface SetRoleOutcome {
     object LastOwner : SetRoleOutcome, HttpFailure by Failures.lastOwner
 }
 
-/** Outcome of removing a member (cr-0088). */
+/** Outcome of the member delete — since ADR 0024 Decision 4 only a pending proposal's rescind (cr-0094). */
 sealed interface RemoveMemberOutcome {
     object Ok : RemoveMemberOutcome
     object Suspended : RemoveMemberOutcome, HttpFailure by Failures.tenantSuspended
@@ -100,7 +100,8 @@ sealed interface RemoveMemberOutcome {
     object ScopeNotFound : RemoveMemberOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RemoveMemberOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
     object MemberNotFound : RemoveMemberOutcome, HttpFailure by Failures.memberNotFound
-    object LastOwner : RemoveMemberOutcome, HttpFailure by Failures.lastOwner
+    /** The target is not a pending proposal: removing them is a removal-rotation, never a bare delete. */
+    object RemovalRequiresRotation : RemoveMemberOutcome, HttpFailure by httpFailure("removal_requires_rotation", CONFLICT)
 }
 
 /** Outcome of a rotation-commit (cr-0088). */
@@ -113,6 +114,12 @@ sealed interface RotateOutcome {
     object StaleEpoch : RotateOutcome, HttpFailure by Failures.staleEpoch
     /** The rotation leaves an open admission neither re-tagged nor dropped (ADR 0020 move 6) — nothing stored. */
     object AdmissionsIncomplete : RotateOutcome, HttpFailure by httpFailure("admissions_incomplete", CONFLICT)
+    /** A removal-rotation names no member of the scope — nothing stored. */
+    object MemberNotFound : RotateOutcome, HttpFailure by Failures.memberNotFound
+    /** A removal-rotation would remove the last OWNER (ADR 0007) — nothing stored. */
+    object LastOwner : RotateOutcome, HttpFailure by Failures.lastOwner
+    /** A removal-rotation re-grants the member it removes (ADR 0024 Decision 4) — nothing stored. */
+    object RemovedMemberGranted : RotateOutcome, HttpFailure by httpFailure("removed_member_granted", UNPROCESSABLE)
 }
 
 /** Outcome of reading the epoch-chain links (cr-0088). */
@@ -193,7 +200,6 @@ sealed interface ListMembersOutcome {
 class ScopesHandler(
     private val store: ScopesStore,
     private val capabilities: CapabilityRegistry,
-    private val shares: SharingStore,
     private val access: ScopeAccess,
 ) {
 
@@ -397,40 +403,50 @@ class ScopesHandler(
     }
 
     /**
-     * Remove a member from a group (cr-0088) — the instant **layer-1** cut (delete the membership). Owner-gated;
-     * the last OWNER cannot be removed. **Layer-2** forward-secrecy is the caller's follow-up rotation.
+     * Rescind a pending consent proposal (cr-0094) — the one membership a delete may take without a rotation, since
+     * a proposal was never keyed. Any other member leaves only by a removal-rotation ([rotateScope] with `removes`,
+     * ADR 0024 Decision 4), so this refuses them (`removal_requires_rotation`) and deletes nothing: a delete that
+     * committed on its own is how a removal used to end without its rotation. Owner-gated.
      */
     fun removeMember(callerId: String, scopeId: String, targetId: String): RemoveMemberOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(RemoveMemberOutcome.ScopeNotFound, RemoveMemberOutcome.Suspended, RemoveMemberOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RemoveMemberOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return RemoveMemberOutcome.NotOwner
-        val current = store.memberRole(targetId, scopeId) ?: return RemoveMemberOutcome.MemberNotFound
-        if (MembershipPolicy.isLastOwnerRemoval(current, store.ownerCount(scopeId))) return RemoveMemberOutcome.LastOwner
-        store.removeMembership(targetId, scopeId)
-        // cr-0104: soft-revoke the public shares this member created in the group — their links 404 now. (Layer-1;
-        // the caller's follow-up rotation is the layer-2 forward-secrecy for the group's content, ADR 0024.)
-        shares.deactivateSharesByOwnerInScope(targetId, scopeId)
-        return RemoveMemberOutcome.Ok
+        return when (store.consentState(targetId, scopeId)) {
+            ConsentState.NONE -> RemoveMemberOutcome.MemberNotFound
+            ConsentState.ACTIVE -> RemoveMemberOutcome.RemovalRequiresRotation
+            ConsentState.PENDING -> {
+                store.deletePendingMembership(targetId, scopeId)
+                RemoveMemberOutcome.Ok
+            }
+        }
     }
 
     /**
      * Commit a scope-key rotation (cr-0088, ADR 0024 §4): commit the stated [epoch] iff it is the scope's next one,
      * store the chain-link, re-grant the listed remaining members; any other epoch is `409 stale_epoch` with nothing
      * stored. Owner-gated; the client minted the new epoch on-device (the server stores only ciphertext).
+     *
+     * With [removes] it is a **removal-rotation** (ADR 0024 Decision 4): [ScopesStore.rotate] deletes the membership
+     * and soft-revokes the public shares that member created in the group (cr-0104) in the **same transaction** as
+     * the epoch commit, so a commit that fails after the delete rolls the removal back with it.
      */
     fun rotateScope(
         callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
-        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>,
+        grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
     ): RotateOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped)) {
+        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped, removes)) {
             is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
             RotationDecision.Stale -> RotateOutcome.StaleEpoch
             RotationDecision.AdmissionsIncomplete -> RotateOutcome.AdmissionsIncomplete
+            RotationDecision.MemberNotFound -> RotateOutcome.MemberNotFound
+            RotationDecision.LastOwner -> RotateOutcome.LastOwner
+            RotationDecision.RemovedMemberGranted -> RotateOutcome.RemovedMemberGranted
         }
     }
 

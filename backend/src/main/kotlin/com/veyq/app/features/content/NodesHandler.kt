@@ -16,6 +16,8 @@ sealed interface CreateNodeOutcome {
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
     object IdTaken : CreateNodeOutcome, HttpFailure by Failures.idTaken
+    /** The node is tagged with an epoch that is not the scope's current one (ADR 0024 Decision 6) — nothing stored. */
+    object StaleEpoch : CreateNodeOutcome, HttpFailure by Failures.staleEpoch
 }
 
 sealed interface ListNodesOutcome {
@@ -75,6 +77,11 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(CreateNodeOutcome.NoScope, CreateNodeOutcome.Suspended, CreateNodeOutcome.ScopeDeleting)?.let { return it }
+        // ADR 0024 Decision 6, layer 1: content sealed under an epoch below the current one is readable by every
+        // member removed since — a writer whose grant lags a rotation. The check rename and set-icon already make.
+        // Unlocked, like theirs: a create racing the rotation that supersedes its epoch was sealed while that epoch
+        // was current, which is the same as having landed a moment earlier.
+        if (epoch != store.currentEpoch(scopeId)) return CreateNodeOutcome.StaleEpoch
         val slot = parentSlotId ?: scopeId // null/absent → the scope root (slot = scope id)
         val parent = store.parentSlot(scopeId, slot)
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
