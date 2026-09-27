@@ -57,7 +57,7 @@ least-privilege is crypto-enforced, and the server stays blind.
   same link; all roles. Honest limit: defends a leaked link against an **honest** operator, not a malicious one —
   stated plainly; [ADR 0037](../../decisions/0037-password-protected-shares.md))
 
-- [uc.sharing.share-link-storage-limit](use-cases/uc.sharing.share-link-storage-limit.md) — **refined** (every
+- [uc.sharing.share-link-storage-limit](use-cases/uc.sharing.share-link-storage-limit.md) — **built** (every
   CONTRIBUTOR and UPLOADER link stores at most the tenant owner's per-link limit, 10 GiB until changed; a `start`
   that does not fit is refused whole, and the visitor learns only that the link is full;
   [ADR 0073](../../decisions/0073-storage-quota-belongs-to-whoever-pays-for-the-store.md))

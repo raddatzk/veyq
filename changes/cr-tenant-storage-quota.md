@@ -74,11 +74,14 @@ Each names the line that settles it.
    - **`quota_exceeded`** joins the per-item error description of `startBlobUploads`. Locator:
      `grep -n 'budget_exceeded' contracts/api/media.openapi.yaml`.
 2. **`veyq_tenant.storage_quota_bytes BIGINT NULL`**, where null means no quota (ADR 0073 §1).
-3. **The unit gains the tenant sum**, still the only SUM. It is the declared size of every blob, plus every open
-   session, in the scopes whose `tenant_id` is the tenant, regardless of any `deleted_at`. `listTenants` asks it
-   once for all tenants, grouped, never with one query per tenant.
+3. **The unit's tenant sum becomes a check**, still the only SUM. `StorageQuota.tenantUsage` already exists — the
+   first CR built it for the owner's `getTenantStorage` read, and it is untested as a *check*: the declared size
+   of every blob, plus every open session, in the scopes whose `tenant_id` is the tenant, regardless of any
+   `deleted_at`. `listTenants` asks the unit once for all tenants, grouped, never with one query per tenant.
 4. **Every `start` goes through the unit's locked transaction** — the member path too, which
-   `cr-share-link-storage-limit` left unlocked. Within it:
+   `cr-share-link-storage-limit` left unlocked: `MediaHandler.startForLink` is the locked shape (lock the tenant row,
+   check each item, ask the unit, insert or refuse whole, commit, then presign), and the member core
+   `startForScope` is the unlocked one it must join. Within it:
    - the quota (if set) is checked for every start;
    - the per-link limit is checked for a link start;
    - each check is independent, and either one refuses the whole request.
@@ -86,7 +89,8 @@ Each names the line that settles it.
    Presigning stays after the commit.
 5. **Web:**
    - `quota_exceeded` is a hard failure in the uploads queue: no automatic retry. Other errors keep their one
-     retry.
+     retry. This is live for link visitors too: the first CR changed only the tile, so a link upload refused
+     `quota_exceeded` is still retried once, silently, before its tile shows the link as full.
    - The tray shows the failed file's reason when it is `quota_exceeded`: no space left, and trash counts until it
      is emptied. A cover refused the same way says the same.
    - The storage panel from `cr-share-link-storage-limit` shows the quota beside the usage when one is set.

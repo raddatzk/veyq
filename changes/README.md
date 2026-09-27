@@ -754,6 +754,10 @@ terms — `cr-request-tenant-and-tenant-bound-recovery` said "the direct deliver
 names something that does not exist where the red must be recorded. Record the red through the old seam (there, the
 request method that still ran the delivery inline), re-point the test once the fix creates the new one, and re-bite
 it by injection on the fixed tree; a CR can save that detour by naming the lever for both trees.
+**The unfixed tree must also compile.** A contracts phase that adds an operation to an existing tag leaves the
+generated `…Api` interface unimplemented, so no backend test runs until the resource implements it:
+cr-share-link-storage-limit ordered its new endpoints *after* the live-defect red, and the red could only be
+taken once they existed. Order the endpoints that only make the tree compile before the red.
 
 **But a live-defect red can land on the wrong STEP, and then it is not a bite either.** § *a bite test must tell
 "the guard held" apart from "nothing ran"* catches an injection that breaks compilation instead of the assertion;
