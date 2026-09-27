@@ -50,8 +50,8 @@ Forces:
    store's data tree. Its image is one the recipe already pins, so it adds no supply-chain input.
 3. **Reachability is default-deny on both targets, then exactly the paths the stack uses.**
    - **Compose: separate networks.** The proxy shares one with the app and the store; the database shares one
-     with the app alone; the admin container shares one with the app alone. The internet-facing process cannot
-     open a connection to the database.
+     with the app alone; the admin container shares one with the app and the proxy, which routes to it when
+     `ADMIN_DOMAIN` is set. The internet-facing process cannot open a connection to the database.
    - **Helm: a NetworkPolicy set.** Ingress is denied to every pod the chart deploys, then allowed:
      - the app's public port from the ingress controller alone, and its admin listener from the admin pod
        alone ([ADR 0065](0065-admin-ui-cli-separate-service.md) § admin channel, which introduced that
@@ -84,7 +84,10 @@ Forces:
 - **Silence is the failure mode, so it drives the proofs.** A read-only root that misses one scratch path
   fails at runtime, never at `docker compose config`, and Traefik's ACME failure keeps the container up. A
   change to either target is proven by a live `up` of the production recipe that reads Traefik's log, not by
-  container state.
+  container state. A third silent failure of the same kind: Traefik reads the app's routing file under a uid of
+  its own, and a file the app left owner-only stops its file provider while the proxy stays up and routes nothing
+  (measured on `traefik:v3.6`). The app therefore writes that file world-readable; it is routing config, never a
+  secret.
 - **What cannot be proven here, named.** `helm template` proves what the chart renders, not that a cluster
   enforces it. Whether a NetworkPolicy binds depends on the CNI, and this repository has no cluster to run
   one on.

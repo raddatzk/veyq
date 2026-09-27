@@ -3,7 +3,7 @@
   "title": "veyq chart values",
   "description": "The shapes the operator's values must have. Helm applies this to install, upgrade, lint AND template, naming the path and the pattern of a violation — which is why nothing here has a generated fallback: a value the chart cannot assert is a value the chart does not supply.",
   "type": "object",
-  "required": ["domain", "storeDomain", "image", "admin", "ingress", "secrets", "mariadb", "externalDatabase", "garage"],
+  "required": ["domain", "storeDomain", "image", "admin", "ingress", "networkPolicy", "secrets", "mariadb", "externalDatabase", "garage"],
   "$defs": {
     "hostname": {
       "type": "string",
@@ -32,6 +32,23 @@
       "properties": { "enabled": { "type": "boolean" } }
     },
     "image": { "$ref": "#/$defs/imageRef" },
+    "app": {
+      "type": "object",
+      "properties": {
+        "trustedProxies": { "type": "string" }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "required": ["enabled"],
+      "$comment": "ingressFrom is required while enabled, and never defaulted: the ingress controller's namespace and labels are the operator's (ADR 0071 §3), so the chart refuses to guess and an install without it fails naming the key.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "ingressFrom": { "type": "array", "items": { "type": "object", "minProperties": 1 } }
+      },
+      "if": { "properties": { "enabled": { "const": true } } },
+      "then": { "required": ["ingressFrom"], "properties": { "ingressFrom": { "minItems": 1 } } }
+    },
     "admin": {
       "type": "object",
       "required": ["image"],

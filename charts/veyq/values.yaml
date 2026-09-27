@@ -8,7 +8,8 @@
 #
 # What is required and has no default:  domain · storeDomain · image.repository · admin.image.repository ·
 # every key under secrets (or secrets.existingSecret) · externalDatabase.jdbcUrl when mariadb.enabled=false ·
-# ingress.tls.secretName when ingress.tls.mode=shared · ingress.tls.acme.email when ingress.tls.acme.enabled.
+# ingress.tls.secretName when ingress.tls.mode=shared · ingress.tls.acme.email when ingress.tls.acme.enabled ·
+# networkPolicy.ingressFrom while networkPolicy.enabled (the default).
 
 # The instance's bootstrap domain — what VEYQ_DOMAIN is under compose. Written into every invitation and
 # recovery link the instance mails, routed statically by the chart's own Ingress (the backend never projects
@@ -43,6 +44,11 @@ image:
   pullPolicy: IfNotPresent
 
 app:
+  # Which proxy addresses may set X-Forwarded-For (quarkus.http.proxy.trusted-proxies), comma-separated. Empty — the
+  # default — renders nothing, and the NetworkPolicy's `ingressFrom` is what confines who can send the header. Set it
+  # only where the proxy has a STABLE address, such as a host-network controller or an external load balancer: a
+  # range wide enough to survive an ingress controller's pod restart trusts every pod beside it (ADR 0071 §4).
+  trustedProxies: ""
   # `Recreate`, and NOT Kubernetes' default RollingUpdate — the second half of "one app pod" is the one that
   # matters. quarkus.flyway.migrate-at-start=true runs the schema migration at boot with no gate, which is
   # today's undecided update mechanism (inbox #121); RollingUpdate with its default maxSurge starts the new pod
@@ -111,6 +117,23 @@ admin:
     requests:
       cpu: 50m
       memory: 32Mi
+
+networkPolicy:
+  # Default-deny for every pod of the release, then exactly the paths the stack uses (templates/networkpolicy.yaml,
+  # ADR 0071 §3). Set false only when your CNI does not enforce NetworkPolicy or you write your own: it removes
+  # EVERY policy the chart renders, the one keeping all pods but the admin pod off the app's admin listener
+  # included, and reachability is then yours to own.
+  enabled: true
+  # REQUIRED while enabled, with no default: the NetworkPolicy peers your ingress controller's pods match. The chart
+  # cannot know its namespace or labels, and never guesses. They reach the app's public port, the store's S3 port,
+  # the admin surface when admin.domain is set, and cert-manager's HTTP-01 solvers. For ingress-nginx, e.g.:
+  #   - namespaceSelector:
+  #       matchLabels:
+  #         kubernetes.io/metadata.name: ingress-nginx
+  #     podSelector:
+  #       matchLabels:
+  #         app.kubernetes.io/name: ingress-nginx
+  ingressFrom: []
 
 ingress:
   # Passed through to every Ingress this chart templates AND, via the backend, to every tenant Ingress it

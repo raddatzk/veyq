@@ -4,6 +4,7 @@ import org.jboss.logging.Logger
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
+import java.nio.file.attribute.PosixFilePermissions
 
 /**
  * The docker-compose sink (ADR 0063): a Traefik **file-provider** dynamic configuration, written to a volume
@@ -127,6 +128,13 @@ class TraefikFileIngressSink(
             Files.createDirectories(dir)
             // Same directory as the target on purpose: an ATOMIC_MOVE is only guaranteed within one filesystem.
             tmp = Files.createTempFile(dir, ".${target.fileName}", ".tmp")
+            // `createTempFile` makes the file 0600 and the rename keeps that mode, but the READER is Traefik, under
+            // a uid of its own (ADR 0071). A file it cannot open is a file provider that fails to start while the
+            // proxy stays up and routes nothing (measured on traefik:v3.6 as uid 65532: "error adding file watcher
+            // … permission denied"). World-readable is safe: this is routing config, never a secret (ADR 0063).
+            if ("posix" in dir.fileSystem.supportedFileAttributeViews()) {
+                Files.setPosixFilePermissions(tmp, PosixFilePermissions.fromString("rw-r--r--"))
+            }
             Files.writeString(tmp, content)
             Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: Exception) {

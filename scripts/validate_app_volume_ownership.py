@@ -36,8 +36,9 @@ different mechanism with a different guard: a PersistentVolumeClaim inherits NOT
 it covers, so seeding is not the question there — `fsGroup` is, and `scripts/chart_meta_check.py` holds the
 chart's app pod to the same runtime user this guard reads (outside the `validate_*` glob, because it renders
 the chart with `helm`). It checks ownership and existence, never the MODE: a directory the app can write is
-what the failure was about, and a mode narrow enough to break a *reader* (traefik reads this one) would be a
-different guard over a different fact. And it deliberately ignores read-only mounts and host bind mounts:
+what the failure was about, and a mode narrow enough to break a *reader* (traefik reads this one, under a uid of
+its own) is a different fact with a different home: the projection file's mode is pinned by
+`TraefikFileIngressSinkReadableTest`. And it deliberately ignores read-only mounts and host bind mounts:
 a `:ro` mount is not written by definition, and a bind mount takes the host's ownership, which no image can
 seed and no guard in this tree can see.
 
