@@ -33,22 +33,22 @@
    writes is readable by the operator alone.
 5. The operator **starts the application**. The downtime was the capture, and nothing else.
 
-**Restore — onto an instance that holds nothing.**
+**Restore — onto an instance that holds no data.**
 
-6. The operator brings up an **empty** instance on the target: a database with no schema, a store with no
-   objects, and no application running yet.
-7. The operator **loads the database dump**. The schema arrives with it; migrations are not re-run against an
-   empty database to produce it.
-8. The operator **recreates the store's configuration** — bucket, access key, layout. This is not restored
-   because it was never state (ADR 0056 §4 of Context); the bundled store's init script does it idempotently.
-9. The operator **pushes the mirrored objects back** into that bucket.
-10. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
-    it, on storage that survives a container being recreated.
-11. The operator **starts the application**.
+6. The operator brings up a **freshly installed** instance on the target and stops its application again: that
+   one start migrated the schema and **recreated the store's configuration** — bucket, access key, layout —
+   which is not restored because it was never state (ADR 0056 §4 of Context; the app provisions it,
+   [ADR 0067](../../../decisions/0067-store-provisioning-from-a-declared-type.md)). It holds no data (A5).
+7. The operator **loads the database dump**. It replaces the fresh schema wholesale, migration history included,
+   so the instance is at the version it was captured at.
+8. The operator **pushes the mirrored objects back** into that bucket.
+9. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
+   it, on storage that survives a container being recreated.
+10. The operator **starts the application**.
 
 **Verify — the step that separates a restore from a hope.**
 
-12. The operator reads the instance's **config-secret state**. A match is what says leg three arrived; a
+11. The operator reads the instance's **config-secret state**. A match is what says leg three arrived; a
     mismatch is the fingerprint doing its job (A2). Then a person signs in and **opens a Memory that contains
     media** — the only assertion that exercises all three legs at once, because the row, the object and the key
     that seals the SMTP settings are three different failures with the same symptom of "it looked fine".

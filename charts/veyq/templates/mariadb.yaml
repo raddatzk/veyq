@@ -1,8 +1,9 @@
 {{- if .Values.mariadb.enabled }}
 # The bundled database. A StatefulSet for its stable claim, one replica, no published port: the app reaches it
-# on the Service, a backup capture reaches it through `kubectl exec`. Runs as the image's own `mysql` user
-# (uid 999) rather than root-then-gosu — measured on mariadb:11.4: started as `--user 999` with a datadir it
-# can write, it reports ready in seconds — which is what lets the pod pass `restricted`.
+# on the Service, a backup capture reaches it through `kubectl port-forward` (infra/README.md § Running on
+# Kubernetes). Runs as the image's own `mysql` user (uid 999) rather than root-then-gosu — measured on
+# mariadb:11.4: started as `--user 999` with a datadir it can write, it reports ready in seconds — which is what
+# lets the pod pass `restricted`.
 apiVersion: v1
 kind: Service
 metadata:
