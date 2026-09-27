@@ -88,7 +88,7 @@ paths:
               masterKeyWraps:
                 - method: PASSWORD
                   wrappedKey: d3JhcHBlZC1tYXN0ZXIta2V5
-              recoveryMasterKeyTag: cmVjb3ZlcnktdGFn
+              secretKeyProofPublicKey: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
       responses:
         "201":
           description: The Server Owner was created and setup is now locked.
@@ -251,6 +251,7 @@ components:
         - wrappedIdentityPrivateKey
         - masterKeyWraps
         - authPublicKey
+        - secretKeyProofPublicKey
       properties:
         email:
           x-veyq-visibility: pii
@@ -300,13 +301,17 @@ components:
           maxLength: 8192
           example: ZWQyNTUxOS1hdXRoLXB1Yg==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
-        recoveryMasterKeyTag:
+        secretKeyProofPublicKey:
           type: string
-          description: One-way tag proving recovery of the same Master Key during reset (opaque base64).
+          description: >
+            The account's Secret-Key proof key (ADR 0060 Decision 2): the Ed25519 public key derived from the
+            Secret Key alone. Rotation, change-password and recovery must each carry a signature under it, so a
+            session or a phished password is not enough to mint a cold credential. Reveals nothing: the Secret
+            Key is 256 random bits.
           contentEncoding: base64
-          maxLength: 256
-          example: cmVjb3ZlcnktdGFn
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          maxLength: 128
+          example: c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     SetupResult:
       type: object
