@@ -110,18 +110,16 @@ startup regenerate.
     the one the catch did not cover. An instance that cannot project its routing logs loudly and still serves
     `/api/setup`. `TenantIngressUnwritablePathTest` holds both callers: the startup one by configuring the
     unwritable path *before* the application boots, so a regression cannot start the test class at all.
-  - **An empty projection carries no `http:` section** — found by the live run that proved the two properties
-    above. Traefik rejects a section that is present but empty, so `http:` with `routers: {}` is the one
-    spelling it cannot parse: `"routers cannot be a standalone element"`, logged by the file provider on every
-    reload. Measured against the pinned v3.6 by writing each shape into a
-    running stack's volume — `http:` + `routers: {}`, `http: {}`, and `http:` with empty
-    routers/services/middlewares are all rejected; a comments-only file and an empty file are accepted, and the
-    provider loads a real router again immediately afterwards. It costs no routing (there are no dynamic
-    routers to lose while the set is empty), but **every freshly deployed instance has zero tenants**, so every
-    new operator met a proxy insisting their routing was broken while debugging their first deploy — the same
-    first-deploy path as the defect above. The empty branch now writes only its self-describing header, which
-    is what still separates "no tenants" from "the projection never ran". `TenantIngressEmptyProjectionTest`
-    holds the shape; Traefik's half is measured in that test's own table, not re-derivable from code.
+  - **A section is rendered only when it has an entry.** Traefik rejects a section that is present but empty:
+    `routers: {}` fails with `"routers cannot be a standalone element"`, logged by the file provider on every
+    reload. Measured against the pinned v3.6 by writing each shape into a running stack's volume — `http:` +
+    `routers: {}`, `http: {}`, and `http:` with empty routers/services/middlewares are all rejected; a
+    comments-only file and an empty file are accepted. It was found when every freshly deployed instance, with
+    zero tenants, met a proxy insisting its routing was broken. The services and the store middleware are always
+    present now, so the section left to omit is `routers:`, which is empty only with no bootstrap domain
+    configured and no routable tenant — a first deploy with a mistyped `VEYQ_DOMAIN`, which is exactly when a
+    misleading proxy error costs the most. `TenantIngressEmptyProjectionTest` holds the shape; Traefik's half is
+    the measurement above, not re-derivable from code.
 - **One author means one failure domain.** A projection that cannot be written now leaves the bootstrap
   domain unrouted as well, not only the tenants. Two things bound that. The one cause ever observed, an
   unowned mount point, is held by the guard above. And the admin surface's default mode is a localhost port

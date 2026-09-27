@@ -11,9 +11,9 @@ import Card from 'primevue/card'
 import Message from 'primevue/message'
 import { getTenantTerms, acceptTenantTerms, type TenantTerms } from '../features/tenant/tenantTerms'
 import { tenantError } from '../features/tenant/tenantError'
-import { activeSpace, markTermsAccepted, clearActiveSpace } from '../app/activeSpace'
+import { activeSpace, markTermsAccepted } from '../app/activeSpace'
 import { takeRoute } from '../app/pendingRoute'
-import { logout } from '../features/account/login/login'
+import { signOut } from '../features/account/login/signOut'
 import { renderMarkdown } from '../shared/markdown'
 import { handle401 } from '../shared/handle401'
 import { isUnauthorized } from '../shared/httpError'
@@ -88,16 +88,6 @@ async function accept() {
   }
 }
 
-// The only way out without accepting: sign out (mirrors ProfileMenu). Declining records nothing; the member
-// stays out of the shell.
-async function signOut() {
-  try {
-    await logout()
-  } finally {
-    clearActiveSpace()
-    await router.push({ name: 'login' })
-  }
-}
 </script>
 
 <template>
@@ -115,13 +105,15 @@ async function signOut() {
         <Message v-if="error" severity="warn" :closable="false">{{ error }}</Message>
         <div class="terms-actions">
           <Button :label="t('terms.accept')" icon="pi pi-check" :loading="busy" @click="accept" />
+          <!-- The only way out without accepting is the one sign-out (uc.account.sign-out). Declining records
+               nothing; the member stays out of the shell. -->
           <Button
             :label="t('terms.signOut')"
             icon="pi pi-sign-out"
             severity="secondary"
             text
             :disabled="busy"
-            @click="signOut"
+            @click="signOut()"
           />
         </div>
       </template>

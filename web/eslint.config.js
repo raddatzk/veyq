@@ -52,6 +52,27 @@ export default defineConfigWithVueTs(
     },
   },
   {
+    // One sign-out (uc.account.sign-out, ADR 0070): a screen calls `features/account/login/signOut`, never the
+    // ending in `app/sessionEnd` — a screen that could reach the ending could assemble its own sign-out, and a
+    // screen-level copy that skipped half the sequence is what this replaced. LIMIT: a `.ts` composable is not
+    // covered, and neither is a screen that calls the session API's revoke directly and then navigates.
+    name: 'veyq/one-sign-out',
+    files: ['**/*.vue'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              regex: '(^|/)sessionEnd(\\.[jt]s)?$',
+              message: 'A screen signs out through features/account/login/signOut, never the session ending itself.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently
     // zero violations — the guard exists to keep it that way).

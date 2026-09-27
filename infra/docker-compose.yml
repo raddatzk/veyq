@@ -31,7 +31,8 @@ services:
   # test. The backend never streams bytes; it presigns short-TTL URLs the
   # client PUT/GETs directly. **Garage** (S3-compatible, AGPL, built for self-hosting — replaces the archived
   # MinIO). Exposed on :19000 for the backend e2e (`VEYQ_S3_E2E=1`, BlobBatchE2ETest); Traefik path-routes the
-  # bucket so the web app reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4). Throwaway creds only.
+  # bucket (traefik-dev/blobs.yml) so a browser reaches presigned URLs **same-origin** (no CORS, ADR 0013 §4).
+  # Throwaway creds only.
   garage:
     image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
     container_name: veyq-garage
@@ -51,43 +52,23 @@ services:
     ports:
       - "19000:3900"   # S3 API — VEYQ_S3_ENDPOINT for the backend e2e; also the internal endpoint the backend stats against
       - "19003:3903"   # admin API (local only)
-    labels:
-      # Traefik path-route for same-origin web access: route the bucket path WITHOUT stripping the prefix and
-      # with the Host header preserved — SigV4 signs host+path+query, so a stripPrefix/host rewrite breaks it.
-      # `veyq-blobs-inert` mirrors the prod route's store-response headers (ADR 0013 §6) so this route stays
-      # representative of it.
-      - "veyq.stack=dev"           # so the DEV proxy claims only dev containers, and vice versa
-      - "traefik.enable=true"
-      - "traefik.http.routers.veyq-blobs.rule=PathPrefix(`/veyq`)"
-      - "traefik.http.routers.veyq-blobs.entrypoints=web"
-      - "traefik.http.services.veyq-blobs.loadbalancer.server.port=3900"
-      - "traefik.http.services.veyq-blobs.loadbalancer.passHostHeader=true"
-      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentTypeNosniff=true"
-      - "traefik.http.middlewares.veyq-blobs-inert.headers.contentSecurityPolicy=sandbox; default-src 'none'"
-      - "traefik.http.routers.veyq-blobs.middlewares=veyq-blobs-inert"
 
-  # Reverse proxy so the bundled store is reachable same-origin by the web app (ADR 0013 §4). Routes only the
-  # bucket path (see the garage labels); the backend + web are added behind it in a fuller deployment.
+  # Reverse proxy so the bundled store is reachable same-origin (ADR 0013 §4). Routes only the bucket path, from
+  # a static file: like production, the file provider is its only provider, so no container holds the Docker
+  # socket. The Vite dev server proxies `/veyq` itself, so nothing in the dev loop reads this route — a broken one
+  # stays silent; `curl -sI http://localhost:18080/veyq/` answering from Garage is the check.
   traefik:
-    # v3.6, not v3.3: v3.3's docker client cannot negotiate with Docker Engine 29 (API 1.55) and fails with an
-    # empty error, so it loads NO routers at all — the proxy answers 404 for everything while looking healthy.
-    # That is how this route stayed broken here unnoticed: the Vite dev server proxies `/veyq` itself
-    # (application-dev.properties signs for http://127.0.0.1:5173), so nothing in the dev loop reads this path.
     image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     container_name: veyq-traefik
     profiles: ["s3"]
     restart: unless-stopped
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
-      # Scoped: the docker provider sees every container on the host, so a prod stack on the same
-      # machine would collide with this one on the router name and Traefik would drop BOTH.
-      - "--providers.docker.constraints=Label(`veyq.stack`,`dev`)"
+      - "--providers.file.directory=/etc/traefik/dynamic"
       - "--entrypoints.web.address=:80"
     ports:
       - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /veyq/<obj> → Garage
     volumes:
-      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik-dev:/etc/traefik/dynamic:ro"
 
   # --- Test mailbox for per-tenant SMTP (cr-email-smtp-transport, ADR 0048) — opt-in: `docker compose --profile
   # mail up -d`. A dev tenant points its mail settings at this (host `localhost`, port 11025, any username/

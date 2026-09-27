@@ -6,7 +6,14 @@
 // handles and decrypted plaintext do. If no SW controls the page, or the handshake version mismatches, every
 // entry point resolves to "no SW" so the caller falls back to the Slice-1 full-blob path.
 
-import { MEDIA_PATH_PREFIX, PROTOCOL_VERSION, type ChunkReply, type ChunkRequest } from './protocol'
+import {
+  MEDIA_PATH_PREFIX,
+  PROTOCOL_VERSION,
+  type ChunkReply,
+  type ChunkRequest,
+  type EndSessionAck,
+  type EndSessionMsg,
+} from './protocol'
 import type { ChunkProvider } from '../features/memory/media'
 
 /** Metadata the SW needs to size the resource + set the response Content-Type; carries no key and no id that
@@ -129,6 +136,42 @@ export function revokePlayback(handle: string): void {
   wired.sw.postMessage({ type: 'veyq-revoke-playback', handle })
   wired.channel.port1.onmessage = null
   wired.channel.port1.close()
+}
+
+/**
+ * A session ended (uc.account.sign-out § The ending, step 2): tell the ACTIVE media SW to drop every playback it
+ * holds, and wait for its ack. Resolves once the SW has confirmed, or after `timeoutMs`, or at once when no SW
+ * is registered. Never throws — an ending must not stop here.
+ *
+ * It asks the registration for its active worker rather than using `controller`, because another tab may be the
+ * one playing: a page opened with a hard reload is not controlled, and the SW still holds that tab's plaintext.
+ * It never registers a SW either — with none registered there is nothing to drop. The message is not
+ * version-gated like a playback: dropping plaintext is safe to ask of any worker, and a stale one that does not
+ * know it simply lets the timeout run.
+ */
+export async function endAllPlaybacks(timeoutMs = 1000): Promise<void> {
+  for (const wired of active.values()) {
+    wired.channel.port1.onmessage = null
+    wired.channel.port1.close()
+  }
+  active.clear()
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+  const sw = (await navigator.serviceWorker.getRegistration().catch(() => undefined))?.active
+  if (!sw) return
+  await new Promise<void>((resolve) => {
+    const ch = new MessageChannel()
+    const finish = () => {
+      clearTimeout(timer)
+      ch.port1.onmessage = null
+      ch.port1.close()
+      resolve()
+    }
+    const timer = setTimeout(finish, timeoutMs)
+    ch.port1.onmessage = (e: MessageEvent) => {
+      if ((e.data as EndSessionAck | undefined)?.type === 'veyq-end-session-ack') finish()
+    }
+    sw.postMessage({ type: 'veyq-end-session' } satisfies EndSessionMsg, [ch.port2])
+  })
 }
 
 /** Extract the handle from a `/__media/<handle>` URL produced by {@link registerPlayback} (for revoke on close). */

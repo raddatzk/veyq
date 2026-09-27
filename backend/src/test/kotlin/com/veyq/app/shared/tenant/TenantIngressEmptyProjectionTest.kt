@@ -1,13 +1,16 @@
 package com.veyq.app.shared.tenant
 
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Path
 
 /**
- * **A projection with no tenants must not contain an empty `http:` section.** Traefik rejects a section that is
- * present but empty, and every freshly deployed instance is in exactly that state — so the shape this branch
- * emits is the first thing every new operator's proxy log has anything to say about.
+ * **A projection with no router must not contain an empty `routers:` section.** Traefik rejects a section that is
+ * present but empty. Since the file became all of compose's routing it always carries the services and the store
+ * middleware, so the state left is narrower than it was: no bootstrap domain configured (a misconfiguration the
+ * producer logs as an error, never a failed boot) and no routable tenant. That is still what a first deploy with a
+ * mistyped `VEYQ_DOMAIN` looks like, and a proxy then insisting its configuration is broken is the wrong lead.
  *
  * Measured 2026-09-09 against the pinned Traefik v3.6, by writing each shape into a running production stack's
  * dynamic volume and reading the file provider's reaction:
@@ -18,66 +21,60 @@ import java.nio.file.Path
  *     comments only, no http: key                  accepted
  *     an empty file                                accepted
  *
- * The rejection costs no routing: there are no dynamic routers to lose while the set is empty, and the provider
- * loads the file again as soon as a real router appears (also measured, in the same run). What it costs is the
- * operator's first hour — a proxy insisting the routing configuration is broken, on a stack that is fine.
- *
  * **Why this calls [TraefikFileIngressSink.render] instead of `regenerate()`.** The property is about an EMPTY
  * tenant table, and that is a state no test here can reach: the `%test` H2 instance is shared across test
  * profiles and already carries a tenant row referenced by `veyq_membership`, so a `deleteAll` dies on the
  * foreign key — measured, after this class first tried exactly that and went red in the full suite while
- * passing in isolation. Suspending every row instead would reach the state by mutating fixtures other classes
- * own. `render` is a pure function of its argument, so passing the list directly is both deterministic and the
- * narrower claim; the table-to-list half is `TenantIngressProjectorTest`'s subject and stays there.
+ * passing in isolation. `render` is a pure function of its argument, so passing the list directly is both
+ * deterministic and the narrower claim; the table-to-list half is `TenantIngressProjectorTest`'s subject.
  *
  * What no test here can prove is Traefik's half — that lives in the table above, measured once against the real
  * proxy. Asserting the shape is the part that can regress silently, so that is the part held here.
  */
 class TenantIngressEmptyProjectionTest {
 
-    /**
-     * Constructed, not injected: `render` is a pure function of its argument and the sink the container would
-     * produce under the default `%test` config is [DisabledIngressSink] — the one that projects nothing. The
-     * path is never touched by the method under test, and neither is the filesystem.
-     */
-    private val projector = TraefikFileIngressSink(Path.of("build/test-tenant-ingress-render-only/tenants.yml"))
+    /** Constructed, not injected: the state under test is one no `%test` profile configures. */
+    private fun sink(bootstrapDomain: String?) = TraefikFileIngressSink(
+        Path.of("build/test-tenant-ingress-render-only/tenants.yml"), bootstrapDomain, null,
+        TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
+    )
 
     @Test
-    fun anEmptyProjectionCarriesNoHttpSection() {
-        val rendered = projector.render(emptyList())
+    fun noRoutableDomainMeansNoRoutersSection() {
+        val rendered = sink(bootstrapDomain = null).render(emptyList())
 
-        // Asserted against the YAML KEYS, not against substrings of the whole file: the header comment
-        // legitimately says the word "routers" ("…whose routers are static labels in the compose file"), and a
-        // naive `contains("routers")` fails on the correct output — which is exactly how this assertion was
-        // first written, and what the full suite caught.
-        val keyLines = rendered.lineSequence().filterNot { it.isBlank() || it.trimStart().startsWith("#") }.toList()
-        assertTrue(
-            keyLines.isEmpty(),
-            "with no tenants the file carries no YAML at all — a present-but-empty section is the one shape " +
-                "Traefik rejects, and every key here would be part of one:\n$rendered",
-        )
-        assertTrue(rendered.isNotBlank(), "the file must still exist and describe itself — 'no tenants' is not 'never ran'")
+        // Asserted against the YAML KEYS, not against substrings of the whole file: a comment may legitimately say
+        // the word "routers", and a naive `contains("routers")` fails on the correct output — which is exactly how
+        // this assertion was first written, and what the full suite caught.
+        val keys = keyLines(rendered).map { it.trim() }
+        assertFalse(keys.contains("routers:"), "no router, no section — a present-but-empty one is rejected:\n$rendered")
+        assertTrue(keys.contains("services:") && keys.contains("middlewares:"), "control: the rest of the file is still there:\n$rendered")
     }
 
     @Test
-    fun aPopulatedProjectionStillCarriesTheHttpSection() {
-        // The positive control the assertions above are worthless without: "contains no `http:`" is trivially
-        // satisfied by a projector that stopped emitting routers altogether.
-        val rendered = projector.render(listOf("a.example.com"))
+    fun aSingleRoutableDomainBringsTheSectionBack() {
+        // The positive control the assertion above is worthless without: "contains no `routers:`" is trivially
+        // satisfied by a sink that stopped emitting routers altogether.
+        val bootstrapOnly = sink(bootstrapDomain = "a.example.com").render(emptyList())
+        val tenantOnly = sink(bootstrapDomain = null).render(listOf("b.example.com"))
 
-        assertTrue(rendered.contains("http:"), "a populated projection needs the section:\n$rendered")
-        assertTrue(rendered.contains("rule: \"Host(`a.example.com`)\""), "…and the tenant's app router")
-        assertTrue(rendered.contains("rule: \"Host(`a.example.com`) && PathPrefix(`/veyq`)\""), "…and its blobs router")
+        listOf(bootstrapOnly to "a.example.com", tenantOnly to "b.example.com").forEach { (rendered, domain) ->
+            assertTrue(keyLines(rendered).any { it.trim() == "routers:" }, "a routed domain needs the section:\n$rendered")
+            assertTrue(rendered.contains("rule: \"Host(`$domain`)\""), "…and its app router")
+            assertTrue(rendered.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "…and its blobs router")
+        }
     }
 
     @Test
-    fun theTwoBranchesShareTheSelfDescribingHeader() {
-        // Both branches are full rewrites of the same file, so a reader who opens it must be able to tell "no
-        // tenants" from "the projection never ran" — which is the whole reason the empty branch writes anything
-        // at all rather than truncating to zero bytes (an empty file is accepted by Traefik too).
+    fun everyShapeCarriesTheSelfDescribingHeader() {
+        // Every write is a full rewrite of the same file, so a reader who opens it must be able to tell it is
+        // generated, and by what.
         val header = "GENERATED by veyq's TenantIngressProjector"
 
-        assertTrue(projector.render(emptyList()).contains(header), "the empty branch")
-        assertTrue(projector.render(listOf("a.example.com")).contains(header), "the populated branch")
+        assertTrue(sink(null).render(emptyList()).contains(header), "no router")
+        assertTrue(sink("a.example.com").render(listOf("b.example.com")).contains(header), "routers")
     }
+
+    private fun keyLines(rendered: String) =
+        rendered.lineSequence().filterNot { it.isBlank() || it.trimStart().startsWith("#") }.toList()
 }

@@ -17,14 +17,15 @@
 // and the only one that needs the session — then drop this one. Nothing remains to do on this screen afterwards:
 // no unlock (no kit, by premise), no list, and a second revoke is idempotently pointless, so leaving a live
 // authenticated session standing on a stranger's browser as a receipt would trade the exact asset the flow
-// protects for a UI nicety. A logout that FAILS is reported rather than swallowed: the caller keeps its session
-// flag, so the sign-in card's own sign-out button stays reachable as the visible fallback.
+// protects for a UI nicety. Signing this device out is the one sign-out sequence (uc.account.sign-out), which
+// ends in a new document: the sign-in page it loads says how it went, including a sign-out that did not reach
+// the server — then the card comes back signed in, and its own sign-out is the visible fallback.
 import { ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import Message from 'primevue/message'
 import { revokeOtherSessionFamilies } from './sessions'
-import { logout } from '../login/login'
+import { signOut } from '../login/signOut'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import { useConfirm } from '../../../shared/state/useConfirm'
 
@@ -32,8 +33,6 @@ const { t } = useI18n()
 const { ask } = useConfirm()
 
 const emit = defineEmits<{
-  /** The action ran. `signedOut` is whether THIS device's own session could be ended too. */
-  (e: 'done', signedOut: boolean): void
   /** The way back to unlocking here — the caller re-shows the Secret-Key field, persisting nothing. */
   (e: 'unlock'): void
 }>()
@@ -43,12 +42,11 @@ const error = ref('')
 const { run, pending } = useAsyncAction(
   async () => {
     // Revoke first: it is the half that stops whoever is holding the lost device, and it is the half that needs
-    // the session we are about to give up. `logout()` does more than its label — it also clears the device key
-    // and the session vault — which on this path are no-ops, since the entry enrolled neither; on a foreign
-    // machine doing them anyway is exactly right.
+    // the session we are about to give up. The sign-out also clears the device key and the session vault, which
+    // on this path are no-ops, since the entry enrolled neither; on a foreign machine doing them anyway is
+    // exactly right.
     await revokeOtherSessionFamilies()
-    const signedOut = await logout().then(() => true).catch(() => false)
-    emit('done', signedOut)
+    await signOut({ everywhere: true })
   },
   // A failed revoke stops here and says so: nothing was cut off, and signing this device out would only take
   // away the session needed to retry.

@@ -71,8 +71,9 @@ starts and looks healthy either way.
 ### Same-origin via Traefik (web, no CORS)
 
 A browser can only PUT/GET a presigned URL if the store is reachable from the web origin **and** allows CORS —
-unless the store is **same-origin**. `traefik` path-routes the bucket so it is: it forwards `/<bucket>/…`
-**without stripping the prefix** and **preserving the Host header** (SigV4 signs host+path+query, so a
+unless the store is **same-origin**. `traefik` path-routes the bucket so it is, from the static
+[`traefik-dev/blobs.yml`](traefik-dev/blobs.yml) — its only provider, as in production, so it holds no Docker
+socket. It forwards `/<bucket>/…` **without stripping the prefix** and **preserving the Host header** (SigV4 signs host+path+query, so a
 stripPrefix or host rewrite would break the signature). Entry is `http://localhost:18080`; sign presigned URLs
 for that public endpoint via `veyq.blob-store.public-endpoint=http://localhost:18080` (CORS-free, ADR 0013 §4).
 (The backend + web are added behind Traefik in a fuller deployment; this profile routes only the bucket path.)
@@ -216,17 +217,17 @@ operator-side recovery — the server holds no key material by construction.
   container at all; it is published on `127.0.0.1:${ADMIN_PORT}` of the host only, so nothing on the internet
   can reach the highest-privilege surface this instance serves. Reach it with the SSH tunnel above, or
   `docker compose exec`.
-- **`ADMIN_DOMAIN` set** — it gets its own hostname, router and certificate, the same fixed-domain pattern
-  `VEYQ_DOMAIN` used before [ADR 0063](../docs/decisions/0063-database-driven-tenant-ingress.md) (the admin
-  surface is 1:1 with the instance, so none of that ADR's per-tenant machinery applies). Point the name's DNS
+- **`ADMIN_DOMAIN` set** — it gets its own hostname, router and certificate. The app renders that router into
+  the routing file below, from configuration and never from the tenant table: the admin surface is 1:1 with the
+  instance ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)). Point the name's DNS
   at this host **first**, or the ACME order fails against the rate limit. Choose a name you publish nowhere:
   the app never links to this surface, and an unlisted name is one more layer between a stranger and it.
   **Set it only after the Server Owner exists.** This mode puts the admin container — and with it the admin
   listener — on the internet, so before setup it reopens exactly the first-caller window the listener closes on
   the public origin (uc.admin.admin-channel A5). Nothing enforces the order; it is yours.
 
-The app itself never links to the admin surface, is never told where it is, and carries no hint that it exists
-— an operator's deployment choice is not something the user-facing app can know.
+The user-facing app never links to the admin surface and carries no hint that it exists. The backend is handed
+`ADMIN_DOMAIN` only to render its router, and no client ever reads it back.
 
 **The same container also holds `veyq-admin`, a CLI for the same operations** ([ADR
 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md)) — tenant create/list/resend/reassign/
@@ -277,10 +278,14 @@ KEK, the instance reports `configSecretState: MISMATCH`, and member invites and 
 `scripts/validate_config_secret_persistence.py` holds the three files that have to agree about that path
 (`Dockerfile`, `VeyqConfig.kt`, this compose file) to each other on every push.
 
-**A tenant's domain routes because the app writes the routing, not because you edit this file.**
+**A domain routes because the app writes the routing, not because you edit this file.**
 `veyq-traefik-dynamic` is mounted at `/etc/traefik/dynamic` — read-write on `app`, read-only on `traefik`, which
-file-watches it — and holds exactly one generated file: a Traefik router pair per non-suspended tenant whose
-domain is not `VEYQ_DOMAIN`. **Never hand-edit it.** It is not configuration you maintain, it is a projection of
+file-watches it — and holds exactly one generated file, which is **all** of this stack's routing: the router
+pair for `VEYQ_DOMAIN`, one per non-suspended tenant, the admin router when `ADMIN_DOMAIN` is set, and the
+services and store middleware they reference. Traefik runs no other provider, so no container mounts the Docker
+socket — a `:ro` mount of it restricts nothing about the Docker API, and the proxy faces the internet. The one
+cost: if the app cannot write the file, `VEYQ_DOMAIN` is unrouted too, and it logs that loudly; the admin
+surface's localhost port bypasses Traefik, so you keep a way in. **Never hand-edit it.** It is not configuration you maintain, it is a projection of
 the `tenant` table ([ADR 0063](../docs/decisions/0063-database-driven-tenant-ingress.md)): the app rewrites the
 whole file on every tenant create, domain change, suspend, reactivate and at startup, so an edit survives until
 the next one of those and no longer. Nothing else is in there — no secret, no content — and it is deliberately
@@ -288,12 +293,8 @@ the next one of those and no longer. Nothing else is in there — no secret, no 
 tenant does mean a new Let's Encrypt certificate order per domain, which is the one place where the ACME
 rate-limit advice above stops being about your own testing.
 
-Two things worth knowing rather than discovering:
+Worth knowing rather than discovering:
 
-- **The proxy is scoped to this stack** (`--providers.docker.constraints=Label(veyq.stack,prod)`). Traefik's
-  docker provider is not project-aware: unconstrained, it discovers *every* container on the host — which both
-  exposes whatever else the machine runs and, with two veyq stacks side by side, collides on the router name and
-  makes Traefik drop the router for both.
 - **Upgrading is a procedure, not a flag change.** It has its own section — § *An upgrade, step by step* — and
   the reason it is not one line is that the schema migrates at boot with no gate and no downgrade path.
 - **There are two images per release, and they are pinned together.** `VEYQ_IMAGE` and `VEYQ_ADMIN_IMAGE` are

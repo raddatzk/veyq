@@ -46,6 +46,17 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+  - id: rotation-commits-only-the-next-epoch
+    text: >
+      A rotation states the epoch it creates and commits only as the scope's current epoch + 1; anything else (it
+      lost a race, or rode a grant a previous rotation skipped) is refused as 409 stale_epoch with nothing stored,
+      so no chain-link can name a key that is not its predecessor. The device re-opens its grant and retries once
+      from a fresh key; a queued rotation job that stays stale is declined for a current key-holder (ADR 0024 §4).
+    coverage:
+      backend:
+        unit: [RotationPolicyTest.commitsTheStatedEpochWhenItIsTheNextOne, RotationPolicyTest.refusesARotationBuiltOnASupersededEpoch, RotationPolicyTest.refusesARotationThatSkipsAnEpoch]
+        integration: [ScopesSliceTest.aRotationBuiltOnASupersededEpochIs409AndLeavesTheChainIntact, ScopesSliceTest.twoConcurrentRotationsStatingTheSameEpochCommitOnce]
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/tasks/scopeRotationWorker.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: operator-blind-rotation
     text: The server sees only role/membership metadata + opaque epoch-chain links, per-member grants, and per-node epoch indices — never a key or a name. The client posts only ciphertext (the chain-link + per-member grants).
     coverage:

@@ -97,8 +97,8 @@ purpose. It is a stored-format change, and it is being made before V1 because af
   With the epoch bound, a rotation between claim and completion would record an epoch the grant does not open
   under. So a grant-delivery completion (`completeTask`) **states the epoch it sealed**, and the server refuses
   one that is not the scope's current epoch (the job re-runs). A `rotateScope` request already states the epoch
-  it creates, and the server refuses it unless that is `current + 1`. That is
-  [`cr-rotation-states-its-epoch`](cr-rotation-states-its-epoch.md), which lands first. This CR binds that
+  it creates, and the server refuses it unless that is `current + 1` (`RotationPolicy.plan`, landed with
+  `cr-rotation-states-its-epoch`; every web rotation commits through `commitRotation` in `scopes.ts`). This CR binds that
   stated epoch into the link's and the grants' seals and adds no field of its own to `rotateScope`.
 - **The package's public surface.** Split `packages/crypto/src/v1.ts`:
   - The primitives move to a module that `package.json` `exports` does not list: `symWrap`, `asymWrap`, their

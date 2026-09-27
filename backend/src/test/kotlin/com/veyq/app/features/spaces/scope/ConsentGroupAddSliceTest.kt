@@ -193,7 +193,7 @@ class ConsentGroupAddSliceTest {
         // The owner rotates and — as a full-directory re-grant would — lists both themselves and the pending partner.
         given().header("Authorization", "Bearer ${token(owner)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant"},{"userId":"$partner","wrappedGrant":"$groupGrant"}]}""")
+            .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant"},{"userId":"$partner","wrappedGrant":"$groupGrant"}]}""")
             .`when`().post("/api/scopes/$groupId/epochs")
             .then().statusCode(201).body("epoch", equalTo(1))
 

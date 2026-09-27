@@ -32,10 +32,11 @@ choice. It also stops a client writing while it knows its epoch is stale
 - **The standalone member DELETE stays, for one purpose.** Its other caller is rescinding a pending consent
   proposal (`GroupMembersPanel.vue`, `rescind`), which was never keyed, so nothing is rotated.
 - **Order:**
-  - **After** `cr-seal-binds-its-object`. `rotateScope` states its new epoch there, and the server refuses any
-    epoch but `current + 1`. The rotator must state its *own* held epoch + 1, never the server's current.
-    That closes three things: inbox #177's race; the chain link a rotator with a stale grant corrupts; and a
-    delivery worker labelling a stale key as current.
+  - **After** `cr-seal-binds-its-object`, which binds into the seals the epoch `rotateScope` already states
+    (since `cr-rotation-states-its-epoch`: the server refuses any epoch but `current + 1`, and `commitRotation`
+    in `scopes.ts` states the rotator's *own* held epoch + 1, never the server's current). That closed inbox
+    #177's race and the chain link a rotator with a stale grant corrupts; the binding closes a delivery worker
+    labelling a stale key as current.
   - **After** `cr-admission-is-a-key-holder-act`. It re-tags every open admission in the same request and the
     same function (`rotateGroupForRemoval`).
   - **Before** `cr-trust-state-never-goes-backwards`, which extends the same write-epoch check with the floor.
