@@ -29,7 +29,7 @@ sign-in screen. You need no camera on this one, only on the other.
 In the second way round, typing the number feels like a hoop too many. It is the one part you should not
 rush, and here is why.
 
-The code your new device shows is only an address — nothing about it says whose device it is. Your phone
+Nothing about the code your new device shows says whose device it is. Your phone
 has no way to tell a code shown by the laptop in front of you from one someone sent you in a message. What
 it *can* tell is whether whoever answers knows a number **your phone chose and only showed on its own
 screen.** Someone who tricked you into scanning their code never sees that screen, so they can never send
@@ -37,6 +37,10 @@ the right number back.
 
 That is also why the first way round asks you to *compare* rather than type: there, both screens are in
 front of you, so seeing the same number is proof enough.
+
+And the server that passes the messages between your two devices cannot slip in a device of its own either way
+round: the code carries a secret that never reaches the server, and both devices check that everything they
+receive was made with it.
 
 **Never type in a number someone gives you over the phone or in a message.** Nobody legitimate will ever
 ask you for one — not support, not us, not a friend "helping you set things up". If someone is asking, that

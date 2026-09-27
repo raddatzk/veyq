@@ -109,7 +109,7 @@ class PairingSliceTest {
     fun aChannelOpenedWithNoSessionBecomesWhicheverAccountDelegates() {
         // The QR-sign-in direction: the channel is opened by the device that wants in, which has no session and
         // names no account — "which account this becomes is decided by whoever scans" (ADR 0059 §3). The answer
-        // here is a commitment to the transcribed code rather than a transport key, and the server cannot tell:
+        // here is that direction's (a MAC that also binds the transcribed code), and the server cannot tell:
         // the same call, the same shape, no branch anywhere on which direction is running (§6).
         val stranger = loginOther()
         val trusted = login()
@@ -454,8 +454,8 @@ class PairingSliceTest {
         /** The answering device's ephemeral transport public key — opaque to the server (ADR 0059 §3). */
         private const val EPHEMERAL_KEY = "ZXBoZW1lcmFsLXRyYW5zcG9ydC1wdWJsaWMta2V5"
 
-        /** The other direction's answer: a commitment to the transcribed code (§6). Same field, same shape —
-         *  the server must not be able to tell the two apart. */
+        /** The other direction's answer: key and a MAC that binds the transcribed code (§6, §11). Same field, same
+         *  shape — the server must not be able to tell the two apart. */
         private const val CODE_COMMITMENT = "Y29tbWl0bWVudC10by10aGUtdHlwZWQtY29kZQ=="
 
         /** The sealed grant: Master Key + delegated refresh token + label, wrapped to the answering key. */

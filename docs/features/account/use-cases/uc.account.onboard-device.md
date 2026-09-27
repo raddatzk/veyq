@@ -31,28 +31,33 @@ scans, and neither direction is the "phone" one.
 title: What each direction has to prove, and how
 ---
 flowchart TB
-  Q["The scanned code is just a routing handle —<br>nothing about it says whose device it is"]
+  Q["The scanned code carries the channel's secret —<br>nothing about it says whose device it is"]
   Q --> A["Add a device: my own screen showed it<br>→ compare the codes, both screens are here"]
   Q --> B["QR sign-in: someone else may have shown it<br>→ send a code back the attacker cannot read"]
 ```
 
 ## Main flow — add a new device
 
-1. On the signed-in, unlocked device the account holder opens **add a device**. It mints a pairing channel on
-   its own server and displays the channel's **handle** as a code. The handle is a routing secret the client
-   mints, not a key: in this direction the trusted device holds no keypair at all — only the new device mints
-   one ([ADR 0059](../../../decisions/0059-device-linking.md) §3) — and keeping the two apart is what lets the
-   displayed code mean one thing in both directions.
-2. The new device scans it. It mints a single-use **ephemeral transport keypair** and posts its public key to
-   that channel — reaching the server it already has open, never one named by the code
-   ([ADR 0059](../../../decisions/0059-device-linking.md) §4).
+1. On the signed-in, unlocked device the account holder opens **add a device**. It mints a 32-byte
+   **secret**, derives from it the channel's routing **handle** and a **channel key**, opens the channel on its
+   own server under the handle, and displays the secret as a code. The server only ever receives the handle
+   ([ADR 0059](../../../decisions/0059-device-linking.md) §11). None of these is a keypair: in this direction the
+   trusted device holds none at all — only the new device mints one (§3) — and keeping them apart is what lets
+   the displayed code mean one thing in both directions.
+2. The new device scans it and derives the same handle and channel key. It mints a single-use **ephemeral
+   transport keypair** and posts its public key to that channel, with a MAC over it under the channel key —
+   reaching the server it already has open, never one named by the code
+   ([ADR 0059](../../../decisions/0059-device-linking.md) §4). The trusted device refuses an answer whose MAC
+   does not verify before it shows any number: the relay carries the answer, sees the number the new device
+   will show, and could otherwise grind a key of its own to match it (§11).
 3. Both devices derive a short **check number** from the answering key. The new device shows it; the trusted
    device shows it inside its confirmation.
 4. The account holder confirms that the two match, names the device, and completes a **slide** confirmation
    that states what is being granted and that signing the device out later will not take it back.
 5. The trusted device seals the **Master Key, a freshly minted session's refresh token, and the label** to the
-   answering public key and posts the envelope.
-6. The new device picks the envelope up and opens it with its ephemeral private key. Before anything else it
+   answering public key and posts the envelope, with a MAC over it under the channel key.
+6. The new device picks the envelope up, verifies its MAC — anyone can seal to its public key, so only the MAC
+   says the grant came from the device that showed the code (§11) — and opens it with its ephemeral private key. Before anything else it
    answers the ordinary *"stay signed in"* question (E5) and **adopts** the handed-over refresh token into a
    session of its own — spending it, and receiving in exchange the same httpOnly cookie every other session
    here rides on ([ADR 0004](../../../decisions/0004-session-tokens.md) § Transport). Only then does it unlock,
@@ -67,20 +72,23 @@ flowchart TB
 1. On the new device the account holder chooses **sign in with a QR code** on the sign-in form — beside
    [uc.account.sessions](uc.account.sessions.md) E3's other two ways in, and like them without a session and
    without a shell route.
-2. The new device mints its **ephemeral transport keypair**, opens a pairing channel on the instance it has
-   open, and displays that channel's **handle** as a code — the same routing-only payload the other direction
-   displays, under its own marker so a code shown for one direction cannot be scanned into the other. The key
+2. The new device mints its **ephemeral transport keypair** and a channel **secret**, opens a pairing channel
+   under the handle the secret derives on the instance it has open, and displays the secret as a code — the
+   same payload the other direction displays, under its own marker so a code shown for one direction cannot be
+   scanned into the other. The key
    itself does **not** travel in the code: a post-quantum transport bundle serialises to 1260 bytes, which is a
    129-module QR nobody scans reliably and which sits past the decoder defect
    [`web/CLAUDE.md`](../../../../web/CLAUDE.md) grants its QR reader an exception around. Nothing is lost by
-   relaying it instead, because in this direction the scan authenticates nothing anyway — the code does (§5),
-   and the key is bound to it. It sends **no account identifier** — which account this becomes is decided by
+   relaying it instead, because the relayed key is MACed under the channel key the secret derives, and the code
+   is bound into the same MAC (§5, §11). It sends **no account identifier** — which account this becomes is decided by
    whoever scans.
 3. The account holder picks up the signed-in, unlocked device and scans.
 4. That device states what is being granted and displays a short **pairing code**, which the account holder
    types into the **new** device.
-5. The new device sends its transport public key together with a proof that it knows that code, bound to that
-   key, as the channel's one relayed answer. The trusted device checks the proof against the code it displayed.
+5. The new device sends its transport public key together with a proof that it knows that code — a MAC over
+   the key and the code under the channel key — as the channel's one relayed answer. The trusted device checks
+   the proof against the code it displayed. The relay reads the proof and cannot grind the code out of it, nor
+   prove it for a key of its own: it does not hold the channel key (§11).
    The transcription is editable until it is sent and there is exactly **one** send: the answer slot is
    write-once and the channel carries no status to refuse through, so a wrong proof abandons the pairing rather
    than offering a retry ([ADR 0059](../../../decisions/0059-device-linking.md) §6).
@@ -96,7 +104,8 @@ flowchart TB
 - **E1 — the pairing expires.** A channel is short-lived and single-use, and only one is outstanding per
   account. An expired or spent channel answers exactly as an unknown one does, so the endpoint cannot be used
   to probe which pairings exist.
-- **E2 — the codes do not match** (add-a-device), or **the pairing code is refused** (QR sign-in). The
+- **E2 — the codes do not match** (add-a-device), **the pairing code is refused** (QR sign-in), or **the answer's
+  MAC does not verify** (either direction — something without the code's secret answered). The
   confirmation is declined, nothing is sealed, and the channel is abandoned rather than retried in place: a
   mismatch is the one signal that something other than the intended device answered, and offering "try again"
   on the same channel would invite the user to grant past it. In the QR-sign-in direction the new device learns
@@ -123,10 +132,13 @@ flowchart TB
 - **Operator-blind.** The server relays two public keys and one ciphertext envelope. It never sees the Master
   Key, the label, the check number or the pairing code, and it learns no account identifier from the new
   device before the grant — the account is decided by the device that scans.
-- **The scan is the security boundary, not the convenience.** It is what carries the new device's key
-  out-of-band, past a relay that could otherwise substitute its own ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)'s
-  pattern, reused for the digest and the decoder — not for its pinning decision, which is about a persistent
-  account-global key and does not apply to a single-use one).
+- **The scan is the security boundary, not the convenience.** It is what carries the channel's secret
+  out-of-band, past a relay that could otherwise substitute its own key in either direction
+  ([ADR 0059](../../../decisions/0059-device-linking.md) §11). The codes of §5 and that secret stop different
+  parties: the codes stop someone who is not the relay (a photographed QR, a phisher's QR), the secret stops the
+  relay. An attacker who both reads the QR and runs the relay is covered by neither. The digest and the decoder
+  reuse [ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md)'s pattern — not its
+  pinning decision, which is about a persistent account-global key and does not apply to a single-use one.
 - **Nothing here wakes a device.** In both directions the account holder picks the second device up
   themselves, so there is no inbound approval prompt to fatigue — and that absence is deliberate, not a gap
   waiting for push.

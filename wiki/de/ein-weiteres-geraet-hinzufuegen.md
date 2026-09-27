@@ -29,7 +29,7 @@ anmelden"**. Dieses Gerät braucht keine Kamera, nur das andere.
 Beim zweiten Weg wirkt das Eintippen wie eine Hürde zu viel. Es ist genau der Teil, den du nicht überspringen
 solltest — und das ist der Grund.
 
-Der Code, den dein neues Gerät zeigt, ist nur eine Adresse; nichts daran sagt, wessen Gerät dahintersteckt.
+Nichts an dem Code, den dein neues Gerät zeigt, sagt, wessen Gerät dahintersteckt.
 Dein Handy kann einen Code, den der Laptop vor dir anzeigt, nicht von einem unterscheiden, den dir jemand in
 einer Nachricht geschickt hat. Was es *erkennen* kann: ob die Gegenseite eine Zahl kennt, **die dein Handy
 selbst gewürfelt und nur auf seinem eigenen Bildschirm gezeigt hat.** Wer dich zu einem fremden Code
@@ -37,6 +37,10 @@ verleitet hat, sieht diesen Bildschirm nie und kann die richtige Zahl deshalb ni
 
 Deshalb wirst du beim ersten Weg nur zum *Vergleichen* aufgefordert und nicht zum Tippen: dort hast du beide
 Bildschirme vor dir, und dieselbe Zahl zu sehen ist Beweis genug.
+
+Und der Server, der die Nachrichten zwischen deinen beiden Geräten weiterreicht, kann auf keinem der beiden
+Wege ein eigenes Gerät einschleusen: Der Code trägt ein Geheimnis, das den Server nie erreicht, und beide
+Geräte prüfen, dass alles, was bei ihnen ankommt, damit gemacht wurde.
 
 **Tippe nie eine Zahl ein, die dir jemand am Telefon oder in einer Nachricht durchgibt.** Seriös fragt
 danach niemand — kein Support, wir nicht, und auch nicht jemand, der dir „beim Einrichten hilft". Wenn

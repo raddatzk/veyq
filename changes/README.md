@@ -980,6 +980,18 @@ itself, not only through the page that already filters.
 and bite each layer alone. A suite that only tests the stack whole proves the property holds while *any* layer
 does, which is exactly what a later cleanup of "the redundant one" will spend without a red.
 
+### An attacker that omits the new field is refused by the parser, not by the check
+
+**When a fix adds an authenticator to a wire value, the bite's attacker must produce the value's NEW shape with
+its best forgery in the new field** — otherwise the fixed tree refuses it for being malformed, and the check the
+CR exists for never runs. `cr-pairing-authenticated-by-the-qr` specified its envelope bite as *"the relay seals a
+grant of its own (a valid seal with no MAC)"*: red on the untouched tree, and after the fix refused as
+`envelope_unreadable` — by the length-prefix reader, before any MAC was computed. Deleting the MAC check left
+that test green. A second relay, the same seal with a tag under the one key it does hold, is refused as
+`envelope_refused` and reddens when the check is disabled. So the CR names, per bite, **which refusal the fixed
+tree must answer with**, and the implementer re-bites the fixed tree by disabling the check itself — a relay test
+that stays green with the MAC switched off is a parser test.
+
 ### A "nothing moved" bite names the test that goes RED when it moves
 
 **The default's tests and the default's *detector* are usually not the same tests**, and a bite that lists the

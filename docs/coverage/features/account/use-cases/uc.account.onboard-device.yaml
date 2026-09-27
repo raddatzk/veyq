@@ -164,9 +164,9 @@ acceptanceCriteria:
       # The two gates are driven separately, one bite each, because either alone satisfies the negative: a wrong
       # proof does not so much as offer the slide and reaches neither `delegate` nor `seal`, and a VERIFIED proof
       # whose slide is left untouched still reaches neither — the completed ceremony calling each exactly once is
-      # the live control on both. The commitment binds ONE key to ONE code (wrong key, wrong code, wrong length
-      # each refused against the matching triple); the answer reader refuses a buffer it does not consume
-      # exactly, anchored on its own message; the new device sends exactly ONE answer, driven by clicks inside a
+      # the live control on both. The proof — a MAC under the channel key — binds ONE key to ONE code (a wrong code
+      # and a wrong key each refused as `answer_refused` against the matching triple); the answer reader refuses a
+      # buffer it does not consume exactly as `answer_unreadable`; the new device sends exactly ONE answer, driven by clicks inside a
       # single tick. The write-once answer slot is the backend's (`PairingStore.recordAnswer` updates only a
       # PENDING row), and no backend test answers a channel twice.
       web:
@@ -174,6 +174,31 @@ acceptanceCriteria:
           - src/features/account/pairing/AddDevicePanel.test.ts
           - src/features/account/pairing/pairing.test.ts
           - src/features/account/pairing/SignInWithCodeCard.test.ts
+  - id: a-relay-that-substitutes-its-key-is-refused
+    text: >-
+      A relay that substitutes its own key in either direction is refused: the trusted device seals only to an
+      answer, and the new device opens only an envelope, whose MAC under the QR-derived channel key verifies
+      (ADR 0059 §11). The relay carries both values and sees both halves of each binding step, so each negative is
+      the relay's own best move from what crossed it — grinding the transcribed code off the honest proof and
+      proving it for its own key, grinding its own bundle to the honest check number, and sealing a grant of its
+      own to the new device's public key — and each is anchored on its named refusal, with the honest ceremony as
+      the live control. Not covered, by design: an attacker who both reads the QR and runs the relay.
+    coverage:
+      # The byte formats are vector-pinned in packages/crypto (`v1.conformance.test.ts` § pairing channel: the two
+      # HKDF derivations and the three MAC statements, each MAC refused for a moved field, a wrong key, and a
+      # wrong length) — its surface still awaits a first CI run, so the refs below are web's. The three relays were
+      # written first against the untouched tree and seen red there (the trusted device sealed to the relay in both
+      # directions; the new device ran the tail on the relay's grant): `AddDevicePanel.test.ts` § a relay that
+      # substitutes its own key (the full ~10⁵-hash grind runs, 0.5–2 s), `JoinDeviceCard.test.ts` RELAY (a bare
+      # seal and one MACed under the handle). `pairing.test.ts` anchors each on its name (`answer_refused`,
+      # `envelope_refused`, `*_unreadable`) against the channel's own values, including a relay that knows the
+      # code but not the channel key; `useGrantReceiver.test.ts` pins the envelope path once for both cards.
+      web:
+        unit:
+          - src/features/account/pairing/AddDevicePanel.test.ts
+          - src/features/account/pairing/JoinDeviceCard.test.ts
+          - src/features/account/pairing/pairing.test.ts
+          - src/features/account/pairing/useGrantReceiver.test.ts
   - id: no-code-ever-names-a-server
     text: >-
       Nothing carried by a scanned code can name an endpoint, and no client follows one out of a scan — each
@@ -184,11 +209,11 @@ acceptanceCriteria:
     coverage:
       # Structural first: `scripts/validate_pairing_shapes.py` pins the seven pairing schemas as exact property
       # sets (bite-tested with a `serverUrl` on `PairingOpenRequest`). The refs are its twins: the channel read
-      # exposes exactly `answer` and `envelope`, the displayed payloads are marker plus handle and can never read
+      # exposes exactly `answer` and `envelope`, the displayed payloads are marker plus secret and can never read
       # as a URL (bitten under both markers by forcing the draw whose base64 begins with a slash), a payload
       # carrying a URL is refused, neither marker parses as the other's, and a foreign `https` QR is scanned past.
       # "Each side talks only to the instance it already has open" holds by construction — a parser returns the
-      # handle and nothing else — and no test asserts the API base after a scan.
+      # secret and nothing else — and no test asserts the API base after a scan.
       backend:
         integration:
           - PairingSliceTest.nothingOnThisWireCarriesAnythingButTheHandleAndTheTwoOpaqueValues

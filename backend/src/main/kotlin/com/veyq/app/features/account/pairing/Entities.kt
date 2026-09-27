@@ -43,9 +43,9 @@ class DevicePairingEntity : PanacheEntityBase {
     @Column(name = "delegated_family_id", length = 36)
     var delegatedFamilyId: String? = null
 
-    /** The answering device's ephemeral transport key — and, when *signing in with a QR code*, that key
-     *  together with its commitment to the transcribed code. The server cannot tell the two forms apart, and
-     *  §6 is why it must not be able to. */
+    /** The answering device's ephemeral transport key and a MAC over it under a channel key the server never
+     *  holds (ADR 0059 §11) — a MAC that, when *signing in with a QR code*, also binds the transcribed code. The
+     *  server cannot tell the two forms apart, and §6 is why it must not be able to. */
     @Column(name = "answer", columnDefinition = "TEXT")
     var answer: String? = null
 

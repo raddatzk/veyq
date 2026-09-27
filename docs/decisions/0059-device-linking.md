@@ -95,7 +95,7 @@ device being granted is one the user is holding.
 
 **6. The proof of the transcribed code gates the sealing, never the release.** The new device proves the code
 together with its public key, under the channel key (§11); the trusted device checks that proof against the code
-it displayed and only then seals. There is exactly **one** attempt, and that is structural rather than a policy: the commitment
+it displayed and only then seals. There is exactly **one** attempt, and that is structural rather than a policy: the proof
 travels in the channel's single relayed answer, that slot is write-once, and the channel carries no status — so
 nothing can tell the new device its proof was refused, and a retry would need a field this relay must not have.
 The transcription is therefore editable on the new device until it is sent; a sent wrong proof abandons the
@@ -131,7 +131,7 @@ key — or another device removes it via [ADR 0058](0058-revoke-never-takes-key-
 needs the password or the Emergency Kit, neither of which was ever typed on it.
 
 **11. The QR carries a secret the relay never sees, and that secret authenticates both messages the relay
-carries.** The code's payload is 32 random bytes instead of the routing handle. Both devices derive the handle
+carries.** The code's payload is 32 random bytes, never the routing handle itself. Both devices derive the handle
 and a **channel key** from it (two HKDF labels); the server only ever receives the handle. The answer carries a
 MAC under the channel key over the transport key — and, when *signing in with a QR code*, over the transcribed
 code too — and the envelope carries one over itself. The trusted device seals only to an answer whose MAC
@@ -201,12 +201,6 @@ rotation exists as before: they are the only barrier that acts *before* the key 
   deliberately have no inbound prompt at all.
 - **A partial grant** (link a device to some scopes only). The key model has one Master Key and one wrap per
   device; a partial grant would be a different key model, not a smaller ceremony.
-
-## What is still open
-
-§11 is decided and not built (inbox #161 (a)). Today the QR carries the handle itself and nothing is MAC'd, so
-the relay can substitute its own transport key in both directions, as §11 describes, and receive the Master Key
-and a live session. §5–§7 still hold against everyone who is not the relay.
 
 ## Related
 

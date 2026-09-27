@@ -14,8 +14,9 @@ data class CollectedChannel(val answer: String?, val envelope: String?)
  * The device-pairing ceremony (ADR 0059), server side.
  *
  * **What this handler is not allowed to know.** It never learns which of the two directions is running: `answer`
- * is an ephemeral transport key when *adding a device* and a commitment to a transcribed code when *signing in
- * with a QR code*, and §6 puts the check of that code on the trusted device precisely so no server-side gate can
+ * is an ephemeral transport key and a MAC under a channel key it never holds, one shape in both directions, the
+ * MAC binding a transcribed code when *signing in with a QR code* (ADR 0059 §11); and §6 puts the check of that
+ * code on the trusted device precisely so no server-side gate can
  * exist. A server that could tell the directions apart is one release-on-correct-code refactor away from being
  * the barrier ADR 0026 says it may never be — so there is nothing here that inspects a relayed value.
  *
