@@ -114,9 +114,16 @@ here because the code's `reason` strings point at this section rather than each 
   guessing axis and the non-enumerable 404 on discovery. What stays **open**: raw request volume by someone who
   already holds the link. Closing it needs a per-policy budget layer (a named `policy =` on the annotation), so
   the axis is right *and* the numbers are its own — deliberately out of scope of the posture work itself.
-- **`MediaResource`** — presign minting is a real amplification axis and `key = USER` now exists. Held back
-  because a per-user cap on the main upload and browse path has to be verified against real traffic first, or
-  it throttles a legitimate bulk upload. This is the open item most likely to be taken next.
+- **`MediaResource`** — presign minting is an amplification axis, bounded **per call** and not per caller: a
+  start or a window signs at most 256 items × `veyq.blob.presign-window` URLs (ADR 0013 §2), where a start once
+  signed every chunk of each item. `key = USER` exists; a per-user cap on the main upload and browse path is held
+  back until it is verified against real traffic, or it throttles a legitimate bulk upload. This is the open item
+  most likely to be taken next.
+- **`presignShareBlobUploadWindows`** — the contributor's next window. It does not spend the share's upload
+  budget (`ShareRateLimiter` counts the writes that create sessions and rows, and a window creates neither), and
+  it is bounded per call like the member window: it runs the link's whole gate again and signs only sessions the
+  token's identity opened through that budget. What stays open is the guest reads' gap — raw call volume by
+  someone who holds the link.
 - **`TasksResource`** — high-frequency polling *is* the design ([ADR 0021](../decisions/0021-operator-blind-background-tasks.md));
   a per-user request cap would throttle the mechanism rather than an abuse of it. What a claim can consume is
   bounded by the lease and attempt machinery, not by request count.

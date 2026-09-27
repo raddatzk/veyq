@@ -268,18 +268,27 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
 
 // --- add-media -------------------------------------------------------------
 
-/** A blob sealed and ready to upload: the wrap + the ciphertext frames + the declared shape. */
-type SealedBlob = { wrappedBlobKey: string; frames: Uint8Array[]; chunkCount: number; byteSize: number }
+/**
+ * A blob about to be uploaded: its plaintext source, a fresh `K_blob` (with its wrap under `K_mem`) and the shape
+ * the frame size fixes. Nothing is sealed yet — the pump seals frame `i` from `source.slice` when it is about to
+ * send it, so the client never holds the whole file, nor its sealed copy (ADR 0013 Consequences).
+ */
+type BlobPlan = { source: Blob; blobKey: Uint8Array; wrappedBlobKey: string; chunkCount: number; byteSize: number }
 
-/** Seal `data` as a media blob under a fresh random `K_blob` (wrapped under `K_mem`). */
-function sealBlob(memoryKey: Uint8Array, data: Uint8Array): SealedBlob {
+/** Plan `source` as a media blob under a fresh random `K_blob` (wrapped under `K_mem`). Its shape follows from its
+ *  size alone: every frame but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
+function planBlob(memoryKey: Uint8Array, source: Blob): BlobPlan {
   const blobKey = v1.randomBytes(32)
   const wrappedBlobKey = b64std(v1.symWrap(memoryKey, blobKey, KBLOB_CTX, v1.randomBytes(12)))
-  const plainChunks = chunkify(data)
-  const total = plainChunks.length
-  const frames = plainChunks.map((chunk, i) => v1.sealFrame(blobKey, i, total, chunk, v1.randomBytes(12)))
-  const byteSize = frames.reduce((n, f) => n + f.length, 0)
-  return { wrappedBlobKey, frames, chunkCount: total, byteSize }
+  const chunkCount = Math.max(1, Math.ceil(source.size / CHUNK_SIZE))
+  return { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD }
+}
+
+/** Read and seal frame `index` of a planned blob — one [CHUNK_SIZE] slice of the source, never more. */
+async function sealFrameAt(plan: BlobPlan, index: number): Promise<Uint8Array> {
+  const slice = plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
+  const plain = new Uint8Array(await slice.arrayBuffer())
+  return v1.sealFrame(plan.blobKey, index, plan.chunkCount, plain, v1.randomBytes(12))
 }
 
 /** Seal a small JSON payload under `K_mem` (a short AEAD blob, like a wrapped key) → opaque base64. */
@@ -346,8 +355,7 @@ function hasExifPayload(e: MediaExif): boolean {
 async function probeDims(source: AddMediaSource, deriver: MediaDeriver): Promise<Dimensions | null> {
   if (!deriver.probeDimensions) return null
   try {
-    const blob = new Blob([source.bytes as BlobPart], { type: source.mediaType })
-    return await deriver.probeDimensions(blob, source.mediaType)
+    return await deriver.probeDimensions(source.blob, source.mediaType)
   } catch {
     return null
   }
@@ -362,8 +370,7 @@ async function probeDims(source: AddMediaSource, deriver: MediaDeriver): Promise
 async function readExif(source: AddMediaSource): Promise<{ capturedAt?: number; gpsLat?: number; gpsLng?: number; exif: MediaExif | null }> {
   if (!source.mediaType.startsWith('image/')) return { exif: null }
   try {
-    const blob = new Blob([source.bytes as BlobPart], { type: source.mediaType })
-    const raw = await exifr.parse(blob, EXIF_PARSE_OPTIONS)
+    const raw = await exifr.parse(source.blob, EXIF_PARSE_OPTIONS)
     if (!raw) return { exif: null }
     const exif: MediaExif = {
       v: 1,
@@ -488,8 +495,12 @@ function throwIfAborted(signal?: AbortSignal): void {
 
 /** One blob to reserve: its declared shape + the K_blob wrap (under K_mem). */
 export type BlobDeclare = { chunkCount: number; byteSize: number; wrappedBlobKey: string }
-/** One reserved upload: the session id + the ordered per-chunk PUT URLs. */
-export type ReservedUpload = { uploadId: string; putUrls: string[] }
+/** One presigned PUT: the chunk it is for + its URL. */
+export type ChunkPut = { index: number; url: string }
+/** One reserved upload: the session id + the PUTs of its first window (ADR 0013 §2 — never the whole blob). */
+export type ReservedUpload = { uploadId: string; puts: ChunkPut[] }
+/** Sign the window of an open upload that starts at `fromChunk` — each next window, or one whose URLs expired. */
+export type WindowFn = (uploadId: string, fromChunk: number) => Promise<ChunkPut[]>
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
   originalUploadId: string
@@ -498,14 +509,104 @@ export type CompleteDecl = {
   wrappedExif: string | null
 }
 /**
- * The upload control plane behind [uploadMediaVia] — reserve sessions + presign PUTs, then complete + attach.
- * The **authed** transport ([mediaApiTransport]) drives the internal Memory upload; the **share-scoped**
- * transport (share.ts) drives the anonymous contributor upload (cr-0101). The sealing + direct-to-store PUTs
- * are identical either way — only who authorizes the reserve/complete differs.
+ * The upload control plane behind [uploadMediaVia] — reserve sessions (+ their first window of PUTs), sign each
+ * next window, then complete + attach. The **authed** transport ([mediaApiTransport]) drives the internal Memory
+ * upload; the **share-scoped** transport (share.ts) drives the anonymous contributor upload (cr-0101). The sealing
+ * + direct-to-store PUTs are identical either way — only who authorizes the reserve/window/complete differs.
  */
 export type MediaUploadTransport = {
   reserve(declares: BlobDeclare[]): Promise<ReservedUpload[]>
+  window: WindowFn
   complete(media: CompleteDecl): Promise<{ blobId: string; mediaId: string }>
+}
+
+/** How many `PUT`s the pump keeps in flight — and so how many sealed frames it holds (≈256 KiB each). */
+export const PUMP_IN_FLIGHT = 4
+
+/**
+ * How close to the end of the signed range the pump asks for the next window: when it starts a chunk this few
+ * places before the last signed one. Enough that the next window is usually back before the pump reaches it.
+ */
+const WINDOW_LOOKAHEAD = 2 * PUMP_IN_FLIGHT
+
+/**
+ * The one upload pump (ADR 0013 §2 + Consequences): read, seal and `PUT` a planned blob one frame at a time, with
+ * at most [PUMP_IN_FLIGHT] `PUT`s in flight, signing each next window before the URLs in hand run out. A `PUT` the
+ * store answers `403` (its window's TTL ran out — a stall, a slow link) re-signs from that chunk and is retried
+ * once, as the GET side does. Every upload — member, contributor, cover — goes through here.
+ */
+async function pumpBlob(
+  plan: BlobPlan,
+  upload: ReservedUpload,
+  signWindow: WindowFn,
+  onChunkDone: () => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const urls = new Map<number, string>()
+  let signedUpTo = 0 // exclusive: every chunk below it has been signed at least once
+  const take = (puts: ChunkPut[]) => {
+    for (const p of puts) {
+      urls.set(p.index, p.url)
+      signedUpTo = Math.max(signedUpTo, p.index + 1)
+    }
+  }
+  take(upload.puts)
+
+  // At most one next-window request at a time; every worker that needs it waits on the same one.
+  let pending: Promise<void> | null = null
+  const nextWindow = (): Promise<void> => {
+    pending ??= signWindow(upload.uploadId, signedUpTo).then(take).finally(() => { pending = null })
+    return pending
+  }
+
+  let next = 0
+  const worker = async () => {
+    for (;;) {
+      throwIfAborted(signal)
+      const i = next++
+      if (i >= plan.chunkCount) return
+      if (signedUpTo < plan.chunkCount && i >= signedUpTo - WINDOW_LOOKAHEAD) nextWindow().catch(() => {}) // ahead; a failure resurfaces below
+      while (!urls.has(i)) {
+        const before = signedUpTo
+        await nextWindow()
+        if (signedUpTo === before) throw new Error('upload_failed') // a window that signs nothing would spin forever
+      }
+      const frame = await sealFrameAt(plan, i)
+      try {
+        await putChunk(urls.get(i)!, frame, signal)
+      } catch (e) {
+        if (chunkPutStatus(e) !== HttpStatus.forbidden) throw e
+        take(await signWindow(upload.uploadId, i)) // the window expired → re-sign from this chunk, retry it once
+        await putChunk(urls.get(i)!, frame, signal)
+      }
+      urls.delete(i)
+      onChunkDone()
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(PUMP_IN_FLIGHT, plan.chunkCount) }, worker))
+}
+
+/** Reserve [plans] through [transport] and pump each in turn, reporting progress over every chunk of every blob. */
+async function reserveAndPump(
+  plans: BlobPlan[],
+  reserve: (declares: BlobDeclare[]) => Promise<ReservedUpload[]>,
+  signWindow: WindowFn,
+  onProgress?: (fraction: number) => void,
+  signal?: AbortSignal,
+): Promise<string[]> {
+  throwIfAborted(signal)
+  const reserved = await reserve(plans.map((p) => ({ chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey })))
+  if (reserved.length !== plans.length) throw new Error('upload_failed')
+  const totalChunks = plans.reduce((n, p) => n + p.chunkCount, 0)
+  let doneChunks = 0
+  onProgress?.(0)
+  for (const [i, plan] of plans.entries()) {
+    await pumpBlob(plan, reserved[i], signWindow, () => {
+      doneChunks += 1
+      onProgress?.(doneChunks / totalChunks)
+    }, signal)
+  }
+  return reserved.map((r) => r.uploadId)
 }
 
 /**
@@ -527,59 +628,59 @@ export async function uploadMediaVia(
   // already measured, so `sealMetadata` has nothing left to probe for an image.
   const { derivatives: tiers, dimensions } = await deriveTiers(source, deriver)
   const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey, dimensions)
-  // index 0 = original; the rest are the role-tagged derivatives, in order
-  const sealedOriginal = sealBlob(memoryKey, source.bytes)
-  const sealedTiers = tiers.map((t) => ({ kind: t.kind, sealed: sealBlob(memoryKey, t.bytes) }))
-  const sealedAll = [sealedOriginal, ...sealedTiers.map((t) => t.sealed)]
+  // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
+  // memory from the derivation — in order
+  const plans = [planBlob(memoryKey, source.blob), ...tiers.map((t) => planBlob(memoryKey, new Blob([t.bytes as BlobPart])))]
 
-  // reserve — one upload session + presign one PUT per chunk, per blob
-  throwIfAborted(signal)
-  const reserved = await transport.reserve(
-    sealedAll.map((s) => ({ chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey })),
-  )
-  if (reserved.length !== sealedAll.length) throw new Error('upload_failed')
-  const uploads = reserved.map((r, i) => ({ uploadId: r.uploadId, putUrls: r.putUrls, frames: sealedAll[i].frames }))
-
-  // PUT every chunk of every blob straight to the store (no base64, no JSON, no credentials), reporting
-  // progress as chunks land and passing the abort signal so a cancel stops the in-flight PUTs.
-  const totalChunks = sealedAll.reduce((n, s) => n + s.chunkCount, 0)
-  let doneChunks = 0
-  onProgress?.(0)
-  await Promise.all(
-    uploads.flatMap((u) =>
-      u.putUrls.map((url, i) =>
-        putChunk(url, u.frames[i], signal).then(() => {
-          doneChunks += 1
-          onProgress?.(totalChunks === 0 ? 1 : doneChunks / totalChunks)
-        }),
-      ),
-    ),
-  )
+  // reserve one upload session per blob, then read → seal → PUT each chunk straight to the store (no base64, no
+  // JSON, no credentials), window by window, passing the abort signal so a cancel stops the in-flight PUTs.
+  const uploadIds = await reserveAndPump(plans, (d) => transport.reserve(d), transport.window, onProgress, signal)
 
   // complete — one logical media: the original + its role-tagged derivative uploads
   throwIfAborted(signal)
   return transport.complete({
-    originalUploadId: uploads[0].uploadId,
-    derivatives: sealedTiers.map((t, i) => ({ kind: t.kind, uploadId: uploads[i + 1].uploadId })),
+    originalUploadId: uploadIds[0],
+    derivatives: tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + 1] })),
     wrappedMeta,
     wrappedExif,
   })
 }
 
-/** The authed upload transport — the internal Memory control plane (`startBlobUploads` + `completeMedia`). */
+/** Reserve through the authed media control plane (`startBlobUploads`) — the member upload and the cover share it. */
+async function mediaReserve(scopeId: string, declares: BlobDeclare[]): Promise<ReservedUpload[]> {
+  const started = await withRefresh(() =>
+    mediaApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
+  )
+  if (started.results.length !== declares.length) throw new Error('upload_failed')
+  return started.results.map((r) => {
+    if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
+    if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
+    return { uploadId: r.uploadId, puts: r.presignedPuts }
+  })
+}
+
+/** Sign an authed upload's next window (`presignBlobUploadWindows`). */
+function mediaWindow(scopeId: string): WindowFn {
+  return async (uploadId, fromChunk) => {
+    const signed = await withRefresh(() =>
+      mediaApi().presignBlobUploadWindows({ scopeId, blobUploadWindowsRequest: { items: [{ uploadId, fromChunk }] } }),
+    )
+    return windowPuts(signed.results[0])
+  }
+}
+
+/** One window result → its PUTs, or the per-item error it carries (`upload_not_found`, `range_invalid`, …). */
+export function windowPuts(r: { presignedPuts?: PresignedUrl[] | null; error?: string | null } | undefined): ChunkPut[] {
+  if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
+  if (!r.presignedPuts) throw new Error('store_unavailable')
+  return r.presignedPuts
+}
+
+/** The authed upload transport — the internal Memory control plane (`startBlobUploads` + `presignBlobUploadWindows` + `completeMedia`). */
 function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTransport {
   return {
-    async reserve(declares) {
-      const started = await withRefresh(() =>
-        mediaApi().startBlobUploads({ scopeId, blobUploadsBatchRequest: { items: declares } }),
-      )
-      if (started.results.length !== declares.length) throw new Error('upload_failed')
-      return started.results.map((r) => {
-        if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
-        if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
-        return { uploadId: r.uploadId, putUrls: byIndex(r.presignedPuts) }
-      })
-    },
+    reserve: (declares) => mediaReserve(scopeId, declares),
+    window: mediaWindow(scopeId),
     async complete(media) {
       const done = await withRefresh(() =>
         mediaApi().completeMedia({
@@ -636,32 +737,18 @@ export async function uploadCoverBlob(
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
 ): Promise<BlobRef> {
-  let bytes = source.bytes
+  let blob = source.blob
   if (source.mediaType.startsWith('image/')) {
     try {
-      bytes = (await deriver.deriveImage(new Blob([source.bytes as BlobPart], { type: source.mediaType }), COVER_SPEC)).bytes
+      blob = new Blob([(await deriver.deriveImage(source.blob, COVER_SPEC)).bytes as BlobPart])
     } catch {
       /* undecodable codec → seal the pristine bytes (still a valid, if larger, cover) */
     }
   }
-  const sealed = sealBlob(memoryKey, bytes)
-
-  const started = await withRefresh(() =>
-    mediaApi().startBlobUploads({
-      scopeId,
-      blobUploadsBatchRequest: {
-        items: [{ chunkCount: sealed.chunkCount, byteSize: sealed.byteSize, wrappedBlobKey: sealed.wrappedBlobKey }],
-      },
-    }),
-  )
-  const r = started.results[0]
-  if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
-  if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
-  const putUrls = byIndex(r.presignedPuts)
-  await Promise.all(putUrls.map((url, i) => putChunk(url, sealed.frames[i])))
+  const [uploadId] = await reserveAndPump([planBlob(memoryKey, blob)], (d) => mediaReserve(scopeId, d), mediaWindow(scopeId))
 
   const committed = await withRefresh(() =>
-    mediaApi().commitCoverBlob({ scopeId, nodeId, coverBlobCommitRequest: { uploadId: r.uploadId! } }),
+    mediaApi().commitCoverBlob({ scopeId, nodeId, coverBlobCommitRequest: { uploadId } }),
   )
   return { blobId: committed.blobId, chunkCount: committed.chunkCount, byteSize: committed.byteSize, wrappedBlobKey: committed.wrappedBlobKey }
 }
@@ -1056,14 +1143,6 @@ export function chunkProvider(scopeId: string, memoryKey: Uint8Array, ref: BlobR
 
 // --- transport helpers -----------------------------------------------------
 
-/** Split plaintext into ≥1 chunks of at most CHUNK_SIZE bytes (a 0-byte blob is a single empty chunk). */
-function chunkify(data: Uint8Array): Uint8Array[] {
-  if (data.length === 0) return [new Uint8Array(0)]
-  const out: Uint8Array[] = []
-  for (let off = 0; off < data.length; off += CHUNK_SIZE) out.push(data.subarray(off, off + CHUNK_SIZE))
-  return out
-}
-
 /** Order presigned URLs by their declared chunk index (the server returns them in order, but don't assume). */
 function byIndex(urls: PresignedUrl[]): string[] {
   return [...urls].sort((a, b) => a.index - b.index).map((u) => u.url)
@@ -1076,6 +1155,12 @@ const PUT_CONTENT_TYPE = 'application/octet-stream'
 async function putChunk(url: string, frame: Uint8Array, signal?: AbortSignal): Promise<void> {
   const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': PUT_CONTENT_TYPE }, body: frame as BodyInit, signal })
   if (!res.ok) throw new Error(`chunk_put_failed:${res.status}`)
+}
+
+/** Parse the HTTP status out of a {@link putChunk} failure (`chunk_put_failed:<status>`), or undefined if not one. */
+function chunkPutStatus(e: unknown): number | undefined {
+  const m = e instanceof Error ? /^chunk_put_failed:(\d+)$/.exec(e.message) : null
+  return m ? Number(m[1]) : undefined
 }
 
 async function getChunk(url: string): Promise<Uint8Array> {

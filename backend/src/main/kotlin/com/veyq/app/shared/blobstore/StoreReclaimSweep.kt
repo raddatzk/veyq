@@ -1,6 +1,6 @@
 package com.veyq.app.shared.blobstore
 
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.scheduler.Scheduled
@@ -55,7 +55,7 @@ class StoreReclaimSweep(
         // One batch call, then attribute the failures back per row: a row is settled only if NONE of its keys
         // came back refused. Partial success within a row is not a settlement — the remaining objects would
         // become exactly the untracked orphan this table exists to abolish.
-        val keysByRow = due.associate { row -> row.id to (0 until row.chunkCount).map { chunkKey(row.storageKey, it) } }
+        val keysByRow = due.associate { row -> row.id to chunkKeys(row.storageKey, row.chunkCount) }
         val refused = handOver(keysByRow.values.flatten())
 
         keysByRow.forEach { (id, keys) ->

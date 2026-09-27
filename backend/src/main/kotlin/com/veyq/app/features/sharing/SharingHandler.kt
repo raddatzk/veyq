@@ -8,11 +8,15 @@ import com.veyq.app.features.media.DerivativeDeclare
 import com.veyq.app.features.media.MediaHandler
 import com.veyq.app.features.media.UploadDeclare
 import com.veyq.app.features.media.UploadItemResult
+import com.veyq.app.features.media.UploadOpener
+import com.veyq.app.features.media.WindowItemResult
+import com.veyq.app.features.media.WindowRequest
 import com.veyq.app.features.platform.capabilities.CapabilityIds
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
 import com.veyq.app.features.spaces.scope.ScopesStore
 import com.veyq.app.shared.blobstore.BlobStore
-import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
+import com.veyq.app.shared.blobstore.PresignedRef
+import com.veyq.app.shared.blobstore.presignGets
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.FailureStatus.SERVICE_UNAVAILABLE
@@ -29,9 +33,6 @@ import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.Base64
-
-/** A presigned GET for one chunk (index in chunk order). */
-data class PresignRef(val index: Int, val url: String)
 
 /** One contributor upload to complete: the original session + role-tagged derivatives (the shared node is server-set). */
 data class ShareCompleteItem(
@@ -101,6 +102,17 @@ sealed interface ShareUploadOutcome {
     object RateLimited : ShareUploadOutcome, HttpFailure by Failures.rateLimited
 }
 
+sealed interface ShareWindowOutcome {
+    data class Results(val items: List<WindowItemResult>) : ShareWindowOutcome
+    object NotFound : ShareWindowOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** Not a CONTRIBUTOR share, or the contributor token is invalid — a 403. */
+    object NotContributable : ShareWindowOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
+    /** Password-protected + a wrong token (cr-0164) — a 403. */
+    object PasswordIncorrect : ShareWindowOutcome, HttpFailure by httpFailure("share_password_incorrect", FORBIDDEN)
+    /** Too many wrong password tokens on this share (cr-0165) — a 429. */
+    object RateLimited : ShareWindowOutcome, HttpFailure by Failures.rateLimited
+}
+
 sealed interface ShareCompleteOutcome {
     data class Results(val items: List<CompleteItemResult>) : ShareCompleteOutcome
     object NotFound : ShareCompleteOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -112,7 +124,7 @@ sealed interface ShareCompleteOutcome {
 }
 
 sealed interface ShareBlobOutcome {
-    data class Found(val gets: List<PresignRef>) : ShareBlobOutcome
+    data class Found(val gets: List<PresignedRef>) : ShareBlobOutcome
     /** Unknown/disabled/expired share, the blob is not under the shared subtree, or a required password token is
      *  absent — a non-enumerable 404. */
     object NotFound : ShareBlobOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
@@ -345,9 +357,28 @@ class SharingHandler(
             PwCheck.OK -> {}
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return ShareUploadOutcome.NotContributable
-        if (store.findIdentity(shareId, contributorToken) == null) return ShareUploadOutcome.NotContributable
+        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareUploadOutcome.NotContributable
         if (!rateLimiter.allowUpload(shareId)) return ShareUploadOutcome.RateLimited
-        return ShareUploadOutcome.Results(mediaHandler.startForScope(share.scopeId, declares, domain))
+        return ShareUploadOutcome.Results(mediaHandler.startForScope(share.scopeId, UploadOpener.Contributor(identity.id), declares, domain))
+    }
+
+    /**
+     * Sign the next window of a contributor's open uploads — the link's whole gate again (active share, password,
+     * upload role, token), because a window is where a revoked, expired or disabled link stops an upload already in
+     * flight (ADR 0013 §2). It does **not** spend [ShareRateLimiter.allowUpload]: that budget counts the writes that
+     * create sessions and rows, and a window creates neither. Only the identity that opened a session gets its window.
+     */
+    fun windowUploads(shareId: String, pwToken: String?, contributorToken: String, requests: List<WindowRequest>, domain: String?): ShareWindowOutcome {
+        val share = activeShare(shareId) ?: return ShareWindowOutcome.NotFound
+        when (passwordCheck(share, pwToken)) {
+            PwCheck.MISSING -> return ShareWindowOutcome.NotFound
+            PwCheck.WRONG -> return ShareWindowOutcome.PasswordIncorrect
+            PwCheck.TOO_MANY -> return ShareWindowOutcome.RateLimited
+            PwCheck.OK -> {}
+        }
+        if (!ShareAccessPolicy.canUpload(share.role)) return ShareWindowOutcome.NotContributable
+        val identity = store.findIdentity(shareId, contributorToken) ?: return ShareWindowOutcome.NotContributable
+        return ShareWindowOutcome.Results(mediaHandler.windowForScope(share.scopeId, UploadOpener.Contributor(identity.id), requests, domain))
     }
 
     /** Complete a contributor upload — attach to the share's own Memory node, stamped with the identity. */
@@ -373,7 +404,7 @@ class SharingHandler(
                 wrappedExif = it.wrappedExif,
             )
         }
-        return ShareCompleteOutcome.Results(mediaHandler.completeForNode(share.scopeId, completeItems, identity.id))
+        return ShareCompleteOutcome.Results(mediaHandler.completeForNode(share.scopeId, completeItems, UploadOpener.Contributor(identity.id)))
     }
 
     /**
@@ -408,8 +439,7 @@ class SharingHandler(
         // in-subtree id. This makes "cannot see" a real server gate, not just id-secrecy (the resolve returns none).
         if (!ShareAccessPolicy.canView(share.role)) return ShareBlobOutcome.NotFound
         val blob = store.authorizedBlob(share.scopeId, share.nodeId, blobId) ?: return ShareBlobOutcome.NotFound
-        if (!blobStore.canPresign) return ShareBlobOutcome.StoreUnavailable
-        val gets = (0 until blob.chunkCount).map { i -> PresignRef(i, blobStore.presignGet(chunkKey(blob.storageKey, i), domain)!!) }
+        val gets = blobStore.presignGets(blob.storageKey, blob.chunkCount, domain) ?: return ShareBlobOutcome.StoreUnavailable
         return ShareBlobOutcome.Found(gets)
     }
 

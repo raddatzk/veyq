@@ -40,7 +40,7 @@ acceptanceCriteria:
         unit: [src/features/memory/share.test.ts]
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: share-scoped-upload
-    text: Two share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role CONTRIBUTOR + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads presigns one PUT per chunk, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
+    text: Three share-scoped UNAUTHENTICATED endpoints mirror the media control plane, gated only on share state (role CONTRIBUTOR + enabled + a valid contributor token) — POST /api/shares/{shareId}/blob-uploads opens sessions and presigns their first window of PUTs, POST /api/shares/{shareId}/blob-upload-windows presigns each next window, POST /api/shares/{shareId}/media completes + attaches. The contributor seals K_blob + derivatives + metadata under K_mem and PUTs ciphertext direct-to-store; bytes never flow through the backend. A parallel authz path keyed on share state, never a relaxed member filter.
     coverage:
       # The slice proves the endpoints' authz; only the e2e proves the TRANSPORT — real presigned PUTs of real
       # sealed chunks into the bundled store, and the bytes coming back out through the gated presign byte-equal.
@@ -77,6 +77,17 @@ acceptanceCriteria:
     coverage:
       backend:
         integration: [ShareContributorSliceTest.viewerShareRejectsContribution, ShareContributorSliceTest.revokeStopsContribution]
+  - id: revocation-stops-an-in-flight-upload
+    text: >-
+      Revoking or expiring the link stops an in-flight upload at its next window. Each window runs the link's whole
+      gate again (active share, password, upload role, contributor token), so an upload already under way gets no
+      further URL once the link is gone — not only the next upload. A window does not spend the share's upload
+      budget, which counts the writes that create sessions and rows.
+    coverage:
+      backend:
+        integration: [ShareUploadWindowSliceTest.revokingTheLinkStopsAnInFlightUploadAtItsNextWindow]
+      web:
+        unit: [src/features/memory/share.test.ts]
   - id: role-mutable-in-place
     text: A curator changes an existing share's role in place (VIEWER <-> CONTRIBUTOR) via PATCH updateShare { role } (cr-0119, ADR 0036) — the same link / wrap / K_share are untouched (role is server-enforced plaintext authz, no re-crypto), so the new grant bites on the next guest request (a promote enables contribution at once; a demote 403s new uploads, already-contributed photos stay). Restricted to VIEWER <-> CONTRIBUTOR - setting role=UPLOADER, or changing an UPLOADER share's role, is 422 invalid_role_change (the write-only drop-box is its own separate action, its promise not flippable on distributed links). Owner-gated (a non-owner is 404, like the note edit); role is optional on the PATCH (omitted for a plain note/name edit). Web - the normal edit dialog shows the VIEWER/CONTRIBUTOR switcher (never the uploader variant).
     coverage:

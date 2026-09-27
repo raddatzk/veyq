@@ -22,6 +22,7 @@ import {
   openBlobFromUrls,
   makeChunkProvider,
   uploadMediaVia,
+  windowPuts,
   createBrowserDeriver,
   type BlobRef,
   type ChunkProvider,
@@ -309,7 +310,9 @@ export async function createContributorIdentity(
   return { identityId, contributorToken }
 }
 
-/** The share-scoped upload transport (no auth) — reserve via `startShareBlobUploads`, complete via `completeShareMedia`. */
+/** The share-scoped upload transport (no auth) — reserve via `startShareBlobUploads`, sign each next window via
+ *  `presignShareBlobUploadWindows` (the link's gate again, so a revoked link stops the upload there), complete via
+ *  `completeShareMedia`. */
 function shareUploadTransport(shareId: string, contributorToken: string, pwToken?: string): MediaUploadTransport {
   return {
     async reserve(declares) {
@@ -322,8 +325,16 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
       return started.results.map((r) => {
         if (!r || r.error) throw new Error(r?.error ?? 'upload_failed')
         if (!r.uploadId || !r.presignedPuts) throw new Error('store_unavailable')
-        return { uploadId: r.uploadId, putUrls: [...r.presignedPuts].sort((a, b) => a.index - b.index).map((u) => u.url) }
+        return { uploadId: r.uploadId, puts: r.presignedPuts }
       })
+    },
+    async window(uploadId, fromChunk) {
+      const signed = await publicSharesApi().presignShareBlobUploadWindows({
+        shareId,
+        shareBlobUploadWindowsRequest: { contributorToken, items: [{ uploadId, fromChunk }] },
+        xSharePassword: pwToken, // cr-0164
+      })
+      return windowPuts(signed.results[0])
     },
     async complete(media) {
       const done = await publicSharesApi().completeShareMedia({

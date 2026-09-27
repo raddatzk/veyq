@@ -34,18 +34,73 @@ acceptanceCriteria:
       `storage_key` and a row-only delete would orphan the bytes permanently. Those are two components since
       ADR 0062 and the tests drive both — the purge deletes the row and records the key prefix in the same
       transaction, and `StoreReclaimSweep` hands the objects to the store on the next tick. A session still
-      inside the window loses neither half. The window is bounded by construction rather than
-      chosen — all of a session's PUT URLs are signed once at `start` and nothing re-signs them, so a client
-      past the presign TTL can write no further byte. This is the SERVER half of E2; the client half (cancelling
-      an in-flight upload aborts its PUTs and stops before `complete`, so no media is attached) is a different
-      claim, covered by `progress-and-cancel` above.
+      inside the window loses neither half. The window is measured from the session's LAST ISSUED WINDOW, not its
+      start — a large upload is signed window by window, so its start says nothing about whether it is alive —
+      and it is bounded by construction rather than chosen: every window's PUT URLs are signed under the presign
+      TTL, so a session with no new window past that TTL can receive no further byte. This is the SERVER half of
+      E2; the client half (cancelling an in-flight upload aborts its PUTs and stops before `complete`, so no
+      media is attached) is a different claim, covered by `progress-and-cancel` above.
     coverage:
       backend:
         integration:
           - UploadSessionPurgeSliceTest.purgeReclaimsBothTheRowAndTheStagedChunkObjectsOfAnAbandonedSession
           - UploadSessionPurgeSliceTest.purgeLeavesBothHalvesOfASessionInsideTheRetentionWindow
           - UploadSessionPurgeSliceTest.purgeAlsoReclaimsTheRowLeftBehindByABudgetRejection
+          - UploadSessionPurgeSliceTest.purgeKeysOnTheLastIssuedWindowNotOnTheStart
           - UploadSessionPurgeSliceTest.retentionDefaultsToTheMeasuredPresignBound
+  - id: upload-outlives-the-presign-ttl
+    text: >-
+      An upload outlives the presign TTL: `start` signs only a blob's first window of chunks, and the client asks
+      for each next window as it goes, so the TTL has to cover one window rather than one file (ADR 0013 §2). A
+      window signs chunks `[fromChunk, fromChunk + window)` of an open session, each for its exact length, and marks
+      the session live; a `fromChunk` outside the blob is `range_invalid`, a consumed session has no window. A `PUT`
+      the store refuses with 403 — its window expired — is re-signed from that chunk and retried once, and the
+      client asks for the next window before the signed range runs out.
+    coverage:
+      backend:
+        integration:
+          - UploadWindowSliceTest.startSignsOnlyTheFirstWindowOfABlobLargerThanOne
+          - UploadWindowSliceTest.aWindowSignsTheNextChunksAndMarksTheSessionLive
+          - UploadWindowSliceTest.aWindowFromOutsideTheBlobIsRangeInvalid
+          - UploadWindowSliceTest.aCompletedSessionHasNoWindow
+      web:
+        unit: [src/features/memory/media.test.ts]
+    gaps:
+      - surface: backend
+        reason: >
+          That a blob of more than one window moves through a REAL store (start + window + PUTs + complete) is
+          measured only by `BlobBatchE2ETest`, which needs a real Garage and runs when `VEYQ_S3_E2E=1`. No CI job
+          sets it, so it makes no coverage claim (ADR 0040) and is named here instead.
+  - id: session-bound-to-its-opener
+    text: >-
+      A session is extended and completed only by its opener, and only while the opener still holds the upload
+      right. It records the account (a member upload) or the share identity (a contributor upload) that opened it,
+      and every window, complete and cover commit resolves it only for that caller — another member or another
+      identity on the same link is told `upload_not_found`, the same as for an unknown session. Every window is
+      authorized again like its `start`, so a member removed since then is refused at their next window.
+    coverage:
+      backend:
+        integration:
+          - UploadWindowSliceTest.aSecondMemberCannotCompleteAnotherMembersSession
+          - UploadWindowSliceTest.aSecondMemberCannotCommitAnotherMembersSessionAsACover
+          - UploadWindowSliceTest.aWindowOfAnotherMembersSessionIsUploadNotFound
+          - UploadWindowSliceTest.aRemovedMemberIsRefusedAtTheNextWindow
+          - ShareUploadWindowSliceTest.aSecondIdentityCannotCompleteAnotherIdentitysSession
+          - ShareUploadWindowSliceTest.aSecondIdentityGetsNoWindowOfAnotherIdentitysSession
+  - id: client-streams-the-file
+    text: >-
+      The client streams a file and never holds all of it: the queue hands the picked `File` on unread, the
+      original is read as one slice per frame, sealed with its index and the total (both known from the size) and
+      `PUT` with at most a small fixed number in flight — member uploads, contributor uploads and the cover alike,
+      through one pump. Derivatives are small and derived from the same `Blob`. That a real tab stays within memory
+      on a multi-GiB file is a manual check, not a claim: the tests prove the pump never reads the whole file and
+      bounds what is in flight.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+          - src/features/memory/uploadQueue.test.ts
+          - src/features/memory/share.test.ts
   - id: store-responses-are-inert
     text: >-
       The store never serves an object as a renderable type, and refuses a PUT of any type but the pinned one

@@ -7,10 +7,10 @@ vi.mock('../../api/client', () => ({
   tokenApi: vi.fn(),
 }))
 
-import { createShare, resolveShare, createContributorIdentity, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
+import { createShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
-import { unsealMeta } from './media'
+import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
 import { sharesApi, publicSharesApi } from '../../api/client'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
@@ -177,6 +177,46 @@ describe('shared-scope management (cr-0104)', () => {
     await reactivateShare('share-9')
 
     expect(reactivate).toHaveBeenCalledWith({ shareId: 'share-9' })
+  })
+})
+
+describe('addSharePhoto — the contributor transport signs each next window (ADR 0013 §2)', () => {
+  it('asks the share-gated window endpoint for the rest of the blob, with the token and the password', async () => {
+    // A server window of 2 chunks and a 3-chunk original: the third URL can only come from a window request, and
+    // that request must carry the link's whole gate — it is where a revoked link stops the upload.
+    const puts = (uploadId: string, from: number, to: number) =>
+      Array.from({ length: to - from }, (_, k) => ({ index: from + k, url: `mem://${uploadId}/${from + k}` }))
+    const api = {
+      startShareBlobUploads: vi.fn(async ({ shareBlobUploadsRequest }: any) => ({
+        results: shareBlobUploadsRequest.items.map((item: any, i: number) => ({
+          uploadId: `up-${i}`, presignedPuts: puts(`up-${i}`, 0, Math.min(2, item.chunkCount)), error: null,
+        })),
+      })),
+      presignShareBlobUploadWindows: vi.fn(async ({ shareBlobUploadWindowsRequest }: any) => ({
+        results: shareBlobUploadWindowsRequest.items.map(({ uploadId, fromChunk }: any) => ({ presignedPuts: puts(uploadId, fromChunk, 3), error: null })),
+      })),
+      completeShareMedia: vi.fn(async () => ({ results: [{ blobId: 'b-1', mediaId: 'm-1', error: null }] })),
+    }
+    vi.mocked(publicSharesApi).mockReturnValue(api as unknown as ReturnType<typeof publicSharesApi>)
+    const putUrls: string[] = []
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => { putUrls.push(url); return { ok: true, status: 200 } as Response }))
+    const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
+
+    const done = await addSharePhoto(
+      { identityId: 'id-1', contributorToken: 'tok-1', shareId: 'share-1', memoryKey: v1.randomBytes(32), pwToken: 'pw-1' },
+      { blob: new Blob([new Uint8Array(2 * CHUNK_SIZE + 1)]), mediaType: 'application/pdf' },
+      noTiers,
+    )
+
+    expect(done).toEqual({ blobId: 'b-1', mediaId: 'm-1' })
+    expect(api.presignShareBlobUploadWindows).toHaveBeenCalledOnce()
+    expect(api.presignShareBlobUploadWindows).toHaveBeenCalledWith({
+      shareId: 'share-1',
+      shareBlobUploadWindowsRequest: { contributorToken: 'tok-1', items: [{ uploadId: 'up-0', fromChunk: 2 }] },
+      xSharePassword: 'pw-1',
+    })
+    expect(putUrls.sort()).toEqual(['mem://up-0/0', 'mem://up-0/1', 'mem://up-0/2'])
+    vi.unstubAllGlobals()
   })
 })
 

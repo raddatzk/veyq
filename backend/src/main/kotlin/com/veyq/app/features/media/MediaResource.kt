@@ -7,6 +7,9 @@ import com.veyq.app.generated.model.BlobDownloadResultItem
 import com.veyq.app.generated.model.BlobDownloadsBatchRequest
 import com.veyq.app.generated.model.BlobDownloadsBatchResponse
 import com.veyq.app.generated.model.BlobUploadResultItem
+import com.veyq.app.generated.model.BlobUploadWindowResultItem
+import com.veyq.app.generated.model.BlobUploadWindowsRequest
+import com.veyq.app.generated.model.BlobUploadWindowsResponse
 import com.veyq.app.generated.model.BlobUploadsBatchRequest
 import com.veyq.app.generated.model.BlobUploadsBatchResponse
 import com.veyq.app.generated.model.MediaBatchRequest
@@ -20,6 +23,7 @@ import com.veyq.app.generated.model.MediaMetaUpdate
 import com.veyq.app.generated.model.MediaResultItem
 import com.veyq.app.generated.model.MediaSummary
 import com.veyq.app.generated.model.PresignedUrl
+import com.veyq.app.shared.blobstore.PresignedRef
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
 import io.quarkus.security.Authenticated
@@ -42,9 +46,10 @@ import com.veyq.app.shared.ratelimit.RateLimitExempt
 @Authenticated
 @RateLimitExempt(
     reason = "Authenticated + membership-gated media plumbing. Deliberately NOT key = USER yet: presign " +
-        "minting is a real amplification axis, but a per-user cap on the main upload and browse path has " +
-        "to be verified against real traffic before it ships, or it throttles a legitimate bulk upload. " +
-        "Recorded as the open item in cc.security.rate-limit (\u00a7 Unbounded by decision).",
+        "minting is an amplification axis, bounded per call (a start or a window signs at most 256 items x " +
+        "veyq.blob.presign-window URLs) but not per caller, and a per-user cap on the main upload and browse " +
+        "path has to be verified against real traffic before it ships, or it throttles a legitimate bulk " +
+        "upload. Recorded as the open item in cc.security.rate-limit (\u00a7 Unbounded by decision).",
 )
 class MediaResource(
     private val handler: MediaHandler,
@@ -203,6 +208,20 @@ class MediaResource(
                 BlobDownloadsBatchResponse(
                     results = o.items.map {
                         BlobDownloadResultItem(presignedGets = it.presignedGets?.map(::toPresigned), error = it.error)
+                    },
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
+    override fun presignBlobUploadWindows(scopeId: UUID, blobUploadWindowsRequest: BlobUploadWindowsRequest): Response {
+        val requests = blobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk) }
+        return when (val o = handler.window(identity.principal.name, scopeId.toString(), requests, signingDomain())) {
+            is WindowOutcome.Results -> Response.ok(
+                BlobUploadWindowsResponse(
+                    results = o.items.map {
+                        BlobUploadWindowResultItem(presignedPuts = it.presignedPuts?.map(::toPresigned), error = it.error)
                     },
                 ),
             ).build()

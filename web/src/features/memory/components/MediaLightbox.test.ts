@@ -112,8 +112,8 @@ async function seedTwo(memoryKey: Uint8Array) {
   const store = galleryFakeStore()
   vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
   vi.stubGlobal('fetch', store.fetchStub)
-  await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(1), mediaType: 'image/png' }, stubDeriver())
-  await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(2), mediaType: 'image/jpeg' }, stubDeriver())
+  await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
+  await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
   const items = await listMedia(SCOPE_ID, NODE_ID)
   return { store, items }
 }
@@ -274,7 +274,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes, mediaType }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([bytes as BlobPart]), mediaType }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
     return { store, items }
   }
@@ -359,7 +359,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: FTYP_MP4, mediaType: 'video/mp4' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([FTYP_MP4 as BlobPart]), mediaType: 'video/mp4' }, stubDeriver())
     return { store, items: await listMedia(SCOPE_ID, NODE_ID) }
   }
 
@@ -462,7 +462,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(3), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     // the list stays constant-small — no EXIF rode along
@@ -503,7 +503,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(3), mediaType: 'image/jpeg', name: 'IMG_0042.HEIC' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg', name: 'IMG_0042.HEIC' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -532,7 +532,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(5), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(5) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -558,7 +558,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
         : store.fetchStub(url, init),
     )
     vi.stubGlobal('fetch', geo)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(7), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(7) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     return { store, geo, items: await listMedia(SCOPE_ID, NODE_ID) }
   }
   const geocoderCalls = (geo: ReturnType<typeof vi.fn>) =>
@@ -655,7 +655,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(2), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -674,7 +674,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(4), mediaType: 'image/png' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(4) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -691,7 +691,7 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
-    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { bytes: new Uint8Array(8).fill(9), mediaType: 'image/jpeg' }, stubDeriver())
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(9) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const items = await listMedia(SCOPE_ID, NODE_ID)
     return { store, items }
   }

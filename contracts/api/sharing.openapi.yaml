@@ -380,13 +380,15 @@ paths:
     post:
       tags: [sharing]
       operationId: startShareBlobUploads
-      summary: Start contributor blob uploads (unauthenticated) — reserve sessions + presign PUTs.
+      summary: Start contributor blob uploads (unauthenticated) — reserve sessions + presign the first window of PUTs.
       description: >
         **No auth.** The share-scoped mirror of `startBlobUploads` (media API) for a **CONTRIBUTOR** share: gated on
         the share (exists + `enabled` + role CONTRIBUTOR) + a valid `contributorToken`. For each declared blob
-        (`chunkCount`, `byteSize`, the `K_blob` wrap under `K_mem`) the server opens an upload session and returns
-        one short-TTL presigned **PUT** URL per chunk; the contributor PUTs ciphertext **direct-to-store** and then
-        calls `completeShareMedia`. The in-memory dev store cannot presign (`503`). Per-share rate-limited.
+        (`chunkCount`, `byteSize`, the `K_blob` wrap under `K_mem`) the server opens an upload session **bound to
+        the token's identity** and returns short-TTL presigned **PUT** URLs for the blob's **first window** of
+        chunks; the contributor PUTs ciphertext **direct-to-store**, asks `presignShareBlobUploadWindows` for each
+        next window, and then calls `completeShareMedia`. The in-memory dev store cannot presign (`503`).
+        Per-share rate-limited.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
         `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
       parameters:
@@ -429,6 +431,55 @@ paths:
           description: The configured object store cannot presign (e.g. the in-memory dev store).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: store_unavailable } }
+
+  /api/shares/{shareId}/blob-upload-windows:
+    post:
+      tags: [sharing]
+      operationId: presignShareBlobUploadWindows
+      summary: Presign the next window of contributor PUTs (unauthenticated).
+      description: >
+        **No auth.** The share-scoped mirror of `presignBlobUploadWindows` (media API). Gated **again**, per
+        request, exactly like `startShareBlobUploads` — the share exists + `enabled` + allows uploads, the password
+        token when the share has one, and a valid `contributorToken` — so revoking, expiring or disabling the link
+        stops an in-flight upload at its next window. A session resolves only for **the identity that opened it**.
+        A window creates no session and no row, so it does not spend the share's upload budget.
+        **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this endpoint — no
+        `X-Share-Password` → non-enumerable `404`; a wrong token → `403 share_password_incorrect`.
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+        - $ref: "#/components/parameters/SharePassword"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ShareBlobUploadWindowsRequest" }
+            example:
+              contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+              items:
+                - uploadId: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+                  fromChunk: 64
+      responses:
+        "200":
+          description: Per-item window results (success carries the presigned PUTs; failure carries a code).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareBlobUploadWindowsResponse" }
+        "400":
+          description: Malformed request.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "403":
+          description: The share does not allow contributions or the contributor token is invalid (`share_not_contributable`), or it is password-protected and the `X-Share-Password` token is wrong (`share_password_incorrect`, cr-0164).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_contributable } }
+        "404":
+          description: No such share (disabled/expired/unknown, or its space is being deleted or its tenant suspended (uc.spaces.scope-access A4)), or it is password-protected and no `X-Share-Password` token was given (cr-0164) — non-enumerable.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "429":
+          description: Too many wrong password attempts on this share (the password gate's own limiter).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: rate_limited } }
 
   /api/shares/{shareId}/media:
     post:
@@ -1145,13 +1196,79 @@ components:
         presignedPuts:
           type: [array, "null"]
           description: >
-            One presigned PUT URL per chunk, in chunk order. Each is signed for its chunk's exact `Content-Length`
-            (full frames, then the remainder), so the store refuses a body of any other length.
+            Presigned PUT URLs for the blob's **first window** of chunks only, in chunk order; every later chunk is
+            signed by `presignShareBlobUploadWindows`. Each is signed for its chunk's exact `Content-Length` (full
+            frames, then the remainder), so the store refuses a body of any other length.
           items: { $ref: "#/components/schemas/PresignedUrl" }
         error:
           x-veyq-visibility: public
           type: [string, "null"]
           description: Per-item error code (`budget_exceeded` = the declared `byteSize` is over the per-blob cap, `shape_invalid` = the declared `chunkCount`/`byteSize` is no shape the frame size allows, `store_unavailable`); null on success.
+          maxLength: 64
+          example: null
+
+    ShareBlobUploadWindowsRequest:
+      type: object
+      required: [contributorToken, items]
+      properties:
+        contributorToken:
+          x-veyq-visibility: token
+          type: string
+          description: The capability token from `createShareIdentity` — the identity that opened the sessions.
+          maxLength: 512
+          example: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
+        items:
+          type: array
+          minItems: 1
+          maxItems: 256
+          items: { $ref: "#/components/schemas/ShareBlobUploadWindowRequestItem" }
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 1, max = 256) @field:jakarta.validation.Valid'
+
+    ShareBlobUploadWindowRequestItem:
+      type: object
+      required: [uploadId, fromChunk]
+      properties:
+        uploadId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The open upload session, as `startShareBlobUploads` returned it.
+          example: 1f2d3e4a-5b6c-7c3f-0e2a-9b1d4a6e8b2c
+        fromChunk:
+          x-veyq-visibility: structure
+          type: integer
+          format: int32
+          description: The first chunk index (0-based) of the window to sign; it must lie inside the blob.
+          minimum: 0
+          example: 64
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+
+    ShareBlobUploadWindowsResponse:
+      type: object
+      required: [results]
+      properties:
+        results:
+          type: array
+          items: { $ref: "#/components/schemas/ShareBlobUploadWindowResultItem" }
+
+    ShareBlobUploadWindowResultItem:
+      type: object
+      description: One per request item, in order. Success carries `presignedPuts`; failure carries `error`.
+      properties:
+        presignedPuts:
+          type: [array, "null"]
+          description: >
+            Presigned PUT URLs for chunks `fromChunk` to `min(fromChunk + window, chunkCount) - 1`, in chunk order,
+            each signed for its chunk's exact `Content-Length`.
+          items: { $ref: "#/components/schemas/PresignedUrl" }
+        error:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: >
+            Per-item error code; null on success. `upload_not_found` = no such session, it is no longer open, or
+            this identity did not open it — one code for all three, so a probe learns nothing. `range_invalid` =
+            `fromChunk` lies outside the blob. `store_unavailable` = the configured store cannot presign.
           maxLength: 64
           example: null
 

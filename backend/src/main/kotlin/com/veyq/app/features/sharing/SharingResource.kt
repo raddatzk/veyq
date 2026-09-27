@@ -2,6 +2,7 @@ package com.veyq.app.features.sharing
 
 import com.veyq.app.features.media.DerivativeDeclare
 import com.veyq.app.features.media.UploadDeclare
+import com.veyq.app.features.media.WindowRequest
 import com.veyq.app.generated.api.SharingApi
 import com.veyq.app.generated.model.CreateShareIdentityRequest
 import com.veyq.app.generated.model.CreateShareRequest
@@ -11,6 +12,9 @@ import com.veyq.app.generated.model.PublicShare
 import com.veyq.app.generated.model.ShareBlobDownload
 import com.veyq.app.generated.model.ShareBlobUploadResultItem
 import com.veyq.app.generated.model.ShareBlobUploadsRequest
+import com.veyq.app.generated.model.ShareBlobUploadWindowResultItem
+import com.veyq.app.generated.model.ShareBlobUploadWindowsRequest
+import com.veyq.app.generated.model.ShareBlobUploadWindowsResponse
 import com.veyq.app.generated.model.ShareBlobUploadsResponse
 import com.veyq.app.generated.model.ShareCreated
 import com.veyq.app.generated.model.ShareIdentity
@@ -271,6 +275,27 @@ class SharingResource(
                             presignedPuts = it.presignedPuts?.map { p -> PresignedUrl(index = p.index, url = p.url) },
                             error = it.error,
                         )
+                    },
+                ),
+            ).build()
+            is HttpFailure -> httpError(o)
+        }
+    }
+
+    @PermitAll
+    @RateLimitExempt(
+        reason = "A window creates no session and no row, so it does not spend the share's upload budget (ShareRateLimiter " +
+            "counts those writes). It runs the link's whole gate again, signs only sessions the token's identity " +
+            "opened through that budget, and at most 256 items x veyq.blob.presign-window URLs per call; raw call " +
+            "volume by a link holder stays open, as for the guest reads (cc.security.rate-limit \u00a7 Unbounded by decision).",
+    )
+    override fun presignShareBlobUploadWindows(shareId: String, shareBlobUploadWindowsRequest: ShareBlobUploadWindowsRequest, xSharePassword: String?): Response {
+        val requests = shareBlobUploadWindowsRequest.items.map { WindowRequest(it.uploadId.toString(), it.fromChunk) }
+        return when (val o = handler.windowUploads(shareId, xSharePassword, shareBlobUploadWindowsRequest.contributorToken, requests, signingDomain())) {
+            is ShareWindowOutcome.Results -> Response.ok(
+                ShareBlobUploadWindowsResponse(
+                    results = o.items.map {
+                        ShareBlobUploadWindowResultItem(presignedPuts = it.presignedPuts?.map { p -> PresignedUrl(index = p.index, url = p.url) }, error = it.error)
                     },
                 ),
             ).build()

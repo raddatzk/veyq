@@ -327,12 +327,12 @@ interface VeyqConfig {
         }
 
         interface Upload {
-            /** How long an OPEN upload session is kept before the sweep reclaims its row + staged chunk objects.
-             *  Deliberately far shorter than the trash/scope/invite windows, and the floor is **measured, not
-             *  chosen**: a session's presigned PUTs are signed once at `start` under
-             *  `veyq.blob-store.presign-ttl-seconds` and nothing re-signs them, so no client can write another
-             *  byte past that TTL. What this buffers is only a PUT that started inside the TTL and is still
-             *  streaming — one 256 KiB web chunk. */
+            /** How long an OPEN upload session is kept after its **last issued window** before the sweep reclaims
+             *  its row + staged chunk objects. Deliberately far shorter than the trash/scope/invite windows, and the
+             *  floor is **measured, not chosen**: every window's presigned PUTs are signed under
+             *  `veyq.blob-store.presign-ttl-seconds`, so a session with no new window past that TTL can receive no
+             *  further byte. What this buffers is only a PUT that started inside the TTL and is still streaming —
+             *  one 256 KiB chunk. */
             @WithDefault("PT1H")
             fun retention(): Duration
 
@@ -364,9 +364,20 @@ interface VeyqConfig {
     }
 
     interface Blob {
-        /** Per-blob declared byte cap. */
-        @WithDefault("2147483648")
+        /**
+         * Per-blob declared byte cap — a sanity ceiling on one declaration, not a limit anyone plans around (ADR 0013
+         * §3). It bounds a file, never a total; a total is the storage quota's (ADR 0073).
+         */
+        @WithDefault("21474836480")
         fun maxBytes(): Long
+
+        /**
+         * How many chunks one presign window signs (ADR 0013 §2): `start` signs a blob's first window and each
+         * window request the next, so the presign TTL has to cover one window rather than one file, and one request
+         * signs at most 256 items × this. 64 chunks is 16 MiB of plaintext.
+         */
+        @WithDefault("64")
+        fun presignWindow(): Int
     }
 
     interface BlobStore {

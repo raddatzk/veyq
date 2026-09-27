@@ -40,7 +40,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('media e2e (live, direct-to-store)', () =
     for (let i = 0; i < data.length; i++) data[i] = (i * 17 + 3) & 0xff
 
     // raw bytes with no MIME ⇒ the original-only path (no derivable frame); the byte transport is what this gates
-    const { blobId } = await addMedia(scopeId, nodeId, memoryKey, { bytes: data, mediaType: '' })
+    const { blobId } = await addMedia(scopeId, nodeId, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: '' })
     expect(blobId).toBeTruthy()
 
     const items = await listMedia(scopeId, nodeId)
