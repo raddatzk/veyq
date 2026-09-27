@@ -26,9 +26,10 @@ render, asserts — deriving every anchor from the source rather than listing it
        agree — and a generated secret is re-rolled on every path where `lookup` is blind (`helm template`,
        `--dry-run`). Measured on helm v4.0.1 that `randAlphaNum` re-rolls per render; this is the check that
        keeps it out.
-  v.   **Every pod is `restricted`-compliant, admin surface included.** Each container's securityContext drops
-       all capabilities, forbids privilege escalation, runs non-root and uses the runtime default seccomp
-       profile. The admin image was made unprivileged for exactly this (ADR 0065,
+  v.   **Every pod is `restricted`-compliant, admin surface included, with a read-only root.** Each container's
+       securityContext drops all capabilities, forbids privilege escalation, runs non-root, uses the runtime
+       default seccomp profile, and sets `readOnlyRootFilesystem` (ADR 0071 §1, the one field beyond
+       `restricted`). The admin image was made unprivileged for exactly this (ADR 0065,
        `validate_images_run_unprivileged.py`); this is the chart-side half of that property.
   vi.  **The admin surface is reachable by default through a ClusterIP Service and NO Ingress.** ADR 0065's
        localhost-only default, translated as a property: `kubectl port-forward` is this target's `127.0.0.1`
@@ -58,14 +59,29 @@ render, asserts — deriving every anchor from the source rather than listing it
        (ADR 0065). No Ingress in any render routes to such a Service, `admin.domain` set or not. The admin
        container's `BACKEND_URL` names one of them at its Service port — the public port 404s every Server-Owner
        operation, so an admin surface pointed there works for nothing.
-  xiii.**A NetworkPolicy admits the public port from anywhere and the admin port from the admin pod alone.** Every
-       ingress rule of every NetworkPolicy selecting the app pods that reaches the admin port — a rule listing
-       it by name or number, or a rule with no `ports` at all, which reaches every port — has a `from` whose
-       every peer is a `podSelector.matchLabels` selecting the admin pod and no other pod in the render: no
-       `ipBlock`, no `namespaceSelector`, no empty selector, no `matchExpressions` this cannot evaluate.
-       Policies are a union, so one permissive rule anywhere opens the port; that is why every rule is read.
-       The positive control on the same predicate: some rule admits the public port with no `from`, or the
-       policy has cut the ingress controller off from the app.
+  xiii.**A NetworkPolicy admits the public port from `networkPolicy.ingressFrom` exactly, and the admin port from
+       the admin pod alone.** Every ingress rule of every NetworkPolicy selecting the app pods that reaches the
+       admin port — a rule listing it by name or number, or a rule with no `ports` at all, which reaches every
+       port — has a `from` whose every peer is a `podSelector.matchLabels` selecting the admin pod and no other
+       pod in the render: no `ipBlock`, no `namespaceSelector`, no empty selector, no `matchExpressions` this
+       cannot evaluate. Every rule that reaches a public port has a `from` equal to the values file's
+       `ingressFrom` (ADR 0071 §3: "anywhere" is how any pod forged the forwarded client address). Policies are a
+       union, so one permissive rule anywhere opens the port; that is why every rule is read. The positive control
+       on the same predicate: some rule admits the public port from `ingressFrom`, or the policy has cut the
+       ingress controller off from the app. Skipped in a render whose values turn policies off; (xvii) owns that.
+  xv.  **A default-deny selects every rendered pod.** Some NetworkPolicy has both `Ingress` and `Egress` in
+       `policyTypes`, no rule in either, and a `podSelector.matchLabels` that selects every workload's pod
+       template — so every other policy is an allow-list rather than a widening of an open default.
+  xvi. **The database's only peer is the app.** Every ingress rule of every policy selecting the bundled MariaDB
+       pod (the container whose image repository is `mariadb`) admits only a bare `podSelector` matching the app
+       pod and no other; and, the positive control, at least one rule does, or the default-deny cut the app off
+       its database. A render without the bundled database (an operator's own) has no pod to check.
+  xvii.**`networkPolicy.enabled=false` renders no NetworkPolicy at all,** the admin listener's included — the
+       operator who turns it off owns reachability, and a policy left behind would be one they do not know they
+       have. The positive control: the same file's default render carries some.
+  xviii.**The schema refuses an enabled policy set with no ingress controller named, naming `ingressFrom`** — both
+       an empty list and no key — while the same lint with it set passes. The chart never guesses the
+       controller's namespace or labels (ADR 0071 §3), so an install without the key must fail and say why.
   xi.  **The schema refuses the three contradictions of the opt-in, naming the key** — `acme.enabled` with a
        mode other than `per-domain`, with an empty `email`, and beside an operator's own
        `cert-manager.io/cluster-issuer` annotation — each a `helm lint` that must exit non-zero AND whose output
@@ -96,7 +112,11 @@ ConfigMap alone was the injection that turned only one of them red. (xii) and (x
 channel (uc.admin.admin-channel), both run red against the chart before its admin Service and policy existed.
 (xiv) came with deploy-by-digest (cr-image-provenance-verifiable, ADR 0057 §3): no incident in the chart, which had
 no digest value at all; it pins that the digest an operator verified is the one the pod pulls, and each of its
-three halves was bitten by injection (template, schema pattern, the `ci/` file).
+three halves was bitten by injection (template, schema pattern, the `ci/` file). The read-only root in (v), the
+narrowed public port in (xiii) and (xv)–(xviii) came with the NetworkPolicy set (ADR 0071, inbox #162): live when
+written — no container had a read-only root, and the one policy admitted the app's public port from any pod in the
+cluster, which could therefore forge the forwarded address the per-IP rate limiter keys on. Run against that chart,
+each of them was red; each was then bitten by a template or schema injection.
 
 **Its limits — what a green run does NOT prove.** It renders the chart; it never installs it. So it proves what
 the manifests say and nothing about a cluster: not that a StorageClass exists for the claim, not that the
@@ -108,11 +128,15 @@ standard adds is out of reach). It renders only the values files in `ci/`, so a 
 checked at its default alone — `admin.domain` set, `mariadb.enabled` false, `ingress.tls.mode: shared` and
 `per-domain` without the opt-in are rendered by nobody here. (xiii) proves the policy is written, not that a CNI
 enforces it — on a cluster whose CNI ignores NetworkPolicy, any pod reaches the admin port (ADR 0065 residual
-(ii)). (ii) checks the app container's mount and the pod's
+(ii)); the same holds for (xv)–(xvii), and the egress the policies narrow is rendered but asserted by nobody. (v)
+requires the read-only root, not that each container has an `emptyDir` for every path it writes: a missed scratch
+path renders green and fails at runtime, which is why ADR 0071 measures those paths by running the images. (xvi)
+recognises the database by its image repository, so a database image of another name is out of reach. (ii) checks
+the app container's mount and the pod's
 `fsGroup`; it does not check the claim's access mode or that the same claim is not also mounted elsewhere. (xi)
 checks three contradictions, not the schema's completeness. (xiv) proves the rendered reference, not that the
 digest exists or is the one `infra/README.md` verified — the chart cannot see the verification. And it says nothing about the compose recipe, which
-its two siblings own.
+its sibling guards own (`validate_compose_posture.py` holds that target's half of ADR 0071).
 
 **Why it sits OUTSIDE the `validate_*` glob.** It shells out to `helm`, which is not a repository artifact,
 and the glob's contract (`trust-chain.yml`) is buildless and diff-free: a `validate_*` guard that needs a tool
@@ -155,6 +179,7 @@ KT_ADMIN_PORT = re.compile(r'interface\s+AdminChannel\s*\{.*?@WithDefault\("(\d+
 ADMIN_PORT_ENV = "VEYQ_ADMIN_CHANNEL_PORT"
 KT_CONST = re.compile(r'const\s+val\s+(OWNER_LABEL|OWNER_VALUE)\s*=\s*"([^"]+)"')
 APP_IMAGE = re.compile(r"(?:^|/)veyq(?::|$)")
+DB_IMAGE = re.compile(r"(?:^|/)mariadb(?::|$)")
 ADMIN_IMAGE = re.compile(r"(?:^|/)veyq-admin(?::|$)")
 WORKLOADS = {"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"}
 # Kinds that exist only cluster-wide. The chart installs into one namespace and holds nothing beyond it.
@@ -187,9 +212,9 @@ def helm() -> str:
     return found
 
 
-def render(values: pathlib.Path) -> str:
+def render(values: pathlib.Path, extra: list[str] | None = None) -> str:
     out = subprocess.run(
-        [helm(), "template", "veyq", str(CHART), "-f", str(values)],
+        [helm(), "template", "veyq", str(CHART), "-f", str(values), *(extra or [])],
         cwd=ROOT, capture_output=True, text=True,
     )
     if out.returncode != 0:
@@ -325,7 +350,7 @@ def check_image_digests(tag: str, values: dict, rendered: list[dict]) -> None:
                 errors.append(f"(xiv) {tag}: the {which} image renders as `{image}` with a digest the values never set")
 
 
-def check_admin_channel(tag: str, rendered: list[dict]) -> None:
+def check_admin_channel(tag: str, rendered: list[dict], policy_enabled: bool, ingress_from: list) -> None:
     """(xii) and (xiii): the admin listener's Service, the Ingresses that must not name it, and the policy."""
     workloads = [(o, s) for o in rendered if (s := pod_spec(o))]
     pod_labels = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {} for o, _ in workloads}
@@ -381,36 +406,90 @@ def check_admin_channel(tag: str, rendered: list[dict]) -> None:
         )
 
     # (xiii) the policy
+    if not policy_enabled:
+        return  # (xvii) asserts that a disabled render carries no policy at all
     others = [labels for n, labels in pod_labels.items() if n != name_of(admin[0])]
-    policies = [o for o in rendered if o.get("kind") == "NetworkPolicy"
-                and selects(((o.get("spec") or {}).get("podSelector") or {}).get("matchLabels") or {}, app_labels)
-                and "Ingress" in ((o.get("spec") or {}).get("policyTypes") or ["Ingress"])]
-    if not policies:
-        errors.append(f"(xiii) {tag}: no NetworkPolicy selects the app pods — any pod in the cluster reaches the admin listener")
-        return
-    public_open = False
-    for policy in policies:
-        for rule in (policy.get("spec") or {}).get("ingress") or []:
-            ports = rule.get("ports")
-            peers = rule.get("from")
-            if not peers and (ports is None or any(port_hits(p, q.get("name"), q.get("containerPort")) for p in ports for q in public)):
-                public_open = True
-            if ports is not None and not any(port_hits(p, port_name, admin_port) for p in ports):
-                continue
-            ok = bool(peers) and all(
-                set(peer) == {"podSelector"} and set(peer["podSelector"] or {}) == {"matchLabels"}
-                and peer["podSelector"]["matchLabels"]
-                and selects(peer["podSelector"]["matchLabels"], admin_labels)
-                and not any(selects(peer["podSelector"]["matchLabels"], labels) for labels in others)
-                for peer in peers
-            )
-            if not ok:
+    public_from_ingress = False
+    for policy, rule in ingress_rules(rendered, app_labels):
+        ports = rule.get("ports")
+        peers = rule.get("from")
+        if ports is None or any(port_hits(p, q.get("name"), q.get("containerPort")) for p in ports for q in public):
+            # The public port's peers are exactly the operator's ingressFrom — not "anywhere", which is what let any
+            # pod in the cluster forge the forwarded client address (ADR 0071 §3, cc.security.rate-limit).
+            if peers != ingress_from:
                 errors.append(
-                    f"(xiii) {tag}: {name_of(policy)} admits the admin listener's port from {peers!r} — only a podSelector "
-                    f"matching the admin pod and no other pod may reach it (ADR 0065)"
+                    f"(xiii) {tag}: {name_of(policy)} admits the app's public port from {peers!r}, not exactly "
+                    f"networkPolicy.ingressFrom {ingress_from!r} (ADR 0071 §3)"
                 )
-    if not public_open:
-        errors.append(f"(xiii) {tag}: no NetworkPolicy rule admits the app's public port from anywhere — the ingress controller could not reach the app")
+            else:
+                public_from_ingress = True
+        if ports is not None and not any(port_hits(p, port_name, admin_port) for p in ports):
+            continue
+        if not only_pod(peers, admin_labels, others):
+            errors.append(
+                f"(xiii) {tag}: {name_of(policy)} admits the admin listener's port from {peers!r} — only a podSelector "
+                f"matching the admin pod and no other pod may reach it (ADR 0065)"
+            )
+    if not public_from_ingress:
+        errors.append(f"(xiii) {tag}: no NetworkPolicy rule admits the app's public port from networkPolicy.ingressFrom — the ingress controller could not reach the app")
+
+
+def ingress_rules(rendered: list[dict], labels: dict) -> list[tuple[dict, dict]]:
+    """Every ingress rule of every NetworkPolicy that selects a pod with these labels — policies are a union, so one
+    permissive rule anywhere opens a port, and that is why every rule is read."""
+    return [
+        (o, rule)
+        for o in rendered
+        if o.get("kind") == "NetworkPolicy"
+        and selects(((o.get("spec") or {}).get("podSelector") or {}).get("matchLabels") or {}, labels)
+        and "Ingress" in ((o.get("spec") or {}).get("policyTypes") or ["Ingress"])
+        for rule in (o.get("spec") or {}).get("ingress") or []
+    ]
+
+
+def only_pod(peers, target: dict, others: list[dict]) -> bool:
+    """Every peer is a bare `podSelector.matchLabels` that selects the target pod and no other rendered pod — no
+    `ipBlock`, no `namespaceSelector`, no empty selector, no `matchExpressions` this cannot evaluate."""
+    return bool(peers) and all(
+        set(peer) == {"podSelector"} and set(peer["podSelector"] or {}) == {"matchLabels"}
+        and peer["podSelector"]["matchLabels"]
+        and selects(peer["podSelector"]["matchLabels"], target)
+        and not any(selects(peer["podSelector"]["matchLabels"], labels) for labels in others)
+        for peer in peers
+    )
+
+
+def check_network_policies(tag: str, rendered: list[dict]) -> None:
+    """(xv) the default-deny selects every pod, and (xvi) the database admits the app alone."""
+    pods = {name_of(o): ((o.get("spec") or {}).get("template") or {}).get("metadata", {}).get("labels") or {}
+            for o in rendered if pod_spec(o)}
+    policies = [o for o in rendered if o.get("kind") == "NetworkPolicy"]
+    deny = [
+        o for o in policies
+        if {"Ingress", "Egress"} <= set((o.get("spec") or {}).get("policyTypes") or [])
+        and not (o.get("spec") or {}).get("ingress") and not (o.get("spec") or {}).get("egress")
+        and set((((o.get("spec") or {}).get("podSelector")) or {})) <= {"matchLabels"}
+        and all(selects(((o.get("spec") or {}).get("podSelector") or {}).get("matchLabels") or {}, labels) for labels in pods.values())
+    ]
+    if not deny:
+        errors.append(
+            f"(xv) {tag}: no NetworkPolicy denies both directions to every rendered pod "
+            f"({', '.join(sorted(pods))}) — default-deny is what makes every other policy an allow-list (ADR 0071 §3)"
+        )
+
+    workloads = [(o, c) for o in rendered for c in ((pod_spec(o) or {}).get("containers") or [])]
+    app = next((o for o, c in workloads if is_app_container(c)), None)
+    database = next((o for o, c in workloads if DB_IMAGE.search(str(c.get("image") or "").split("@", 1)[0])), None)
+    if database is None or app is None:
+        return  # an operator-managed database renders no pod here, and a missing app is reported elsewhere
+    app_labels = pods[name_of(app)]
+    others = [labels for name, labels in pods.items() if name not in {name_of(app), name_of(database)}]
+    rules = ingress_rules(rendered, pods[name_of(database)])
+    for policy, rule in rules:
+        if not only_pod(rule.get("from"), app_labels, others):
+            errors.append(f"(xvi) {tag}: {name_of(policy)} admits the database from {rule.get('from')!r} — its only peer is the app pod (ADR 0071 §3)")
+    if not rules:
+        errors.append(f"(xvi) {tag}: no NetworkPolicy rule admits the app to the database — the default-deny would cut the app off it")
 
 
 def app_properties(rendered: list[dict]) -> str | None:
@@ -500,6 +579,8 @@ def check(values_file: pathlib.Path) -> list[dict]:
             problems = []
             if ctx.get("allowPrivilegeEscalation") is not False:
                 problems.append("allowPrivilegeEscalation must be false")
+            if ctx.get("readOnlyRootFilesystem") is not True:
+                problems.append("readOnlyRootFilesystem must be true (ADR 0071 §1) — give each path it writes an emptyDir")
             drop = [str(c).upper() for c in ((ctx.get("capabilities") or {}).get("drop") or [])]
             if "ALL" not in drop:
                 problems.append("capabilities.drop must include ALL")
@@ -589,7 +670,11 @@ def check(values_file: pathlib.Path) -> list[dict]:
                             f"default it is reachable through port-forward alone."
                         )
 
-    check_admin_channel(tag, rendered)
+    network_policy = values.get("networkPolicy") or {}
+    policy_enabled = network_policy.get("enabled", True) is not False  # the chart's default is true
+    check_admin_channel(tag, rendered, policy_enabled, network_policy.get("ingressFrom") or [])
+    if policy_enabled:
+        check_network_policies(tag, rendered)
     check_image_digests(tag, values, rendered)
 
     if not first:
@@ -677,6 +762,30 @@ for which in ("app", "admin"):
     if values_files and which not in digests_set:
         errors.append(f"(xiv) no file in {CI_DIR.relative_to(ROOT)} sets the {which} image's digest, so the `repository:tag@digest` render is checked by nobody")
 if values_files:
+    base = values_files[0]
+    # (xvii) off means off: a render with the switch off carries no NetworkPolicy at all — and, the positive control
+    # on the same predicate, the same file's own render carries some.
+    enabled_policies = sum(o.get("kind") == "NetworkPolicy" for o in renders.get(base.name) or [])
+    disabled = render(base, ["--set", "networkPolicy.enabled=false"])
+    disabled_policies = [name_of(o) for o in objects(disabled) if o.get("kind") == "NetworkPolicy"] if disabled else []
+    if not enabled_policies:
+        errors.append(f"(xvii) {base.name}: the render renders no NetworkPolicy, so the switch below turns off nothing")
+    if not disabled:
+        errors.append(f"(xvii) {base.name}: the render with networkPolicy.enabled=false failed, so what it leaves is unchecked")
+    elif disabled_policies:
+        errors.append(f"(xvii) {base.name}: networkPolicy.enabled=false still renders {disabled_policies} — the switch must remove every policy the chart renders")
+    # (xviii) the schema refuses an enabled policy with no ingressFrom, naming the key — both an empty list and no
+    # key at all — while the same lint with it set passes.
+    code, output = lint(base, [])
+    if code != 0:
+        errors.append(f"(xviii) {base.name}: `helm lint` fails on the file itself, so a refusal below proves nothing:\n{output.strip()}")
+    else:
+        for extra in (["--set-json", "networkPolicy.ingressFrom=[]"], ["--set", "networkPolicy.ingressFrom=null"]):
+            code, output = lint(base, extra)
+            if code == 0:
+                errors.append(f"(xviii) `helm lint {' '.join(extra)}` passed — an enabled policy set with no ingress controller named must be refused")
+            elif "ingressFrom" not in output:
+                errors.append(f"(xviii) `helm lint {' '.join(extra)}` failed, but its output never names `ingressFrom`:\n{output.strip()}")
     for key in ("image.digest", "admin.image.digest"):
         code, output = lint(values_files[0], ["--set", f"{key}=sha256:not-a-digest"])
         if code == 0:
@@ -694,9 +803,11 @@ summary = "; ".join(f"{name}: {len(objs)} objects" for name, objs in renders.ite
 print(
     f"chart meta check OK ({summary}): no object carries the sink's ownership value or is cluster-scoped; the app's "
     f"config-secret path is on a claim with fsGroup={runtime_user}; strategy Recreate; every render byte-identical "
-    f"twice; every container restricted-compliant; the admin surface on a ClusterIP Service and no Ingress; the admin "
-    f"listener on a Service of its own that no Ingress names and the admin surface points at, admitted by policy from "
-    f"the admin pod alone; the ACME "
+    f"twice; every container restricted-compliant with a read-only root; the admin surface on a ClusterIP Service and "
+    f"no Ingress; the admin listener on a Service of its own that no Ingress names and the admin surface points at, "
+    f"admitted by policy from the admin pod alone; a default-deny over every pod, the public port admitted from "
+    f"ingressFrom exactly and the database from the app alone, no policy when switched off, and no install without "
+    f"ingressFrom; the ACME "
     f"opt-in absent where off, and where on one `{ISSUER_NAME}` Issuer on every Ingress and in the properties file, "
     f"its contradictions refused by the schema; a pinned image digest is the digest the pod runs"
 )

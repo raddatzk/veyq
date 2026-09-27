@@ -130,6 +130,14 @@ docker compose -f infra/docker-compose.prod.yml up -d
 **Every secret is required and has no default.** A missing variable fails the `up` with the name of the variable,
 rather than starting an instance on a password that is printed in this repository.
 
+**Every container runs unprivileged, and the proxy cannot reach the database**
+([ADR 0071](../docs/decisions/0071-runtime-hardening-on-both-targets.md)). Each service drops every capability,
+cannot escalate, runs as a non-root user and has a read-only root. A one-shot `volume-ownership` service chowns the
+Garage and ACME volumes to their writers first, so `ps` lists it as exited (0) after every `up`, and that is its
+done state. Three networks separate the peers: `veyq_edge` (Traefik, app, Garage), `veyq_db` (app, MariaDB, no
+route out) and `veyq_admin` (app, admin container, and Traefik for the `ADMIN_DOMAIN` router). A command that joins
+the stack names one of them.
+
 ### Verifying a release — before anything runs it
 
 A release is two images, `ghcr.io/raddatzk/veyq` and `ghcr.io/raddatzk/veyq-admin`, and the publish signs both
@@ -324,10 +332,25 @@ would reconcile each other's routing away.
 
 ```sh
 cp charts/veyq/values.yaml my-values.yaml         # fill in: domain, storeDomain, both image repositories,
-                                                  # every key under secrets, and the ingress.tls block
+                                                  # every key under secrets, the ingress.tls block, and
+                                                  # networkPolicy.ingressFrom — your ingress controller's pods:
+#   networkPolicy:
+#     ingressFrom:
+#       - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress-nginx}}
+#         podSelector: {matchLabels: {app.kubernetes.io/name: ingress-nginx}}
 # § Verifying a release, then pin what it verified: image.tag/digest and admin.image.tag/digest
 helm install veyq ./charts/veyq -n veyq --create-namespace -f my-values.yaml
 ```
+
+**Reachability is default-deny, and you name the ingress controller** ([ADR
+0071](../docs/decisions/0071-runtime-hardening-on-both-targets.md)). The chart renders a NetworkPolicy set that
+admits only the paths the stack uses. The controller's namespace and labels are yours, so the chart never guesses
+them: an install without `networkPolicy.ingressFrom` fails and names the key. **A CNI that does not enforce
+NetworkPolicy renders the set and enforces none of it.** On such a cluster, or if you write your own policies, set
+`networkPolicy.enabled: false`, which removes every policy the chart renders, including the one on the admin
+listener. `app.trustedProxies` stays unset unless your proxy has a stable address, such as a host-network
+controller or an external load balancer. A pod-IP range wide enough to survive a controller restart trusts every
+pod beside it.
 
 Generate the store's secrets the same way as for compose: `openssl rand -hex 32` for `garageRpcSecret`
 (exactly 64 hex characters), and an access key of the shape `GK` + 24 hex for `s3AccessKey`. An operator who
@@ -348,11 +371,13 @@ afterwards — never before the owner exists, for the reason given under compose
 **The admin listener has a `Service` of its own, `veyq-app-admin`, and a `NetworkPolicy` keeps every other pod off
 it.** It is deliberately not a second port on `veyq-app`: that Service is what the chart's `Ingress`, every
 projected tenant `Ingress` and any `Ingress` of yours aim at, so a port on it would sit behind all of them. The
-`veyq-app` policy admits the public port from anywhere and the admin port from the admin pod alone. **A CNI that
+`veyq-app` policy admits the public port from `networkPolicy.ingressFrom` and the admin port from the admin pod
+alone. **A CNI that
 does not enforce NetworkPolicy leaves the admin port reachable from any pod in the cluster** — the Service
 separation still keeps every Ingress off it, but in-cluster reachability is then only as narrow as your cluster
 ([ADR 0065](../docs/decisions/0065-admin-ui-cli-separate-service.md) residual (ii)). Every pod passes the `restricted` PodSecurity standard — the admin image runs
-unprivileged for exactly this — so the namespace can carry that label from the start.
+unprivileged for exactly this — so the namespace can carry that label from the start. Every container also has a
+read-only root filesystem.
 
 **Three hosts, two of them mandatory.** `domain` is the instance (the compose file's `VEYQ_DOMAIN`);
 `storeDomain` is the object store on **its own host** — not a path under `domain`, because an operator-chosen
@@ -506,10 +531,10 @@ python3 scripts/instance_backup.py verify infra/backups/<stamp>
 # 5. Start the application again. The downtime was the capture, and nothing else.
 ```
 
-`--docker-network` is the network the pinned `rclone` container joins; it is `<project>_default`, so for the
-**dev** stack above it is `infra_default` — that file declares no project, so Compose derives one from its
-directory. The production file declares `name: veyq`, so there it is `veyq_default`. List them with
-`docker network ls`. An operator with their own `rclone` install can pass `--rclone-binary rclone` instead, and
+`--docker-network` is the network the pinned `rclone` container joins, and it must be one the store is on. For the
+**dev** stack above it is `infra_default`: that file names no networks and declares no project, so Compose derives
+`<project>_default` from its directory. The production file declares `name: veyq` and separate networks, and the
+store is on `veyq_edge` (§ Running in production). List them with `docker network ls`. An operator with their own `rclone` install can pass `--rclone-binary rclone` instead, and
 one whose database is not this compose service passes `--db-host`/`--db-port` (the client then runs from `PATH`
 if installed, else in the pinned `mariadb:11.4` image on `--docker-network`).
 
@@ -614,14 +639,15 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    there is no ordering to get right.
 
 2. **Capture, then check the capture.** § Backup & restore owns the commands and the credentials; two arguments
-   differ here from the dev examples there. The network is `veyq_default` — the production compose file declares
-   `name: veyq`, so that is the project, and nothing has to be passed on the command line to make it so. And
+   differ here from the dev examples there. The network is `veyq_edge`, the one the store is on: the production
+   compose file declares `name: veyq`, so that is the project, and nothing has to be passed on the command line to
+   make it so. And
    leg (c) lives on a **volume**, not on your filesystem, so it has to be addressed there:
 
    ```sh
    python3 scripts/instance_backup.py capture \
        --compose-file infra/docker-compose.prod.yml \
-       --docker-network veyq_default \
+       --docker-network veyq_edge \
        --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key"
    python3 scripts/instance_backup.py verify infra/backups/<stamp>
    ```

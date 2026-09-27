@@ -1,0 +1,175 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+Reachability, default-deny (ADR 0071 §3): the first policy selects every pod of this release and allows nothing,
+then one policy per pod allows exactly the paths the stack uses. Policies are a union, so each pod's allows live in
+ONE policy here and nowhere else — a second policy selecting the same pod would widen it where nobody reads.
+
+Only as strong as the cluster's CNI: one that does not enforce NetworkPolicy renders all of this and enforces none
+of it, which leaves the admin listener reachable from any pod in the cluster (ADR 0065 residual (ii)).
+`networkPolicy.enabled: false` removes every policy below, the admin listener's included; the operator then owns
+reachability. Kubelet probes and `kubectl port-forward` are not pod-to-pod traffic and pass on common CNIs.
+*/ -}}
+{{- /* Never empty here: values.schema.json refuses an enabled set without it, naming the key (chart_meta_check (xviii)). */ -}}
+{{- $ingressFrom := .Values.networkPolicy.ingressFrom }}
+{{- $dns := dict "to" (list (dict "namespaceSelector" dict)) "ports" (list (dict "protocol" "UDP" "port" 53) (dict "protocol" "TCP" "port" 53)) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-default-deny
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: veyq
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  policyTypes: [Ingress, Egress]
+---
+# The app: its public port from the ingress controller alone, and the admin listener's port from the admin pod
+# ALONE (ADR 0065) — a Service of its own keeps every Ingress off the admin port; this keeps every other pod off
+# it. Egress stays open: the app sends SMTP to hosts the operator chooses and reaches an API server whose address
+# is cluster-specific.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-app
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: app
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+      ports:
+        - port: http
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "admin") | nindent 14 }}
+      ports:
+        - port: admin
+  egress:
+    - {}
+---
+# The store: S3 from the ingress controller (the store's own host) and the app; its admin API from the app alone;
+# its RPC port from itself, which it dials at its own advertised address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-garage
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: garage
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 14 }}
+      ports:
+        - port: s3
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 14 }}
+      ports:
+        - port: admin
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 14 }}
+      ports:
+        - port: rpc
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "garage") | nindent 14 }}
+      ports:
+        - port: rpc
+{{- if .Values.mariadb.enabled }}
+---
+# The database: from the app alone, and it dials nothing but DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-mariadb
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mariadb
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "mariadb") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 14 }}
+      ports:
+        - port: mysql
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+{{- end }}
+---
+# The admin surface: reachable from the ingress controller only when admin.domain exposes it; by default from no
+# pod at all, which is what port-forward-only means. It dials the app's admin listener and nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-admin
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+    app.kubernetes.io/component: admin
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "veyq.selector" (dict "Release" .Release "component" "admin") | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  {{- if .Values.admin.domain }}
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+      ports:
+        - port: http
+  {{- else }}
+  ingress: []
+  {{- end }}
+  egress:
+    - {{- toYaml $dns | nindent 6 }}
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "veyq.selector" (dict "Release" .Release "component" "app") | nindent 14 }}
+      ports:
+        - port: admin
+---
+# cert-manager's HTTP-01 solver pods, which it starts in this namespace for each order: from the ingress controller.
+# Always rendered — it selects nothing until a solver exists — because under a namespace-wide default-deny of the
+# operator's own, a solver nobody admits fails every ACME challenge.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: veyq-acme-solver
+  labels:
+    {{- include "veyq.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      acme.cert-manager.io/http01-solver: "true"
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- toYaml $ingressFrom | nindent 8 }}
+{{- end }}
