@@ -21,10 +21,56 @@
 # `infra_*` (dev) and `veyq_*` (prod) apart on one host. `scripts/validate_release_identity.py` holds it.
 name: veyq
 
+# The container posture every service below merges in (ADR 0071 §1): no capabilities, no privilege escalation, a
+# read-only root. What a process still writes is a named volume or a `tmpfs:` of its own, each measured by
+# running the pinned image this way — a missed scratch path fails at runtime, never at `compose config`.
+# `scripts/validate_compose_posture.py` holds every service to it, and holds the user and the networks below.
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  read_only: true
+
 services:
+  # Compose has no `fsGroup`, and a named volume inherits ownership only from the image directory it covers:
+  # Garage's image is scratch and seeds nothing, and Traefik's leaves /acme root-owned — as a non-root uid, Garage
+  # then exits and Traefik stays up and silently never obtains a certificate (ADR 0071, measured). So this
+  # one-shot step chowns each such volume's ROOT before its service starts, holding CAP_CHOWN alone. The uid is
+  # the path it mounts the volume under (`/chown/<uid>/…`), so the script carries no uid of its own; the guard
+  # holds each one to the `user:` of the service that writes the volume. A root that already matches is left
+  # alone, so every later `up` is a no-op, and it never walks a store's data tree. The image is one this file
+  # already pins, so the step adds no supply-chain input.
+  volume-ownership:
+    image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
+    <<: *hardened
+    user: "0:0"
+    cap_add: [CHOWN]
+    restart: "no"
+    network_mode: none
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for dir in /chown/*/*; do
+          uid=$${dir#/chown/}; uid=$${uid%%/*}
+          if [ "$$(stat -c %u:%g "$$dir")" != "$$uid:$$uid" ]; then chown "$$uid:$$uid" "$$dir"; echo "chowned $$dir"; fi
+        done
+    volumes:
+      - veyq-garage-meta:/chown/1000/garage-meta
+      - veyq-garage-data:/chown/1000/garage-data
+      - veyq-garage-snapshots:/chown/1000/garage-snapshots
+      - veyq-acme:/chown/65532/acme
+
   mariadb:
     image: mariadb:11.4@sha256:70cc072b29b4a89ae07abb2d4da2c64678a7f2dfe092751bb51c87d67dc1338b
     restart: unless-stopped
+    <<: *hardened
+    # The image's own `mysql` user, which owns /var/lib/mysql in the image — so the volume is seeded writable and
+    # needs no ownership step. The two tmpfs are its socket/pid directory and its scratch.
+    user: "999:999"
+    tmpfs: [/run/mysqld, /tmp]
+    # Shares a network with the app alone, and that network has no route out: the internet-facing proxy cannot
+    # open a connection here (ADR 0071 §3).
+    networks: [db]
     environment:
       MARIADB_DATABASE: veyq
       MARIADB_USER: veyq
@@ -43,6 +89,13 @@ services:
   garage:
     image: dxflrs/garage:v2.0.0@sha256:15b40e0dddd2e611aa746ff6f7c3bfe9f22735e4a2cc29e0abd89c268e9b79d9
     restart: unless-stopped
+    <<: *hardened
+    # The uid the chart runs it as. The image has no USER, so without this it runs as root.
+    user: "1000:1000"
+    depends_on:
+      volume-ownership:
+        condition: service_completed_successfully
+    networks: [edge]
     environment:
       # garage.toml carries no secrets so one config serves both stacks; these are the real ones.
       GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?set GARAGE_RPC_SECRET in infra/.env (64 hex chars)}
@@ -56,6 +109,13 @@ services:
   app:
     image: ${VEYQ_IMAGE:?set VEYQ_IMAGE in infra/.env, e.g. ghcr.io/raddatzk/veyq:1.0@sha256:<digest> (infra/README.md, Verifying a release)}
     restart: unless-stopped
+    # No `user:` — the image declares it (Dockerfile `USER`), and the guards read it there. /tmp is the JVM's
+    # scratch (hsperfdata, the Vert.x cache).
+    <<: *hardened
+    tmpfs: [/tmp]
+    # The one service on all three networks: it is the only peer the proxy, the database and the admin surface
+    # each need.
+    networks: [edge, db, admin]
     depends_on:
       mariadb:
         condition: service_healthy
@@ -136,6 +196,12 @@ services:
   admin:
     image: ${VEYQ_ADMIN_IMAGE:?set VEYQ_ADMIN_IMAGE in infra/.env, e.g. ghcr.io/raddatzk/veyq-admin:1.0@sha256:<digest> (infra/README.md, Verifying a release)}
     restart: unless-stopped
+    # No `user:`, as for the app. /tmp holds nginx's pid and temp paths; the entrypoint renders its site into
+    # conf.d. A tmpfs over an image directory keeps that directory's root-owned 0775, so conf.d is opened to its
+    # one writer by mode rather than by repeating the image's uid here.
+    <<: *hardened
+    tmpfs: [/tmp, "/etc/nginx/conf.d:mode=1777"]
+    networks: [admin]
     depends_on:
       app:
         condition: service_started
@@ -156,6 +222,15 @@ services:
   traefik:
     image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     restart: unless-stopped
+    <<: *hardened
+    # Any non-root uid; this one is the image-agnostic `nonroot` convention. Docker lets a container bind :80/:443
+    # without a capability. It reads the app's routing file as "other", which is why the app writes it 0644.
+    user: "65532:65532"
+    depends_on:
+      volume-ownership:
+        condition: service_completed_successfully
+    # Never on `db`. On `admin` only because the router rendered for ADMIN_DOMAIN points at the admin container.
+    networks: [edge, admin]
     command:
       # The ONLY provider: the file the app renders (ADR 0063). No Docker provider, so no Docker socket — a `:ro`
       # mount of it restricts nothing about the API, and this container faces the internet. `watch` is what makes
@@ -197,3 +272,16 @@ volumes:
   # The ingress projection (ADR 0063) — derived state, not durable: it is NOT part of a backup, because the
   # `tenant` table it is generated from is, and the app rewrites it in full at startup.
   veyq-traefik-dynamic:
+
+# Separated by peer (ADR 0071 §3). Every service names its networks, so Compose creates no `default` for a service
+# to land on unnoticed. A command that joins this stack — the backup's rclone container — names one of these:
+# the store is on `veyq_edge`.
+networks:
+  # The internet-facing proxy, the app, and the store the proxy routes /veyq to.
+  edge:
+  # The app and the database, and nothing else. `internal`: no route out, since the database needs none.
+  db:
+    internal: true
+  # The admin surface and the app's admin listener, plus the proxy for the ADMIN_DOMAIN router. Not `internal`,
+  # because a published port needs a network with a route out.
+  admin:
