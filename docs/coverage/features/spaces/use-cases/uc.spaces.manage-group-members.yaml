@@ -1,11 +1,8 @@
 useCase: uc.spaces.manage-group-members
 feature: spaces
 title: Manage a group's members (promote / demote / remove)
-# cr-0088 delivers roles (promote/demote) end-to-end + the remove/rotation backend + slice tests. cr-0089 lands
-# the web remove UI + the client-side rotation crypto (epoch-aware scope open + tree seal, the epoch chain-peel):
-# `epochs.test.ts` (chain peel), `scopes.test.ts::rotateGroupForRemoval` (mint + chain-link + re-grant, all
-# operator-blind ciphertext), `members.test.ts::removeGroupMember` (membership delete). The two-account
-# forward-secrecy LIVE smoke is tracked in cr-0089's definition of done.
+# The removal is a removal-rotation (ADR 0024 Decision 4): one request deletes the membership and commits the new
+# epoch. `members.test.ts::removeGroupMember` is the consent rescind only — the one delete without a rotation.
 acceptanceCriteria:
   - id: promote-demote
     text: A GroupOwner promotes a member to co-owner (OWNER) or demotes a co-owner to MEMBER — a pure role change, no key move.
@@ -15,12 +12,34 @@ acceptanceCriteria:
   - id: last-owner-guard
     text: The last remaining OWNER cannot be demoted or removed; the action is rejected (a group needs ≥1 owner).
     coverage:
-      backend: { integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.removeMemberThenLastOwnerGuard] }
+      backend:
+        unit: [RotationPolicyTest.refusesRemovingTheLastOwner, RotationPolicyTest.removesAnOwnerWhileAnotherOwnerRemains]
+        integration: [ScopesSliceTest.promoteDemoteAndLastOwnerGuard, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard]
   - id: remove-member
     text: A GroupOwner removes a member → the membership is deleted (the group instantly reads as 404 to them, ADR 0042). A non-owner caller is rejected.
     coverage:
-      backend: { integration: [ScopesSliceTest.removeMemberThenLastOwnerGuard] }
-      web: { unit: [src/features/spaces/members.test.ts] }
+      backend: { integration: [ScopesSliceTest.aRemovalRotationWhoseGrantsNameTheRemovedMemberIsRefusedAndChangesNothing, ScopesSliceTest.aRemovalRotationKeepsTheOwnerGateAndTheLastOwnerGuard] }
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts] }
+  - id: removal-is-one-request
+    text: >
+      A removal and its rotation are one request; the new epoch is never granted to the removed member, whatever
+      member list the server returns. The server deletes the membership and commits the epoch in one transaction
+      (a failed commit leaves the member in place), refuses a request whose grants name the removed member, and
+      refuses the bare member delete for anyone but a pending consent proposal. The client builds the re-grant set
+      from the directory the owner picked from, minus the removed member (ADR 0024 Decision 4).
+    coverage:
+      backend:
+        unit: [RotationPolicyTest.refusesARemovalWhoseGrantsNameTheRemovedMember, RotationPolicyTest.aRemovalThatGrantsOnlyTheRemainingMembersCommitsAndNamesWhomItRemoves]
+        integration: [ScopesSliceTest.aRemovalRotationWhoseGrantsNameTheRemovedMemberIsRefusedAndChangesNothing, ScopesSliceTest.aRemovalRotationThatFailsAtCommitLeavesTheMemberInPlace, ScopesSliceTest.theMemberDeleteRefusesAKeyedMemberAndRescindsOnlyAProposal]
+      web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/GroupMembersPanel.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+  - id: stale-grant-writes-nothing
+    text: >
+      A member whose grant is older than the scope's current epoch writes nothing until it is re-granted: the scope
+      reads as awaiting access on their client, and the server refuses a node create tagged with any epoch but the
+      current one (409 stale_epoch), as it already did for a rename and an icon (ADR 0024 Decision 6, layer 1).
+    coverage:
+      backend: { integration: [ScopesSliceTest.aNodeCreateAtAStaleEpochIsRefused] }
+      web: { unit: [src/features/spaces/scopes.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
   - id: membership-boundary-first
     text: >
       Membership is the first guard on every scope-addressed operation (ADR 0042, cr-0162): a caller who is not a
@@ -38,11 +57,11 @@ acceptanceCriteria:
       web: { unit: [src/features/spaces/scopes.test.ts, src/features/spaces/epochs.test.ts] }
   - id: queued-rotation-backstop
     text: >
-      A2 (no key-holder online to rotate): when the remover isn't a key-holder able to rotate synchronously, the
-      rotation is queued as a SCOPE_ROTATION job on the operator-blind task queue and the next online remaining
-      key-holder completes it on-device (mint E_{n+1} + re-grant survivors), idempotent + coalescing + first-online-
-      wins. The identical async backstop serves uc.spaces.remove-tenant-member A4 (a tenant owner cutting a co-shared
-      group they don't hold) — one mechanism, cr-0092.
+      A2 (the remover holds no key): when a tenant owner's removal cuts a co-shared group they do not hold
+      (uc.spaces.remove-tenant-member A4), the rotation is queued as a SCOPE_ROTATION job on the operator-blind task
+      queue and the next online remaining key-holder completes it on-device (mint E_{n+1} + re-grant survivors),
+      idempotent + coalescing + first-online-wins — cr-0092. It re-grants the directory the server returns, so it
+      holds against an honest operator only (ADR 0024 § Guarantee).
     coverage:
       backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }

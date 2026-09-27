@@ -140,10 +140,7 @@ layer for everything future.
 
 ## What is still open
 
-Decision 4's single request and Decision 6 are decided and not built (inbox #161 (b)). Until they are, the
-guarantee holds against an honest operator only, and not fully even there. Today the owner's client removes the
-member, then reads the member list, then rotates to whatever that list contains, so a server that re-lists the
-removed member gets the new epoch wrapped to them, and a tab closed between the two calls leaves the group
-unrotated. A member with a stale grant writes under the old epoch, and the server accepts any epoch on a create.
-No client remembers an epoch: the write key is the `grantedEpoch` the server serves, so a server can hand a
-member an older grant and have new content sealed under it.
+Decision 6's per-device floor is decided and not built (inbox #161 (b)). No client remembers an epoch: the
+write key is the `grantedEpoch` the server serves, so a server can hand a member an older grant — together with
+a `currentEpoch` that matches it — and have new content sealed under it. Until the floor lands, Decision 6 holds
+against an honest operator only. Decision 4's single request and Decision 6's layer-1 half are built.

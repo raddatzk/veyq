@@ -29,8 +29,9 @@ Decision 7, [ADR 0024](../docs/decisions/0024-scope-key-rotation.md) Decision 6'
   - **After** `cr-seal-binds-its-object`.
   - **After** `cr-pairing-authenticated-by-the-qr`. A linked device inherits its marks inside the envelope, and
     only an authenticated envelope may set them.
-  - **After** `cr-removal-rotates-in-one-request`. It adds the layer-1 half of the same write-epoch check that
-    the floor extends.
+  - **After** `cr-removal-rotates-in-one-request` (done 2026-09-27). It added the layer-1 half of the same
+    write-epoch check that the floor extends: `toOpenedScope` in `web/src/features/spaces/scopes.ts` refuses a
+    scope whose `grantedEpoch < currentEpoch` (`AwaitingCurrentKey`), and only `commitRotation` opens past it.
 - **Web only.** The marks never leave the device, and the envelope is an opaque string on the wire, so there is
   no contract change. If one seems needed, it goes back to refinement.
 - **Measured against** `main` @ `a494436` on 2026-09-24, all in `web/src/features/account/`:
@@ -61,9 +62,11 @@ Decision 7, [ADR 0024](../docs/decisions/0024-scope-key-rotation.md) Decision 6'
 - **Write.** The open that precedes every write is subject to the same checks. After a successful write the mark
   is the written version. The master-key rotation's re-seal of the pin store and the register goes through the
   same open.
-- **The epoch floor.** A grant whose epoch is below the scope's mark makes the scope **read-only**: the same
-  *awaiting the current key* state `cr-removal-rotates-in-one-request` introduces. Older content still reads
-  through the chain. The mark rises whenever the device holds a newer epoch: a grant it opened, or a rotation it
+- **The epoch floor.** A grant whose epoch is below the scope's mark puts the scope in the same *awaiting the
+  current key* state `cr-removal-rotates-in-one-request` introduced. **As built, that state is not read-only:**
+  the scope does not open at all (it reuses the awaiting-access presentation, as that CR decided), so older
+  content does not read either. Re-decide at refine whether the floor wants that, or a read-only open that the
+  layer-1 check would then have to adopt too. The mark rises whenever the device holds a newer epoch: a grant it opened, or a rotation it
   made.
 - **The pairing envelope carries the marks** of the linking device. The new device takes the maximum of those
   and any it already holds, and only after the envelope's MAC has verified.
