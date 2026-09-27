@@ -1,18 +1,17 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -45,11 +44,6 @@ import java.util.UUID
 @QuarkusTest
 class ObjectKeyCarriesNoStructureSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     /** A bare UUID: 8-4-4-4-12 hex, anchored — no prefix, no suffix, no path segment, no extension. */
     private val bareUuid = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 
@@ -57,7 +51,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
     fun mintedObjectKeyIsABareUuidAndLeaksNoIdentifier() {
         val seed = seedEverything()
 
-        val uploadId = given().header("Authorization", token(seed.userId)).contentType(ContentType.JSON)
+        val uploadId = given().header("Authorization", bearer(seed.userId)).contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.ofChunks(2).declare("d3JhcHBlZA==")}]}""")
             .`when`().post("/api/scopes/${seed.scopeId}/blob-uploads-batch")
             .then().statusCode(200)
@@ -70,7 +64,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
         assertBareAndOpaque(sessionKey, seed, "veyq_upload_session.storage_key")
 
         // Attach, so the key crosses into veyq_blob — the row the purge + presign paths read.
-        val mediaId = given().header("Authorization", token(seed.userId)).contentType(ContentType.JSON)
+        val mediaId = given().header("Authorization", bearer(seed.userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"${seed.nodeId}","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/scopes/${seed.scopeId}/media-batch")
             .then().statusCode(200)
@@ -129,11 +123,7 @@ class ObjectKeyCarriesNoStructureSliceTest {
             nodeId = UUID.randomUUID().toString(),
         )
         QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = seed.userId; email = seed.email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
+            newUser(id = seed.userId, email = seed.email).persist()
             TenantEntity().apply {
                 id = seed.tenantId; name = seed.tenantName; domain = "t-${seed.tenantId}.example.com"
                 ownerEmail = seed.email; status = TenantEntity.ACTIVE; createdAt = Instant.now()

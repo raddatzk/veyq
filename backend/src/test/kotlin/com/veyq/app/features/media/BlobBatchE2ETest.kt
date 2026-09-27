@@ -1,19 +1,15 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertArrayEquals
@@ -25,8 +21,6 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.time.Instant
-import java.util.UUID
 
 /**
  * Opt-in byte-transport e2e (ADR 0013) — exercises the **one path the hermetic [MediaSliceTest] cannot**: the
@@ -65,17 +59,12 @@ class BlobBatchE2ETest {
         )
     }
 
-    @Inject
-    lateinit var sessions: SessionService
-
     private val http: HttpClient = HttpClient.newHttpClient()
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun uploadThenDownloadRoundTripsBytes() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
 
         // a two-frame blob at its derived sizes — one full frame, then a short last one (ADR 0013 §3). The bytes are
         // opaque ciphertext as far as the store is concerned; only their lengths are the contract's.
@@ -83,7 +72,7 @@ class BlobBatchE2ETest {
         val chunks = (0 until blob.chunkCount).map { i -> ByteArray(blob.chunkLength(i).toInt()) { b -> (b * 31 + i).toByte() } }
 
         // start → presigned PUT per chunk, each signed for its chunk's exact length
-        val start = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val start = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
@@ -110,7 +99,7 @@ class BlobBatchE2ETest {
         plantLegacyHtml(URI.create(putUrls[1]), chunks[1])
 
         // complete → backend stats every object at its exact derived length (declare-then-verify), attaches the media
-        val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -119,14 +108,14 @@ class BlobBatchE2ETest {
             .extract().path<String>("results[0].blobId")
 
         // list → the manifest records the real per-chunk sizes
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media[0].blobId", equalTo(blobId))
             .body("media[0].manifest.size()", equalTo(chunks.size))
 
         // presign GET → fetch each chunk back → byte-identical
-        val dl = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val dl = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"blobId":"$blobId"}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-downloads-batch")
             .then().statusCode(200)
@@ -155,11 +144,11 @@ class BlobBatchE2ETest {
     @Test
     fun aBlobOfSeveralWindowsMovesThroughStartAndWindows() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofChunks(2 * WINDOW + 1) // three windows: two full, one of a single chunk
         val chunks = (0 until blob.chunkCount).map { i -> ByteArray(blob.chunkLength(i).toInt()) { b -> (b * 17 + i).toByte() } }
 
-        val start = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val start = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
@@ -169,7 +158,7 @@ class BlobBatchE2ETest {
         val urls = (0 until WINDOW).associateWith { start.path<String>("results[0].presignedPuts[$it].url") }.toMutableMap()
         var from = WINDOW
         while (from < blob.chunkCount) {
-            val window = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            val window = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
                 .body("""{"items":[{"uploadId":"$uploadId","fromChunk":$from}]}""")
                 .`when`().post("/api/scopes/$scopeId/blob-upload-windows")
                 .then().statusCode(200).body("results[0].error", org.hamcrest.CoreMatchers.nullValue())
@@ -181,12 +170,12 @@ class BlobBatchE2ETest {
         assertEquals(blob.chunkCount, urls.size, "every chunk was signed by start or a window")
         chunks.forEachIndexed { i, bytes -> assertEquals(200, put(urls.getValue(i), bytes, PINNED), "PUT chunk $i") }
 
-        val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", org.hamcrest.CoreMatchers.nullValue())
             .extract().path<String>("results[0].blobId")
-        val dl = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val dl = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"blobId":"$blobId"}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-downloads-batch")
             .then().statusCode(200).body("results[0].presignedGets.size()", equalTo(chunks.size))
@@ -220,46 +209,6 @@ class BlobBatchE2ETest {
             val served = get(getUrl.url().toString()).headers().firstValue("Content-Type").orElse(null)
             assertEquals("text/html", served, "§6 row 2: with no override the store serves the stored type")
         }
-    }
-
-    private fun seedNode(scopeId: String, kind: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; this.kind = kind
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = UUID.randomUUID().toString()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            // The scope-access gate wants an accepted TENANT membership for a write too (uc.spaces.scope-access);
-            // without it every upload here is a 404 — which this opt-in suite, run by no CI job, did not notice.
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
     }
 
     companion object {

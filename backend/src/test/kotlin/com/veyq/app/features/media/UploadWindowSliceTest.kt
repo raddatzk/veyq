@@ -1,13 +1,14 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.TestProfile
@@ -36,12 +37,7 @@ import java.util.UUID
 class UploadWindowSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var fakeStore: FakePresigningBlobStore
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     @Test
     fun startSignsOnlyTheFirstWindowOfABlobLargerThanOne() {
@@ -59,7 +55,7 @@ class UploadWindowSliceTest {
     fun aSecondMemberCannotCompleteAnotherMembersSession() {
         val scope = seedScope()
         val other = seedMember(scope)
-        val memory = seedNode(scope.scopeId)
+        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL)
 
         complete(other, scope.scopeId, memory, uploadId)
@@ -75,7 +71,7 @@ class UploadWindowSliceTest {
     fun aSecondMemberCannotCommitAnotherMembersSessionAsACover() {
         val scope = seedScope()
         val other = seedMember(scope)
-        val memory = seedNode(scope.scopeId)
+        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL, ownerId = memory, role = "COVER")
 
         commitCover(other, scope.scopeId, memory, uploadId).statusCode(404).body("code", equalTo("node_not_found"))
@@ -146,7 +142,7 @@ class UploadWindowSliceTest {
     @Test
     fun aCompletedSessionHasNoWindow() {
         val scope = seedScope()
-        val memory = seedNode(scope.scopeId)
+        val memory = seedNode(scope.scopeId, wrappedContentKey = CONTENT_KEY)
         val uploadId = startStaged(scope.owner, scope.scopeId, TestBlob.SMALL)
         complete(scope.owner, scope.scopeId, memory, uploadId).body("results[0].mediaId", notNullValue())
 
@@ -160,7 +156,7 @@ class UploadWindowSliceTest {
         userId: String, scopeId: String, blob: TestBlob,
         ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
     ) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare("d3JhcA==", ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
@@ -177,41 +173,26 @@ class UploadWindowSliceTest {
     }
 
     private fun window(userId: String, scopeId: String, uploadId: String, fromChunk: Int) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"uploadId":"$uploadId","fromChunk":$fromChunk}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-upload-windows")
             .then()
 
     private fun complete(userId: String, scopeId: String, nodeId: String, uploadId: String) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$nodeId","mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
 
     private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob")
             .then()
 
     private data class Scope(val owner: String, val tenantId: String, val scopeId: String)
 
-    private fun seedScope(): Scope {
-        val owner = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.GROUP; createdAt = Instant.now()
-            }.persist()
-        }
-        join(owner, tenantId, scopeId, MembershipEntity.OWNER)
-        return Scope(owner, tenantId, scopeId)
-    }
+    private fun seedScope(): Scope = seedMemberScope(ScopeEntity.GROUP).let { Scope(it.userId, it.tenantId, it.scopeId) }
 
     /** A second accepted member of [scope] — a full writer, just not the opener. */
     private fun seedMember(scope: Scope): String = seedUser().also { join(it, scope.tenantId, scope.scopeId, MembershipEntity.MEMBER) }
@@ -224,30 +205,6 @@ class UploadWindowSliceTest {
             }.persist()
             TenantRoots.join(userId, tenantId)
         }
-
-    private fun seedNode(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     private companion object {
         /** `veyq.blob.presign-window`'s default — the tests run on it. */

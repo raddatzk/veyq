@@ -1,12 +1,12 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.FakePresigningBlobStore
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedTenant
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Test
 import java.net.URI
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -42,9 +41,6 @@ class MediaPresignDomainSliceTest {
     class FakePresignProfile : QuarkusTestProfile {
         override fun getEnabledAlternatives(): Set<Class<*>> = setOf(FakePresigningBlobStore::class.java)
     }
-
-    @Inject
-    lateinit var sessions: SessionService
 
     @Test
     fun twoTenantDomainsSignTheSameScopesUploadsForTwoDifferentOrigins() {
@@ -91,7 +87,7 @@ class MediaPresignDomainSliceTest {
         val uploadId = URI.create(startUpload(userId, scopeId, host = domain)) // upload signed for `domain`
 
         val blobId = completeAndReadBlobId(userId, scopeId, uploadId)
-        val get = given().header("Authorization", token(userId)).header("X-Forwarded-Host", domain)
+        val get = given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain)
             .contentType(ContentType.JSON)
             .body("""{"items":[{"blobId":"$blobId"}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-downloads-batch")
@@ -118,7 +114,7 @@ class MediaPresignDomainSliceTest {
             TenantEntity.update("status = ?1 where domain = ?2", TenantEntity.SUSPENDED, domain)
         }
 
-        given().header("Authorization", token(userId)).header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", domain)
             .contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
@@ -127,11 +123,9 @@ class MediaPresignDomainSliceTest {
 
     // --- helpers ---
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     /** Start a one-chunk upload over [host] and return its first presigned PUT URL. */
     private fun startUpload(userId: String, scopeId: String, host: String): String =
-        given().header("Authorization", token(userId)).header("X-Forwarded-Host", host)
+        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", host)
             .contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
@@ -149,8 +143,8 @@ class MediaPresignDomainSliceTest {
         val uploadId = QuarkusTransaction.requiringNew().call {
             UploadSessionEntity.find("storageKey", key.substringBeforeLast('/')).firstResult()!!.id
         }
-        val memory = seedMemoryNode(scopeId)
-        return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","derivatives":[]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -160,62 +154,10 @@ class MediaPresignDomainSliceTest {
     @Inject
     lateinit var fakeStore: FakePresigningBlobStore
 
-    private fun seedMemoryNode(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            com.veyq.app.features.content.NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId
-                kind = com.veyq.app.features.content.NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
     /** A bare ACTIVE tenant row whose only job is to claim a domain; returns that domain. */
     private fun seedTenantDomain(): String {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "pd-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-        }
+        val domain = "pd-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = domain, tenantScope = false)
         return domain
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "pdt-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "pd-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

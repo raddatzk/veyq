@@ -1,18 +1,18 @@
 package com.veyq.app.features.media
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -31,26 +31,21 @@ import java.util.UUID
 @QuarkusTest
 class MediaBucketsSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     @Test
     fun uploadStampsOwnerKeyAndMaterializesPrimary() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
 
         // the media carries the member's owner_key + a concrete bucket (its primary)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media[0].ownerKey", equalTo("user:$userId"))
             .body("media[0].bucketId", notNullValue())
 
         // the Beiträge list shows exactly one primary bucket (the uploader's) with a count of 1
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("buckets.size()", equalTo(1))
@@ -63,12 +58,12 @@ class MediaBucketsSliceTest {
     @Test
     fun createSubBucketMoveThenDeleteReparents() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==")
         val primary = firstPrimaryId(userId, scopeId, memory)
 
         // create a sub-bucket under the caller's primary (one level, owner inherited)
-        val sub = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val sub = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
@@ -78,28 +73,28 @@ class MediaBucketsSliceTest {
             .extract().path<String>("bucketId")
 
         // move the only medium into the sub-bucket → primary count 0, sub count 1
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"mediaIds":["$a"],"targetBucketId":"$sub"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/media-moves")
             .then().statusCode(204)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("buckets.find { it.bucketId == '$primary' }.mediaCount", equalTo(0))
             .body("buckets.find { it.bucketId == '$sub' }.mediaCount", equalTo(1))
 
         // delete the sub-bucket → its media REPARENT to the primary (never deleted); the sub-bucket is gone
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/buckets/$sub")
             .then().statusCode(204)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
             .body("buckets.size()", equalTo(1))
             .body("buckets[0].bucketId", equalTo(primary))
             .body("buckets[0].mediaCount", equalTo(1))
         // the medium itself still lives in the gallery
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media.size()", equalTo(1))
@@ -109,11 +104,11 @@ class MediaBucketsSliceTest {
     @Test
     fun renameSubBucketUpdatesSealedName() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val sub = createSub(userId, scopeId, memory, "YnVja2V0")
 
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"sealedName":"cmVuYW1lZA=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$sub")
             .then().statusCode(200)
@@ -123,18 +118,18 @@ class MediaBucketsSliceTest {
 
     @Test
     fun memberMayManageAnotherRootsSubBucket() {
-        val (alice, scopeId, tenantId) = seedMemberScopeWithTenant()
+        val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(alice, scopeId, memory, wrap = "YQ==") // alice's primary
         val aliceSub = createSub(alice, scopeId, memory, "YWxpY2U=")
 
         // cr-0123: a fellow member may rename + delete another root's SUB-bucket (curating contributions) → 200 / 204
-        given().header("Authorization", token(bob)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(bob)).contentType(ContentType.JSON)
             .body("""{"sealedName":"Ym9i"}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$aliceSub")
             .then().statusCode(200).body("sealedName", equalTo("Ym9i"))
-        given().header("Authorization", token(bob))
+        given().header("Authorization", bearer(bob))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/buckets/$aliceSub")
             .then().statusCode(204)
     }
@@ -142,29 +137,29 @@ class MediaBucketsSliceTest {
     @Test
     fun primaryBucketNotRenameableNorDeletable() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val primary = firstPrimaryId(userId, scopeId, memory)
 
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"sealedName":"eA=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory/buckets/$primary")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/buckets/$primary")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
     }
 
     @Test
     fun memberCreatesSubUnderAnotherRootInheritingItsOwner() {
-        val (alice, scopeId, tenantId) = seedMemberScopeWithTenant()
+        val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(alice, scopeId, memory, wrap = "YQ==")
         val alicePrimary = firstPrimaryId(alice, scopeId, memory)
 
         // cr-0123: bob nests a sub under alice's primary root (via parentBucketId) → it inherits alice's owner_key
-        given().header("Authorization", token(bob)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(bob)).contentType(ContentType.JSON)
             .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"c3Vi","parentBucketId":"$alicePrimary"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200)
@@ -176,12 +171,12 @@ class MediaBucketsSliceTest {
     @Test
     fun createSubRejectsNonPrimaryParent() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val sub = createSub(userId, scopeId, memory, "c3Vi")
 
         // a sub-bucket can't be a parent — sub-buckets nest one level under a primary → 403
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"eA==","parentBucketId":"$sub"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
@@ -189,14 +184,14 @@ class MediaBucketsSliceTest {
 
     @Test
     fun crossOwnerMoveIsRejected() {
-        val (alice, scopeId, tenantId) = seedMemberScopeWithTenant()
+        val (alice, scopeId, tenantId) = seedMemberScope()
         val bob = addMemberToScope(scopeId, tenantId)
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val aliceMedia = completeOne(alice, scopeId, memory, wrap = "YQ==")
         val bobMedia = completeOne(bob, scopeId, memory, wrap = "Yg==")
 
         // one move may not span two owners (alice + bob) — a cross-owner move → 403 illegal_target
-        given().header("Authorization", token(alice)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(alice)).contentType(ContentType.JSON)
             .body("""{"mediaIds":["$aliceMedia","$bobMedia"],"targetBucketId":null}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/media-moves")
             .then().statusCode(403).body("code", equalTo("illegal_target"))
@@ -205,10 +200,10 @@ class MediaBucketsSliceTest {
     @Test
     fun listBucketsByNonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==")
         val outsider = seedUser()
-        given().header("Authorization", token(outsider))
+        given().header("Authorization", bearer(outsider))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
     }
@@ -216,19 +211,19 @@ class MediaBucketsSliceTest {
     // --- helpers (mirror MediaTrashSliceTest) ---
 
     private fun createSub(userId: String, scopeId: String, nodeId: String, sealedName: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$sealedName"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path("bucketId")
 
     private fun firstPrimaryId(userId: String, scopeId: String, nodeId: String): String =
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path("buckets.find { it.isPrimary == true }.bucketId")
 
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, wrap)
-        return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
@@ -236,49 +231,11 @@ class MediaBucketsSliceTest {
     }
 
     private fun startOne(userId: String, scopeId: String, wrap: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare(wrap)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")
-
-    private fun seedNode(scopeId: String, kind: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; this.kind = kind
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = if (kind == NodeEntity.MEMORY) "a21lbQ==" else null; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val (userId, scopeId, _) = seedMemberScopeWithTenant()
-        return userId to scopeId
-    }
-
-    private fun seedMemberScopeWithTenant(): Triple<String, String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return Triple(userId, scopeId, tenantId)
-    }
 
     private fun addMemberToScope(scopeId: String, tenantId: String): String {
         val userId = seedUser()
@@ -288,18 +245,6 @@ class MediaBucketsSliceTest {
                 this.scopeId = scopeId; role = MembershipEntity.MEMBER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
             TenantRoots.join(userId, tenantId)
-        }
-        return userId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
         }
         return userId
     }
