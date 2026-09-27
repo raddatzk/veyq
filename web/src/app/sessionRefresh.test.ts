@@ -66,6 +66,25 @@ describe('a rejected refresh ends the session (uc.account.sign-out E1, E2)', () 
     expect(replace).not.toHaveBeenCalled()
   })
 
+  it('a 403 tenant_suspended is about the tenant, not the session: tokens kept, nothing ended', async () => {
+    // On a suspended tenant's own domain the Host filter answers EVERY /api call so — the refresh too — and it
+    // deliberately touches no session (uc.spaces.scope-access A7). Ending here would drop the convenience tiers
+    // of a session the server never refused; the app shows the suspension notice instead.
+    session.accessToken = 'a1'
+    const suspended = {
+      response: new Response(JSON.stringify({ code: 'tenant_suspended' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    }
+    refreshFails(suspended)
+
+    await expect(refreshSession()).rejects.toBe(suspended)
+
+    expect(session.accessToken).toBe('a1')
+    expect(replace).not.toHaveBeenCalled()
+  })
+
   it('a 401 at boot, before this tab holds a session, is the ordinary not-signed-in path (E2)', async () => {
     // Without this the sign-in page would reload itself forever: every boot there refreshes with no cookie.
     refreshFails(rejected(401))

@@ -6,7 +6,7 @@ import { tokenApi } from '../api/client'
 import { clearTokens, session, setTokens } from './session'
 import { endSession } from './sessionEnd'
 import { isAuthoritativeRejection, isUnauthorized } from '../shared/httpError'
-import { handleTenantSuspended } from './tenantSuspension'
+import { handleTenantSuspended, isTenantSuspended } from './tenantSuspension'
 
 /**
  * The refresh this tab already has outstanding, or null. Callers that arrive while one is in flight join it
@@ -54,7 +54,7 @@ async function rotateSession(): Promise<void> {
     })
     setTokens(pair.accessToken, pair.refreshToken ?? null)
   } catch (e) {
-    if (isAuthoritativeRejection(e)) {
+    if (await isSessionRefusal(e)) {
       // `endSession` decides whether this tab holds a session before it awaits anything, so the tokens can go
       // right after; it is awaited so no caller acts on the failure while the document load is under way.
       const ended = endSession()
@@ -63,6 +63,16 @@ async function rotateSession(): Promise<void> {
     }
     throw e
   }
+}
+
+/**
+ * Whether a failure is the server refusing THIS SESSION — revoked, expired, unknown — as opposed to anything that
+ * says nothing about it. An authoritative 4xx ({@link isAuthoritativeRejection}), except a `403 tenant_suspended`:
+ * a suspended tenant's own domain answers every `/api` call that way before authentication is even looked at, and
+ * deliberately touches no session (uc.spaces.scope-access A7), so the family is as live as it was.
+ */
+export async function isSessionRefusal(e: unknown): Promise<boolean> {
+  return isAuthoritativeRejection(e) && !(await isTenantSuspended(e))
 }
 
 /**

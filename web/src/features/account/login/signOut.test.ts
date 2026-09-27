@@ -14,7 +14,10 @@ vi.mock('../rememberMe/sessionVault', () => ({ clearSessionVault }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({ clearDeviceKey }))
 vi.mock('../../../api/client', () => ({ sessionApi: () => ({ logout }) }))
 // The refresh-and-retry is `sessionRefresh`'s own test; here a failed call is the failure the sequence sees.
-vi.mock('../../../app/sessionRefresh', () => ({ withRefresh: <T>(call: () => Promise<T>) => call() }))
+vi.mock('../../../app/sessionRefresh', async (actual) => ({
+  ...(await actual<typeof import('../../../app/sessionRefresh')>()),
+  withRefresh: <T>(call: () => Promise<T>) => call(),
+}))
 
 import { signOut, takeSignOutNotice } from './signOut'
 
@@ -84,6 +87,22 @@ describe('signOut (uc.account.sign-out)', () => {
 
     expect(endSession).toHaveBeenCalledTimes(1)
     expect(takeSignOutNotice()).toBeNull()
+  })
+
+  it('does not count a suspended tenant’s refusal as a revoke — the family is still live (E4)', async () => {
+    // A suspended tenant's own domain answers every /api call `403 tenant_suspended` and touches no session, so
+    // the logout never reached the family and the cookie still works: that is E4, not "already gone".
+    logout.mockRejectedValue({
+      response: new Response(JSON.stringify({ code: 'tenant_suspended' }), {
+        status: 403,
+        headers: { 'content-type': 'application/json' },
+      }),
+    })
+
+    await signOut()
+
+    expect(endSession).toHaveBeenCalledTimes(1)
+    expect(takeSignOutNotice()).toBe('unconfirmed')
   })
 
   it('says so when the locked screen signed every device out, this one included', async () => {

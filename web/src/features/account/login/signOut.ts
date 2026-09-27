@@ -9,9 +9,8 @@
 //
 // `handle401` is deliberately NOT this: it is redirect-only, for a request that came back unauthorized.
 import { sessionApi } from '../../../api/client'
-import { withRefresh } from '../../../app/sessionRefresh'
+import { isSessionRefusal, withRefresh } from '../../../app/sessionRefresh'
 import { endSession } from '../../../app/sessionEnd'
-import { isAuthoritativeRejection } from '../../../shared/httpError'
 import { clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../rememberMe/sessionVault'
 
@@ -42,9 +41,9 @@ export async function signOut(opts: { everywhere?: boolean } = {}): Promise<void
   try {
     await withRefresh(() => sessionApi().logout())
   } catch (e) {
-    // A 4xx is the server answering that this session is not live any more — revoked or expired — which is what
-    // signing out wanted. Only a failure that never got that answer (offline, 5xx) leaves the cookie standing.
-    reached = isAuthoritativeRejection(e)
+    // A refusal of the session is the server answering that it is not live any more — revoked or expired — which
+    // is what signing out wanted. Any other failure (offline, 5xx, a suspended tenant) leaves the cookie standing.
+    reached = await isSessionRefusal(e)
   }
   leaveNotice(opts.everywhere ? (reached ? 'everywhere' : 'everywhereUnconfirmed') : reached ? null : 'unconfirmed')
   await endSession()

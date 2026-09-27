@@ -55,7 +55,9 @@ This is a property with several triggers, so it lives here and not under any one
   expired, unknown) in a tab that holds a session runs the ending. A network failure or a 5xx is **not** a
   rejection: the session and its tokens stay, and the next call tries again. Losing the connection for a
   moment must not cost an unlock. Neither is a 408 or a 429, which a proxy in front of the instance may answer:
-  they say *not now*, not *no*.
+  they say *not now*, not *no* — nor a `403 tenant_suspended`, which a suspended tenant's own domain answers to
+  every call without looking at the session ([uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)
+  A7). The same line decides E4: a sign-out refused that way did not revoke the family.
 - **E2 — the tab holds no session.** The sign-in page at boot, a public share, a device waiting in a pairing
   ceremony: such a tab ignores the other-tab message, and a refresh rejected at boot is the ordinary *not
   signed in* path, not an ending. Without this, an ending on the sign-in page would load the sign-in page
