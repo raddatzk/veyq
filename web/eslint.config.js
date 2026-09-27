@@ -73,6 +73,35 @@ export default defineConfigWithVueTs(
     },
   },
   {
+    // A test renders the REAL catalog, through `src/test/i18n.ts` (inbox #171). A hand-written stub catalog, or a
+    // mocked `t`, keeps a test green on a string the app no longer shows: stub keys had outlived the catalog
+    // when this rule was written, among them the retired `members.copyLink`. LIMIT: a stub reached some other way
+    // (a hand-rolled plugin providing `$t`) is not caught.
+    name: 'veyq/tests-use-the-real-catalog',
+    files: ['src/**/*.test.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'vue-i18n',
+              importNames: ['createI18n'],
+              message: 'Mount with realI18n() from src/test/i18n — the real catalog, where a missing key fails the test.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.value='vue-i18n']",
+          message: 'Do not mock vue-i18n; mount with realI18n() from src/test/i18n and assert through its t().',
+        },
+      ],
+    },
+  },
+  {
     // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently
     // zero violations — the guard exists to keep it that way).
