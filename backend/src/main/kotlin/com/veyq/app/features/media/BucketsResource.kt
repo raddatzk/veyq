@@ -41,7 +41,7 @@ class BucketsResource(
     override fun createBucket(scopeId: UUID, nodeId: UUID, createBucketRequest: CreateBucketRequest): Response =
         when (
             val o = handler.createBucket(
-                identity.principal.name, scopeId.toString(), nodeId.toString(),
+                identity.principal.name, scopeId.toString(), nodeId.toString(), createBucketRequest.bucketId.toString(),
                 createBucketRequest.sealedName, createBucketRequest.parentBucketId?.toString(),
             )
         ) {
@@ -79,5 +79,6 @@ class BucketsResource(
         mediaCount = b.mediaCount,
         parentBucketId = b.parentBucketId?.let(UUID::fromString),
         sealedName = b.sealedName,
+        shareId = b.shareId,
     )
 }

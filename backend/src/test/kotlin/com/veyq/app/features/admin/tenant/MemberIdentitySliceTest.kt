@@ -201,7 +201,7 @@ class MemberIdentitySliceTest {
     private fun memberRegisterBody(secret: String, username: String, sealedName: String? = null): String {
         val nameField = sealedName?.let { ""","sealedName":"$it"""" } ?: ""
         return """
-            {"bootstrapSecret":"$secret","username":"$username"$nameField,
+            {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"$username"$nameField,
              "account":{"suiteId":"v1",
                "identityPublicKey":"bWVtYmVyLXB1YmxpYy1rZXk=",
                "wrappedIdentityPrivateKey":"d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ==",

@@ -61,6 +61,16 @@ object Failures {
      *  the tenant ever sees it. */
     val scopeDeleting: HttpFailure = httpFailure("scope_deleting", CONFLICT)
 
+    /**
+     * The client-minted id of a create is already taken → 409 (ADR 0072 Decision 3). The client mints the id of
+     * every sealed object it creates because each ciphertext of the create is sealed bound to it, so the server may
+     * neither substitute its own id nor overwrite the object that holds this one. **The same answer wherever the
+     * taken id lives** — this scope, another scope, a trashed row — and only ever after the scope-access gate, so
+     * it tells a member nothing about a scope they cannot see. Not idempotent: a retry whose first response was
+     * lost answers this too, and the client re-reads.
+     */
+    val idTaken: HttpFailure = httpFailure("id_taken", CONFLICT)
+
     /** Slug already taken under the parent (uniqueness) → 409. */
     val slugTaken: HttpFailure = httpFailure("slug_taken", CONFLICT)
 

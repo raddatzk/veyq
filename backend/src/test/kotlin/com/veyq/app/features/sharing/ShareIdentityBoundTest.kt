@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
@@ -93,12 +94,12 @@ class ShareIdentityBoundTest {
     // --- helpers (mirroring SharePasswordAttemptBoundTest) ---
 
     private fun createIdentity(shareId: String) =
-        given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"$sealedName"}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
             .`when`().post("/api/shares/$shareId/identities")
 
     private fun createShare(userId: String, nodeId: String): String =
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}").contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"CONTRIBUTOR","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"CONTRIBUTOR","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

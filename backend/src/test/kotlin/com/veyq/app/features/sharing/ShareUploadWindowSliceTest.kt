@@ -1,5 +1,6 @@
 package com.veyq.app.features.sharing
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.MediaBudgetBranchSliceTest
@@ -97,14 +98,14 @@ class ShareUploadWindowSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId)
         val shareId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$memory","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$memory","role":"CONTRIBUTOR","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         return Share(userId, shareId)
     }
 
     private fun identity(shareId: String): String =
-        given().contentType(ContentType.JSON).body("""{"sealedDisplayName":"bmFtZQ=="}""")
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"bmFtZQ=="}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path("contributorToken")
 
@@ -130,7 +131,7 @@ class ShareUploadWindowSliceTest {
 
     private fun complete(shareId: String, contributorToken: String, uploadId: String) =
         given().contentType(ContentType.JSON)
-            .body("""{"contributorToken":"$contributorToken","items":[{"originalUploadId":"$uploadId"}]}""")
+            .body("""{"contributorToken":"$contributorToken","items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId"}]}""")
             .`when`().post("/api/shares/$shareId/media")
             .then().statusCode(200)
 

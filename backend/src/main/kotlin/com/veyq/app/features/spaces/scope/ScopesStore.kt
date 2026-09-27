@@ -48,6 +48,8 @@ data class TenantRow(
     val wrappedGrant: String?,
     val sealedIcon: String?,
     val iconEpoch: Int,
+    /** The epoch `wrappedGrant` holds (its seal is bound to it, ADR 0072); null whenever the grant is. */
+    val grantedEpoch: Int?,
 )
 
 /** A member of a scope — the row behind a `ScopeMember` (the member directory, cr-0077). `hasGrant=false` is a
@@ -76,7 +78,11 @@ data class ResolvedCandidateRow(
 
 /** A pending consent proposal from the invitee's point of view (cr-0096): the group + who proposed + the wrapped
  *  name-key `K_name` (`sealedNameKey`) + the scope's canonical `encryptedName` the key opens (ADR 0027). */
-data class GroupInvitationRow(val scopeId: String, val addedByUsername: String, val sealedNameKey: String, val encryptedName: String)
+data class GroupInvitationRow(
+    val scopeId: String, val addedByUsername: String, val sealedNameKey: String, val encryptedName: String,
+    /** The name epoch both seals are bound to (ADR 0072) — the invitee opens them at exactly this epoch. */
+    val nameEpoch: Int,
+)
 
 /** The caller's membership state on a scope (cr-0094) — drives idempotent accept/decline + 404. */
 enum class ConsentState { PENDING, ACTIVE, NONE }
@@ -104,9 +110,9 @@ class ScopesStore(
 
     /** Birth a PERSONAL scope for the caller in this tenant + the self-membership (grant = opaque ciphertext). */
     @Transactional
-    fun createPersonal(userId: String, tenantId: String, wrappedGrant: String): String {
+    fun createPersonal(scopeId: String, userId: String, tenantId: String, wrappedGrant: String): Boolean {
+        if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
-        val scopeId = UUID.randomUUID().toString()
         ScopeEntity().apply {
             id = scopeId
             this.tenantId = tenantId
@@ -122,16 +128,16 @@ class ScopesStore(
             this.wrappedGrant = wrappedGrant
             createdAt = now
         }.persist()
-        return scopeId
+        return true
     }
 
     /** Birth a GROUP scope for the caller in this tenant + the OWNER self-membership (en.spaces.group-scope,
      *  cr-0032). Mirrors [createPersonal] but stores the opaque `encryptedName` (the group name sealed under its
      *  derived name-key `K_name`, cr-0096) on the scope row, at name-epoch 0. Group names are not unique — no existence check. */
     @Transactional
-    fun createGroup(userId: String, tenantId: String, encryptedName: String, wrappedGrant: String): String {
+    fun createGroup(scopeId: String, userId: String, tenantId: String, encryptedName: String, wrappedGrant: String): Boolean {
+        if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
-        val scopeId = UUID.randomUUID().toString()
         ScopeEntity().apply {
             id = scopeId
             this.tenantId = tenantId
@@ -148,7 +154,7 @@ class ScopesStore(
             this.wrappedGrant = wrappedGrant
             createdAt = now
         }.persist()
-        return scopeId
+        return true
     }
 
     /** Rename a GROUP (uc.spaces.rename-group, cr-0097): overwrite the scope's `encrypted_name` (re-sealed under
@@ -414,8 +420,11 @@ class ScopesStore(
         return MembershipEntity.find("userId = ?1 and tenantId = ?2 and pendingConsent = true", userId, tenantId).list()
             .mapNotNull { m ->
                 val sealedNameKey = m.sealedNameKey ?: return@mapNotNull null
-                val encryptedName = ScopeEntity.findById(m.scopeId)?.encryptedName ?: return@mapNotNull null
-                GroupInvitationRow(m.scopeId, m.addedBy?.let { profileByUser[it]?.username } ?: "", sealedNameKey, encryptedName)
+                val scope = ScopeEntity.findById(m.scopeId) ?: return@mapNotNull null
+                val encryptedName = scope.encryptedName ?: return@mapNotNull null
+                GroupInvitationRow(
+                    m.scopeId, m.addedBy?.let { profileByUser[it]?.username } ?: "", sealedNameKey, encryptedName, scope.nameEpoch,
+                )
             }
     }
 
@@ -473,10 +482,12 @@ class ScopesStore(
                 val rootScope = ScopeEntity.findById(tenantId)
                 TenantEntity.findById(tenantId)?.let { t ->
                     val open = t.status != TenantEntity.SUSPENDED
+                    val grant = root?.wrappedGrant?.takeIf { open }
                     TenantRow(
                         t.id, t.name, t.domain, role, t.status,
-                        root?.wrappedGrant?.takeIf { open }, rootScope?.sealedIcon?.takeIf { open },
+                        grant, rootScope?.sealedIcon?.takeIf { open },
                         rootScope?.iconEpoch ?: 0,
+                        root?.grantedEpoch?.takeIf { grant != null },
                     )
                 }
             }

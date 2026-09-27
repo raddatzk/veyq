@@ -70,6 +70,7 @@ class SharingResource(
     override fun createShare(createShareRequest: CreateShareRequest): Response =
         when (val o = handler.create(
             userId = identity.principal.name,
+            shareId = createShareRequest.shareId,
             nodeId = createShareRequest.nodeId.toString(),
             role = createShareRequest.role.value, // VIEWER | CONTRIBUTOR (cr-0101)
             wrap = createShareRequest.wrap,
@@ -103,6 +104,7 @@ class SharingResource(
         return Response.ok(shares.map { s ->
             ShareSummary(
                 shareId = s.id,
+                scopeId = UUID.fromString(s.scopeId), // the recovery wrap is bound to (scope, node, share), ADR 0072
                 nodeId = UUID.fromString(s.nodeId),
                 role = ShareRole.decode(s.role),
                 sealedName = s.sealedName,
@@ -156,6 +158,7 @@ class SharingResource(
             is ResolveShareOutcome.Found -> Response.ok(
                 PublicShare(
                     role = ShareRole.decode(o.share.role),
+                    scopeId = UUID.fromString(o.share.scopeId), // every K_mem seal the viewer opens is bound to it (ADR 0072)
                     passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
                     pwSalt = if (o.share.passwordRequired) o.share.pwSalt else null,
                     wrap = o.share.wrap,
@@ -220,6 +223,7 @@ class SharingResource(
         kind = NodeKind.decode(n.kind),
         parentId = n.parentId?.let(UUID::fromString),
         orderIndex = n.orderIndex,
+        epoch = n.epoch,
         wrappedContentKey = n.wrappedContentKey,
         wrappedMeta = n.wrappedMeta,
     )
@@ -253,7 +257,9 @@ class SharingResource(
     // identity table on its own. Bounded per share in the handler (ShareRateLimiter.allowIdentity).
     @RateLimit(key = RateLimitKey.SHARE)
     override fun createShareIdentity(shareId: String, createShareIdentityRequest: CreateShareIdentityRequest, xSharePassword: String?): Response =
-        when (val o = handler.createIdentity(shareId, xSharePassword, createShareIdentityRequest.sealedDisplayName)) {
+        when (val o = handler.createIdentity(
+            shareId, xSharePassword, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
+        )) {
             is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareIdentityCreated(identityId = UUID.fromString(o.identityId), contributorToken = o.contributorToken)).build()
             is HttpFailure -> httpError(o)
@@ -265,7 +271,9 @@ class SharingResource(
     // be the wrong axis here, since a share's guests can all sit behind one proxy address.
     @RateLimit(key = RateLimitKey.SHARE)
     override fun startShareBlobUploads(shareId: String, shareBlobUploadsRequest: ShareBlobUploadsRequest, xSharePassword: String?): Response {
-        val declares = shareBlobUploadsRequest.items.map { UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey) }
+        val declares = shareBlobUploadsRequest.items.map {
+            UploadDeclare(it.chunkCount, it.byteSize, it.wrappedBlobKey, it.blobId.toString(), it.ownerId.toString(), it.role.value)
+        }
         return when (val o = handler.startUploads(shareId, xSharePassword, shareBlobUploadsRequest.contributorToken, declares, signingDomain())) {
             is ShareUploadOutcome.Results -> Response.ok(
                 ShareBlobUploadsResponse(
@@ -310,6 +318,7 @@ class SharingResource(
     override fun completeShareMedia(shareId: String, shareMediaBatchRequest: ShareMediaBatchRequest, xSharePassword: String?): Response {
         val items = shareMediaBatchRequest.items.map { item ->
             ShareCompleteItem(
+                mediaId = item.mediaId.toString(),
                 originalUploadId = item.originalUploadId.toString(),
                 derivatives = item.derivatives.orEmpty().map { DerivativeDeclare(it.kind.value, it.uploadId.toString()) },
                 wrappedMeta = item.wrappedMeta,

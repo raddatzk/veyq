@@ -15,6 +15,7 @@ sealed interface CreateNodeOutcome {
     object ScopeDeleting : CreateNodeOutcome, HttpFailure by Failures.scopeDeleting
     object IllegalStructure : CreateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : CreateNodeOutcome, HttpFailure by Failures.slugTaken
+    object IdTaken : CreateNodeOutcome, HttpFailure by Failures.idTaken
 }
 
 sealed interface ListNodesOutcome {
@@ -69,7 +70,7 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
     }
 
     fun create(
-        userId: String, scopeId: String, parentSlotId: String?, kind: String,
+        userId: String, scopeId: String, nodeId: String, parentSlotId: String?, kind: String,
         encryptedName: String, slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
     ): CreateNodeOutcome {
         access.check(userId, scopeId, WRITE)
@@ -79,9 +80,12 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
         if (parent is ParentSlot.Missing) return CreateNodeOutcome.IllegalStructure
         if (!parentAllows(kind, parent)) return CreateNodeOutcome.IllegalStructure
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
-        return CreateNodeOutcome.Created(
-            store.create(scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta),
-        )
+        // The client-minted id (ADR 0072): the name, K_mem wrap and meta are sealed bound to it, so it is stored
+        // verbatim or not at all.
+        if (!store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)) {
+            return CreateNodeOutcome.IdTaken
+        }
+        return CreateNodeOutcome.Created(nodeId)
     }
 
     fun list(userId: String, scopeId: String): ListNodesOutcome {

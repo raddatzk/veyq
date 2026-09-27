@@ -151,7 +151,7 @@ class MediaPresignDomainSliceTest {
         }
         val memory = seedMemoryNode(scopeId)
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$memory","originalUploadId":"$uploadId","derivatives":[]}]}""")
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","derivatives":[]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .extract().path("results[0].blobId")

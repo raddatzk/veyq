@@ -8,6 +8,7 @@ import com.veyq.app.shared.http.httpError
 import com.veyq.app.shared.http.httpFailure
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
+import java.util.UUID
 import jakarta.ws.rs.core.Response
 import org.jboss.logging.Logger
 import com.veyq.app.shared.ratelimit.RateLimitExempt
@@ -64,6 +65,8 @@ class AccountResource(
 
         return Response.ok(
             AccountKeyMaterial(
+                // The caller's own id: its sealed name is bound to it (ADR 0072), and nothing else hands it over.
+                userId = UUID.fromString(identity.principal.name),
                 suiteId = suiteId,
                 wraps = wraps,
                 wrappedIdentityPrivateKey = material.wrappedIdentityPrivateKey,

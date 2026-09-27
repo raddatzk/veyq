@@ -9,6 +9,7 @@ import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -51,6 +52,9 @@ sealed interface CompleteResult {
     /** The job is not leased to the caller (ADR 0021 §6) — idempotency makes a repeated completion harmless, it does
      *  not make an unclaimed one legitimate. */
     object NotHolder : CompleteResult, HttpFailure by httpFailure("not_lease_holder", CONFLICT)
+    /** A grant-delivery completion stated an epoch that is not the scope's current one (ADR 0072): nothing written,
+     *  the lease released without spending an attempt, so the job re-runs at the current epoch. */
+    object StaleEpoch : CompleteResult, HttpFailure by httpFailure("stale_epoch", CONFLICT)
 }
 
 /** Outcome of a failure report — the job's status + attempts after requeue-or-dead-letter. */
@@ -175,21 +179,33 @@ class TasksStore {
      * (ADR 0021 §6) — which also makes them a key-holder there, since only a granted scope is claimable.
      */
     @Transactional
-    fun complete(userId: String, jobId: String, sealedResult: String?): CompleteResult {
+    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?): CompleteResult {
         val job = JobEntity.findById(jobId) ?: return CompleteResult.NotFound
         if (job.status == JobEntity.DONE) return CompleteResult.Done // idempotent no-op
         if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
 
         if (job.capabilityTag == CapabilityTags.GRANT_DELIVERY) {
             val grant = sealedResult ?: return CompleteResult.MissingResult
-            // The worker wrapped E_current, so record grantedEpoch = the scope's current epoch — else the client
-            // peels the chain from the wrong base (treats E_current as E_0) and can't read post-rotation content
-            // (cr-0093). Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current —
-            // e.g. a rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is
-            // already at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the
-            // caller was authorized against `job.scopeId`, so it may only ever write onto a membership *in that
-            // scope*; without this an attacker holding a grant in any scope could target a foreign id (cr-0081).
-            val epoch = ScopeEntity.findById(job.scopeId)?.currentEpoch ?: 0
+            val epoch = statedEpoch ?: return CompleteResult.MissingResult
+            // The grant is sealed bound to (scope, the epoch the worker states) (ADR 0072), so that is the epoch the
+            // membership records — and it must be the scope's CURRENT one: a rotation that landed between claim and
+            // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
+            // released (the claim's attempt rolled back, like a decline) so the job re-runs at the current epoch.
+            // The scope row is read under the lock a rotation takes (ScopesStore.rotate), so the two serialize.
+            val current = ScopeEntity.findById(job.scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch ?: 0
+            if (epoch != current) {
+                JobEntity.update(
+                    "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
+                        "where id = ?2 and leaseHolder = ?3 and status = ?4",
+                    JobEntity.PENDING, jobId, userId, JobEntity.LEASED,
+                )
+                return CompleteResult.StaleEpoch
+            }
+            // Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current — e.g. a
+            // rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is already
+            // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
+            // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
+            // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
             job.resourceRef?.let { membershipId ->
                 MembershipEntity.update(
                     "wrappedGrant = ?1, grantedEpoch = ?2 where id = ?3 and scopeId = ?4 " +

@@ -2,6 +2,7 @@ package com.veyq.app.shared.http
 
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
+import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.membership.ScopeAccessWorld
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
@@ -77,7 +78,7 @@ class OperatorBlindProbeTest {
     private val probes: Map<String, Probe> = mapOf(
         // --- content ---
         "createNode" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes", """{"kind":"FOLDER","encryptedName":"$B64","slugToken":"$slug","orderIndex":0}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes", """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$B64","slugToken":"$slug","orderIndex":0}""")
         },
         "listNodes" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes") },
         "updateNode" to Probe(Address.SCOPE) { s ->
@@ -102,12 +103,12 @@ class OperatorBlindProbeTest {
             Call("POST", "/api/scopes/${s.scopeId}/blob-upload-windows", """{"items":[{"uploadId":"${s.uploadId}","fromChunk":0}]}""")
         },
         "completeMedia" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/media-batch", """{"items":[{"nodeId":"${s.nodeId}","originalUploadId":"${s.uploadId}","derivatives":[]}]}""")
+            Call("POST", "/api/scopes/${s.scopeId}/media-batch", """{"items":[{"nodeId":"${s.nodeId}","mediaId":"${TestBlob.ownerOf(s.uploadId)}","originalUploadId":"${s.uploadId}","derivatives":[]}]}""")
         },
         "listNodeMedia" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/media") },
         "listNodeBuckets" to Probe(Address.SCOPE) { s -> Call("GET", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets") },
         "createBucket" to Probe(Address.SCOPE) { s ->
-            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets", """{"sealedName":"$B64"}""")
+            Call("POST", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets", """{"bucketId":"${UUID.randomUUID()}","sealedName":"$B64"}""")
         },
         "renameBucket" to Probe(Address.SCOPE) { s ->
             Call("PATCH", "/api/scopes/${s.scopeId}/nodes/${s.nodeId}/buckets/${s.bucketId}", """{"sealedName":"$B64"}""")
@@ -149,13 +150,13 @@ class OperatorBlindProbeTest {
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },
         // Host-resolved: the Host names the tenant, so its root is what the gate checks. The suspended persona
         // cannot reach the gate here — the tenant's own domain is refused by TenantSuspensionFilter first.
-        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"wrappedGrant":"$B64"}""", host = s.domain) },
+        "createPersonalScope" to Probe(Address.HOST) { s -> Call("POST", "/api/scopes", """{"scopeId":"${UUID.randomUUID()}","wrappedGrant":"$B64"}""", host = s.domain) },
         "createGroup" to Probe(Address.HOST) { s ->
-            Call("POST", "/api/scopes/groups", """{"encryptedName":"$B64","wrappedGrant":"$B64"}""", host = s.domain)
+            Call("POST", "/api/scopes/groups", """{"scopeId":"${UUID.randomUUID()}","encryptedName":"$B64","wrappedGrant":"$B64"}""", host = s.domain)
         },
         // --- sharing (curation) ---
         "createShare" to Probe(Address.NODE) { s ->
-            Call("POST", "/api/shares", """{"nodeId":"${s.nodeId}","role":"VIEWER","wrap":"$B64","sealedName":"$B64"}""")
+            Call("POST", "/api/shares", """{"shareId":"${TestIds.shareId()}","nodeId":"${s.nodeId}","role":"VIEWER","wrap":"$B64","sealedName":"$B64"}""")
         },
         // With `nodeId` only; without it the listing is account-addressed and filters instead of refusing
         // (ScopeAccessSliceTest). A non-member gets `[]`, so every answer is told apart by its rows.

@@ -43,6 +43,8 @@ class AccountKeyMaterialSliceTest {
         // the interactive (PASSWORD) wrap — RECOVERY is withheld for the email-gated recovery flow (cr-0052).
         get(issueToken(USER_A))
             .then().statusCode(200)
+            // the caller's own id — its sealed name is bound to it (ADR 0072) — and only ever the caller's
+            .body("userId", equalTo(USER_A))
             .body("suiteId", equalTo("v1"))
             .body("wrappedIdentityPrivateKey", equalTo(A_PRIV))
             .body("wraps.size()", equalTo(1))
@@ -71,7 +73,7 @@ class AccountKeyMaterialSliceTest {
 
     @Test
     fun unknownWrapMethodIsSkippedNotA500() {
-        val userId = "keymat-user-bogus"
+        val userId = "6b65796d-6174-4000-8000-00000000b065"
         QuarkusTransaction.requiringNew().run {
             if (VeyqUser.findById(userId) == null) {
                 VeyqUser().apply {
@@ -164,8 +166,8 @@ class AccountKeyMaterialSliceTest {
 
     companion object {
         private const val PATH = "/api/account/key-material"
-        private const val USER_A = "keymat-user-a"
-        private const val USER_B = "keymat-user-b"
+        private const val USER_A = "6b65796d-6174-4000-8000-00000000000a"
+        private const val USER_B = "6b65796d-6174-4000-8000-00000000000b"
         private const val A_PW_WRAP = "QS1wYXNzd29yZC13cmFw"
         private const val A_REC_WRAP = "QS1yZWNvdmVyeS13cmFw"
         private const val A_PRIV = "QS1pZGVudGl0eS1wcml2"

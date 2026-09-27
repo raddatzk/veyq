@@ -99,14 +99,14 @@ class AccountWrapsSliceTest {
     @Test
     fun deletingPasswordWrapIsNoOp() {
         val token = issueToken(USER_A)
-        delete(token, "$USER_A-pw").then().statusCode(204) // the floor's id
+        delete(token, UUID.nameUUIDFromBytes("$USER_A-pw".toByteArray()).toString()).then().statusCode(204) // the floor's id
         keyMaterial(token).then().statusCode(200).body("wraps.method", hasItems("PASSWORD"))
     }
 
     @Test
     fun deletingNonDeviceWrapIsNoOp() {
         // A RECOVERY wrap must NOT be removable through this device-untrust endpoint (whitelist DEVICE).
-        val recId = "$USER_A-rec"
+        val recId = UUID.nameUUIDFromBytes("$USER_A-rec".toByteArray()).toString()
         QuarkusTransaction.requiringNew().run {
             if (MasterKeyWrapEntity.findById(recId) == null) {
                 MasterKeyWrapEntity().apply {
@@ -216,7 +216,7 @@ class AccountWrapsSliceTest {
                     createdAt = Instant.now()
                 }.persist()
                 MasterKeyWrapEntity().apply {
-                    id = "$userId-pw"
+                    id = UUID.nameUUIDFromBytes("$userId-pw".toByteArray()).toString()
                     this.userId = userId
                     method = "PASSWORD"
                     wrappedKey = "cGFzc3dvcmQtd3JhcA=="
@@ -227,8 +227,8 @@ class AccountWrapsSliceTest {
     }
 
     companion object {
-        private const val USER_A = "wraps-user-a"
-        private const val USER_B = "wraps-user-b"
+        private const val USER_A = "77726170-7300-4000-8000-00000000000a"
+        private const val USER_B = "77726170-7300-4000-8000-00000000000b"
         private const val KDF = "a2RmLXBhcmFtcw=="
     }
 }

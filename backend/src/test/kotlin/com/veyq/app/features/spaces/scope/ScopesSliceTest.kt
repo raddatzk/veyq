@@ -1,5 +1,6 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.shared.TestIds
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
@@ -513,7 +514,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val personalId = given().header("Authorization", "Bearer ${token(userId)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes").then().statusCode(201).extract().path<String>("scopeId")
         given().header("Authorization", "Bearer ${token(userId)}").contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
@@ -642,7 +643,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(201)
             .body("kind", equalTo("PERSONAL"))
@@ -684,12 +685,12 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes").then().statusCode(201)
 
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(409).body("code", equalTo("personal_scope_exists"))
     }
@@ -699,7 +700,7 @@ class ScopesSliceTest {
         val (userId, domain) = seedMember()
         val scopeId = given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201)
             .body("kind", equalTo("GROUP"))
@@ -726,7 +727,7 @@ class ScopesSliceTest {
         val outsider = seedUser()
         given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -802,7 +803,7 @@ class ScopesSliceTest {
         val (userId, _) = seedMember()
         given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
             .header("X-Forwarded-Host", "nobody-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -814,7 +815,7 @@ class ScopesSliceTest {
         val outsider = seedUser()
         given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
     }
@@ -822,7 +823,7 @@ class ScopesSliceTest {
     @Test
     fun unauthenticatedIs401() {
         given().header("X-Forwarded-Host", "x-${UUID.randomUUID()}.example.com").contentType(ContentType.JSON)
-            .body("""{"wrappedGrant":"$personalGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","wrappedGrant":"$personalGrant"}""")
             .`when`().post("/api/scopes")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
     }
@@ -1193,9 +1194,9 @@ class ScopesSliceTest {
         val expiredKey = UUID.randomUUID().toString()
         val freshKey = UUID.randomUUID().toString()
         val blob3 = TestBlob.ofChunks(3)
-        val expiredSession = mediaStore.createSession(expired, UploadOpener.Member(owner), expiredKey, chunkCount = blob3.chunkCount, byteSize = blob3.byteSize, wrappedBlobKey = "d3JhcA==")
+        val expiredSession = mediaStore.createSession(expired, UploadOpener.Member(owner), expiredKey, blob3.upload("d3JhcA=="))
         val blob2 = TestBlob.ofChunks(2)
-        val freshSession = mediaStore.createSession(fresh, UploadOpener.Member(owner), freshKey, chunkCount = blob2.chunkCount, byteSize = blob2.byteSize, wrappedBlobKey = "d3JhcA==")
+        val freshSession = mediaStore.createSession(fresh, UploadOpener.Member(owner), freshKey, blob2.upload("d3JhcA=="))
 
         listOf(expired, fresh).forEach {
             given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$it").then().statusCode(204)
@@ -1224,7 +1225,7 @@ class ScopesSliceTest {
 
     /** A minimal FOLDER-node create body; `slug` becomes a base64 slug token (unique per parent). */
     private fun nodeBody(slug: String) =
-        """{"kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0}"""
+        """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"$groupName","slugToken":"${Base64.getEncoder().encodeToString(slug.toByteArray())}","orderIndex":0}"""
 
     /** Create a FOLDER node in a scope (a write) → the new nodeId. */
     private fun createNodeIn(owner: String, scopeId: String, slug: String): String =
@@ -1239,7 +1240,7 @@ class ScopesSliceTest {
     private fun createGroupAs(userId: String, domain: String): String =
         given().header("Authorization", "Bearer ${token(userId)}")
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
-            .body("""{"encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
+            .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant"}""")
             .`when`().post("/api/scopes/groups")
             .then().statusCode(201).extract().path("scopeId")
 

@@ -95,12 +95,14 @@ class NodesStore {
         return false
     }
 
+    /** Persist a node under the client-minted [id]; false — nothing written — if any node, live or trashed, in
+     *  any scope already holds it (ADR 0072: never overwrite, never substitute). */
     @Transactional
     fun create(
-        scopeId: String, parentSlot: String, kind: String, encryptedName: String,
+        id: String, scopeId: String, parentSlot: String, kind: String, encryptedName: String,
         slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
-    ): String {
-        val id = UUID.randomUUID().toString()
+    ): Boolean {
+        if (NodeEntity.findById(id) != null) return false
         NodeEntity().apply {
             this.id = id
             this.scopeId = scopeId
@@ -114,7 +116,7 @@ class NodesStore {
             this.wrappedMeta = wrappedMeta
             createdAt = Instant.now()
         }.persist()
-        return id
+        return true
     }
 
     fun list(scopeId: String): List<NodeRow> =

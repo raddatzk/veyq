@@ -3,6 +3,7 @@ package com.veyq.app.shared.membership
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
+import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
@@ -126,17 +127,18 @@ class ScopeAccessWorld(
         member(ownerId, tenant.first, scopeId, MembershipEntity.OWNER)
         val auth = token(ownerId)
 
-        val completed = start(auth, scopeId)
+        val mediaId = TestIds.uuid()
+        val completed = start(auth, scopeId, mediaId)
         val done = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$completed","nodeId":"$nodeId"}]}""")
+            .body("""{"items":[{"mediaId":"$mediaId","originalUploadId":"$completed","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].mediaId", notNullValue()).extract()
         val bucketId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"sealedName":"$B64"}""")
+            .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"$B64"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
         val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"nodeId":"$nodeId","role":"$shareRole","wrap":"$B64","sealedName":"$B64"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$shareRole","wrap":"$B64","sealedName":"$B64"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         given().header("Authorization", auth).contentType(ContentType.JSON)
@@ -150,13 +152,13 @@ class ScopeAccessWorld(
         return Space(
             tenantId = tenant.first, domain = tenant.second, scopeId = scopeId, ownerId = ownerId, nodeId = nodeId,
             mediaId = done.path("results[0].mediaId"), blobId = done.path("results[0].blobId"), bucketId = bucketId,
-            uploadId = start(auth, scopeId), shareId = shareId, jobId = jobId,
+            uploadId = start(auth, scopeId, TestIds.uuid()), shareId = shareId, jobId = jobId,
         )
     }
 
-    private fun start(auth: String, scopeId: String): String =
+    private fun start(auth: String, scopeId: String, mediaId: String): String =
         given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"items":[${TestBlob.SMALL.declare(B64)}]}""")
+            .body("""{"items":[${TestBlob.SMALL.declare(B64, ownerId = mediaId)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).extract().path("results[0].uploadId")
 

@@ -48,7 +48,7 @@ class NodeCoverSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         val blob = TestBlob.ofPlaintext(4096)
-        val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==")
+        val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==", ownerId = memory, role = "COVER")
 
         // commit the upload as the node's standalone cover — the ref echoes the declared shape + wrap verbatim
         val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
@@ -85,12 +85,12 @@ class NodeCoverSliceTest {
     fun replaceReclaimsPriorCoverBlob() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Zmlyc3Q="))
+        val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Zmlyc3Q=", memory, "COVER"))
 
         // the key the replace must not lose — read while the row that holds it still exists
         val firstStorageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(first)!!.storageKey }
 
-        val second = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.ofChunks(2), "c2Vjb25k"))
+        val second = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.ofChunks(2), "c2Vjb25k", memory, "COVER"))
 
         // the superseded first blob is reclaimed (gone); the new one is authorized
         assertEquals("upload_not_found", downloadError(userId, scopeId, first))
@@ -107,7 +107,7 @@ class NodeCoverSliceTest {
     fun deleteCoverBlobDetachesAndReclaims() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "ZGVs"))
+        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "ZGVs", memory, "COVER"))
 
         // the key the delete must not lose — read while the row that holds it still exists
         val storageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.storageKey }
@@ -143,7 +143,7 @@ class NodeCoverSliceTest {
     fun deleteNodeKeepsTheCoverBlobForTheRestore() {
         val (userId, scopeId) = seedMemberScope()
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bm9kZQ=="))
+        val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bm9kZQ==", memory, "COVER"))
 
         given().header("Authorization", token(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory")
@@ -152,6 +152,31 @@ class NodeCoverSliceTest {
         // `store_unavailable` = the blob row is still there and authorization passed (only the transport is
         // absent on the hermetic store); `upload_not_found` would mean the row was reclaimed.
         assertEquals("store_unavailable", downloadError(userId, scopeId, blobId))
+    }
+
+    /**
+     * The cover's `K_blob` wrap is sealed bound to (this node, COVER) (ADR 0072), so an upload started for anything
+     * else — here a media ORIGINAL, and a cover of another node — would attach a blob its readers cannot open.
+     * Refused, and nothing attached; the control is [commitAttachesCoverBlobWithNoMediaRow], the same commit of an
+     * upload started as this node's cover.
+     */
+    @Test
+    fun anUploadNotStartedAsThisNodesCoverIsRefused() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val other = seedNode(scopeId, NodeEntity.MEMORY)
+        for (upload in listOf(
+            startOne(userId, scopeId, TestBlob.SMALL, "b3JpZw==", ownerId = memory, role = "ORIGINAL"),
+            startOne(userId, scopeId, TestBlob.SMALL, "b3RoZXI=", ownerId = other, role = "COVER"),
+        )) {
+            given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+                .body("""{"uploadId":"$upload"}""")
+                .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
+                .then().statusCode(422).body("code", equalTo("upload_mismatch"))
+        }
+        QuarkusTransaction.requiringNew().run {
+            assertNull(NodeEntity.findById(memory)!!.coverBlobId, "nothing was attached as the cover")
+        }
     }
 
     @Test
@@ -223,9 +248,12 @@ class NodeCoverSliceTest {
 
     // --- helpers ---
 
-    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
+    private fun startOne(
+        userId: String, scopeId: String, blob: TestBlob, wrap: String,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
             .extract().path("results[0].uploadId")

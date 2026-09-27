@@ -52,11 +52,11 @@ class TasksHandler(
         return store.heartbeat(userId, jobId, leaseTtl)
     }
 
-    fun complete(userId: String, jobId: String, sealedResult: String?): CompleteResult {
+    fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?): CompleteResult {
         val job = store.find(jobId) ?: return CompleteResult.NotFound
         access.check(userId, job.scopeId, WRITE)
             .refusal(CompleteResult.NotFound, CompleteResult.Suspended, CompleteResult.Deleting)?.let { return it }
-        return store.complete(userId, jobId, sealedResult)
+        return store.complete(userId, jobId, sealedResult, statedEpoch)
     }
 
     fun fail(userId: String, jobId: String): FailResult {

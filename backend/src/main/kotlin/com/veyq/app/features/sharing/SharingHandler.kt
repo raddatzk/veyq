@@ -36,6 +36,7 @@ import java.util.Base64
 
 /** One contributor upload to complete: the original session + role-tagged derivatives (the shared node is server-set). */
 data class ShareCompleteItem(
+    val mediaId: String,
     val originalUploadId: String,
     val derivatives: List<DerivativeDeclare>,
     val wrappedMeta: String?,
@@ -52,6 +53,7 @@ sealed interface CreateShareOutcome {
     object NoNode : CreateShareOutcome, HttpFailure by Failures.nodeNotFound
     /** The node is not a MEMORY (only a Memory can be public-shared, ADR 0029 §6) — a 422. */
     object IllegalScope : CreateShareOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
+    object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
 }
 
 sealed interface ResolveShareOutcome {
@@ -70,6 +72,7 @@ sealed interface CreateIdentityOutcome {
     data class Created(val identityId: String, val contributorToken: String) : CreateIdentityOutcome
     /** Unknown/disabled/expired share, or password-protected with no token given (cr-0164) — a 404. */
     object NotFound : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    object IdTaken : CreateIdentityOutcome, HttpFailure by Failures.idTaken
     /** The share does not accept contributions (not CONTRIBUTOR/UPLOADER) — a 403. */
     object NotContributable : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** Password-protected + a wrong token (cr-0164) — a 403. */
@@ -200,7 +203,7 @@ class SharingHandler(
 ) {
 
     fun create(
-        userId: String, nodeId: String, role: String, wrap: String, sealedName: String, expiresAt: Instant?,
+        userId: String, shareId: String, nodeId: String, role: String, wrap: String, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): CreateShareOutcome {
@@ -213,11 +216,12 @@ class SharingHandler(
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a MEMORY node can
         // be public-shared (ADR 0029 §6, ADR 0030).
         if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
-        val shareId = store.create(
-            userId, node.scopeId, nodeId, role, wrap, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareName,
+        // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it.
+        val created = store.create(
+            shareId, userId, node.scopeId, nodeId, role, wrap, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareName,
             passwordRequired, pwSalt, pwVerifier, sealedPassword,
         )
-        return CreateShareOutcome.Created(shareId)
+        return if (created) CreateShareOutcome.Created(shareId) else CreateShareOutcome.IdTaken
     }
 
     /**
@@ -331,7 +335,7 @@ class SharingHandler(
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------
 
     /** Name yourself on a contributable share (CONTRIBUTOR/UPLOADER): seal-name in, an anonymous identity + token out. */
-    fun createIdentity(shareId: String, pwToken: String?, sealedDisplayName: String): CreateIdentityOutcome {
+    fun createIdentity(shareId: String, pwToken: String?, identityId: String, sealedDisplayName: String): CreateIdentityOutcome {
         val share = activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
             PwCheck.MISSING -> return CreateIdentityOutcome.NotFound // no token → non-enumerable 404 (no role reveal)
@@ -343,7 +347,8 @@ class SharingHandler(
         // The only guest call that writes a row before any upload exists — bounded per share (ADR 0051,
         // `@RateLimit(key = SHARE)`), after the authorization gates so an unauthorized caller spends nothing.
         if (!rateLimiter.allowIdentity(shareId)) return CreateIdentityOutcome.RateLimited
-        val (identityId, token) = store.createIdentity(shareId, sealedDisplayName)
+        // The client-minted identity id (ADR 0072): the sealed display name is bound to it.
+        val token = store.createIdentity(identityId, shareId, sealedDisplayName) ?: return CreateIdentityOutcome.IdTaken
         return CreateIdentityOutcome.Created(identityId, token)
     }
 
@@ -397,6 +402,7 @@ class SharingHandler(
         if (!rateLimiter.allowUpload(shareId)) return ShareCompleteOutcome.RateLimited
         val completeItems = items.map {
             CompleteItem(
+                mediaId = it.mediaId,
                 nodeId = share.nodeId, // contributors attach to the shared Memory root — server-set, not client-chosen
                 originalUploadId = it.originalUploadId,
                 derivatives = it.derivatives,

@@ -50,7 +50,7 @@ class MediaSliceTest {
 
         // complete + attach to the Memory; the merged listed-metadata tier is listed, EXIF is lazy (cr-0068)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ==","wrappedExif":"ZXhpZg=="}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ==","wrappedExif":"ZXhpZg=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].blobId", notNullValue())
@@ -86,7 +86,7 @@ class MediaSliceTest {
 
         // complete with no EXIF sealed (source carried no readable EXIF)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
@@ -114,7 +114,7 @@ class MediaSliceTest {
 
         // complete with an initial listed-metadata tier (cr-0068)
         val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ=="}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
@@ -152,13 +152,14 @@ class MediaSliceTest {
         val memory = seedNode(scopeId, NodeEntity.MEMORY)
         // three independent uploads: original + thumbnail + preview, each its own K_blob wrap
         val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==")
-        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=")
-        val preview = startOne(userId, scopeId, TestBlob.ofChunks(2), wrap = "cHJldg==")
+        val mediaId = TestBlob.ownerOf(original)
+        val thumb = startOne(userId, scopeId, TestBlob.SMALL, wrap = "dGh1bWI=", ownerId = mediaId, role = "THUMBNAIL")
+        val preview = startOne(userId, scopeId, TestBlob.ofChunks(2), wrap = "cHJldg==", ownerId = mediaId, role = "PREVIEW")
 
         // complete: one logical media = original + two role-tagged derivatives
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","originalUploadId":"$original","derivatives":[""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original","derivatives":[""" +
                     """{"kind":"THUMBNAIL","uploadId":"$thumb"},{"kind":"PREVIEW","uploadId":"$preview"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -188,7 +189,7 @@ class MediaSliceTest {
 
         // a media with no derivable frame attaches the original only
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"nodeId":"$memory","originalUploadId":"$original"}]}""")
+            .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
@@ -211,7 +212,7 @@ class MediaSliceTest {
         // a missing derivative session fails the whole item atomically — nothing is attached
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
             .body(
-                """{"items":[{"nodeId":"$memory","originalUploadId":"$original",""" +
+                """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$bogus"}]}]}""",
             )
             .`when`().post("/api/scopes/$scopeId/media-batch")
@@ -233,7 +234,7 @@ class MediaSliceTest {
         val bogus = UUID.randomUUID()
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$memory"},{"originalUploadId":"$bogus","nodeId":"$memory"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"},{"mediaId":"${TestBlob.ownerOf(bogus.toString())}","originalUploadId":"$bogus","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].mediaId", notNullValue())
@@ -248,7 +249,7 @@ class MediaSliceTest {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", equalTo("illegal_target"))
@@ -277,9 +278,9 @@ class MediaSliceTest {
         val impossible = ChunkFrames.SEALED_BYTES + ChunkFrames.OVERHEAD
         val items = listOf(
             blob.declare("aw=="),
-            """{"chunkCount":${blob.chunkCount + 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
-            """{"chunkCount":${blob.chunkCount - 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
-            """{"chunkCount":2,"byteSize":$impossible,"wrappedBlobKey":"aw=="}""",
+            """{"blobId":"${UUID.randomUUID()}","ownerId":"${UUID.randomUUID()}","role":"ORIGINAL","chunkCount":${blob.chunkCount + 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
+            """{"blobId":"${UUID.randomUUID()}","ownerId":"${UUID.randomUUID()}","role":"ORIGINAL","chunkCount":${blob.chunkCount - 1},"byteSize":${blob.byteSize},"wrappedBlobKey":"aw=="}""",
+            """{"blobId":"${UUID.randomUUID()}","ownerId":"${UUID.randomUUID()}","role":"ORIGINAL","chunkCount":2,"byteSize":$impossible,"wrappedBlobKey":"aw=="}""",
         )
         startBatch(userId, scopeId, items.joinToString(",", "[", "]")).then().statusCode(200)
             .body("results[0].uploadId", notNullValue())
@@ -440,7 +441,7 @@ class MediaSliceTest {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = wrap)
         val metaField = if (meta != null) ""","wrappedMeta":"$meta"""" else ""
         return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[{"originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
+            .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path("results[0].mediaId")
@@ -488,9 +489,12 @@ class MediaSliceTest {
             .body("""{"items":$items}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
 
-    private fun startOne(userId: String, scopeId: String, blob: TestBlob, wrap: String): String =
+    private fun startOne(
+        userId: String, scopeId: String, blob: TestBlob, wrap: String,
+        ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
+    ): String =
         given().header("Authorization", token(userId)).contentType(ContentType.JSON)
-            .body("""{"items":[${blob.declare(wrap)}]}""")
+            .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())
