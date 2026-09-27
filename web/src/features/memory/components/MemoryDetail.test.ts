@@ -35,6 +35,8 @@ import { galleryFakeStore } from './galleryFakeStore'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
+/** The node every meta fixture here belongs to — node-meta seals are bound to it (ADR 0072). */
+const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const i18n = createI18n({
   legacy: false,
@@ -130,14 +132,14 @@ function lastPatchedDate(key: Uint8Array): MemoryDate | null {
   const calls = updateNode.mock.calls
   if (!calls.length) return null
   const wrappedMeta = calls[calls.length - 1][0].updateNodeRequest.wrappedMeta as string
-  return unsealMemoryDate(key, { wrappedMeta })
+  return unsealMemoryDate(SCOPE_ID, key, { id: NODE_ID, wrappedMeta })
 }
 /** The MemoryLocation sealed into the most recent updateNode PATCH (cr-0069), unsealed under `key`. */
 function lastPatchedLocation(key: Uint8Array): MemoryLocation | null {
   const calls = updateNode.mock.calls
   if (!calls.length) return null
   const wrappedMeta = calls[calls.length - 1][0].updateNodeRequest.wrappedMeta as string
-  return unsealMemoryLocation(key, { wrappedMeta })
+  return unsealMemoryLocation(SCOPE_ID, key, { id: NODE_ID, wrappedMeta })
 }
 afterEach(() => {
   vi.restoreAllMocks()
@@ -247,7 +249,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    // media-0 = 2020, media-1 = 2022, media-2 = 2021 (creation order); the exifr date drives the capturedAt tier
+    // media 0 = 2020, media 1 = 2022, media 2 = 2021 (creation order); the exifr date drives the capturedAt tier
     vi.mocked(exifr.parse)
       .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2020, 0, 1)) } as never)
       .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2022, 0, 1)) } as never)
@@ -260,14 +262,16 @@ describe('MemoryDetail (gallery grid + header)', () => {
     await flushPromises()
     await flushPromises()
 
+    // the client mints each media id — read them back in creation order
+    const [m0, m1, m2] = store.media.map((m) => m.mediaId)
     const order = () => wrapper.findAll('.media-tile').map((t) => t.attributes('data-media-id'))
-    // newest first (default): 2022 (media-1), 2021 (media-2), 2020 (media-0)
-    expect(order()).toEqual(['media-1', 'media-2', 'media-0'])
+    // newest first (default): 2022 (media 1), 2021 (media 2), 2020 (media 0)
+    expect(order()).toEqual([m1, m2, m0])
 
     // toggle → oldest first
     await wrapper.find('.gallery-sort-toggle').trigger('click')
     await flushPromises()
-    expect(order()).toEqual(['media-0', 'media-2', 'media-1'])
+    expect(order()).toEqual([m0, m2, m1])
   })
 
   it('a lightbox date correction persists on close + reopen — no stale date (cr-0066 regression guard)', async () => {
@@ -417,7 +421,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
   it('renders a sealed manual single date in the header chip (locale-formatted)', async () => {
     emptyStore()
     const memoryKey = v1.randomBytes(32)
-    const sealed = sealMemoryDate(memoryKey, { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
+    const sealed = sealMemoryDate(memoryKey, THIS_NODE, { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
     const wrapper = mountDetail(memoryKey, { node: node('Rom 2026', sealed) })
     await flushPromises()
     expect(wrapper.find('.memory-date-chip').text()).toContain('06/15/2026')
@@ -440,7 +444,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     const memoryKey = v1.randomBytes(32)
     const epoch = Date.UTC(2021, 4, 1, 10, 0, 0)
     await seedDatedMedia(memoryKey, epoch)
-    const stale = sealMemoryDate(memoryKey, { mode: 'auto', from: '2000-01-01', to: '2000-01-02' })
+    const stale = sealMemoryDate(memoryKey, THIS_NODE, { mode: 'auto', from: '2000-01-01', to: '2000-01-02' })
     mountDetail(memoryKey, { node: node('Rom 2026', stale) })
     await flushPromises()
     await flushPromises()
@@ -451,7 +455,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
   it('does not overwrite a manual date when reconciling on open', async () => {
     const memoryKey = v1.randomBytes(32)
     await seedDatedMedia(memoryKey, Date.UTC(2021, 4, 1))
-    const manual = sealMemoryDate(memoryKey, { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
+    const manual = sealMemoryDate(memoryKey, THIS_NODE, { mode: 'single', from: '2026-06-15', to: '2026-06-15' })
     mountDetail(memoryKey, { node: node('Rom 2026', manual) })
     await flushPromises()
     await flushPromises()
@@ -518,7 +522,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   it('renders the stored location name in the chip', async () => {
     emptyStore()
     const memoryKey = v1.randomBytes(32)
-    const sealed = sealNodeMeta(memoryKey, { v: 1, location: GEOCODED })
+    const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: GEOCODED })
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
     expect(wrapper.find('.memory-location-chip').text()).toContain('Teneriffa')
@@ -528,7 +532,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     emptyStore()
     const memoryKey = v1.randomBytes(32)
     const date: MemoryDate = { mode: 'single', from: '2026-06-15', to: '2026-06-15' }
-    const sealed = sealNodeMeta(memoryKey, { v: 1, date }) // node already has a manual date
+    const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, date }) // node already has a manual date
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
 
@@ -547,7 +551,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     emptyStore()
     const memoryKey = v1.randomBytes(32)
     const date: MemoryDate = { mode: 'ongoing', from: '2026-01-01' }
-    const sealed = sealNodeMeta(memoryKey, { v: 1, date, location: GEOCODED })
+    const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, date, location: GEOCODED })
     const wrapper = mountWithLocationStub(memoryKey, sealed)
     await flushPromises()
 
@@ -564,7 +568,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     // an `auto` location pre-armed at creation carries a name but no position yet (cr-0069 phase 3)
     const memoryKey = v1.randomBytes(32)
     const pending: MemoryLocation = { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' }
-    const sealed = sealNodeMeta(memoryKey, { v: 1, location: pending })
+    const sealed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: pending })
 
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
@@ -585,7 +589,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   it('shows “no location detected” for an armed auto location when there is NO geotagged media (nothing to resolve)', async () => {
     emptyStore()
     const memoryKey = v1.randomBytes(32)
-    const pending = sealNodeMeta(memoryKey, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
+    const pending = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
     // No GPS media ⇒ the armed auto place can never resolve, so the chip says so rather than imply an in-progress lookup.
@@ -595,7 +599,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
   it('shows the “pending” placeholder for an armed auto location while a geotagged medium exists but no name yet', async () => {
     setMapsConsent(false) // a position to resolve exists, but geocoding is not consented ⇒ the name stays deferred
     const memoryKey = v1.randomBytes(32)
-    const pending = sealNodeMeta(memoryKey, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
+    const pending = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
@@ -612,7 +616,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     setGeocoderUrl('https://nominatim.example')
     vi.mocked(reverseGeocode).mockResolvedValue([{ key: 'city', name: 'La Orotava' }, { key: 'state', name: 'Kanaren' }])
     const memoryKey = v1.randomBytes(32)
-    const pending = sealNodeMeta(memoryKey, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
+    const pending = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { nameSource: 'geocoded', derivedMode: 'auto' } })
 
     const store = galleryFakeStore()
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)

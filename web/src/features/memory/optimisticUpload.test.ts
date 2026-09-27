@@ -29,7 +29,7 @@ const batch = (seq: number, nodeId: string, files: UploadFile[]): UploadBatch =>
 
 const item = (mediaId: string): MediaItem => ({
   mediaId,
-  original: { blobId: `blob-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'k' },
+  original: { blobId: `blob-${mediaId}`, chunkCount: 1, byteSize: 3, wrappedBlobKey: 'k', ownerId: mediaId, role: 'ORIGINAL' },
   derivatives: [],
 })
 

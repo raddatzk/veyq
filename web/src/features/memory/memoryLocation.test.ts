@@ -26,19 +26,23 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)
+// Every node-meta seal is bound to its node (ADR 0072).
+const NODE_ID = '5c09e000-0000-4000-8000-0000000000e1'
+const NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 beforeEach(() => vi.clearAllMocks())
 
 /** Build a MediaItem whose listed tier (incl. GPS) is sealed under `nodeKey` (mirrors media.ts's `sealMetadata`). */
 function itemWith(tier: Partial<MediaMeta> | null): MediaItem {
   const base: MediaItem = {
-    mediaId: 'm-' + Math.random().toString(36).slice(2),
-    original: { blobId: 'b', chunkCount: 1, byteSize: 1, wrappedBlobKey: 'x' },
+    mediaId: crypto.randomUUID(),
+    original: { blobId: 'b', chunkCount: 1, byteSize: 1, wrappedBlobKey: 'x', ownerId: 'm', role: 'ORIGINAL' },
     derivatives: [],
   }
+  base.original.ownerId = base.mediaId
   if (!tier) return base
   const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, ...tier }))
-  base.wrappedMeta = b64std(v1.symWrap(nodeKey, bytes, 'media-meta', v1.randomBytes(12)))
+  base.wrappedMeta = b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: base.mediaId }, nodeKey, bytes))
   return base
 }
 
@@ -76,10 +80,16 @@ describe('mediaGpsPoints', () => {
       itemWith(null), // no tier
       itemWith({ gpsLat: 48.85, gpsLng: 2.35 }),
     ]
-    expect(mediaGpsPoints(items, nodeKey)).toEqual([
+    expect(mediaGpsPoints(SCOPE_ID, items, nodeKey)).toEqual([
       { lat: 28.27, lng: -16.61 },
       { lat: 48.85, lng: 2.35 },
     ])
+  })
+
+  it('skips a GPS tier sealed for another media (a moved wrappedMeta cannot pull the place)', () => {
+    const donor = itemWith({ gpsLat: 0, gpsLng: 0 })
+    const moved: MediaItem = { ...itemWith(null), wrappedMeta: donor.wrappedMeta }
+    expect(mediaGpsPoints(SCOPE_ID, [moved, itemWith({ gpsLat: 1, gpsLng: 2 })], nodeKey)).toEqual([{ lat: 1, lng: 2 }])
   })
 })
 
@@ -124,7 +134,7 @@ describe('normalizeLocation', () => {
 })
 
 describe('unsealMemoryLocation', () => {
-  it('round-trips a sealed location; best-effort null on wrong key / absent', () => {
+  it('round-trips a sealed location; best-effort null on wrong key / another node / absent', () => {
     const loc: MemoryLocation = {
       name: 'Teneriffa',
       nameSource: 'geocoded',
@@ -132,14 +142,16 @@ describe('unsealMemoryLocation', () => {
       derivedMode: 'auto',
       nameAnchor: { lat: 28.27, lng: -16.61, level: 'city' },
     }
-    const sealed = sealNodeMeta(nodeKey, { v: 1, location: loc })
-    expect(unsealMemoryLocation(nodeKey, { wrappedMeta: sealed })).toEqual(loc)
-    expect(unsealMemoryLocation(v1.randomBytes(32), { wrappedMeta: sealed })).toBeNull() // wrong key
-    expect(unsealMemoryLocation(nodeKey, { wrappedMeta: null })).toBeNull() // absent
+    const sealed = sealNodeMeta(nodeKey, NODE, { v: 1, location: loc })
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(loc)
+    expect(unsealMemoryLocation(SCOPE_ID, v1.randomBytes(32), { id: NODE_ID, wrappedMeta: sealed })).toBeNull() // wrong key
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: null })).toBeNull() // absent
+    // the blob served on another node's row does not open there (ADR 0072)
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: crypto.randomUUID(), wrappedMeta: sealed })).toBeNull()
   })
 
   it('is operator-blind — the sealed blob carries no plaintext name/coord', () => {
-    const sealed = sealNodeMeta(nodeKey, {
+    const sealed = sealNodeMeta(nodeKey, NODE, {
       v: 1,
       location: { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 28.27, lng: -16.61 } },
     })
@@ -161,32 +173,32 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
 
   it('setting a location keeps the existing date', async () => {
     const updateNode = mockUpdate()
-    const withDate = sealNodeMeta(nodeKey, { v: 1, date })
-    const sealed = await setMemoryLocation(SCOPE_ID, 'n', nodeKey, loc, withDate)
+    const withDate = sealNodeMeta(nodeKey, NODE, { v: 1, date })
+    const sealed = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, loc, withDate)
 
     expect(updateNode.mock.calls[0][0].updateNodeRequest.wrappedMeta).toBe(sealed)
-    expect(unsealMemoryLocation(nodeKey, { wrappedMeta: sealed })).toEqual(loc)
-    expect(unsealMemoryDate(nodeKey, { wrappedMeta: sealed })).toEqual(date) // date survived
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(loc)
+    expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date) // date survived
   })
 
   it('removing the location (null) keeps the date and drops only the place', async () => {
     mockUpdate()
-    const withBoth = sealNodeMeta(nodeKey, { v: 1, date, location: loc })
-    const sealed = await setMemoryLocation(SCOPE_ID, 'n', nodeKey, null, withBoth)
+    const withBoth = sealNodeMeta(nodeKey, NODE, { v: 1, date, location: loc })
+    const sealed = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, null, withBoth)
 
-    expect(unsealMemoryLocation(nodeKey, { wrappedMeta: sealed })).toBeNull() // place gone
-    expect(unsealMemoryDate(nodeKey, { wrappedMeta: sealed })).toEqual(date) // date intact
+    expect(unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toBeNull() // place gone
+    expect(unsealMemoryDate(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toEqual(date) // date intact
   })
 
   it('fixed → auto drops the frozen coord (re-medoid happens on the next open)', async () => {
     mockUpdate()
     const fixed: MemoryLocation = { name: 'Teneriffa', nameSource: 'geocoded', derivedMode: 'fixed', derived: { lat: 28.27, lng: -16.61 } }
-    const withFixed = sealNodeMeta(nodeKey, { v: 1, location: fixed })
+    const withFixed = sealNodeMeta(nodeKey, NODE, { v: 1, location: fixed })
     // switching back to auto = writing the same name with derivedMode 'auto' and no frozen derived
     const asAuto: MemoryLocation = { name: fixed.name, nameSource: fixed.nameSource, derivedMode: 'auto' }
-    const sealed = await setMemoryLocation(SCOPE_ID, 'n', nodeKey, asAuto, withFixed)
+    const sealed = await setMemoryLocation(SCOPE_ID, NODE_ID, nodeKey, asAuto, withFixed)
 
-    const back = unsealMemoryLocation(nodeKey, { wrappedMeta: sealed })
+    const back = unsealMemoryLocation(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })
     expect(back?.derivedMode).toBe('auto')
     expect(back?.derived).toBeUndefined() // frozen coord dropped
   })

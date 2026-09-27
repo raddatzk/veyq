@@ -1,5 +1,5 @@
 // uc.spaces.personal-scope (web) — birth + open a member's per-tenant PERSONAL scope. Operator-blind: the
-// scope key is generated on-device and sealed to the member's own identity (asymWrap, the hybrid KEM); only
+// scope key is generated on-device and sealed to the member's own identity (sealTo, the hybrid KEM); only
 // the ciphertext grant reaches the server. The active tenant is resolved server-side from the Host.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -7,18 +7,17 @@ import { scopesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
-import { sealName, openName } from '../memory/tree'
 import { slugify } from '../../shared/naming'
-import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, EPOCH_LINK, type EpochKeys } from './epochs'
-import { SCOPE_GRANT, wrapScopeKeyToMember } from './grant'
+import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type EpochKeys } from './epochs'
+import { grantContext, wrapScopeKeyToMember } from './grant'
 import { checkAndPin, IdentityChangedError } from '../account/identityPins'
-import { deriveGroupNameKey, wrapNameKeyToInvitee } from './inviteName'
+import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { ScopeKind, type ScopeSummary, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
 
-/** The AAD/KDF context binding a scope-key wrap (ADR 0017/0020), re-exported for back-compat — its home is now
- *  {@link ./grant}, shared with the grant-delivery worker (cr-0076) + rotation re-grants (cr-0089). */
-export { SCOPE_GRANT } from './grant'
+/** The seal context of a scope grant (ADR 0072), re-exported — its home is {@link ./grant}, shared with the
+ *  grant-delivery worker (cr-0076) + rotation re-grants (cr-0089). */
+export { grantContext } from './grant'
 
 /** The caller's scopes in the active tenant (each with their own grant ciphertext). */
 export async function listMyScopes(): Promise<ScopeSummary[]> {
@@ -49,7 +48,7 @@ export async function scopeLifecycle(scopeId: string): Promise<{ deletedAt: Date
 /** Peel the scope's epoch chain from the caller's grant key down to E_0 (ADR 0024). No fetch when unrotated. */
 async function epochKeysFor(scope: ScopeSummary, grantKey: Uint8Array): Promise<EpochKeys> {
   const links = scope.grantedEpoch > 0 ? await listScopeEpochs(scope.id) : []
-  return deriveEpochKeys(grantKey, scope.grantedEpoch, links)
+  return deriveEpochKeys(scope.id, grantKey, scope.grantedEpoch, links)
 }
 
 /** Every tenant the caller belongs to — the sidebar space switcher (Host-independent). */
@@ -67,11 +66,11 @@ export async function ensurePersonalScope(): Promise<boolean> {
   const priv = identityPrivate()
   if (!priv) throw new Error('vault is locked — cannot birth a personal scope')
   const scopeKey = v1.randomBytes(32)
+  // The client mints the scope's id: the grant is sealed bound to it, at the birth epoch 0 (ADR 0072).
+  const scopeId = crypto.randomUUID()
   try {
-    const grant = b64std(
-      v1.asymWrap(v1.hybridPublic(priv), scopeKey, SCOPE_GRANT, { nonce: v1.randomBytes(12) }),
-    )
-    await withRefresh(() => scopesApi().createPersonalScope({ createPersonalScopeRequest: { wrappedGrant: grant } }))
+    const grant = b64std(v1.sealTo(grantContext(scopeId, 0), v1.hybridPublic(priv), scopeKey))
+    await withRefresh(() => scopesApi().createPersonalScope({ createPersonalScopeRequest: { scopeId, wrappedGrant: grant } }))
     return true
   } finally {
     scopeKey.fill(0)
@@ -91,11 +90,13 @@ export async function createGroup(name: string): Promise<string> {
   if (!priv) throw new Error('vault is locked — cannot create a group')
   const scopeKey = v1.randomBytes(32)
   const nameKey = deriveGroupNameKey(scopeKey) // K_name_0 = HKDF(E_0), name-epoch 0
+  // The client mints the scope's id: the grant and the name are both sealed bound to it (ADR 0072).
+  const scopeId = crypto.randomUUID()
   try {
-    const encryptedName = sealName(nameKey, name)
-    const grant = b64std(v1.asymWrap(v1.hybridPublic(priv), scopeKey, SCOPE_GRANT, { nonce: v1.randomBytes(12) }))
+    const encryptedName = sealGroupName(nameKey, scopeId, 0, name)
+    const grant = b64std(v1.sealTo(grantContext(scopeId, 0), v1.hybridPublic(priv), scopeKey))
     const created = await withRefresh(() =>
-      scopesApi().createGroup({ createGroupRequest: { encryptedName, wrappedGrant: grant } }),
+      scopesApi().createGroup({ createGroupRequest: { scopeId, encryptedName, wrappedGrant: grant } }),
     )
     return created.scopeId
   } finally {
@@ -107,10 +108,10 @@ export async function createGroup(name: string): Promise<string> {
 
 /** The group's display name from its epoch keys: derive `K_name` from the name-epoch key, open the canonical
  *  `encryptedName` under it (cr-0096/ADR 0027). Members read the same blob a pending invitee is handed the key for. */
-function openGroupName(epochs: EpochKeys, nameEpoch: number, encryptedName: string): string {
+function openGroupName(scopeId: string, epochs: EpochKeys, nameEpoch: number, encryptedName: string): string {
   const nameKey = deriveGroupNameKey(keyAt(epochs, nameEpoch))
   try {
-    return openName(nameKey, encryptedName)
+    return openGroupNameWith(nameKey, scopeId, nameEpoch, encryptedName)
   } finally {
     nameKey.fill(0)
   }
@@ -120,10 +121,10 @@ function openGroupName(epochs: EpochKeys, nameEpoch: number, encryptedName: stri
  *  peeled from the chain, because a group's `iconEpoch` may sit below `currentEpoch` (it rotates on member-removal,
  *  ADR 0024, but a rotation never re-seals the icon) — then open + unpad the sealed icon. Null when unopenable →
  *  the caller renders the initial. Unlike {@link openMyTenantIcon}, this must peel the chain (a tenant never rotates). */
-function openGroupIconAt(epochs: EpochKeys, iconEpoch: number, sealedIcon: string): Uint8Array | null {
+function openGroupIconAt(scopeId: string, epochs: EpochKeys, iconEpoch: number, sealedIcon: string): Uint8Array | null {
   const iconKey = deriveSpaceIconKey(keyAt(epochs, iconEpoch))
   try {
-    return openIcon(iconKey, sealedIcon)
+    return openIcon(iconKey, { scopeId, iconEpoch }, sealedIcon)
   } catch {
     return null
   } finally {
@@ -154,8 +155,8 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
           // The name is sealed under K_name (from the name-epoch key) — peel the chain so a rotated group still
           // derives that epoch's key and decrypts its name.
           epochs = await epochKeysFor(g, unwrapGrant(g, priv))
-          const name = g.encryptedName ? openGroupName(epochs, g.nameEpoch, g.encryptedName) : ''
-          const icon = g.sealedIcon ? openGroupIconAt(epochs, g.iconEpoch, g.sealedIcon) : null
+          const name = g.encryptedName ? openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName) : ''
+          const icon = g.sealedIcon ? openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon) : null
           return { scopeId: g.id, tenantId: g.tenantId, name, icon, role: g.role, deletedAt: g.deletedAt ?? null, purgeAfter: g.purgeAfter ?? null }
         } catch {
           return null
@@ -174,9 +175,13 @@ export async function listMyGroups(): Promise<GroupSpace[]> {
  *  the write key = the current epoch) + the decrypted display `name` for a named scope (a GROUP; undefined else). */
 export type OpenedScope = { scopeId: string; tenantId: string; kind: ScopeKind; key: Uint8Array; epochs: EpochKeys; nameEpoch: number; name?: string; deletedAt: Date | null; purgeAfter: Date | null }
 
-/** asymUnwrap our **own** grant on a scope row with the vaulted identity → the in-memory epoch key. Caller owns it. */
+/**
+ * Open our **own** grant on a scope row with the vaulted identity → the in-memory epoch key. Caller owns it. The
+ * grant is bound to (this row's scope, its granted epoch) (ADR 0072): a grant the server moved here from another
+ * scope's row — or from another epoch — is refused, never opened as this scope's key.
+ */
 function unwrapGrant(scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }): Uint8Array {
-  return v1.asymUnwrap(v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant), SCOPE_GRANT)
+  return v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant))
 }
 
 /** Open a scope summary → its epoch keys + (for a GROUP) its decrypted name. The name is sealed under `K_name`
@@ -187,7 +192,7 @@ async function toOpenedScope(scope: ScopeSummary, priv: { kemX: Uint8Array; mlke
   let name: string | undefined
   if (scope.kind === ScopeKind.Group && scope.encryptedName) {
     try {
-      name = openGroupName(epochs, scope.nameEpoch, scope.encryptedName)
+      name = openGroupName(scope.id, epochs, scope.nameEpoch, scope.encryptedName)
     } catch {
       name = undefined // a name that won't open (E2) is non-fatal — the scope still opens, just unlabelled
     }
@@ -199,7 +204,7 @@ async function toOpenedScope(scope: ScopeSummary, priv: { kemX: Uint8Array; mlke
 }
 
 /**
- * Open the caller's scope of the given `kind` → its identity + in-memory epoch keys (asymUnwrap our **own** grant
+ * Open the caller's scope of the given `kind` → its identity + in-memory epoch keys (open our **own** grant
  * with the vaulted identity, then peel the epoch chain), or null if there is no such scope / the vault is locked.
  * This is **open-only** — it never mints a scope. The caller owns the returned keys transiently.
  */
@@ -239,7 +244,7 @@ async function groupSlug(
   let epochs: EpochKeys | null = null
   try {
     epochs = await epochKeysFor(g, unwrapGrant(g, priv))
-    return slugify(openGroupName(epochs, g.nameEpoch, g.encryptedName))
+    return slugify(openGroupName(g.id, epochs, g.nameEpoch, g.encryptedName))
   } catch {
     return null
   } finally {
@@ -300,7 +305,7 @@ export async function wrapGroupNameKeyForInvitee(
   if (!opened) return null
   const nameKey = deriveGroupNameKey(keyAt(opened.epochs, opened.nameEpoch))
   try {
-    return wrapNameKeyToInvitee(nameKey, inviteeIdentityPublicKeyB64)
+    return wrapNameKeyToInvitee(nameKey, scopeId, opened.nameEpoch, inviteeIdentityPublicKeyB64)
   } finally {
     nameKey.fill(0)
     zeroEpochKeys(opened.epochs)
@@ -322,7 +327,7 @@ export async function renameGroup(scopeId: string, newName: string): Promise<voi
     const nameEpoch = opened.epochs.current // seal under the highest epoch we hold; the server gates it == current
     const nameKey = deriveGroupNameKey(writeKey(opened.epochs))
     try {
-      const encryptedName = sealName(nameKey, newName)
+      const encryptedName = sealGroupName(nameKey, scopeId, nameEpoch, newName)
       await withRefresh(() => scopesApi().renameGroup({ scopeId, renameGroupRequest: { encryptedName, nameEpoch } }))
       return
     } catch (e) {
@@ -356,7 +361,7 @@ export async function setSpaceIcon(scopeId: string, encoded: Uint8Array): Promis
     const iconEpoch = opened.epochs.current // seal under the highest epoch we hold; the server gates it == current
     const iconKey = deriveSpaceIconKey(writeKey(opened.epochs))
     try {
-      const sealedIcon = sealIcon(iconKey, encoded)
+      const sealedIcon = sealIcon(iconKey, { scopeId, iconEpoch }, encoded)
       await withRefresh(() => scopesApi().setScopeIcon({ scopeId, setScopeIconRequest: { sealedIcon, iconEpoch } }))
       return
     } catch (e) {
@@ -386,15 +391,18 @@ export async function clearSpaceIcon(scopeId: string): Promise<void> {
  * tenant ever re-keys and `iconEpoch < currentEpoch`, {@link openIcon} returns null → the initial (never a throw).
  */
 export async function openMyTenantIcon(tenant: MyTenant): Promise<Uint8Array | null> {
-  if (!tenant.sealedIcon || !tenant.wrappedGrant) return null
+  if (!tenant.sealedIcon || !tenant.wrappedGrant || tenant.grantedEpoch == null) return null
   const priv = identityPrivate()
   if (!priv) return null
   let scopeKey: Uint8Array | null = null
   let iconKey: Uint8Array | null = null
   try {
-    scopeKey = v1.asymUnwrap(v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(tenant.wrappedGrant), SCOPE_GRANT)
+    // The tenant scope's id IS the tenant id; the grant is bound to it at the epoch the row states (ADR 0072).
+    scopeKey = v1.openAs(
+      grantContext(tenant.tenantId, tenant.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(tenant.wrappedGrant),
+    )
     iconKey = deriveSpaceIconKey(scopeKey)
-    return openIcon(iconKey, tenant.sealedIcon)
+    return openIcon(iconKey, { scopeId: tenant.tenantId, iconEpoch: tenant.iconEpoch }, tenant.sealedIcon)
   } catch {
     return null
   } finally {
@@ -420,7 +428,7 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
     const g = (await listMyScopes()).find((s) => s.id === scopeId && s.kind === ScopeKind.Group)
     if (!g || !g.sealedIcon) return null
     epochs = await epochKeysFor(g, unwrapGrant(g, priv))
-    return openGroupIconAt(epochs, g.iconEpoch, g.sealedIcon)
+    return openGroupIconAt(g.id, epochs, g.iconEpoch, g.sealedIcon)
   } catch {
     return null
   } finally {
@@ -431,7 +439,7 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
 
 /**
  * Rotate a group's content key forward after a member was removed (ADR 0024, cr-0089) — the crypto half of the
- * remove: {@link commitRotation} with every **remaining member** re-granted `E_{n+1}` (`asymWrap` to each directory
+ * remove: {@link commitRotation} with every **remaining member** re-granted `E_{n+1}` (`sealTo` each directory
  * pubkey). New content thereafter seals under `E_{n+1}`, which the removed member never holds — so they read
  * pre-removal content but never post-removal content, even against a malicious operator. Operator-blind: only the
  * opaque chain-link + per-member grants are posted. Returns the new epoch index.
@@ -442,7 +450,7 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
  * Requires an unlocked vault (opens the caller's own grant to derive `E_n`).
  */
 export async function rotateGroupForRemoval(scopeId: string, remaining: ScopeMember[]): Promise<number> {
-  return commitRotation(scopeId, async (newKey) => {
+  return commitRotation(scopeId, async (newKey, epoch) => {
     // Never re-grant a soft consent proposal (cr-0095): a `pendingConsent` row is grant-gated until the invitee
     // accepts, so it must stay out of the rotation's re-grant set (the server enforces this too; this avoids the
     // useless wrap + keeps the client honest). The directory hands owners the pending rows, so filter here.
@@ -456,7 +464,7 @@ export async function rotateGroupForRemoval(scopeId: string, remaining: ScopeMem
     for (const m of remaining) {
       if (m.pendingConsent) continue
       if ((await checkAndPin(m.userId, m.identityPublicKey)) === 'changed') continue
-      grants.push({ userId: m.userId, wrappedGrant: wrapScopeKeyToMember(newKey, m.identityPublicKey) })
+      grants.push({ userId: m.userId, wrappedGrant: wrapScopeKeyToMember(newKey, scopeId, epoch, m.identityPublicKey) })
     }
     return grants
   })
@@ -467,7 +475,7 @@ export type RotationGrant = { userId: string; wrappedGrant: string }
 
 /**
  * Commit a scope-key rotation (ADR 0024 §4) — the one path every rotation takes. Open the caller's own grant
- * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`symWrap(E_{n+1}, E_n)`), let `buildGrants` wrap it to the
+ * (`E_n`), mint a fresh `E_{n+1}`, chain-link it (`E_n` sealed under `E_{n+1}`), let `buildGrants` wrap it to the
  * members, and commit **stating the epoch it creates**, `n+1`. `E_n` is our grant, not the scope's epoch, so the
  * server takes the commit only as the scope's current epoch + 1: a rotation that lost a race or rode a lagging
  * grant is `409 stale_epoch` with nothing stored, and would otherwise link the new epoch to a key that is not its
@@ -480,16 +488,17 @@ export type RotationGrant = { userId: string; wrappedGrant: string }
  */
 export async function commitRotation(
   scopeId: string,
-  buildGrants: (newKey: Uint8Array) => Promise<RotationGrant[]>,
+  buildGrants: (newKey: Uint8Array, epoch: number) => Promise<RotationGrant[]>,
 ): Promise<number> {
   for (let attempt = 0; ; attempt++) {
     const opened = await openScopeById(scopeId) // our grant → the epoch keys we hold (E_n = the write key)
     if (!opened) throw new Error('cannot open scope to rotate')
     const newKey = v1.randomBytes(32)
     try {
-      const wrappedPrev = b64std(v1.symWrap(newKey, writeKey(opened.epochs), EPOCH_LINK, v1.randomBytes(12)))
-      const grants = await buildGrants(newKey)
+      // The epoch this rotation creates binds the link and every grant (ADR 0072) — the one the server checks.
       const epoch = opened.epochs.current + 1
+      const wrappedPrev = b64std(v1.seal(epochLinkContext(scopeId, epoch), newKey, writeKey(opened.epochs)))
+      const grants = await buildGrants(newKey, epoch)
       const rotated = await withRefresh(() => scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants } }))
       return rotated.epoch
     } catch (e) {

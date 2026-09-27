@@ -70,6 +70,11 @@ export function activeScopeKey(): Uint8Array | null {
   return scopeKey
 }
 
+/** The active scope's write key together with the epoch it is — what a grant sealed with it is bound to (ADR 0072). */
+export function activeWriteKey(): { key: Uint8Array; epoch: number } | null {
+  return scopeKey && epochKeys ? { key: scopeKey, epoch: epochKeys.current } : null
+}
+
 /** The active scope's full **epoch key set** (ADR 0024) — a per-epoch lookup so a read opens a node under its own
  *  epoch key. Null when no space is open. The caller must not mutate or zero it (activeSpace owns its lifetime). */
 export function activeEpochKeys(): EpochKeys | null {
@@ -134,7 +139,7 @@ export async function enterScope(token: string): Promise<void> {
     // As a key-holder, keep delivering the scope key to any pending member (cr-0076/cr-0077, first-online-wins):
     // deliver on entry and then poll in the background so "awaiting access" closes without a re-entry (cr-0079).
     // A shared TENANT/GROUP scope may have grant-less members; Personal never does, so it just stops any poll.
-    if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, activeScopeKey)
+    if (opened.kind !== ScopeKind.Personal) startGrantDeliveryPolling(opened.scopeId, activeWriteKey)
     else stopGrantDeliveryPolling()
     // Also drain any queued group-key rotations (cr-0092): unlike grant-delivery this is scope-agnostic — a
     // remaining key-holder completes a queued rotation for ANY group they hold, without opening it. Session-level

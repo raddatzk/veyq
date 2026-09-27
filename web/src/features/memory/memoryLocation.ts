@@ -95,8 +95,10 @@ export function isLocationPending(loc: MemoryLocation | null | undefined): boole
  * the node carries no meta/location, the wrap doesn't open, or the payload is malformed — the header then shows
  * the "set location" affordance rather than break.
  */
-export function unsealMemoryLocation(nodeKey: Uint8Array, node: { wrappedMeta: string | null }): MemoryLocation | null {
-  return normalizeLocation(unsealNodeMeta(nodeKey, node.wrappedMeta).location)
+export function unsealMemoryLocation(
+  scopeId: string, nodeKey: Uint8Array, node: { id: string; wrappedMeta: string | null },
+): MemoryLocation | null {
+  return normalizeLocation(unsealNodeMeta(nodeKey, { scopeId, nodeId: node.id }, node.wrappedMeta).location)
 }
 
 /**
@@ -113,10 +115,10 @@ export async function setMemoryLocation(
   location: MemoryLocation | null,
   currentMeta: string | null,
 ): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, currentMeta)
+  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
   if (location) meta.location = location
   else delete meta.location
-  const wrappedMeta = sealNodeMeta(nodeKey, meta)
+  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
   await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
   return wrappedMeta
 }
@@ -173,10 +175,10 @@ export function computeMedoid(points: LatLng[]): LatLng | null {
  * (`K_mem`) — the raw input to [computeMedoid] for the `auto` position. Items without a GPS tier are skipped;
  * reads only the already-listed metadata, no per-item fetch.
  */
-export function mediaGpsPoints(items: MediaItem[], nodeKey: Uint8Array): LatLng[] {
+export function mediaGpsPoints(scopeId: string, items: MediaItem[], nodeKey: Uint8Array): LatLng[] {
   const points: LatLng[] = []
   for (const item of items) {
-    const tier = unsealMeta(nodeKey, item)
+    const tier = unsealMeta(scopeId, nodeKey, item)
     if (tier && tier.gpsLat !== undefined && tier.gpsLng !== undefined) {
       points.push({ lat: tier.gpsLat, lng: tier.gpsLng })
     }

@@ -150,8 +150,8 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
-    expect(presigned).toContain('up-2')
-    expect(presigned).not.toContain('up-0')
+    expect(presigned).toContain(store.blobIdOfUpload('up-2'))
+    expect(presigned).not.toContain(store.blobIdOfUpload('up-0'))
     expect(wrapper.find('.media-lightbox-stage img').attributes('src')).toBeTruthy()
   })
 
@@ -199,7 +199,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
-    expect(presigned).toContain('up-5')
+    expect(presigned).toContain(store.blobIdOfUpload('up-5'))
     expect(wrapper.find('.media-lightbox-title small').text()).toBe('2 of 2')
     expect(wrapper.find('.lightbox-nav-next').attributes('disabled')).toBeDefined()
   })
@@ -260,7 +260,7 @@ describe('MediaLightbox (preview, prev/next, download)', () => {
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
-    expect(presigned).toEqual(['up-0'])
+    expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     // the original decrypts to the stub's 8 bytes filled with 1 → not a known signature → .bin
     expect(anchors.at(-1)!.getAttribute('download')).toBe('Rom 2026 1.bin')
   })
@@ -300,7 +300,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
-    expect(presigned).toEqual(['up-0'])
+    expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     const video = wrapper.find('.media-lightbox-stage video')
     expect(video.exists()).toBe(true)
     expect(video.attributes('src')).toBeTruthy()
@@ -319,7 +319,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const memoryKey = v1.randomBytes(32)
     // pre-field: an EMPTY source type → nothing sealed at upload, but the original sniffs as mp4
     const { store, items } = await seedVideoLike(memoryKey, '', FTYP_MP4)
-    expect(unsealMeta(memoryKey, items[0])?.mediaType).toBeUndefined() // no signal yet
+    expect(unsealMeta(SCOPE_ID, memoryKey, items[0])?.mediaType).toBeUndefined() // no signal yet
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
 
     const wrapper = mountLightbox(memoryKey, items, 0)
@@ -331,7 +331,7 @@ describe('MediaLightbox — video playback + mediaType backfill (cr-inline-video
     const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
     expect(typeof sent).toBe('string')
     expect(sent).not.toContain('video/mp4')
-    expect(unsealMeta(memoryKey, { wrappedMeta: sent } as MediaItem)?.mediaType).toBe('video/mp4')
+    expect(unsealMeta(SCOPE_ID, memoryKey, { mediaId: items[0].mediaId, wrappedMeta: sent } as MediaItem)?.mediaType).toBe('video/mp4')
     expect(wrapper.emitted('updated')?.at(-1)?.[0]).toMatchObject({ mediaId: items[0].mediaId })
   })
 
@@ -405,7 +405,7 @@ describe('MediaLightbox — Slice 2 SW switchover (cr-inline-video-playback, ADR
     const presigned = store.api.presignBlobDownloads.mock.calls.flatMap(
       (c: any) => c[0].blobDownloadsBatchRequest.items.map((it: any) => it.blobId),
     )
-    expect(presigned).toEqual(['up-0'])
+    expect(presigned).toEqual([store.blobIdOfUpload('up-0')])
     expect(wrapper.find('.media-lightbox-stage video').attributes('src')).toMatch(/^blob:/)
     expect(revokePlayback).not.toHaveBeenCalled()
   })
@@ -472,7 +472,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     await flushPromises()
 
     // the panel fetched the exif endpoint once and unsealed it under K_mem
-    expect(store.api.getMediaExif).toHaveBeenCalledWith({ scopeId: SCOPE_ID, mediaId: 'media-0' })
+    expect(store.api.getMediaExif).toHaveBeenCalledWith({ scopeId: SCOPE_ID, mediaId: items[0].mediaId })
     const dds = wrapper.findAll('.media-lightbox-metadata dd').map((d) => d.text())
     expect(dds).toContain('Canon EOS R')
     expect(dds).toContain('RF 50mm')

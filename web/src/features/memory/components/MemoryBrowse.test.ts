@@ -15,6 +15,7 @@ import { sealNodeMeta } from '../nodeMeta'
 import type { MemoryLocation } from '../memoryLocation'
 import type { TreeNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
+import { activeSpace } from '../../../app/activeSpace'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
@@ -37,18 +38,30 @@ const node = (id: string, kind: NodeKind, name: string): TreeNode => ({
   id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null,
 })
 
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000bb'
 const scopeKey = v1.randomBytes(32)
 const located = (lat: number, lng: number): MemoryLocation => ({ name: `p-${lat}`, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } })
+// Every seal binds its node (ADR 0072), so the map fixtures use canonical UUID ids; the readable label is the name.
+const uuidOf = new Map<string, string>()
+const uid = (label: string): string => {
+  if (!uuidOf.has(label)) uuidOf.set(label, crypto.randomUUID())
+  return uuidOf.get(label)!
+}
 
-/** A located Memory whose K_mem is wrapped under `scopeKey` and location sealed under it (mirrors tree.ts). */
-function locatedMemory(id: string, parentId: string | null, loc: MemoryLocation): TreeNode {
+/** A located Memory whose K_mem is wrapped under `scopeKey` and location sealed under it (mirrors tree.ts), both
+ *  bound to the node. `id`/`parentId` are labels, resolved to their UUIDs. */
+function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLocation): TreeNode {
   const key = v1.randomBytes(32)
+  const id = uid(label)
   return {
-    id, kind: NodeKind.Memory, name: id, parentId, orderIndex: 0, epoch: 0,
-    wrappedContentKey: b64std(v1.symWrap(scopeKey, key, 'content-key', v1.randomBytes(12))),
-    wrappedMeta: sealNodeMeta(key, { v: 1, location: loc }),
+    id, kind: NodeKind.Memory, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
+    wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, scopeKey, key)),
+    wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
   }
 }
+/** A folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it). */
+const folderOf = (label: string, name: string): TreeNode => ({ ...node(label, NodeKind.Folder, name), id: uid(label) })
+const pinNames = (map: { props: (k: string) => unknown }) => (map.props('pins') as { node: TreeNode }[]).map((p) => p.node.name)
 
 const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']> & { folders: TreeNode[]; memories: TreeNode[] }) =>
   mount(MemoryBrowse, { props, global: { plugins: [i18n], stubs: { SpaceMap: SpaceMapStub } } })
@@ -56,6 +69,7 @@ const mountBrowse = (props: Partial<InstanceType<typeof MemoryBrowse>['$props']>
 beforeEach(() => {
   setViewMode('grid')
   treeStore.nodes = []
+  activeSpace.scopeId = SCOPE_ID // the map binds every node's seals to the active scope
 })
 
 describe('MemoryBrowse', () => {
@@ -84,7 +98,7 @@ describe('MemoryBrowse', () => {
     // folder fA holds a located memory; a second located memory sits at root — at root both are in scope.
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memRoot = locatedMemory('memRoot', null, located(2, 2))
-    treeStore.nodes = [node('fA', NodeKind.Folder, 'A'), memInA, memRoot]
+    treeStore.nodes = [folderOf('fA', 'A'), memInA, memRoot]
     setViewMode('map')
 
     const wrapper = mountBrowse({ folder: null, folders: [], memories: [memRoot], epochs: epochsOf(scopeKey) })
@@ -93,19 +107,19 @@ describe('MemoryBrowse', () => {
     expect(wrapper.find('.memory-card-grid').exists()).toBe(false)
     const map = wrapper.findComponent(SpaceMapStub)
     expect(map.exists()).toBe(true)
-    expect((map.props('pins') as { node: TreeNode }[]).map((p) => p.node.id).sort()).toEqual(['memInA', 'memRoot'])
+    expect(pinNames(map).sort()).toEqual(['memInA', 'memRoot'])
   })
 
   it('scopes the map to the current folder subtree', () => {
     const memInA = locatedMemory('memInA', 'fA', located(1, 1))
     const memInB = locatedMemory('memInB', 'fB', located(2, 2))
-    const fA = node('fA', NodeKind.Folder, 'A')
-    treeStore.nodes = [fA, node('fB', NodeKind.Folder, 'B'), memInA, memInB]
+    const fA = folderOf('fA', 'A')
+    treeStore.nodes = [fA, folderOf('fB', 'B'), memInA, memInB]
     setViewMode('map')
 
     const wrapper = mountBrowse({ folder: fA, folders: [], memories: [], epochs: epochsOf(scopeKey) })
     const map = wrapper.findComponent(SpaceMapStub)
-    expect((map.props('pins') as { node: TreeNode }[]).map((p) => p.node.id)).toEqual(['memInA'])
+    expect(pinNames(map)).toEqual(['memInA'])
   })
 
   it('a pin open resolves to its TreeNode and emits openMemory', async () => {
@@ -114,10 +128,10 @@ describe('MemoryBrowse', () => {
     setViewMode('map')
 
     const wrapper = mountBrowse({ folder: null, folders: [], memories: [memRoot], epochs: epochsOf(scopeKey) })
-    wrapper.findComponent(SpaceMapStub).vm.$emit('open', 'memRoot')
+    wrapper.findComponent(SpaceMapStub).vm.$emit('open', uid('memRoot'))
     await wrapper.vm.$nextTick()
 
-    expect(wrapper.emitted('openMemory')?.[0]?.[0]).toMatchObject({ id: 'memRoot' })
+    expect(wrapper.emitted('openMemory')?.[0]?.[0]).toMatchObject({ id: uid('memRoot') })
   })
 
   it('grid mode still renders the card grids (map absent)', () => {

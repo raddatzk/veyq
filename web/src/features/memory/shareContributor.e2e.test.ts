@@ -96,9 +96,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     nodeId = memory.nodeId
     const kMem = memory.memoryKey
 
-    const minted = await createShare(nodeId, kMem, MEMORY_NAME, ShareRole.Contributor, null, NOTE, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, kMem, MEMORY_NAME, ShareRole.Contributor, null, NOTE, SHARE_NAME)
     shareId = minted.shareId
-    expect(shareId, 'the server minted an opaque shareId').toBeTruthy()
+    expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 
     // --- anonymous: resolve with nothing but the id and the FRAGMENT key ------------------------------------
     // `minted.kShare` is what a real visitor carries in `/s/{shareId}#k=…`; the server never saw it.
@@ -108,12 +108,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     expect(resolved.memoryName, 'the anonymous visitor recovered the Memory name under K_share').toBe(MEMORY_NAME)
     expect(resolved.noteByLocale, 'the per-locale curator note opened with the same fragment key').toEqual(NOTE)
     expect(resolved.items, 'a fresh share carries no media yet').toHaveLength(0)
+    expect(resolved.scopeId, 'the unlocked share names the scope its seals are bound to').toBe(scopeId)
 
     // --- anonymous: name yourself, then upload TWO media through the share-scoped transport ------------------
-    const session = await createContributorIdentity(shareId, resolved.rootMemoryKey, CONTRIBUTOR_NAME)
+    const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.rootMemoryKey, CONTRIBUTOR_NAME)
     expect(session.contributorToken, 'the server minted a capability token for this session').toBeTruthy()
 
-    const upload = { ...session, shareId, memoryKey: resolved.rootMemoryKey }
+    const upload = { ...session, shareId, scopeId: resolved.scopeId, memoryKey: resolved.rootMemoryKey }
     // raw bytes with no MIME ⇒ the original-only path (nothing derivable) — the byte transport is what this gates
     const first = await addSharePhoto(upload, { blob: new Blob([bytes(3) as BlobPart]), mediaType: '' })
     const second = await addSharePhoto(upload, { blob: new Blob([bytes(101) as BlobPart]), mediaType: '' })
@@ -145,19 +146,19 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     const buckets = await listBuckets(scopeId, nodeId)
     const primary = buckets.find((b) => b.isPrimary && b.sealedName)
     expect(primary, "the contributor's primary bucket carries a sealed name").toBeDefined()
-    const recoveredName = openBucketName(kMem, primary!.sealedName!, 'contributor')
+    const recoveredName = openBucketName(scopeId, nodeId, kMem, primary!)
     expect(recoveredName, 'the curator recovered the contributor display name through the bucket').toBe(CONTRIBUTOR_NAME)
     expect(primary!.mediaCount, 'both contributions are attributed to that one contributor').toBe(2)
 
     // The curator's own management read: recover K_share from its K_mem-sealed copy and open the private name.
     const managed = (await listSharesFor(nodeId)).find((s) => s.shareId === shareId)
     expect(managed, 'the share shows up in the curator manage panel').toBeDefined()
-    const recoveredShareName = readShareName(kMem, managed!.sealedShareKey, managed!.sealedShareName)
+    const recoveredShareName = readShareName(kMem, managed!, managed!.sealedShareKey, managed!.sealedShareName)
     expect(recoveredShareName, "the curator recovered the share's private name").toBe(SHARE_NAME)
 
     // The wire assertion's derivation (ADR 0053) — every value below was recovered by UNSEALING what the server
     // returned, so nothing has to be remembered and none can be forgotten out of the set. Note what is NOT here:
-    // `session` (a server-minted capability token), `minted` (an opaque server id), the raw `PublicShare` — and
+    // `session` (a server-minted capability token), `minted` (an opaque id), the raw `PublicShare` — and
     // `resolved` itself, which looks like the ideal argument and is not: it carries `role`, and 'CONTRIBUTOR' is
     // stored as PLAINTEXT in `veyq_share` because the server enforces the grant. Project the fields, never hand
     // over the envelope.
@@ -172,7 +173,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
       resolved.noteByLocale,
       recoveredName,
       recoveredShareName,
-      unsealMeta(kMem, curatorItems[0]),
+      unsealMeta(scopeId, kMem, curatorItems[0]),
     )
   }, 240_000)
 

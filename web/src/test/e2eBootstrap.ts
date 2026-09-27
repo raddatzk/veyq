@@ -99,7 +99,7 @@ export async function become(a: Actor): Promise<void> {
   const wrap = a.built.material.masterKeyWraps.find((w) => w.method === 'PASSWORD')!
   const { params, salt } = v1.decodeKdfParams(fromB64std(wrap.kdfParams))
   const kek = v1.kekPasswordSecret(fromB64std(a.built.emergencyKit.secretKey), a.password, salt, params)
-  const masterKey = v1.symUnwrap(kek, fromB64std(wrap.wrappedKey), 'master-key')
+  const masterKey = v1.open({ purpose: 'master-key' }, kek, fromB64std(wrap.wrappedKey))
   // It opened the PASSWORD wrap with password + Secret Key, so `cold` is what actually happened here.
   setUnlocked(masterKey, a.built.identity.priv, 'cold')
 }
@@ -140,7 +140,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
   await createServerOwner(owner.built.material, owner.email)
   await become(owner)
   const tenant = await createTenant(tenantName, HOST, owner.email)
-  await acceptInvite(tenant.bootstrapSecret, owner.username, scopeGrant(v1.hybridPublic(owner.built.identity.priv)))
+  await acceptInvite(tenant.bootstrapSecret, owner.username, scopeGrant(v1.hybridPublic(owner.built.identity.priv), tenant.tenantId))
   await updateTenantMailSettings(tenant.tenantId, {
     host: HOST,
     port: MAILPIT_SMTP_PORT,
@@ -176,7 +176,7 @@ export async function onboardMember(tenantId: string, actor: Actor, salt: Uint8A
   const body = await waitForMail(actor.email)
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
   expect(link, `no invite link in the mail to ${actor.email}:\n${body}`).toBeTruthy()
-  const accepted = await registerAndAccept(link![1], actor.username, actor.built.material)
+  const accepted = await registerAndAccept(link![1], crypto.randomUUID(), actor.username, actor.built.material)
   actor.userId = accepted.userId
   return actor
 }

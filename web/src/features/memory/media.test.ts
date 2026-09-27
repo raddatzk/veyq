@@ -52,6 +52,12 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const NODE_ID = '22222222-2222-2222-2222-222222222222'
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+// A media's two metadata tiers are sealed bound to (scope, media) — ADR 0072 — so a reader names the media it opens.
+const metaCtx = (mediaId: string) => ({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }) as const
+const exifCtx = (mediaId: string) => ({ purpose: 'media-exif', scopeId: SCOPE_ID, mediaId }) as const
+const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
+  JSON.parse(new TextDecoder().decode(v1.open(ctx, key, fromB64std(sealed))))
 
 /**
  * A tiny in-process object store that handles **several blobs per add-media** (original + derivatives). Each
@@ -70,7 +76,9 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayMs?: number } = {}) {
   const window = opts.window ?? Number.POSITIVE_INFINITY
   const objects = new Map<string, Uint8Array>()
-  const sessions = new Map<string, { wrappedBlobKey: string; chunkCount: number }>()
+  const sessions = new Map<string, { wrappedBlobKey: string; chunkCount: number; blobId: string }>()
+  // The client mints each blob id and binds its K_blob wrap to it (ADR 0072); the store keys by upload session.
+  const uploadOfBlob = new Map<string, string>()
   const events: string[] = []
   const inFlight = { now: 0, max: 0 }
   const forbidden = new Set(opts.forbidFirstPut ?? [])
@@ -81,14 +89,15 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
 
   const blobOf = (uploadId: string) => {
     const s = sessions.get(uploadId)!
-    return { blobId: uploadId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
+    return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
   }
 
   const api = {
     startBlobUploads: vi.fn(async ({ blobUploadsBatchRequest }: any) => {
       const results = blobUploadsBatchRequest.items.map((item: any) => {
         const uploadId = `up-${upCounter++}`
-        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount })
+        sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
+        uploadOfBlob.set(item.blobId, uploadId)
         captured.startItems.push(item)
         return { uploadId, presignedPuts: putsOf(uploadId, 0, item.chunkCount), error: null }
       })
@@ -103,7 +112,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
     completeMedia: vi.fn(async ({ mediaBatchRequest }: any) => {
       const item = mediaBatchRequest.items[0]
       captured.completeItem = item
-      return { results: [{ blobId: `blob-${item.originalUploadId}`, mediaId: 'media-1', error: null }] }
+      return { results: [{ blobId: sessions.get(item.originalUploadId)!.blobId, mediaId: item.mediaId, error: null }] }
     }),
     listNodeMedia: vi.fn(async () => {
       const item = captured.completeItem
@@ -111,7 +120,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       return {
         media: [
           {
-            mediaId: 'media-1',
+            mediaId: item.mediaId, // the client-minted id the upload was completed for
             ...blobOf(item.originalUploadId),
             derivatives: (item.derivatives ?? []).map((d: any) => ({ kind: d.kind, ...blobOf(d.uploadId) })),
             wrappedMeta: captured.updatedMeta ?? item.wrappedMeta ?? null, // listed for grid layout + date sorting (cr-0068)
@@ -129,7 +138,7 @@ function fakeStore(opts: { window?: number; forbidFirstPut?: number[]; putDelayM
       return { wrappedMeta: mediaMetaUpdate.wrappedMeta ?? null }
     }),
     presignBlobDownloads: vi.fn(async ({ blobDownloadsBatchRequest }: any) => {
-      const uploadId = blobDownloadsBatchRequest.items[0].blobId // == uploadId in this fake
+      const uploadId = uploadOfBlob.get(blobDownloadsBatchRequest.items[0].blobId)!
       const s = sessions.get(uploadId)!
       return {
         results: [{ presignedGets: Array.from({ length: s.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` })), error: null }],
@@ -229,8 +238,14 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     const data = new Uint8Array(10).fill(7)
     const { blobId, mediaId } = await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([data as BlobPart]), mediaType: 'image/png' }, deriver)
 
-    expect(mediaId).toBe('media-1')
-    expect(blobId).toBe('blob-up-0') // original is upload index 0
+    // the client mints the media id and every blob id, and binds each K_blob wrap to its slot (ADR 0072)
+    expect(mediaId).toMatch(UUID)
+    expect(store.captured.completeItem.mediaId).toBe(mediaId)
+    expect(blobId).toBe(store.captured.startItems[0].blobId) // original is upload index 0
+    for (const i of store.captured.startItems) expect(i.blobId).toMatch(UUID)
+    expect(store.captured.startItems.map((i) => [i.ownerId, i.role])).toEqual([
+      [mediaId, 'ORIGINAL'], [mediaId, 'THUMBNAIL'], [mediaId, 'PREVIEW'],
+    ])
 
     // three blobs declared in one start batch (original + 2 derivatives)
     expect(store.captured.startItems).toHaveLength(3)
@@ -281,7 +296,7 @@ describe('addMedia — derivative generation + role/batch assembly', () => {
     expect(probe).not.toHaveBeenCalled() // nothing re-measured what that decode already knew
     // …and the geometry it knew is what got sealed, at full source resolution — not the preview's size
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    expect(unsealMeta(memoryKey, item)).toMatchObject({ w: 4032, h: 3024 })
+    expect(unsealMeta(SCOPE_ID, memoryKey, item)).toMatchObject({ w: 4032, h: 3024 })
     // both tiers still arrive, at their pinned specs
     expect(store.captured.completeItem.derivatives.map((d: { kind: string }) => d.kind)).toEqual(['THUMBNAIL', 'PREVIEW'])
     expect(deriver.deriveImage).toHaveBeenNthCalledWith(1, expect.anything(), TIER_SPECS.PREVIEW)
@@ -375,7 +390,7 @@ describe('addMedia — progress, abort, best-effort derivation (cr-0058)', () =>
 
     const { mediaId } = await addMedia(SCOPE_ID, NODE_ID, v1.randomBytes(32), { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/heic' }, deriver)
 
-    expect(mediaId).toBe('media-1')
+    expect(mediaId).toBe(store.captured.completeItem.mediaId)
     expect(store.captured.startItems).toHaveLength(1) // original only — no derivative blobs
     expect(store.captured.completeItem.derivatives).toEqual([])
   })
@@ -406,10 +421,10 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(sealed).not.toContain('1920')
 
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(meta).toMatchObject({ v: 1, w: 1920, h: 1080 }) // geometry rides the listed metadata tier (cr-0068)
     // a wrong K_mem can't open it (bound to the Memory key)
-    expect(unsealMeta(v1.randomBytes(32), item)).toBeNull()
+    expect(unsealMeta(SCOPE_ID, v1.randomBytes(32), item)).toBeNull()
   })
 
   it('seals date + GPS in the listed tier, a date/gps-free EXIF tier lazy alongside', async () => {
@@ -434,7 +449,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // the EXIF tier is sealed opaque and **date- AND gps-free** — camera only (cr-0068)
     const sealedExif = store.captured.completeItem.wrappedExif
     expect(sealedExif).not.toContain('Canon')
-    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealedExif), 'media-exif')))
+    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, sealedExif)
     expect(exif).toMatchObject({ v: 1, make: 'Canon', model: 'EOS R', lens: 'RF 50mm', fNumber: 1.8, iso: 200 })
     expect(exif.capturedAt).toBeUndefined()
     expect(exif.gpsLat).toBeUndefined() // GPS moved to the listed tier (cr-0068)
@@ -444,7 +459,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
     expect(item.wrappedMeta).toBeDefined()
     expect((item as Record<string, unknown>).wrappedExif).toBeUndefined()
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(effectiveCapturedAt(meta)).toBe(CAPTURED_AT)
     expect(meta).toMatchObject({ gpsLat: 48.137, gpsLng: 11.575 }) // GPS available at list-level for the medoid
   })
@@ -481,7 +496,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', name: FILENAME }, deriver)
 
     // B1.1 + B1.3 — the lazy tier carries every new field, the filename included
-    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(store.captured.completeItem.wrappedExif), 'media-exif')))
+    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, store.captured.completeItem.wrappedExif)
     expect(exif).toMatchObject({
       name: FILENAME,
       focalLength35: 75, exposureCompensation: -0.7, flash: 9, orientation: 6,
@@ -497,7 +512,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // type (`capturedAtOverride` among them) whether or not it was sealed, so keying the assertion off it
     // would measure the normaliser instead of what actually rides in the capped tier.
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const sealedMeta = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(item.wrappedMeta!), 'media-meta')))
+    const sealedMeta = openJson(metaCtx(item.mediaId), memoryKey, item.wrappedMeta!)
     expect(Object.keys(sealedMeta).sort()).toEqual(
       ['capturedAt', 'capturedAtSource', 'gpsLat', 'gpsLng', 'h', 'mediaType', 'v', 'w'].sort(),
     )
@@ -521,11 +536,11 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)!
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)!
     const withOverride = { ...meta, capturedAtOverride: Date.UTC(2019, 7, 15) }
 
     // B2.3 — the spread is what keeps the date and the GPS. Lever: seal `{ v: 1, placeName }` instead.
-    const saved = await backfillPlaceName(SCOPE_ID, 'media-0', memoryKey, withOverride, 'München', 'city')
+    const saved = await backfillPlaceName(SCOPE_ID, item.mediaId, memoryKey, withOverride, 'München', 'city')
     expect(saved.tier).toMatchObject({
       placeName: 'München', placeLevel: 'city',
       capturedAtOverride: Date.UTC(2019, 7, 15), gpsLat: 48.137, gpsLng: 11.575, w: 4032,
@@ -533,7 +548,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     // B2.4 — a tier whose ONLY content is a name must not seal to null, or the name is resolved again on every
     // open. Lever: remove the `placeName` clause from `metaHasContent`.
-    const nameOnly = await backfillPlaceName(SCOPE_ID, 'media-0', memoryKey, { v: 1 }, 'Formentera', 'island')
+    const nameOnly = await backfillPlaceName(SCOPE_ID, item.mediaId, memoryKey, { v: 1 }, 'Formentera', 'island')
     expect(nameOnly.wrappedMeta).not.toBeNull()
     expect(nameOnly.tier).toMatchObject({ placeName: 'Formentera' })
 
@@ -541,7 +556,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // an overflowing name breaks that write too. Worst case: every field populated plus a maximal name.
     // Lever: remove the clamp in `backfillPlaceName`.
     const maximal = await backfillPlaceName(
-      SCOPE_ID, 'media-0', memoryKey,
+      SCOPE_ID, item.mediaId, memoryKey,
       { ...withOverride, mediaType: 'image/jpeg', capturedAtSource: 'exif' },
       'Sant Francesc de Formentera i les Illes Balears de la Mediterrània Occidental'.repeat(4),
       'country',
@@ -566,7 +581,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     const sealed = store.captured.completeItem.wrappedExif as string
     expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
-    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-exif')))
+    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
     expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200, focalLength: 50, rating: 4 })
     // shortened, not dropped, and never split inside a two-byte character
     expect(exif.description).toBe('ä'.repeat(EXIF_TEXT_MAX_BYTES / 2))
@@ -589,7 +604,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     const sealed = store.captured.completeItem.wrappedExif as string
     expect(sealed.length).toBeLessThanOrEqual(EXIF_TIER_MAX_B64)
-    const exif = JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-exif')))
+    const exif = openJson(exifCtx(store.captured.completeItem.mediaId), memoryKey, sealed)
     expect(exif).toMatchObject({ make: 'Canon', fNumber: 1.8, iso: 200 })
     // the two longest escaped fields went; the one a character shorter then fits and stays
     expect(exif.artist).toBeUndefined()
@@ -611,7 +626,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     expect(store.captured.completeItem.wrappedExif ?? null).toBeNull() // no EXIF bundle
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(meta).toMatchObject({ v: 1, w: 640, h: 480 })
     expect(effectiveCapturedAt(meta)).toBe(FILE_MTIME) // file-date fallback
     expect(meta?.capturedAtSource).toBe('file') // marked untrustworthy for the Memory `auto` range
@@ -634,7 +649,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) } as never)
     const keyA = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyA, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
-    const sealedA = unsealMeta(keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
+    const sealedA = unsealMeta(SCOPE_ID, keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
     const tileA = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
     expect(tileA.capturedAt).toBe(sealedA?.capturedAt)
     expect(tileA.capturedAt).toBe(CAPTURED_AT)
@@ -645,7 +660,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const keyB = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyB, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const listed = await listMedia(SCOPE_ID, NODE_ID)
-    const sealedB = unsealMeta(keyB, listed[listed.length - 1])
+    const sealedB = unsealMeta(SCOPE_ID, keyB, listed[listed.length - 1])
     const tileB = await readCaptureTime(asPickedFile(), 'image/jpeg', FILE_MTIME)
     expect(tileB.capturedAt).toBe(sealedB?.capturedAt)
     expect(tileB.capturedAt).toBe(FILE_MTIME)
@@ -663,7 +678,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1, 2, 3]) as BlobPart]), mediaType: 'image/png' }, deriver)
 
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(effectiveCapturedAt(meta)).toBeUndefined() // no date → sorts last
     expect(meta).toMatchObject({ w: 640, h: 480 }) // geometry still rides the tier
   })
@@ -681,7 +696,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
     expect(store.captured.completeItem.wrappedExif ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(meta).toMatchObject({ mediaType: 'application/pdf' })
     expect(meta?.w).toBeUndefined()
     expect(meta?.capturedAt).toBeUndefined()
@@ -696,7 +711,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    expect(unsealMeta(memoryKey, item)).toMatchObject({ mediaType: 'image/png' })
+    expect(unsealMeta(SCOPE_ID, memoryKey, item)).toMatchObject({ mediaType: 'image/png' })
   })
 
   it('seals NO metadata tier when there is truly nothing — an empty MIME + no derivable metadata', async () => {
@@ -708,17 +723,17 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: '' }, stubDeriver())
     expect(store.captured.completeItem.wrappedMeta ?? null).toBeNull()
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    expect(unsealMeta(memoryKey, item)).toBeNull()
+    expect(unsealMeta(SCOPE_ID, memoryKey, item)).toBeNull()
   })
 })
 
 describe('setMediaMeta — sealed capturedAt override in the listed-metadata tier (cr-0066/0068)', () => {
   const ORIG = Date.UTC(2021, 4, 1, 10, 0, 0)
   const CORRECTED = Date.UTC(2019, 7, 15, 8, 30, 0)
-  const MEDIA_ID = 'media-1'
+  const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a01'
 
   function decodeMeta(memoryKey: Uint8Array, sealed: string): MediaMeta {
-    return JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-meta')))
+    return openJson(metaCtx(MEDIA_ID), memoryKey, sealed)
   }
 
   it('re-seals the tier with the override, keeping the original capturedAt + geometry/GPS (operator-blind)', async () => {
@@ -779,9 +794,9 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
 })
 
 describe('mediaType — the persisted video signal (cr-inline-video-playback, #104/#105)', () => {
-  const MEDIA_ID = 'media-1'
+  const MEDIA_ID = '5c09e000-0000-4000-8000-000000000a01'
   function decodeMeta(memoryKey: Uint8Array, sealed: string): MediaMeta {
-    return JSON.parse(new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(sealed), 'media-meta')))
+    return openJson(metaCtx(MEDIA_ID), memoryKey, sealed)
   }
 
   it('isVideoMediaType matches only video/* MIME types', () => {
@@ -836,7 +851,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     // the wire is opaque ciphertext — the MIME never crosses in the clear
     expect(store.captured.completeItem.wrappedMeta).not.toContain('video/mp4')
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
-    const meta = unsealMeta(memoryKey, item)
+    const meta = unsealMeta(SCOPE_ID, memoryKey, item)
     expect(meta?.mediaType).toBe('video/mp4')
     expect(isVideoMediaType(meta?.mediaType)).toBe(true)
   })
@@ -949,6 +964,9 @@ describe('uploadCoverBlob / deleteCoverBlob — standalone cover blob (cr-0073)'
     expect(store.captured.startItems).toHaveLength(1)
     expect(store.api.completeMedia).not.toHaveBeenCalled() // NO veyq_media row
     expect(store.captured.coverUpload).toEqual({ nodeId: NODE_ID, uploadId: 'up-0' })
+    // a cover's blob is owned by its node, in the COVER role — the wrap is sealed to exactly that slot (ADR 0072)
+    expect(store.captured.startItems[0]).toMatchObject({ ownerId: NODE_ID, role: 'COVER' })
+    expect(ref).toMatchObject({ blobId: store.captured.startItems[0].blobId, ownerId: NODE_ID, role: 'COVER' })
 
     // the committed ref opens back to the downscaled cover bytes (2048-tagged by the stub) under K_mem
     const opened = await openBlob(SCOPE_ID, memoryKey, ref)
@@ -1008,21 +1026,28 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(5).fill(9) as BlobPart]), mediaType: 'image/webp' }, stubDeriver())
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
 
-    expect(downloadRef(item).blobId).toBe('up-0')
-    expect(gridRef(item).blobId).toBe('up-1') // THUMBNAIL
-    expect(lightboxRef(item).blobId).toBe('up-2') // PREVIEW
+    const started = store.captured.startItems.map((i) => i.blobId)
+    expect(downloadRef(item).blobId).toBe(started[0])
+    expect(gridRef(item).blobId).toBe(started[1]) // THUMBNAIL
+    expect(lightboxRef(item).blobId).toBe(started[2]) // PREVIEW
+    // each ref is owned by the listed row's media, in the role it is listed in
+    expect([downloadRef(item), gridRef(item), lightboxRef(item)].map((r) => [r.ownerId, r.role])).toEqual([
+      [item.mediaId, 'ORIGINAL'], [item.mediaId, 'THUMBNAIL'], [item.mediaId, 'PREVIEW'],
+    ])
 
     // the thumbnail tier opens to the 400px-tagged stub bytes, the preview to the 2048px-tagged ones
     const grid = await openBlob(SCOPE_ID, memoryKey, gridRef(item))
     const light = await openBlob(SCOPE_ID, memoryKey, lightboxRef(item))
     expect(Array.from(grid)).toEqual([0xff, 0xd8, 512 & 0xff, 512 >> 8])
     expect(Array.from(light)).toEqual([0xff, 0xd8, 2048 & 0xff, 2048 >> 8])
+    // a server serving the thumbnail in the original's slot gets a refusal, not the thumbnail's key (ADR 0072)
+    await expect(openBlob(SCOPE_ID, memoryKey, { ...gridRef(item), role: 'ORIGINAL' })).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 
   it('falls back to the original when a media has no derivatives', async () => {
     const item: MediaItem = {
       mediaId: 'm',
-      original: { blobId: 'orig', chunkCount: 1, byteSize: 0, wrappedBlobKey: 'd3JhcA==' },
+      original: { blobId: 'orig', chunkCount: 1, byteSize: 0, wrappedBlobKey: 'd3JhcA==', ownerId: 'm', role: 'ORIGINAL' },
       derivatives: [],
     }
     expect(gridRef(item).blobId).toBe('orig')
@@ -1037,16 +1062,23 @@ describe('read-back — operator-blind round-trip + tier selection', () => {
     const memoryKey = v1.randomBytes(32)
 
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array([1]) as BlobPart]), mediaType: 'application/pdf' }, stubDeriver())
-    const wrap = store.captured.startItems[0].wrappedBlobKey
-    const blobKey = v1.symUnwrap(memoryKey, fromB64std(wrap), 'blob-key')
+    const start = store.captured.startItems[0]
+    expect(start.ownerId).toBe(store.captured.completeItem.mediaId)
+    const wrap = fromB64std(start.wrappedBlobKey)
+    const blobCtx = { purpose: 'blob-key', scopeId: SCOPE_ID, ownerId: start.ownerId, blobId: start.blobId, role: 'ORIGINAL' } as const
+    const blobKey = v1.open(blobCtx, memoryKey, wrap)
     expect(blobKey.length).toBe(32)
+    // bound to its slot: the same wrap in another role, under another owner, or as another blob refuses
+    expect(() => v1.open({ ...blobCtx, role: 'THUMBNAIL' }, memoryKey, wrap)).toThrow(v1.OpenRefused)
+    expect(() => v1.open({ ...blobCtx, ownerId: crypto.randomUUID() }, memoryKey, wrap)).toThrow(v1.OpenRefused)
+    expect(() => v1.open({ ...blobCtx, blobId: crypto.randomUUID() }, memoryKey, wrap)).toThrow(v1.OpenRefused)
   })
 })
 
 describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
   const item = (id: string, updatedAt: string): MediaItem => ({
     mediaId: id,
-    original: { blobId: `b-${id}`, chunkCount: 1, byteSize: 0, wrappedBlobKey: 'aw==' },
+    original: { blobId: `b-${id}`, chunkCount: 1, byteSize: 0, wrappedBlobKey: 'aw==', ownerId: id, role: 'ORIGINAL' },
     derivatives: [],
     updatedAt: new Date(updatedAt),
   })
@@ -1127,15 +1159,17 @@ describe('live-updates data layer (uc.memory.live-updates, cr-0107)', () => {
 describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR 0047)', () => {
   // The SW never sees a key; it asks the page for one chunk's plaintext by index. Build a real chunked-AEAD blob
   // (K_blob wrapped under K_mem, each frame bound to `index‖total`) so the seam runs the true seal/open path.
-  const KBLOB_CTX = 'blob-key' // == media.ts KBLOB_CTX; if the domain tag ever changes this test breaks loudly.
+  // The wrap is sealed with a HARDCODED blob-key context (== media.ts blobKeyContext); if the purpose or a bound
+  // field ever changes, this test breaks loudly.
+  const BLOB = { blobId: '5c09e000-0000-4000-8000-000000000b01', ownerId: '5c09e000-0000-4000-8000-000000000b02', role: 'PREVIEW' as const }
 
   function buildBlob(memoryKey: Uint8Array, plaintextChunks: Uint8Array[]) {
     const blobKey = v1.randomBytes(32)
     const total = plaintextChunks.length
     const frames = plaintextChunks.map((pt, i) => v1.sealFrame(blobKey, i, total, pt, v1.randomBytes(12)))
-    const wrappedBlobKey = b64std(v1.symWrap(memoryKey, blobKey, KBLOB_CTX, v1.randomBytes(12)))
+    const wrappedBlobKey = b64std(v1.seal({ purpose: 'blob-key', scopeId: SCOPE_ID, ...BLOB }, memoryKey, blobKey))
     const byteSize = frames.reduce((n, f) => n + f.length, 0)
-    return { blobKey, frames, ref: { blobId: 'blob-x', chunkCount: total, byteSize, wrappedBlobKey } }
+    return { blobKey, frames, ref: { ...BLOB, chunkCount: total, byteSize, wrappedBlobKey } }
   }
 
   /** A fetch stub that serves `frames[i]` at URL `slot/<n>/<i>`, where `slot` advances on each re-presign so a
@@ -1165,12 +1199,21 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const { fetchStub, presignAll } = storeFor(frames)
     vi.stubGlobal('fetch', fetchStub)
 
-    const p = makeChunkProvider(memoryKey, ref, presignAll)
+    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
     expect(p.chunkCount).toBe(3)
     expect(p.byteSize).toBe(ref.byteSize)
     for (let i = 0; i < chunks.length; i++) {
       expect(Array.from(await p.getPlaintextChunk(i))).toEqual(Array.from(chunks[i]))
     }
+  })
+
+  it('refuses a ref whose wrap was sealed for another slot — before any presign (ADR 0072)', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { ref } = buildBlob(memoryKey, [new Uint8Array([1])])
+    const presignAll = vi.fn(async () => [])
+    expect(() => makeChunkProvider(SCOPE_ID, memoryKey, { ...ref, role: 'ORIGINAL' }, presignAll)).toThrow(v1.OpenRefused)
+    expect(() => makeChunkProvider(SCOPE_ID, memoryKey, { ...ref, ownerId: crypto.randomUUID() }, presignAll)).toThrow(v1.OpenRefused)
+    expect(presignAll).not.toHaveBeenCalled()
   })
 
   it('presigns the WHOLE blob only once and reuses the cache across chunk reads', async () => {
@@ -1179,7 +1222,7 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const { fetchStub, presignAll } = storeFor(frames)
     vi.stubGlobal('fetch', fetchStub)
 
-    const p = makeChunkProvider(memoryKey, ref, presignAll)
+    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
     await p.getPlaintextChunk(0)
     await p.getPlaintextChunk(2)
     await p.getPlaintextChunk(1)
@@ -1195,7 +1238,7 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const { fetchStub, presignAll } = storeFor(frames)
     vi.stubGlobal('fetch', fetchStub)
 
-    const p = makeChunkProvider(memoryKey, ref, presignAll)
+    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
     // Green: the provider opens chunk 2 with the whole chunkCount (5).
     expect(Array.from(await p.getPlaintextChunk(2))).toEqual(Array.from(chunks[2]))
     // Red bite: the same frame opened with the range-subset total (3) — what the trap forbids — must reject.
@@ -1208,7 +1251,7 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const { fetchStub, presignAdvancing } = storeFor(frames, new Set([0])) // slot 0 → 403, slot 1 → ok
     vi.stubGlobal('fetch', fetchStub)
 
-    const p = makeChunkProvider(memoryKey, ref, presignAdvancing)
+    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAdvancing)
     expect(Array.from(await p.getPlaintextChunk(1))).toEqual(Array.from([2, 2]))
     expect(presignAdvancing).toHaveBeenCalledTimes(2) // initial presign (403) → re-presign → retry succeeds
   })
@@ -1219,7 +1262,7 @@ describe('makeChunkProvider — the page-side plaintext chunk seam (Slice 2, ADR
     const { fetchStub, presignAll } = storeFor(frames)
     vi.stubGlobal('fetch', fetchStub)
 
-    const p = makeChunkProvider(memoryKey, ref, presignAll)
+    const p = makeChunkProvider(SCOPE_ID, memoryKey, ref, presignAll)
     await expect(p.getPlaintextChunk(1)).rejects.toThrow(/chunk_out_of_range/)
     await expect(p.getPlaintextChunk(-1)).rejects.toThrow(/chunk_out_of_range/)
     expect(fetchStub).not.toHaveBeenCalled()

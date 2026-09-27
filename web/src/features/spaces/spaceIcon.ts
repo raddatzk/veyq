@@ -7,8 +7,9 @@
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
-/** The AAD/KDF context binding the icon seal + key derivation (ADR 0017/0027). Distinct from `group-name-key` / `scope-grant`. */
-export const SPACE_ICON_CTX = 'space-icon'
+/** Where an icon is sealed: its space and the epoch `K_icon` derives from (ADR 0072). */
+export type IconAddress = { scopeId: string; iconEpoch: number }
+const iconContext = (a: IconAddress) => ({ purpose: 'space-icon', scopeId: a.scopeId, iconEpoch: a.iconEpoch }) as const
 /** HKDF `info` for deriving `K_icon` from an epoch key. Pinned by the `space_icon_key` conformance vector. */
 const ICON_KEY_INFO = v1.utf8('veyq/v1/space-icon-key')
 
@@ -59,11 +60,11 @@ export function unpad(padded: Uint8Array): Uint8Array {
 
 /**
  * Seal encoded icon bytes under `K_icon` → opaque base64 (the {@link sealName} shape: `0x02 || nonce(12) || aead`,
- * fresh nonce, `space-icon` context). Pads to the constant **intrinsically** — you cannot seal a variable length —
- * so every `sealedIcon` is byte-identical in size.
+ * fresh nonce, `space-icon` purpose bound to (scope, icon epoch)). Pads to the constant **intrinsically** — you
+ * cannot seal a variable length — so every `sealedIcon` is byte-identical in size.
  */
-export function sealIcon(iconKey: Uint8Array, encoded: Uint8Array): string {
-  return b64std(v1.symWrap(iconKey, pad(encoded), SPACE_ICON_CTX, v1.randomBytes(12)))
+export function sealIcon(iconKey: Uint8Array, address: IconAddress, encoded: Uint8Array): string {
+  return b64std(v1.seal(iconContext(address), iconKey, pad(encoded)))
 }
 
 /**
@@ -71,9 +72,9 @@ export function sealIcon(iconKey: Uint8Array, encoded: Uint8Array): string {
  * unpad (wrong key, corrupt, malformed base64) — the caller renders the initial and never throws
  * (uc.spaces.set-space-icon E2, the same posture a dangling Memory cover takes).
  */
-export function openIcon(iconKey: Uint8Array, sealedIcon: string): Uint8Array | null {
+export function openIcon(iconKey: Uint8Array, address: IconAddress, sealedIcon: string): Uint8Array | null {
   try {
-    return unpad(v1.symUnwrap(iconKey, fromB64std(sealedIcon), SPACE_ICON_CTX))
+    return unpad(v1.open(iconContext(address), iconKey, fromB64std(sealedIcon)))
   } catch {
     return null
   }

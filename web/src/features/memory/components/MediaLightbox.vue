@@ -72,7 +72,7 @@ const originalOf = (it: MediaItem) => (props.originalLoader ?? ((x: MediaItem) =
 // the share viewer; else the authed media-API provider. Keys never leave the page — the SW only pulls plaintext.
 const videoProviderOf = (it: MediaItem): ChunkProvider =>
   (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, downloadRef(x))))(it)
-const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.memoryKey, x)))(it)
+const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.scopeId, props.memoryKey, x)))(it)
 const exifOf = (it: MediaItem): Promise<MediaExif | null> =>
   props.exifLoader ? props.exifLoader(it) : props.readonly ? Promise.resolve(null) : loadMediaExif(props.scopeId, it.mediaId, props.memoryKey)
 

@@ -1,11 +1,12 @@
 // The web worker loop for the operator-blind background-task mechanism (ADR 0021, cr-0076) — its first
 // consumer, grant-delivery (ADR 0020). Any online key-holder is an equal worker: it pulls grant-delivery jobs
-// for a scope it has opened, wraps that scope's key `K_SC` to a pending member's *foreign* identity public key
-// (`asymWrap(hybridPublic(target), K_SC, "scope-grant")` — the first wrap to a foreign identity in the client),
-// and completes; the backend writes the opaque ciphertext onto the target membership, idempotently. Delivery
+// for a scope it has opened, seals that scope's key `K_SC` to a pending member's *foreign* identity public key —
+// bound to (scope, the epoch it is), ADR 0072 — and completes **stating that epoch**; the backend writes the
+// opaque ciphertext onto the target membership at exactly that epoch, idempotently, and refuses a stale one. Delivery
 // is automatic and first-online-wins — the wrap runs on-device, the server only ever relays ciphertext.
 import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
+import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { checkAndPin } from '../account/identityPins'
 import { wrapScopeKeyToMember } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'
@@ -15,8 +16,9 @@ import type { ClaimedJob } from '../../api/generated/tasks'
 // re-exported here so this worker + its test keep their existing import path.
 export { wrapScopeKeyToMember } from '../spaces/grant'
 
-/** Just what the worker needs from a cr-0075 opened scope: its id + the in-memory scope key `K_SC`. */
-export type ScopeKeyHolder = { scopeId: string; key: Uint8Array }
+/** Just what the worker needs from a cr-0075 opened scope: its id, the in-memory write key `K_SC` and the epoch it
+ *  is — a grant is sealed bound to that epoch, and the completion states it (ADR 0072). */
+export type ScopeKeyHolder = { scopeId: string; key: Uint8Array; epoch: number }
 
 /**
  * Drain the grant-delivery jobs claimable for a single opened scope: claim → wrap `K_SC` to the target →
@@ -45,8 +47,16 @@ export async function runGrantDeliveryWorker(scope: ScopeKeyHolder): Promise<num
       await declineJob(job.jobId, 'identity_changed')
       continue
     }
-    const wrap = wrapScopeKeyToMember(scope.key, target.identityPublicKey)
-    await completeJob(job.jobId, wrap)
+    const wrap = wrapScopeKeyToMember(scope.key, scope.scopeId, scope.epoch, target.identityPublicKey)
+    try {
+      await completeJob(job.jobId, wrap, scope.epoch)
+    } catch (e) {
+      // Our key is not the scope's current epoch (a rotation landed, or we still hold an older grant): the server
+      // wrote nothing and released the job, so a key-holder at the current epoch delivers it. Stop draining —
+      // every further job would meet the same answer, and re-claiming would only spin on this one.
+      if (await isCodedError(e, HttpStatus.conflict, 'stale_epoch')) break
+      throw e
+    }
     delivered++
   }
   return delivered
@@ -59,8 +69,8 @@ async function claimGrantDelivery(scopeId: string): Promise<ClaimedJob | null> {
   return job ?? null
 }
 
-async function completeJob(jobId: string, sealedResult: string): Promise<void> {
-  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: { sealedResult } }))
+async function completeJob(jobId: string, sealedResult: string, epoch: number): Promise<void> {
+  await withRefresh(() => tasksApi().completeTask({ jobId, completeRequest: { sealedResult, epoch } }))
 }
 
 async function failJob(jobId: string, reason: string): Promise<void> {

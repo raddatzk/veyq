@@ -70,7 +70,7 @@ function fixture(label: string = LABEL) {
     suiteId: 'v1',
     wraps: [],
     wrappedIdentityPrivateKey: b64std(
-      v1.symWrap(mk, v1.serializeIdentityPrivate(id), 'identity-priv', v1.randomBytes(12)),
+      v1.seal({ purpose: 'identity-priv' }, mk, v1.serializeIdentityPrivate(id)),
     ),
   }
   const grant: PairingGrant = { email: EMAIL, masterKey: mk, refreshToken: 'the-grant-token', label }

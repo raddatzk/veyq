@@ -17,6 +17,7 @@ import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
+import { expectMintedId } from './mintedId'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
 
 // The on-device pixel stage lives in `./mediaDeriver` (cr-0143). Re-exported here so existing importers of
@@ -28,15 +29,21 @@ export { scaleToMaxEdge, TIER_SPECS, createBrowserDeriver, type MediaDeriver, ty
 // their import path unchanged.
 export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, moveBucketMedia, type BucketItem } from './mediaBuckets'
 
-const KBLOB_CTX = 'blob-key'
 /**
- * AAD context binding the sealed **listed-metadata** tier to its purpose (cr-0068). This one blob carries the
+ * Every seal in this layer binds the object it is stored as (ADR 0072). A `K_blob` wrap is bound to (scope, owner,
+ * blob, role) — the owner is the media for its tiers and the node for a cover — so a server that attaches a blob
+ * under another media, or serves a thumbnail in another's slot, gets a wrap that does not open there.
+ */
+const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
+  ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
+/**
+ * The sealed **listed-metadata** tier of one media (cr-0068), bound to (scope, media). This one blob carries the
  * geometry (`w,h`), the capture time (`capturedAt*`), and the GPS (`gpsLat,gpsLng`) — everything the grid, the
  * date sort, and the place medoid need at list-level. Consolidates the former `media-layout` + `media-capturedat`.
  */
-const MEDIA_META_CTX = 'media-meta'
-/** AAD context binding the sealed heavy EXIF tier to its purpose (cr-0064) — distinct from the listed tier's. */
-const MEDIA_EXIF_CTX = 'media-exif'
+const mediaMetaContext = (scopeId: string, mediaId: string) => ({ purpose: 'media-meta', scopeId, mediaId }) as const
+/** The sealed heavy EXIF tier of one media (cr-0064) — its own purpose, bound to (scope, media). */
+const mediaExifContext = (scopeId: string, mediaId: string) => ({ purpose: 'media-exif', scopeId, mediaId }) as const
 
 /** Plaintext bytes per full chunk before sealing — the contract's frame size (ADR 0013 §3), not a choice made here:
  *  the server derives `chunkCount` from `byteSize` on exactly this and refuses any other. */
@@ -44,12 +51,22 @@ export const CHUNK_SIZE = v1.CHUNK_FRAME_SIZE.plaintextBytes
 
 // --- read-back model -------------------------------------------------------
 
-/** Everything needed to open one blob: its id + the metadata + the K_blob wrap (under K_mem). */
+/** The role a blob plays for its owner — the `K_blob` wrap is sealed bound to it (ADR 0072). */
+export type BlobRole = v1.BlobRole
+
+/**
+ * Everything needed to open one blob: its id + the metadata + the K_blob wrap (under K_mem) + where that wrap is
+ * sealed — its owner (the media it is a tier of, or the node it is the cover of) and its role there. The owner and
+ * role are set by whoever built the ref from the row it addressed (a media row's id, the node whose cover it is),
+ * never read back from the blob, so a ref the server moved to another row carries that row's owner and refuses.
+ */
 export type BlobRef = {
   blobId: string
   chunkCount: number
   byteSize: number
   wrappedBlobKey: string
+  ownerId: string
+  role: BlobRole
 }
 
 /** One role-tagged derivative tier of a media. */
@@ -162,13 +179,21 @@ export type MediaItem = {
   bucketId?: string
 }
 
-function summaryToItem(s: MediaSummary): MediaItem {
+/** A media list row as the UI holds it — exported so a test can feed the read path a row the server shaped. */
+export function summaryToItem(s: MediaSummary): MediaItem {
+  // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072).
   return {
     mediaId: s.mediaId,
-    original: { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey },
+    original: {
+      blobId: s.blobId, chunkCount: s.chunkCount, byteSize: s.byteSize, wrappedBlobKey: s.wrappedBlobKey,
+      ownerId: s.mediaId, role: 'ORIGINAL',
+    },
     derivatives: (s.derivatives ?? []).map((d) => ({
       kind: d.kind,
-      ref: { blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey },
+      ref: {
+        blobId: d.blobId, chunkCount: d.chunkCount, byteSize: d.byteSize, wrappedBlobKey: d.wrappedBlobKey,
+        ownerId: s.mediaId, role: d.kind,
+      },
     })),
     wrappedMeta: s.wrappedMeta ?? undefined,
     updatedAt: s.updatedAt,
@@ -185,10 +210,10 @@ function summaryToItem(s: MediaSummary): MediaItem {
  * validated (positive, finite) so a bad payload falls back to a default aspect rather than break the grid; the
  * other fields are coerced to finite numbers. Use [effectiveCapturedAt] for the sort/display date.
  */
-export function unsealMeta(memoryKey: Uint8Array, item: MediaItem): MediaMeta | null {
+export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaItem): MediaMeta | null {
   if (!item.wrappedMeta) return null
   try {
-    const json = new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(item.wrappedMeta), MEDIA_META_CTX))
+    const json = new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, item.mediaId), memoryKey, fromB64std(item.wrappedMeta)))
     const parsed = JSON.parse(json) as unknown
     if (parsed && typeof parsed === 'object') {
       const m = parsed as MediaMeta
@@ -273,28 +298,41 @@ export async function readCaptureTime(file: Blob, mediaType: string, lastModifie
  * the frame size fixes. Nothing is sealed yet — the pump seals frame `i` from `source.slice` when it is about to
  * send it, so the client never holds the whole file, nor its sealed copy (ADR 0013 Consequences).
  */
-type BlobPlan = { source: Blob; blobKey: Uint8Array; wrappedBlobKey: string; chunkCount: number; byteSize: number }
+type BlobPlan = {
+  source: Blob
+  blobKey: Uint8Array
+  wrappedBlobKey: string
+  chunkCount: number
+  byteSize: number
+  blobId: string
+  ownerId: string
+  role: BlobRole
+}
 
-/** Plan `source` as a media blob under a fresh random `K_blob` (wrapped under `K_mem`). Its shape follows from its
- *  size alone: every frame but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
-function planBlob(memoryKey: Uint8Array, source: Blob): BlobPlan {
+/** Plan `source` as a blob under a fresh random `K_blob`, wrapped under `K_mem` bound to where it will live — the
+ *  client-minted blob id, its owner and its role (ADR 0072). Its shape follows from its size alone: every frame
+ *  but the last carries [CHUNK_SIZE] plaintext bytes, and an empty source is one empty frame. */
+function planBlob(scopeId: string, owner: { ownerId: string; role: BlobRole }, memoryKey: Uint8Array, source: Blob): BlobPlan {
   const blobKey = v1.randomBytes(32)
-  const wrappedBlobKey = b64std(v1.symWrap(memoryKey, blobKey, KBLOB_CTX, v1.randomBytes(12)))
+  const blobId = crypto.randomUUID()
+  const wrappedBlobKey = b64std(v1.seal(blobKeyContext(scopeId, { blobId, ...owner }), memoryKey, blobKey))
   const chunkCount = Math.max(1, Math.ceil(source.size / CHUNK_SIZE))
-  return { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD }
+  return { source, blobKey, wrappedBlobKey, chunkCount, byteSize: source.size + chunkCount * v1.FRAME_OVERHEAD, blobId, ...owner }
 }
 
 /** Read and seal frame `index` of a planned blob — one [CHUNK_SIZE] slice of the source, never more. */
 async function sealFrameAt(plan: BlobPlan, index: number): Promise<Uint8Array> {
   const slice = plan.source.slice(index * CHUNK_SIZE, (index + 1) * CHUNK_SIZE)
   const plain = new Uint8Array(await slice.arrayBuffer())
+  // Outside the typed seal union on purpose (ADR 0072 Decision 2): the frame key is this blob's own K_blob, so the
+  // key is the object binding; the AAD binds only the frame's position (index ‖ total).
   return v1.sealFrame(plan.blobKey, index, plan.chunkCount, plain, v1.randomBytes(12))
 }
 
-/** Seal a small JSON payload under `K_mem` (a short AEAD blob, like a wrapped key) → opaque base64. */
-function sealJson(memoryKey: Uint8Array, value: unknown, context: string): string {
+/** Seal a small JSON payload under `K_mem` as the object `context` names (a short AEAD blob) → opaque base64. */
+function sealJson(memoryKey: Uint8Array, value: unknown, context: v1.SealContext): string {
   const bytes = new TextEncoder().encode(JSON.stringify(value))
-  return b64std(v1.symWrap(memoryKey, bytes, context, v1.randomBytes(12)))
+  return b64std(v1.seal(context, memoryKey, bytes))
 }
 
 function finiteNum(n: unknown): number | undefined {
@@ -420,6 +458,8 @@ async function sealMetadata(
   source: AddMediaSource,
   deriver: MediaDeriver,
   memoryKey: Uint8Array,
+  /** The media the tiers belong to — both are sealed bound to it (ADR 0072). */
+  media: { scopeId: string; mediaId: string },
   /** The geometry the tier derivation already measured, when it had it — an image always does. Absent for a
    *  video or an underivable source, and only then is a probe (its own decode) worth paying for. */
   knownDims: Dimensions | null = null,
@@ -439,8 +479,8 @@ async function sealMetadata(
   const hasMeta =
     metaTier.w !== undefined || metaTier.capturedAt !== undefined || metaTier.gpsLat !== undefined ||
     metaTier.gpsLng !== undefined || metaTier.mediaType !== undefined
-  const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), MEDIA_META_CTX) : null
-  const wrappedExif = meta.exif ? sealExifTier(memoryKey, meta.exif) : null
+  const wrappedMeta = hasMeta ? sealJson(memoryKey, prune(metaTier), mediaMetaContext(media.scopeId, media.mediaId)) : null
+  const wrappedExif = meta.exif ? sealExifTier(memoryKey, mediaExifContext(media.scopeId, media.mediaId), meta.exif) : null
   return { wrappedMeta, wrappedExif }
 }
 
@@ -465,17 +505,17 @@ export const EXIF_TEXT_MAX_BYTES = 1024
  * numbers alone is a few hundred bytes. The string set is read off the value, not listed, so a text field added
  * to [MediaExif] later is clamped without anyone remembering to add it here.
  */
-function sealExifTier(memoryKey: Uint8Array, exif: MediaExif): string {
+function sealExifTier(memoryKey: Uint8Array, context: v1.SealContext, exif: MediaExif): string {
   const tier: Record<string, unknown> = { ...exif }
   const textKeys = () => Object.keys(tier).filter((k) => typeof tier[k] === 'string')
   for (const k of textKeys()) tier[k] = clampUtf8(tier[k] as string, EXIF_TEXT_MAX_BYTES)
-  let sealed = sealJson(memoryKey, tier, MEDIA_EXIF_CTX)
+  let sealed = sealJson(memoryKey, tier, context)
   while (sealed.length > EXIF_TIER_MAX_B64) {
     const keys = textKeys()
     if (!keys.length) break // unreachable: see the doc above — numbers alone cannot reach the cap
     const longest = keys.reduce((a, b) => (JSON.stringify(tier[b]).length > JSON.stringify(tier[a]).length ? b : a))
     delete tier[longest]
-    sealed = sealJson(memoryKey, tier, MEDIA_EXIF_CTX)
+    sealed = sealJson(memoryKey, tier, context)
   }
   return sealed
 }
@@ -493,8 +533,15 @@ function throwIfAborted(signal?: AbortSignal): void {
   if (signal?.aborted) throw new DOMException('Upload cancelled', 'AbortError')
 }
 
-/** One blob to reserve: its declared shape + the K_blob wrap (under K_mem). */
-export type BlobDeclare = { chunkCount: number; byteSize: number; wrappedBlobKey: string }
+/** One blob to reserve: its declared shape + the K_blob wrap (under K_mem) + the ids that wrap is bound to. */
+export type BlobDeclare = {
+  blobId: string
+  ownerId: string
+  role: BlobRole
+  chunkCount: number
+  byteSize: number
+  wrappedBlobKey: string
+}
 /** One presigned PUT: the chunk it is for + its URL. */
 export type ChunkPut = { index: number; url: string }
 /** One reserved upload: the session id + the PUTs of its first window (ADR 0013 §2 — never the whole blob). */
@@ -503,6 +550,8 @@ export type ReservedUpload = { uploadId: string; puts: ChunkPut[] }
 export type WindowFn = (uploadId: string, fromChunk: number) => Promise<ChunkPut[]>
 /** One logical media to complete: the original session + its role-tagged derivative sessions + the sealed metadata. */
 export type CompleteDecl = {
+  /** The client-minted media id every upload of it was started for (ADR 0072). */
+  mediaId: string
   originalUploadId: string
   derivatives: { kind: MediaDerivativeKind; uploadId: string }[]
   wrappedMeta: string | null
@@ -595,7 +644,10 @@ async function reserveAndPump(
   signal?: AbortSignal,
 ): Promise<string[]> {
   throwIfAborted(signal)
-  const reserved = await reserve(plans.map((p) => ({ chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey })))
+  const reserved = await reserve(plans.map((p) => ({
+    blobId: p.blobId, ownerId: p.ownerId, role: p.role,
+    chunkCount: p.chunkCount, byteSize: p.byteSize, wrappedBlobKey: p.wrappedBlobKey,
+  })))
   if (reserved.length !== plans.length) throw new Error('upload_failed')
   const totalChunks = plans.reduce((n, p) => n + p.chunkCount, 0)
   let doneChunks = 0
@@ -616,6 +668,7 @@ async function reserveAndPump(
  * `AbortSignal`.
  */
 export async function uploadMediaVia(
+  scopeId: string,
   memoryKey: Uint8Array,
   source: AddMediaSource,
   deriver: MediaDeriver,
@@ -624,13 +677,18 @@ export async function uploadMediaVia(
 ): Promise<{ blobId: string; mediaId: string }> {
   const { onProgress, signal } = opts
   throwIfAborted(signal)
+  // The client mints the media's id (ADR 0072): every blob wrap and both metadata tiers are sealed bound to it.
+  const mediaId = crypto.randomUUID()
   // ONE decode of the original: `deriveTiers` produces both tiers from it and hands back the geometry it
   // already measured, so `sealMetadata` has nothing left to probe for an image.
   const { derivatives: tiers, dimensions } = await deriveTiers(source, deriver)
-  const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey, dimensions)
+  const { wrappedMeta, wrappedExif } = await sealMetadata(source, deriver, memoryKey, { scopeId, mediaId }, dimensions)
   // index 0 = original, streamed from the source; the rest are the role-tagged derivatives — small, already in
   // memory from the derivation — in order
-  const plans = [planBlob(memoryKey, source.blob), ...tiers.map((t) => planBlob(memoryKey, new Blob([t.bytes as BlobPart])))]
+  const plans = [
+    planBlob(scopeId, { ownerId: mediaId, role: 'ORIGINAL' }, memoryKey, source.blob),
+    ...tiers.map((t) => planBlob(scopeId, { ownerId: mediaId, role: t.kind }, memoryKey, new Blob([t.bytes as BlobPart]))),
+  ]
 
   // reserve one upload session per blob, then read → seal → PUT each chunk straight to the store (no base64, no
   // JSON, no credentials), window by window, passing the abort signal so a cancel stops the in-flight PUTs.
@@ -638,12 +696,14 @@ export async function uploadMediaVia(
 
   // complete — one logical media: the original + its role-tagged derivative uploads
   throwIfAborted(signal)
-  return transport.complete({
+  const done = await transport.complete({
+    mediaId,
     originalUploadId: uploadIds[0],
     derivatives: tiers.map((t, i) => ({ kind: t.kind, uploadId: uploadIds[i + 1] })),
     wrappedMeta,
     wrappedExif,
   })
+  return { blobId: expectMintedId(plans[0].blobId, done.blobId), mediaId: expectMintedId(mediaId, done.mediaId) }
 }
 
 /** Reserve through the authed media control plane (`startBlobUploads`) — the member upload and the cover share it. */
@@ -686,7 +746,10 @@ function mediaApiTransport(scopeId: string, nodeId: string): MediaUploadTranspor
         mediaApi().completeMedia({
           scopeId,
           mediaBatchRequest: {
-            items: [{ nodeId, originalUploadId: media.originalUploadId, derivatives: media.derivatives, wrappedMeta: media.wrappedMeta, wrappedExif: media.wrappedExif }],
+            items: [{
+              mediaId: media.mediaId, nodeId, originalUploadId: media.originalUploadId, derivatives: media.derivatives,
+              wrappedMeta: media.wrappedMeta, wrappedExif: media.wrappedExif,
+            }],
           },
         }),
       )
@@ -710,7 +773,7 @@ export async function addMedia(
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
-  return uploadMediaVia(memoryKey, source, deriver, mediaApiTransport(scopeId, nodeId), opts)
+  return uploadMediaVia(scopeId, memoryKey, source, deriver, mediaApiTransport(scopeId, nodeId), opts)
 }
 
 // --- standalone cover blob (cr-0073) ---------------------------------------
@@ -745,12 +808,18 @@ export async function uploadCoverBlob(
       /* undecodable codec → seal the pristine bytes (still a valid, if larger, cover) */
     }
   }
-  const [uploadId] = await reserveAndPump([planBlob(memoryKey, blob)], (d) => mediaReserve(scopeId, d), mediaWindow(scopeId))
+  // A cover's owner is its node, in the COVER role (ADR 0072) — the server commits only an upload started so.
+  const cover = { ownerId: nodeId, role: 'COVER' } as const
+  const plan = planBlob(scopeId, cover, memoryKey, blob)
+  const [uploadId] = await reserveAndPump([plan], (d) => mediaReserve(scopeId, d), mediaWindow(scopeId))
 
   const committed = await withRefresh(() =>
     mediaApi().commitCoverBlob({ scopeId, nodeId, coverBlobCommitRequest: { uploadId } }),
   )
-  return { blobId: committed.blobId, chunkCount: committed.chunkCount, byteSize: committed.byteSize, wrappedBlobKey: committed.wrappedBlobKey }
+  return {
+    blobId: expectMintedId(plan.blobId, committed.blobId),
+    chunkCount: committed.chunkCount, byteSize: committed.byteSize, wrappedBlobKey: committed.wrappedBlobKey, ...cover,
+  }
 }
 
 /**
@@ -872,7 +941,7 @@ export async function loadMediaExif(scopeId: string, mediaId: string, memoryKey:
   const exif = await withRefresh(() => mediaApi().getMediaExif({ scopeId, mediaId }))
   if (!exif.wrappedExif) return null
   try {
-    const json = new TextDecoder().decode(v1.symUnwrap(memoryKey, fromB64std(exif.wrappedExif), MEDIA_EXIF_CTX))
+    const json = new TextDecoder().decode(v1.open(mediaExifContext(scopeId, mediaId), memoryKey, fromB64std(exif.wrappedExif)))
     const parsed = JSON.parse(json) as unknown
     return parsed && typeof parsed === 'object' ? (parsed as MediaExif) : null
   } catch {
@@ -986,7 +1055,7 @@ async function persistMeta(
   memoryKey: Uint8Array,
   next: MediaMeta,
 ): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  const wrappedMeta = metaHasContent(next) ? sealJson(memoryKey, prune(next), MEDIA_META_CTX) : null
+  const wrappedMeta = metaHasContent(next) ? sealJson(memoryKey, prune(next), mediaMetaContext(scopeId, mediaId)) : null
   await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta } }))
   return { tier: wrappedMeta ? (prune(next) as MediaMeta) : null, wrappedMeta }
 }
@@ -1029,8 +1098,8 @@ export function downloadRef(item: MediaItem): BlobRef {
  * applies). Shared by the authed [openBlob] (presign via the media endpoint) and the anonymous share viewer
  * (presign via the gated share endpoint, cr-0100) — the decrypt is identical; only who presigns differs.
  */
-export async function openBlobFromUrls(memoryKey: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
-  const blobKey = v1.symUnwrap(memoryKey, fromB64std(ref.wrappedBlobKey), KBLOB_CTX)
+export async function openBlobFromUrls(scopeId: string, memoryKey: Uint8Array, ref: BlobRef, getUrls: string[]): Promise<Uint8Array> {
+  const blobKey = v1.open(blobKeyContext(scopeId, ref), memoryKey, fromB64std(ref.wrappedBlobKey))
   const frames = await Promise.all(getUrls.map((url) => getChunk(url)))
   const chunks = frames.map((frame, i) => v1.openFrame(blobKey, i, frames.length, frame))
   return v1.concat(...chunks)
@@ -1054,7 +1123,7 @@ async function presignAllChunks(scopeId: string, blobId: string): Promise<string
  * direct-from-store, and `openFrame` them back to plaintext (the AAD position check still applies).
  */
 export async function openBlob(scopeId: string, memoryKey: Uint8Array, ref: BlobRef): Promise<Uint8Array> {
-  return openBlobFromUrls(memoryKey, ref, await presignAllChunks(scopeId, ref.blobId))
+  return openBlobFromUrls(scopeId, memoryKey, ref, await presignAllChunks(scopeId, ref.blobId))
 }
 
 /** Open the grid tier (thumbnail) of a media. */
@@ -1099,11 +1168,12 @@ function chunkGetStatus(e: unknown): number | undefined {
  * are cached with their issue time and re-presigned on TTL/expiry or a store `403`.
  */
 export function makeChunkProvider(
+  scopeId: string,
   memoryKey: Uint8Array,
   ref: BlobRef,
   presignAll: () => Promise<string[]>,
 ): ChunkProvider {
-  const blobKey = v1.symUnwrap(memoryKey, fromB64std(ref.wrappedBlobKey), KBLOB_CTX)
+  const blobKey = v1.open(blobKeyContext(scopeId, ref), memoryKey, fromB64std(ref.wrappedBlobKey))
   let urls: string[] | undefined
   let issuedAt = 0
   async function freshUrls(force: boolean): Promise<string[]> {
@@ -1138,7 +1208,7 @@ export function makeChunkProvider(
 
 /** A {@link ChunkProvider} for the authed app: presigns the whole blob via the media endpoint (bearer, `withRefresh`). */
 export function chunkProvider(scopeId: string, memoryKey: Uint8Array, ref: BlobRef): ChunkProvider {
-  return makeChunkProvider(memoryKey, ref, () => presignAllChunks(scopeId, ref.blobId))
+  return makeChunkProvider(scopeId, memoryKey, ref, () => presignAllChunks(scopeId, ref.blobId))
 }
 
 // --- transport helpers -----------------------------------------------------

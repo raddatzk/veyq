@@ -67,9 +67,11 @@ const bootstrapSecret = await awaitInvite(inviteFile, tenantOwnerEmail)
 const built = buildAccount(tenantOwnerEmail, tenantOwnerPassword, instanceSalt)
 const scopeRootKey = v1.randomBytes(32)
 const idPub = { x: built.identity.pub.kemX, m: built.identity.pub.kemM }
-const grant = b64std(v1.asymWrap(idPub, scopeRootKey, 'scope-grant', { nonce: v1.randomBytes(12) }))
+// Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0 (ADR 0072); the account id is minted here.
+const grant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: tenantId, epoch: 0 }, idPub, scopeRootKey))
 const accepted = await post('/api/tenants/accept/register', {
   bootstrapSecret,
+  userId: crypto.randomUUID(),
   username: (process.env.VEYQ_TENANT_OWNER_USERNAME ?? tenantOwnerEmail.split('@')[0]).toLowerCase(),
   account: {
     suiteId: built.material.suiteId,

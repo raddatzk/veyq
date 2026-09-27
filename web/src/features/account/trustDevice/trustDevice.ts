@@ -39,7 +39,7 @@ export async function trustThisDevice(email: string, password: string, masterKey
   const deviceFactor = await device.deviceFactor(cryptoKey)
   const salt = v1.randomBytes(16)
   const kek = v1.kekDevicePassword(deviceFactor, password, salt)
-  const wrap = v1.symWrap(kek, masterKey, 'master-key', v1.randomBytes(12))
+  const wrap = v1.seal({ purpose: 'master-key' }, kek, masterKey)
   const kdfParams = b64std(v1.encodeKdfParams(v1.ARGON, salt))
 
   const result = await withRefresh(() =>

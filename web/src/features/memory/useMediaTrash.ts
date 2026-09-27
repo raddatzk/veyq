@@ -100,7 +100,7 @@ export function useMediaTrash(ctx: MediaTrashContext) {
   /** The trashed media as MediaGrid tiles — the same justified layout as the gallery (aspect from the sealed dims). */
   const trashLayoutItems = computed(() =>
     trashedItems.value.map((m, index) => {
-      const dims = ctx.memoryKey() ? unsealMeta(ctx.memoryKey()!, m) : null
+      const dims = ctx.memoryKey() ? unsealMeta(ctx.scopeId(), ctx.memoryKey()!, m) : null
       return { id: m.mediaId, aspectRatio: galleryDisplayAspectRatio(dims?.w, dims?.h), media: m, index }
     }),
   )

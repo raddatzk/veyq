@@ -65,8 +65,13 @@ const { members, isOwner, trust, reviewTarget, reviewOpen, loading, loadError, r
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
     // A grant-less "awaiting access" member has no sealed name yet → null (the row shows only the @username).
+    // Each name is bound to (this tenant scope, that member) — the scope we addressed and the row's member id — so a
+    // server that moves one member's sealed name onto another's row shows no name there, not the wrong one.
     const kTenant = activeScopeKey()
-    names.value = kTenant ? Object.fromEntries(rows.map((m) => [m.userId, unsealName(kTenant, m.sealedName)])) : {}
+    const scopeId = activeSpace.scopeId
+    names.value = kTenant
+      ? Object.fromEntries(rows.map((m) => [m.userId, unsealName(kTenant, { scopeId, userId: m.userId }, m.sealedName)]))
+      : {}
     const mine = (await listMyTenants()).find((tn) => tn.tenantId === activeSpace.tenantId)
     const owner = mine?.role === 'OWNER'
     // The identity header: the tenant name (plaintext) + its icon opened on-device against our own grant (null when

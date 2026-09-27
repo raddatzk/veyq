@@ -57,6 +57,6 @@ describe.skipIf(!process.env.VEYQ_E2E)('restore rehearsal — capture', () => {
 
     const tree = await listTree(scopeId, epochsOf(scopeKey))
     const items = await listMedia(scopeId, nodeId)
-    recordCanaries(tree.map((n) => n.name), unsealMeta(memoryKey, items[0]))
+    recordCanaries(tree.map((n) => n.name), unsealMeta(scopeId, memoryKey, items[0]))
   })
 })

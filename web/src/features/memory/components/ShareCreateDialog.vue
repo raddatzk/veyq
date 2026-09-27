@@ -25,6 +25,8 @@ import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 const MIN_PW = 10
 
 const props = defineProps<{
+  /** The shared Memory's scope — the new share's recovery copy of `K_share` is bound to it (ADR 0072). */
+  scopeId: string
   nodeId: string
   memoryKey: Uint8Array
   memoryName: string
@@ -37,6 +39,8 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const { t } = useI18n()
 
 const isEdit = computed(() => !!props.editShare)
+// A share's recovery copy is bound to (scope, Memory, share) (ADR 0072): this dialog's scope + Memory, never the row's.
+const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
 // The role switcher shows in the normal flow on BOTH create and edit (cr-0119: an existing VIEWER/CONTRIBUTOR share
 // can be re-graded in place); the uploader variant never shows it (its role is fixed, its promise not flippable).
 const showRoleSwitcher = computed(() => !props.uploader)
@@ -71,10 +75,10 @@ const passwordTooShort = computed(() => passwordEnabled.value && password.value.
 onMounted(() => {
   const s = props.editShare
   if (s && s.sealedShareKey) {
-    name.value = readShareName(props.memoryKey, s.sealedShareKey, s.sealedShareName)
-    note.value = readShareNoteMap(props.memoryKey, s.sealedShareKey, s.sealedNote)
+    name.value = readShareName(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedShareName)
+    note.value = readShareNoteMap(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedNote)
     role.value = s.role
-    currentPassword.value = readSharePassword(props.memoryKey, s.sealedShareKey, s.sealedPassword)
+    currentPassword.value = readSharePassword(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedPassword)
     password.value = currentPassword.value
     noteEnabled.value = hasLocaleText(note.value)
     passwordEnabled.value = !!s.passwordRequired || currentPassword.value.length > 0
@@ -112,14 +116,14 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
           : ({ set: password.value } as const)
       // cr-0119: a normal-flow edit may re-grade the role (VIEWER ↔ CONTRIBUTOR); the uploader variant never sends one.
       await updateShare(
-        props.editShare.shareId, props.memoryKey, props.editShare.sealedShareKey,
+        addressOf(props.editShare), props.memoryKey, props.editShare.sealedShareKey,
         effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
       )
       emit('saved')
       emit('close')
     } else {
       const minted = await createShare(
-        props.nodeId, props.memoryKey, props.memoryName, role.value, expiry,
+        props.scopeId, props.nodeId, props.memoryKey, props.memoryName, role.value, expiry,
         effectiveNote, name.value, passwordEnabled.value ? password.value : '',
       )
       link.value = buildShareLink(minted.shareId, minted.kShare) // the origin belongs here, not in the data layer

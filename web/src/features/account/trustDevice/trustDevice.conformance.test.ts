@@ -79,7 +79,7 @@ describe('trustThisDevice derives the DEVICE-wrap KEK of the shared crypto vecto
     expect(v1.kekDevicePassword).toHaveBeenCalledOnce()
     expect(hex(vi.mocked(v1.kekDevicePassword).mock.results[0].value)).toBe(K.kek)
     const req = add.mock.calls[0][0].addWrapRequest
-    expect(real.symUnwrap(unhex(K.kek), fromB64std(req.wrappedKey), 'master-key')).toEqual(masterKey)
+    expect(real.open({ purpose: 'master-key' }, unhex(K.kek), fromB64std(req.wrappedKey))).toEqual(masterKey)
     expect(hex(real.decodeKdfParams(fromB64std(req.kdfParams)).salt)).toBe(K.salt)
   })
 })

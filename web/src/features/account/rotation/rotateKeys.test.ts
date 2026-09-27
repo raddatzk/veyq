@@ -60,10 +60,13 @@ const MK = v1.randomBytes(32)
 /** The account's *current* identity — the one its scope grants are wrapped to, and the vault still holds. */
 const OLD_ID = v1.generateIdentity()
 const oldPriv = () => ({ kemX: OLD_ID.priv.kemX.slice(), mlkemSeed: OLD_ID.priv.mlkemSeed.slice(), sign: OLD_ID.priv.sign.slice() })
+/** Two scopes the caller holds — canonical ids, since every grant and chain link is sealed bound to its scope. */
+const SCOPE_PERSONAL = '5c09e000-0000-4000-8000-0000000000e1'
+const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity. */
 const heldAt0 = (id: string, e0: Uint8Array) => ({
   id, kind: 'PERSONAL', tenantId: 't', grantedEpoch: 0,
-  wrappedGrant: b64std(v1.asymWrap(v1.hybridPublic(oldPriv()), e0, 'scope-grant', { nonce: v1.randomBytes(12) })),
+  wrappedGrant: b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: id, epoch: 0 }, v1.hybridPublic(oldPriv()), e0)),
 })
 /** The light cost the mocked worker above uses; the stored floor's KEK must be built with the same. Its WIRE
  *  profile stays `v1.ARGON` — the client refuses any other before deriving (ADR 0017 rule 5), and the mock above
@@ -77,7 +80,7 @@ function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWO
   return {
     id: 'w1',
     method: 'PASSWORD',
-    wrappedKey: b64std(v1.symWrap(kek, masterKeyBytes, 'master-key', v1.randomBytes(12))),
+    wrappedKey: b64std(v1.seal({ purpose: 'master-key' }, kek, masterKeyBytes)),
     kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, salt)),
   }
 }
@@ -211,23 +214,19 @@ describe('what a rotation posts', () => {
     // The floor still takes password + Secret Key — the Emergency Kit survives — but now yields a key that is
     // NOT the one the compromise handed over.
     const pw = v1.decodeKdfParams(fromB64std(body.passwordWrap.kdfParams))
-    const newMk = v1.symUnwrap(
+    const newMk = v1.open(
+      { purpose: 'master-key' },
       // KDF at the mocked worker's cost — the params ON the wrap are production ARGON, which is what the
       // client genuinely writes; only the derivation is light here.
       v1.kekPasswordSecret(SECRET_KEY, PASSWORD, pw.salt, KDF),
       fromB64std(body.passwordWrap.wrappedKey),
-      'master-key',
     )
     expect(b64std(newMk)).not.toBe(b64std(MK))
 
     // The recovery wrap must open the SAME new key with the Secret Key alone. If it did not, recovery would
     // restore the old Master Key and hand the account straight back.
     const rec = v1.decodeKdfParams(fromB64std(body.recoveryWrap.kdfParams))
-    const fromRecovery = v1.symUnwrap(
-      v1.kekRecovery(SECRET_KEY, rec.salt, KDF),
-      fromB64std(body.recoveryWrap.wrappedKey),
-      'master-key',
-    )
+    const fromRecovery = v1.open({ purpose: 'master-key' }, v1.kekRecovery(SECRET_KEY, rec.salt, KDF), fromB64std(body.recoveryWrap.wrappedKey))
     expect(b64std(fromRecovery)).toBe(b64std(newMk))
 
     // Fresh salt on both: re-using one leaks the rewrite to anyone diffing two dumps, and the recovery wrap's
@@ -236,7 +235,7 @@ describe('what a rotation posts', () => {
 
     // The identity private key rides the new Master Key.
     expect(() =>
-      v1.symUnwrap(newMk, fromB64std(body.wrappedIdentityPrivateKey), 'identity-priv'),
+      v1.open({ purpose: 'identity-priv' }, newMk, fromB64std(body.wrappedIdentityPrivateKey)),
     ).not.toThrow()
 
     // The server's check, run here (ADR 0060 Decision 2): the statement rebuilt from what was SENT, from the
@@ -286,24 +285,24 @@ describe('what a rotation leaves behind', () => {
     // ADR 0060 Decision 6: between rotating and being re-admitted the caller is OUTSIDE every shared scope.
     // That is the property that stops an attacker rotating their way back in, so the status says it rather
     // than showing a spinner over it.
-    const srv = fakeServer({ queued: ['scope-shared'] })
+    const srv = fakeServer({ queued: [SCOPE_SHARED] })
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
-    expect(result.scopes).toEqual([{ scopeId: 'scope-shared', status: 'waiting' }])
+    expect(result.scopes).toEqual([{ scopeId: SCOPE_SHARED, status: 'waiting' }])
     expect(srv.rotateScope).not.toHaveBeenCalled()
   })
 
   it('re-keys a sole-member scope to the new identity and reports it secured', async () => {
     const e0 = v1.randomBytes(32)
-    const srv = fakeServer({ sole: ['scope-personal'], held: [heldAt0('scope-personal', e0)] })
+    const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
     vi.mocked(listScopeMembers).mockResolvedValue([
       { userId: 'me', identityPublicKey: 'ignored' },
     ] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
-    expect(result.scopes).toEqual([{ scopeId: 'scope-personal', status: 'secured' }])
+    expect(result.scopes).toEqual([{ scopeId: SCOPE_PERSONAL, status: 'secured' }])
     const grants = srv.rotateScope.mock.calls[0][0].rotateScopeRequest.grants
     expect(grants).toHaveLength(1)
     expect(grants[0].userId).toBe('me')
@@ -311,18 +310,20 @@ describe('what a rotation leaves behind', () => {
     // the old identity, the one the compromise holds, no longer reads this scope's next epoch.
     const swapped = vi.mocked(setUnlocked).mock.calls[0]
     const priv = swapped[1]
-    const opened = v1.asymUnwrap(
+    // Bound to the scope it re-keys, at the epoch the rotation creates (ADR 0072).
+    const opened = v1.openAs(
+      { purpose: 'scope-grant', scopeId: SCOPE_PERSONAL, epoch: 1 },
       v1.hybridSecret(priv),
       v1.hybridPublic(priv),
       fromB64std(grants[0].wrappedGrant),
-      'scope-grant',
     )
     expect(opened).toHaveLength(32)
     // It states the epoch it creates — the old grant's 0, plus one — and links that new epoch back to E_0, so the
     // new identity still reads everything already written.
     const request = srv.rotateScope.mock.calls[0][0].rotateScopeRequest
     expect(request.epoch).toBe(1)
-    expect(Array.from(v1.symUnwrap(opened, fromB64std(request.wrappedPrev), 'scope-epoch'))).toEqual(Array.from(e0))
+    const link = { purpose: 'scope-epoch', scopeId: SCOPE_PERSONAL, epoch: 1 } as const
+    expect(Array.from(v1.open(link, opened, fromB64std(request.wrappedPrev)))).toEqual(Array.from(e0))
     // And the vault is told this session is still cold — it was proven cold moments ago, so a rotation must
     // not leave the person unable to rotate again.
     expect(swapped[2]).toBe('cold')
@@ -331,7 +332,7 @@ describe('what a rotation leaves behind', () => {
   it('refuses to re-key a "sole" scope that turns out to have another member', async () => {
     // The server split it as sole-member; if a member appeared in between, re-granting only ourselves would
     // lock that member out. The honest answer is to leave the scope alone and say it was not secured.
-    const srv = fakeServer({ sole: ['scope-personal'], held: [heldAt0('scope-personal', v1.randomBytes(32))] })
+    const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, v1.randomBytes(32))] })
     vi.mocked(listScopeMembers).mockResolvedValue([
       { userId: 'me', identityPublicKey: 'x' },
       { userId: 'someone-else', identityPublicKey: 'y' },
@@ -339,7 +340,7 @@ describe('what a rotation leaves behind', () => {
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
-    expect(result.scopes).toEqual([{ scopeId: 'scope-personal', status: 'failed' }])
+    expect(result.scopes).toEqual([{ scopeId: SCOPE_PERSONAL, status: 'failed' }])
     expect(srv.rotateScope).not.toHaveBeenCalled()
   })
 
@@ -352,14 +353,14 @@ describe('what a rotation leaves behind', () => {
    * two result lists partition the caller's scopes, so re-sealing only one of them loses the other's pins.
    */
   it('carries the Memory pins of EVERY scope across the new Master Key', async () => {
-    fakeServer({ sole: ['scope-personal'], queued: ['scope-shared'], held: [heldAt0('scope-personal', v1.randomBytes(32))] })
+    fakeServer({ sole: [SCOPE_PERSONAL], queued: [SCOPE_SHARED], held: [heldAt0(SCOPE_PERSONAL, v1.randomBytes(32))] })
     vi.mocked(listScopeMembers).mockResolvedValue([])
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
     expect(resealFavoritesUnderNewMasterKey).toHaveBeenCalledTimes(1)
     const scopeIds = vi.mocked(resealFavoritesUnderNewMasterKey).mock.calls[0][2]
-    expect([...scopeIds].sort()).toEqual(['scope-personal', 'scope-shared'])
+    expect([...scopeIds].sort()).toEqual([SCOPE_PERSONAL, SCOPE_SHARED])
   })
 
   it('does not fail a published rotation because a Master-Key-sealed blob could not be re-sealed', async () => {

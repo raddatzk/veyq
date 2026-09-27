@@ -44,6 +44,9 @@ precondition any such sweep needs — this guard — and it protects a **live** 
       written later — a new reclaim predicate elsewhere gets no protection from this guard at all — nor an arm
       that is named in the body but unreachable (dead branch, always-empty query). It proves the arm is
       *mentioned*, not that it is *reached*.
+  (c) A `*blob_id` column declared a **non-reference** (`NOT_REFERENCE_*`, each with its reason) is trusted on
+      that reason. The list is checked for staleness, not for truth: were such a column ever to start pointing at
+      a live blob row, this guard would not notice. It names one column today, the upload session's minted id.
 
 Two naive shapes were reached for first and are recorded so nobody reaches for them again — both are the
 easier thing to type and both are silently wrong. Anchoring the entity key on `@Column(name = ` assumes the
@@ -92,6 +95,15 @@ EXPECTED_FK_ARMS = [
     "V11__media.sql:fk_media_blob",
     "V13__media_derivatives.sql:fk_derivative_blob",
 ]
+
+# Columns named `*blob_id` that are NOT a reference to a veyq_blob row, each with the reason it cannot be one. They
+# are dropped from the entity and schema keys, and must still exist (a stale entry is an error), so this list can
+# only ever name a column that is really there. Keep it short: every entry is a place a real arm could hide.
+#   - The upload session's `blob_id` is the id a blob WILL be stored under (ADR 0072: the client mints it and the
+#     `K_blob` wrap is sealed bound to it). The session row is deleted in the transaction that births the blob row,
+#     and `start` refuses an id a blob already holds, so it never points at an existing veyq_blob row.
+NOT_REFERENCE_ENTITY = ["UploadSessionEntity.blob_id"]
+NOT_REFERENCE_SCHEMA = ["V53__upload_session_binding.sql:blob_id"]
 
 # The three arms as `subtreeBlobIds` spells them in its own body. Each is the accessor that arm is READ by, so
 # removing the arm removes the marker.
@@ -188,8 +200,12 @@ def main() -> int:
         )
         return 1
 
-    compare("entity", EXPECTED_ENTITY_ARMS, entity_arms(), errors)
-    compare("schema", EXPECTED_SCHEMA_ARMS, schema_arms(), errors)
+    entity, schema = entity_arms(), schema_arms()
+    for key, declared, found in (("entity", NOT_REFERENCE_ENTITY, entity), ("schema", NOT_REFERENCE_SCHEMA, schema)):
+        for stale in sorted(set(declared) - set(found)):
+            errors.append(f"{key}: `{stale}` is declared a non-reference column but no longer exists — drop the entry.")
+    compare("entity", EXPECTED_ENTITY_ARMS, [a for a in entity if a not in NOT_REFERENCE_ENTITY], errors)
+    compare("schema", EXPECTED_SCHEMA_ARMS, [a for a in schema if a not in NOT_REFERENCE_SCHEMA], errors)
     compare("backstop", EXPECTED_FK_ARMS, fk_arms(), errors)
 
     body = live_twin_body()

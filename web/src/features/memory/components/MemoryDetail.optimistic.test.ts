@@ -161,7 +161,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     // …and it appears where its capture time puts it, which here is BEHIND the newer listed media. This
     // assertion replaces the old "pinned ahead of the listed media (first tile in DOM order)": appearing at
     // once and appearing first were conflated, and only the first of the two was ever the promise.
-    expect(gridOrder(wrapper)).toEqual(['media-0', 'u1.jpg'])
+    expect(gridOrder(wrapper)).toEqual([store.media[0].mediaId, 'u1.jpg']) // the client-minted id of the listed media
   })
 
   // uc.memory.gallery § "One order for every tile — including one that is still uploading". The defect this
@@ -186,16 +186,17 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     pushBatch([uploadFile('u1', 'uploading', { progress: 0.4, lastModified: OLD }), uploadFile('u2', 'uploading', { progress: 0.1, lastModified: NEW })])
     await flushPromises()
     await flushPromises()
-    expect(gridOrder(wrapper)).toEqual(['u2.jpg', 'u1.jpg', 'media-0']) // newest first; u1 ties with its own media and leads it
+    const m0 = store.media[0].mediaId // the listed media's client-minted id
+    expect(gridOrder(wrapper)).toEqual(['u2.jpg', 'u1.jpg', m0]) // newest first; u1 ties with its own media and leads it
     const slotBefore = gridOrder(wrapper).indexOf('u1.jpg')
 
-    // u1 settles onto the already-listed media-0 → its optimistic tile reconciles away
-    settle(0, 0, 'media-0')
+    // u1 settles onto the already-listed media 0 → its optimistic tile reconciles away
+    settle(0, 0, m0)
     await flushPromises()
 
     const after = gridOrder(wrapper)
     expect(after).not.toContain('u1.jpg') // handed off, not duplicated
-    expect(after.indexOf('media-0')).toBe(slotBefore) // the whole point: finishing changed the CONTENT, not the place
+    expect(after.indexOf(m0)).toBe(slotBefore) // the whole point: finishing changed the CONTENT, not the place
   })
 
   // A queued file has not sent a byte, and a preparing one is still being decoded on this device. The tile used
@@ -257,15 +258,16 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
 
-    // the queue still holds the done file, but its media (media-0) is already listed → the optimistic tile drops
-    pushBatch([uploadFile('u1', 'done', { mediaId: 'media-0' })])
+    // the queue still holds the done file, but its media (media 0) is already listed → the optimistic tile drops
+    const m0 = store.media[0].mediaId
+    pushBatch([uploadFile('u1', 'done', { mediaId: m0 })])
     const wrapper = mountDetail(memoryKey)
     await flushPromises()
     await flushPromises()
 
     expect(wrapper.findAll('.gallery-tile-optimistic')).toHaveLength(0) // reconciled away
     expect(wrapper.findAll('.media-tile')).toHaveLength(1) // exactly one tile — the real media, no duplicate
-    expect(wrapper.find('.media-tile').attributes('data-media-id')).toBe('media-0')
+    expect(wrapper.find('.media-tile').attributes('data-media-id')).toBe(m0)
   })
 
   it('keeps the optimistic tile while a done upload’s media is not yet listed (no gap before reconcile)', async () => {

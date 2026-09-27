@@ -1,7 +1,7 @@
 // The sealed device register — the operator-blind naming layer over ADR 0004's deliberately unnamed session
 // families (en.account.device-register).
 //
-// ONE blob sealed under the Master Key (`symWrap(masterKey, blob, "device-register")`), synced with the account:
+// ONE blob sealed under the Master Key (`seal({ purpose: "device-register", version }, masterKey, blob)`), synced with the account:
 // the server relays one opaque ciphertext + a monotonic `version` for optimistic concurrency, and learns no
 // device name, no device count, and above all no device<->family and no device<->wrap link — the links the
 // unnamed families and the anonymous wraps exist to withhold. The sealed plaintext is
@@ -26,8 +26,9 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
 
-/** The AAD context binding the register seal (vector-pinned `sym_device_register`, domain-separate from pins). */
-export const DEVICE_REGISTER = 'device-register'
+/** The register's seal context at a stored `version` (ADR 0072, vector `seal.sym.device-register`, domain-separate
+ *  from the pins): bound to the version the server stores it at, so a blob served under another does not open. */
+const registerContext = (version: number) => ({ purpose: 'device-register', version }) as const
 
 export interface DeviceEntry {
   label: string
@@ -96,10 +97,10 @@ const mapOr = (value: unknown): Record<string, string> =>
 // the seal. `the sealed round-trip carries all three maps` is the test that pins it.
 
 /** Decrypt the register from a sealed blob; an unreadable/absent blob is an empty register (never throws). */
-function unsealRegister(mk: Uint8Array, blobB64: string | null): RegisterPlain {
+function unsealRegister(mk: Uint8Array, blobB64: string | null, version: number): RegisterPlain {
   if (!blobB64) return empty()
   try {
-    const parsed = JSON.parse(decoder.decode(v1.symUnwrap(mk, fromB64std(blobB64), DEVICE_REGISTER))) as Partial<RegisterPlain>
+    const parsed = JSON.parse(decoder.decode(v1.open(registerContext(version), mk, fromB64std(blobB64)))) as Partial<RegisterPlain>
     return {
       devices: parsed?.devices && typeof parsed.devices === 'object' ? parsed.devices : {},
       families: mapOr(parsed?.families),
@@ -112,10 +113,11 @@ function unsealRegister(mk: Uint8Array, blobB64: string | null): RegisterPlain {
   }
 }
 
-/** Seal a register under the Master Key with a fresh nonce → the opaque base64 blob to PUT. */
-function sealRegister(mk: Uint8Array, reg: RegisterPlain): string {
+/** Seal a register under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
+ *  server bumps the version it accepts by one → the opaque base64 blob to PUT. */
+function sealRegister(mk: Uint8Array, reg: RegisterPlain, storedVersion: number): string {
   const json = encoder.encode(JSON.stringify({ devices: reg.devices, families: reg.families, wraps: reg.wraps }))
-  return b64std(v1.symWrap(mk, json, DEVICE_REGISTER, v1.randomBytes(12)))
+  return b64std(v1.seal(registerContext(storedVersion), mk, json))
 }
 
 /** Fetch + open the caller's register (born-empty → version 0). Requires an unlocked vault. */
@@ -124,7 +126,7 @@ async function loadRegister(): Promise<OpenedRegister> {
   if (!mk) throw new Error('device register requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-    return { version: res.version, ...unsealRegister(mk, res.blob) }
+    return { version: res.version, ...unsealRegister(mk, res.blob, res.version) }
   } finally {
     mk.fill(0)
   }
@@ -198,7 +200,7 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
     const mk = masterKey()
     if (!mk) throw new Error('device register requires an unlocked vault')
     try {
-      const blob = sealRegister(mk, next)
+      const blob = sealRegister(mk, next, current.version + 1)
       await withRefresh(() =>
         accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate: { blob, version: current.version } }),
       )
@@ -231,10 +233,10 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
  */
 export async function resealRegisterUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
   const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-  const reg = unsealRegister(oldMk, res.blob)
+  const reg = unsealRegister(oldMk, res.blob, res.version)
   await withRefresh(() =>
     accountDeviceRegisterApi().putDeviceRegister({
-      deviceRegisterUpdate: { blob: sealRegister(newMk, reg), version: res.version },
+      deviceRegisterUpdate: { blob: sealRegister(newMk, reg, res.version + 1), version: res.version },
     }),
   )
 }

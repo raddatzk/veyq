@@ -30,6 +30,7 @@ import { createShare } from './share'
 import { sharesApi } from '../../api/client'
 import * as v1 from '@veyq/crypto/v1'
 
+const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
 
 describe('share.ts is headless — the data layer never touches the DOM (see shareLink.ts)', () => {
@@ -41,9 +42,10 @@ describe('share.ts is headless — the data layer never touches the DOM (see sha
     vi.mocked(sharesApi).mockReturnValue({ createShare: create } as unknown as ReturnType<typeof sharesApi>)
 
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(NODE_ID, kMem, 'Rom 2026')
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom 2026')
 
-    expect(minted.shareId).toBe('share-headless')
+    // the id is minted client-side (ADR 0072) — the one the request carried
+    expect(minted.shareId).toBe(create.mock.calls[0][0].createShareRequest.shareId)
     expect(minted.kShare, 'the key comes back raw — assembling a URL is the UI edge, not this layer').toHaveLength(32)
     // and the server still saw only ciphertext on the way out
     expect(create.mock.calls[0][0].createShareRequest.sealedName).not.toContain('Rom')

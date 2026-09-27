@@ -18,9 +18,14 @@ import { epochsOf } from '../spaces/epochsTestUtil'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
-// The K_mem wrap context, kept byte-identical to tree.ts's KMEM_CTX so nodeContentKey can re-open what we seal here.
-const KMEM_CTX = 'content-key'
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000aa'
 const scopeKey = v1.randomBytes(32)
+// Every seal binds its node (ADR 0072), so node ids are canonical UUIDs; the readable label rides in `name`.
+const uuidOf = new Map<string, string>()
+const uid = (label: string): string => {
+  if (!uuidOf.has(label)) uuidOf.set(label, crypto.randomUUID())
+  return uuidOf.get(label)!
+}
 
 const located = (lat: number, lng: number): MemoryLocation => ({
   name: `place-${lat}`,
@@ -31,30 +36,39 @@ const located = (lat: number, lng: number): MemoryLocation => ({
 // A pending auto place: armed at creation, no geotagged media yet → no `derived` position.
 const pendingAuto: MemoryLocation = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 
-/** Build a content node (MEMORY/CHAPTER): mint a K_mem, wrap it under `parentKey`, seal the location under it. */
+/** Build a content node (MEMORY/CHAPTER): mint a K_mem, wrap it under `parentKey`, seal the location under it —
+ *  each bound to the node (the same contexts tree.ts / nodeMeta.ts open with). `metaFor` seals the meta as if it
+ *  belonged to another node (a server moving one node's wrappedMeta onto another's row). */
 function content(
-  id: string,
+  label: string,
   kind: NodeKind,
-  parentId: string | null,
+  parentLabel: string | null,
   parentKey: Uint8Array,
-  opts: { location?: MemoryLocation; wrapUnder?: Uint8Array } = {},
+  opts: { location?: MemoryLocation; wrapUnder?: Uint8Array; metaFor?: string } = {},
 ): { node: TreeNode; key: Uint8Array } {
+  const id = uid(label)
   const key = v1.randomBytes(32)
-  const wrappedContentKey = b64std(v1.symWrap(opts.wrapUnder ?? parentKey, key, KMEM_CTX, v1.randomBytes(12)))
-  const wrappedMeta = opts.location ? sealNodeMeta(key, { v: 1, location: opts.location }) : null
-  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta }, key }
+  const wrappedContentKey = b64std(
+    v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, opts.wrapUnder ?? parentKey, key),
+  )
+  const metaNode = { scopeId: SCOPE_ID, nodeId: opts.metaFor ? uid(opts.metaFor) : id }
+  const wrappedMeta = opts.location ? sealNodeMeta(key, metaNode, { v: 1, location: opts.location }) : null
+  const parentId = parentLabel === null ? null : uid(parentLabel)
+  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta }, key }
 }
 
-const folder = (id: string, parentId: string | null = null): TreeNode => ({
-  id, kind: NodeKind.Folder, parentId, orderIndex: 0, epoch: 0, name: id, wrappedContentKey: null, wrappedMeta: null,
+const folder = (label: string, parentLabel: string | null = null): TreeNode => ({
+  id: uid(label), kind: NodeKind.Folder, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0,
+  epoch: 0, name: label, wrappedContentKey: null, wrappedMeta: null,
 })
 
-const ids = (pins: ReturnType<typeof collectLocatedPins>) => pins.map((p) => p.node.id).sort()
+const ids = (pins: ReturnType<typeof collectLocatedPins>) => pins.map((p) => p.node.name).sort()
 
 describe('collectLocatedPins', () => {
   // fA ─ memA (located) ─ chapA (located, nested)
   // fB ─ memB (located)
   // memRoot (located, at root) · memPending (auto, no derived) · memLocked (key wrapped under a wrong parent)
+  // memMoved (its located meta was sealed for another node — refused, never shown at that node's place)
   const fA = folder('fA')
   const fB = folder('fB')
   const memA = content('memA', NodeKind.Memory, 'fA', scopeKey, { location: located(1, 1) })
@@ -66,31 +80,38 @@ describe('collectLocatedPins', () => {
     location: located(9, 9),
     wrapUnder: v1.randomBytes(32), // K_mem sealed under a key we don't have → nodeContentKey can't chain it
   })
-  const tree: TreeNode[] = [fA, fB, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node]
+  const memMoved = content('memMoved', NodeKind.Memory, null, scopeKey, { location: located(7, 7), metaFor: 'memRoot' })
+  const tree: TreeNode[] = [
+    fA, fB, memA.node, chapA.node, memB.node, memRoot.node, memPending.node, memLocked.node, memMoved.node,
+  ]
 
   it('root (null) pins every located MEMORY/CHAPTER across the whole tree', () => {
-    expect(ids(collectLocatedPins(epochsOf(scopeKey), tree, null))).toEqual(['chapA', 'memA', 'memB', 'memRoot'])
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).toEqual(['chapA', 'memA', 'memB', 'memRoot'])
   })
 
   it('carries each pin its unsealed location with the derived position', () => {
-    const pins = collectLocatedPins(epochsOf(scopeKey), tree, null)
-    const pin = pins.find((p) => p.node.id === 'chapA')
+    const pins = collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null)
+    const pin = pins.find((p) => p.node.id === uid('chapA'))
     expect(pin?.location.derived).toEqual({ lat: 2, lng: 2 })
     expect(pin?.location.name).toBe('place-2')
   })
 
   it('scopes to a folder subtree recursively — a sibling folder is excluded', () => {
     // rooted at fA: its Memory + nested chapter; memB (under fB) and the root nodes are out
-    expect(ids(collectLocatedPins(epochsOf(scopeKey), tree, 'fA'))).toEqual(['chapA', 'memA'])
-    expect(ids(collectLocatedPins(epochsOf(scopeKey), tree, 'fB'))).toEqual(['memB'])
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, uid('fA')))).toEqual(['chapA', 'memA'])
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, uid('fB')))).toEqual(['memB'])
   })
 
   it('skips a pending auto place (no derived ⇒ no pin)', () => {
-    expect(ids(collectLocatedPins(epochsOf(scopeKey), tree, null))).not.toContain('memPending')
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memPending')
   })
 
   it('skips a node whose key cannot be chained (best-effort, never a broken map)', () => {
-    expect(ids(collectLocatedPins(epochsOf(scopeKey), tree, null))).not.toContain('memLocked')
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memLocked')
+  })
+
+  it('skips a node whose location was sealed for another node (bound meta, ADR 0072)', () => {
+    expect(ids(collectLocatedPins(SCOPE_ID, epochsOf(scopeKey), tree, null))).not.toContain('memMoved')
   })
 })
 

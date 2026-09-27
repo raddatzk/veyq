@@ -57,7 +57,7 @@ export function ensureCovers(nodeIds: readonly string[]): void {
     const node = treeStore.nodes.find((n) => n.id === id)
     if (!node) continue
     if (resolvedFrom.has(id) && resolvedFrom.get(id) === node.wrappedMeta) continue // current, nothing to do
-    const nodeKey = nodeContentKey(epochs, treeStore.nodes, id)
+    const nodeKey = nodeContentKey(scopeId, epochs, treeStore.nodes, id)
     if (!nodeKey) continue // K_mem not openable yet — leave un-tried so a later pass retries
     const meta = node.wrappedMeta
     resolvedFrom.set(id, meta)

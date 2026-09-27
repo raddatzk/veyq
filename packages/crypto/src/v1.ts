@@ -7,7 +7,6 @@ import { hkdf } from '@noble/hashes/hkdf.js'
 import { hmac } from '@noble/hashes/hmac.js'
 import { sha256 } from '@noble/hashes/sha2.js'
 import { argon2id } from '@noble/hashes/argon2.js'
-import * as raw from './primitives'
 import { aeadOpen, aeadSeal, concat, lp, u32be, utf8, type HybridPublic, type HybridSecret } from './primitives'
 
 export { concat, lp, utf8, type HybridPublic, type HybridSecret }
@@ -70,23 +69,6 @@ export const decodeKdfParams = (b: Uint8Array): { params: ArgonParams; salt: Uin
 /** HKDF-SHA256 as every v1 derivation uses it — exposed so the conformance suite can pin the RFC 5869 KAT. */
 export const hkdfSha256 = (ikm: Uint8Array, salt: Uint8Array, info: Uint8Array, len: number): Uint8Array =>
   hkdf(sha256, ikm, salt, info, len)
-
-// TRANSITIONAL (cr-seal-binds-its-object phases 1–3): the unbound string-context wraps web/ still calls. Phase 4
-// moves every caller onto `seal`/`open`/`sealTo`/`openAs` and deletes these, which is what takes the raw wraps out
-// of this package's public surface.
-export const symWrap = (kek: Uint8Array, pt: Uint8Array, context: string, nonce: Uint8Array): Uint8Array =>
-  raw.symWrap(kek, pt, utf8(context), nonce)
-export const symUnwrap = (kek: Uint8Array, blob: Uint8Array, context: string): Uint8Array =>
-  raw.symUnwrap(kek, blob, utf8(context))
-export const asymWrap = (
-  pk: HybridPublic,
-  pt: Uint8Array,
-  context: string,
-  opts: { eskX?: Uint8Array; mlkemMsg?: Uint8Array; nonce: Uint8Array },
-): Uint8Array => raw.asymWrap(pk, pt, utf8(context), opts)
-export const asymUnwrap = (sk: HybridSecret, pk: HybridPublic, blob: Uint8Array, context: string): Uint8Array =>
-  raw.asymUnwrap(sk, pk, blob, utf8(context))
-export { aeadSeal, aeadOpen }
 
 /**
  * Blinded slug token (AD-26): a deterministic, keyed, one-way token of a slug, so the server can enforce
@@ -298,7 +280,7 @@ export type Identity = {
 }
 
 /**
- * Build a HybridSecret usable for kemDecap/asymUnwrap from a stored private bundle. noble decapsulates
+ * Build a HybridSecret usable for `openAs` from a stored private bundle. noble decapsulates
  * with the *expanded* ML-KEM secret key, so we re-derive it from the stored 64-byte seed (the other
  * stacks reconstruct from the seed directly).
  */
@@ -307,7 +289,7 @@ export const hybridSecret = (priv: Identity['priv']): HybridSecret => ({
   m: ml_kem768.keygen(priv.mlkemSeed).secretKey,
 })
 
-/** The hybrid KEM PUBLIC bundle re-derived from a stored private bundle — for sealing (asymWrap) to one's
+/** The hybrid KEM PUBLIC bundle re-derived from a stored private bundle — for sealing (`sealTo`) to one's
  *  own identity (e.g. an owner's first scope grant). Pure derivation; mirrors [hybridSecret]. */
 export const hybridPublic = (priv: Identity['priv']): HybridPublic => ({
   x: x25519.getPublicKey(priv.kemX),
@@ -366,7 +348,7 @@ export const serializeIdentityPrivate = (id: Identity): Uint8Array =>
   concat(lp(id.priv.kemX), lp(id.priv.mlkemSeed), lp(id.priv.sign))
 
 /** Inverse of serializeIdentityPublic: read three length-prefixed fields → a public identity bundle. Used to
- *  wrap a scope key to *another* member's published identity (asymWrap to a foreign identity — cr-0076). */
+ *  seal a scope key to *another* member's published identity (`sealTo` a foreign identity — cr-0076). */
 export function deserializeIdentityPublic(bytes: Uint8Array): Identity['pub'] {
   let o = 0
   const next = (): Uint8Array => {

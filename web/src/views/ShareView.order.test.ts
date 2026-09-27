@@ -21,6 +21,9 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std } from '@veyq/crypto/base64'
 
 const SHARE_ID = 's1'
+const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000dd'
+/** The listed media's id — a canonical UUID, since its metadata tier is sealed bound to it (ADR 0072). */
+const MEDIA_0 = '5c09e000-0000-4000-8000-0000000000de'
 /** Two capture moments, far apart, so nothing below depends on a tie-break it did not mean to test. */
 const OLD = Date.UTC(2019, 2, 3)
 const NEW = Date.UTC(2024, 8, 9)
@@ -57,17 +60,19 @@ import { ShareRole } from '../api/generated/sharing'
 
 const i18n = createI18n({ legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false, messages: { en: {} } })
 
-/** A shared media whose sealed metadata tier carries `capturedAt` — the key the grid sorts on. */
+/** A shared media whose sealed metadata tier carries `capturedAt` — the key the grid sorts on — sealed bound to
+ *  (scope, media) exactly as the media layer does. */
 function sharedItem(mediaId: string, capturedAt: number) {
   const memoryKey = v1.randomBytes(32)
   const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt }))
   return {
     memoryKey,
+    scopeId: SCOPE_ID,
     item: {
       mediaId,
-      original: { blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 1, wrappedBlobKey: 'x' },
+      original: { blobId: `b-${mediaId}`, chunkCount: 1, byteSize: 1, wrappedBlobKey: 'x', ownerId: mediaId, role: 'ORIGINAL' as const },
       derivatives: [],
-      wrappedMeta: b64std(v1.symWrap(memoryKey, bytes, 'media-meta', v1.randomBytes(12))),
+      wrappedMeta: b64std(v1.seal({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }, memoryKey, bytes)),
     },
   }
 }
@@ -113,8 +118,8 @@ beforeEach(() => {
 describe('ShareView — one order for every grid tile', () => {
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
     resolveShareMock.mockResolvedValue({
-      memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer,
-      rootMemoryKey: v1.randomBytes(32), items: [sharedItem('media-0', OLD)],
+      memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: SCOPE_ID,
+      rootMemoryKey: v1.randomBytes(32), items: [sharedItem(MEDIA_0, OLD)],
     })
     const wrapper = mount(ShareView, { global: { plugins: [i18n], stubs: { MediaLightbox: true } } })
     await flushPromises()
@@ -125,14 +130,14 @@ describe('ShareView — one order for every grid tile', () => {
     await flushPromises()
 
     // newest first (the viewer has no toggle); u1 ties with the media it will become and leads it
-    expect(gridOrder(wrapper)).toEqual(['u2.jpg', 'u1.jpg', 'media-0'])
+    expect(gridOrder(wrapper)).toEqual(['u2.jpg', 'u1.jpg', MEDIA_0])
     const slotBefore = gridOrder(wrapper).indexOf('u1.jpg')
 
-    settle(0, 'media-0')
+    settle(0, MEDIA_0)
     await flushPromises()
 
     const after = gridOrder(wrapper)
     expect(after).not.toContain('u1.jpg') // handed off, not duplicated
-    expect(after.indexOf('media-0')).toBe(slotBefore)
+    expect(after.indexOf(MEDIA_0)).toBe(slotBefore)
   })
 })

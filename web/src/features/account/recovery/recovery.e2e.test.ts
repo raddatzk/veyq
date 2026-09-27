@@ -98,11 +98,7 @@ describe.runIf(live)('recovery — live', () => {
 
       const floor = after.wraps.find((w) => w.method === 'PASSWORD')!
       const { params, salt } = v1.decodeKdfParams(fromB64std(floor.kdfParams!))
-      const masterKey = v1.symUnwrap(
-        v1.kekPasswordSecret(fromB64std(secretKey), NEW_PASSWORD, salt, params),
-        fromB64std(floor.wrappedKey),
-        'master-key',
-      )
+      const masterKey = v1.open({ purpose: 'master-key' }, v1.kekPasswordSecret(fromB64std(secretKey), NEW_PASSWORD, salt, params), fromB64std(floor.wrappedKey))
       // The same Master Key the recovery wrap yielded — one key, two locks, nothing re-encrypted.
       expect(Array.from(masterKey)).toEqual(Array.from(opened.masterKey))
 

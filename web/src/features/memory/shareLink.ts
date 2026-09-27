@@ -17,7 +17,7 @@
 // (The terms-acceptance helpers in `share.ts` are the deliberate exception — a `localStorage` flag genuinely is
 // browser state, not a layering fault, and `uc.sharing.share-accept` is browser-only by design.)
 import { b64url } from '@veyq/crypto/base64'
-import { recoverShareKey } from './share'
+import { recoverShareKey, type ShareAddress } from './share'
 
 /** Build the copyable link `/s/{shareId}#k=<base64url(K_share)>` — the fragment carries `K_share`, never sent. */
 export function buildShareLink(shareId: string, kShare: Uint8Array): string {
@@ -27,10 +27,10 @@ export function buildShareLink(shareId: string, kShare: Uint8Array): string {
 /** Reconstruct a managed share's full copyable link by recovering `K_share` via `K_mem` (cr-0115, ADR 0036) — so
  *  the curator can re-copy **any** existing link, not just the freshly-minted one. Null when the share carries no
  *  recoverable key (minted before cr-0115) or the recovery fails. */
-export function recoverShareLink(shareId: string, memoryKey: Uint8Array, sealedShareKey: string | null): string | null {
+export function recoverShareLink(share: ShareAddress, memoryKey: Uint8Array, sealedShareKey: string | null): string | null {
   if (!sealedShareKey) return null
   try {
-    return buildShareLink(shareId, recoverShareKey(memoryKey, sealedShareKey))
+    return buildShareLink(share.shareId, recoverShareKey(memoryKey, share, sealedShareKey))
   } catch {
     return null
   }
