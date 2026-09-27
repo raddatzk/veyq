@@ -3,7 +3,7 @@ package com.veyq.app.features.spaces.scope
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaStore
@@ -19,6 +19,7 @@ import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.scope.ScopeEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -357,7 +358,7 @@ class ScopesSliceTest {
         given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
             .body("""{"encryptedName":"$renamedName","nameEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/name")
-            .then().statusCode(409).body("code", equalTo("scope_pending_deletion"))
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
     // --- space icon (uc.spaces.set-space-icon) ---
@@ -579,11 +580,11 @@ class ScopesSliceTest {
         given().header("Authorization", "Bearer ${token(owner)}").contentType(ContentType.JSON)
             .body("""{"sealedIcon":"$sealedIcon","iconEpoch":0}""")
             .`when`().post("/api/scopes/$groupId/icon")
-            .then().statusCode(409).body("code", equalTo("scope_pending_deletion"))
+            .then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
     @Test
-    fun clearScopeIconOnAGroupIsIdempotentAndAllowedDuringGrace() {
+    fun clearScopeIconOnAGroupIsIdempotentAndRefusedDuringGrace() {
         val (owner, domain) = seedMember()
         val groupId = createGroupAs(owner, domain)
         // Set then clear → 204, back to null.
@@ -598,12 +599,12 @@ class ScopesSliceTest {
         // Idempotent: clearing an already-iconless group → 204.
         given().header("Authorization", "Bearer ${token(owner)}")
             .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
-        // A clear is allowed even after the group enters grace-deletion (planning decision: dropping an icon off a
-        // dying scope is inconsequential; unlike a set, it writes no epoch-current ciphertext).
+        // Like every write, a clear is refused once the group enters its deletion grace: the window promises that
+        // nothing about the space changes, its icon included (uc.spaces.scope-access).
         given().header("Authorization", "Bearer ${token(owner)}")
             .`when`().delete("/api/scopes/$groupId").then().statusCode(204) // grace
         given().header("Authorization", "Bearer ${token(owner)}")
-            .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(204)
+            .`when`().delete("/api/scopes/$groupId/icon").then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
     @Test
@@ -903,10 +904,10 @@ class ScopesSliceTest {
         given().header("Authorization", "Bearer ${token(owner)}")
             .`when`().delete("/api/scopes/${tenantIdOf(domain)}").then().statusCode(409).body("code", equalTo("not_group"))
 
-        // Soft-delete, then a second delete → 409 scope_already_deleted.
+        // Soft-delete, then a second delete → 409 scope_deleting: a deleting group refuses the delete like any write.
         given().header("Authorization", "Bearer ${token(owner)}").`when`().delete("/api/scopes/$groupId").then().statusCode(204)
         given().header("Authorization", "Bearer ${token(owner)}")
-            .`when`().delete("/api/scopes/$groupId").then().statusCode(409).body("code", equalTo("scope_already_deleted"))
+            .`when`().delete("/api/scopes/$groupId").then().statusCode(409).body("code", equalTo("scope_deleting"))
     }
 
     @Test
@@ -960,7 +961,7 @@ class ScopesSliceTest {
 
         // The real enqueue path (the member-removal rotation backstop, cr-0092) — not a hand-written row.
         assertTrue(tasks.originateScopeRotation(poisoned, 3), "a rotation job was enqueued on the group")
-        val claimed = tasks.claim(owner, listOf(CapabilityTags.SCOPE_ROTATION), poisoned, Duration.ofMinutes(5), 3)
+        val claimed = tasks.claim(owner, setOf(poisoned), listOf(CapabilityTags.SCOPE_ROTATION), Duration.ofMinutes(5), 3)
         assertNotNull(claimed, "the owner holds a grant on the group, so the rotation job is claimable")
         tasks.decline(owner, claimed!!.jobId, "bite-test")
         QuarkusTransaction.requiringNew().run {

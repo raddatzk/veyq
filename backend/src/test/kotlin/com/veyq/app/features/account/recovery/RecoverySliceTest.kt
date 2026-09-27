@@ -3,11 +3,11 @@ package com.veyq.app.features.account.recovery
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.admin.tenant.MailSettingsRow
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.admin.tenant.TenantMailSender
 import com.veyq.app.features.admin.tenant.TenantStore
 import com.veyq.app.features.admin.tenant.TestMailbox
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser

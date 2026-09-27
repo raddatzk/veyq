@@ -8,7 +8,7 @@ import { createRouter, createMemoryHistory, type Router } from 'vue-router'
 // multi-tenant overview).
 vi.mock('../../features/spaces/scopes', () => ({
   listMyTenants: vi.fn().mockResolvedValue([
-    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
+    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
   ]),
   listMyGroups: vi.fn().mockResolvedValue([]),
   openMyTenantIcon: vi.fn().mockResolvedValue(null),
@@ -166,8 +166,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('shows a chevron and an overview of every tenant when there are several', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', iconEpoch: 0 },
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
     ])
     const wrapper = await mountAt('')
 
@@ -184,8 +184,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('switches to another tenant from the overview (full navigation to its domain)', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', iconEpoch: 0 },
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
     ])
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
     const wrapper = await mountAt('')
@@ -193,6 +193,28 @@ describe('AppSidebar tenant switcher', () => {
     const rows = wrapper.findAll('.sidebar-tenant-overview-list .sidebar-tenant-link')
     await rows[1].trigger('click') // the inactive tenant
     expect(assign).toHaveBeenCalledWith('https://verein.localhost')
+
+    assign.mockRestore()
+  })
+  // uc.spaces.scope-access A7: a suspended tenant stays listed — its initial (no grant, no icon), marked offline —
+  // but is not enterable. The control is the same list's active row, which still carries its domain.
+  it('lists a suspended tenant offline and not enterable', async () => {
+    vi.mocked(listMyTenants).mockResolvedValueOnce([
+      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'SUSPENDED', iconEpoch: 0 },
+    ])
+    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
+    const wrapper = await mountAt('')
+
+    const rows = wrapper.findAll('.sidebar-tenant-overview-list .sidebar-tenant-link')
+    expect(rows[1].find('.sidebar-tenant-offline').text()).toBe('shell.tenantOffline')
+    expect(rows[1].text()).not.toContain('verein.localhost')
+    expect(rows[1].attributes('disabled')).toBeDefined()
+    await rows[1].trigger('click')
+    expect(assign).not.toHaveBeenCalled()
+    // control: the active tenant is neither marked nor disabled
+    expect(rows[0].find('.sidebar-tenant-offline').exists()).toBe(false)
+    expect(rows[0].attributes('disabled')).toBeUndefined()
 
     assign.mockRestore()
   })

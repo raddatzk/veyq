@@ -1,9 +1,9 @@
 package com.veyq.app.features.tasks
 
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -387,11 +387,16 @@ class TasksSliceTest {
         val scopeB = seedTenantScope()
         val victimMembership = seedGrantlessMembership(seedUser(), scopeB)
 
-        // A grant-delivery job in scope A (attacker's) pointing at the victim's grant-less membership in scope B.
-        val jobId = seedJob(scopeA, CapabilityTags.GRANT_DELIVERY, JobEntity.PENDING, attempts = 0, resourceRef = victimMembership)
+        // A grant-delivery job in scope A (attacker's) pointing at the victim's grant-less membership in scope B,
+        // leased to the attacker — completing needs the lease (ADR 0021 §6), so this is the strongest position the
+        // attacker can hold.
+        val jobId = seedJob(
+            scopeA, CapabilityTags.GRANT_DELIVERY, JobEntity.LEASED, attempts = 1, resourceRef = victimMembership,
+            leaseExpiresAt = Instant.now().plusSeconds(300), leaseHolder = attacker,
+        )
 
-        // The attacker completes it (they hold a grant in A) — the job is marked done, but the cross-scope write
-        // is refused: the victim's membership in B stays grant-less.
+        // The attacker completes it (they hold the lease and a grant in A) — the job is marked done, but the
+        // cross-scope write is refused: the victim's membership in B stays grant-less.
         given().header("Authorization", bearer(attacker)).contentType(ContentType.JSON)
             .body("""{"sealedResult":"YXR0YWNrZXItd3JhcA=="}""")
             .`when`().post("/api/tasks/$jobId/complete").then().statusCode(204)
@@ -489,14 +494,14 @@ class TasksSliceTest {
 
     private fun seedJob(
         scopeId: String, tag: String, status: String, attempts: Int, maxAttempts: Int = 5,
-        leaseExpiresAt: Instant? = null, resourceRef: String? = null,
+        leaseExpiresAt: Instant? = null, resourceRef: String? = null, leaseHolder: String = "crashed",
     ): String {
         val jobId = UUID.randomUUID().toString()
         QuarkusTransaction.requiringNew().run {
             JobEntity().apply {
                 id = jobId; this.scopeId = scopeId; capabilityTag = tag; this.status = status
                 this.attempts = attempts; this.maxAttempts = maxAttempts; this.resourceRef = resourceRef
-                this.leaseExpiresAt = leaseExpiresAt; leaseHolder = if (status == JobEntity.LEASED) "crashed" else null
+                this.leaseExpiresAt = leaseExpiresAt; this.leaseHolder = if (status == JobEntity.LEASED) leaseHolder else null
                 createdAt = Instant.now()
             }.persist()
         }

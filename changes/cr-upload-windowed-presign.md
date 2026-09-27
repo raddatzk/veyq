@@ -49,7 +49,9 @@ After this CR:
   - Both callers already know who is asking: `completeForNode` receives `shareIdentityId`/`uploaderUserId`
     (`grep -n 'fun completeForNode' backend/src/main/kotlin/com/veyq/app/features/media/MediaHandler.kt`).
 - **The gates to reuse** (fourth tell: locate the gate, not only the insertion point):
-  - Member: `store.isMember(userId, scopeId)` in `MediaHandler.start`.
+  - Member: the scope-access gate, `access.check(userId, scopeId, WRITE)` in `MediaHandler.start` (landed with
+    `cr-scope-access-gate`, #157). A new window operation calls it the same way **and** is classified in
+    `OperatorBlindProbeTest`'s probe map — the test is red on an unclassified operation.
   - Contributor: `SharingHandler.startUploads`'s chain — active share → password → `canUpload` → identity →
     `allowUpload` (`grep -n 'fun startUploads' -A12 backend/src/main/kotlin/com/veyq/app/features/sharing/SharingHandler.kt`).
   - `MediaResource` is `@RateLimitExempt`, and its reason names presign minting as the amplification axis

@@ -7,6 +7,10 @@ import com.veyq.app.shared.http.FailureStatus
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 
@@ -29,6 +33,7 @@ data class MailSettingsView(
 /** Result of an owner reading a tenant's mail settings. */
 sealed interface MailSettingsReadOutcome {
     data class Ok(val settings: MailSettingsView) : MailSettingsReadOutcome
+    data object Suspended : MailSettingsReadOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : MailSettingsReadOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or the caller is not a member (indistinguishable)
     data object NotOwner : MailSettingsReadOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
 }
@@ -36,6 +41,7 @@ sealed interface MailSettingsReadOutcome {
 /** Result of an owner setting/replacing a tenant's mail settings. */
 sealed interface MailSettingsUpdateOutcome {
     data class Ok(val settings: MailSettingsView) : MailSettingsUpdateOutcome
+    data object Suspended : MailSettingsUpdateOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : MailSettingsUpdateOutcome, HttpFailure by Failures.tenantNotFound
     data object NotOwner : MailSettingsUpdateOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
     // A subject/body template referencing a {{tag}} outside the closed set (ADR 0049) — rejected, never stored.
@@ -61,13 +67,15 @@ class TenantMailSettingsHandler(
     private val seal: ConfigSecretSeal,
     private val keyState: ConfigSecretKeyGuard,
     private val renderer: InviteMailRenderer,
+    private val access: ScopeAccess,
 ) {
 
     /** Read the tenant's mail settings — owner-gated (a non-owner member is 403, a non-member 404). Redacts the
      *  password to `passwordSet`. A tenant that configured nothing reads back the empty default. Carries the
      *  server's config-secret KEK state so the owner sees whether a stored password can actually be used. */
     fun read(callerId: String, tenantId: String): MailSettingsReadOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return MailSettingsReadOutcome.NotFound
+        access.check(callerId, tenantId, READ)
+            .refusal(MailSettingsReadOutcome.NotFound, MailSettingsReadOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return MailSettingsReadOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return MailSettingsReadOutcome.NotOwner
         val state = keyState.state()
@@ -94,7 +102,8 @@ class TenantMailSettingsHandler(
         subjectTemplate: String?,
         bodyTemplate: String?,
     ): MailSettingsUpdateOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return MailSettingsUpdateOutcome.NotFound
+        access.check(callerId, tenantId, WRITE)
+            .refusal(MailSettingsUpdateOutcome.NotFound, MailSettingsUpdateOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return MailSettingsUpdateOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return MailSettingsUpdateOutcome.NotOwner
 

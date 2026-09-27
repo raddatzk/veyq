@@ -1,6 +1,5 @@
 package com.veyq.app.shared.tenant
 
-import com.veyq.app.features.admin.tenant.TenantEntity
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.httpError
 import io.smallrye.mutiny.Uni
@@ -11,8 +10,16 @@ import jakarta.ws.rs.core.Response
 import org.jboss.resteasy.reactive.server.ServerRequestFilter
 
 /**
- * The tenant-suspension lockout (uc.admin.suspend-tenant, ADR 0066): every API request whose `Host` resolves to a
- * `SUSPENDED` tenant is refused `403 tenant_suspended`, no exceptions — read or write, authenticated or not.
+ * The tenant-suspension lockout **on the suspended tenant's own domain** (uc.admin.suspend-tenant, ADR 0066): every
+ * API request whose `Host` resolves to a `SUSPENDED` tenant is refused `403 tenant_suspended`, no exceptions — read
+ * or write, authenticated or not, sign-in included.
+ *
+ * **It is not the enforcement, only its own-domain half.** A `Host` cannot say which tenant a request is *about*:
+ * the space switcher reaches every tenant's spaces by id from whichever domain the app is open on, so a filter
+ * keyed on it left a suspended tenant's content, shares and jobs reachable through any other domain. What refuses
+ * the tenant from everywhere is the scope-access gate every scope-, tenant-, share- and job-addressed operation asks
+ * (`shared/membership/ScopeAccess`, uc.spaces.scope-access); this filter keeps what only a `Host` check can do —
+ * refusing sign-in and the Host-resolved operations on the tenant's own domain.
  *
  * **The API, and only the API.** JAX-RS sees every request the static handler did not answer, so without the
  * path check this also refused the app shell's deep links (`/recover`, `/s/…`) while `/` itself — a real file,

@@ -1,6 +1,6 @@
 package com.veyq.app.shared.appshell
 
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given

@@ -30,8 +30,8 @@ export interface CspOptions {
  *  (`AppShell.POLICY_FILE`) and refuses to boot without it, which is what catches the two drifting apart. */
 export const CSP_POLICY_FILE = 'content-security-policy.txt'
 
-// The HaveIBeenPwned range API — a fixed, privacy-preserving third-party the password-strength check calls
-// client-direct (only a 5-hex SHA-1 prefix leaves the device, k-anonymity). It must be in connect-src.
+// The HaveIBeenPwned range API — a fixed, privacy-preserving third party the opt-in breached-password check calls
+// client-direct, once on submit (only a 5-hex SHA-1 prefix leaves the device, k-anonymity). It must be in connect-src.
 const PWNED_ORIGIN = 'https://api.pwnedpasswords.com'
 
 /** Build the Content-Security-Policy header/meta value from the resolved provider origins. */

@@ -6,6 +6,7 @@ import { tokenApi } from '../api/client'
 import { clearTokens, session, setTokens } from './session'
 import { endSession } from './sessionEnd'
 import { isAuthoritativeRejection, isUnauthorized } from '../shared/httpError'
+import { handleTenantSuspended } from './tenantSuspension'
 
 /**
  * The refresh this tab already has outstanding, or null. Callers that arrive while one is in flight join it
@@ -79,6 +80,9 @@ export async function withRefresh<T>(call: () => Promise<T>): Promise<T> {
       await refreshSession()
       return await call()
     }
+    // A suspended tenant answers every call `403 tenant_suspended` (uc.spaces.scope-access A7): let the app react
+    // wherever it arrives mid-session, not only on entering a space. Not awaited — the caller still gets `e`.
+    void handleTenantSuspended(e)
     throw e
   }
 }

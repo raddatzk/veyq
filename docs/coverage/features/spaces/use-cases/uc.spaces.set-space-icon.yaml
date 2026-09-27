@@ -29,7 +29,7 @@ acceptanceCriteria:
           - ScopesSliceTest.setScopeIconOnAGroupByOwnerThenCoOwnerUpdatesSealedIcon
           - ScopesSliceTest.setScopeIconOnAGroupNonOwnerIs403AndNonMemberIs404
           - ScopesSliceTest.setScopeIconOnAGroupPendingDeletionIs409
-          - OperatorBlindProbeTest.noScopeAddressedEndpointDistinguishesANonMemberFromANonExistentScope
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
       web:
         unit:
           - src/features/spaces/GroupMembersPanel.test.ts
@@ -39,7 +39,7 @@ acceptanceCriteria:
       backend:
         integration:
           - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
-          - OperatorBlindProbeTest.noScopeAddressedEndpointDistinguishesANonMemberFromANonExistentScope
+          - OperatorBlindProbeTest.everyGatedOperationAnswersEachStateOfTheGate
   - id: constant-ciphertext-length
     text: Every sealed_icon has the identical byte length regardless of the source image, because the plaintext is padded to a constant before sealing. A flat two-colour logo and a dense photo produce ciphertexts of equal length, so the operator cannot fingerprint or correlate icons by size — including across the several tenants one my-tenants response returns.
     coverage:
@@ -84,7 +84,7 @@ acceptanceCriteria:
         integration:
           - ScopesSliceTest.clearScopeIconIsIdempotentAndOwnerGated
           - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
-          - ScopesSliceTest.clearScopeIconOnAGroupIsIdempotentAndAllowedDuringGrace
+          - ScopesSliceTest.clearScopeIconOnAGroupIsIdempotentAndRefusedDuringGrace
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

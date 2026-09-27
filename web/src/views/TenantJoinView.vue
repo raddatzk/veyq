@@ -12,7 +12,8 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
-import { usePwnedWarning } from '../features/account/passwordWarning'
+import Checkbox from 'primevue/checkbox'
+import { useBreachCheck } from '../features/account/passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { previewInvite, acceptInvite, registerAndAccept, bornTenantScope, tenantError } from '../features/tenant/tenantInvite'
 import { sealName } from '../features/account/profile/profile'
@@ -60,7 +61,7 @@ const username = ref('')
 const firstName = ref('')
 const lastName = ref('')
 const password = ref('')
-const { breachCount } = usePwnedWarning(password)
+const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(password)
 const secretKeyDisplay = ref('')
 const kitReady = ref(false)
 // sign-in form
@@ -115,6 +116,7 @@ async function prepareRegistration() {
   error.value = ''
   busy.value = true
   try {
+    if (!(await breachCheckPasses())) return
     const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
     built = buildAccount(ownerEmail.value, password.value, instanceSalt)
     secretKeyDisplay.value = built.emergencyKit.secretKey
@@ -284,8 +286,15 @@ async function mapError(e: unknown): Promise<string> {
           </template>
           <label>{{ t('common.password') }}<Password v-model="password" :feedback="false" toggleMask inputId="join-password" /></label>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
-          <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
-            t('password.pwnedWarning', { count: breachCount })
+          <div class="checkbox-row">
+            <Checkbox v-model="checkBreaches" input-id="join-breach-check" binary :disabled="busy" />
+            <label for="join-breach-check">
+              {{ t('password.pwnedCheck') }}
+              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
+            </label>
+          </div>
+          <Message v-if="breachStop" severity="warn" :closable="false">{{
+            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
           }}</Message>
           <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
           <Button type="submit" :label="t('tenant.join.continue')" icon="pi pi-arrow-right" :loading="busy"

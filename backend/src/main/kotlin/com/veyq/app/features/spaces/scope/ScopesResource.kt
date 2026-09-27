@@ -10,6 +10,7 @@ import com.veyq.app.generated.model.ResolvedGroupCandidate
 import com.veyq.app.generated.model.RenameGroupRequest
 import com.veyq.app.generated.model.RotateScopeRequest
 import com.veyq.app.generated.model.ScopeCreated
+import com.veyq.app.generated.model.TenantStatus
 import com.veyq.app.generated.model.ScopeEpochLink
 import com.veyq.app.generated.model.ScopeKind
 import com.veyq.app.generated.model.ScopeMember
@@ -205,6 +206,7 @@ class ScopesResource(
             handler.myTenants(identity.principal.name).map {
                 MyTenant(
                     tenantId = UUID.fromString(it.tenantId), name = it.name, domain = it.domain, role = MyTenant.Role.valueOf(it.role),
+                    status = TenantStatus.valueOf(it.status),
                     wrappedGrant = it.wrappedGrant, sealedIcon = it.sealedIcon, iconEpoch = it.iconEpoch,
                 )
             },

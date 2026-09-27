@@ -75,7 +75,7 @@ jobs:
             # A PR builds the image and publishes nothing. The version is still the tree's: the artifact a PR
             # builds is the one that would ship, which a synthesised `${major}.0` was not.
             :
-          elif [[ "$REF_NAME" == "main" || "$REF_NAME" == "master" ]]; then
+          elif [[ "$REF_NAME" == "main" ]]; then
             publish_branch_tags=true
             publish_latest=true
           elif [[ "$REF_NAME" == "release/${major}.x" ]]; then
@@ -323,10 +323,10 @@ jobs:
         run: |
           set -euo pipefail
           # Resolve each manifest-list digest (the sha- tag is always produced) and sign THAT, so every channel
-          # tag pointing at it (latest/<major>/<version>) is covered. Verify with:
-          #   cosign verify $IMAGE@<digest> \
-          #     --certificate-identity-regexp '^https://github.com/${{ github.repository }}/' \
-          #     --certificate-oidc-issuer https://token.actions.githubusercontent.com
+          # tag pointing at it (latest/<major>/<version>) is covered. The identity this produces is this file on
+          # the branch that ran it — which is why the version step publishes from `main` and `release/<major>.x`
+          # only. How an operator verifies it is stated once, in infra/README.md § Verifying a release, and
+          # scripts/validate_release_identity.py holds that command to the branches this workflow publishes from.
           for image in $IMAGES; do
             digest="sha256:$(docker buildx imagetools inspect --raw "$image:sha-${GITHUB_SHA}" | sha256sum | cut -d' ' -f1)"
             echo "Signing $image@${digest}"

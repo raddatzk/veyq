@@ -1,18 +1,15 @@
 package com.veyq.app.features.content.favorites
 
-import com.veyq.app.shared.membership.MembershipStore
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
 
 /**
  * Persistence for per-(user, scope) favorites (cr-0031). Operator-blind: stores the sealed ciphertext only.
- * Scope access = the caller holds a membership for the scope (same gate as the Memory tree, cr-0026/0027).
+ * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate.
  */
 @ApplicationScoped
-class FavoritesStore(private val membership: MembershipStore) {
-
-    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
+class FavoritesStore {
 
     /** The caller's sealed favorites blob for the scope, or null if none was ever stored. */
     fun get(userId: String, scopeId: String): String? =

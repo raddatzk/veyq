@@ -5,7 +5,7 @@
 
 # --- web -------------------------------------------------------------------------------------------------
 # Was `frontend/` — the surface is `web/` since the greenfield reset.
-FROM node:22-bookworm-slim AS frontend-build
+FROM node:22-bookworm-slim@sha256:43ac6c60b8f89723f746e8a92ce91abd5017e627ce1ddfe4238355d3a30b772c AS frontend-build
 # The install is a WORKSPACE install since cr-admin-web-extraction (ADR 0065): the lockfile lives at the repo
 # root and `web/` resolves `@veyq/crypto` through it, so the stage builds from /src with web/ as a workspace
 # rather than treating web/ as a standalone project. `/src/contracts` keeps generate:api's `../contracts/api`
@@ -36,7 +36,7 @@ COPY web/ ./
 RUN npm run build && npm run verify:no-backdoor && npm run verify:csp
 
 # --- backend (JVM) ---------------------------------------------------------------------------------------
-FROM eclipse-temurin:21-jdk-jammy AS backend-build-base
+FROM eclipse-temurin:21-jdk-jammy@sha256:c7d5863b5dd8f26b90c64f1d80cc2b0e5a5e4642f8db9955a370d348edd8f438 AS backend-build-base
 WORKDIR /code/backend
 # gradle.properties (build-JVM heap) and pitest.scope.json are NOT optional extras: build.gradle.kts:73 parses
 # the PIT manifest at CONFIGURATION time, so even `gradlew help` dies without it. Both postdate the recovered
@@ -57,7 +57,7 @@ COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 RUN ./gradlew --no-daemon quarkusBuild -x test
 
 # --- backend (native) ------------------------------------------------------------------------------------
-FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-21 AS backend-build-native-base
+FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-21@sha256:b9bb34595c74910a5d9faa712abf17786c56073bc443064dd64d4f43c51e44e6 AS backend-build-native-base
 WORKDIR /code/backend
 COPY --chown=quarkus:quarkus backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties backend/pitest.scope.json ./
 COPY --chown=quarkus:quarkus backend/gradle ./gradle
@@ -71,7 +71,7 @@ COPY --chown=quarkus:quarkus --from=frontend-build /src/web/dist ./src/main/reso
 RUN ./gradlew --no-daemon quarkusBuild -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false -x test
 
 # --- runtime (JVM) — the target container.yml builds --------------------------------------------------------
-FROM eclipse-temurin:21-jre-jammy AS runtime-jvm
+FROM eclipse-temurin:21-jre-jammy@sha256:61d6c7b34d36aee3f45d043101259f97f3c6d428dc2a6f75513789983c5e254f AS runtime-jvm
 ARG VEYQ_VERSION=""
 ARG VEYQ_REVISION=""
 ENV VEYQ_VERSION="${VEYQ_VERSION}"
@@ -148,7 +148,7 @@ EXPOSE 8080
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=60.0", "-XX:InitialRAMPercentage=40.0", "-XX:+ExitOnOutOfMemoryError", "-Dquarkus.http.host=0.0.0.0", "-jar", "/work/quarkus-app/quarkus-run.jar"]
 
 # --- runtime (native) ---------------------------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5 AS runtime-native
+FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:a50731d3397a4ee28583f1699842183d4d24fadcc565c4688487af9ee4e13a44 AS runtime-native
 ARG VEYQ_VERSION=""
 ARG VEYQ_REVISION=""
 ENV VEYQ_VERSION="${VEYQ_VERSION}"

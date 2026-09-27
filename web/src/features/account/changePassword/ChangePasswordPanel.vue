@@ -13,12 +13,13 @@ import Button from 'primevue/button'
 import SecretKeyField from '../../../shared/ui/SecretKeyField.vue'
 import Password from 'primevue/password'
 import Message from 'primevue/message'
+import Checkbox from 'primevue/checkbox'
 import { changePassword, ChangePasswordRefused } from './changePassword'
 import { enrolDeviceKey, isRememberSupported } from '../rememberMe/deviceKeyWrap'
 import { masterKey } from '../../../app/vault'
 import { account } from '../../../app/account'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
-import { usePwnedWarning } from '../passwordWarning'
+import { useBreachCheck } from '../passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../../../shared/passwordPolicy'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { ACCOUNT_DEVICE_TRUST } from '../../platform/capabilities'
@@ -34,7 +35,7 @@ const secretKey = ref('')
 const error = ref('')
 const done = ref(false)
 
-const { breachCount } = usePwnedWarning(newPassword)
+const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(newPassword)
 
 const rememberSupported = isRememberSupported() && hasCapability(ACCOUNT_DEVICE_TRUST)
 // The length floor is a CLIENT-side floor and cannot be anything else: under Model B (ADR 0003) the password
@@ -51,6 +52,7 @@ const canSubmit = computed(
 
 const { run, pending: busy } = useAsyncAction(
   async () => {
+    if (!(await breachCheckPasses())) return
     await changePassword(newPassword.value, secretKey.value.trim(), currentPassword.value)
     currentPassword.value = ''
     secretKey.value = ''
@@ -131,10 +133,17 @@ function startOver() {
             {{ t('changePassword.newPasswordLabel') }}
             <Password v-model="newPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-new" />
             <small v-if="passwordHintKey(newPassword)" class="field-hint">{{ t(passwordHintKey(newPassword)!) }}</small>
-            <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
-              t('password.pwnedWarning', { count: breachCount })
-            }}</Message>
           </label>
+          <div class="checkbox-row">
+            <Checkbox v-model="checkBreaches" input-id="change-password-breach-check" binary :disabled="busy" />
+            <label for="change-password-breach-check">
+              {{ t('password.pwnedCheck') }}
+              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
+            </label>
+          </div>
+          <Message v-if="breachStop" severity="warn" :closable="false">{{
+            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
+          }}</Message>
           <label class="settings-field">
             {{ t('changePassword.confirmPasswordLabel') }}
             <Password v-model="confirmPassword" :feedback="false" toggle-mask autocomplete="new-password" :disabled="busy" input-id="change-password-confirm" />

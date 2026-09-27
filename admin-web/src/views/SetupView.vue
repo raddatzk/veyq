@@ -11,9 +11,10 @@ import Card from 'primevue/card'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
 import Password from 'primevue/password'
+import Checkbox from 'primevue/checkbox'
 import { registerServerOwner } from '../features/setup/setupServer'
 import EmergencyKitSave from '../features/setup/EmergencyKitSave.vue'
-import { usePwnedWarning } from '../features/account/passwordWarning'
+import { useBreachCheck } from '../features/account/passwordWarning'
 import { MIN_PASSWORD_LENGTH, passwordHintKey } from '../shared/passwordPolicy'
 import { setAuthPrefill } from '../app/authPrefill'
 import { useServerState } from '../shared/state/useServerState'
@@ -24,7 +25,7 @@ const { t } = useI18n()
 const { setSetupCompleted } = useServerState()
 const email = ref('')
 const password = ref('')
-const { breachCount } = usePwnedWarning(password)
+const { enabled: checkBreaches, stop: breachStop, proceed: breachCheckPasses } = useBreachCheck(password)
 const error = ref('')
 const secretKey = ref<string | null>(null)
 const kitReady = ref(false)
@@ -32,6 +33,7 @@ let kitEmail = ''
 
 const { run: runSubmit, pending: busy } = useAsyncAction(
   async () => {
+    if (!(await breachCheckPasses())) return
     const { emergencyKit } = await registerServerOwner(email.value, password.value)
     kitEmail = email.value
     secretKey.value = emergencyKit.secretKey
@@ -83,8 +85,15 @@ async function proceed() {
               fluid
             />
           </label>
-          <Message v-if="breachCount > 0" severity="warn" :closable="false">{{
-            t('password.pwnedWarning', { count: breachCount })
+          <div class="checkbox-row">
+            <Checkbox v-model="checkBreaches" input-id="setup-breach-check" binary :disabled="busy" />
+            <label for="setup-breach-check">
+              {{ t('password.pwnedCheck') }}
+              <small class="field-hint">{{ t('password.pwnedCheckNote') }}</small>
+            </label>
+          </div>
+          <Message v-if="breachStop" severity="warn" :closable="false">{{
+            breachStop.count === null ? t('password.pwnedUnavailable') : t('password.pwnedWarning', { count: breachStop.count })
           }}</Message>
           <small v-if="passwordHintKey(password)" class="field-hint">{{ t(passwordHintKey(password)!) }}</small>
           <Button

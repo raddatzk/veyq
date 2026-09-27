@@ -21,7 +21,10 @@
 1. The operation resolves the space it acts on — directly from the path or body, or by the node, medium,
    bucket, share or job it names.
 2. It asks the **one** gate, `ScopeAccess.check(caller, scope, READ | WRITE)` in `shared/membership`, **inline,
-   before anything else it does** — before existence, kind, role or capability checks.
+   before anything else it does** — before existence, kind, role or capability checks. The one thing that may
+   come first is an **instance-wide** policy check that names no space (a capability the operator switched off,
+   answered `422` to anyone): it reveals nothing about any scope, and answering it first is what lets it read as
+   instance policy rather than as a scope error.
 3. The gate answers in a fixed order, and the order is the security property
    ([ADR 0042](../../../decisions/0042-http-failure-projection.md)):
    1. **Not a member** — the caller holds no *accepted* membership on this scope → the operation's own
@@ -87,8 +90,12 @@
   meant *being deleted*. There is now one code (`scope_deleting`) and one place to get the order wrong.
 - **Completeness is derived, not listed.** `OperatorBlindProbeTest` takes the operation set from the generated
   API interfaces — the contract — and requires every operation to be either probed against each state above or
-  named on a reasoned exclusion list (public, token-gated, Server-Owner, account-wide). A new operation that
-  nobody classified is red on the day it is added, instead of an unguarded route nobody noticed.
+  named on a reasoned exclusion list: public or token-gated, Server-Owner, account-wide, the Host-resolved
+  operations that touch only the caller's own rows on the Host's own tenant (where the `Host` filter is a correct
+  suspension gate), answering one's own proposal (A3 — the gate by definition does not count it), and the
+  listings whose answer is a filter rather than a refusal (claim, my-tenants), which carry tests of their own. A
+  new operation that nobody classified is red on the day it is added, instead of an unguarded route nobody
+  noticed.
 - **Operator-blind by construction.** The gate reads membership rows, a scope's `deletedAt` and a tenant's
   `status` — operational metadata the server already holds ([ADR 0007](../../../decisions/0007-membership-role-grant-relation.md)).
   No key, no name, no content.

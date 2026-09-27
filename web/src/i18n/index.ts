@@ -11,6 +11,11 @@ const en = {
     sub: 'Nobody has created the first account on this server, so there is nothing here to sign in to yet.',
     operator: 'Setting a server up is done by the person who runs it, on the server’s own administration surface — not from this page. If that is you, open it on the machine the server runs on.',
   },
+  spaceOffline: {
+    title: 'This space is temporarily offline',
+    sub: 'Its content is safe and unchanged — it just can’t be opened right now.',
+    operator: 'The person who runs this server has taken it offline for the moment. Once they bring it back, everything is exactly where you left it.',
+  },
   incompatible: {
     title: 'This app and this server don’t match',
     updateApp: 'Your app is older than this server. Update the app to a newer version to continue.',
@@ -380,7 +385,10 @@ const en = {
   password: {
     minLength: 'Use at least 10 characters.',
     strong: 'Nice and long — that is a strong password.',
-    pwnedWarning: 'This password appeared in {count} known data breaches. Consider a different one.',
+    pwnedCheck: 'Check this password against known data breaches',
+    pwnedCheckNote: 'Only the first 5 characters of a hash of the password go to haveibeenpwned.com — never the password itself.',
+    pwnedWarning: 'This password appeared in {count} known data breaches. Choose a different one, or press the button again to use it anyway.',
+    pwnedUnavailable: 'The breach check could not run. Press the button again to continue without it.',
   },
   recovery: {
     forgot: 'Forgot your password?',
@@ -526,6 +534,7 @@ const en = {
     shared: 'Shared',
     personal: 'Personal',
     tenantSwitch: 'Switch space',
+    tenantOffline: 'Temporarily offline',
     groups: 'Groups',
     groupCreate: 'New group',
     groupsMenuOpen: 'More groups',
@@ -948,6 +957,11 @@ const de: typeof en = {
     sub: 'Auf diesem Server wurde noch kein erstes Konto angelegt — es gibt hier also noch nichts, wo du dich anmelden könntest.',
     operator: 'Die Einrichtung übernimmt, wer den Server betreibt, auf dessen eigener Verwaltungsoberfläche — nicht auf dieser Seite. Falls du das bist: Öffne sie auf der Maschine, auf der der Server läuft.',
   },
+  spaceOffline: {
+    title: 'Dieser Bereich ist vorübergehend offline',
+    sub: 'Seine Inhalte sind sicher und unverändert — er lässt sich gerade nur nicht öffnen.',
+    operator: 'Wer diesen Server betreibt, hat ihn vorübergehend offline genommen. Sobald er wieder da ist, ist alles genau so, wie du es verlassen hast.',
+  },
   incompatible: {
     title: 'Diese App und dieser Server passen nicht zusammen',
     updateApp: 'Deine App ist älter als dieser Server. Aktualisiere die App auf eine neuere Version, um fortzufahren.',
@@ -1297,7 +1311,10 @@ const de: typeof en = {
   password: {
     minLength: 'Mindestens 10 Zeichen verwenden.',
     strong: 'Schön lang — ein starkes Passwort.',
-    pwnedWarning: 'Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle besser ein anderes.',
+    pwnedCheck: 'Passwort mit bekannten Datenlecks abgleichen',
+    pwnedCheckNote: 'Nur die ersten 5 Zeichen eines Hashwerts des Passworts gehen an haveibeenpwned.com — nie das Passwort selbst.',
+    pwnedWarning: 'Dieses Passwort tauchte in {count} bekannten Datenlecks auf. Wähle ein anderes oder klicke erneut, um es trotzdem zu verwenden.',
+    pwnedUnavailable: 'Die Prüfung auf Datenlecks konnte nicht laufen. Klicke erneut, um ohne sie fortzufahren.',
   },
   recovery: {
     forgot: 'Passwort vergessen?',
@@ -1444,6 +1461,7 @@ const de: typeof en = {
     shared: 'Gemeinsam',
     personal: 'Persönlich',
     tenantSwitch: 'Bereich wechseln',
+    tenantOffline: 'Vorübergehend offline',
     groups: 'Gruppen',
     groupCreate: 'Neue Gruppe',
     groupsMenuOpen: 'Weitere Gruppen',

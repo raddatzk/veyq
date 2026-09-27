@@ -160,3 +160,13 @@ describe('session refresh (uc.account.login)', () => {
     expect(session.refreshToken).toBeNull()
   })
 })
+
+describe('withRefresh — a suspended tenant mid-session (uc.spaces.scope-access A7)', () => {
+  it('hands a 403 to the suspension handler and still rethrows it to the caller', async () => {
+    const spy = vi.spyOn(await import('./tenantSuspension'), 'handleTenantSuspended').mockResolvedValue('other-tenant')
+    const refused = { response: new Response(JSON.stringify({ code: 'tenant_suspended' }), { status: 403 }) }
+    await expect(withRefresh(() => Promise.reject(refused))).rejects.toBe(refused)
+    expect(spy).toHaveBeenCalledWith(refused)
+    spy.mockRestore()
+  })
+})

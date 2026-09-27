@@ -5,6 +5,10 @@ import com.veyq.app.shared.http.FailureStatus
 import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
+import com.veyq.app.shared.membership.AccessMode.READ
+import com.veyq.app.shared.membership.AccessMode.WRITE
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.util.TreeMap
@@ -19,12 +23,14 @@ data class GuestTerms(val version: Int, val terms: TermsContent?)
 /** Result of reading a tenant's terms + the caller's accepted version (cr-0114). */
 sealed interface TermsReadOutcome {
     data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsReadOutcome
+    data object Suspended : TermsReadOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsReadOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or the caller is not a member (indistinguishable)
 }
 
 /** Result of an owner setting/replacing a tenant's terms (cr-0114). */
 sealed interface TermsUpdateOutcome {
     data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsUpdateOutcome
+    data object Suspended : TermsUpdateOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsUpdateOutcome, HttpFailure by Failures.tenantNotFound // no such tenant, or the caller is not a member (indistinguishable)
     data object NotOwner : TermsUpdateOutcome, HttpFailure by httpFailure("not_tenant_owner", FailureStatus.FORBIDDEN)
 }
@@ -32,6 +38,7 @@ sealed interface TermsUpdateOutcome {
 /** Result of a member accepting the tenant's current terms (cr-0114). */
 sealed interface TermsAcceptOutcome {
     data class Ok(val version: Int, val acceptedVersion: Int, val terms: TermsContent?) : TermsAcceptOutcome
+    data object Suspended : TermsAcceptOutcome, HttpFailure by Failures.tenantSuspended
     data object NotFound : TermsAcceptOutcome, HttpFailure by Failures.tenantNotFound
     data object VersionChanged : TermsAcceptOutcome, HttpFailure by httpFailure("terms_version_changed", FailureStatus.CONFLICT) // the operator bumped the terms since they were shown
 }
@@ -49,11 +56,13 @@ sealed interface TermsAcceptOutcome {
 class TenantTermsHandler(
     private val store: TenantStore,
     private val mapper: ObjectMapper,
+    private val access: ScopeAccess,
 ) {
 
     /** Read the tenant's current terms + the caller's accepted version — gated to **members** (else NotFound). */
     fun read(callerId: String, tenantId: String): TermsReadOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return TermsReadOutcome.NotFound
+        access.check(callerId, tenantId, READ)
+            .refusal(TermsReadOutcome.NotFound, TermsReadOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId, callerId) ?: return TermsReadOutcome.NotFound
         return TermsReadOutcome.Ok(row.version, row.acceptedVersion, decode(row.markdownByLocale))
     }
@@ -79,7 +88,8 @@ class TenantTermsHandler(
      */
     @Transactional
     fun update(callerId: String, tenantId: String, de: String?, en: String?): TermsUpdateOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return TermsUpdateOutcome.NotFound
+        access.check(callerId, tenantId, WRITE)
+            .refusal(TermsUpdateOutcome.NotFound, TermsUpdateOutcome.Suspended)?.let { return it }
         if (store.findTenant(tenantId) == null) return TermsUpdateOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return TermsUpdateOutcome.NotOwner
         val normalized = normalize(de, en)
@@ -94,7 +104,8 @@ class TenantTermsHandler(
      */
     @Transactional
     fun accept(callerId: String, tenantId: String, version: Int): TermsAcceptOutcome {
-        if (!store.hasMembership(callerId, tenantId)) return TermsAcceptOutcome.NotFound
+        access.check(callerId, tenantId, WRITE)
+            .refusal(TermsAcceptOutcome.NotFound, TermsAcceptOutcome.Suspended)?.let { return it }
         val row = store.termsFor(tenantId, callerId) ?: return TermsAcceptOutcome.NotFound
         if (version != row.version) return TermsAcceptOutcome.VersionChanged
         store.recordAcceptance(callerId, tenantId, version)

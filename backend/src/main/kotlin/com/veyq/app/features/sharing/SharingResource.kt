@@ -88,7 +88,14 @@ class SharingResource(
         val me = identity.principal.name
         // Without nodeId: the caller's own shares. With nodeId: every share on that Memory visible to a scope
         // member (cr-0104) — `mine` tells the UI which the caller may revoke vs merely see / adopt.
-        val shares = if (nodeId != null) handler.listForNode(me, nodeId.toString()) else handler.list(me)
+        val shares = if (nodeId == null) {
+            handler.list(me)
+        } else {
+            when (val o = handler.listForNode(me, nodeId.toString())) {
+                is NodeSharesOutcome.Shares -> o.rows
+                is HttpFailure -> return httpError(o)
+            }
+        }
         return Response.ok(shares.map { s ->
             ShareSummary(
                 shareId = s.id,

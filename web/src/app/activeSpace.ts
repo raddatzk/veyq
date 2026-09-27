@@ -17,6 +17,7 @@ import { startGrantDeliveryPolling, stopGrantDeliveryPolling } from '../features
 import { startScopeRotationPolling, stopScopeRotationPolling } from '../features/tasks/scopeRotationPolling'
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
 import { isUnlocked } from './vault'
+import { handleTenantSuspended } from './tenantSuspension'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -140,6 +141,12 @@ export async function enterScope(token: string): Promise<void> {
     // (restarted on each entry, stopped on logout/re-lock in clearActiveSpace), gated on an unlocked vault.
     startScopeRotationPolling(isUnlocked)
   } catch (err) {
+    // A suspended tenant (uc.spaces.scope-access A7): on this domain's own tenant the router takes over with the
+    // offline notice; for another tenant the home view leaves for this domain's home. Either way not a plain error.
+    if (await handleTenantSuspended(err)) {
+      activeSpace.status = 'idle'
+      return
+    }
     activeSpace.status = isNoTenant(err) ? 'no-tenant' : 'error'
   }
 }

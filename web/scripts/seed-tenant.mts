@@ -50,7 +50,7 @@ const challenge = await json(await post('/api/login/challenge', { email: ownerEm
 const instanceSalt = fromB64std(challenge.instanceSalt)
 const auth = v1.deriveAuthKeypair(ownerPassword, v1.deriveAuthSalt(instanceSalt, ownerEmail), v1.ARGON)
 const signature = v1.authSign(auth.privateKey, fromB64std(challenge.nonce))
-const verify = await post('/api/login/verify', { email: ownerEmail, signature: b64std(signature) })
+const verify = await post('/api/login/verify', { email: ownerEmail, nonce: challenge.nonce, signature: b64std(signature) })
 if (!verify.ok) { console.error('server-owner login failed', verify.status, await verify.text()); process.exit(1) }
 const token = (await json(verify)).accessToken as string
 

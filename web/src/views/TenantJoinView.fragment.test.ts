@@ -29,6 +29,7 @@ const stubs = {
   Message: { template: '<div class="msg"><slot /></div>' },
   InputText: { template: '<input />' },
   Password: { template: '<input type="password" />' },
+  Checkbox: { template: '<input type="checkbox" />' },
 }
 
 const i18n = createI18n({

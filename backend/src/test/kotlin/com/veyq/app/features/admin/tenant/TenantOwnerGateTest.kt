@@ -1,9 +1,10 @@
 package com.veyq.app.features.admin.tenant
 
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -44,6 +45,7 @@ class TenantOwnerGateTest {
         // the escalation actor: belongs to the tenant, OWNER of a personal scope AND a self-made group, but has NO
         // OWNER row on the root scope — a tenant *member*, not a tenant *owner*.
         val actor = seedUser("actor@gate.example.com")
+        membership(actor, tenantId, tenantId, MembershipEntity.MEMBER)
         seedScope(tenantId, ScopeEntity.PERSONAL).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
         val group = seedScope(tenantId, ScopeEntity.GROUP).also { membership(actor, tenantId, it, MembershipEntity.OWNER) }
 

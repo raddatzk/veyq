@@ -1,7 +1,6 @@
 package com.veyq.app.features.content
 
-import com.veyq.app.features.spaces.scope.ScopeEntity
-import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -40,23 +39,16 @@ sealed interface ParentSlot {
 
 /**
  * Persistence for the Memory tree (cr-0027). Operator-blind: stores ciphertext + the blinded slug token only.
- * Scope access = the caller holds a membership for the scope (cr-0026 scope identity).
+ * Who may act on a scope is decided before this store is reached, by the handler's `ScopeAccess` gate.
  */
 @ApplicationScoped
-class NodesStore(
+class NodesStore {
     // cr-0073 reclaimed a node's standalone cover blob HERE, at delete time. ADR 0061 moved that into
     // `NodeSubtreePurge`: under a soft-delete, reclaiming the cover when the user deletes would hand a restore
     // back a Memory whose cover is already gone. So this store no longer touches the blob store at all — the
     // one-way dependency (media → content) is restored, and the purge worker owns both directions.
-    private val membership: MembershipStore,
-) {
-
-    fun isMember(userId: String, scopeId: String): Boolean = membership.isScopeMember(userId, scopeId)
 
     fun scopeExists(scopeId: String): Boolean = ScopeEntity.findById(scopeId) != null
-
-    /** Whether the scope is in pending-deletion (cr-0090) — content is **read-only** during the grace window. */
-    fun isPendingDeletion(scopeId: String): Boolean = ScopeEntity.findById(scopeId)?.deletedAt != null
 
     /** Resolve a parent slot within the scope: the scope id (root), a node in the same scope, or missing. */
     fun parentSlot(scopeId: String, parentSlot: String): ParentSlot {

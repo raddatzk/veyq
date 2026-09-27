@@ -64,7 +64,7 @@ if (CREATE_DOMAIN !== DOMAIN) {
 const ch = await json(await post('/api/login/challenge', { email: entry.email }, undefined, HOST_BASE))
 const auth = v1.deriveAuthKeypair(entry.password, v1.deriveAuthSalt(fromB64std(ch.instanceSalt), entry.email), v1.ARGON)
 const sig = v1.authSign(auth.privateKey, fromB64std(ch.nonce))
-const verify = await post('/api/login/verify', { email: entry.email, signature: b64std(sig) }, undefined, HOST_BASE)
+const verify = await post('/api/login/verify', { email: entry.email, nonce: ch.nonce, signature: b64std(sig) }, undefined, HOST_BASE)
 if (!verify.ok) { console.error('tenant-owner login failed', verify.status, await verify.text()); process.exit(1) }
 const token = (await json(verify)).accessToken as string
 

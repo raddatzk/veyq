@@ -1,13 +1,26 @@
 version: 2
 
+# UNPROVEN BY CONSTRUCTION: this repository has no remote, so Dependabot has never read this file. Every entry
+# below is a claim about what Dependabot would do, checked against its source (dependabot-core, main, 2026-09-25)
+# rather than against a run.
+
 multi-ecosystem-groups:
   app-runtime:
     schedule:
       interval: "daily"
+  # Third-party image pins (ADR 0057 §6). Every image is pinned `repo:tag@sha256:<index digest>`, so a new tag or a
+  # re-pushed one reaches this repository only as one of these PRs — the explicit bump the pin trades silent
+  # patches for. One `repo:tag` carries one digest everywhere (scripts/validate_image_pins.py), so a bump that
+  # reaches only some of its sites is red until the rest follow.
+  images:
+    schedule:
+      interval: "weekly"
 
 updates:
+  # The npm workspace's one lockfile is at the root (web/, admin-web/ and packages/crypto/ are its members), so
+  # this is the directory that reaches all three.
   - package-ecosystem: "npm"
-    directory: "/web"
+    directory: "/"
     patterns:
       - "*"
     multi-ecosystem-group: "app-runtime"
@@ -20,8 +33,35 @@ updates:
     multi-ecosystem-group: "app-runtime"
     open-pull-requests-limit: 1
 
-  # Docker ecosystems are intentionally absent: there is no root Dockerfile yet (the container-image
-  # build+publish pipeline is deferred, cr-0127). Add a docker entry per Dockerfile once one exists.
+  # `docker` reads the files named Dockerfile/Containerfile in each directory (not recursively): the app image's at
+  # the root and the admin image's in admin-web/.
+  - package-ecosystem: "docker"
+    directories:
+      - "/"
+      - "/admin-web"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "images"
+
+  # `docker-compose` matches `(docker-)?compose(-\w+)?(.<suffix>)?.ya?ml`, so both infra/docker-compose.yml and the
+  # release recipe infra/docker-compose.prod.yml.
+  - package-ecosystem: "docker-compose"
+    directory: "/infra"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "images"
+
+  # `helm` reads Chart.yaml dependencies (the chart has none) AND every `image:` string in values*.yaml — the
+  # chart's mariadb and garage pins. The ci/ values files sit one directory down and name no third-party image.
+  - package-ecosystem: "helm"
+    directory: "/charts/veyq"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "images"
+
+  # Reached by no ecosystem: the backup tool's `*_IMAGE` constants in scripts/instance_backup.py. Its mariadb pin
+  # shares a `repo:tag` with the compose files, so a bump there turns validate_image_pins.py red until the constant
+  # follows by hand; its rclone pin appears nowhere else and is bumped by hand, deliberately, at a release.
 
   - package-ecosystem: "github-actions"
     directory: "/"

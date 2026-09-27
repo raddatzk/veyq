@@ -30,6 +30,7 @@ vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: { template: '<div class="stub-kit" />' },
 }))
 vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
+vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
 vi.mock('../api/client', () => ({
   setupApi: () => ({ getSetupStatus: vi.fn().mockResolvedValue({ instanceSalt: 'AAAA' }) }),
 }))
@@ -44,6 +45,7 @@ import { previewInvite } from '../features/tenant/tenantInvite'
 import { login } from '../features/account/login/login'
 import { buildAccount } from '@veyq/crypto/accountBirth'
 import { vaultState } from '../app/vault'
+import { pwnedCount } from '../shared/pwned'
 
 // PrimeVue's real components need the plugin's config injection, which this file has no reason to install:
 // what it asserts is a `:disabled` prop and a rendered hint, not PrimeVue's own rendering. Same stub set as
@@ -63,6 +65,11 @@ const stubs = {
     props: ['modelValue'],
     template: '<input type="password" :value="modelValue" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
+  // The breach-check box: a native checkbox, so a test ticks it with `setValue(true)`.
+  Checkbox: {
+    props: ['modelValue'],
+    template: '<input type="checkbox" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const i18n = createI18n({
@@ -76,7 +83,7 @@ const i18n = createI18n({
       unlock: { secretKey: 'Secret Key' },
       profile: { firstName: 'First', lastName: 'Last' },
       login: { title: 'Sign in' },
-      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.' },
+      password: { minLength: 'Use at least 10 characters.', strong: 'Strong.', pwnedWarning: 'Seen in {count}.', pwnedUnavailable: 'Not checked.' },
       tenant: {
         join: {
           title: 'Join', loading: 'Loading…', invitedTo: 'Invited', continue: 'Continue', join: 'Join',
@@ -128,6 +135,26 @@ describe('TenantJoinView — where the password floor applies', () => {
     await w.find('form').trigger('submit')
     await flushPromises()
     expect(buildAccount).toHaveBeenCalledOnce()
+  })
+
+  it('REGISTER with the breach check ticked: a hit stops the first submit and the second goes ahead', async () => {
+    // The slip the composable's own test cannot see: a dialog that forgets to await the guard.
+    vi.mocked(pwnedCount).mockResolvedValue(3)
+    const w = await mountFor(false)
+    await w.find('input[name="username"]').setValue('kevin')
+    await w.find('input[type="password"]').setValue('a long enough password')
+    await w.find('input[type="checkbox"]').setValue(true)
+    await flushPromises()
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(buildAccount).not.toHaveBeenCalled()
+    expect(w.text()).toContain('Seen in 3.')
+
+    await w.find('form').trigger('submit')
+    await flushPromises()
+    expect(buildAccount).toHaveBeenCalledOnce()
+    expect(pwnedCount).toHaveBeenCalledOnce()
   })
 })
 

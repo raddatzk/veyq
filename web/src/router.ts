@@ -6,6 +6,7 @@ import { vaultState } from './app/vault'
 import { rememberRoute } from './app/pendingRoute'
 import { termsStale } from './app/activeSpace'
 import NotSetUpView from './views/NotSetUpView.vue'
+import SpaceOfflineView from './views/SpaceOfflineView.vue'
 import LoginView from './views/LoginView.vue'
 import SettingsHubView from './views/SettingsHubView.vue'
 import TenantJoinView from './views/TenantJoinView.vue'
@@ -27,6 +28,9 @@ const router = createRouter({
   routes: [
     { path: '/', name: 'home', component: MemoryHomeView, meta: { layout: 'app', requiresUnlock: true } },
     { path: '/not-set-up', name: 'not-set-up', component: NotSetUpView },
+    // The suspended tenant's own domain (uc.spaces.scope-access A7): every API call here is refused, so every route
+    // lands on this full-page notice — reached from boot, or mid-session once a call learns it.
+    { path: '/offline', name: 'offline', component: SpaceOfflineView },
     { path: '/login', name: 'login', component: LoginView },
     // The settings hub (cr-0078, ADR 0022): one scope-contextual page. `:section?` selects a section (wide shows
     // the sidebar + that section; narrow drills in). Needs an unlocked vault — sections read the active space,
@@ -57,6 +61,9 @@ const router = createRouter({
 
 router.beforeEach((to) => {
   const { serverState } = useServerState()
+  // A suspended tenant's own domain answers nothing but `403 tenant_suspended` — only the notice is left.
+  if (serverState.suspended) return to.name === 'offline' ? true : { name: 'offline' }
+  if (to.name === 'offline') return { name: 'login' }
   // Boot hasn't answered yet (null) — let navigation through; boot resolves before mount.
   if (serverState.setupCompleted === null) return true
   if (!serverState.setupCompleted && to.name !== 'not-set-up') return { name: 'not-set-up' }
@@ -97,5 +104,13 @@ watch(termsStale, (stale) => {
     void router.push({ name: 'terms' })
   }
 })
+
+// Mid-session: a call on this domain learned its tenant is suspended (`handleTenantSuspended`) — leave for the notice.
+watch(
+  () => useServerState().serverState.suspended,
+  (suspended) => {
+    if (suspended && router.currentRoute.value.name !== 'offline') void router.replace({ name: 'offline' })
+  },
+)
 
 export default router

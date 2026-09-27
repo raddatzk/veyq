@@ -8,9 +8,10 @@ import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.features.admin.tenant.TenantEntity
+import com.veyq.app.shared.membership.TenantRoots
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.features.spaces.scope.ScopeEntity
+import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -350,6 +351,7 @@ class MediaTrashSliceTest {
                 id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
                 this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
+            TenantRoots.join(userId, tenantId)
         }
         return userId to scopeId
     }

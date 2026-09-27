@@ -98,9 +98,9 @@ sequenceDiagram
   the fresh epoch and retries **once** — the same optimistic-concurrency shape, and the same client retry, a
   rename already uses ([uc.spaces.rename-group](uc.spaces.rename-group.md) A1). Rare on a group; on a tenant
   it effectively cannot happen (see the `iconEpoch` note below).
-- **A2 — the space is pending-deletion:** an icon-set is a content write → `409`, read-only until
-  restore/purge ([uc.spaces.delete-group](uc.spaces.delete-group.md) A4). Group slice only — a tenant has no
-  grace-delete.
+- **A2 — the space is pending-deletion:** an icon-set or an icon-clear is a write → `409 scope_deleting`,
+  read-only until restore/purge ([uc.spaces.delete-group](uc.spaces.delete-group.md) A4,
+  [scope-access](uc.spaces.scope-access.md)). Group slice only — a tenant has no grace-delete.
 - **A3 — the caller is not the OWNER:** `403 not_scope_owner`. A plain member is not the icon authority. The
   membership guard runs **first**, so a non-member gets the same `404` as a bogus id
   ([ADR 0042](../../../decisions/0042-http-failure-projection.md)).
@@ -112,6 +112,7 @@ sequenceDiagram
 - **A5 — remove the icon:** the owner clears it → `sealed_icon` + `icon_epoch` are reset and every member falls
   back to the initial. Same owner gate, but **no epoch check**: a removal carries no ciphertext that could be
   sealed under a stale epoch, so the concurrency guard a set needs (A1) has nothing to guard here. Idempotent.
+  Still a write, so it is refused while the space is being deleted (A2).
 - **E1 — the browser cannot decode the file:** rejected in the picker with a message. Unlike a Memory cover —
   which seals the **pristine bytes** un-resized when a codec is undecodable — an icon has **no such fallback**:
   the fixed box and the constant length are the whole point, so bytes that cannot be re-encoded cannot be

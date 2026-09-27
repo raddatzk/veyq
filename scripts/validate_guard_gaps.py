@@ -207,7 +207,7 @@ PROD_COMPOSE = "infra/docker-compose.prod.yml"
 CONFIG_SECRET_MOUNT = "      - veyq-config-secret:/var/lib/veyq\n"
 # Where a fourth veyq_blob reference arm is forged: a scope is the plausible place for one (a space banner),
 # and it is one of the entities the delete paths already touch.
-SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/features/spaces/scope/Entities.kt"
+SCOPE_ENTITY = "backend/src/main/kotlin/com/veyq/app/shared/scope/ScopeEntity.kt"
 SCOPE_ENTITY_ANCHOR = "class ScopeEntity : PanacheEntityBase {\n"
 BANNER_MIGRATION = "backend/src/main/resources/db/migration/V99__guard_gap_scope_banner.sql"
 # Where a bypass of the single-deleter rule is forged. A scheduled purge is the plausible place: it already
