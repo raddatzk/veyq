@@ -1,24 +1,20 @@
 package com.veyq.app.features.content
 
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.media.TestBlob
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.itemfavorites.ItemFavoritesEntity
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -62,9 +58,6 @@ import java.util.UUID
 class NodeTrashSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var handler: NodesHandler
 
     @Inject
@@ -81,8 +74,6 @@ class NodeTrashSliceTest {
 
     private val recorder: RecordingBlobStore get() = blobStore as RecordingBlobStore
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     // --- 1. the subtree leaves the tree and shows up in the space's trash ---
 
     @Test
@@ -92,15 +83,15 @@ class NodeTrashSliceTest {
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Yy1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$folder").then().statusCode(204)
 
         // gone from the tree, whole subtree
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("id", not(hasItem(folder))).body("id", not(hasItem(memory))).body("id", not(hasItem(chapter)))
 
         // the trash lists ONLY the root — the descendants went with it and come back with it
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
             .then().statusCode(200)
             .body("id", hasItem(folder))
             .body("id", not(hasItem(memory)))
@@ -117,7 +108,7 @@ class NodeTrashSliceTest {
         val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"a2VlcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val mediaId = completeOne(userId, scopeId, memory, "b3JpZw==")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
 
         val (media, node) = QuarkusTransaction.requiringNew().call {
@@ -136,7 +127,7 @@ class NodeTrashSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val first = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"cm9tLTIwMjY=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$first").then().statusCode(204)
 
         // the SAME slug in the SAME parent is immediately reusable — without `slug_token := id` this is a 409
@@ -156,26 +147,26 @@ class NodeTrashSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val original = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$original").then().statusCode(204)
 
         // somebody re-used the name while the Memory sat in the trash
         createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bTI=","slugToken":"dGFrZW4=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // the restore surfaces the SAME disambiguation a create does — a 409 slug_taken, never a 500
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"dGFrZW4="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$original/restore")
             .then().statusCode(409).body("code", equalTo("slug_taken"))
 
         // and the subtree is still in the trash, restorable under another name — the retry re-seals the name in
         // the SAME write as the token derived from it, so the node is never live with a mismatched pair.
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"dGFrZW4tMg==","encryptedName":"cmVuYW1lZA=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$original/restore")
             .then().statusCode(204)
 
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("find { it.id == '$original' }.slugToken", equalTo("dGFrZW4tMg=="))
             .body("find { it.id == '$original' }.encryptedName", equalTo("cmVuYW1lZA=="))
@@ -188,18 +179,18 @@ class NodeTrashSliceTest {
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"cmVzdC1j","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val mediaId = completeOne(userId, scopeId, chapter, "b3JpZw==")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"cmVzdC1z"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/restore").then().statusCode(204)
 
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("id", hasItem(memory)).body("id", hasItem(chapter))
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/trash/nodes")
             .then().statusCode(200).body("id", not(hasItem(memory)))
         // the chapter's gallery is reachable again, with its media still in it
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes/$chapter/media")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$chapter/media")
             .then().statusCode(200).body("media.mediaId", hasItem(mediaId))
     }
 
@@ -207,7 +198,7 @@ class NodeTrashSliceTest {
     @Test
     fun restoreOfAnUnknownSubtreeIs404() {
         val (userId, scopeId) = seedMemberScope()
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"Z29uZQ=="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/${UUID.randomUUID()}/restore")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
@@ -226,7 +217,7 @@ class NodeTrashSliceTest {
     fun slugTakenStillSeesTrashedRowsSoTheDatabaseNeverThrows() {
         val (userId, scopeId) = seedMemberScope()
         val trashed = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"dHJhcC1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$trashed").then().statusCode(204)
 
         // the freed token is the trashed node's own id; creating a sibling that claims it must be REJECTED,
@@ -255,7 +246,7 @@ class NodeTrashSliceTest {
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"c3RyLW0=","orderIndex":0,"wrappedContentKey":"aw=="}""")
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"c3RyLWM=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
 
         // the inner delete happened long ago — past the retention window
@@ -265,7 +256,7 @@ class NodeTrashSliceTest {
         }
 
         // now the folder around it goes
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$folder").then().statusCode(204)
 
         purge.run()
@@ -279,10 +270,10 @@ class NodeTrashSliceTest {
         }
 
         // and restoring the folder brings the whole thing back
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"slugToken":"c3RyLWY="}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$folder/restore").then().statusCode(204)
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("id", hasItem(folder)).body("id", hasItem(memory)).body("id", hasItem(chapter))
     }
 
@@ -292,11 +283,11 @@ class NodeTrashSliceTest {
         val (userId, scopeId) = seedMemberScope()
         val memory = createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"aWRlbXA=","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
         val first = QuarkusTransaction.requiringNew().call { NodeEntity.findById(memory)!!.deletedAt }
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
         val second = QuarkusTransaction.requiringNew().call { NodeEntity.findById(memory)!!.deletedAt }
 
@@ -320,13 +311,13 @@ class NodeTrashSliceTest {
 
         val original = startOne(userId, scopeId, TestBlob.ofChunks(2), "b3JpZw==")
         val thumb = startOne(userId, scopeId, TestBlob.SMALL, "dGh1bWI=", TestBlob.ownerOf(original), "THUMBNAIL")
-        val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original","derivatives":[{"kind":"THUMBNAIL","uploadId":"$thumb"}]}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
         val coverBlob = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Y292ZXI=", memory, "COVER"))
-        val subBucket = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val subBucket = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"bucketId":"${TestIds.uuid()}","sealedName":"YnVja2V0"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
@@ -334,17 +325,17 @@ class NodeTrashSliceTest {
         // item favorites on BOTH subtrees: the doomed one's must go, the in-window one's must not (ADR 0068).
         // Keyed on the node, so the purge is the only thing that reaches them — the scope survives.
         for (n in listOf(memory, survivor)) {
-            given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
                 .body("""{"ciphertext":"bWFya3M="}""")
                 .`when`().put("/api/scopes/$scopeId/nodes/$n/item-favorites").then().statusCode(204)
         }
 
         // a control subtree, trashed but still INSIDE the window — the purge must not touch it
         val freshMediaId = completeOne(userId, scopeId, survivor, "ZnJlc2g=")
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$survivor").then().statusCode(204)
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory").then().statusCode(204)
 
         // the cover blob must SURVIVE the delete — reclaiming it there would make a restore return a Memory
@@ -396,7 +387,7 @@ class NodeTrashSliceTest {
     // --- helpers ---
 
     private fun createNode(userId: String, scopeId: String, body: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON).body(body)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(body)
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(201).body("nodeId", notNullValue())
             .extract().path("nodeId")
@@ -405,7 +396,7 @@ class NodeTrashSliceTest {
         userId: String, scopeId: String, blob: TestBlob, wrap: String,
         ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
     ): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
@@ -413,7 +404,7 @@ class NodeTrashSliceTest {
 
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String): String {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap)
-        return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
@@ -421,42 +412,9 @@ class NodeTrashSliceTest {
     }
 
     private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob")
             .then().statusCode(200).body("blobId", notNullValue())
             .extract().path("blobId")
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

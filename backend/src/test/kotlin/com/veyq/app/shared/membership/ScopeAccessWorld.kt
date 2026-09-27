@@ -1,12 +1,13 @@
 package com.veyq.app.shared.membership
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -36,7 +37,6 @@ import java.util.UUID
  *   counted as a tenant member.
  */
 class ScopeAccessWorld(
-    private val sessions: SessionService,
     /** The role of each space's seeded share — a profile that switches VIEWER links off seeds UPLOADER ones. */
     private val shareRole: String = "VIEWER",
 ) {
@@ -66,11 +66,9 @@ class ScopeAccessWorld(
     /** A `Host` no tenant claims — so a refusal on it can only come from the gate, never from `TenantSuspensionFilter`. */
     val unclaimedHost = "unclaimed-${UUID.randomUUID()}.invalid"
 
-    fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     fun build(): ScopeAccessWorld {
-        val tenantA = seedTenant()
-        val tenantB = seedTenant()
+        val tenantA = seedHostTenant()
+        val tenantB = seedHostTenant()
         val ownerA = seedUser().also { member(it, tenantA.first, tenantA.first, MembershipEntity.OWNER) }
         val deleter = seedUser().also { member(it, tenantA.first, tenantA.first, MembershipEntity.MEMBER) }
         val ownerB = seedUser().also { member(it, tenantB.first, tenantB.first, MembershipEntity.OWNER) }
@@ -95,19 +93,9 @@ class ScopeAccessWorld(
     }
 
     /** A tenant with its root scope; returns (tenantId, domain). */
-    private fun seedTenant(): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "t-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Probe"; this.domain = domain; ownerEmail = "o-$tenantId@example.com"
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-        }
-        return tenantId to domain
+    private fun seedHostTenant(): Pair<String, String> {
+        val domain = "t-${UUID.randomUUID()}.example.com"
+        return seedTenant(domain = domain) to domain
     }
 
     /** A GROUP owned by [ownerId], with content written through the API as its owner. */
@@ -125,7 +113,7 @@ class ScopeAccessWorld(
             }.persist()
         }
         member(ownerId, tenant.first, scopeId, MembershipEntity.OWNER)
-        val auth = token(ownerId)
+        val auth = bearer(ownerId)
 
         val mediaId = TestIds.uuid()
         val completed = start(auth, scopeId, mediaId)
@@ -180,17 +168,6 @@ class ScopeAccessWorld(
                 sealedNameKey = B64; createdAt = Instant.now()
             }.persist()
         }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "probe-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
-                identityPublicKey = B64; wrappedIdentityPrivateKey = B64; authPublicKey = B64; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 
     companion object {
         const val B64 = "AQ=="

@@ -1,24 +1,21 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -38,20 +35,15 @@ import java.util.UUID
 @QuarkusTest
 class NodeCoverSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     @Test
     fun commitAttachesCoverBlobWithNoMediaRow() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofPlaintext(4096)
         val uploadId = startOne(userId, scopeId, blob, wrap = "Y292ZXItd3JhcA==", ownerId = memory, role = "COVER")
 
         // commit the upload as the node's standalone cover — the ref echoes the declared shape + wrap verbatim
-        val blobId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val blobId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
             .then().statusCode(200)
@@ -63,7 +55,7 @@ class NodeCoverSliceTest {
 
         // NO media row — a cover blob never appears in the gallery list; and cr-0107: a cover change bumps
         // NEITHER counter (it writes no veyq_media row + never lists), so a cover swap must not force a re-list.
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media.size()", equalTo(0))
@@ -84,7 +76,7 @@ class NodeCoverSliceTest {
     @Test
     fun replaceReclaimsPriorCoverBlob() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val first = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "Zmlyc3Q=", memory, "COVER"))
 
         // the key the replace must not lose — read while the row that holds it still exists
@@ -106,13 +98,13 @@ class NodeCoverSliceTest {
     @Test
     fun deleteCoverBlobDetachesAndReclaims() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "ZGVs", memory, "COVER"))
 
         // the key the delete must not lose — read while the row that holds it still exists
         val storageKey = QuarkusTransaction.requiringNew().call { BlobEntity.findById(blobId)!!.storageKey }
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob")
             .then().statusCode(204)
 
@@ -127,7 +119,7 @@ class NodeCoverSliceTest {
         }
 
         // idempotent — deleting again (no cover blob) still answers 204
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory/cover-blob")
             .then().statusCode(204)
     }
@@ -142,10 +134,10 @@ class NodeCoverSliceTest {
     @Test
     fun deleteNodeKeepsTheCoverBlobForTheRestore() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blobId = commitCover(userId, scopeId, memory, startOne(userId, scopeId, TestBlob.SMALL, "bm9kZQ==", memory, "COVER"))
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().delete("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
 
@@ -163,13 +155,13 @@ class NodeCoverSliceTest {
     @Test
     fun anUploadNotStartedAsThisNodesCoverIsRefused() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        val other = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        val other = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         for (upload in listOf(
             startOne(userId, scopeId, TestBlob.SMALL, "b3JpZw==", ownerId = memory, role = "ORIGINAL"),
             startOne(userId, scopeId, TestBlob.SMALL, "b3RoZXI=", ownerId = other, role = "COVER"),
         )) {
-            given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+            given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
                 .body("""{"uploadId":"$upload"}""")
                 .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
                 .then().statusCode(422).body("code", equalTo("upload_mismatch"))
@@ -182,10 +174,10 @@ class NodeCoverSliceTest {
     @Test
     fun coverOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "Zm9sZA==")
 
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$folder/cover-blob")
             .then().statusCode(422).body("code", equalTo("illegal_target"))
@@ -194,8 +186,8 @@ class NodeCoverSliceTest {
     @Test
     fun commitUnknownUploadIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"${UUID.randomUUID()}"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
@@ -205,7 +197,7 @@ class NodeCoverSliceTest {
     fun commitUnknownNodeIs404() {
         val (userId, scopeId) = seedMemberScope()
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "bm9wZQ==")
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/${UUID.randomUUID()}/cover-blob")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
@@ -214,12 +206,12 @@ class NodeCoverSliceTest {
     @Test
     fun crossScopeUploadIs404() {
         val (userId, scopeA) = seedMemberScope()
-        val scopeB = seedScopeFor(userId) // the same user is a member of a second scope
-        val memoryB = seedNode(scopeB, NodeEntity.MEMORY)
+        val scopeB = seedMemberScope(userId = userId).scopeId // the same user is a member of a second scope
+        val memoryB = seedNode(scopeB, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadInA = startOne(userId, scopeA, TestBlob.SMALL, "eA==")
 
         // committing scope A's upload against a scope B node — the session isn't in B → 404 (no cross-scope reach)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadInA"}""")
             .`when`().post("/api/scopes/$scopeB/nodes/$memoryB/cover-blob")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
@@ -228,11 +220,11 @@ class NodeCoverSliceTest {
     @Test
     fun nonMemberIs404() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, "b3V0")
         val outsider = seedUser()
 
-        given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$memory/cover-blob")
             .then().statusCode(404).body("code", equalTo("node_not_found"))
@@ -252,7 +244,7 @@ class NodeCoverSliceTest {
         userId: String, scopeId: String, blob: TestBlob, wrap: String,
         ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
     ): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200).body("results[0].uploadId", notNullValue())
@@ -260,7 +252,7 @@ class NodeCoverSliceTest {
 
     /** Commit an upload as the node's cover and return the committed blob id. */
     private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"uploadId":"$uploadId"}""")
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob")
             .then().statusCode(200).body("blobId", notNullValue())
@@ -268,59 +260,9 @@ class NodeCoverSliceTest {
 
     /** The per-item presign-download error for a blob: `store_unavailable` (exists) vs `upload_not_found` (gone). */
     private fun downloadError(userId: String, scopeId: String, blobId: String): String? =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"blobId":"$blobId"}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-downloads-batch")
             .then().statusCode(200)
             .extract().path("results[0].error")
-
-    private fun seedNode(scopeId: String, kind: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; this.kind = kind
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = if (kind == NodeEntity.MEMORY) "a21lbQ==" else null; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        return userId to seedScopeFor(userId)
-    }
-
-    /** Seed an ACTIVE tenant + a PERSONAL scope the given user is a member of. Returns the scope id. */
-    private fun seedScopeFor(userId: String): String {
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

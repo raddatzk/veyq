@@ -1,21 +1,15 @@
 package com.veyq.app.features.content
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItems
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -27,11 +21,6 @@ import java.util.UUID
 @QuarkusTest
 class NodesSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     @Test
     fun createTreeThenList() {
         val (userId, scopeId) = seedMemberScope()
@@ -40,7 +29,7 @@ class NodesSliceTest {
         // a chapter carries its OWN K_mem, wrapped under the parent Memory's K_mem (recursive K_mem, cr-0060 / ADR 0012)
         val chapter = createNode(userId, scopeId, """{"parentId":"$memory","nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Y2hhcHRlcg==","slugToken":"Y2hhcC1zbHVn","orderIndex":0,"wrappedContentKey":"a2NoYXAtd3JhcA=="}""")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("kind", hasItems("FOLDER", "MEMORY", "CHAPTER"))
@@ -54,7 +43,7 @@ class NodesSliceTest {
     fun slugCollisionPerParentIs409() {
         val (userId, scopeId) = seedMemberScope()
         createNode(userId, scopeId, """{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"YQ==","slugToken":"ZHVwZQ==","orderIndex":0}""")
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Yg==","slugToken":"ZHVwZQ==","orderIndex":1}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(409).body("code", equalTo("slug_taken"))
@@ -63,7 +52,7 @@ class NodesSliceTest {
     @Test
     fun chapterAtRootIs422() {
         val (userId, scopeId) = seedMemberScope()
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"nodeId":"${UUID.randomUUID()}","kind":"CHAPTER","encryptedName":"Yw==","slugToken":"Y2hhcA==","orderIndex":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(422).body("code", equalTo("illegal_structure"))
@@ -73,7 +62,7 @@ class NodesSliceTest {
     fun nonMemberIs404() {
         val (_, scopeId) = seedMemberScope()
         val outsider = seedUser()
-        given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"nodeId":"${UUID.randomUUID()}","kind":"FOLDER","encryptedName":"Yg==","slugToken":"b3V0","orderIndex":0}""")
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
@@ -94,17 +83,17 @@ class NodesSliceTest {
         val memory = createNode(userId, scopeId, """{"parentId":"$folder","nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bQ==","slugToken":"bS1z","orderIndex":0,"wrappedContentKey":"aw=="}""")
 
         // rename the folder (new ciphertext name + recomputed slug)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXM="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$folder")
             .then().statusCode(204)
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("find { it.id == '$folder' }.encryptedName", equalTo("bmV3"))
 
         // delete the folder → its subtree (the memory) goes too
-        given().header("Authorization", token(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$folder")
+        given().header("Authorization", bearer(userId)).`when`().delete("/api/scopes/$scopeId/nodes/$folder")
             .then().statusCode(204)
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200).body("id", org.hamcrest.CoreMatchers.not(hasItems(folder, memory)))
     }
 
@@ -118,12 +107,12 @@ class NodesSliceTest {
 
         // addressing the foreign node through the attacker's own scope must NOT delete it: a NoScope-shaped 404,
         // indistinguishable from an absent scope (non-enumerable) — never a 204 that hard-deletes another scope's node.
-        given().header("Authorization", token(userA))
+        given().header("Authorization", bearer(userA))
             .`when`().delete("/api/scopes/$scopeA/nodes/$victimNode")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
 
         // the foreign node survives under B
-        given().header("Authorization", token(userB)).`when`().get("/api/scopes/$scopeB/nodes")
+        given().header("Authorization", bearer(userB)).`when`().get("/api/scopes/$scopeB/nodes")
             .then().statusCode(200).body("id", hasItems(victimNode))
     }
 
@@ -135,25 +124,25 @@ class NodesSliceTest {
             userId, scopeId,
             """{"nodeId":"${UUID.randomUUID()}","kind":"MEMORY","encryptedName":"bWVt","slugToken":"bWV0YS1z","orderIndex":0,"wrappedContentKey":"aw==","wrappedMeta":"bWV0YS12MQ=="}""",
         )
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("find { it.id == '$memory' }.wrappedMeta", equalTo("bWV0YS12MQ=="))
 
         // a rename that OMITS wrappedMeta must leave the sealed blob unchanged (partial semantics)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"encryptedName":"bmV3","slugToken":"bmV3LXNsdWc="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("find { it.id == '$memory' }.wrappedMeta", equalTo("bWV0YS12MQ=="))
 
         // a partial update that SETS wrappedMeta replaces it
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"wrappedMeta":"bWV0YS12Mg=="}""")
             .`when`().patch("/api/scopes/$scopeId/nodes/$memory")
             .then().statusCode(204)
-        given().header("Authorization", token(userId)).`when`().get("/api/scopes/$scopeId/nodes")
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes")
             .then().statusCode(200)
             .body("find { it.id == '$memory' }.wrappedMeta", equalTo("bWV0YS12Mg=="))
     }
@@ -161,42 +150,8 @@ class NodesSliceTest {
     // --- helpers ---
 
     private fun createNode(userId: String, scopeId: String, body: String): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON).body(body)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body(body)
             .`when`().post("/api/scopes/$scopeId/nodes")
             .then().statusCode(201).body("nodeId", notNullValue())
             .extract().path("nodeId")
-
-    /** Seed a user + an ACTIVE tenant + a PERSONAL scope the user is a member of. Returns (userId, scopeId). */
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

@@ -1,20 +1,21 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.shared.TestIds
 import com.veyq.app.shared.adminchannel.givenAdminChannel
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.membership.TenantRoots
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import io.restassured.response.Response
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
@@ -39,11 +40,6 @@ import kotlin.test.assertEquals
  */
 @QuarkusTest
 class TenantStorageQuotaSliceTest {
-
-    @Inject
-    lateinit var sessions: SessionService
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     private val s = TestBlob.SMALL
     private val d = TestBlob.ofPlaintext(100) // a size no probe blob has, so its bytes are visible in the pin
@@ -330,7 +326,7 @@ class TenantStorageQuotaSliceTest {
             }
             TenantRoots.join(userId, tenantId, MembershipEntity.OWNER) // the tenant owner
         }
-        return Tenant(tenantId, userId, scopeA, seedNode(scopeA), scopeB, seedNode(scopeB))
+        return Tenant(tenantId, userId, scopeA, seedNode(scopeA, wrappedContentKey = CONTENT_KEY), scopeB, seedNode(scopeB, wrappedContentKey = CONTENT_KEY))
     }
 
     /** A CONTRIBUTOR link on Memory A, with one identity. */
@@ -409,28 +405,4 @@ class TenantStorageQuotaSliceTest {
 
     private fun sessionCount(scopeId: String): Long =
         QuarkusTransaction.requiringNew().call { UploadSessionEntity.count("scopeId", scopeId) }
-
-    private fun seedNode(scopeId: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; kind = NodeEntity.MEMORY
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = "a21lbQ=="; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    private fun seedUser(serverRole: String = "MEMBER"): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; this.serverRole = serverRole
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

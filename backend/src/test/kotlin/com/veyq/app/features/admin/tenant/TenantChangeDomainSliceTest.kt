@@ -3,6 +3,8 @@ package com.veyq.app.features.admin.tenant
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -11,7 +13,6 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -36,7 +37,7 @@ class TenantChangeDomainSliceTest {
 
     @Test
     fun aPendingTenantMoves() {
-        val (tenantId, _) = seedTenant(TenantEntity.PENDING)
+        val (tenantId, _) = seedTenantIn(TenantEntity.PENDING)
         val moved = uniqueDomain("pending-moved")
         changeDomain(ownerToken(), tenantId, moved).then().statusCode(204)
         assertEquals(moved, domainOf(tenantId))
@@ -45,7 +46,7 @@ class TenantChangeDomainSliceTest {
     @Test
     fun anActiveTenantMovesToo() {
         // The difference from resend/reassign/revoke, stated as a test: a settled tenant may still be moved.
-        val (tenantId, _) = seedTenant(TenantEntity.ACTIVE)
+        val (tenantId, _) = seedTenantIn(TenantEntity.ACTIVE)
         val moved = uniqueDomain("active-moved")
         changeDomain(ownerToken(), tenantId, moved).then().statusCode(204)
         assertEquals(moved, domainOf(tenantId))
@@ -56,7 +57,7 @@ class TenantChangeDomainSliceTest {
         // Reactivate first — a state whose whole point is "leave it alone" does not get a second thing to reason
         // about. The code is deliberately NOT the boundary gate's `tenant_suspended` (403): that one means "this
         // space is offline", this one means "reactivate it, then move it".
-        val (tenantId, original) = seedTenant(TenantEntity.SUSPENDED)
+        val (tenantId, original) = seedTenantIn(TenantEntity.SUSPENDED)
         changeDomain(ownerToken(), tenantId, uniqueDomain("refused"))
             .then().statusCode(409).body("code", equalTo("tenant_not_pending_or_active"))
         assertEquals(original, domainOf(tenantId))
@@ -64,8 +65,8 @@ class TenantChangeDomainSliceTest {
 
     @Test
     fun aDomainAlreadyMappedIsRefused() {
-        val (occupantId, taken) = seedTenant(TenantEntity.ACTIVE)
-        val (tenantId, original) = seedTenant(TenantEntity.ACTIVE)
+        val (occupantId, taken) = seedTenantIn(TenantEntity.ACTIVE)
+        val (tenantId, original) = seedTenantIn(TenantEntity.ACTIVE)
 
         changeDomain(ownerToken(), tenantId, taken)
             .then().statusCode(409).body("code", equalTo("domain_taken"))
@@ -79,7 +80,7 @@ class TenantChangeDomainSliceTest {
     fun movingATenantToItsOwnDomainSucceedsUnchanged() {
         // The idempotent replay — the same request twice, a double-submitted form. `domainExists` would answer
         // "taken" for the tenant's own row, so without the identity check this would 409 on a no-op.
-        val (tenantId, original) = seedTenant(TenantEntity.ACTIVE)
+        val (tenantId, original) = seedTenantIn(TenantEntity.ACTIVE)
         changeDomain(ownerToken(), tenantId, original).then().statusCode(204)
         assertEquals(original, domainOf(tenantId))
     }
@@ -87,7 +88,7 @@ class TenantChangeDomainSliceTest {
     @Test
     fun aMalformedDomainIsRejectedAtTheBoundary() {
         // Same rule as at creation, and the same place: the generated DTO's @Pattern, before any handler runs.
-        val (tenantId, original) = seedTenant(TenantEntity.ACTIVE)
+        val (tenantId, original) = seedTenantIn(TenantEntity.ACTIVE)
         changeDomain(ownerToken(), tenantId, "NOT a domain").then().statusCode(400)
         changeDomain(ownerToken(), tenantId, "").then().statusCode(400)
         assertEquals(original, domainOf(tenantId))
@@ -97,7 +98,7 @@ class TenantChangeDomainSliceTest {
     fun theDomainIsNormalisedToLowercaseLikeAtCreation() {
         // A Host is case-insensitive but `TenantHostResolver` looks the row up lowercased — an upper-case row is
         // a tenant no request can ever resolve to. Create normalises; so must this.
-        val (tenantId, _) = seedTenant(TenantEntity.ACTIVE)
+        val (tenantId, _) = seedTenantIn(TenantEntity.ACTIVE)
         val moved = uniqueDomain("mixedcase")
         changeDomain(ownerToken(), tenantId, moved.uppercase()).then().statusCode(400) // the @Pattern is lowercase-only…
         changeDomain(ownerToken(), tenantId, moved).then().statusCode(204)             // …so the boundary is what normalises
@@ -106,7 +107,7 @@ class TenantChangeDomainSliceTest {
 
     @Test
     fun itIsServerOwnerOnly() {
-        val (tenantId, original) = seedTenant(TenantEntity.ACTIVE)
+        val (tenantId, original) = seedTenantIn(TenantEntity.ACTIVE)
         changeDomain(memberToken(), tenantId, uniqueDomain("not-owner"))
             .then().statusCode(403).body("code", equalTo("not_server_owner"))
         assertEquals(original, domainOf(tenantId))
@@ -130,40 +131,12 @@ class TenantChangeDomainSliceTest {
 
     private fun uniqueDomain(prefix: String) = "$prefix-${UUID.randomUUID()}.example.com"
 
-    private fun ownerToken() = sessions.issue(seedUser("SERVER_OWNER")).accessToken
-    private fun memberToken() = sessions.issue(seedUser("MEMBER")).accessToken
+    private fun ownerToken() = sessions.issue(seedUser(serverRole = "SERVER_OWNER")).accessToken
+    private fun memberToken() = sessions.issue(seedUser(serverRole = "MEMBER")).accessToken
 
     /** A tenant in [status] on a unique domain; returns its id + that domain. */
-    private fun seedTenant(status: String): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "cd-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId
-                name = "Fam"
-                this.domain = domain
-                ownerEmail = "owner-$tenantId@example.com"
-                this.status = status
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return tenantId to domain
-    }
-
-    private fun seedUser(serverRole: String): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            com.veyq.app.shared.identity.VeyqUser().apply {
-                id = userId
-                email = "cd-$userId@example.com"
-                this.serverRole = serverRole
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
+    private fun seedTenantIn(status: String): Pair<String, String> {
+        val domain = uniqueDomain("cd")
+        return seedTenant(domain = domain, status = status, tenantScope = false) to domain
     }
 }

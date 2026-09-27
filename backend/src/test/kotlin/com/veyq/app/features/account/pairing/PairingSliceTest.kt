@@ -5,6 +5,7 @@ import com.veyq.app.features.account.login.RefreshTokenEntity
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -467,16 +468,10 @@ class PairingSliceTest {
 
         private fun seed(userId: String, email: String, keyPair: KeyPair) {
             if (VeyqUser.find("email", email).firstResult() != null) return
-            VeyqUser().apply {
-                id = userId
-                this.email = email
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ=="
-                authPublicKey = b64(keyPair.public.encoded.let { it.copyOfRange(it.size - 32, it.size) })
-                createdAt = Instant.now()
-            }.persist()
+            newUser(
+                id = userId, email = email,
+                authPublicKey = b64(keyPair.public.encoded.let { it.copyOfRange(it.size - 32, it.size) }),
+            ).persist()
         }
 
         private fun sign(kp: KeyPair, nonceB64: String): String {

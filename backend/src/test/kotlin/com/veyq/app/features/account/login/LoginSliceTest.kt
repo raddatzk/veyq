@@ -1,6 +1,7 @@
 package com.veyq.app.features.account.login
 
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -29,19 +30,13 @@ import java.util.Base64
 class LoginSliceTest {
 
     @BeforeEach
-    fun seedUser() {
+    fun seedAccount() {
         QuarkusTransaction.requiringNew().run(Runnable {
             if (VeyqUser.find("email", EMAIL).firstResult() == null) {
-                VeyqUser().apply {
-                    id = "login-test-user"
-                    email = EMAIL
-                    serverRole = "SERVER_OWNER"
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ=="
-                    authPublicKey = b64(rawPublicKey(KEYPAIR))
-                    createdAt = Instant.now()
-                }.persist()
+                newUser(
+                    id = "login-test-user", email = EMAIL, serverRole = "SERVER_OWNER",
+                    authPublicKey = b64(rawPublicKey(KEYPAIR)),
+                ).persist()
             }
         })
     }

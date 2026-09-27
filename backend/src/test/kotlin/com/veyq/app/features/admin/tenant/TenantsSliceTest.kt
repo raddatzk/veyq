@@ -3,8 +3,9 @@ package com.veyq.app.features.admin.tenant
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.adminchannel.givenAdminChannel
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.ensureUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -40,8 +41,8 @@ class TenantsSliceTest {
 
     @BeforeEach
     fun seed() {
-        seedUser(OWNER_ID, "owner@example.com", "SERVER_OWNER")
-        seedUser(MEMBER_ID, "member@example.com", "MEMBER")
+        ensureUser(OWNER_ID, "owner@example.com", "SERVER_OWNER")
+        ensureUser(MEMBER_ID, "member@example.com", "MEMBER")
     }
 
     @Test
@@ -238,8 +239,8 @@ class TenantsSliceTest {
 
     private fun accept(secret: String, invitedEmail: String): Response {
         val userId = UUID.randomUUID().toString()
-        seedUser(userId, invitedEmail, "MEMBER")
-        return given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        ensureUser(userId, invitedEmail, "MEMBER")
+        return given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON).body("""{"bootstrapSecret":"$secret","username":"handoff","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/tenants/accept")
     }
@@ -259,23 +260,6 @@ class TenantsSliceTest {
             this.expiresAt = expiresAt
             createdAt = Instant.now()
         }.persist()
-    }
-
-    private fun seedUser(userId: String, email: String, role: String) {
-        QuarkusTransaction.requiringNew().run {
-            if (VeyqUser.findById(userId) == null) {
-                VeyqUser().apply {
-                    id = userId
-                    this.email = email
-                    serverRole = role
-                    suiteId = "v1"
-                    identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                    wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                    authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                    createdAt = Instant.now()
-                }.persist()
-            }
-        }
     }
 
     companion object {

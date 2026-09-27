@@ -1,13 +1,12 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.sharing.SharingStore
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -19,7 +18,6 @@ import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -32,24 +30,19 @@ import java.util.UUID
 @QuarkusTest
 class MediaSliceTest {
 
-    @Inject
-    lateinit var sessions: SessionService
-
     /** cr-0107: drives the real share delete-own path (cr-0102) to exercise the delete_revision bump + id-set. */
     @Inject
     lateinit var sharing: SharingStore
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     @Test
     fun startCompleteListRoundTrip() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val blob = TestBlob.ofChunks(2)
         val uploadId = startOne(userId, scopeId, blob, wrap = "d3JhcHBlZA==")
 
         // complete + attach to the Memory; the merged listed-metadata tier is listed, EXIF is lazy (cr-0068)
-        val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ==","wrappedExif":"ZXhpZg=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -60,7 +53,7 @@ class MediaSliceTest {
 
         // list the node's media — operator-blind: the wrap + sealed listed-metadata blob come back verbatim.
         // The heavier EXIF tier is deliberately NOT listed (kept constant-small); it is lazy via getMediaExif.
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media[0].wrappedBlobKey", equalTo("d3JhcHBlZA=="))
@@ -72,7 +65,7 @@ class MediaSliceTest {
             .body("mediaRevision", equalTo(1)) // cr-0107: one attach bumped the node's revision to 1
 
         // the lazy exif endpoint returns the sealed EXIF verbatim (opaque, never inspected)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/media/$mediaId/exif")
             .then().statusCode(200)
             .body("wrappedExif", equalTo("ZXhpZg=="))
@@ -81,18 +74,18 @@ class MediaSliceTest {
     @Test
     fun mediaExifWithoutExifIsNull() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with no EXIF sealed (source carried no readable EXIF)
-        val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/media/$mediaId/exif")
             .then().statusCode(200)
             .body("wrappedExif", nullValue())
@@ -101,7 +94,7 @@ class MediaSliceTest {
     @Test
     fun mediaExifForUnknownMediaIs404() {
         val (userId, scopeId) = seedMemberScope()
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/media/${UUID.randomUUID()}/exif")
             .then().statusCode(404).body("code", equalTo("media_not_found"))
     }
@@ -109,29 +102,29 @@ class MediaSliceTest {
     @Test
     fun updateMetaOverwritesSealedTierAndLists() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // complete with an initial listed-metadata tier (cr-0068)
-        val mediaId = given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        val mediaId = given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory","wrappedMeta":"bWV0YQ=="}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
             .extract().path<String>("results[0].mediaId")
 
         // PUT a re-sealed listed-metadata blob (e.g. a corrected date) — opaque, echoed back verbatim (cr-0068)
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", equalTo("Y29ycmVjdGVk"))
 
         // the overwritten value comes back on list (the tier is always listed)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200).body("media[0].wrappedMeta", equalTo("Y29ycmVjdGVk"))
 
         // null clears it
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"wrappedMeta":null}""")
             .`when`().put("/api/scopes/$scopeId/media/$mediaId/meta")
             .then().statusCode(200).body("wrappedMeta", nullValue())
@@ -140,7 +133,7 @@ class MediaSliceTest {
     @Test
     fun updateMetaForUnknownMediaIs404() {
         val (userId, scopeId) = seedMemberScope()
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
             .`when`().put("/api/scopes/$scopeId/media/${UUID.randomUUID()}/meta")
             .then().statusCode(404).body("code", equalTo("media_not_found"))
@@ -149,7 +142,7 @@ class MediaSliceTest {
     @Test
     fun derivativesRoundTripWithOwnWraps() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         // three independent uploads: original + thumbnail + preview, each its own K_blob wrap
         val original = startOne(userId, scopeId, TestBlob.ofChunks(3), wrap = "b3JpZw==")
         val mediaId = TestBlob.ownerOf(original)
@@ -157,7 +150,7 @@ class MediaSliceTest {
         val preview = startOne(userId, scopeId, TestBlob.ofChunks(2), wrap = "cHJldg==", ownerId = mediaId, role = "PREVIEW")
 
         // complete: one logical media = original + two role-tagged derivatives
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
                 """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original","derivatives":[""" +
                     """{"kind":"THUMBNAIL","uploadId":"$thumb"},{"kind":"PREVIEW","uploadId":"$preview"}]}]}""",
@@ -169,7 +162,7 @@ class MediaSliceTest {
             .body("results[0].error", nullValue())
 
         // list: the original tier + both derivative tiers, each with its OWN wrap (no shared K_blob)
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media[0].wrappedBlobKey", equalTo("b3JpZw=="))
@@ -184,17 +177,17 @@ class MediaSliceTest {
     @Test
     fun mediaWithoutDerivativesListsEmptyTiers() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b25seQ==")
 
         // a media with no derivable frame attaches the original only
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
             .body("results[0].error", nullValue())
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media[0].wrappedBlobKey", equalTo("b25seQ=="))
@@ -205,12 +198,12 @@ class MediaSliceTest {
     @Test
     fun derivativeUploadNotFoundFailsWholeItem() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val original = startOne(userId, scopeId, TestBlob.SMALL, wrap = "b3JpZw==")
         val bogus = UUID.randomUUID()
 
         // a missing derivative session fails the whole item atomically — nothing is attached
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body(
                 """{"items":[{"nodeId":"$memory","mediaId":"${TestBlob.ownerOf(original)}","originalUploadId":"$original",""" +
                     """"derivatives":[{"kind":"THUMBNAIL","uploadId":"$bogus"}]}]}""",
@@ -220,7 +213,7 @@ class MediaSliceTest {
             .body("results[0].error", equalTo("upload_not_found"))
             .body("results[0].mediaId", nullValue())
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
             .body("media.size()", equalTo(0))
@@ -229,11 +222,11 @@ class MediaSliceTest {
     @Test
     fun partialBatchPerItemResult() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
         val bogus = UUID.randomUUID()
 
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$memory"},{"mediaId":"${TestBlob.ownerOf(bogus.toString())}","originalUploadId":"$bogus","nodeId":"$memory"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -245,10 +238,10 @@ class MediaSliceTest {
     @Test
     fun mediaOnFolderIsIllegalTarget() {
         val (userId, scopeId) = seedMemberScope()
-        val folder = seedNode(scopeId, NodeEntity.FOLDER)
+        val folder = seedNode(scopeId, NodeEntity.FOLDER, wrappedContentKey = null)
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = "aw==")
 
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$folder"}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200)
@@ -260,7 +253,7 @@ class MediaSliceTest {
     fun overCapDeclarationIsBudgetExceeded() {
         val (userId, scopeId) = seedMemberScope()
         // a well-formed declaration beyond the per-blob cap (`veyq.blob.max-bytes`) — declare-then-verify rejects at start
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.ofChunks(100_000).declare("aw==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
@@ -297,7 +290,7 @@ class MediaSliceTest {
     fun nonMemberIs404() {
         val (_, scopeId) = seedMemberScope()
         val outsider = seedUser()
-        given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare("aw==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
@@ -316,17 +309,17 @@ class MediaSliceTest {
     @Test
     fun unchangedPollIsNotModified() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==") // one attach → media_revision = 1
 
         // the initial full list caches the revision (the ETag)
-        val rev = given().header("Authorization", token(userId))
+        val rev = given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200).body("mediaRevision", equalTo(1))
             .extract().path<Int>("mediaRevision").toString()
 
         // a re-poll echoing that revision as If-None-Match short-circuits to 304 — the O(1) idle fast path, no body
-        given().header("Authorization", token(userId)).header("If-None-Match", rev)
+        given().header("Authorization", bearer(userId)).header("If-None-Match", rev)
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(304)
     }
@@ -334,7 +327,7 @@ class MediaSliceTest {
     @Test
     fun attachDeltaCarriesOnlyNewMediaAndNoIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
 
         val cursor = newestCursor(userId, scopeId, memory) // cache the newest (updatedAt, mediaId)
@@ -344,7 +337,7 @@ class MediaSliceTest {
 
         // the poll streams ONLY the new media past the cursor (a keyset delta, never a re-list), and — since no
         // delete happened (delete_revision unchanged) — carries NO O(N) id-set
-        given().header("Authorization", token(userId)).header("If-None-Match", "1")
+        given().header("Authorization", bearer(userId)).header("If-None-Match", "1")
             .queryParam("since", cursor).queryParam("sinceDelete", 0)
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
@@ -358,19 +351,19 @@ class MediaSliceTest {
     @Test
     fun metaEditSurfacesViaCursorAndNoIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==", meta = "bWV0YQ==") // media_revision = 1
 
         val cursor = newestCursor(userId, scopeId, memory)
 
         // a meta edit re-seals the tier → media_revision bumps + updated_at advances past the cursor
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"wrappedMeta":"Y29ycmVjdGVk"}""")
             .`when`().put("/api/scopes/$scopeId/media/$a/meta")
             .then().statusCode(200)
 
         // the edited media re-surfaces via the cursor as a delta upsert; still no id-set (nothing was deleted)
-        given().header("Authorization", token(userId)).header("If-None-Match", "1")
+        given().header("Authorization", bearer(userId)).header("If-None-Match", "1")
             .queryParam("since", cursor).queryParam("sinceDelete", 0)
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
@@ -385,7 +378,7 @@ class MediaSliceTest {
     @Test
     fun deleteBumpsBothCountersAndIdSetOmitsRemoved() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==") // media_revision = 2
 
@@ -395,7 +388,7 @@ class MediaSliceTest {
         sharing.deleteContributedMedia(scopeId, b, "id-X")
 
         // a poll whose sinceDelete (0) lags delete_revision (1) gets the current id-set — only a remains, b dropped
-        given().header("Authorization", token(userId)).header("If-None-Match", "2")
+        given().header("Authorization", bearer(userId)).header("If-None-Match", "2")
             .queryParam("sinceDelete", 0)
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
@@ -408,7 +401,7 @@ class MediaSliceTest {
     @Test
     fun netZeroDeleteAddStillCarriesIdSet() {
         val (userId, scopeId) = seedMemberScope()
-        val memory = seedNode(scopeId, NodeEntity.MEMORY)
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
         val a = completeOne(userId, scopeId, memory, wrap = "YQ==") // media_revision = 1
         val b = completeOne(userId, scopeId, memory, wrap = "Yg==") // media_revision = 2
 
@@ -422,7 +415,7 @@ class MediaSliceTest {
 
         // the poll: c rides the delta (past the cursor) AND the id-set is present (a delete advanced delete_revision),
         // reconciling to {a, c} — b dropped despite the count staying 2
-        given().header("Authorization", token(userId)).header("If-None-Match", "2")
+        given().header("Authorization", bearer(userId)).header("If-None-Match", "2")
             .queryParam("since", cursor).queryParam("sinceDelete", 0)
             .`when`().get("/api/scopes/$scopeId/nodes/$memory/media")
             .then().statusCode(200)
@@ -440,7 +433,7 @@ class MediaSliceTest {
     private fun completeOne(userId: String, scopeId: String, nodeId: String, wrap: String, meta: String? = null): String {
         val uploadId = startOne(userId, scopeId, TestBlob.SMALL, wrap = wrap)
         val metaField = if (meta != null) ""","wrappedMeta":"$meta"""" else ""
-        return given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        return given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[{"mediaId":"${TestBlob.ownerOf(uploadId)}","originalUploadId":"$uploadId","nodeId":"$nodeId"$metaField}]}""")
             .`when`().post("/api/scopes/$scopeId/media-batch")
             .then().statusCode(200).body("results[0].error", nullValue())
@@ -449,7 +442,7 @@ class MediaSliceTest {
 
     /** The node's newest `(updatedAt, mediaId)` keyset cursor, read from a full list (the media are ordered oldest-first). */
     private fun newestCursor(userId: String, scopeId: String, nodeId: String): String {
-        val list = given().header("Authorization", token(userId))
+        val list = given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$nodeId/media")
             .then().statusCode(200).extract()
         val last = list.path<Int>("media.size()") - 1
@@ -485,7 +478,7 @@ class MediaSliceTest {
     private fun uploadItems(n: Int) = (1..n).joinToString(",", "[", "]") { TestBlob.SMALL.declare("d3JhcA==") }
 
     private fun startBatch(userId: String, scopeId: String, items: String) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":$items}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
 
@@ -493,57 +486,11 @@ class MediaSliceTest {
         userId: String, scopeId: String, blob: TestBlob, wrap: String,
         ownerId: String = UUID.randomUUID().toString(), role: String = "ORIGINAL",
     ): String =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"items":[${blob.declare(wrap, ownerId = ownerId, role = role)}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
             .then().statusCode(200)
             .body("results[0].uploadId", notNullValue())
             .body("results[0].presignedPuts", nullValue())
             .extract().path("results[0].uploadId")
-
-    private fun seedNode(scopeId: String, kind: String): String {
-        val id = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            NodeEntity().apply {
-                this.id = id; this.scopeId = scopeId; parentId = scopeId; this.kind = kind
-                encryptedName = "bg=="; slugToken = "c2x1Zy0$id".take(120); orderIndex = 0
-                wrappedContentKey = if (kind == NodeEntity.MEMORY) "a21lbQ==" else null; createdAt = Instant.now()
-            }.persist()
-        }
-        return id
-    }
-
-    /** Seed a user + an ACTIVE tenant + a PERSONAL scope the user is a member of. Returns (userId, scopeId). */
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

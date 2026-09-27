@@ -3,9 +3,10 @@ package com.veyq.app.features.admin.tenant
 import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.adminchannel.givenAdminChannel
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -203,25 +204,8 @@ class TenantSuspendSliceTest {
 
     /** A user + an ACTIVE tenant on a unique domain + its TENANT root scope (the post-activation state). */
     private fun seedActiveTenant(): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "s-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId
-                name = "Fam"
-                this.domain = domain
-                ownerEmail = "owner-$tenantId@example.com"
-                status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId
-                this.tenantId = tenantId
-                kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return tenantId to domain
+        val domain = "s-${UUID.randomUUID()}.example.com"
+        return seedTenant(domain = domain) to domain
     }
 
     /** A fresh account holding a MEMBER membership on the tenant's root scope. */
@@ -243,22 +227,5 @@ class TenantSuspendSliceTest {
                 createdAt = Instant.now()
             }.persist()
         }
-    }
-
-    private fun seedUser(serverRole: String = "MEMBER"): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                this.serverRole = serverRole
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

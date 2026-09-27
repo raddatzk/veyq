@@ -15,6 +15,7 @@ import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.ResolvedTenant
+import com.veyq.app.testing.TestFixtures.newUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -67,7 +68,7 @@ class RecoverySliceTest {
 
     @BeforeEach
     fun seed() {
-        seedUser(USER, EMAIL)
+        resetAccount(USER, EMAIL)
     }
 
     // --- the request endpoint is never an oracle ---
@@ -428,23 +429,15 @@ class RecoverySliceTest {
     /** Reset the account to its pre-recovery state without deleting the row: other tables (session families
      *  from a previous test in this class) hold FK references to it, so a delete-and-recreate would trip a
      *  constraint rather than give a clean slate. */
-    private fun seedUser(userId: String, email: String) {
+    private fun resetAccount(userId: String, email: String) {
         QuarkusTransaction.requiringNew().run {
             AccountRecoveryEntity.delete("userId", userId)
             MasterKeyWrapEntity.delete("userId", userId)
             SessionFamilyEntity.update("status = ?1 where userId = ?2", SessionFamilyEntity.REVOKED, userId)
-            val user = VeyqUser.findById(userId) ?: VeyqUser().apply {
-                id = userId
-                this.email = email
-                serverRole = "SERVER_OWNER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                createdAt = Instant.now()
-                // Set before persist: these columns are NOT NULL, so the insert must already carry them.
-                wrappedIdentityPrivateKey = PRIV
-                authPublicKey = OLD_AUTH_KEY
-                secretKeyProofPublicKey = PROOF_KEY.publicKey
-            }.also { it.persist() }
+            val user = VeyqUser.findById(userId) ?: newUser(
+                id = userId, email = email, serverRole = "SERVER_OWNER", wrappedIdentityPrivateKey = PRIV,
+                authPublicKey = OLD_AUTH_KEY, secretKeyProofPublicKey = PROOF_KEY.publicKey,
+            ).also { it.persist() }
             user.wrappedIdentityPrivateKey = PRIV
             user.authPublicKey = OLD_AUTH_KEY
             user.secretKeyProofPublicKey = PROOF_KEY.publicKey

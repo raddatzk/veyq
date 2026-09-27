@@ -1,11 +1,9 @@
 package com.veyq.app.features.content.favorites
 
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -13,7 +11,6 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -32,7 +29,7 @@ class FavoritesSliceTest {
     @Test
     fun getWithoutAnyStoredReturnsNullCiphertext() {
         val (userId, scopeId) = seedMember()
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/favorites")
             .then().statusCode(200).body("ciphertext", nullValue())
     }
@@ -40,13 +37,13 @@ class FavoritesSliceTest {
     @Test
     fun putThenGetReturnsTheVerbatimCiphertext() {
         val (userId, scopeId) = seedMember()
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .contentType(ContentType.JSON).body("""{"ciphertext":"$sealed"}""")
             .`when`().put("/api/scopes/$scopeId/favorites")
             .then().statusCode(204)
 
         // operator-blind: the stored blob is exactly the ciphertext the client sent.
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}")
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/favorites")
             .then().statusCode(200).body("ciphertext", equalTo(sealed))
     }
@@ -69,10 +66,10 @@ class FavoritesSliceTest {
     fun nonMemberIs404() {
         val (_, scopeId) = seedMember()
         val outsider = seedUser()
-        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+        given().header("Authorization", bearer(outsider))
             .`when`().get("/api/scopes/$scopeId/favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
-        given().header("Authorization", "Bearer ${sessions.issue(outsider).accessToken}")
+        given().header("Authorization", bearer(outsider))
             .contentType(ContentType.JSON).body("""{"ciphertext":"$sealed"}""")
             .`when`().put("/api/scopes/$scopeId/favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
@@ -89,49 +86,6 @@ class FavoritesSliceTest {
     /** Seed a user + an ACTIVE tenant + the user's TENANT-scope membership. Returns (userId, scopeId). */
     private fun seedMember(): Pair<String, String> {
         val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId
-                name = "Fam"
-                domain = "t-$tenantId.example.com"
-                ownerEmail = "owner-$tenantId@example.com"
-                status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId
-                this.tenantId = tenantId
-                kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString()
-                this.userId = userId
-                this.tenantId = tenantId
-                scopeId = tenantId
-                role = MembershipEntity.OWNER
-                wrappedGrant = "dGVuYW50LWdyYW50"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId to tenantId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
+        return userId to seedTenant(owner = userId)
     }
 }

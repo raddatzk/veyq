@@ -6,6 +6,7 @@ import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -17,7 +18,6 @@ import org.junit.jupiter.api.Test
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.Signature
-import java.time.Instant
 import java.util.Base64
 import java.util.UUID
 
@@ -164,16 +164,7 @@ class PasswordChangeSliceTest {
         SecretKeyProof.passwordChangeStatement(OLD_AUTH_PUB, NEW_AUTH_PUB, SecretKeyProof.Wrap(NEW_PW_WRAP, KDF))
 
     private fun seedAccount(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "pwchg-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "d3JhcHBlZC1pZGVudGl0eS1wcml2YXRlLWtleQ=="
-                authPublicKey = OLD_AUTH_PUB; secretKeyProofPublicKey = PROOF_KEY.publicKey
-                createdAt = Instant.now()
-            }.persist()
-        }
+        val userId = seedUser(authPublicKey = OLD_AUTH_PUB, secretKeyProofPublicKey = PROOF_KEY.publicKey)
         seedWrap(userId, "PASSWORD", OLD_PW_WRAP)
         return userId
     }

@@ -7,10 +7,7 @@ import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
 import com.veyq.app.shared.config.VeyqConfig
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.seedMemberScope
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import jakarta.inject.Inject
@@ -186,30 +183,7 @@ class UploadSessionPurgeSliceTest {
         }
     }
 
-    private fun seedScope(): String {
-        val userId = UUID.randomUUID().toString()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "u-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "t-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-        }
-        return scopeId
-    }
+    private fun seedScope(): String = seedMemberScope().scopeId
 
     private companion object {
         /** Who opened the sessions this class seeds — the purge never reads it. */

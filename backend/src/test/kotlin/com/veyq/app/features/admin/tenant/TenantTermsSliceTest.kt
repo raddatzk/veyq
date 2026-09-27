@@ -1,15 +1,13 @@
 package com.veyq.app.features.admin.tenant
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.tenant.TenantEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -24,10 +22,6 @@ import java.util.UUID
  */
 @QuarkusTest
 class TenantTermsSliceTest {
-
-    @Inject lateinit var sessions: SessionService
-
-    private fun bearer(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
 
     private fun termsBody(de: String?, en: String?): String {
         val fields = buildList {
@@ -69,7 +63,7 @@ class TenantTermsSliceTest {
     @Test
     fun nonOwnerCannotUpdateTerms() {
         val (tenantId, _) = seedActiveTenant("terms-authz.example.com", "owner@terms-authz.example.com")
-        val member = seedUser("member@terms-authz.example.com")
+        val member = seedUser(email = "member@terms-authz.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
 
         given().header("Authorization", bearer(member)).contentType(ContentType.JSON)
@@ -81,7 +75,7 @@ class TenantTermsSliceTest {
     @Test
     fun memberAcceptsThenABumpReStalesAndAStaleAcceptIs409() {
         val (tenantId, owner) = seedActiveTenant("terms-accept.example.com", "owner@terms-accept.example.com")
-        val member = seedUser("member@terms-accept.example.com")
+        val member = seedUser(email = "member@terms-accept.example.com")
         seedMembership(tenantId, member, MembershipEntity.MEMBER)
 
         // Owner publishes v1.
@@ -124,7 +118,7 @@ class TenantTermsSliceTest {
             .body(termsBody("Regeln", "Rules"))
             .`when`().put("/api/tenants/$tenantId/terms").then().statusCode(200)
 
-        val outsider = seedUser("outsider@terms-outsider.example.com")
+        val outsider = seedUser(email = "outsider@terms-outsider.example.com")
         given().header("Authorization", bearer(outsider))
             .`when`().get("/api/tenants/$tenantId/terms")
             .then().statusCode(404).body("code", equalTo("tenant_not_found"))
@@ -138,19 +132,8 @@ class TenantTermsSliceTest {
 
     /** An ACTIVE tenant + its TENANT scope + a granted OWNER membership. Returns (tenantId, ownerUserId). */
     private fun seedActiveTenant(domain: String, ownerEmail: String): Pair<String, String> {
-        val tenantId = UUID.randomUUID().toString()
-        val ownerId = seedUser(ownerEmail)
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain; this.ownerEmail = ownerEmail
-                status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId; this.tenantId = tenantId; kind = ScopeEntity.TENANT; createdAt = Instant.now()
-            }.persist()
-        }
-        seedMembership(tenantId, ownerId, MembershipEntity.OWNER)
-        return tenantId to ownerId
+        val ownerId = seedUser(email = ownerEmail)
+        return seedTenant(domain = domain, ownerEmail = ownerEmail, owner = ownerId) to ownerId
     }
 
     private fun seedMembership(tenantId: String, userId: String, role: String) =
@@ -160,17 +143,4 @@ class TenantTermsSliceTest {
                 scopeId = tenantId; this.role = role; wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
             }.persist()
         }
-
-    private fun seedUser(email: String): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; this.email = email; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
-    }
 }

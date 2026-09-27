@@ -12,6 +12,8 @@ import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -243,7 +245,7 @@ class RotationSliceTest {
              "passwordWrap":{"wrappedKey":"$NEW_PW_WRAP","kdfParams":"$KDF"},
              "secretKeyProofSignature":"${PROOF_KEY.sign(rotationStatement())}"}
         """.trimIndent()
-        given().header("Authorization", "Bearer ${sessions.issue(user).accessToken}")
+        given().header("Authorization", bearer(user))
             .contentType(ContentType.JSON).body(body)
             .`when`().post("/api/account/rotation").then().statusCode(400)
 
@@ -276,19 +278,14 @@ class RotationSliceTest {
     )
 
     private fun claim(userId: String, tag: String) =
-        given().header("Authorization", "Bearer ${sessions.issue(userId).accessToken}").contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"capabilityTags":["$tag"]}""").`when`().post("/api/tasks/claim")
 
     private fun seedAccount(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "rot-$userId@example.com"; serverRole = "MEMBER"; suiteId = "v1"
-                identityPublicKey = OLD_IDENTITY_PUB; wrappedIdentityPrivateKey = OLD_PRIV
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"; secretKeyProofPublicKey = PROOF_KEY.publicKey
-                createdAt = Instant.now()
-            }.persist()
-        }
+        val userId = seedUser(
+            identityPublicKey = OLD_IDENTITY_PUB, wrappedIdentityPrivateKey = OLD_PRIV,
+            secretKeyProofPublicKey = PROOF_KEY.publicKey,
+        )
         seedWrap(userId, "PASSWORD", OLD_PW_WRAP)
         seedWrap(userId, "RECOVERY", OLD_REC_WRAP)
         return userId

@@ -1,11 +1,10 @@
 package com.veyq.app.features.content.itemfavorites
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.spaces.scope.ScopesStore
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -35,18 +34,13 @@ import java.util.UUID
 class ItemFavoritesSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var scopes: ScopesStore
 
     private val mine = "bWluZS1jaXBoZXJ0ZXh0" // "mine-ciphertext"
     private val theirs = "dGhlaXJzLWNpcGhlcg==" // "theirs-cipher"
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     private fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String) =
-        given().header("Authorization", token(userId)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
             .body("""{"ciphertext":"$ciphertext"}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$nodeId/item-favorites")
             .then().statusCode(204)
@@ -54,7 +48,7 @@ class ItemFavoritesSliceTest {
     @Test
     fun getWithoutAnyStoredReturnsAnEmptyArray() {
         val (userId, scopeId) = seedMember()
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/${UUID.randomUUID()}/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(0))
     }
@@ -66,7 +60,7 @@ class ItemFavoritesSliceTest {
         put(userId, scopeId, node, mine)
 
         // operator-blind: the stored blob is exactly the ciphertext the client sent.
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200)
             .body("$", hasSize<Any>(1))
@@ -88,7 +82,7 @@ class ItemFavoritesSliceTest {
         put(bob, scopeId, node, theirs)
 
         for ((caller, ownBlob) in listOf(alice to mine, bob to theirs)) {
-            val body = given().header("Authorization", token(caller))
+            val body = given().header("Authorization", bearer(caller))
                 .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
                 .then().statusCode(200).body("$", hasSize<Any>(2))
                 .extract().jsonPath()
@@ -118,7 +112,7 @@ class ItemFavoritesSliceTest {
         val rewritten = "cmV3cml0dGVu" // "rewritten"
         put(alice, scopeId, node, rewritten)
 
-        val body = given().header("Authorization", token(bob))
+        val body = given().header("Authorization", bearer(bob))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(2)).extract().jsonPath()
         val entries = (0..1).map { body.getBoolean("[$it].self") to body.getString("[$it].ciphertext") }
@@ -139,10 +133,10 @@ class ItemFavoritesSliceTest {
         val two = UUID.randomUUID().toString()
         put(userId, scopeId, one, mine)
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$two/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(0))
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$one/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(1))
     }
@@ -155,7 +149,7 @@ class ItemFavoritesSliceTest {
         put(userId, scopeId, node, mine)
         put(userId, scopeId, node, second)
 
-        given().header("Authorization", token(userId))
+        given().header("Authorization", bearer(userId))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200).body("$", hasSize<Any>(1)).body("[0].ciphertext", equalTo(second))
     }
@@ -174,7 +168,7 @@ class ItemFavoritesSliceTest {
 
         scopes.removeMembership(bob, scopeId)
 
-        given().header("Authorization", token(alice))
+        given().header("Authorization", bearer(alice))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(200)
             .body("$", hasSize<Any>(1))
@@ -187,10 +181,10 @@ class ItemFavoritesSliceTest {
         val (_, scopeId) = seedMember()
         val outsider = seedUser()
         val node = UUID.randomUUID().toString()
-        given().header("Authorization", token(outsider))
+        given().header("Authorization", bearer(outsider))
             .`when`().get("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
-        given().header("Authorization", token(outsider)).contentType(ContentType.JSON)
+        given().header("Authorization", bearer(outsider)).contentType(ContentType.JSON)
             .body("""{"ciphertext":"$mine"}""")
             .`when`().put("/api/scopes/$scopeId/nodes/$node/item-favorites")
             .then().statusCode(404).body("code", equalTo("scope_not_found"))
@@ -207,25 +201,7 @@ class ItemFavoritesSliceTest {
     /** Seed a user + an ACTIVE tenant + the user's TENANT-scope membership. Returns (userId, scopeId). */
     private fun seedMember(): Pair<String, String> {
         val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId
-                name = "Fam"
-                domain = "t-$tenantId.example.com"
-                ownerEmail = "owner-$tenantId@example.com"
-                status = TenantEntity.ACTIVE
-                createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = tenantId
-                this.tenantId = tenantId
-                kind = ScopeEntity.TENANT
-                createdAt = Instant.now()
-            }.persist()
-            membership(userId, tenantId, tenantId)
-        }
-        return userId to tenantId
+        return userId to seedTenant(owner = userId)
     }
 
     /** A second member on an existing scope — what makes "everyone's" more than a word. */
@@ -245,22 +221,5 @@ class ItemFavoritesSliceTest {
             wrappedGrant = "dGVuYW50LWdyYW50"
             createdAt = Instant.now()
         }.persist()
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

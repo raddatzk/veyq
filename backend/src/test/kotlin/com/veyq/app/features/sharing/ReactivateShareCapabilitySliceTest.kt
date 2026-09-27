@@ -1,14 +1,13 @@
 package com.veyq.app.features.sharing
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.ScopeAccessWorld
 import com.veyq.app.shared.membership.ScopeAccessWorld.Companion.B64
+import com.veyq.app.testing.TestFixtures.bearer
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
-import jakarta.inject.Inject
 import org.hamcrest.Matchers.equalTo
 import org.junit.jupiter.api.Test
 import java.time.Instant
@@ -28,14 +27,12 @@ class ReactivateShareCapabilitySliceTest {
         override fun getConfigOverrides() = mapOf("veyq.capabilities.disabled" to "sharing.public-links")
     }
 
-    @Inject lateinit var sessions: SessionService
-
     @Test
     fun reactivatingALinkWhoseCapabilityIsOffIs422() {
-        val w = ScopeAccessWorld(sessions, shareRole = ShareEntity.UPLOADER).build()
+        val w = ScopeAccessWorld(shareRole = ShareEntity.UPLOADER).build()
         val viewer = disabledShare(w.live, ShareEntity.VIEWER)
         val uploader = disabledShare(w.live, ShareEntity.UPLOADER)
-        val auth = w.token(w.live.ownerId)
+        val auth = bearer(w.live.ownerId)
 
         given().header("Authorization", auth).`when`().post("/api/shares/$viewer/reactivate")
             .then().statusCode(422).body("code", equalTo("capability_disabled"))

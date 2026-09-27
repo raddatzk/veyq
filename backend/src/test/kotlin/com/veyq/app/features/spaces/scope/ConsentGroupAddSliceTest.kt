@@ -2,15 +2,15 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.TestIds
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.tasks.CapabilityTags
 import com.veyq.app.features.tasks.JobEntity
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.identity.TenantProfileEntity
-import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -37,9 +37,6 @@ import java.util.UUID
 class ConsentGroupAddSliceTest {
 
     @Inject
-    lateinit var sessions: SessionService
-
-    @Inject
     lateinit var tasks: TasksStore
 
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
@@ -53,7 +50,7 @@ class ConsentGroupAddSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
 
         // The owner resolves the candidate → learns consent is required + gets the pubkey to seal the name to.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner"}""")
             .`when`().post("/api/scopes/$groupId/members/resolve")
@@ -63,7 +60,7 @@ class ConsentGroupAddSliceTest {
             .body("identityPublicKey", notNullValue())
 
         // The owner adds WITH the wrapped name-key → a soft, pending, grant-less proposal.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members")
@@ -84,7 +81,7 @@ class ConsentGroupAddSliceTest {
         val groupId = createGroupAs(owner, domain)
         seedTenantMember(tenantIdOf(domain), "partner", consent = true)
 
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner",${TestAdmission.json()}}""") // no sealedNameKey
             .`when`().post("/api/scopes/$groupId/members")
@@ -100,7 +97,7 @@ class ConsentGroupAddSliceTest {
 
         // The invitee sees exactly one pending invitation carrying the wrapped name-key `K_name` + the scope's
         // canonical encryptedName it opens (cr-0096) + who added them.
-        given().header("Authorization", "Bearer ${token(partner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(partner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes/invitations")
             .then().statusCode(200)
             .body("size()", equalTo(1))
@@ -110,9 +107,9 @@ class ConsentGroupAddSliceTest {
             .body("[0].addedBy", equalTo("owner"))
 
         // Accept → 204; the invitation is gone and grant-delivery now originates a job (grant-less, not pending).
-        given().header("Authorization", "Bearer ${token(partner)}")
+        given().header("Authorization", bearer(partner))
             .`when`().post("/api/scopes/$groupId/invitations/accept").then().statusCode(204)
-        given().header("Authorization", "Bearer ${token(partner)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(partner)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/scopes/invitations").then().statusCode(200).body("size()", equalTo(0))
 
         val created = QuarkusTransaction.requiringNew().call { tasks.reconcileGrantDelivery(setOf(groupId), 5) }
@@ -120,7 +117,7 @@ class ConsentGroupAddSliceTest {
         assertEquals(1, deliveryJobsFor(partner, groupId), "a grant-delivery job now targets the accepted member")
 
         // Re-accept is an idempotent no-op 204 (the flag is already clear).
-        given().header("Authorization", "Bearer ${token(partner)}")
+        given().header("Authorization", bearer(partner))
             .`when`().post("/api/scopes/$groupId/invitations/accept").then().statusCode(204)
     }
 
@@ -131,7 +128,7 @@ class ConsentGroupAddSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = true)
         addSoft(owner, domain, groupId)
 
-        given().header("Authorization", "Bearer ${token(partner)}")
+        given().header("Authorization", bearer(partner))
             .`when`().post("/api/scopes/$groupId/invitations/decline").then().statusCode(204)
 
         // The soft membership is gone (nothing was wrapped) and the scope did NOT rotate (epoch untouched).
@@ -140,7 +137,7 @@ class ConsentGroupAddSliceTest {
             assertEquals(0, ScopeEntity.findById(groupId)!!.currentEpoch, "decline never rotates")
         }
         // Re-invite after a decline is allowed (no `declined` marker kept) — a fresh proposal succeeds.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
@@ -152,11 +149,11 @@ class ConsentGroupAddSliceTest {
         val groupId = createGroupAs(owner, domain)
         val stranger = seedTenantMember(tenantIdOf(domain), "stranger", consent = true)
 
-        given().header("Authorization", "Bearer ${token(stranger)}")
+        given().header("Authorization", bearer(stranger))
             .`when`().post("/api/scopes/$groupId/invitations/accept")
             .then().statusCode(404).body("code", equalTo("invitation_not_found"))
         // Decline with no proposal is still a silent 204 (no enumeration oracle).
-        given().header("Authorization", "Bearer ${token(stranger)}")
+        given().header("Authorization", bearer(stranger))
             .`when`().post("/api/scopes/$groupId/invitations/decline").then().statusCode(204)
     }
 
@@ -169,13 +166,13 @@ class ConsentGroupAddSliceTest {
         val grantedMember = seedGroupGrantHolder(tenantIdOf(domain), groupId, "member2")
 
         // The group owner sees the pending proposal in the directory.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .`when`().get("/api/scopes/$groupId/members")
             .then().statusCode(200)
             .body("find { it.username == 'partner' }.pendingConsent", equalTo(true))
 
         // An ordinary (non-owner) key-holder does NOT see the pending proposal at all.
-        given().header("Authorization", "Bearer ${token(grantedMember)}")
+        given().header("Authorization", bearer(grantedMember))
             .`when`().get("/api/scopes/$groupId/members")
             .then().statusCode(200)
             .body("find { it.username == 'partner' }", equalTo(null))
@@ -193,7 +190,7 @@ class ConsentGroupAddSliceTest {
         addSoft(owner, domain, groupId)
 
         // The owner rotates and — as a full-directory re-grant would — lists both themselves and the pending partner.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"epoch":1,"wrappedPrev":"$groupGrant","grants":[{"userId":"$owner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}},{"userId":"$partner","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON}}],${TestAdmission.openJson(groupId)}}""")
             .`when`().post("/api/scopes/$groupId/epochs")
@@ -218,12 +215,12 @@ class ConsentGroupAddSliceTest {
         val partner = seedTenantMember(tenantIdOf(domain), "partner", consent = false)
 
         // Resolve reports consent not required; the add (no seal) is the ordinary grant-less direct-add.
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner"}""")
             .`when`().post("/api/scopes/$groupId/members/resolve")
             .then().statusCode(200).body("requiresConsent", equalTo(false))
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members")
@@ -240,16 +237,16 @@ class ConsentGroupAddSliceTest {
         val (_, domain) = seedMember()
         val member = seedTenantMember(tenantIdOf(domain), "member", consent = false)
 
-        given().header("Authorization", "Bearer ${token(member)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(member)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/account/profile")
             .then().statusCode(200).body("requireGroupAddConsent", equalTo(false))
 
-        given().header("Authorization", "Bearer ${token(member)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(member)).header("X-Forwarded-Host", domain)
             .contentType(ContentType.JSON).body("""{"requireGroupAddConsent":true}""")
             .`when`().put("/api/account/profile")
             .then().statusCode(200).body("requireGroupAddConsent", equalTo(true)).body("username", equalTo("member"))
 
-        given().header("Authorization", "Bearer ${token(member)}").header("X-Forwarded-Host", domain)
+        given().header("Authorization", bearer(member)).header("X-Forwarded-Host", domain)
             .`when`().get("/api/account/profile")
             .then().statusCode(200).body("requireGroupAddConsent", equalTo(true))
     }
@@ -263,8 +260,6 @@ class ConsentGroupAddSliceTest {
 
     // --- helpers ---
 
-    private fun token(userId: String) = sessions.issue(userId).accessToken
-
     private fun tenantIdOf(domain: String) = domain.removePrefix("t-").removeSuffix(".example.com")
 
     /** Count grant-delivery jobs targeting a user's membership in a scope (resourceRef = membershipId). */
@@ -276,7 +271,7 @@ class ConsentGroupAddSliceTest {
         }
 
     private fun createGroupAs(userId: String, domain: String): String =
-        given().header("Authorization", "Bearer ${token(userId)}")
+        given().header("Authorization", bearer(userId))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"scopeId":"${TestIds.uuid()}","encryptedName":"$groupName","wrappedGrant":"$groupGrant",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/groups")
@@ -284,7 +279,7 @@ class ConsentGroupAddSliceTest {
 
     /** The owner proposes the consent-on "partner" (a soft pending add). */
     private fun addSoft(owner: String, domain: String, groupId: String) {
-        given().header("Authorization", "Bearer ${token(owner)}")
+        given().header("Authorization", bearer(owner))
             .header("X-Forwarded-Host", domain).contentType(ContentType.JSON)
             .body("""{"username":"partner","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/$groupId/members").then().statusCode(201)
@@ -292,7 +287,7 @@ class ConsentGroupAddSliceTest {
 
     /** Seed a tenant member with a per-tenant username profile + an account-global consent preference. */
     private fun seedTenantMember(tenantId: String, username: String, consent: Boolean): String {
-        val userId = seedUser(consent)
+        val userId = seedUser(requireGroupAddConsent = consent)
         QuarkusTransaction.requiringNew().run {
             MembershipEntity().apply {
                 id = UUID.randomUUID().toString()
@@ -333,7 +328,7 @@ class ConsentGroupAddSliceTest {
 
     /** Seed a user + an ACTIVE tenant + the owner's TENANT membership + the owner's per-tenant profile ("owner"). */
     private fun seedMember(): Pair<String, String> {
-        val userId = seedUser(consent = false)
+        val userId = seedUser(requireGroupAddConsent = false)
         val tenantId = UUID.randomUUID().toString()
         val domain = "t-$tenantId.example.com"
         QuarkusTransaction.requiringNew().run {
@@ -369,23 +364,5 @@ class ConsentGroupAddSliceTest {
             }.persist()
         }
         return userId to domain
-    }
-
-    private fun seedUser(consent: Boolean): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "u-$userId@example.com"
-                serverRole = "MEMBER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                requireGroupAddConsent = consent
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 }

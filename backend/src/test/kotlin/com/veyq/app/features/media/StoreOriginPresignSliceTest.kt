@@ -1,24 +1,18 @@
 package com.veyq.app.features.media
 
-import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.tenant.TenantEntity
-import com.veyq.app.shared.scope.ScopeEntity
-import com.veyq.app.shared.identity.VeyqUser
-import com.veyq.app.shared.membership.MembershipEntity
-import com.veyq.app.shared.membership.TenantRoots
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.quarkus.test.junit.QuarkusTestProfile
 import io.quarkus.test.junit.TestProfile
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
-import jakarta.inject.Inject
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.net.URI
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -59,9 +53,6 @@ class StoreOriginPresignSliceTest {
             "veyq.blob-store.bucket" to BUCKET,
         )
     }
-
-    @Inject
-    lateinit var sessions: SessionService
 
     @Test
     fun aHostNoTenantClaimsCannotChooseTheOriginInStoreOriginMode() {
@@ -114,11 +105,9 @@ class StoreOriginPresignSliceTest {
 
     // --- helpers (the seeding shape of MediaPresignDomainSliceTest; this class needs its own profile) ---
 
-    private fun token(userId: String) = "Bearer ${sessions.issue(userId).accessToken}"
-
     /** Start a one-chunk upload over [host] and return its first presigned PUT URL. */
     private fun startUpload(userId: String, scopeId: String, host: String): String =
-        given().header("Authorization", token(userId)).header("X-Forwarded-Host", host)
+        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", host)
             .contentType(ContentType.JSON)
             .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==")}]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
@@ -127,49 +116,9 @@ class StoreOriginPresignSliceTest {
 
     /** A bare ACTIVE tenant row whose only job is to claim a domain; returns that domain. */
     private fun seedTenantDomain(): String {
-        val tenantId = UUID.randomUUID().toString()
-        val domain = "so-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; this.domain = domain
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-        }
+        val domain = "so-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = domain, tenantScope = false)
         return domain
-    }
-
-    private fun seedMemberScope(): Pair<String, String> {
-        val userId = seedUser()
-        val tenantId = UUID.randomUUID().toString()
-        val scopeId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId; name = "Fam"; domain = "sot-$tenantId.example.com"
-                ownerEmail = "o-$tenantId@example.com"; status = TenantEntity.ACTIVE; createdAt = Instant.now()
-            }.persist()
-            ScopeEntity().apply {
-                id = scopeId; this.tenantId = tenantId; kind = ScopeEntity.PERSONAL; createdAt = Instant.now()
-            }.persist()
-            MembershipEntity().apply {
-                id = UUID.randomUUID().toString(); this.userId = userId; this.tenantId = tenantId
-                this.scopeId = scopeId; role = MembershipEntity.OWNER
-                wrappedGrant = "Z3JhbnQ="; createdAt = Instant.now()
-            }.persist()
-            TenantRoots.join(userId, tenantId)
-        }
-        return userId to scopeId
-    }
-
-    private fun seedUser(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId; email = "so-$userId@example.com"; serverRole = "MEMBER"
-                suiteId = "v1"; identityPublicKey = "aWQ="; wrappedIdentityPrivateKey = "aXA="
-                authPublicKey = "YXA="; createdAt = Instant.now()
-            }.persist()
-        }
-        return userId
     }
 
     private companion object {

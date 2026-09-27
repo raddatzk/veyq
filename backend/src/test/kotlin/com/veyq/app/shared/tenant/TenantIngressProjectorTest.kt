@@ -1,10 +1,10 @@
 package com.veyq.app.shared.tenant
 
 import com.veyq.app.features.account.login.SessionService
-import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.config.VeyqConfig
-import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.seedTenant
+import com.veyq.app.testing.TestFixtures.seedUser
 import io.smallrye.config.WithDefault
 import io.quarkus.arc.ClientProxy
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -21,7 +21,6 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.nio.file.Files
 import java.nio.file.Path
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -76,9 +75,9 @@ class TenantIngressProjectorTest {
         // PENDING routes: the invited owner has to be able to *reach* the accept link at all. SUSPENDED does not
         // (ADR 0066). Both halves in one fixture so "excludes SUSPENDED" cannot be satisfied by a projector that
         // simply emitted nothing.
-        val pending = seedTenant(TenantEntity.PENDING)
-        val active = seedTenant(TenantEntity.ACTIVE)
-        val suspended = seedTenant(TenantEntity.SUSPENDED)
+        val pending = seedTenantIn(TenantEntity.PENDING)
+        val active = seedTenantIn(TenantEntity.ACTIVE)
+        val suspended = seedTenantIn(TenantEntity.SUSPENDED)
 
         projector.regenerate()
 
@@ -106,8 +105,8 @@ class TenantIngressProjectorTest {
         // because the bootstrap pair is already rendered from configuration and a second router on the same Host
         // makes Traefik drop *both* ("Router defined multiple times"). The other tenant is the positive control:
         // the file is being written and does contain tenant routers.
-        val other = seedTenant(TenantEntity.ACTIVE)
-        seedTenant(TenantEntity.ACTIVE, domain = BOOTSTRAP_DOMAIN)
+        val other = seedTenantIn(TenantEntity.ACTIVE)
+        seedTenantIn(TenantEntity.ACTIVE, domain = BOOTSTRAP_DOMAIN)
 
         projector.regenerate()
 
@@ -123,7 +122,7 @@ class TenantIngressProjectorTest {
     fun theFileDefinesEveryServiceItsRoutersReference() {
         // Traefik runs no Docker provider, so a router naming `<x>@docker` — or any service this file does not
         // define — is a router Traefik rejects, with its route. The services point at the configured upstreams.
-        seedTenant(TenantEntity.ACTIVE)
+        seedTenantIn(TenantEntity.ACTIVE)
         projector.regenerate()
 
         val file = Files.readString(Path.of(CONFIG_PATH))
@@ -166,7 +165,7 @@ class TenantIngressProjectorTest {
         // ADR 0013 §4's same-origin blob path is per-domain or it is nothing: a tenant with only an app router
         // would serve its media from the bootstrap origin and lose the no-CORS property for every tenant but the
         // first. Asserted on the rule text, so a blobs router that dropped the prefix or the priority is caught.
-        val domain = seedTenant(TenantEntity.ACTIVE)
+        val domain = seedTenantIn(TenantEntity.ACTIVE)
 
         projector.regenerate()
 
@@ -189,7 +188,7 @@ class TenantIngressProjectorTest {
         // domain — the proxy sets `nosniff` + a `sandbox` CSP on store responses, a belt under the signer's
         // overrides. The middleware is DEFINED in the same file its routers reference it from, so no router can
         // name one Traefik has not loaded. Asserted per blobs router block; the control is the block count.
-        seedTenant(TenantEntity.ACTIVE)
+        seedTenantIn(TenantEntity.ACTIVE)
 
         projector.regenerate()
 
@@ -209,12 +208,12 @@ class TenantIngressProjectorTest {
         // completely unrelated tenant, which is exactly what an incremental "add one router" would get wrong.
         // PENDING, because that is the state a tenant can actually be deleted from (revoke) — an ACTIVE one owns
         // a TENANT scope row that references it, and deleting the tenant under it violates the foreign key.
-        val doomed = seedTenant(TenantEntity.PENDING)
+        val doomed = seedTenantIn(TenantEntity.PENDING)
         projector.regenerate()
         assertTrue(projectedHosts().contains(doomed))
 
         QuarkusTransaction.requiringNew().run { TenantEntity.delete("domain", doomed) }
-        seedTenant(TenantEntity.ACTIVE)
+        seedTenantIn(TenantEntity.ACTIVE)
         projector.regenerate()
 
         assertFalse(projectedHosts().contains(doomed), "a deleted tenant survives only an incremental projection")
@@ -224,7 +223,7 @@ class TenantIngressProjectorTest {
     fun aCorruptedOrWipedFileHealsOnTheNextRegenerate() {
         // The self-healing property (ADR 0063) — a wiped volume, a fresh Traefik container, an operator's edit.
         // Nothing "detects" the damage: the next full regenerate simply overwrites whatever is there.
-        val domain = seedTenant(TenantEntity.ACTIVE)
+        val domain = seedTenantIn(TenantEntity.ACTIVE)
         projector.regenerate()
         Files.writeString(Path.of(CONFIG_PATH), "this is not the configuration you are looking for\n")
 
@@ -245,8 +244,8 @@ class TenantIngressProjectorTest {
         //
         // The well-formed tenant beside it is the control: the file IS being written, and the malformed row is
         // the one thing missing from it — without that, a projector that emitted nothing at all would pass.
-        val sound = seedTenant(TenantEntity.ACTIVE)
-        val injected = seedTenant(TenantEntity.PENDING, domain = "evil`) || Host(`stolen.example.com")
+        val sound = seedTenantIn(TenantEntity.ACTIVE)
+        val injected = seedTenantIn(TenantEntity.PENDING, domain = "evil`) || Host(`stolen.example.com")
 
         projector.regenerate()
 
@@ -344,45 +343,12 @@ class TenantIngressProjectorTest {
     private fun projectedHosts(): List<String> =
         HOST_RULE.findAll(Files.readString(Path.of(CONFIG_PATH))).map { it.groupValues[1] }.distinct().toList()
 
-    private fun ownerToken(): String {
-        val userId = UUID.randomUUID().toString()
-        QuarkusTransaction.requiringNew().run {
-            VeyqUser().apply {
-                id = userId
-                email = "ingress-owner-$userId@example.com"
-                serverRole = "SERVER_OWNER"
-                suiteId = "v1"
-                identityPublicKey = "aWRlbnRpdHktcHVibGljLWtleQ=="
-                wrappedIdentityPrivateKey = "aWRlbnRpdHktcHJpdg=="
-                authPublicKey = "YXV0aC1wdWJsaWMta2V5"
-                createdAt = Instant.now()
-            }.persist()
-        }
-        return sessions.issue(userId).accessToken
-    }
+    private fun ownerToken(): String = sessions.issue(seedUser(serverRole = "SERVER_OWNER")).accessToken
 
     /** A tenant row in [status]; returns its domain. Distinct per call so the JVM-lived mem DB cannot bleed. */
-    private fun seedTenant(status: String, domain: String? = null): String {
-        val tenantId = UUID.randomUUID().toString()
-        val host = domain ?: "p-$tenantId.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = tenantId
-                name = "Fam"
-                this.domain = host
-                ownerEmail = "owner-$tenantId@example.com"
-                this.status = status
-                createdAt = Instant.now()
-            }.persist()
-            if (status == TenantEntity.ACTIVE) {
-                ScopeEntity().apply {
-                    id = tenantId
-                    this.tenantId = tenantId
-                    kind = ScopeEntity.TENANT
-                    createdAt = Instant.now()
-                }.persist()
-            }
-        }
+    private fun seedTenantIn(status: String, domain: String? = null): String {
+        val host = domain ?: "p-${UUID.randomUUID()}.example.com"
+        seedTenant(domain = host, status = status, tenantScope = status == TenantEntity.ACTIVE)
         return host
     }
 

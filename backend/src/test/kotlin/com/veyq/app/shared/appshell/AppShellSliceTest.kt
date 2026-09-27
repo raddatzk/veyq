@@ -1,7 +1,7 @@
 package com.veyq.app.shared.appshell
 
 import com.veyq.app.shared.tenant.TenantEntity
-import io.quarkus.narayana.jta.QuarkusTransaction
+import com.veyq.app.testing.TestFixtures.seedTenant
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.response.Response
@@ -13,7 +13,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
-import java.time.Instant
 import java.util.UUID
 
 /**
@@ -115,7 +114,7 @@ class AppShellSliceTest {
         // pre-matching JAX-RS filter reaches the second and not the first. Both must load the same client, which
         // is what lets it show the suspension (ADR 0066: what `TenantSuspensionFilter` refuses is the API).
         // Control: the API on the same Host is refused by that filter, so the 200s are not a Host nobody resolved.
-        val suspended = seedTenant(TenantEntity.SUSPENDED)
+        val suspended = seedTenantIn(TenantEntity.SUSPENDED)
         for (path in listOf("/", "/recover")) {
             given().header("Accept", HTML).header("X-Forwarded-Host", suspended).`when`().get(path)
                 .then().statusCode(200).body(containsString(FIXTURE_MARKER))
@@ -125,14 +124,9 @@ class AppShellSliceTest {
     }
 
     /** A bare tenant row whose only job is to claim a domain; returns that domain. */
-    private fun seedTenant(status: String): String {
+    private fun seedTenantIn(status: String): String {
         val domain = "shell-${UUID.randomUUID()}.example.com"
-        QuarkusTransaction.requiringNew().run {
-            TenantEntity().apply {
-                id = UUID.randomUUID().toString(); name = "Fam"; this.domain = domain
-                ownerEmail = "o-${UUID.randomUUID()}@example.com"; this.status = status; createdAt = Instant.now()
-            }.persist()
-        }
+        seedTenant(domain = domain, status = status, tenantScope = false)
         return domain
     }
 
