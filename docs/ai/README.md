@@ -114,7 +114,10 @@ Five rules follow:
    `git reset` by relative ref such as `HEAD~1` (the same session then reset what it thought was its own tip,
    hit the neighbour's four newer commits, and a `--hard` discarded a whole finished phase's uncommitted work —
    recoverable only because every edit was still in the conversation). **Stage by explicit path, and address a
-   commit by its hash, never by its distance from the tip.**
+   commit by its hash, never by its distance from the tip.** An explicit path is not enough on its own: `git rm`
+   stages at once, so a later phase's deletion rides along with an earlier phase's commit (it did on
+   2026-09-27, when a failed `git add` left only that deletion staged). Read `git status --short` between the
+   add and the commit.
 
    **And the rule reaches a *delegated* read, where nobody can apply it from inside.** A subagent measures
    whatever tree it is pointed at and cannot know which parts of it this session already moved. A `web/`

@@ -32,9 +32,9 @@ It is test-only.
   resolves every literal key, and ADR 0065 would give it its own copy of any helper, so it is not worth doing
   now.
 - **Neighbours.**
-  - `cr-dead-code-sweep` touches `TenantMembersPanel.test.ts` (its dead `inviteLink` mock) and
-    `LoginView.test.ts` (its dead `authPrefill` mock), and it deletes real catalog keys. If it lands first,
-    the migration here meets a smaller catalog, which is intended. The overlap is textual.
+  - `cr-dead-code-sweep` landed 2026-09-27 (inbox #170): `LoginView.test.ts` lost its dead `authPrefill`
+    mock, 32 catalog keys went, and web gained `src/i18n/i18n.test.ts` with the reverse "every key is used"
+    assertion only — the forward check is still this CR's question.
   - Before the first edit, run `grep -ln 'test.ts' changes/cr-*.md`.
 
 ## Decisions
