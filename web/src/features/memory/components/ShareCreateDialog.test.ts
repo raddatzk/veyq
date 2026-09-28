@@ -42,10 +42,11 @@ const stubs = {
 }
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cc'
+const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
 
 function mountDialog(props: Record<string, unknown>) {
   return mount(ShareCreateDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom', ...props },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom', ...props },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -53,7 +54,7 @@ function mountDialog(props: Record<string, unknown>) {
 const editShareWith = (over: Record<string, unknown>) => ({
   shareId: 's1', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
   createdAt: new Date(0), expiresAt: null, sealedNote: null, sealedShareName: null, sealedShareKey: 'k',
-  passwordRequired: false, sealedPassword: null, ...over,
+  sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null, ...over,
 })
 
 describe('ShareCreateDialog (cr-0116)', () => {
@@ -93,7 +94,9 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(createShare).toHaveBeenCalledTimes(1)
     // the share is minted in the Memory's scope — its recovery copy of K_share is bound to (scope, node, share)
     expect(createShare.mock.calls[0].slice(0, 2)).toEqual([SCOPE_ID, 'n1'])
-    const expiry = createShare.mock.calls[0][5] as Date // the 6th positional arg is expiresAt
+    // …and sealed under the scope's epoch keys, which no share link carries (ADR 0036 point 4)
+    expect(createShare.mock.calls[0][3]).toStrictEqual(EPOCHS)
+    const expiry = createShare.mock.calls[0][6] as Date // the 7th positional arg is expiresAt
     expect(expiry).toBeInstanceOf(Date)
     expect([expiry.getFullYear(), expiry.getMonth(), expiry.getDate()]).toEqual([2026, 7, 1])
     expect(expiry.getHours()).toBe(23) // end of the picked day, not its midnight
@@ -103,7 +106,7 @@ describe('ShareCreateDialog (cr-0116)', () => {
     createShare.mockClear()
     const w = mountDialog({})
     await w.findAll('button').find((b) => b.text() === t('share.create'))!.trigger('click')
-    expect(createShare.mock.calls[0][5]).toBeNull()
+    expect(createShare.mock.calls[0][6]).toBeNull()
   })
 
   it('the expiry card shows on EDIT, pre-filled; an unchanged edit re-sends it (full replace)', async () => {
@@ -113,6 +116,9 @@ describe('ShareCreateDialog (cr-0116)', () => {
     expect(w.find(`[aria-label="${t('share.expirySection')}"]`).exists()).toBe(true) // shown on edit
 
     await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click') // save without touching expiry
+    // K_share is recovered through the epoch keys, from the row's recovery copy and its epoch (ADR 0036 point 4)
+    expect(updateShare.mock.calls[0][1]).toStrictEqual(EPOCHS)
+    expect(updateShare.mock.calls[0][2]).toMatchObject({ sealedShareKey: 'k', sealedShareKeyEpoch: 0 })
     const expiry = updateShare.mock.calls[0][5] as Date // updateShare arg 6 (index 5) is expiresAt
     expect([expiry.getFullYear(), expiry.getMonth(), expiry.getDate()]).toEqual([2026, 7, 1]) // preserved
   })

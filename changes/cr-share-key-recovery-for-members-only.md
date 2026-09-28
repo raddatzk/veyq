@@ -241,7 +241,7 @@ rotation are out of their reach.
       - Update the comments on `sealedShareKey` and `sealedPassword` in `Entities.kt`, `SharingResource.kt` and
         `V37`/`V39` (a migration's comment is not edited: add the correction to the new migration's header).
       · Done when: `./gradlew check` green, including B1.
-- [ ] 3 web:
+- [x] 3 web:
       - Implement the decisions in `share.ts`, `shareLink.ts`, both dialogs and `MemoryHomeView.vue`.
       - Update every test the phase-3 inventory grep lists, including `shareContributor.e2e.test.ts`
         (`grep -n "readShareName(kMem" web/src/features/memory/shareContributor.e2e.test.ts`).

@@ -272,20 +272,22 @@ async function onDeleteDone() {
       @close="trashVisible = false"
     />
     <ShareDialog
-      v-if="shareVisible && currentNode && memoryKey"
+      v-if="shareVisible && currentNode && memoryKey && epochs"
       :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
       :memory-key="memoryKey"
+      :epochs="epochs"
       :memory-name="currentNode.name"
       @close="shareVisible = false"
     />
     <!-- The SAME dialog component, uploader variant (no role switcher, uploader shares only) — a separate action. -->
     <ShareDialog
-      v-if="uploaderVisible && currentNode && memoryKey"
+      v-if="uploaderVisible && currentNode && memoryKey && epochs"
       uploader
       :scope-id="activeSpace.scopeId!"
       :node-id="currentNode.id"
       :memory-key="memoryKey"
+      :epochs="epochs"
       :memory-name="currentNode.name"
       @close="uploaderVisible = false"
     />

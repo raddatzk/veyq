@@ -23,11 +23,12 @@ import { ShareRole } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000cd'
+const EPOCHS = { current: 0, keys: new Map([[0, new Uint8Array(32)]]) }
 
 const share = (over: Record<string, unknown>) => ({
   shareId: 's', scopeId: SCOPE_ID, nodeId: 'n1', role: ShareRole.Viewer, enabled: true, mine: true,
   createdAt: new Date('2026-01-01T00:00:00Z'), expiresAt: null,
-  sealedNote: null, sealedShareName: null, sealedShareKey: 'k', passwordRequired: false, sealedPassword: null,
+  sealedNote: null, sealedShareName: null, sealedShareKey: 'k', sealedShareKeyEpoch: 0, passwordRequired: false, sealedPassword: null,
   ...over,
 })
 
@@ -39,7 +40,7 @@ const stubs = {
 
 const mountList = () =>
   mount(ShareDialog, {
-    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), memoryName: 'Rom' },
+    props: { scopeId: SCOPE_ID, nodeId: 'n1', memoryKey: new Uint8Array([1, 2, 3]), epochs: EPOCHS, memoryName: 'Rom' },
     global: { plugins: [realI18n()], stubs },
   })
 

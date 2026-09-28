@@ -6,15 +6,26 @@ vi.mock('../../api/client', () => ({
   publicSharesApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
+// Only the scope RE-OPEN a `stale_epoch` retry performs is stubbed; `isStaleEpoch` stays real, because which refusal
+// the create retries on is the thing under test.
+vi.mock('../spaces/scopes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../spaces/scopes')>()),
+  openScopeById: vi.fn(),
+}))
 
 import { createShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
 import { sharesApi, publicSharesApi } from '../../api/client'
+import { isStaleEpoch, openScopeById } from '../spaces/scopes'
+import { isCodedError, HttpStatus } from '../../shared/httpError'
+import type { EpochKeys } from '../spaces/epochs'
+import { httpError } from '../../test/httpError'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
+import { ShareRole } from '../../api/generated/sharing'
 
 const SCOPE_ID = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 const NODE_ID = '4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d'
@@ -25,6 +36,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 const SHARE_ID = /^[A-Za-z0-9_-]{43}$/ // 256 random bits, base64url — minted by the client (ADR 0072)
 /** A fixed share address for tests that seal their own fixtures. */
 const ADDR = { scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: 'S'.repeat(43) }
+/** The scope's epoch keys a member holds: `K_SC` at epochs 0..2, the write key at 2 (ADR 0024). A share's recovery copy
+ *  of `K_share` seals under the write key and opens at its own epoch (ADR 0036 point 4). */
+const EPOCHS: EpochKeys = { current: 2, keys: new Map([[0, v1.randomBytes(32)], [1, v1.randomBytes(32)], [2, v1.randomBytes(32)]]) }
+/** A share with no recovery copy. */
+const NO_COPY = { sealedShareKey: null, sealedShareKeyEpoch: null }
 /** The address of the share a createShare call minted (the recovery copy of K_share is bound to it). */
 const addressOf = (req: { shareId: string }) => ({ scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: req.shareId })
 
@@ -50,7 +66,7 @@ describe('createShare (curator)', () => {
     mockCurator(create)
     const kMem = v1.randomBytes(32)
 
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom 2026')
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom 2026')
 
     const req = create.mock.calls[0][0].createShareRequest
     // the client mints the share id and sends it — the recovery copy of K_share is sealed bound to it
@@ -65,6 +81,54 @@ describe('createShare (curator)', () => {
     expect(req.sealedName).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
     expect(JSON.stringify(req)).not.toContain('Rom 2026')
   })
+
+  it('seals the recovery copy under the write key at its epoch, never under K_mem (ADR 0036 point 4)', async () => {
+    const create = vi.fn().mockResolvedValue({})
+    mockCurator(create)
+    const kMem = v1.randomBytes(32)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom')
+    const req = create.mock.calls[0][0].createShareRequest
+    expect(req.sealedShareKeyEpoch).toBe(EPOCHS.current)
+    const ctx = { purpose: 'share-key-recovery', ...addressOf(req), epoch: EPOCHS.current } as const
+    expect(v1.open(ctx, EPOCHS.keys.get(2)!, fromB64std(req.sealedShareKey))).toEqual(minted.kShare)
+    expect(() => v1.open(ctx, kMem, fromB64std(req.sealedShareKey))).toThrow(v1.OpenRefused)
+  })
+
+  it('on a 409 stale_epoch re-opens the scope key and re-seals the copy at the new epoch, once', async () => {
+    const create = vi.fn().mockRejectedValueOnce(httpError(409, 'stale_epoch')).mockResolvedValueOnce({})
+    mockCurator(create)
+    const fresh: EpochKeys = { current: 3, keys: new Map([...EPOCHS.keys, [3, v1.randomBytes(32)]]) }
+    const k3 = Uint8Array.from(fresh.keys.get(3)!) // the re-opened keys are wiped after the re-seal
+    vi.mocked(openScopeById).mockResolvedValueOnce({ epochs: fresh } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+
+    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
+
+    expect(openScopeById).toHaveBeenCalledWith(SCOPE_ID)
+    expect(create).toHaveBeenCalledTimes(2)
+    const [first, second] = create.mock.calls.map((c) => c[0].createShareRequest)
+    expect(first.shareId).toBe(second.shareId) // the same share, re-sealed — not a second one
+    expect(second.sealedShareKeyEpoch).toBe(3)
+    const ctx = { purpose: 'share-key-recovery', ...addressOf(second), epoch: 3 } as const
+    expect(v1.open(ctx, k3, fromB64std(second.sealedShareKey))).toEqual(minted.kShare)
+    expect(fresh.keys.get(3)!.every((b) => b === 0)).toBe(true)
+  })
+
+  it('a second stale_epoch is thrown, and any other refusal is never retried', async () => {
+    const stale = vi.fn().mockRejectedValue(httpError(409, 'stale_epoch'))
+    mockCurator(stale)
+    vi.mocked(openScopeById).mockResolvedValue({ epochs: { current: 3, keys: new Map([[3, v1.randomBytes(32)]]) } } as unknown as Awaited<ReturnType<typeof openScopeById>>)
+    const second = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom').catch((e: unknown) => e)
+    expect(await isStaleEpoch(second)).toBe(true)
+    expect(stale).toHaveBeenCalledTimes(2)
+
+    const taken = vi.fn().mockRejectedValue(httpError(409, 'id_taken'))
+    mockCurator(taken)
+    vi.mocked(openScopeById).mockClear()
+    const refused = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom').catch((e: unknown) => e)
+    expect(await isCodedError(refused, HttpStatus.conflict, 'id_taken')).toBe(true)
+    expect(taken).toHaveBeenCalledTimes(1)
+    expect(openScopeById).not.toHaveBeenCalled()
+  })
 })
 
 describe('resolveShare (anonymous viewer)', () => {
@@ -72,7 +136,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-1' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom 2026')
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom 2026')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
 
     // the media's listed metadata is sealed under the Memory's K_mem
@@ -103,7 +167,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-2' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Trip')
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Trip')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
 
     // a chapter's K_mem is wrapped under the Memory's K_mem (purpose `content-key`, bound to the chapter + its epoch)
@@ -134,7 +198,7 @@ describe('resolveShare (anonymous viewer)', () => {
     const create = vi.fn().mockResolvedValue({})
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Trip')
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Trip')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
     const chapterKey = v1.randomBytes(32)
     const OTHER_CHAPTER = '5c09e000-0000-4000-8000-00000000ce99'
@@ -158,7 +222,7 @@ describe('resolveShare (anonymous viewer)', () => {
   it('refuses an unlocked share that carries no scope (every seal it serves is bound to one)', async () => {
     const create = vi.fn().mockResolvedValue({})
     mockCurator(create)
-    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), 'Rom')
+    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
     mockGuest({ role: 'VIEWER', wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
     await expect(resolveShare(minted.shareId, b64url(minted.kShare))).rejects.toBeInstanceOf(ShareUnavailableError)
@@ -167,7 +231,7 @@ describe('resolveShare (anonymous viewer)', () => {
   it('rejects a wrong fragment key — the id alone is inert (E1)', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-3' })
     mockCurator(create)
-    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), 'Rom')
+    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
     mockGuest({ role: 'VIEWER', scopeId: SCOPE_ID, wrap, sealedName, nodes: [{ id: NODE_ID, parentId: null, kind: 'MEMORY', epoch: 0 }], media: [] })
 
@@ -308,7 +372,7 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     mockCurator(create)
     const kMem = v1.randomBytes(32)
 
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom 2026', undefined, null, { de: 'Viel Spaß!', en: 'Enjoy our trip!' })
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom 2026', undefined, null, { de: 'Viel Spaß!', en: 'Enjoy our trip!' })
     const req = create.mock.calls[0][0].createShareRequest
     // all ciphertexts are opaque base64; neither locale's plaintext appears in the request
     expect(req.sealedNote).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
@@ -327,26 +391,28 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     expect(pickLocaleText(resolved.noteByLocale, 'fr')).toBe('Enjoy our trip!') // no fr → falls back to en
   })
 
-  it('edits the note + name in place: recovers K_share via K_mem, re-seals both, PATCHes (shareId unchanged)', async () => {
+  it('edits the note + name in place: recovers K_share via K_SC(epoch), re-seals both, PATCHes (shareId unchanged)', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-n2' })
     const update = vi.fn().mockResolvedValue(undefined)
     vi.mocked(sharesApi).mockReturnValue({ createShare: create, updateShare: update } as unknown as ReturnType<typeof sharesApi>)
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom', undefined, null, { en: 'v1 note' }, 'For friends')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'v1 note' }, 'For friends')
     const req = create.mock.calls[0][0].createShareRequest
-    const { sealedShareKey } = req
     const share = addressOf(req)
 
-    await updateShare(share, kMem, sealedShareKey, { en: 'v2 note' }, 'For Grandma', null)
+    await updateShare(share, EPOCHS, req, { en: 'v2 note' }, 'For Grandma', null)
     const patch = update.mock.calls[0][0]
     expect(patch.shareId).toBe(req.shareId)
     // both ciphertexts round-trip to the new values via the recovered K_share
-    expect(readShareNoteMap(kMem, share, sealedShareKey, patch.updateShareRequest.sealedNote)).toEqual({ en: 'v2 note' })
-    expect(readShareName(kMem, share, sealedShareKey, patch.updateShareRequest.sealedShareName)).toBe('For Grandma')
+    expect(readShareNoteMap(EPOCHS, share, req, patch.updateShareRequest.sealedNote)).toEqual({ en: 'v2 note' })
+    expect(readShareName(EPOCHS, share, req, patch.updateShareRequest.sealedShareName)).toBe('For Grandma')
     // the recovery copy is bound to its share: listed on another share's row it recovers nothing (ADR 0072)
     const elsewhere = { ...share, shareId: ADDR.shareId }
-    expect(readShareName(kMem, elsewhere, sealedShareKey, patch.updateShareRequest.sealedShareName)).toBe('')
-    await expect(updateShare(elsewhere, kMem, sealedShareKey, { en: 'x' }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    expect(readShareName(EPOCHS, elsewhere, req, patch.updateShareRequest.sealedShareName)).toBe('')
+    await expect(updateShare(elsewhere, EPOCHS, req, { en: 'x' }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
+    // …and to its epoch: relabelled as another epoch it opens under neither key (the right key, the wrong label)
+    const relabelled = { ...req, sealedShareKeyEpoch: 1 }
+    await expect(updateShare(share, EPOCHS, relabelled, { en: 'x' }, 'x', null)).rejects.toBeInstanceOf(v1.OpenRefused)
   })
 
   it('clears note + name with blank edits (PATCH nulls)', async () => {
@@ -354,10 +420,10 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const update = vi.fn().mockResolvedValue(undefined)
     vi.mocked(sharesApi).mockReturnValue({ createShare: create, updateShare: update } as unknown as ReturnType<typeof sharesApi>)
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom', undefined, null, { en: 'note' }, 'name')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'note' }, 'name')
     const req = create.mock.calls[0][0].createShareRequest
 
-    await updateShare(addressOf(req), kMem, req.sealedShareKey, { en: '  ' }, '   ', null)
+    await updateShare(addressOf(req), EPOCHS, req, { en: '  ' }, '   ', null)
     expect(update.mock.calls[0][0].updateShareRequest.sealedNote).toBeNull()
     expect(update.mock.calls[0][0].updateShareRequest.sealedShareName).toBeNull()
   })
@@ -366,35 +432,34 @@ describe('share note + name (cr-0115 / cr-0116)', () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-n5' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom', undefined, null, {}, 'For Grandma')
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, {}, 'For Grandma')
     const req = create.mock.calls[0][0].createShareRequest
     expect(req.sealedShareName).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
     expect(JSON.stringify(req)).not.toContain('For Grandma')
-    expect(readShareName(kMem, addressOf(req), req.sealedShareKey, req.sealedShareName)).toBe('For Grandma')
+    expect(readShareName(EPOCHS, addressOf(req), req, req.sealedShareName)).toBe('For Grandma')
   })
 
   it('readShareNoteMap / readShareName return empty when there is no ciphertext or recoverable key', () => {
-    const kMem = v1.randomBytes(32)
-    expect(readShareNoteMap(kMem, ADDR, null, 'x')).toEqual({})
-    expect(readShareNoteMap(kMem, ADDR, 'x', null)).toEqual({})
-    expect(readShareName(kMem, ADDR, null, 'x')).toBe('')
-    expect(readShareName(kMem, ADDR, 'x', null)).toBe('')
+    const copy = { sealedShareKey: 'x', sealedShareKeyEpoch: 0 }
+    expect(readShareNoteMap(EPOCHS, ADDR, NO_COPY, 'x')).toEqual({})
+    expect(readShareNoteMap(EPOCHS, ADDR, copy, null)).toEqual({})
+    expect(readShareName(EPOCHS, ADDR, NO_COPY, 'x')).toBe('')
+    expect(readShareName(EPOCHS, ADDR, copy, null)).toBe('')
   })
 
   it('recoverShareLink rebuilds the full link (with the #k= fragment) for any existing share', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-n4' })
     mockCurator(create)
     const kMem = v1.randomBytes(32)
-    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, 'Rom', undefined, null, {})
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, {})
     const req = create.mock.calls[0][0].createShareRequest
-    const { sealedShareKey } = req
 
-    // recovering K_share via K_mem reconstructs exactly the minted link — so any old link is re-copyable
-    expect(recoverShareLink(addressOf(req), kMem, sealedShareKey)).toBe(buildShareLink(minted.shareId, minted.kShare))
-    // a pre-cr-0115 share carries no recoverable key → null (falls back to the fresh link in the UI)
-    expect(recoverShareLink(addressOf(req), kMem, null)).toBeNull()
+    // recovering K_share via K_SC(epoch) reconstructs exactly the minted link — so any old link is re-copyable
+    expect(recoverShareLink(addressOf(req), EPOCHS, req)).toBe(buildShareLink(minted.shareId, minted.kShare))
+    // a share without a recoverable key → null (falls back to the fresh link in the UI)
+    expect(recoverShareLink(addressOf(req), EPOCHS, NO_COPY)).toBeNull()
     // a recovery copy served on another share's row rebuilds no link (bound to its share, ADR 0072)
-    expect(recoverShareLink(ADDR, kMem, sealedShareKey)).toBeNull()
+    expect(recoverShareLink(ADDR, EPOCHS, req)).toBeNull()
   })
 })
 
@@ -406,7 +471,7 @@ describe('password protection (cr-0118)', () => {
   it('createShare with a password sends the gate fields; the verifier = SHA-256(Argon2id(pw, salt))', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-p1' })
     mockCurator(create)
-    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), 'Rom', undefined, null, {}, '', 'hunter2')
+    await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
     const req = create.mock.calls[0][0].createShareRequest
     expect(req.passwordRequired).toBe(true)
     expect(req.pwSalt).toMatch(/^[A-Za-z0-9+/]*={0,2}$/)
@@ -421,21 +486,25 @@ describe('password protection (cr-0118)', () => {
     expect(derivePasswordToken('pw', salt)).toBe(derivePasswordToken('pw', salt))
   })
 
-  it('readSharePassword reveals the plaintext via the K_mem-recovered K_share', () => {
-    const kMem = v1.randomBytes(32)
+  it('readSharePassword reveals the plaintext via the K_SC(epoch)-recovered K_share', () => {
     const kShare = v1.randomBytes(32)
-    const sealedShareKey = b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR }, kMem, kShare))
+    // a copy sealed at epoch 1 — before a rotation to 2 — still opens: the member holds the whole epoch chain
+    const copy = { sealedShareKey: b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR, epoch: 1 }, EPOCHS.keys.get(1)!, kShare)), sealedShareKeyEpoch: 1 }
     const sealedPassword = b64std(v1.seal({ purpose: 'share-password' }, kShare, v1.utf8('s3cret')))
-    expect(readSharePassword(kMem, ADDR, sealedShareKey, sealedPassword)).toBe('s3cret')
-    expect(readSharePassword(kMem, ADDR, null, sealedPassword)).toBe('') // no recoverable key → ''
+    expect(readSharePassword(EPOCHS, ADDR, copy, sealedPassword)).toBe('s3cret')
+    expect(readSharePassword(EPOCHS, ADDR, NO_COPY, sealedPassword)).toBe('') // no recoverable key → ''
     // the recovery copy is bound to its share — addressed as another share, nothing is revealed
-    expect(readSharePassword(kMem, { ...ADDR, shareId: 'T'.repeat(43) }, sealedShareKey, sealedPassword)).toBe('')
+    expect(readSharePassword(EPOCHS, { ...ADDR, shareId: 'T'.repeat(43) }, copy, sealedPassword)).toBe('')
+    // a copy sealed under K_mem, as before ADR 0036 point 4, degrades to nothing rather than refusing the list
+    const kMem = v1.randomBytes(32)
+    const legacy = { sealedShareKey: b64std(v1.seal({ purpose: 'share-key-recovery', ...ADDR, epoch: 1 }, kMem, kShare)), sealedShareKeyEpoch: 1 }
+    expect(readSharePassword(EPOCHS, ADDR, legacy, sealedPassword)).toBe('')
   })
 
   it('resolveShare throws SharePasswordRequiredError on a locked shell, then unlocks with the token', async () => {
     const create = vi.fn().mockResolvedValue({ shareId: 'share-p2' })
     mockCurator(create)
-    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), 'Rom', undefined, null, {}, '', 'hunter2')
+    const minted = await createShare(SCOPE_ID, NODE_ID, v1.randomBytes(32), EPOCHS, 'Rom', undefined, null, {}, '', 'hunter2')
     const { wrap, sealedName } = create.mock.calls[0][0].createShareRequest
     const resolveMock = vi.fn()
       .mockResolvedValueOnce({ passwordRequired: true, pwSalt: 'c2FsdA==', role: 'VIEWER', nodes: [], media: [] })
@@ -448,6 +517,33 @@ describe('password protection (cr-0118)', () => {
     await expect(resolveShare('share-p2', fragment)).rejects.toBeInstanceOf(SharePasswordRequiredError)
     const resolved = await resolveShare('share-p2', fragment, 'token')
     expect(resolved.memoryName).toBe('Rom')
+  })
+}, PRODUCTION_ARGON_TIMEOUT_MS)
+
+// W1 (ADR 0036 point 4): a VIEWER or CONTRIBUTOR link hands its holder K_mem — and, with a database dump, every
+// other share's row of the same Memory, share id included. The recovery copy of each sibling's K_share must open
+// under none of the keys that link yields, or the dump reads that share's password, label and note, and rebuilds
+// its link. Runs the REAL create path, so a regression that seals the copy under the Memory key again reddens here.
+describe('a link opens nothing of a sibling share (W1)', () => {
+  it("neither the link's K_mem nor its own K_share opens another share's recovery copy; a member's key does", async () => {
+    const create = vi.fn().mockResolvedValue({})
+    mockCurator(create)
+    const kMem = v1.randomBytes(32)
+    // B — the sibling with a password, a private label and a note; A — the viewer link the attacker holds.
+    await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', undefined, null, { en: 'note for B' }, 'For Grandma', 'correct horse battery')
+    const b = create.mock.calls[0][0].createShareRequest
+    const a = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', ShareRole.Viewer)
+    const aReq = create.mock.calls[1][0].createShareRequest
+    const linkKmem = v1.open({ purpose: 'share-key' }, a.kShare, fromB64std(aReq.wrap)) // what link A hands over
+    const bContext = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: b.shareId, epoch: b.sealedShareKeyEpoch } as const
+
+    for (const key of [linkKmem, a.kShare]) {
+      expect(() => v1.open(bContext, key, fromB64std(b.sealedShareKey))).toThrow(v1.OpenRefused)
+    }
+    // Positive control, same predicate: a member of the scope opens B's copy at its epoch and reveals its password.
+    const kShareB = v1.open(bContext, EPOCHS.keys.get(b.sealedShareKeyEpoch)!, fromB64std(b.sealedShareKey))
+    expect(new TextDecoder().decode(v1.open({ purpose: 'share-password' }, kShareB, fromB64std(b.sealedPassword)))).toBe('correct horse battery')
+    expect(readSharePassword(EPOCHS, addressOf(b), b, b.sealedPassword)).toBe('correct horse battery')
   })
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 

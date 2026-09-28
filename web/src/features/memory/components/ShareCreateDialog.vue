@@ -3,7 +3,7 @@
 // `uploader` flag so they stay identical by construction: the normal flow shows a VIEWER/CONTRIBUTOR role switcher;
 // the uploader (drop-box) flow fixes the role to UPLOADER and hides the switcher — that is the ONLY difference.
 // CREATE collects an optional name + per-locale note, mints the share and shows the copyable link. EDIT (editShare
-// set): pre-fills name + note (decrypted via the recoverable K_share) and saves them in place with `updateShare` —
+// set): pre-fills name + note (decrypted via the K_SC-recoverable K_share) and saves them in place with `updateShare` —
 // the link stays valid. Operator-blind: name + note sealed under K_share; the fresh K_share rides only the returned
 // link. (The uploader-links capability is gated on the memory ACTION that opens the uploader dialog, not here.)
 import { ref, computed, onMounted } from 'vue'
@@ -18,6 +18,7 @@ import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
 import { createShare, updateShare, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
+import type { EpochKeys } from '../../spaces/epochs'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 
 /** cr-0118: a password-protected share requires at least this many characters (a client-side convention — the
@@ -29,6 +30,9 @@ const props = defineProps<{
   scopeId: string
   nodeId: string
   memoryKey: Uint8Array
+  /** The scope's epoch keys: a new share's recovery copy seals under the current one, an edited share's opens at its
+   *  own epoch (ADR 0036 point 4). */
+  epochs: EpochKeys
   memoryName: string
   /** When set, the dialog edits this share's name + note in place instead of creating a new one. */
   editShare?: ManagedShare | null
@@ -75,10 +79,10 @@ const passwordTooShort = computed(() => passwordEnabled.value && password.value.
 onMounted(() => {
   const s = props.editShare
   if (s && s.sealedShareKey) {
-    name.value = readShareName(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedShareName)
-    note.value = readShareNoteMap(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedNote)
+    name.value = readShareName(props.epochs, addressOf(s), s, s.sealedShareName)
+    note.value = readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)
     role.value = s.role
-    currentPassword.value = readSharePassword(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedPassword)
+    currentPassword.value = readSharePassword(props.epochs, addressOf(s), s, s.sealedPassword)
     password.value = currentPassword.value
     noteEnabled.value = hasLocaleText(note.value)
     passwordEnabled.value = !!s.passwordRequired || currentPassword.value.length > 0
@@ -116,14 +120,14 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
           : ({ set: password.value } as const)
       // cr-0119: a normal-flow edit may re-grade the role (VIEWER ↔ CONTRIBUTOR); the uploader variant never sends one.
       await updateShare(
-        addressOf(props.editShare), props.memoryKey, props.editShare.sealedShareKey,
+        addressOf(props.editShare), props.epochs, props.editShare,
         effectiveNote, name.value, expiry, props.uploader ? undefined : role.value, passwordChange,
       )
       emit('saved')
       emit('close')
     } else {
       const minted = await createShare(
-        props.scopeId, props.nodeId, props.memoryKey, props.memoryName, role.value, expiry,
+        props.scopeId, props.nodeId, props.memoryKey, props.epochs, props.memoryName, role.value, expiry,
         effectiveNote, name.value, passwordEnabled.value ? password.value : '',
       )
       link.value = buildShareLink(minted.shareId, minted.kShare) // the origin belongs here, not in the data layer
