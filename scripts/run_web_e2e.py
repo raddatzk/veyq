@@ -15,7 +15,7 @@ short-circuiting on the first.
 `<stem>.<member>.e2e.test.ts` joins the group `<stem>`; its members run in filename order against the same
 database, bucket and config-secret file, and the orchestrator runs a **hook** between them. Everything else is
 unchanged, and a **group of one is byte-for-byte the old behaviour** — an ordinary `media.e2e.test.ts` still
-gets its own boot, keeps the shared `veyq` bucket, and never touches a hook. Only a real group gets its own
+gets its own boot, keeps the shared `blobs` bucket, and never touches a hook. Only a real group gets its own
 bucket, because only a real group has a hook that destroys one.
 
 The hook is what a group exists for: `restore.*` captures the instance with the app already stopped,
@@ -156,9 +156,10 @@ DB_APP_USER = "veyq"
 # through it. Documented throwaway dev token, not a secret.
 GARAGE_ADMIN = os.environ.get("VEYQ_GARAGE_ADMIN", "http://127.0.0.1:19003")
 GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-token")
-# The bucket `%e2e` boots with, and the key alias the backend imports it under (GarageStoreProvisioner.KEY_ALIAS).
-# `fresh_bucket` grants against that exact alias, so the name is a contract between this file and that class.
-STORE_BUCKET = "veyq"
+# The bucket `%e2e` boots with — the backend's default `veyq.blob-store.bucket`, which `%e2e` does not override — and
+# the key alias the backend imports it under (GarageStoreProvisioner.KEY_ALIAS). `fresh_bucket` grants against that
+# exact alias, so the name is a contract between this file and that class.
+STORE_BUCKET = "blobs"
 STORE_KEY_ALIAS = "veyq-app"
 
 # The throwaway mailbox, published by `infra/docker-compose.yml`'s `mail` profile. It is EXPORTED to each suite as
@@ -959,7 +960,7 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
     backup = group_dir / "backup"
     kept_key = group_dir / "kept-apart" / instance_backup.KEY_NAME
     backup_tool("capture", "--into", str(backup), "--key-into", str(kept_key), "--db-name", source.database,
-                "--store-bucket", source.bucket or "veyq", "--config-secret-file", str(source.secret_file))
+                "--store-bucket", source.bucket or STORE_BUCKET, "--config-secret-file", str(source.secret_file))
     verify_capture(backup, kept_key)
 
     destroy(source)

@@ -52,7 +52,7 @@ class BlobBatchE2ETest {
             "veyq.blob-store.endpoint" to (System.getenv("VEYQ_S3_ENDPOINT") ?: "http://localhost:19000"),
             "veyq.blob-store.access-key" to (System.getenv("VEYQ_S3_ACCESS_KEY") ?: DEV_KEY_ID),
             "veyq.blob-store.secret-key" to (System.getenv("VEYQ_S3_SECRET_KEY") ?: DEV_SECRET),
-            "veyq.blob-store.bucket" to (System.getenv("VEYQ_S3_BUCKET") ?: "veyq"),
+            "veyq.blob-store.bucket" to (System.getenv("VEYQ_S3_BUCKET") ?: "blobs"),
             "veyq.blob-store.region" to (System.getenv("VEYQ_S3_REGION") ?: "us-east-1"),
             // A window of two chunks, so a blob of a few frames crosses windows without megabytes of test data.
             "veyq.blob.presign-window" to "$WINDOW",
@@ -222,7 +222,7 @@ class BlobBatchE2ETest {
         /** The one type a presigned PUT signs and a presigned GET is served as (ADR 0013 §6). */
         const val PINNED = "application/octet-stream"
 
-        private fun bucket() = System.getenv("VEYQ_S3_BUCKET") ?: "veyq"
+        private fun bucket() = System.getenv("VEYQ_S3_BUCKET") ?: "blobs"
 
         private fun endpoint() = java.net.URI.create(System.getenv("VEYQ_S3_ENDPOINT") ?: "http://localhost:19000")
         private fun region() = software.amazon.awssdk.regions.Region.of(System.getenv("VEYQ_S3_REGION") ?: "us-east-1")
@@ -242,8 +242,9 @@ class BlobBatchE2ETest {
                 .endpointOverride(endpoint()).region(region()).credentialsProvider(creds()).serviceConfiguration(pathStyle()).build()
 
         /**
-         * Best-effort bucket create before the suite (the bundled Garage init already creates `veyq`; this is a
-         * safety net for a bare store where the key may create buckets). Swallows already-exists / no-permission.
+         * Best-effort bucket create before the suite (on the bundled Garage the backend's store provisioner has
+         * already created the configured bucket, `blobs` by default, on its first start; this is a safety net for
+         * a bare store where the key may create buckets). Swallows already-exists / no-permission.
          */
         @JvmStatic
         @BeforeAll

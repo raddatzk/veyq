@@ -88,7 +88,7 @@ Environment (the app's own variables — nothing new to configure):
                                 `http://garage:3900`, not a host-published port.
     VEYQ_BLOB_STORE_ACCESS_KEY  Store credentials.
     VEYQ_BLOB_STORE_SECRET_KEY
-    VEYQ_BLOB_STORE_BUCKET      Default `veyq`.
+    VEYQ_BLOB_STORE_BUCKET      Default `blobs`, the backend's own default.
     VEYQ_BLOB_STORE_REGION      Default `us-east-1`.
 """
 from __future__ import annotations
@@ -971,7 +971,7 @@ def add_common(parser: argparse.ArgumentParser) -> None:
                         help="S3 endpoint AS THE CONTAINER SEES IT (e.g. http://garage:3900), not a published port")
     parser.add_argument("--store-access-key", default=os.environ.get("VEYQ_BLOB_STORE_ACCESS_KEY"))
     parser.add_argument("--store-secret-key", default=os.environ.get("VEYQ_BLOB_STORE_SECRET_KEY"))
-    parser.add_argument("--store-bucket", default=os.environ.get("VEYQ_BLOB_STORE_BUCKET", "veyq"))
+    parser.add_argument("--store-bucket", default=os.environ.get("VEYQ_BLOB_STORE_BUCKET", "blobs"))
     parser.add_argument("--store-region", default=os.environ.get("VEYQ_BLOB_STORE_REGION", "us-east-1"))
     parser.add_argument("--rclone-image", default=RCLONE_IMAGE)
     parser.add_argument("--rclone-binary", default=None,

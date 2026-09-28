@@ -24,6 +24,18 @@ acceptanceCriteria:
       backend:
         integration: [TenantIngressProjectorTest.everyRoutabilityChangingOperationReprojects, TenantIngressProjectorTest.theBootstrapDomainIsRoutedOnceFromConfiguration, TenantIngressProjectorTest.theBootstrapPairIsRenderedWithNoTenantRowAtAll, TenantIngressProjectorTest.suspendedTenantsAreExcluded, TenantIngressProjectorTest.regenerateIsAFullRewriteNotAPatch, TenantIngressProjectorTest.aCorruptedOrWipedFileHealsOnTheNextRegenerate, KubernetesIngressSinkTest.anIngressIsCreatedPerRoutableDomain, KubernetesIngressSinkTest.aDomainThatStoppedRoutingLosesItsIngress, KubernetesIngressSinkTest.anEmptyProjectionRemovesEverythingThisSinkOwns]
       # No web surface: routing is a server-side projection with no client half to get wrong.
+  - id: the-blob-route-follows-the-bucket
+    # ADR 0013 §4: path-style presigning puts every object at `/<bucket>/<key>`, so the blobs route IS the bucket
+    # and is derived from `veyq.blob-store.bucket`, never spelled. The ref configures a bucket that is not the
+    # default — every default-bucket test passes a sink that hard-codes the default, since there the literal and
+    # the setting agree (bitten: a hard-coded `/blobs/` reddens this ref alone). The whole rule is compared, so
+    # the prefix without its trailing slash — which claims every app path beginning with the name — fails too.
+    # Kubernetes has no blobs route to derive (its store has a host of its own, ADR 0064).
+    text: Every blobs route the proxy is given — the bootstrap domain's and each tenant's — routes the configured bucket's path and no path that merely begins with its name, so a bucket other than the default routes with configuration alone.
+    coverage:
+      backend:
+        integration: [TenantIngressBucketRouteTest.everyBlobsRouterRoutesTheConfiguredBucketAndNothingElse]
+      # No web surface, for the reason domain-actually-routes states: routing has no client half.
   - id: presign-for-a-reachable-origin
     # ADR 0013 §4 as amended by ADR 0063, and ADR 0067 Decision 5. The negative is the load-bearing one: the
     # domain is resolved through the tenant table, so a spoofed Host signs against the default instead of an

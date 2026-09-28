@@ -14,7 +14,8 @@ import { DEFAULT_GEOCODER_URL, DEFAULT_TILE_URL } from './src/shared/state/mapDe
 
 // `/api` is proxied to the backend. Override the backend URL with VEYQ_API_TARGET.
 const apiTarget = process.env.VEYQ_API_TARGET ?? 'http://127.0.0.1:8080'
-// `/veyq` (presigned media) is proxied to the object store — only used with the s3 store profile.
+// `/blobs/` (presigned media) is proxied to the object store — only used with the s3 store profile. It is the
+// backend's default `veyq.blob-store.bucket`, spelled here because this file cannot read the setting.
 const storeTarget = process.env.VEYQ_STORE_TARGET ?? 'http://localhost:19000'
 // Dev-server port (the IntelliJ run config sets VITE_PORT). Default 5173.
 const port = Number(process.env.VITE_PORT) || 5173
@@ -151,7 +152,7 @@ export default defineConfig(({ command, mode }) => {
             : undefined,
         },
         // Presigned media → object store, Host left untouched (SigV4 signs the Host).
-        '/veyq': { target: storeTarget, changeOrigin: false },
+        '/blobs/': { target: storeTarget, changeOrigin: false },
       },
     },
   }

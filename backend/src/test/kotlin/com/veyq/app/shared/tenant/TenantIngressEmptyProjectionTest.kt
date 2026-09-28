@@ -37,6 +37,7 @@ class TenantIngressEmptyProjectionTest {
     private fun sink(bootstrapDomain: String?) = TraefikFileIngressSink(
         Path.of("build/test-tenant-ingress-render-only/tenants.yml"), bootstrapDomain, null,
         TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
+        bucket = BUCKET,
     )
 
     @Test
@@ -61,7 +62,7 @@ class TenantIngressEmptyProjectionTest {
         listOf(bootstrapOnly to "a.example.com", tenantOnly to "b.example.com").forEach { (rendered, domain) ->
             assertTrue(keyLines(rendered).any { it.trim() == "routers:" }, "a routed domain needs the section:\n$rendered")
             assertTrue(rendered.contains("rule: \"Host(`$domain`)\""), "…and its app router")
-            assertTrue(rendered.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "…and its blobs router")
+            assertTrue(rendered.contains("rule: \"Host(`$domain`) && PathPrefix(`/$BUCKET/`)\""), "…and its blobs router")
         }
     }
 
@@ -77,4 +78,9 @@ class TenantIngressEmptyProjectionTest {
 
     private fun keyLines(rendered: String) =
         rendered.lineSequence().filterNot { it.isBlank() || it.trimStart().startsWith("#") }.toList()
+
+    private companion object {
+        /** The value this sink is given, which its blobs routers must route (ADR 0013 §4). */
+        const val BUCKET = "blobs"
+    }
 }

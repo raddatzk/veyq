@@ -280,7 +280,7 @@ volumes:
 # to land on unnoticed. A command that joins this stack — the backup's rclone container — names one of these:
 # the store is on `veyq_edge`.
 networks:
-  # The internet-facing proxy, the app, and the store the proxy routes /veyq to.
+  # The internet-facing proxy, the app, and the store the proxy routes the bucket's path to.
   edge:
   # The app and the database, and nothing else. `internal`: no route out, since the database needs none.
   db:

@@ -27,6 +27,7 @@ class TraefikFileIngressSinkReadableTest {
         val sink = TraefikFileIngressSink(
             target, "veyq.example.org", null,
             TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
+            bucket = "blobs",
         )
 
         sink.apply(listOf("family.example.org"))

@@ -12,15 +12,21 @@ import java.util.Optional
  * Outside the hermetic `%test` profile a blank `veyq.blob-store.endpoint` **aborts startup** — media is not an
  * optional feature, so an instance without a store is misconfigured, not gracefully degraded (there is no
  * client-facing `directTransport` flag to soft-gate on any more). `%test` keeps the metadata-only in-memory stub.
+ *
+ * It also refuses a `veyq.blob-store.bucket` that breaks S3's bucket-naming rules, in **every** mode, `%test`
+ * included — unlike the endpoint, the name is never absent. The value is not only a store's business: it becomes the
+ * path of every blobs router `TraefikFileIngressSink` renders (ADR 0013 §4), so it is checked, not trusted.
  */
 @ApplicationScoped
 class BlobStoreStartupCheck(
     config: VeyqConfig,
 ) {
     private val endpoint: Optional<String> = config.blobStore().endpoint()
+    private val bucket: String = config.blobStore().bucket()
 
     fun onStart(@Observes ev: StartupEvent) {
         check(hasStore(endpoint.orElse(""), LaunchMode.current())) { REQUIRED_MSG }
+        check(isValidBucketName(bucket)) { bucketNameRefusal(bucket) }
     }
 
     companion object {
@@ -31,5 +37,17 @@ class BlobStoreStartupCheck(
         /** A configured store is mandatory unless we are in the hermetic `%test` profile (in-memory stub). */
         fun hasStore(endpoint: String, mode: LaunchMode): Boolean =
             mode == LaunchMode.TEST || endpoint.isNotBlank()
+
+        /** What an operator reads when the boot aborts on the name, so it names the key to fix. */
+        fun bucketNameRefusal(name: String): String =
+            "veyq.blob-store.bucket=$name is not a valid S3 bucket name: 3-63 characters of a-z, 0-9, '.' and '-', " +
+                "starting and ending with a letter or digit, no '..', and not shaped like an IPv4 address."
+
+        private val BUCKET_NAME = Regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$")
+        private val IPV4_SHAPED = Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+$")
+
+        /** S3's general-purpose bucket-naming rules — the subset every S3-compatible store accepts. */
+        fun isValidBucketName(name: String): Boolean =
+            BUCKET_NAME.matches(name) && ".." !in name && !IPV4_SHAPED.matches(name)
     }
 }
