@@ -1191,6 +1191,17 @@ of them would have been red on the first run. A cold Linux container found the g
 reproduced it. So a done-when that writes one names its **substrate**: an empty cache, and the OS the release
 builds on. Otherwise it names only a command.
 
+### A pin file's write set includes what only RUNS, and what only the IDE and the image build fetch
+
+**"Every task" means every task that resolves, and some resolve only while they run.** cr-build-inputs-pinned's
+metadata passed its own check, then broke three consumers its write never exercised, each found on 2026-09-28
+by simply using the thing: `quarkusDev` (its bootstrap resolver configuration resolves only when the task
+executes — the dev backend refused to start), the owner's IntelliJ sync (it fetches the Gradle distribution's
+`-src` zip, which no `-sources.jar` rule matches), and both container builds (the JAR verifier ran inside the
+image's `npm ci` before `openapitools.json` had been copied in). So a CR that adds a verification step lists
+**every consumer that resolves or runs the verified input** — the dev loop, the IDE sync, each image build —
+and its done-when **runs each one**, not the test suite that happens to share the build file.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and

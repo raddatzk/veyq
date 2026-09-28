@@ -7,8 +7,8 @@
   rationale and verification are traceable from the threat model.
 - **Status:** built as described below: by the backend's app shell
   ([ADR 0069](../decisions/0069-backend-serves-the-web-app-shell.md)) for the app origin, and by the admin
-  container's nginx for the admin origin (§ *admin-web*). What of the admin origin's headers is not yet
-  live-verified is named under § *Verification*.
+  container's nginx for the admin origin (§ *admin-web*). The admin origin's served headers were live-verified
+  once (§ *Verification*); what no check covers is named there too.
 
 ## Protects against
 
@@ -182,8 +182,13 @@ every header of the admin origin.
     container alike, both ways;
   - nginx 1.30.0's headers module merges `add_header_inherit` into a location that does not set it, so the
     server-level `merge` reaches `= /index.html` (read in its source, `ngx_http_headers_merge_conf`).
-- **Not verified yet:** that the built admin image serves those headers — STS and the four others on `/`,
-  `/setup`, a hashed asset and a 502 `/api/*`, none of STS with the switch `false` — and that the image starts
-  on the 1.30 base at all. That needs the image built and run; the run is written down in
-  `cr-admin-origin-hsts`, which stays open until it is done. Nor, beyond that, that a browser records the
-  admin host as an HSTS host: that needs a trusted certificate on a real admin domain.
+- **Served, measured 2026-09-28** (the built `admin-web/Dockerfile` image, run with no backend on
+  127.0.0.1:18081). The image builds and starts on the 1.30 base. **Switch unset:** `/`, `/setup`, a hashed
+  asset and `/api/setup` (a 502) all carry `Strict-Transport-Security: max-age=15552000` plus
+  `X-Frame-Options`, `X-Content-Type-Options`, `Referrer-Policy` and `X-Robots-Tag`; `/` and `/setup` also
+  `Cache-Control: no-store`. **Switch `false`:** the same four headers everywhere, no STS anywhere.
+  **Switch `bogus`:** the container exits 1 with `veyq-admin: VEYQ_HSTS_ENABLED must be 'true' or 'false',
+  got 'bogus'`. **Bite:** with `add_header_inherit merge;` removed from a template mounted over the image's,
+  `/setup` keeps only `Cache-Control` while the asset keeps all five — the merge is what carries them.
+- **Not verified:** that a browser records the admin host as an HSTS host. That needs a trusted certificate on
+  a real admin domain, and a browser ignores STS on a certificate error.
