@@ -12,7 +12,6 @@ import {
   openLightbox,
   openOriginal,
   chunkProvider,
-  downloadRef,
   hasDerivatives,
   loadMediaExif,
   unsealMeta,
@@ -72,10 +71,10 @@ const originalOf = (it: MediaItem) => (props.originalLoader ?? ((x: MediaItem) =
 // The Slice-2 chunk provider for the shown item's ORIGINAL (the video streams the pristine original). Injected by
 // the share viewer; else the authed media-API provider. Keys never leave the page — the SW only pulls plaintext.
 const videoProviderOf = (it: MediaItem): ChunkProvider =>
-  (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, downloadRef(x))))(it)
+  (props.videoChunkProvider ?? ((x: MediaItem) => chunkProvider(props.scopeId, props.memoryKey, x)))(it)
 const metaOf = (it: MediaItem) => (props.metaResolver ?? ((x: MediaItem) => unsealMeta(props.scopeId, props.memoryKey, x)))(it)
 const exifOf = (it: MediaItem): Promise<MediaExif | null> =>
-  props.exifLoader ? props.exifLoader(it) : props.readonly ? Promise.resolve(null) : loadMediaExif(props.scopeId, it.mediaId, props.memoryKey)
+  props.exifLoader ? props.exifLoader(it) : props.readonly ? Promise.resolve(null) : loadMediaExif(props.scopeId, it, props.memoryKey)
 
 const current = ref(props.startIndex)
 // The current item's decrypted preview tier as an object URL — minted + revoked (on switch/unmount) by the primitive.
@@ -196,7 +195,7 @@ async function persistCapturedAt(overrideMs: number | null) {
   savingCapturedAt.value = true
   capturedAtError.value = false
   try {
-    const updated = await setMediaMeta(props.scopeId, target.mediaId, props.memoryKey, captured.value, overrideMs)
+    const updated = await setMediaMeta(props.scopeId, target, props.memoryKey, captured.value, overrideMs)
     if (item.value !== target) return // navigated away mid-save — drop the stale result
     captured.value = updated.tier
     isEditingCapturedAt.value = false
@@ -300,7 +299,7 @@ async function resolvePlaceForCurrent() {
   const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
   if (!resolved) return
   try {
-    const updated = await backfillPlaceName(props.scopeId, target.mediaId, props.memoryKey, meta, resolved.name, resolved.level)
+    const updated = await backfillPlaceName(props.scopeId, target, props.memoryKey, meta, resolved.name, resolved.level)
     if (item.value === target) captured.value = updated.tier
     emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta })
   } catch {
@@ -435,7 +434,7 @@ async function maybeBackfillMediaType(target: MediaItem, targetMeta: MediaMeta |
   const sniffed = sniffMediaType(bytes)
   if (!sniffed) return
   try {
-    const updated = await backfillMediaType(props.scopeId, target.mediaId, props.memoryKey, targetMeta, sniffed)
+    const updated = await backfillMediaType(props.scopeId, target, props.memoryKey, targetMeta, sniffed)
     if (item.value === target) captured.value = updated.tier
     emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta }) // let the grid re-list with the badge
   } catch {

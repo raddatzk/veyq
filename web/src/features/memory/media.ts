@@ -16,8 +16,9 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { mediaApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
+import { type MediaListPage, type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
 import { expectMintedId } from './mintedId'
+import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
 
 // The on-device pixel stage lives in `./mediaDeriver` (cr-0143). Re-exported here so existing importers of
@@ -33,6 +34,10 @@ export { openBucketName, listBuckets, createBucket, renameBucket, deleteBucket, 
  * Every seal in this layer binds the object it is stored as (ADR 0072). A `K_blob` wrap is bound to (scope, owner,
  * blob, role) — the owner is the media for its tiers and the node for a cover — so a server that attaches a blob
  * under another media, or serves a thumbnail in another's slot, gets a wrap that does not open there.
+ *
+ * A media's seals are under `K_mem`, except for one an UPLOADER guest added: that one's are under the guest's own
+ * key (ADR 0031 point 7). A function handed the MEDIA resolves the key itself ([mediaKey]); one handed only an id
+ * or a blob ref is handed the key, which its caller asks [mediaKey] for.
  */
 const blobKeyContext = (scopeId: string, ref: { blobId: string; ownerId: string; role: BlobRole }) =>
   ({ purpose: 'blob-key', scopeId, ownerId: ref.ownerId, blobId: ref.blobId, role: ref.role }) as const
@@ -177,10 +182,16 @@ export type MediaItem = {
   ownerKey?: string
   /** cr-0113: the bucket this media lives in, or undefined = the uploader's primary. */
   bucketId?: string
+  /** Set when an UPLOADER guest added this media: its seals are under that guest's own key, which [mediaKey]
+   *  opens from here (ADR 0031 point 7). Undefined for every other media, whose seals are under `K_mem`. */
+  uploader?: UploaderOrigin
 }
 
+/** What a per-media write or lazy read needs: the media's id and, for one an UPLOADER guest added, its origin. */
+export type MediaRef = Pick<MediaItem, 'mediaId' | 'uploader'>
+
 /** A media list row as the UI holds it — exported so a test can feed the read path a row the server shaped. */
-export function summaryToItem(s: MediaSummary): MediaItem {
+export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): MediaItem {
   // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072).
   return {
     mediaId: s.mediaId,
@@ -201,7 +212,15 @@ export function summaryToItem(s: MediaSummary): MediaItem {
     deletedBy: s.deletedBy ?? undefined,
     ownerKey: s.ownerKey ?? undefined,
     bucketId: s.bucketId ?? undefined,
+    uploader,
   }
+}
+
+/** A listing page's rows as items — a row an UPLOADER guest added carries its origin, which the page itself
+ *  serves: the node's sealed drop key and the guest's wrapped key (ADR 0031 point 7). */
+function pageItems(nodeId: string, page: MediaListPage): MediaItem[] {
+  const wrapped = new Map((page.uploaderKeys ?? []).map((k) => [k.identityId, k.wrappedIdentityKey]))
+  return page.media.map((s) => summaryToItem(s, uploaderOriginOf(s.ownerKey, nodeId, page.sealedDropPrivateKey, wrapped)))
 }
 
 /**
@@ -213,7 +232,8 @@ export function summaryToItem(s: MediaSummary): MediaItem {
 export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaItem): MediaMeta | null {
   if (!item.wrappedMeta) return null
   try {
-    const json = new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, item.mediaId), memoryKey, fromB64std(item.wrappedMeta)))
+    const key = mediaKey(scopeId, memoryKey, item)
+    const json = new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, item.mediaId), key, fromB64std(item.wrappedMeta)))
     const parsed = JSON.parse(json) as unknown
     if (parsed && typeof parsed === 'object') {
       const m = parsed as MediaMeta
@@ -664,8 +684,9 @@ async function reserveAndPump(
 /**
  * Seal the original + its derivatives (each under its own `K_blob`), upload all ciphertext chunks direct-to-store,
  * and complete + attach — via an injected [MediaUploadTransport]. Shared by the authed [addMedia] and the
- * anonymous contributor upload. `deriver` is injectable for tests; `opts` carries `onProgress` (0..1) + an
- * `AbortSignal`.
+ * anonymous contributor upload. `memoryKey` is the key the new media is sealed under: `K_mem`, or an UPLOADER
+ * guest's own identity key, since that guest never holds `K_mem` (ADR 0031 point 7). `deriver` is injectable for
+ * tests; `opts` carries `onProgress` (0..1) + an `AbortSignal`.
  */
 export async function uploadMediaVia(
   scopeId: string,
@@ -855,7 +876,7 @@ export async function restoreMedia(scopeId: string, mediaId: string): Promise<vo
  */
 export async function listTrash(scopeId: string, nodeId: string): Promise<MediaItem[]> {
   const page = await withRefresh(() => mediaApi().listNodeMedia({ scopeId, nodeId, state: 'trashed' }))
-  return page.media.map(summaryToItem)
+  return pageItems(nodeId, page)
 }
 
 /**
@@ -891,7 +912,7 @@ export async function listMediaPage(
     )
     return {
       notModified: false,
-      items: page.media.map(summaryToItem),
+      items: pageItems(nodeId, page),
       mediaRevision: page.mediaRevision,
       deleteRevision: page.deleteRevision,
       mediaIds: page.mediaIds ?? null,
@@ -934,14 +955,16 @@ export function newestCursor(items: readonly MediaItem[]): string | undefined {
 /**
  * Lazily fetch + unseal a media's heavy **EXIF** bundle via the exif endpoint (cr-0064/0068) — the lightbox calls
  * this only when an item opens, so `listMedia` stays constant-small. Operator-blind: the server returns opaque
- * ciphertext, unsealed here under `K_mem`. Best-effort: null when none was sealed, the wrap doesn't open, or the
- * payload isn't a sane object (the lightbox then shows no detail rather than break).
+ * ciphertext, unsealed here under the media's key ([mediaKey]). Best-effort: null when none was sealed, the wrap
+ * doesn't open, or the payload isn't a sane object (the lightbox then shows no detail rather than break).
  */
-export async function loadMediaExif(scopeId: string, mediaId: string, memoryKey: Uint8Array): Promise<MediaExif | null> {
+export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey: Uint8Array): Promise<MediaExif | null> {
+  const { mediaId } = media
   const exif = await withRefresh(() => mediaApi().getMediaExif({ scopeId, mediaId }))
   if (!exif.wrappedExif) return null
   try {
-    const json = new TextDecoder().decode(v1.open(mediaExifContext(scopeId, mediaId), memoryKey, fromB64std(exif.wrappedExif)))
+    const key = mediaKey(scopeId, memoryKey, media)
+    const json = new TextDecoder().decode(v1.open(mediaExifContext(scopeId, mediaId), key, fromB64std(exif.wrappedExif)))
     const parsed = JSON.parse(json) as unknown
     return parsed && typeof parsed === 'object' ? (parsed as MediaExif) : null
   } catch {
@@ -958,12 +981,12 @@ export async function loadMediaExif(scopeId: string, mediaId: string, memoryKey:
  */
 export async function setMediaMeta(
   scopeId: string,
-  mediaId: string,
+  media: MediaRef,
   memoryKey: Uint8Array,
   meta: MediaMeta | null,
   overrideMs: number | null,
 ): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, mediaId, memoryKey, { ...(meta ?? { v: 1 }), capturedAtOverride: overrideMs ?? undefined })
+  return persistMeta(scopeId, media, memoryKey, { ...(meta ?? { v: 1 }), capturedAtOverride: overrideMs ?? undefined })
 }
 
 /**
@@ -1000,13 +1023,13 @@ function clampUtf8(s: string, maxBytes: number): string {
  */
 export async function backfillPlaceName(
   scopeId: string,
-  mediaId: string,
+  media: MediaRef,
   memoryKey: Uint8Array,
   meta: MediaMeta | null,
   placeName: string,
   placeLevel?: string,
 ): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, mediaId, memoryKey, {
+  return persistMeta(scopeId, media, memoryKey, {
     ...(meta ?? { v: 1 }),
     placeName: clampPlaceName(placeName),
     placeLevel,
@@ -1024,12 +1047,12 @@ export async function backfillPlaceName(
  */
 export async function backfillMediaType(
   scopeId: string,
-  mediaId: string,
+  media: MediaRef,
   memoryKey: Uint8Array,
   meta: MediaMeta | null,
   mediaType: string,
 ): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, mediaId, memoryKey, { ...(meta ?? { v: 1 }), mediaType })
+  return persistMeta(scopeId, media, memoryKey, { ...(meta ?? { v: 1 }), mediaType })
 }
 
 /** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). */
@@ -1044,18 +1067,22 @@ function metaHasContent(m: MediaMeta): boolean {
 }
 
 /**
- * Re-seal a metadata tier under `K_mem` and PUT it verbatim (`updateMediaMeta`) — the shared write path behind the
- * capturedAt edit ([setMediaMeta]) and the mediaType backfill ([backfillMediaType]). Drops to null when nothing is
+ * Re-seal a metadata tier under the media's key and PUT it verbatim (`updateMediaMeta`) — the shared write path
+ * behind the capturedAt edit ([setMediaMeta]) and the mediaType backfill ([backfillMediaType]). The key is the one
+ * the media's origin fixes ([mediaKey]): a member editing what an UPLOADER guest added re-seals under that guest's
+ * key, never under `K_mem`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
  * left worth sealing. Returns both the unsealed tier (for local state) and the sealed blob (so the grid item stays
  * consistent).
  */
 async function persistMeta(
   scopeId: string,
-  mediaId: string,
+  media: MediaRef,
   memoryKey: Uint8Array,
   next: MediaMeta,
 ): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  const wrappedMeta = metaHasContent(next) ? sealJson(memoryKey, prune(next), mediaMetaContext(scopeId, mediaId)) : null
+  const { mediaId } = media
+  const key = mediaKey(scopeId, memoryKey, media)
+  const wrappedMeta = metaHasContent(next) ? sealJson(key, prune(next), mediaMetaContext(scopeId, mediaId)) : null
   await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta } }))
   return { tier: wrappedMeta ? (prune(next) as MediaMeta) : null, wrappedMeta }
 }
@@ -1126,12 +1153,15 @@ export async function openBlob(scopeId: string, memoryKey: Uint8Array, ref: Blob
   return openBlobFromUrls(scopeId, memoryKey, ref, await presignAllChunks(scopeId, ref.blobId))
 }
 
-/** Open the grid tier (thumbnail) of a media. */
-export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) => openBlob(scopeId, memoryKey, gridRef(item))
+/** Open the grid tier (thumbnail) of a media — under the key its origin fixes ([mediaKey]). */
+export const openGrid = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
+  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), gridRef(item))
 /** Open the lightbox tier (preview) of a media. */
-export const openLightbox = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) => openBlob(scopeId, memoryKey, lightboxRef(item))
+export const openLightbox = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
+  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), lightboxRef(item))
 /** Open the pristine original of a media (download). */
-export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) => openBlob(scopeId, memoryKey, downloadRef(item))
+export const openOriginal = (scopeId: string, memoryKey: Uint8Array, item: MediaItem) =>
+  openBlob(scopeId, mediaKey(scopeId, memoryKey, item), downloadRef(item))
 
 // --- Slice-2 range streaming: the page-side chunk provider (ADR 0047) --------
 //
@@ -1206,9 +1236,11 @@ export function makeChunkProvider(
   }
 }
 
-/** A {@link ChunkProvider} for the authed app: presigns the whole blob via the media endpoint (bearer, `withRefresh`). */
-export function chunkProvider(scopeId: string, memoryKey: Uint8Array, ref: BlobRef): ChunkProvider {
-  return makeChunkProvider(scopeId, memoryKey, ref, () => presignAllChunks(scopeId, ref.blobId))
+/** A {@link ChunkProvider} for the authed app over a media's original: presigns the whole blob via the media
+ *  endpoint (bearer, `withRefresh`), and opens it under the key the media's origin fixes ([mediaKey]). */
+export function chunkProvider(scopeId: string, memoryKey: Uint8Array, item: MediaItem): ChunkProvider {
+  const ref = downloadRef(item)
+  return makeChunkProvider(scopeId, mediaKey(scopeId, memoryKey, item), ref, () => presignAllChunks(scopeId, ref.blobId))
 }
 
 // --- transport helpers -----------------------------------------------------

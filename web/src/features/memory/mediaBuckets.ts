@@ -7,10 +7,13 @@ import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { bucketsApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { type BucketSummary } from '../../api/generated/media'
+import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
 
 // Bucket names sealed under K_mem (cr-0113), each bound to its object (ADR 0072): a user-created sub-bucket's name
 // to (scope, node, bucket); a contributor primary's name IS the identity's sealed display name (cr-0101, copied
 // server-side onto the bucket), bound to (scope, share, identity) — the row carries the share and names the identity.
+// An UPLOADER identity's primary is the exception to "under K_mem": its name is sealed under that guest's own key,
+// which the row's [BucketItem.uploader] opens through the Memory's drop key (ADR 0031 point 7).
 const bucketNameContext = (scopeId: string, nodeId: string, bucketId: string) =>
   ({ purpose: 'bucket-name', scopeId, nodeId, bucketId }) as const
 const OWNER_SHARE_PREFIX = 'share:'
@@ -27,6 +30,8 @@ export type BucketItem = {
   mediaCount: number
   /** A contributor primary's share — its name is bound to it (ADR 0072). */
   shareId?: string
+  /** An UPLOADER identity's primary: its name is sealed under that guest's key, opened from here ([mediaKey]). */
+  uploader?: UploaderOrigin
 }
 
 /**
@@ -38,7 +43,8 @@ export type BucketItem = {
 export function openBucketName(scopeId: string, nodeId: string, memoryKey: Uint8Array, bucket: BucketItem): string | null {
   if (!bucket.sealedName) return null
   try {
-    return new TextDecoder().decode(v1.open(bucketNameContext_(scopeId, nodeId, bucket), memoryKey, fromB64std(bucket.sealedName)))
+    const key = mediaKey(scopeId, memoryKey, bucket)
+    return new TextDecoder().decode(v1.open(bucketNameContext_(scopeId, nodeId, bucket), key, fromB64std(bucket.sealedName)))
   } catch {
     return null // not openable → the picker uses a neutral fallback label
   }
@@ -53,7 +59,8 @@ function bucketNameContext_(scopeId: string, nodeId: string, b: BucketItem): v1.
   return bucketNameContext(scopeId, nodeId, b.bucketId)
 }
 
-function toBucket(b: BucketSummary): BucketItem {
+function toBucket(b: BucketSummary, nodeId: string, sealedDropPrivateKey: string | null | undefined): BucketItem {
+  const wrapped = new Map<string, string>(b.isPrimary && b.wrappedIdentityKey ? [[b.ownerKey.slice(OWNER_SHARE_PREFIX.length), b.wrappedIdentityKey]] : [])
   return {
     bucketId: b.bucketId,
     ownerKey: b.ownerKey,
@@ -62,13 +69,14 @@ function toBucket(b: BucketSummary): BucketItem {
     sealedName: b.sealedName ?? undefined,
     mediaCount: b.mediaCount,
     shareId: b.shareId ?? undefined,
+    uploader: uploaderOriginOf(b.ownerKey, nodeId, sealedDropPrivateKey, wrapped),
   }
 }
 
 /** List a node's uploader buckets for the "Beiträge" tab (primaries + sub-buckets) with per-bucket counts. */
 export async function listBuckets(scopeId: string, nodeId: string): Promise<BucketItem[]> {
   const res = await withRefresh(() => bucketsApi().listNodeBuckets({ scopeId, nodeId }))
-  return res.buckets.map(toBucket)
+  return res.buckets.map((b) => toBucket(b, nodeId, res.sealedDropPrivateKey))
 }
 
 /** Create a sub-bucket under a primary root — the client seals the folder name under K_mem. `parentBucketId` nests
@@ -76,13 +84,13 @@ export async function listBuckets(scopeId: string, nodeId: string): Promise<Buck
 export async function createBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, name: string, parentBucketId?: string): Promise<BucketItem> {
   const bucketId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
   const sealedName = b64std(v1.seal(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
-  return toBucket(await withRefresh(() => bucketsApi().createBucket({ scopeId, nodeId, createBucketRequest: { bucketId, sealedName, parentBucketId } })))
+  return toBucket(await withRefresh(() => bucketsApi().createBucket({ scopeId, nodeId, createBucketRequest: { bucketId, sealedName, parentBucketId } })), nodeId, null)
 }
 
 /** Rename one of the caller's own sub-buckets — re-seal the name under K_mem (a later slice's UI). */
 export async function renameBucket(scopeId: string, nodeId: string, memoryKey: Uint8Array, bucketId: string, name: string): Promise<BucketItem> {
   const sealedName = b64std(v1.seal(bucketNameContext(scopeId, nodeId, bucketId), memoryKey, v1.utf8(name)))
-  return toBucket(await withRefresh(() => bucketsApi().renameBucket({ scopeId, nodeId, bucketId, renameBucketRequest: { sealedName } })))
+  return toBucket(await withRefresh(() => bucketsApi().renameBucket({ scopeId, nodeId, bucketId, renameBucketRequest: { sealedName } })), nodeId, null)
 }
 
 /** Delete one of the caller's own sub-buckets — its media reparent to the primary (a later slice's UI). */

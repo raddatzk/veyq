@@ -18,6 +18,7 @@ import {
   openShareOriginal,
   shareChunkProvider,
   createContributorIdentity,
+  sessionSealKey,
   addSharePhoto,
   deleteSharePhoto,
   pickLocaleText,
@@ -29,6 +30,7 @@ import {
   SharePasswordRequiredError,
   SharePasswordIncorrectError,
   type ShareItem,
+  type ShareAccess,
   type ContributorSession,
 } from '../features/memory/share'
 import { unsealMeta, effectiveCapturedAt, hasDerivatives, downloadRef, type MediaItem } from '../features/memory/media'
@@ -165,9 +167,10 @@ const hasContent = computed(() => items.value.length > 0 || optimisticTiles.valu
 
 
 // --- contributor / uploader (CONTRIBUTOR + UPLOADER shares, cr-0101 / cr-0102) ----------------------------
-// The share role + the root Memory's K_mem (for a contributor/uploader to seal their name + uploads under).
+// The share role + what its link lets this guest hold (ADR 0031 point 7): the root Memory's K_mem for a viewer or
+// contributor, only the Memory's drop public key for an uploader — which never holds K_mem.
 const role = ref<ShareRole>(ShareRole.Viewer)
-const rootMemoryKey = ref<Uint8Array | null>(null)
+const access = ref<ShareAccess | null>(null)
 // The shared Memory's scope — a contributor's name and uploads are sealed bound to it (ADR 0072).
 const shareScopeId = ref<string | null>(null)
 const isContributor = computed(() => role.value === ShareRole.Contributor)
@@ -187,18 +190,21 @@ function loadSession() {
     session.value = null
   }
 }
-// A CONTRIBUTOR or UPLOADER share shows a mandatory name pre-screen until the visitor has named themselves.
-const needsName = computed(() => status.value === 'ready' && canContribute.value && !session.value)
+// The key this session's uploads seal under — K_mem for a contributor, the uploader's own key for an uploader.
+const sealKey = computed(() => (session.value && access.value ? sessionSealKey(session.value, access.value) : null))
+// A CONTRIBUTOR or UPLOADER share shows a mandatory name pre-screen until the visitor has named themselves — and
+// again for an uploader session saved without its own key, which has nothing to seal with.
+const needsName = computed(() => status.value === 'ready' && canContribute.value && !sealKey.value)
 const displayName = ref('')
 const naming = ref(false)
 const nameError = ref(false)
 async function submitName() {
   const name = displayName.value.trim()
-  if (!name || naming.value || !rootMemoryKey.value || !shareScopeId.value) return
+  if (!name || naming.value || !access.value || !shareScopeId.value) return
   naming.value = true
   nameError.value = false
   try {
-    const created = await createContributorIdentity(shareId, shareScopeId.value, rootMemoryKey.value, name, pwToken.value)
+    const created = await createContributorIdentity(shareId, shareScopeId.value, access.value, name, pwToken.value)
     localStorage.setItem(sessionKey, JSON.stringify(created))
     session.value = created
   } catch {
@@ -226,11 +232,11 @@ function onFilesPicked() {
 }
 function enqueueBatch(picked: File[]) {
   const s = session.value
-  const key = rootMemoryKey.value
+  const key = sealKey.value
   const scopeId = shareScopeId.value
   if (!s || !key || !scopeId) return
   enqueueUploads(
-    { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, scopeId, memoryKey: key, ...s, pwToken: pwToken.value }, source, undefined, opts) },
+    { key: shareId, upload: (source, opts) => addSharePhoto({ shareId, scopeId, sealKey: key, ...s, pwToken: pwToken.value }, source, undefined, opts) },
     picked.map((file) => ({ file, mediaType: inferMediaType(file) })),
     // CONTRIBUTOR: re-resolve so the contributed photo lists. UPLOADER: never re-resolve (the resolve serves the
     // uploader no media) — the done optimistic tile stays as the session-only own-view from its local preview.
@@ -297,7 +303,7 @@ async function load() {
     // cr-0116: the curator note is a per-locale map — pick the viewer's locale (exact → base → en → first).
     note.value = pickLocaleText(resolved.noteByLocale, locale.value)
     role.value = resolved.role
-    rootMemoryKey.value = resolved.rootMemoryKey
+    access.value = resolved.access
     shareScopeId.value = resolved.scopeId
     // incremental merge (no empty-flash): the pipeline drops thumbs of removed media + donates a just-uploaded
     // photo's optimistic preview (hands off with no gray gap), then decrypts each derivable item's real thumbnail.

@@ -8,11 +8,16 @@
 //  - **curator** (authed): mint / list / revoke a share.
 //  - **viewer** (anonymous, no session): resolve a share, unwrap `K_mem` from the fragment key, derive each
 //    chapter's `K_mem` down the subtree, and open blobs via the gated share-scoped presign endpoint.
+//
+// An UPLOADER share is the exception to the second wrap (ADR 0031 point 7): its guest is the one party the link
+// exists to keep out, so it gets no `K_mem` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
+// seals under an identity key of its own, wrapped to that drop key; `./mediaKey.ts` owns that chain.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
-import { sharesApi, publicSharesApi } from '../../api/client'
+import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
-import { isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
+import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
 import type { LocaleMap } from '../../shared/ui/localeMap'
 import {
   gridRef,
@@ -190,6 +195,11 @@ export type MintedShare = { shareId: string; kShare: Uint8Array }
  * Memory's `K_mem` under it, re-seals the Memory name under `K_share`, and POSTs the opaque record. Returns the
  * `shareId` + `K_share`; the caller turns that pair into a link with [buildShareLink]. The server never sees
  * `K_share` — it leaves this function only towards the UI, and reaches a visitor only in the link's fragment.
+ *
+ * An UPLOADER share carries no wrap (ADR 0031 point 7): it carries the Memory's drop public key under `K_share`
+ * instead — the node's existing drop key, read fresh from the server because every upload so far is sealed to it,
+ * or a new one whose private half the server then sets on the Memory. Two owners minting the Memory's first one at
+ * once: the server keeps one and refuses the other `drop_key_exists`, which re-reads the node and retries once.
  */
 export async function createShare(
   scopeId: string,
@@ -204,7 +214,9 @@ export async function createShare(
 ): Promise<MintedShare> {
   const kShare = v1.randomBytes(32)
   const shareId = newShareId() // client-minted: the recovery copy below is sealed bound to it (ADR 0072)
-  const wrap = b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
+  const uploader = role === ShareRole.Uploader
+  // Only a VIEWER or CONTRIBUTOR link holds K_mem; an UPLOADER link's guest never does.
+  const wrap = uploader ? undefined : b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
   const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName))) // the Memory name re-sealed under K_share
   // cr-0115/cr-0116 (ADR 0036): store a recoverable copy of K_share under K_mem (so the curator can edit note + name
   // later) and seal the optional per-locale note + private name under K_share. sealedShareKey is on EVERY share, so
@@ -214,15 +226,34 @@ export async function createShare(
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
   const pw = password.trim() ? buildPasswordFields(kShare, password) : undefined
-  await withRefresh(() =>
-    sharesApi().createShare({
-      createShareRequest: {
-        shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareKey, sealedShareName,
-        passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
-      },
-    }),
-  )
+  const post = async () => {
+    const drop = uploader
+      ? dropKeysForShare(scopeId, nodeId, memoryKey, kShare, await currentSealedDropKey(scopeId, nodeId))
+      : undefined
+    await withRefresh(() =>
+      sharesApi().createShare({
+        createShareRequest: {
+          shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareKey, sealedShareName,
+          passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
+          sealedDropPublicKey: drop?.sealedDropPublicKey, sealedDropPrivateKey: drop?.sealedDropPrivateKey,
+        },
+      }),
+    )
+  }
+  try {
+    await post()
+  } catch (e) {
+    // Another owner set the Memory's drop key first: seal to theirs, which every upload so far is sealed to.
+    if (!uploader || !(await isCodedError(e, HttpStatus.conflict, 'drop_key_exists'))) throw e
+    await post()
+  }
   return { shareId, kShare }
+}
+
+/** The Memory's sealed drop private key as the server holds it now — null until its first UPLOADER share. */
+async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<string | null> {
+  const nodes = await withRefresh(() => contentApi().listNodes({ scopeId }))
+  return nodes.find((n) => n.id === nodeId)?.sealedDropPrivateKey ?? null
 }
 
 /**
@@ -315,31 +346,52 @@ export async function reactivateShare(shareId: string): Promise<void> {
   await withRefresh(() => sharesApi().reactivateShare({ shareId }))
 }
 
-// --- contributor (anonymous, no session; cr-0101) --------------------------
-
-/** A named contributor session on a CONTRIBUTOR share: the anonymous identity id + its capability token. */
-export type ContributorSession = { identityId: string; contributorToken: string }
+// --- contributor / uploader (anonymous, no session; cr-0101, cr-0102) --------
 
 /**
- * Name yourself on a CONTRIBUTOR share (operator-blind): seal the display name under `K_mem` and create an
- * anonymous share identity. Returns the identity id + a capability token that authorizes this session's uploads.
- * The server never sees the name (only the ciphertext) or the person.
+ * A named session on a CONTRIBUTOR or UPLOADER share: the anonymous identity id + its capability token and — an
+ * UPLOADER identity only — its own key `K_up` (standard base64), which everything it uploads is sealed under
+ * (ADR 0031 point 7). Persisted on the guest's device only; it opens nothing but what this identity sealed.
+ */
+export type ContributorSession = { identityId: string; contributorToken: string; uploaderKey?: string }
+
+/**
+ * Name yourself on a CONTRIBUTOR or UPLOADER share (operator-blind) and create an anonymous share identity.
+ * A CONTRIBUTOR seals the display name under `K_mem`. An UPLOADER, which never holds `K_mem`, mints its own key
+ * `K_up`, seals the name under it and hands `K_up` over wrapped to the Memory's drop public key. Returns the
+ * identity id + a capability token that authorizes this session's uploads (+ `K_up`). The server never sees the
+ * name (only the ciphertext), the key, or the person.
  */
 export async function createContributorIdentity(
   shareId: string,
   scopeId: string,
-  memoryKey: Uint8Array,
+  access: ShareAccess,
   displayName: string,
   pwToken?: string,
 ): Promise<ContributorSession> {
-  const identityId = crypto.randomUUID() // client-minted: the name is sealed bound to it (ADR 0072)
-  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), memoryKey, v1.utf8(displayName)))
+  const identityId = crypto.randomUUID() // client-minted: the name and the key wrap are sealed bound to it (ADR 0072)
+  const minted = access.kind === 'drop' ? mintUploaderKey(scopeId, access.nodeId, identityId, access.dropPublicKey) : undefined
+  const nameKey = minted ? minted.uploaderKey : access.kind === 'read' ? access.memoryKey : null
+  if (!nameKey) throw new Error('share_not_contributable')
+  const sealedDisplayName = b64std(v1.seal(identityNameContext(scopeId, shareId, identityId), nameKey, v1.utf8(displayName)))
   const { contributorToken } = await publicSharesApi().createShareIdentity({
     shareId,
-    createShareIdentityRequest: { identityId, sealedDisplayName },
+    createShareIdentityRequest: { identityId, sealedDisplayName, wrappedIdentityKey: minted?.wrappedIdentityKey },
     xSharePassword: pwToken, // cr-0164: the password gate fronts the write path too
   })
-  return { identityId, contributorToken }
+  return minted
+    ? { identityId, contributorToken, uploaderKey: b64std(minted.uploaderKey) }
+    : { identityId, contributorToken }
+}
+
+/**
+ * The key a named session's uploads are sealed under: an UPLOADER identity's own `K_up`, a CONTRIBUTOR's `K_mem`.
+ * Null when the session cannot seal for this share — an UPLOADER session saved without its key, which must name
+ * itself again rather than fall back to a key it does not hold.
+ */
+export function sessionSealKey(session: ContributorSession, access: ShareAccess): Uint8Array | null {
+  if (access.kind === 'drop') return session.uploaderKey ? fromB64std(session.uploaderKey) : null
+  return access.memoryKey
 }
 
 /** The share-scoped upload transport (no auth) — reserve via `startShareBlobUploads`, sign each next window via
@@ -395,18 +447,19 @@ function shareUploadTransport(shareId: string, contributorToken: string, pwToken
 }
 
 /**
- * Add one photo to a CONTRIBUTOR share (anonymous): seal it under `K_mem` (which the contributor holds) with its
- * derivatives + metadata and upload it via the share-scoped endpoints — the exact same operator-blind pipeline as
- * the curator's `addMedia`, only the transport is share-gated. Returns the new blob + media ids.
+ * Add one photo to a CONTRIBUTOR or UPLOADER share (anonymous): seal it under the session's key ([sessionSealKey]:
+ * `K_mem` for a contributor, the guest's own `K_up` for an uploader) with its derivatives + metadata and upload it
+ * via the share-scoped endpoints — the exact same operator-blind pipeline as the curator's `addMedia`, only the
+ * transport is share-gated. Returns the new blob + media ids.
  */
 export async function addSharePhoto(
-  session: ContributorSession & { shareId: string; scopeId: string; memoryKey: Uint8Array; pwToken?: string },
+  session: ContributorSession & { shareId: string; scopeId: string; sealKey: Uint8Array; pwToken?: string },
   source: AddMediaSource,
   deriver: MediaDeriver = createBrowserDeriver(),
   opts: AddMediaOptions = {},
 ): Promise<{ blobId: string; mediaId: string }> {
   return uploadMediaVia(
-    session.scopeId, session.memoryKey, source, deriver, shareUploadTransport(session.shareId, session.contributorToken, session.pwToken), opts,
+    session.scopeId, session.sealKey, source, deriver, shareUploadTransport(session.shareId, session.contributorToken, session.pwToken), opts,
   )
 }
 
@@ -421,21 +474,31 @@ export async function deleteSharePhoto(shareId: string, contributorToken: string
 
 // --- viewer (anonymous, no session) ----------------------------------------
 
-/** One shared media resolved for the read-only viewer: the media + the exact `K_mem` its blobs are sealed under +
- *  the shared Memory's scope, which every one of those seals is bound to (ADR 0072). */
+/** One shared media resolved for the read-only viewer: the media + the `K_mem` of the node it sits on + the shared
+ *  Memory's scope, which every one of its seals is bound to (ADR 0072). A media an UPLOADER guest added carries its
+ *  origin, so [mediaKey] opens it through that node's drop key instead (ADR 0031 point 7). */
 export type ShareItem = { item: MediaItem; memoryKey: Uint8Array; scopeId: string }
 
 /**
- * The decrypted shared Memory, ready to render: its name, the grant `role` (VIEWER / CONTRIBUTOR), the **root**
- * `K_mem` (for a contributor to seal their name + uploads under), and every media (each with its own `K_mem`).
+ * What a resolved link lets its guest do with keys (ADR 0031 point 7):
+ *  - `read` (VIEWER, CONTRIBUTOR): the shared Memory's root `K_mem` — to open its media, and for a contributor to
+ *    seal their name + uploads under;
+ *  - `drop` (UPLOADER): the Memory's drop PUBLIC key and the node it belongs to — enough to wrap an identity key
+ *    of its own to, nothing to open anything with.
  */
+export type ShareAccess =
+  | { kind: 'read'; memoryKey: Uint8Array }
+  | { kind: 'drop'; nodeId: string; dropPublicKey: v1.HybridPublic }
+
+/** The decrypted shared Memory, ready to render: its name, the grant `role`, what its [access] holds, and every
+ *  media (each with its own node's `K_mem` — none for an UPLOADER link, which is served no media). */
 export type ResolvedShare = {
   memoryName: string
   noteByLocale: LocaleMap
   role: ShareRole
   /** The shared Memory's scope — a contributor seals their name and uploads bound to it (ADR 0072). */
   scopeId: string
-  rootMemoryKey: Uint8Array
+  access: ShareAccess
   items: ShareItem[]
 }
 
@@ -500,7 +563,7 @@ export function recordTermsAccepted(tenantId: string, version: number): void {
   }
 }
 
-function shareMediaToItem(m: ShareMedia): MediaItem {
+function shareMediaToItem(m: ShareMedia, uploader: MediaItem['uploader']): MediaItem {
   // Each ref is owned by THIS row's media, in the role the row lists it in (ADR 0072), exactly as the authed list.
   return {
     mediaId: m.mediaId,
@@ -516,6 +579,7 @@ function shareMediaToItem(m: ShareMedia): MediaItem {
       },
     })),
     wrappedMeta: m.wrappedMeta ?? undefined,
+    uploader,
   }
 }
 
@@ -578,15 +642,14 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
     throw new ShareUnavailableError('not_found') // 404 (revoked/expired/unknown) or a network error
   }
   // cr-0118: a locked share (password required, no/valid-less token) serves only the challenge — prompt the viewer.
-  if (share.passwordRequired && !share.wrap) throw new SharePasswordRequiredError(share.pwSalt ?? '')
-  if (!share.scopeId) throw new ShareUnavailableError('not_found') // an unlocked share always carries its scope
+  // Locked is "no sealed name", never "no wrap": an unlocked UPLOADER share carries no wrap either.
+  if (share.passwordRequired && !share.sealedName) throw new SharePasswordRequiredError(share.pwSalt ?? '')
+  if (!share.scopeId || !share.sealedName) throw new ShareUnavailableError('not_found') // unlocked ⇒ scope + name
   const scopeId = share.scopeId
 
-  let rootKmem: Uint8Array
   let memoryName: string
   try {
-    rootKmem = v1.open(SHARE_KEY, kShare, fromB64std(share.wrap!))
-    memoryName = noteDecoder.decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName!)))
+    memoryName = noteDecoder.decode(v1.open(SHARE_MEMORY_NAME, kShare, fromB64std(share.sealedName)))
   } catch {
     throw new ShareUnavailableError('bad_fragment_key') // the id was valid but the fragment key doesn't match
   }
@@ -594,14 +657,41 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
   // The share page picks the viewer's locale via `pickLocaleText`.
   const noteByLocale = share.sealedNote ? openNoteMap(kShare, share.sealedNote) : {}
 
+  // ADR 0031 point 7: an UPLOADER link opens the drop public key and nothing else. It never unwraps `K_mem`, even
+  // from a row that still carries a wrap, and it is served no media to key.
+  if (share.role === ShareRole.Uploader) {
+    if (!share.sealedDropPublicKey || !share.nodeId) throw new ShareUnavailableError('not_found')
+    let dropPublicKey: v1.HybridPublic
+    try {
+      dropPublicKey = openDropPublicKey(kShare, share.sealedDropPublicKey)
+    } catch {
+      throw new ShareUnavailableError('bad_fragment_key')
+    }
+    return { memoryName, noteByLocale, role: share.role, scopeId, access: { kind: 'drop', nodeId: share.nodeId, dropPublicKey }, items: [] }
+  }
+
+  if (!share.wrap) throw new ShareUnavailableError('not_found')
+  let rootKmem: Uint8Array
+  try {
+    rootKmem = v1.open(SHARE_KEY, kShare, fromB64std(share.wrap)) // VIEWER / CONTRIBUTOR only (guarded above)
+  } catch {
+    throw new ShareUnavailableError('bad_fragment_key')
+  }
   const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
+  // A media an UPLOADER guest added opens through its node's drop key and its identity's wrapped key, both served
+  // here: the node carries the one, the identities list the other (ADR 0031 point 7).
+  const dropKeyOf = new Map(share.nodes.map((n) => [n.id, n.sealedDropPrivateKey]))
+  const wrapped = new Map<string, string>()
+  for (const i of share.identities ?? []) if (i.wrappedIdentityKey) wrapped.set(i.identityId, i.wrappedIdentityKey)
   const items: ShareItem[] = []
   for (const m of share.media) {
     const memoryKey = keys.get(m.nodeId)
     if (!memoryKey) continue // a media under a chapter whose K_mem didn't open — skip
-    items.push({ item: shareMediaToItem(m), memoryKey, scopeId })
+    const owner = m.identityId ? `share:${m.identityId}` : undefined
+    const uploader = uploaderOriginOf(owner, m.nodeId, dropKeyOf.get(m.nodeId), wrapped)
+    items.push({ item: shareMediaToItem(m, uploader), memoryKey, scopeId })
   }
-  return { memoryName, noteByLocale, role: share.role, scopeId, rootMemoryKey: rootKmem, items }
+  return { memoryName, noteByLocale, role: share.role, scopeId, access: { kind: 'read', memoryKey: rootKmem }, items }
 }
 
 /** Open a shared blob via the gated, share-scoped presign endpoint (no auth), then decrypt it under its `K_mem`.
@@ -609,7 +699,7 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
 async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): Promise<Uint8Array> {
   const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
   const getUrls = [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
-  return openBlobFromUrls(si.scopeId, si.memoryKey, ref, getUrls)
+  return openBlobFromUrls(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, getUrls)
 }
 
 /**
@@ -618,7 +708,7 @@ async function openShareBlob(shareId: string, si: ShareItem, ref: BlobRef, pwTok
  * `chunkProvider`; only the presign differs, so the SW never learns which route served the bytes (ADR 0047).
  */
 export function shareChunkProvider(shareId: string, si: ShareItem, ref: BlobRef, pwToken?: string): ChunkProvider {
-  return makeChunkProvider(si.scopeId, si.memoryKey, ref, async () => {
+  return makeChunkProvider(si.scopeId, mediaKey(si.scopeId, si.memoryKey, si.item), ref, async () => {
     const dl = await publicSharesApi().resolveShareBlob({ shareId, blobId: ref.blobId, xSharePassword: pwToken })
     return [...dl.presignedGets].sort((a, b) => a.index - b.index).map((u) => u.url)
   })

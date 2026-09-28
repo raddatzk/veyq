@@ -117,7 +117,7 @@ describe('ShareView — one order for every grid tile', () => {
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
     resolveShareMock.mockResolvedValue({
       memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, scopeId: SCOPE_ID,
-      rootMemoryKey: v1.randomBytes(32), items: [sharedItem(MEDIA_0, OLD)],
+      access: { kind: 'read', memoryKey: v1.randomBytes(32) }, items: [sharedItem(MEDIA_0, OLD)],
     })
     const wrapper = mount(ShareView, { global: { plugins: [realI18n()], stubs: { MediaLightbox: true } } })
     await flushPromises()
