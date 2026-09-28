@@ -19,6 +19,10 @@ here; the server is blind.
   spec behind. (Unlike the backend, where `./gradlew check` generates as part of the
   build — the asymmetry is the trap.) cr-0171 nearly shipped "the markers are inert to both generators" on a
   check that had never seen them.
+- **An absence asserted through the generated client proves nothing about the wire.** Its `…FromJSON` keeps only
+  the fields the spec names, so a field the server still sends (or sends again) is dropped before the test sees
+  it. To assert that a response does *not* carry something, read `…Raw(…)` and `.raw.json()`, as the two sharing
+  e2e suites do for the guest name (ADR 0030 point 8).
 - **`vi.mock` resolves by path, so moving a module silently disarms every mock of it.** A mock left on the old
   path stubs nothing and the real module runs — and a passthrough mock (`withRefresh: (f) => f()`) is green
   either way, so no red announces it. After a move, prove the new mocks bite by sabotaging the *real* module
