@@ -37,7 +37,7 @@ data class ShareMediaRow(
     val wrappedBlobKey: String,
     val derivatives: List<ShareDerivativeRow>,
     val wrappedMeta: String?,
-    /** The contributor identity that added this media (cr-0101); null for curator uploads. */
+    /** The guest identity that added this media; null for a member's. `resolve` serves it for an uploader's only. */
     val identityId: String?,
 )
 
@@ -226,15 +226,17 @@ class SharingStore(
     }
 
     /**
-     * The identities a reader of [subtree] needs: this share's own (the attribution list), plus every UPLOADER
-     * identity — of any share — that added a media served in [subtree], because that media is sealed under the
-     * identity's own key and opens only through its wrapped key (ADR 0031 point 7).
+     * The wrapped identity key of every UPLOADER identity — of any share — that added a media served in [subtree]
+     * (identity id → wrap): that media is sealed under the identity's own key and opens only through this wrap
+     * (ADR 0031 point 7). This is ALL a guest reader is told about any identity. Never a CONTRIBUTOR identity, not
+     * even the reading share's own — a flipped VIEWER link still has its contributor identities — and never a name:
+     * a guest's name is for the Memory's members, who read it through the bucket list (ADR 0030 point 8).
      */
-    fun readerIdentities(shareId: String, subtree: SubtreeData): List<ShareIdentityEntity> {
-        val own = ShareIdentityEntity.find("shareId = ?1", shareId).list()
-        val uploaderIds = subtree.media.mapNotNull { it.identityId }.toSet() - own.map { it.id }.toSet()
-        if (uploaderIds.isEmpty()) return own
-        return own + ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", uploaderIds).list()
+    fun uploaderKeys(subtree: SubtreeData): Map<String, String> {
+        val ids = subtree.media.mapNotNull { it.identityId }.toSet()
+        if (ids.isEmpty()) return emptyMap()
+        return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids).list()
+            .associate { it.id to it.wrappedIdentityKey!! }
     }
 
     /**

@@ -14,6 +14,7 @@ import org.hamcrest.CoreMatchers.endsWith
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Test
 
 /**
@@ -21,7 +22,8 @@ import org.junit.jupiter.api.Test
  * **in-memory store** (metadata only — the byte path is direct-to-store, covered by the store e2e). Covers: a
  * CONTRIBUTOR share's anonymous **identity-create** (name sealed under `K_mem`, opaque) → **share-scoped upload**
  * (no bearer, gated by role + token) → the media **attaches to the shared root stamped with the identity** and
- * surfaces in the anonymous resolve (with the identity's sealed name); a **VIEWER** share rejects the identity
+ * surfaces in the anonymous resolve (with no identity and no name — those reach the curator's bucket list only,
+ * ADR 0030 point 8; the full per-role matrix is `ShareGuestNamesSliceTest`); a **VIEWER** share rejects the identity
  * path (`403`); a **bad token** is rejected (`403`); **revoke** stops contributions (`404`); operator-blindness
  * (the sealed name + wrap round-trip, the server stores only ciphertext + opaque ids).
  */
@@ -63,12 +65,17 @@ class ShareContributorSliceTest {
             .then().statusCode(200).body("results[0].mediaId", notNullValue())
             .extract().path<String>("results[0].mediaId")
 
-        // the anonymous resolve now shows the contributed media (stamped with the identity) + the identity's sealed name
+        // the anonymous resolve now shows the contributed media — but names no identity and serves no guest, not
+        // even this link's own: a guest's name is for the Memory's members (ADR 0030 point 8)
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
             .body("media.find { it.mediaId == '$mediaId' }.nodeId", equalTo(memory)) // attached to the shared root
-            .body("media.find { it.mediaId == '$mediaId' }.identityId", equalTo(identityId))
-            .body("identities.find { it.identityId == '$identityId' }.sealedDisplayName", equalTo(sealedContributorName))
+            .body("media.find { it.mediaId == '$mediaId' }.identityId", nullValue())
+            .body("identities.size()", equalTo(0))
+        // the stamp and the sealed name are stored all the same: the curator's bucket list serves both
+        given().header("Authorization", bearer(userId)).`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets")
+            .then().statusCode(200)
+            .body("buckets.find { it.ownerKey == 'share:$identityId' }.sealedName", equalTo(sealedContributorName))
     }
 
     @Test
