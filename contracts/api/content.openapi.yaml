@@ -611,6 +611,15 @@ components:
           maxLength: 8192
           description: A MEMORY's or CHAPTER's curated metadata (date/place) — a client-versioned JSON blob sealed under this node's `K_mem` (AAD context `node-meta`); null when unset. Lets a browse card show + sort by the date without loading the Memory's media. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          contentEncoding: base64
+          maxLength: 256
+          description: >
+            A MEMORY's drop private key sealed under its `K_mem` (AAD `drop-private-key`, bound to scope + node;
+            opaque base64) — set once, by the Memory's first UPLOADER share (`createShare`), and never replaced:
+            the media UPLOADER guests added open through it (ADR 0031 point 7). Null until then.
+          example: null
 
     RestoreNodeRequest:
       type: object

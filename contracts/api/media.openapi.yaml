@@ -1133,7 +1133,9 @@ components:
       description: >
         A media's read-back view: the **original** blob ref plus its role-tagged `derivatives`. A gallery
         fetches `derivatives[THUMBNAIL]` for the grid, `derivatives[PREVIEW]` for the lightbox, and the
-        original blob only on download.
+        original blob only on download. Its seals (blob keys, `wrappedMeta`, EXIF) are under `K_mem`, except for a
+        row an UPLOADER guest added: that row's are under the guest's identity key, which the page's
+        `uploaderKeys` carries (ADR 0031 point 7) — including after a member edits its metadata.
       required: [mediaId, blobId, chunkCount, byteSize, wrappedBlobKey, updatedAt]
       properties:
         mediaId: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e, x-veyq-visibility: id }
@@ -1257,6 +1259,35 @@ components:
             (a delete happened since the client last synced). The client drops any cached id absent from it,
             catching a delete and a net-zero delete+add. Null on pure adds/edits.
           items: { type: string, format: uuid, example: 2a9b1d4a-6e8b-2c1f-2d3e-4a5b6c7c3f0e }
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          description: >
+            The node's drop private key sealed under its `K_mem` (as `NodeSummary.sealedDropPrivateKey`; opaque
+            base64), served with the media so every row an UPLOADER guest added can be opened from this page alone
+            (ADR 0031 point 7). Null while the node has none.
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+        uploaderKeys:
+          type: array
+          description: >
+            One entry per UPLOADER identity that added a row of this page (`ownerKey` `share:{identityId}`): its
+            identity key wrapped to the node's drop key. A row whose identity is listed here is sealed under that
+            identity's key; every other row under `K_mem` (ADR 0031 point 7).
+          items: { $ref: "#/components/schemas/UploaderKey" }
+
+    UploaderKey:
+      type: object
+      description: An UPLOADER identity's own key, wrapped to the Memory's drop public key — how a reader opens what that guest uploaded.
+      required: [identityId, wrappedIdentityKey]
+      properties:
+        identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
+        wrappedIdentityKey:
+          type: string
+          description: The identity key `K_up` wrapped to the drop public key (AAD `upload-identity-key`, bound to scope + node + identity; opaque base64).
+          contentEncoding: base64
+          maxLength: 2048
+          example: d3JhcHBlZC1pZGVudGl0eS1rZXk=
 
     MediaDerivativeSummary:
       type: object
@@ -1384,6 +1415,15 @@ components:
             the operator-visible username), present for a contributor primary + every sub-bucket.
           contentEncoding: base64
           maxLength: 512
+          example: null
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: >
+            For an **UPLOADER** identity's primary only: the identity's key wrapped to the Memory's drop public key
+            (AAD `upload-identity-key`; opaque base64). That primary's `sealedName` is sealed under the identity's
+            key, not `K_mem` (ADR 0031 point 7). Null otherwise.
+          contentEncoding: base64
+          maxLength: 2048
           example: null
         mediaCount:
           x-veyq-visibility: measure
