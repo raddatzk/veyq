@@ -357,7 +357,8 @@ paths:
         unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. A taken
         `identityId`, in any share, is `409 id_taken` (never overwritten, not idempotent). The server stores
         only the sealed name and wrapped key (opaque) + the token hash + the `shareId`; it never sees the name,
-        the key or the person. A disabled/expired/unknown share is a `404`; a VIEWER share is a `403`.
+        the key or the person. The sealed name is served back only to the Memory's members, through their bucket
+        list — never on a public resolve (ADR 0030 point 8). A disabled/expired/unknown share is a `404`; a VIEWER share is a `403`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
         with **no** `X-Share-Password` the share is a non-enumerable `404`; a **wrong** token → `403
         share_password_incorrect`. A guest names themselves only after presenting the password.
@@ -971,8 +972,8 @@ components:
           type: [string, "null"]
           format: uuid
           description: >
-            The shared Memory's scope. Every `K_mem` seal the viewer opens — node meta, media meta, blob keys,
-            contributor names — is bound to it (ADR 0072), so it rides with the subtree. Null in a locked response.
+            The shared Memory's scope. Every `K_mem` seal the viewer opens — node meta, media meta, blob keys
+            — is bound to it (ADR 0072), so it rides with the subtree. Null in a locked response.
           example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c
         pwSalt:
           type: [string, "null"]
@@ -1027,10 +1028,11 @@ components:
         identities:
           type: [array, "null"]
           description: >
-            The anonymous identities a reader needs (cr-0101): this share's own contributor identities, plus every
-            UPLOADER identity with media in the served subtree — each an opaque `identityId`, its sealed display
-            name and, for an UPLOADER identity, its wrapped identity key, without which that identity's media
-            cannot be opened (ADR 0031 point 7). Empty for an UPLOADER share (it is served nothing).
+            The anonymous identities a reader needs to open what it is served: every UPLOADER identity with media
+            in the served subtree, each an opaque `identityId` and its wrapped identity key, without which that
+            identity's media cannot be opened (ADR 0031 point 7). No guest's name, and no CONTRIBUTOR identity —
+            not even this share's own, whatever its role is now: a guest's name is for the Memory's members, who
+            read it through the bucket list (ADR 0030 point 8). Empty for an UPLOADER share (it is served nothing).
           items: { $ref: "#/components/schemas/ShareIdentity" }
 
     ShareNode:
@@ -1132,7 +1134,10 @@ components:
           x-veyq-visibility: id
           type: [string, "null"]
           format: uuid
-          description: The **contributor identity** that added this media (cr-0101); null for media the curator uploaded. Maps into `identities[]` for attribution/grouping.
+          description: >
+            The UPLOADER identity that added this media, whose wrapped key in `identities[]` opens it (ADR 0031
+            point 7). Null for a member's media and for a CONTRIBUTOR guest's, which open under `K_mem` — a guest is
+            not told which uploads came from one person (ADR 0030 point 8).
           example: null
 
     ShareMediaDerivative:
@@ -1201,28 +1206,21 @@ components:
     ShareIdentity:
       type: object
       description: >
-        An anonymous share identity — an opaque id + its sealed display name (attribution/grouping hook) and, for
-        an UPLOADER identity, its wrapped identity key.
-      required: [identityId, sealedDisplayName]
+        An UPLOADER identity as a guest reader is served it: the opaque id and the key its media opens under.
+        Deliberately **no name** — the display name is for the Memory's members (ADR 0030 point 8), and a field
+        that is absent cannot be read by any guest-side code.
+      required: [identityId, wrappedIdentityKey]
       properties:
         identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
-        sealedDisplayName:
+        wrappedIdentityKey:
           type: string
           description: >
-            The display name AEAD-sealed (AAD `share-identity-name`; opaque base64) — under `K_mem` for a
-            CONTRIBUTOR identity, under the identity's own key for an UPLOADER one.
-          contentEncoding: base64
-          maxLength: 512
-          example: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=
-        wrappedIdentityKey:
-          type: [string, "null"]
-          description: >
-            UPLOADER identities only: the identity's own key `K_up` wrapped to the Memory's drop public key (AAD
-            `upload-identity-key`, bound to scope + node + identity; opaque base64). Everything the identity sealed
-            opens under `K_up` (ADR 0031 point 7). Null for a CONTRIBUTOR identity, whose seals are under `K_mem`.
+            The identity's own key `K_up` wrapped to the Memory's drop public key (AAD `upload-identity-key`, bound
+            to scope + node + identity; opaque base64). Everything the identity sealed opens under `K_up` (ADR 0031
+            point 7).
           contentEncoding: base64
           maxLength: 2048
-          example: null
+          example: d3JhcHBlZC11cGxvYWRlci1rZXk=
 
     CreateShareIdentityRequest:
       type: object
