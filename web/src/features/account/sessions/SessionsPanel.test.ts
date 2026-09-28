@@ -62,6 +62,7 @@ import { signOut } from '../login/signOut'
 import { readRegisterView, reconcileWithSessions, renameDeviceOfFamily } from '../deviceRegister'
 import { listSavedKeyWraps, removeSavedKey } from '../savedKeys'
 import { localWrapId } from '../localWrap'
+import { TrustStateRefused } from '../trustMarks'
 import { isTrusted, untrustThisDevice, isTrustSupported } from '../trustDevice/trustDevice'
 import { isRemembered, clearDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { vaultState } from '../../../app/vault'
@@ -314,6 +315,23 @@ describe('SessionsPanel (uc.account.sessions, web)', () => {
     await rowButtons(wrapper)[1].trigger('click')
     await flushPromises()
     expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+  })
+
+  it('names a REFUSED register (ADR 0028 Decision 7) — and still lists and revokes every row unnamed', async () => {
+    vi.mocked(reconcileWithSessions).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'register'))
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).toContain(t('sessions.registerRolledBack'))
+    expect(wrapper.findAll('.session-row')).toHaveLength(2)
+    await rowButtons(wrapper)[1].trigger('click')
+    await flushPromises()
+    expect(revokeSessionFamily).toHaveBeenCalledWith(OTHER.id)
+  })
+
+  it('control: any other register failure stays silent — only the refusal is named', async () => {
+    vi.mocked(reconcileWithSessions).mockRejectedValue(new Error('register unreachable'))
+    const wrapper = await mountPanel()
+    expect(wrapper.text()).not.toContain(t('sessions.registerRolledBack'))
+    expect(wrapper.text()).not.toContain(t('sessions.registerUnreadable'))
   })
 
   it('renames the DEVICE behind a row, and only offers it where there is a device to rename', async () => {

@@ -58,6 +58,7 @@ import {
 import { startPairingAnswerPolling, stopPairingAnswerPolling } from './pairingAnswerPolling'
 import { account } from '../../../app/account'
 import { masterKey } from '../../../app/vault'
+import { readMarks } from '../trustMarks'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
 import type * as v1 from '@veyq/crypto/v1'
 
@@ -227,11 +228,14 @@ const { run: runGrant, pending: granting } = useAsyncAction(
     const mk = masterKey()
     if (!pub || !keys || !mk) throw new Error('pairing_not_ready')
     const refreshToken = await delegatePairingSession(keys.handle)
+    // This device's trust-state marks travel inside the authenticated envelope, so the new device starts from
+    // what this one has held rather than from whatever the server serves it first (ADR 0028 Decision 7).
     const envelope = sealGrant(keys.key, pub, {
       email: account.email,
       masterKey: mk,
       refreshToken,
       label: label.value.trim(),
+      marks: await readMarks(mk),
     })
     await sealPairingChannel(keys.handle, envelope)
     step.value = 'sealed'

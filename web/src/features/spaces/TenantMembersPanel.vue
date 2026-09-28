@@ -60,7 +60,7 @@ const inTenant = computed(() => activeSpace.kind === ScopeKind.Tenant && activeS
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The load body is Tenant-specific: fetch
 // the roster, decrypt each real name with K_tenant (operator-blind, on-device), then read the owner-only invite
 // list — and resolve ownership from the tenant role.
-const { members, isOwner, trust, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     if (!inTenant.value || !activeSpace.scopeId || !activeSpace.tenantId) throw new Error('no-active-tenant')
     const rows = await listScopeMembers(activeSpace.scopeId)
@@ -259,6 +259,8 @@ async function revoke(invite: PendingMemberInvite) {
       </div>
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
+      <Message v-if="trustRefusal" severity="warn" :closable="false">{{ t(trustRefusal) }}</Message>
 
       <!-- A re-issue has no link to surface any more: the fresh secret went to the invitee (ADR 0055 §2). This
            is the confirmation, dismissible, not a handoff. -->

@@ -10,6 +10,7 @@ vi.mock('../account/identityPins', () => ({ trustStates: vi.fn() }))
 
 import { useMemberDirectory } from './useMemberDirectory'
 import { trustStates } from '../account/identityPins'
+import { TrustStateRefused } from '../account/trustMarks'
 import type { ScopeMember } from './members'
 import { tagAdmission } from './grant'
 import * as v1 from '@veyq/crypto/v1'
@@ -47,6 +48,22 @@ describe('useMemberDirectory', () => {
     expect(api.isOwner.value).toBe(true)
     expect(api.trust.value).toEqual({ a: 'changed' })
     expect(api.loadError.value).toBe('')
+  })
+
+  it('names a refused pin store (ADR 0028 Decision 7) instead of a directory that merely shows no flags', async () => {
+    vi.mocked(trustStates).mockRejectedValueOnce(new TrustStateRefused('trust_state_unreadable', 'pins'))
+    const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: true })))
+    await flushPromises()
+    expect(api.trustRefusal.value).toBe('verify.trustUnreadable')
+    expect(api.trust.value).toEqual({})
+    expect(api.members.value.map((m) => m.userId)).toEqual(['a']) // the directory itself still loads
+  })
+
+  it('control: any other trust-read failure degrades silently, as before', async () => {
+    vi.mocked(trustStates).mockRejectedValueOnce(new Error('vault locked'))
+    const { api } = harness(() => useMemberDirectory(async () => ({ rows: [member('a')], isOwner: true })))
+    await flushPromises()
+    expect(api.trustRefusal.value).toBeNull()
   })
 
   it('maps a 403 load to notAuthorized and a 500 to failed', async () => {

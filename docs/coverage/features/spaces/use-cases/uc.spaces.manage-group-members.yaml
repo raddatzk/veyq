@@ -93,3 +93,13 @@ acceptanceCriteria:
         integration: [ScopesSliceTest.aRotationThatLeavesAnOpenAdmissionBehindIsRefused, ScopesSliceTest.anAdmissionTheRotatorDropsIsClearedAndNoLongerOpen]
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/account/rotation/rotateKeys.test.ts]
+  - id: no-seal-below-the-epoch-floor
+    # ADR 0024 Decision 6's second half, the per-device floor (one of ADR 0028 Decision 7's marks). A grant below
+    # the highest epoch this device has held opens as the layer-1 *awaiting the current key* state — no read-only
+    # open (owner decision, 2026-09-28) — whatever currentEpoch the server pairs it with; a rotation is refused on
+    # it too. A grant the device opened or a rotation it made raises the floor, and an account-key rotation carries
+    # it to the new key. The bite (held n+1, served n with a matching current epoch) was red on the untouched tree.
+    text: No device seals under an epoch below the highest it has held for that scope.
+    coverage:
+      web:
+        unit: [src/features/spaces/scopes.test.ts, src/features/account/trustMarks.test.ts, src/features/account/rotation/rotateKeys.test.ts]

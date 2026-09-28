@@ -140,7 +140,9 @@ layer for everything future.
 
 ## What is still open
 
-Decision 6's per-device floor is decided and not built (inbox #161 (b)). No client remembers an epoch: the
-write key is the `grantedEpoch` the server serves, so a server can hand a member an older grant — together with
-a `currentEpoch` that matches it — and have new content sealed under it. Until the floor lands, Decision 6 holds
-against an honest operator only. Decision 4's single request and Decision 6's layer-1 half are built.
+Decision 4's single request and both halves of Decision 6 are built. The floor is one of the device's
+trust-state marks ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7): a grant this device
+opened, or a rotation it made, raises it, and a grant below it — whatever `currentEpoch` the server pairs it
+with — opens as the same *awaiting the current key* state as layer 1. No read-only open: one closed state for
+both halves (owner decision, 2026-09-28), so a rolled-back scope shows neither old nor new content. What the floor
+cannot see is the § Guarantee list above — above all the fork, a member who never learnt of the newer epoch.

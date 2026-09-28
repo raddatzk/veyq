@@ -20,6 +20,7 @@ import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
+import { carryMarks } from '../trustMarks'
 import { commitRotation } from '../../spaces/scopes'
 import { listScopeMembers } from '../../spaces/members'
 
@@ -145,9 +146,10 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
       }),
     )
 
-    // Master-Key-sealed blobs, re-sealed under MK'. Best-effort on purpose: all three degrade to empty rather
-    // than fail (a lost contact-pin re-pins on first use, an unnamed device still revokes, an unpinned Memory
-    // is still there to re-pin), so none is worth failing a rotation that has already published.
+    // Master-Key-sealed blobs, re-sealed under MK'. Best-effort on purpose: none is worth failing a rotation that
+    // has already published. Memory pins degrade to empty (an unpinned Memory is still there to re-pin); the
+    // contact pins and the device register do not — a re-seal that never lands leaves a document the new key
+    // cannot open, which this device then refuses as unreadable (ADR 0028 Decision 7).
     //
     // Memory pins joined this list when they moved off `K_SC` onto the Master Key (ADR 0068). Their two lists
     // partition the caller's scopes, so the union is every scope a pin set can exist in.
@@ -162,6 +164,10 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     for (const scopeId of result.soleMemberScopeIds) {
       secured.push({ scopeId, status: (await rekeyAlone(scopeId, identity)) ? 'secured' : 'failed' })
     }
+
+    // This device's trust-state marks are keyed by the Master Key (ADR 0028 Decision 7), so they move with it —
+    // last, because the re-seals and the re-keys above still ran under the old key and raised its marks.
+    await carryMarks(oldMasterKey, newMasterKey)
 
     // `cold` is a statement of fact: this rotation ran on a live proof of password + Secret Key moments
     // ago, so the session it leaves behind is cold however it was originally opened.
@@ -182,7 +188,7 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: 
   try {
     await resealPinsUnderNewMasterKey(oldMk, newMk)
   } catch {
-    /* an unreadable pin store is an empty one; every contact re-pins on first use */
+    /* the store stays under the retired key; wraps to foreign keys refuse until it is recovered */
   }
   try {
     await resealRegisterUnderNewMasterKey(oldMk, newMk)

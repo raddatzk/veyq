@@ -1,4 +1,6 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({
@@ -10,7 +12,7 @@ vi.mock('../../api/client', () => ({
   sessionApi: vi.fn(),
   accountApi: vi.fn(),
 }))
-vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
+vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn(), masterKey: vi.fn() }))
 // The TOFU pin store is exercised in identityPins.test.ts; here we drive checkAndPin's outcome directly so the
 // rotation re-grant's per-member gate is under our control (default: first-use → proceed).
 vi.mock('../account/identityPins', () => ({
@@ -27,7 +29,7 @@ import { ScopeKind, type MyTenant, type ScopeMember } from '../../api/generated/
 import { scopesApi, contentApi, tenantsApi, accountApi } from '../../api/client'
 import { createFolder } from '../memory/tree'
 import { checkAndPin } from '../account/identityPins'
-import { identityPrivate } from '../../app/vault'
+import { identityPrivate, masterKey } from '../../app/vault'
 import { epochLinkContext } from './epochs'
 import { deriveGroupNameKey, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon } from './spaceIcon'
@@ -85,9 +87,15 @@ function mockScopes(list: ReturnType<typeof vi.fn>, create: ReturnType<typeof vi
   } as unknown as ReturnType<typeof scopesApi>)
 }
 
+// The account's Master Key — the vault hands out a fresh copy per call. It names this device's trust-state marks
+// (ADR 0028 Decision 7), of which the per-scope epoch floor is one (ADR 0024 Decision 6).
+const MK = v1.randomBytes(32)
+
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
+  vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  globalThis.indexedDB = new IDBFactory() // a device that has held no epoch yet
   vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial: vi.fn().mockResolvedValue({ userId: ME }) } as unknown as ReturnType<typeof accountApi>)
   // Default: every contact is new/unchanged → the rotation re-grants them (TOFU). Overridden per test.
   vi.mocked(checkAndPin).mockResolvedValue('firstUse')
@@ -473,6 +481,69 @@ describe('a scope whose grant is older than its current epoch writes nothing (AD
     expect(opened?.epochs.current).toBe(1)
     expect(createNode).toHaveBeenCalledTimes(1)
     expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+  })
+})
+
+describe('no device seals under an epoch below the highest it has held for the scope (ADR 0024 Decision 6, the floor)', () => {
+  /** Serve G1 with our grant at `grantedEpoch` and the scope's `currentEpoch`, the chain-links down to E_0 under
+   *  `keys`, and a rotation endpoint — the lever is exactly what the server says, fixed per call. */
+  function serveG1(keys: Uint8Array[], grantedEpoch: number, currentEpoch: number) {
+    const list = vi.fn().mockResolvedValue([signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, keys[grantedEpoch], grantedEpoch), grantedEpoch, currentEpoch })])
+    const links = keys.slice(1, grantedEpoch + 1).map((k, i) => ({ epoch: i + 1, wrappedPrev: linkUnder(G1, i + 1, k, keys[i]) }))
+    const rotateScope = vi.fn().mockResolvedValue({ epoch: currentEpoch + 1 }) // a server that takes whatever it is sent
+    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: list, listScopeEpochs: vi.fn().mockResolvedValue(links), rotateScope } as unknown as ReturnType<typeof scopesApi>)
+    const createNode = vi.fn(async ({ createNodeRequest }: { createNodeRequest: { nodeId: string } }) => ({ nodeId: createNodeRequest.nodeId }))
+    vi.mocked(contentApi).mockReturnValue({ createNode } as unknown as ReturnType<typeof contentApi>)
+    return { createNode, rotateScope }
+  }
+  async function openAndCreate() {
+    const opened = await openScopeById(G1)
+    if (opened) await createFolder(G1, opened.epochs, 'Neu')
+    return opened
+  }
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
+
+  it('held epoch 1, then served its epoch-0 grant with a matching current epoch: awaiting the current key, nothing is written', async () => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    serveG1(keys, 1, 1)
+    expect((await openScopeById(G1))?.epochs.current).toBe(1) // this device has now held epoch 1
+    const { createNode } = serveG1(keys, 0, 0) // the server rolls the scope back to a grant a removed member holds
+    expect(await openAndCreate()).toBeNull() // the awaiting-access state: no key to write under
+    expect(createNode).not.toHaveBeenCalled()
+  })
+
+  it('control: a device that never held epoch 1 opens the very same epoch-0 grant (the null above is the floor, not the grant)', async () => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    const { createNode } = serveG1(keys, 0, 0)
+    expect((await openAndCreate())?.epochs.current).toBe(0)
+    expect(createNode).toHaveBeenCalledTimes(1)
+  })
+
+  it('control: served epoch 1 again, it writes under epoch 1', async () => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    serveG1(keys, 1, 1)
+    await openScopeById(G1)
+    const { createNode } = serveG1(keys, 1, 1)
+    expect((await openAndCreate())?.epochs.current).toBe(1)
+    expect(createNode.mock.calls[0][0].createNodeRequest).toMatchObject({ epoch: 1 })
+  })
+
+  it('a rotation is not built on a grant below the floor either', async () => {
+    const keys = [v1.randomBytes(32), v1.randomBytes(32)]
+    serveG1(keys, 1, 1)
+    await openScopeById(G1)
+    const { rotateScope } = serveG1(keys, 0, 0)
+    await expect(commitRotation(G1, self)).rejects.toThrow('cannot open scope to rotate')
+    expect(rotateScope).not.toHaveBeenCalled()
+  })
+
+  it('a rotation this device made raises the floor to the epoch it created', async () => {
+    const keys = [v1.randomBytes(32)]
+    serveG1(keys, 0, 0)
+    expect(await commitRotation(G1, self)).toBe(1)
+    const { createNode } = serveG1(keys, 0, 0) // the server withholds the rotation this device itself committed
+    expect(await openAndCreate()).toBeNull()
+    expect(createNode).not.toHaveBeenCalled()
   })
 })
 

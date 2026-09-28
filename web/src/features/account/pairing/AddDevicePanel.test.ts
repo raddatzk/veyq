@@ -29,6 +29,10 @@ vi.mock('./pairingChannel', () => ({
 
 const MASTER_KEY = new Uint8Array(32).fill(7)
 vi.mock('../../../app/vault', () => ({ masterKey: () => MASTER_KEY }))
+// This device's trust-state marks (ADR 0028 Decision 7), as the store would hand them back for MASTER_KEY — the
+// panel must carry exactly these into the envelope, so the new device starts from them.
+const LINKER_MARKS = { pins: 5, register: 3, epochs: { 'scope-a': 2 } }
+vi.mock('../trustMarks', () => ({ readMarks: vi.fn(async () => LINKER_MARKS) }))
 
 // A tripwire, not a dependency: this panel does not import the device register today, and the point of the spy
 // is that it fires the day somebody adds it. The onboarded device writes its own entry (write moment 1, from
@@ -60,6 +64,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
 import { account } from '../../../app/account'
+import { readMarks } from '../trustMarks'
 import { realI18n, t } from '../../../test/i18n'
 
 const open = vi.mocked(openPairingChannel)
@@ -207,7 +212,7 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
     expect(w.find('.msg').text()).toBe(t('pairing.sealed'))
   })
 
-  it('seals the account’s Master Key, the delegated token and the typed name to the answering key', async () => {
+  it('seals the account’s Master Key, the delegated token, the typed name and this device’s marks to the answering key', async () => {
     const w = mountPanel()
     await showCode(w)
     await answerArrives(w)
@@ -223,7 +228,9 @@ describe('AddDevicePanel — the trusted half (uc.account.onboard-device, ADR 00
       masterKey: MASTER_KEY,
       refreshToken: REFRESH_TOKEN,
       label: 'Arbeitslaptop',
+      marks: LINKER_MARKS,
     })
+    expect(vi.mocked(readMarks)).toHaveBeenCalledWith(MASTER_KEY) // the marks of THIS account, not another's
   })
 
   // D8 row 1, the negative: declining the comparison must not reach the wire at all. Anchored on the two calls

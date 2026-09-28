@@ -1,4 +1,6 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
 
 // The register's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so these tests
@@ -14,6 +16,7 @@ import {
   reconcileWithSessions,
   renameDeviceOfFamily,
   MAX_DEVICES,
+  resealRegisterUnderNewMasterKey,
   type RegisterPlain,
 } from './deviceRegister'
 import { accountDeviceRegisterApi } from '../../api/client'
@@ -80,6 +83,8 @@ function interposeWrites(server: ReturnType<typeof fakeServer>, writes: Readonly
 beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
+  // This device's local trust-state marks (ADR 0028 Decision 7): a fresh, empty store per test.
+  globalThis.indexedDB = new IDBFactory()
 })
 
 describe('reading names', () => {
@@ -100,11 +105,20 @@ describe('reading names', () => {
     expect(await namesOf([])).toEqual({})
   })
 
-  it('an unreadable blob degrades to empty instead of throwing (§E4)', async () => {
-    // Sealed under a DIFFERENT key — exactly what a rotated Master Key looks like from here.
+  it('an unreadable blob is refused as unreadable, never read as an empty register (ADR 0028 Decision 7)', async () => {
+    // Sealed under a DIFFERENT key — exactly what a rotation whose re-seal never landed looks like from here. The
+    // sessions view still lists and revokes every row unnamed (§E4); it is the register that refuses.
     const foreign = b64std(v1.seal(registerAt(3), v1.randomBytes(32), enc.encode('{}')))
-    fakeServer({ blob: foreign, version: 3 })
-    expect(await namesOf(['fam1'])).toEqual({})
+    const server = fakeServer({ blob: foreign, version: 3 })
+    await expect(namesOf(['fam1'])).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    // …and a write never re-seals over it, which is how the old degrade-to-empty silently replaced it.
+    await expect(rememberThisDevice('me', 'Firefox', 'fam1', null)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    expect(server.putDeviceRegister).not.toHaveBeenCalled()
+  })
+
+  it('control: a register sealed under the account key at that version opens', async () => {
+    fakeServer({ blob: seal(reg({ d1: dev('Work laptop') }, { fam1: 'd1' }), 3), version: 3 })
+    expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' })
   })
 })
 
@@ -475,5 +489,50 @@ describe('what never reaches the server', () => {
     expect(stored.devices.me.label).toBe('Firefox · macOS')
     expect(stored.families).toEqual({ famA: 'me', famB: 'me' })
     expect(stored.wraps).toEqual({ w1: 'me' })
+  })
+})
+
+// ADR 0028 Decision 7 covers the register too: a device never accepts a register older than one it has opened.
+describe('the register never goes backwards on this device (ADR 0028 Decision 7)', () => {
+  it('a register served below the version this device has opened is refused', async () => {
+    fakeServer({ blob: seal(reg({ d1: dev('Work laptop') }, { fam1: 'd1' }), 4), version: 4 })
+    expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' }) // this device has now held v4
+    const rolled = fakeServer({ blob: seal(reg({ d1: dev('Old name') }, { fam1: 'd1' }), 3), version: 3 })
+    await expect(readRegisterView(['fam1'], null, 'nobody')).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    await expect(rememberThisDevice('me', 'Firefox', 'fam2', null)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(rolled.putDeviceRegister).not.toHaveBeenCalled()
+  })
+
+  it('a write raises the mark to the version it stored — a missing register afterwards is refused', async () => {
+    const server = fakeServer()
+    await rememberThisDevice('me', 'Firefox', 'fam1', null) // stored at v1 by this device
+    expect(server.state.version).toBe(1)
+    fakeServer()
+    await expect(namesOf(['fam1'])).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+  })
+
+  it('the rotation\u2019s re-seal refuses a register below the mark, and a re-seal that lands raises the new key\u2019s', async () => {
+    const newMk = v1.randomBytes(32)
+    const blob = seal(reg({ d1: dev('Work laptop') }, { fam1: 'd1' }), 4)
+    fakeServer({ blob, version: 4 })
+    await namesOf(['fam1']) // held v4
+    const rolled = fakeServer({ blob: seal(reg({}, {}), 3), version: 3 })
+    await expect(resealRegisterUnderNewMasterKey(MK.slice(), newMk)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(rolled.putDeviceRegister).not.toHaveBeenCalled()
+
+    const server = fakeServer({ blob, version: 4 })
+    await resealRegisterUnderNewMasterKey(MK.slice(), newMk)
+    expect(server.state.version).toBe(5)
+    vi.mocked(masterKey).mockImplementation(() => newMk.slice()) // the vault has switched
+    fakeServer()
+    await expect(namesOf(['fam1'])).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+  })
+
+  it('control: served again at the mark, the register is accepted', async () => {
+    const blob = seal(reg({ d1: dev('Work laptop') }, { fam1: 'd1' }), 4)
+    fakeServer({ blob, version: 4 })
+    expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' })
+    fakeServer({ blob, version: 4 })
+    expect(await namesOf(['fam1'])).toEqual({ fam1: 'Work laptop' })
   })
 })

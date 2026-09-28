@@ -11,7 +11,9 @@
 // identity. `trustDevice` is mocked purely as a **tripwire** — the tail does not import it today, and the point
 // of the spy is that it will fire the day somebody adds it (ADR 0005 §22: this device has no password to key a
 // `DEVICE` wrap with, so that call must never appear on this path).
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
 
 vi.mock('../../../api/client', () => ({
@@ -20,6 +22,8 @@ vi.mock('../../../api/client', () => ({
   loginApi: vi.fn(),
   sessionApi: vi.fn(),
   accountWrapsApi: vi.fn(),
+  accountIdentityPinsApi: vi.fn(),
+  tasksApi: vi.fn(),
 }))
 vi.mock('../rememberMe/deviceKeyWrap', () => ({
   enrolDeviceKey: vi.fn(),
@@ -45,7 +49,9 @@ vi.mock('../trustDevice/trustDevice', () => ({
 
 import { runOnboardTail, OnboardTailError } from './onboardTail'
 import { unlockWithGrantedMasterKey } from '../unlock/unlock'
-import { accountApi, tokenApi } from '../../../api/client'
+import { accountApi, tokenApi, accountIdentityPinsApi } from '../../../api/client'
+import { checkAndPin } from '../identityPins'
+import { channelKeys, mintPairingSecret, openGrant, sealGrant } from './pairing'
 import { enrolDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { cacheSessionVault } from '../rememberMe/sessionVault'
 import { rememberThisDevice, rememberThisDeviceWrap } from '../deviceRegister'
@@ -95,6 +101,7 @@ function useMaterial(material: unknown) {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  globalThis.indexedDB = new IDBFactory() // this browser has held no trust state yet
   clearVault()
   clearTokens()
   clearAccount()
@@ -345,5 +352,44 @@ describe('the shared tail — every terminal state, and the call that may never 
     expect(isUnlocked()).toBe(false)
     expect(enrolDeviceKey).not.toHaveBeenCalled()
     expect(cacheSessionVault).not.toHaveBeenCalled()
+  })
+})
+
+// ADR 0028 Decision 7 / ADR 0059: a linked device inherits its linker's trust-state marks inside the authenticated
+// envelope, so the server cannot hand it an older store than the device that vouched for it had already opened.
+describe('the shared tail — a linked device starts from its linker\u2019s trust-state marks', () => {
+  /** The linker seals, this device opens through the MAC check and runs the tail — exactly the receiving path. */
+  async function linkedBy(linkerPinMark: number) {
+    const { grant, material, mk } = fixture()
+    useMaterial(material)
+    const channel = channelKeys(mintPairingSecret())
+    const transport = v1.generateIdentity()
+    const envelope = sealGrant(channel.key, transport.pub, { ...grant, marks: { pins: linkerPinMark, register: 0, epochs: {} } })
+    await runOnboardTail(openGrant(channel.key, transport.priv, envelope), false)
+    await settle()
+    return mk
+  }
+  /** The pin store as the server serves it on this device's first read: a valid seal at `version`. */
+  function servePins(mk: Uint8Array, version: number) {
+    const blob = b64std(v1.seal({ purpose: 'identity-pins', version }, mk, new TextEncoder().encode(JSON.stringify({ pins: {} }))))
+    const putIdentityPins = vi.fn()
+    vi.mocked(accountIdentityPinsApi).mockReturnValue(
+      { getIdentityPins: vi.fn(async () => ({ blob, version })), putIdentityPins } as unknown as ReturnType<typeof accountIdentityPinsApi>,
+    )
+    return putIdentityPins
+  }
+
+  it('linked by a device whose pin mark is 5, a v4 pin store on the first read is refused', async () => {
+    const mk = await linkedBy(5)
+    const put = servePins(mk, 4)
+    await expect(checkAndPin('u1', 'a2V5LW9uZQ==')).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(put).not.toHaveBeenCalled()
+  })
+
+  it('control: served v5, the store is accepted', async () => {
+    const mk = await linkedBy(5)
+    const put = servePins(mk, 5)
+    put.mockResolvedValue({})
+    expect(await checkAndPin('u1', 'a2V5LW9uZQ==')).toBe('firstUse')
   })
 })

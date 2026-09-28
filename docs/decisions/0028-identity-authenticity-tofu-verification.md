@@ -101,6 +101,13 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
    - **The marks are per device and local, never synced.** A synced mark is one more thing the server can roll
      back. A device linked by another ([ADR 0059](0059-device-linking.md)) inherits that device's marks inside
      the authenticated pairing envelope.
+   - **They are filed under the account's Master Key, never under an id the server names.** A mark filed under
+     the account id the server reports is a mark the server can point elsewhere — report another id and the
+     device reads an empty slot, which is the no-mark case on demand. The slot is a one-way derivation of the
+     Master Key instead. So an account-key rotation ([ADR 0060](0060-key-rotation-after-compromise.md)) moves the
+     marks: the rotating device carries its own across; every other device must unlock afresh, and does so
+     without marks when it uses the password and Secret Key (the no-mark case below), or with its linker's when
+     it is linked again.
    - **What it cannot see:** a device with no mark — one that signed in with the password and Secret Key, or
      lost its local storage — trusts the first store it is served, which is the first-use gap applied to trust
      state; and a newer store the server keeps from a device that never held it (a fork).
@@ -156,10 +163,16 @@ the grant rows store and serve the signature with the granter's current key, and
 switcher's icon read verify before the key is used. Two consequences of verifying under the granter's *current*
 key are deliberate: a granter who rotates their account keys leaves the grants they signed unverifiable until
 the rotation's re-grant reaches the recipient, and the recipient's pin of them reads `changed` until a human
-accepts it — both are the Decision 1–2 behaviour for a changed key, not new failure modes. Decision 7 is decided and not yet built (inbox #161 (c)): today a device keeps no mark, reads a
-store that does not open as empty, and re-seals whatever copy it was served, so the server can wipe or roll
-back any account's pins — every detected key change becomes a first use again, and a rolled-back pin makes a
-retired key match. Two further things remain:
+accepts it — both are the Decision 1–2 behaviour for a changed key, not new failure modes. Decision 7 is built
+for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each refusal is named
+(`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one rather than
+declining, and the nearest existing notice names it. Three further things remain:
+
+- **A store that does not open has no way back.** Refusing it is the decision; nothing yet replaces it. The
+  realistic cause is not an attack but an account-key rotation whose re-seal never landed after the publish:
+  the store stays under the retired key, and every device refuses it until someone rebuilds it. A deliberate
+  reset — the user confirming they start the pin store over — is the missing piece, and it must not be
+  something a server can trigger (inbox #192).
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
   ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)

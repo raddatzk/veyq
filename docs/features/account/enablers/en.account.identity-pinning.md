@@ -96,8 +96,9 @@ the blob and inherits every pin — so the trust state is shared across the acco
 **Which copy a device reads is the server's choice, so the device keeps its own mark**
 ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7): the highest version
 it has opened, held locally and never synced. A served copy below the mark, a missing store after one was held,
-or a blob that does not open is refused — on read and before every write — never read as empty. Not yet built
-(inbox #161 (c)): today all three read as whatever was served, an unopenable blob as the empty store.
+or a blob that does not open is refused — on read and before every write — never read as empty. A linked
+device starts from its linker's marks, and an account-key rotation carries them to the new Master Key; the
+marks, their slot and what refuses live in `web/src/features/account/trustMarks.ts`.
 
 ## Quality notes
 

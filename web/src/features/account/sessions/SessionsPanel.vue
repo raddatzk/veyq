@@ -70,6 +70,7 @@ import {
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { listSavedKeyWraps, removeSavedKey, type SavedKeyWrap } from '../savedKeys'
 import { localWrapId } from '../localWrap'
+import { TrustStateRefused, refusalMessageKey } from '../trustMarks'
 import DeviceTrustControl from '../trustDevice/DeviceTrustControl.vue'
 
 const { t, locale } = useI18n()
@@ -84,6 +85,9 @@ const actionError = ref('')
 const EMPTY_VIEW: RegisterView = { names: {}, wrapsOfFamily: {}, savedKeyDevices: [] }
 /** What the register can say about the two lists below. Empty while locked, and empty per family it cannot name (§E4). */
 const view = ref<RegisterView>(EMPTY_VIEW)
+/** The i18n key naming why this device refused the register (ADR 0028 Decision 7), or null. The rows still list
+ *  and revoke unnamed (§E4); the notice is what tells an unnamed list from a refused one. */
+const registerRefusal = ref<string | null>(null)
 /**
  * The server's device-local saved keys — `null` means "we do not hold that list" (locked, or the fetch failed),
  * which is deliberately NOT the same as the empty array. Only a successful fetch may claim there are none; the
@@ -129,8 +133,11 @@ async function loadRegisterHalf(): Promise<void> {
       families.value.find((f) => f.current)?.id ?? null,
     )
     view.value = await readRegisterView(liveFamilyIds, servedWrapIds, deviceId())
-  } catch {
-    /* unnamed rows and a missing escalation are supported states — never an error the user must act on */
+    registerRefusal.value = null
+  } catch (e) {
+    // Unnamed rows and a missing escalation are supported states — never an error the user must act on. A refusal
+    // is the one failure named: it is the server serving this device something older than it has held.
+    registerRefusal.value = e instanceof TrustStateRefused ? refusalMessageKey(e) : null
   }
 }
 
@@ -165,7 +172,7 @@ const { run: runRename, pending: renameBusy } = useAsyncAction(
     renamingFamily.value = null
     toast.success(t('sessions.renamed'))
   },
-  { onError: (e) => { on401(e); actionError.value = t('sessions.renameFailed') } },
+  { onError: (e) => { on401(e); actionError.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('sessions.renameFailed') } },
 )
 
 async function saveRename(): Promise<void> {
@@ -365,6 +372,7 @@ async function removeOtherKeys() {
       </div>
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <Message v-if="registerRefusal" severity="warn" :closable="false">{{ t(registerRefusal) }}</Message>
 
       <p v-if="loading" class="settings-muted">{{ t('sessions.loading') }}</p>
       <Message v-else-if="loadError === 'failed'" severity="error" :closable="false">

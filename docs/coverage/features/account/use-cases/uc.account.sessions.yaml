@@ -335,6 +335,15 @@ acceptanceCriteria:
         unit:
           - src/features/account/deviceRegister.test.ts
           - src/features/account/localWrap.test.ts
+  - id: register-never-goes-backwards
+    text: A device refuses a device register older than one it has held, a missing register after it held one, and a register that does not open — none is read as empty, and no write re-seals over it. The sessions view still lists and revokes every row unnamed (E4) and names the refusal.
+    # ADR 0028 Decision 7's second sealed account document, same mechanism as the pin store's
+    # (uc.spaces.verify-identity `pin-store-never-goes-backwards`). The rollback bite was red on the untouched tree.
+    coverage:
+      web:
+        unit:
+          - src/features/account/deviceRegister.test.ts
+          - src/features/account/sessions/SessionsPanel.test.ts
 gaps:
   crypto: >-
     `packages/crypto`'s job (`ci.yml` → `frontend` → "Run shared crypto checks") has never executed, so ADR 0040

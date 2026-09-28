@@ -203,6 +203,7 @@ async function onDeleteDone() {
     </div>
     <div v-else-if="activeSpace.status === 'error' || treeStore.error" class="home-state">
       <p>{{ t('home.error') }}</p>
+      <p v-if="activeSpace.trustRefusal">{{ t(activeSpace.trustRefusal) }}</p>
     </div>
     <template v-else>
       <Message v-if="isPendingDeletion" severity="warn" :closable="false" class="pending-delete-banner">

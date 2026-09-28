@@ -177,10 +177,40 @@ describe('the sealed grant (ADR 0059 §3, §11)', () => {
     expect(openGrant(key, transport.priv, sealGrant(key, asRead, grant())).email).toBe('someone@example.org')
   })
 
+  // ADR 0028 Decision 7: the linking device's trust-state marks ride inside the same authenticated envelope.
+  it('carries the linking device\u2019s trust-state marks, exactly', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const marks = { pins: 5, register: 3, epochs: { 'scope-a': 2 } }
+    expect(openGrant(key, transport.priv, sealGrant(key, transport.pub, { ...grant(), marks })).marks).toEqual(marks)
+    // control: an envelope sealed without them (an older linker) opens with none — nothing to inherit
+    expect(openGrant(key, transport.priv, sealGrant(key, transport.pub, grant()))).not.toHaveProperty('marks')
+  })
+
+  it('refuses marks in a shape this client does not write, rather than half-reading them', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const bad = { pins: -1, register: 0, epochs: {} } as unknown as { pins: number; register: number; epochs: Record<string, number> }
+    expect(() => openGrant(key, transport.priv, sealGrant(key, transport.pub, { ...grant(), marks: bad }))).toThrow('pairing_grant_unreadable')
+    const badEpoch = { pins: 1, register: 0, epochs: { s: 'x' } } as unknown as { pins: number; register: number; epochs: Record<string, number> }
+    expect(() => openGrant(key, transport.priv, sealGrant(key, transport.pub, { ...grant(), marks: badEpoch }))).toThrow('pairing_grant_unreadable')
+  })
+
   it('stays inside the contract\'s 8192-char ceiling for a realistic grant', () => {
     const transport = mintTransportKey()
     const { key } = aChannel()
     const envelope = sealGrant(key, transport.pub, { ...grant(), label: 'x'.repeat(200) })
+
+    expect(envelope.length).toBeLessThan(8192)
+  })
+
+  // Only a ROTATED scope has an epoch mark (an epoch-0 floor is never stored), so this is the bound that matters:
+  // a hundred scopes that each lost a member, plus the longest label, still fit.
+  it('stays inside the ceiling with the marks of a hundred rotated scopes', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const epochs = Object.fromEntries(Array.from({ length: 100 }, () => [crypto.randomUUID(), 12345]))
+    const envelope = sealGrant(key, transport.pub, { ...grant(), label: 'x'.repeat(200), marks: { pins: 99999, register: 99999, epochs } })
 
     expect(envelope.length).toBeLessThan(8192)
   })

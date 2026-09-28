@@ -4,7 +4,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({ scopesApi: vi.fn(), accountApi: vi.fn() }))
-vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
+// masterKey: no unlocked account key here, so this device holds no trust-state marks (ADR 0028 Decision 7) — the
+// grant binding under test is the only check in play.
+vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn(), masterKey: vi.fn() }))
 
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'

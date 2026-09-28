@@ -19,12 +19,18 @@
 // client could ever derive this mapping — the register is the only place it can be shared, and it is shared
 // sealed. Note the direction of the dependency: the enrolment modules know nothing about this file. They RETURN
 // the new id and their caller records it, which is what keeps the register off every unlock path.
+//
+// Every open — before a read and before every write — goes through this device's trust-state marks exactly as
+// the pin store's does (`trustMarks.ts`, ADR 0028 Decision 7): an older register, a missing one after this device
+// held one, and one that does not open are refused, never read as empty. The sessions view still lists and
+// revokes every row without it (uc.account.sessions §E4); what a refusal costs is the names and the writes.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountDeviceRegisterApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey } from '../../app/vault'
+import { openAccountDocument, raiseMarks } from './trustMarks'
 
 /** The register's seal context at a stored `version` (ADR 0072, vector `seal.sym.device-register`, domain-separate
  *  from the pins): bound to the version the server stores it at, so a blob served under another does not open. */
@@ -96,21 +102,22 @@ const mapOr = (value: unknown): Record<string, string> =>
 // silently on write — and an in-memory test stays green, because the object it asserts on never went through
 // the seal. `the sealed round-trip carries all three maps` is the test that pins it.
 
-/** Decrypt the register from a sealed blob; an unreadable/absent blob is an empty register (never throws). */
-function unsealRegister(mk: Uint8Array, blobB64: string | null, version: number): RegisterPlain {
-  if (!blobB64) return empty()
-  try {
-    const parsed = JSON.parse(decoder.decode(v1.open(registerContext(version), mk, fromB64std(blobB64)))) as Partial<RegisterPlain>
-    return {
-      devices: parsed?.devices && typeof parsed.devices === 'object' ? parsed.devices : {},
-      families: mapOr(parsed?.families),
-      wraps: mapOr(parsed?.wraps),
-    }
-  } catch {
-    // uc.account.sessions §E4: an unreadable register renders rows unnamed and blocks nothing. Degrading to
-    // empty here is what makes that a design property instead of an error path.
-    return empty()
+/** Decrypt the register from a sealed blob. Throws when it does not open; the caller refuses it as unreadable
+ *  (ADR 0028 Decision 7). A map missing from a register that did open reads as empty — an older writer's shape. */
+function unsealRegister(mk: Uint8Array, blobB64: string, version: number): RegisterPlain {
+  const parsed = JSON.parse(decoder.decode(v1.open(registerContext(version), mk, fromB64std(blobB64)))) as Partial<RegisterPlain>
+  if (!parsed || typeof parsed !== 'object') throw new Error('device_register_unreadable')
+  return {
+    devices: parsed.devices && typeof parsed.devices === 'object' ? parsed.devices : {},
+    families: mapOr(parsed.families),
+    wraps: mapOr(parsed.wraps),
   }
+}
+
+/** Open a served register through this device's marks — refused if rolled back, missing after a mark, or
+ *  unreadable. uc.account.sessions §E4 still holds above it: the sessions view renders rows unnamed. */
+function openRegister(mk: Uint8Array, served: { blob: string | null; version: number }): Promise<RegisterPlain> {
+  return openAccountDocument('register', mk, served, (blob) => unsealRegister(mk, blob, served.version), empty)
 }
 
 /** Seal a register under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
@@ -120,13 +127,14 @@ function sealRegister(mk: Uint8Array, reg: RegisterPlain, storedVersion: number)
   return b64std(v1.seal(registerContext(storedVersion), mk, json))
 }
 
-/** Fetch + open the caller's register (born-empty → version 0). Requires an unlocked vault. */
+/** Fetch + open the caller's register (born-empty → version 0). Requires an unlocked vault. Throws
+ *  `TrustStateRefused` for a register this device must not accept. */
 async function loadRegister(): Promise<OpenedRegister> {
   const mk = masterKey()
   if (!mk) throw new Error('device register requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-    return { version: res.version, ...unsealRegister(mk, res.blob, res.version) }
+    return { version: res.version, ...(await openRegister(mk, res)) }
   } finally {
     mk.fill(0)
   }
@@ -204,6 +212,7 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
       await withRefresh(() =>
         accountDeviceRegisterApi().putDeviceRegister({ deviceRegisterUpdate: { blob, version: current.version } }),
       )
+      await raiseMarks(mk, { register: current.version + 1 })
       return
     } catch (e) {
       if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleVersion(e))) {
@@ -222,8 +231,11 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
  * The sibling of `resealPinsUnderNewMasterKey`, and it exists for the same reason: mid-rotation the vault still
  * holds the old Master Key, so [mutateAndSave] would seal under the key being retired.
  *
- * Best-effort: an unreadable register renders rows unnamed and blocks nothing (uc.account.sessions §E4), so a
- * re-seal that never lands costs display names, not access — and the sessions panel repairs it on next open.
+ * It opens through the same marks as every read, under the old key's slot, and raises the new key's — the pin
+ * store's sibling rule (`resealPinsUnderNewMasterKey`). Best-effort: a re-seal that never lands leaves a register
+ * the new key cannot open, which every later read refuses as `trust_state_unreadable`. That costs display names
+ * and register writes, not access — rows still list and revoke unnamed (uc.account.sessions §E4) — but it no
+ * longer repairs itself by starting over empty (ADR 0028 § What is still open).
  *
  * The contents cross unchanged, including the wrap join rows. That looks wrong for a moment and is right: the
  * rotation deletes every device wrap server-side, so those rows are already stale — and pruning them **here**
@@ -233,12 +245,13 @@ async function mutateAndSave(base: OpenedRegister, apply: (reg: RegisterPlain) =
  */
 export async function resealRegisterUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
   const res = await withRefresh(() => accountDeviceRegisterApi().getDeviceRegister())
-  const reg = unsealRegister(oldMk, res.blob, res.version)
+  const reg = await openRegister(oldMk, res)
   await withRefresh(() =>
     accountDeviceRegisterApi().putDeviceRegister({
       deviceRegisterUpdate: { blob: sealRegister(newMk, reg, res.version + 1), version: res.version },
     }),
   )
+  await raiseMarks(newMk, { register: res.version + 1 })
 }
 
 /**

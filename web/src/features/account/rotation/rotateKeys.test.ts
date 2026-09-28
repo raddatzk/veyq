@@ -1,4 +1,6 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 
 // The APIs and the vault are mocked; the scope layer and **the crypto are real** — both wraps, the identity mint
 // and the KEK derivation all run for real (the last at a light Argon cost, see the worker mock below), so
@@ -52,6 +54,7 @@ import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { grantSignatureVerifies, signGrant, tagAdmission } from '../../spaces/grant'
+import { raiseMarks, readMarks } from '../trustMarks'
 
 const PASSWORD = 'correct horse battery staple'
 const SECRET_KEY = v1.randomBytes(32)
@@ -139,6 +142,7 @@ function fakeServer(opts: { wraps?: unknown[]; sole?: string[]; queued?: string[
 
 beforeEach(() => {
   vi.clearAllMocks()
+  globalThis.indexedDB = new IDBFactory() // this device's trust-state marks (ADR 0028 Decision 7), fresh per test
   vi.mocked(unlockOrigin).mockReturnValue('cold')
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   vi.mocked(identityPrivate).mockImplementation(() => oldPriv())
@@ -389,10 +393,23 @@ describe('what a rotation leaves behind', () => {
     expect([...scopeIds].sort()).toEqual([SCOPE_PERSONAL, SCOPE_SHARED])
   })
 
+  it('carries this device\u2019s trust-state marks to the new Master Key — the epoch its own re-key made included', async () => {
+    // The marks are keyed by the Master Key, so a rotation that did not carry them would leave this device with
+    // none: the next served pin store, of any version, would be taken as the first one (ADR 0028 Decision 7).
+    await raiseMarks(MK, { pins: 3, register: 2, epochs: { [SCOPE_SHARED]: 4 } })
+    fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, v1.randomBytes(32))] })
+    vi.mocked(listScopeMembers).mockResolvedValue([{ userId: ME, identityPublicKey: 'ignored' }] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
+
+    await rotateKeys(PASSWORD, SECRET_KEY_B64)
+
+    const newMk = vi.mocked(setUnlocked).mock.calls[0][0]
+    expect(await readMarks(newMk)).toEqual({ pins: 3, register: 2, epochs: { [SCOPE_SHARED]: 4, [SCOPE_PERSONAL]: 1 } })
+  })
+
   it('does not fail a published rotation because a Master-Key-sealed blob could not be re-sealed', async () => {
-    // All three blobs degrade to empty rather than break (a lost contact-pin re-pins on first use, an unnamed
-    // device still revokes, an unpinned Memory is still there), so none is worth failing a rotation the server
-    // has already committed.
+    // None is worth failing a rotation the server has already committed: an unpinned Memory is still there, an
+    // unnamed device still revokes, and a pin store left under the retired key is refused as unreadable
+    // (ADR 0028 Decision 7) rather than taking the account's access with it.
     vi.mocked(resealFavoritesUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     vi.mocked(resealPinsUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     fakeServer({ queued: ['s1'] })

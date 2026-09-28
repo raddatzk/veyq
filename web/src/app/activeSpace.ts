@@ -18,6 +18,7 @@ import { startScopeRotationPolling, stopScopeRotationPolling } from '../features
 import { refreshMyInvitations, clearMyInvitations } from '../features/spaces/invitations'
 import { isUnlocked } from './vault'
 import { handleTenantSuspended } from './tenantSuspension'
+import { TrustStateRefused, refusalMessageKey } from '../features/account/trustMarks'
 
 export type SpaceStatus = 'idle' | 'loading' | 'ready' | 'no-tenant' | 'error'
 
@@ -39,6 +40,9 @@ export const activeSpace = reactive({
   purgeAfter: null as Date | null,
   // The token-less tenant home resolved to Personal because the caller holds no TENANT grant (ADR 0019, E1).
   tenantUnavailable: false,
+  // With status 'error': the i18n key naming the trust-state refusal that stopped the scope opening (ADR 0028
+  // Decision 7 — a shared grant's granter is checked against the pin store this device refused), else null.
+  trustRefusal: null as string | null,
   // The active tenant's terms of service (cr-0114, ADR 0035): the operator's current `termsVersion` and the
   // caller's `acceptedVersion` — both 0 when no terms are set / none accepted. When accepted < version the
   // member accept-gate fires (`termsStale()`, enforced by the router). Refreshed on every scope entry.
@@ -96,6 +100,7 @@ export function activeEpochKeys(): EpochKeys | null {
  */
 export async function enterScope(token: string): Promise<void> {
   activeSpace.status = 'loading'
+  activeSpace.trustRefusal = null
   try {
     let opened: OpenedScope | null = null
     if (token === TENANT_SCOPE) {
@@ -152,6 +157,7 @@ export async function enterScope(token: string): Promise<void> {
       activeSpace.status = 'idle'
       return
     }
+    activeSpace.trustRefusal = err instanceof TrustStateRefused ? refusalMessageKey(err) : null
     activeSpace.status = isNoTenant(err) ? 'no-tenant' : 'error'
   }
 }
@@ -196,6 +202,7 @@ export function clearActiveSpace(): void {
   activeSpace.deletedAt = null
   activeSpace.purgeAfter = null
   activeSpace.tenantUnavailable = false
+  activeSpace.trustRefusal = null
   activeSpace.termsVersion = 0
   activeSpace.acceptedVersion = 0
   if (epochKeys) zeroEpochKeys(epochKeys)
