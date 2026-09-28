@@ -93,7 +93,7 @@ class SharingStore(
     fun create(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
         keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
-        sealedShareName: String?,
+        sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): CreateResult {
         if (ShareEntity.findById(id) != null) return CreateResult.ID_TAKEN
@@ -120,6 +120,7 @@ class SharingStore(
             this.expiresAt = expiresAt
             this.sealedNote = sealedNote
             this.sealedShareKey = sealedShareKey
+            this.sealedShareKeyEpoch = sealedShareKeyEpoch
             this.sealedShareName = sealedShareName
             this.passwordRequired = passwordRequired // cr-0118 (ADR 0037): the access-control gate + reveal copy
             this.pwSalt = pwSalt

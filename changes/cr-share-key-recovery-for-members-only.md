@@ -233,7 +233,7 @@ rotation are out of their reach.
       - Run `git status` first: `sharing.openapi.yaml` is also edited by `cr-guest-names-for-members-only`.
       · Done when: `npm run check` green in `packages/crypto` (the conformance test), and the generators run in
       `backend/` and `web/`.
-- [ ] 2 backend:
+- [x] 2 backend:
       - Add the migration `V58__share_key_recovery_epoch.sql`; take the next free number at implement time
         (`ls backend/src/main/resources/db/migration | sort -V | tail -1`).
       - Add the entity field, the pairing check and the stale-epoch check in `SharingHandler.create`, and serve

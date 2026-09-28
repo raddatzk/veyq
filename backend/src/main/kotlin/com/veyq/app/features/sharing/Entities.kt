@@ -70,10 +70,17 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "sealed_share_name")
     var sealedShareName: String? = null
 
-    /** cr-0115 (ADR 0036): the recoverable per-share key `symWrap(K_mem, K_share)` (opaque base64), or null. Lets the
-     *  curator recover `K_share` (they hold `K_mem`) to edit the note in place — openable **only** with `K_mem`. */
+    /** ADR 0036: the recoverable per-share key — `K_share` sealed under the scope key `K_SC` at
+     *  [sealedShareKeyEpoch] (opaque base64), or null. Lets every scope member recover `K_share` to reveal, edit and
+     *  re-copy the share. Never under `K_mem`: every VIEWER/CONTRIBUTOR link carries that key, and a copy under it
+     *  would open this share to a sibling link plus a dump (ADR 0036 point 4). */
     @Column(name = "sealed_share_key")
     var sealedShareKey: String? = null
+
+    /** The scope epoch [sealedShareKey] is sealed under — non-null exactly when it is; the scope's current epoch at
+     *  create (a stale one is refused `stale_epoch`, ADR 0024 Decision 6). */
+    @Column(name = "sealed_share_key_epoch")
+    var sealedShareKeyEpoch: Int? = null
 
     /** cr-0118 (ADR 0037): true when the share is password-protected — the guest resolve + blob GET then require a
      *  valid `X-Share-Password` token. An access-control gate, not a crypto one (content stays E2EE via `K_share`). */
@@ -90,7 +97,8 @@ class ShareEntity : PanacheEntityBase {
     var pwVerifier: String? = null
 
     /** cr-0118: the plaintext password sealed under `K_share` (AAD `share-password`, opaque base64), or null — a
-     *  management-only reveal copy the curator opens with a recovered `K_share`; never served to a viewer. */
+     *  management-only reveal copy a scope member opens with `K_share` recovered from [sealedShareKey] (so under
+     *  `K_SC`, which no share link holds — ADR 0036 point 4); never served to a viewer. */
     @Column(name = "sealed_password")
     var sealedPassword: String? = null
 
