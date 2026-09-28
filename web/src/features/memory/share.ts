@@ -18,6 +18,8 @@ import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
+import { keyAt, writeKey, zeroEpochKeys, type EpochKeys } from '../spaces/epochs'
+import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import type { LocaleMap } from '../../shared/ui/localeMap'
 import {
   gridRef,
@@ -57,9 +59,13 @@ const SHARE_NAME = { purpose: 'share-name' } as const
 const SHARE_PASSWORD = { purpose: 'share-password' } as const
 /** Where a share lives: the Memory it shares and that Memory's scope, plus the share's own id (ADR 0072). */
 export type ShareAddress = { scopeId: string; nodeId: string; shareId: string }
-/** The recoverable copy of `K_share` under `K_mem` — shared across the scope, so it binds the share it belongs to. */
-const shareKeyRecoveryContext = (a: ShareAddress) =>
-  ({ purpose: 'share-key-recovery', scopeId: a.scopeId, nodeId: a.nodeId, shareId: a.shareId }) as const
+/** The recoverable copy of `K_share` under the scope key `K_SC` at `epoch` — shared across the scope, so it binds the
+ *  share it belongs to and the epoch it is stored at (ADR 0072). */
+const shareKeyRecoveryContext = (a: ShareAddress, epoch: number) =>
+  ({ purpose: 'share-key-recovery', scopeId: a.scopeId, nodeId: a.nodeId, shareId: a.shareId, epoch }) as const
+/** A share's recovery copy as the manage list serves it: `K_share` sealed under `K_SC` at `sealedShareKeyEpoch`.
+ *  Both null on a share minted without one. */
+export type RecoveryCopy = { sealedShareKey: string | null; sealedShareKeyEpoch: number | null }
 /** A contributor's display name under `K_mem` (cr-0101), bound to (scope, share, identity). */
 const identityNameContext = (scopeId: string, shareId: string, identityId: string) =>
   ({ purpose: 'share-identity-name', scopeId, shareId, identityId }) as const
@@ -101,10 +107,19 @@ function sealShareName(kShare: Uint8Array, name: string): string {
 function openShareName(kShare: Uint8Array, sealed: string): string {
   return noteDecoder.decode(v1.open(SHARE_NAME, kShare, fromB64std(sealed)))
 }
-/** Recover `K_share` from its `K_mem`-sealed copy — the curator always holds `K_mem`. Bound to the share it is
- *  listed as (ADR 0072), so a recovery copy the server moved onto another share's row does not open there. */
-export function recoverShareKey(memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string): Uint8Array {
-  return v1.open(shareKeyRecoveryContext(share), memoryKey, fromB64std(sealedShareKey))
+/**
+ * Recover `K_share` from its recovery copy, sealed under the scope key `K_SC` at the copy's epoch — a key every scope
+ * member holds and **no share link does** (ADR 0036 point 4): a VIEWER or CONTRIBUTOR link carries `K_mem`, so a copy
+ * under `K_mem` would open every sibling share to that link plus a dump. Bound to the share it is listed as and to
+ * its epoch (ADR 0072), so a copy the server moved onto another share's row, or relabelled, does not open. Throws
+ * `OpenRefused`, or a plain error when the share carries no copy.
+ */
+export function recoverShareKey(epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy): Uint8Array {
+  const { sealedShareKey, sealedShareKeyEpoch: epoch } = copy
+  if (sealedShareKey == null || epoch == null) throw new Error('share_key_not_recoverable')
+  // `keyAt` answers an epoch the caller does not hold with the WRITE key rather than refusing. That stays harmless
+  // only because the epoch is in the AAD: a copy served under an epoch label it was not sealed at opens under no key.
+  return v1.open(shareKeyRecoveryContext(share, epoch), keyAt(epochs, epoch), fromB64std(sealedShareKey))
 }
 
 // --- password protection (cr-0118, ADR 0037): an operator-blind ACCESS-CONTROL gate ------------------------
@@ -133,38 +148,38 @@ export function derivePasswordToken(password: string, pwSalt: string): string {
   return b64std(v1.sharesPwToken(password, fromB64std(pwSalt)))
 }
 
-/** Reveal a managed share's password (curator only): recover `K_share` via `K_mem`, open the sealed copy. '' when
- *  none / unreadable (or a share minted before cr-0118). */
+/** Reveal a managed share's password (scope members only): recover `K_share` through the epoch keys, open the sealed
+ *  copy. '' when none / unreadable — a copy that does not open degrades, it does not refuse (ADR 0036 point 4). */
 export function readSharePassword(
-  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedPassword: string | null,
+  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedPassword: string | null,
 ): string {
-  if (!sealedShareKey || !sealedPassword) return ''
+  if (!copy.sealedShareKey || !sealedPassword) return ''
   try {
-    return noteDecoder.decode(v1.open(SHARE_PASSWORD, recoverShareKey(memoryKey, share, sealedShareKey), fromB64std(sealedPassword)))
+    return noteDecoder.decode(v1.open(SHARE_PASSWORD, recoverShareKey(epochs, share, copy), fromB64std(sealedPassword)))
   } catch {
     return ''
   }
 }
 
-/** A managed share's per-locale note, decrypted (recover `K_share` via `K_mem`, then open the map). `{}` when there
- *  is none or the ciphertext can't be opened (a share minted before cr-0115 carries no recoverable key). */
+/** A managed share's per-locale note, decrypted (recover `K_share` through the epoch keys, then open the map). `{}`
+ *  when there is none or the ciphertext can't be opened. */
 export function readShareNoteMap(
-  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedNote: string | null,
+  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedNote: string | null,
 ): LocaleMap {
-  if (!sealedShareKey || !sealedNote) return {}
+  if (!copy.sealedShareKey || !sealedNote) return {}
   try {
-    return openNoteMap(recoverShareKey(memoryKey, share, sealedShareKey), sealedNote)
+    return openNoteMap(recoverShareKey(epochs, share, copy), sealedNote)
   } catch {
     return {}
   }
 }
 /** A managed share's private name, decrypted. '' when none / unreadable. */
 export function readShareName(
-  memoryKey: Uint8Array, share: ShareAddress, sealedShareKey: string | null, sealedShareName: string | null,
+  epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy, sealedShareName: string | null,
 ): string {
-  if (!sealedShareKey || !sealedShareName) return ''
+  if (!copy.sealedShareKey || !sealedShareName) return ''
   try {
-    return openShareName(recoverShareKey(memoryKey, share, sealedShareKey), sealedShareName)
+    return openShareName(recoverShareKey(epochs, share, copy), sealedShareName)
   } catch {
     return ''
   }
@@ -200,11 +215,16 @@ export type MintedShare = { shareId: string; kShare: Uint8Array }
  * instead — the node's existing drop key, read fresh from the server because every upload so far is sealed to it,
  * or a new one whose private half the server then sets on the Memory. Two owners minting the Memory's first one at
  * once: the server keeps one and refuses the other `drop_key_exists`, which re-reads the node and retries once.
+ *
+ * The recovery copy of `K_share` is sealed under the scope's **write key** (`epochs`' current epoch), never under
+ * `memoryKey` (ADR 0036 point 4). A rotation that moved the epoch under the caller is `409 stale_epoch`: it re-opens
+ * the scope key and retries once, as a group rename does (ADR 0024 Decision 6).
  */
 export async function createShare(
   scopeId: string,
   nodeId: string,
   memoryKey: Uint8Array,
+  epochs: EpochKeys,
   memoryName: string,
   role: ShareRole = ShareRole.Viewer,
   expiresAt: Date | null = null,
@@ -218,14 +238,18 @@ export async function createShare(
   // Only a VIEWER or CONTRIBUTOR link holds K_mem; an UPLOADER link's guest never does.
   const wrap = uploader ? undefined : b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
   const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName))) // the Memory name re-sealed under K_share
-  // cr-0115/cr-0116 (ADR 0036): store a recoverable copy of K_share under K_mem (so the curator can edit note + name
-  // later) and seal the optional per-locale note + private name under K_share. sealedShareKey is on EVERY share, so
-  // a note/name can be added later even to one minted without them.
-  const sealedShareKey = b64std(v1.seal(shareKeyRecoveryContext({ scopeId, nodeId, shareId }), memoryKey, kShare))
+  // ADR 0036: a recoverable copy of K_share under K_SC(epoch) (so every scope member can reveal, edit and re-copy it
+  // later — and no link can, point 4), and the optional per-locale note + private name under K_share. The copy is on
+  // EVERY share, so a note/name can be added later even to one minted without them.
+  const recoveryCopy = (ek: EpochKeys) => ({
+    sealedShareKey: b64std(v1.seal(shareKeyRecoveryContext({ scopeId, nodeId, shareId }, ek.current), writeKey(ek), kShare)),
+    sealedShareKeyEpoch: ek.current,
+  })
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : undefined
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
   const pw = password.trim() ? buildPasswordFields(kShare, password) : undefined
+  let recovery = recoveryCopy(epochs)
   const post = async () => {
     const drop = uploader
       ? dropKeysForShare(scopeId, nodeId, memoryKey, kShare, await currentSealedDropKey(scopeId, nodeId))
@@ -233,21 +257,47 @@ export async function createShare(
     await withRefresh(() =>
       sharesApi().createShare({
         createShareRequest: {
-          shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareKey, sealedShareName,
+          shareId, nodeId, role, wrap, sealedName, expiresAt: expiresAt ?? undefined, sealedNote, sealedShareName, ...recovery,
           passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
           sealedDropPublicKey: drop?.sealedDropPublicKey, sealedDropPrivateKey: drop?.sealedDropPrivateKey,
         },
       }),
     )
   }
-  try {
-    await post()
-  } catch (e) {
-    // Another owner set the Memory's drop key first: seal to theirs, which every upload so far is sealed to.
-    if (!uploader || !(await isCodedError(e, HttpStatus.conflict, 'drop_key_exists'))) throw e
-    await post()
+  // Each refusal is retried once: a nothing-written conflict the caller can answer by re-reading what moved.
+  let retriedDrop = false
+  let retriedEpoch = false
+  for (;;) {
+    try {
+      await post()
+      return { shareId, kShare }
+    } catch (e) {
+      // Another owner set the Memory's drop key first: seal to theirs, which every upload so far is sealed to.
+      if (uploader && !retriedDrop && (await isCodedError(e, HttpStatus.conflict, 'drop_key_exists'))) {
+        retriedDrop = true
+        continue
+      }
+      // A rotation moved the scope's epoch under us: re-open the scope key and re-seal the copy at the current one.
+      if (!retriedEpoch && (await isStaleEpoch(e))) {
+        retriedEpoch = true
+        recovery = await freshRecoveryCopy(scopeId, recoveryCopy)
+        continue
+      }
+      throw e
+    }
   }
-  return { shareId, kShare }
+}
+
+/** Re-open the scope's key after a `stale_epoch` and seal the recovery copy at its current epoch; the re-opened
+ *  epoch keys are wiped straight after. Throws when the scope no longer opens. */
+async function freshRecoveryCopy<T>(scopeId: string, seal: (ek: EpochKeys) => T): Promise<T> {
+  const opened = await openScopeById(scopeId)
+  if (!opened) throw new Error('cannot open scope to re-seal the share key')
+  try {
+    return seal(opened.epochs)
+  } finally {
+    zeroEpochKeys(opened.epochs)
+  }
 }
 
 /** The Memory's sealed drop private key as the server holds it now — null until its first UPLOADER share. */
@@ -257,19 +307,20 @@ async function currentSealedDropKey(scopeId: string, nodeId: string): Promise<st
 }
 
 /**
- * Edit a share in place (cr-0115/cr-0116/cr-0119/cr-0118, ADR 0036/0037): recover `K_share` from its `K_mem`-sealed
- * copy, re-seal note + name (or clear a blank one) and PATCH the full pair — the same link keeps working. An
+ * Edit a share in place (cr-0115/cr-0116/cr-0119/cr-0118, ADR 0036/0037): recover `K_share` from its recovery copy
+ * (under `K_SC` at the copy's epoch), re-seal note + name (or clear a blank one) and PATCH the full pair — the same
+ * link keeps working. The copy itself is never re-sealed here, so an edit needs no current epoch. An
  * optional `role` changes the grant in place (VIEWER ↔ CONTRIBUTOR; the server 422s UPLOADER). `passwordChange` is
  * the tri-state gate: `{ set }` sets/changes it, `{ remove: true }` removes it, `undefined` leaves it untouched.
  * Owner-gated server-side; the link/`K_share` are untouched throughout.
  */
 export async function updateShare(
-  share: ShareAddress, memoryKey: Uint8Array, sealedShareKey: string, note: LocaleMap, name: string,
+  share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy, note: LocaleMap, name: string,
   expiresAt: Date | null, role?: ShareRole,
   passwordChange?: { set: string } | { remove: true },
 ): Promise<void> {
   const { shareId } = share
-  const kShare = recoverShareKey(memoryKey, share, sealedShareKey)
+  const kShare = recoverShareKey(epochs, share, copy)
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : null
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : null
   // cr-0118: the password tri-state. A `remove` sends only `passwordRequired: false` — the server clears the fields.
@@ -300,12 +351,13 @@ export type ManagedShare = {
   mine: boolean
   createdAt: Date
   expiresAt: Date | null
-  /** cr-0115/cr-0116: the note (per-locale) + name ciphertext (under `K_share`) + the recoverable `K_share` (under
-   *  `K_mem`). The dialog reads them via `readShareNoteMap`/`readShareName` and edits them via `updateShare`. Null
-   *  on a pre-cr-0115 share. */
+  /** The note (per-locale) + name ciphertext (under `K_share`) + the recoverable `K_share` (under `K_SC` at
+   *  `sealedShareKeyEpoch`, ADR 0036 point 4). The dialog reads them via `readShareNoteMap`/`readShareName` and edits
+   *  them via `updateShare`. */
   sealedNote: string | null
   sealedShareName: string | null
   sealedShareKey: string | null
+  sealedShareKeyEpoch: number | null
   /** cr-0118: whether the share is password-protected (a lock badge) + the `K_share`-sealed reveal copy of the
    *  plaintext password (management-only), read via `readSharePassword`. */
   passwordRequired: boolean
@@ -329,6 +381,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       sealedNote: r.sealedNote ?? null,
       sealedShareName: r.sealedShareName ?? null,
       sealedShareKey: r.sealedShareKey ?? null,
+      sealedShareKeyEpoch: r.sealedShareKeyEpoch ?? null,
       passwordRequired: r.passwordRequired ?? false,
       sealedPassword: r.sealedPassword ?? null,
     }))

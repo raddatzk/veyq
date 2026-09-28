@@ -39,7 +39,8 @@ least-privilege is crypto-enforced, and the server stays blind.
 
 - [uc.sharing.share-note](use-cases/uc.sharing.share-note.md) — **built (web, cr-0115 + cr-0116)** (an optional
   **editable curator note** on a share, sealed under `K_share` + rendered (markdown) on the share page; **editable
-  in place** via a `K_mem`-recoverable share key `sealed_share_key = symWrap(K_mem, K_share)` + an owner-gated
+  in place** via a member-recoverable share key `sealed_share_key` (`K_share` under `K_SC(epoch)`, which no link
+  carries — ADR 0036 point 4) + an owner-gated
   `updateShare` — the link stays valid. **cr-0116** made the note **per-locale** (`{de,en}`, viewer picks locale),
   added an optional **private share name** (`sealed_share_name`, management-only), and **redesigned the dialogs**
   — list-only manage + separate create, copy-only links, with the **uploader as its own

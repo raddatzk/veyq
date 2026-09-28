@@ -99,7 +99,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     nodeId = memory.nodeId
     const kMem = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, MEMORY_NAME, ShareRole.Contributor, null, NOTE, SHARE_NAME)
+    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Contributor, null, NOTE, SHARE_NAME)
     shareId = minted.shareId
     expect(shareId, 'the client minted an opaque shareId (ADR 0072)').toMatch(/^[A-Za-z0-9_-]{43}$/)
 
@@ -167,11 +167,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     expect(recoveredName, 'the curator recovered the contributor display name through the bucket').toBe(CONTRIBUTOR_NAME)
     expect(primary!.mediaCount, 'both contributions are attributed to that one contributor').toBe(2)
 
-    // The curator's own management read: recover K_share from its K_mem-sealed copy and open the private name.
+    // The curator's own management read: recover K_share from its copy under K_SC(epoch) and open the private name.
     const managed = (await listSharesFor(nodeId)).find((s) => s.shareId === shareId)
     expect(managed, 'the share shows up in the curator manage panel').toBeDefined()
-    const recoveredShareName = readShareName(kMem, managed!, managed!.sealedShareKey, managed!.sealedShareName)
+    const recoveredShareName = readShareName(epochsOf(scopeKey), managed!, managed!, managed!.sealedShareName)
     expect(recoveredShareName, "the curator recovered the share's private name").toBe(SHARE_NAME)
+    // …and the Memory key every viewer or contributor link hands over recovers nothing of it (ADR 0036 point 4).
+    expect(readShareName(epochsOf(kMem), managed!, managed!, managed!.sealedShareName), 'K_mem opens no recovery copy').toBe('')
 
     // The wire assertion's derivation (ADR 0053) — every value below was recovered by UNSEALING what the server
     // returned, so nothing has to be remembered and none can be forgotten out of the set. Note what is NOT here:

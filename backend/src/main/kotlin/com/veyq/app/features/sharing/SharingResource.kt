@@ -79,7 +79,8 @@ class SharingResource(
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
-            sealedShareKey = createShareRequest.sealedShareKey, // cr-0115: recoverable K_share for a later edit
+            sealedShareKey = createShareRequest.sealedShareKey, // K_share under K_SC(epoch): members recover it (ADR 0036)
+            sealedShareKeyEpoch = createShareRequest.sealedShareKeyEpoch, // the scope epoch it is sealed at
             sealedShareName = createShareRequest.sealedShareName, // cr-0116: optional private label under K_share
             passwordRequired = createShareRequest.passwordRequired ?: false, // cr-0118: optional access-control gate
             pwSalt = createShareRequest.pwSalt,
@@ -116,7 +117,8 @@ class SharingResource(
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it
                 sealedShareName = s.sealedShareName, // cr-0116: the manage list's row title (falls back to the role)
-                sealedShareKey = s.sealedShareKey, // cr-0115: lets the manage UI recover K_share to edit note + name
+                sealedShareKey = s.sealedShareKey, // a member's manage UI recovers K_share through its epoch keys
+                sealedShareKeyEpoch = s.sealedShareKeyEpoch,
                 passwordRequired = s.passwordRequired, // cr-0118: a lock badge in the manage list
                 sealedPassword = s.sealedPassword, // cr-0118: the reveal copy (management-only; never a viewer)
             )

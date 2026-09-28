@@ -56,8 +56,10 @@ password, nothing is readable" holds at the access-control layer.
   `passwordRequired` is a **tri-state** — `true` sets/changes it (with fresh `pw_salt`/`pw_verifier`/`sealed_password`),
   `false` removes it (clears the fields), **omitted** leaves it untouched. Adding a password to a share created
   without one, or removing one, is just toggling the server-side gate — **no new link**, unlike the crypto-gate.
-- **Reveal:** the curator (who holds `K_mem`) recovers `K_share` (via the `K_mem`-recoverable `sealed_share_key`,
-  cr-0115) and opens `sealed_password` → a 👁 "show password" in the manage UI.
+- **Reveal:** the curator — any member of the Memory's scope — recovers `K_share` from `sealed_share_key`, sealed
+  under `K_SC` at its epoch ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4), and opens
+  `sealed_password` → a 👁 "show password" in the manage UI. Never under `K_mem`: every VIEWER/CONTRIBUTOR link of
+  the Memory carries that key, so such a copy would hand this password to another link's holder with a dump.
 
 **All roles.** The gate sits in front of every guest endpoint, so it protects a VIEWER greeting page, a
 CONTRIBUTOR album, and an UPLOADER drop-box alike; the password field lives in the shared `ShareCreateDialog`.
@@ -67,7 +69,9 @@ CONTRIBUTOR album, and an UPLOADER drop-box alike; the password field lives in t
 - **The server never reads content.** Content is E2EE under `K_share` (fragment); the password only gates
   *serving*. The server stores a verifier + salt (opaque, like the `contributorToken` hash and the blinded slug
   tokens) + one ciphertext (`sealed_password`). The raw password never reaches the server (the client sends
-  `Argon2id(pw)`, not `pw`), so password reuse isn't exposed to the operator.
+  `Argon2id(pw)`, not `pw`), so password reuse isn't exposed to the operator — nor, with a dump,
+  to the holder of another link to the same Memory: `sealed_password` opens only through a `K_share` recovered
+  under `K_SC`, which no link carries ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4).
 - **This is an access-control gate, not a cryptographic one — and we say so.** A password defends against a
   **leaked link reaching the wrong person while the operator is honest**: the honest server refuses to serve
   without the password. It does **not** defend against a **malicious operator**, who can ignore the check and serve
@@ -123,7 +127,7 @@ CONTRIBUTOR album, and an UPLOADER drop-box alike; the password field lives in t
 
 - [ADR 0029](0029-public-viewer-share.md) (the share model + `K_share` fragment), [ADR 0030](0030-contributor-public-share.md)
   (the `contributorToken` this reuses), [ADR 0036](0036-editable-share-note-recoverable-share-key.md) (the
-  owner-gated `updateShare` this extends + the `K_mem`-recoverable `K_share` the reveal uses),
+  owner-gated `updateShare` this extends + the member-recoverable `K_share` the reveal uses),
   [ADR 0003](0003-operator-blind-password-auth.md) (the "raw password never reaches the server" stance),
   [ADR 0026](0026-client-trust-tiers.md) (the client-integrity tiers that bound this gate).
 - Use-case: [uc.sharing.share-password](../features/sharing/use-cases/uc.sharing.share-password.md).

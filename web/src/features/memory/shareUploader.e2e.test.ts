@@ -68,7 +68,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     const nodeId = memory.nodeId
     const kMem = memory.memoryKey
 
-    const minted = await createShare(scopeId, nodeId, kMem, MEMORY_NAME, ShareRole.Uploader)
+    const minted = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Uploader)
     const fragmentKey = b64url(minted.kShare)
 
     // --- anonymous: what the server sends the guest carries no wrap, only the sealed drop public key ----------
@@ -108,12 +108,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     expect(recoveredName, 'the curator recovered the uploader display name').toBe(UPLOADER_NAME)
 
     // a second UPLOADER link on the same Memory seals to the drop key the Memory already has
-    const second = await createShare(scopeId, nodeId, kMem, MEMORY_NAME, ShareRole.Uploader)
+    const second = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Uploader)
     const secondResolved = await resolveShare(second.shareId, b64url(second.kShare))
     expect(secondResolved.access.kind, 'the second uploader link resolves to a drop key too').toBe('drop')
 
     // --- a viewer link of the same Memory opens the guest's upload too --------------------------------------
-    const viewer = await createShare(scopeId, nodeId, kMem, MEMORY_NAME, ShareRole.Viewer)
+    const viewer = await createShare(scopeId, nodeId, kMem, epochsOf(scopeKey), MEMORY_NAME, ShareRole.Viewer)
     const viewed = await resolveShare(viewer.shareId, b64url(viewer.kShare))
     const shared = viewed.items.find((i) => i.item.mediaId === uploaded.mediaId)
     expect(shared, "the upload is in the viewer link's gallery").toBeDefined()

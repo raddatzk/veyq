@@ -1,13 +1,14 @@
 # UC: Password-protect a share (a leaked link alone isn't enough)
 
 - **ID:** uc.sharing.share-password
-- **Primary actor:** the **curator** (owns/shares the Memory; holds `K_mem`).
+- **Primary actor:** the **curator** (owns/shares the Memory; a member of its scope, so holds `K_SC`).
 - **Secondary actor:** an **anonymous guest** who opens the link and must know the password.
 - **Goal:** put an **optional password** on a share so that whoever opens the link must **also know the password**
   before the server serves anything. Set / change / remove / reveal it in place, without minting a new link;
   operator-blind.
-- **Preconditions:** an authenticated, unlocked curator with a share they own (any role). The curator holds
-  `K_mem` (so recovers `K_share` for the reveal, [ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+- **Preconditions:** an authenticated, unlocked curator with a share they own (any role). The curator holds the
+  scope's epoch keys, so recovers `K_share` for the reveal from its copy under `K_SC`
+  ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md) point 4).
 - **Postconditions (success):** the share carries `password_required` + `pw_salt` + `pw_verifier`
   (`SHA-256(Argon2id(pw, salt))`) + `sealed_password` (the plaintext sealed under `K_share`). A guest reaches the
   content only by presenting a valid **password token**; without it the server serves **nothing** — not even the
@@ -36,7 +37,7 @@ serve the ciphertext to a colluder holding the fragment) — the same posture th
    `403 share_password_incorrect` (re-prompt). Every subsequent guest call (blob GET, contribute/upload) carries
    the token too.
 4. **Reveal / change / remove (curator).** In the manage list a 👁 reveals the password (the curator recovers
-   `K_share` via `K_mem` and opens `sealed_password`). Editing the share can **change** the password (fresh
+   `K_share` from its copy under `K_SC` and opens `sealed_password`). Editing the share can **change** the password (fresh
    salt/verifier/sealed copy) or **remove** it (`password_required: false`, fields cleared) — the same link keeps
    working throughout.
 
@@ -66,14 +67,18 @@ sequenceDiagram
   the counter is touched) and the tokenless challenge-fetch never counts. The verifier is never served.
 - **A3 — revoked / expired:** `404` as ever — the password gate sits **after** the enabled/expiry check; a revoked
   share is non-enumerable regardless of the password.
-- **A4 — curator forgets the password:** they **reveal** it from the manage list (recovering `K_share` via `K_mem`),
-  or **change** it — they are never locked out of their own share.
+- **A4 — curator forgets the password:** they **reveal** it from the manage list (recovering `K_share` from its copy
+  under `K_SC`), or **change** it — they are never locked out of their own share. The reveal is for the Memory's
+  scope members only: the holder of another link to the same Memory — who holds `K_mem` — cannot open it even with
+  a database dump (ADR 0036 point 4).
 
 ## Quality notes
 
 - **Operator-blind (honest limit stated).** The server stores a **verifier + salt** (opaque, like the contributor
   token hash) + `sealed_password` (ciphertext); it never sees the raw password (the client sends `Argon2id(pw)`)
-  and never content. It **is** an access-control gate — a malicious operator could bypass the check, so this
+  and never content. `sealed_password` opens only through a `K_share` recovered under `K_SC`, a key no share link
+  carries — so neither the operator nor another link's holder, with a dump, reads the password (ADR 0036 point 4).
+  It **is** an access-control gate — a malicious operator could bypass the check, so this
   defends a leaked link against an **honest** operator (the realistic self-hosted / trusted case), not an active
   one. The crypto-gate upgrade (fold `Argon2id` into the key) is a documented future option, not built here.
 - **All roles.** The gate fronts every guest endpoint, so a VIEWER, CONTRIBUTOR or UPLOADER share is protected
@@ -101,7 +106,7 @@ dicht); es ist ein Schloss an der Tür, und deine Fotos selbst sind ohnehin vers
 - **Decisions:** [ADR 0037](../../../decisions/0037-password-protected-shares.md) (this gate + the honest
   access-control vs crypto tradeoff), [ADR 0030](../../../decisions/0030-contributor-public-share.md) (the
   contributor token this reuses), [ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
-  (owner-gated `updateShare` + the `K_mem`-recoverable `K_share` the reveal uses),
+  (owner-gated `updateShare` + the member-recoverable `K_share` the reveal uses),
   [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tiers that bound it).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md),
   [cc.security.rate-limit](../../../crosscutting/cc.security.rate-limit.md).

@@ -1312,6 +1312,15 @@ live pass for it.
 enum narrowing landed on top of uncommitted `cr-space-icon` WIP in `scopes.openapi.yaml`, and only a pre-edit
 `git status` caught it. Split the go — land one, then the other as its own commit — and the history stays legible.
 
+### A sibling CR still in flight is cited as PLANNED, and re-read when it lands
+
+`cr-share-key-recovery-for-members-only` justified its key choice with a "precedent": #190's members-only name
+keypair under `K_SC`, written in the present tense. #190 then landed without it — its owner took the cheaper
+variant — and the paragraph described a design nobody built. The reasoning happened to stand on its own; a CR whose
+decision *rested* on the sibling would not have. So a claim drawn from another CR's plan says so ("planned in
+`cr-…`"), and the CR that lands second re-reads every such claim against the merged tree before its first edit,
+alongside its locators.
+
 ### "Which one is mine?" is a flag, not an id — and dropping the id is the stronger answer
 
 **When a read hands back a collection of per-party blobs and the client only needs to find its own, the field

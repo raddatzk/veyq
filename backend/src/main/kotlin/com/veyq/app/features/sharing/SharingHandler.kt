@@ -57,6 +57,8 @@ sealed interface CreateShareOutcome {
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
     /** The keys do not match the role: a wrap on an UPLOADER share, a drop key on any other — a 400. */
     object InvalidRequest : CreateShareOutcome, HttpFailure by Failures.invalidRequest
+    /** The recovery copy's epoch is not the scope's current one (ADR 0024 Decision 6) — a 409, nothing written. */
+    object StaleEpoch : CreateShareOutcome, HttpFailure by Failures.staleEpoch
     /** An UPLOADER share brought a drop private key, but the Memory already has one — a 409, nothing written. */
     object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
     /** An UPLOADER share brought no drop private key, and the Memory has none — a 409, nothing written. */
@@ -215,22 +217,30 @@ class SharingHandler(
     fun create(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
-        sealedNote: String?, sealedShareKey: String?, sealedShareName: String?,
+        sealedNote: String?, sealedShareKey: String?, sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
         if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
         val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
+        // The recovery copy of K_share and the epoch of K_SC it is sealed under travel together (ADR 0036 point 4).
+        if ((sealedShareKey == null) != (sealedShareKeyEpoch == null)) return CreateShareOutcome.InvalidRequest
         val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
         // Any member of the node's scope may share (cr-0104) — personal, group, or tenant; only a MEMORY node can
         // be public-shared (ADR 0029 §6, ADR 0030).
         if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
+        // ADR 0024 Decision 6, as NodesHandler checks it: a recovery copy sealed under an epoch other than the scope's
+        // current one is refused — an older one is an epoch a member removed since still holds. Unlocked, like theirs.
+        if (sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) {
+            return CreateShareOutcome.StaleEpoch
+        }
         // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it.
         val created = store.create(
-            shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareName,
+            shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            sealedShareKeyEpoch, sealedShareName,
             passwordRequired, pwSalt, pwVerifier, sealedPassword,
         )
         return when (created) {

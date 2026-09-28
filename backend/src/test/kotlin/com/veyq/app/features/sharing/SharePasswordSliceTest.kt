@@ -32,6 +32,7 @@ class SharePasswordSliceTest {
     private val pwVerifier = sha256b64(pwToken) // SHA-256(decode(pwToken)) — what the server stores + checks
     private val wrongToken = "d3JvbmctdG9rZW4=" // "wrong-token"
     private val sealedPassword = "c2VhbGVkLXB3" // the plaintext password sealed under K_share (opaque here)
+    private val shareKey = "cmVjb3ZlcmFibGUta2V5" // K_share under K_SC(epoch), opaque here
 
     @Test
     fun createThenLockedResolveHidesTheContent() {
@@ -109,6 +110,9 @@ class SharePasswordSliceTest {
             .then().statusCode(200)
             .body("find { it.shareId == '$shareId' }.passwordRequired", equalTo(true))
             .body("find { it.shareId == '$shareId' }.sealedPassword", equalTo(sealedPassword))
+            // …and the recovery copy it is opened through, with the scope epoch it is sealed under (ADR 0036 point 4)
+            .body("find { it.shareId == '$shareId' }.sealedShareKey", equalTo(shareKey))
+            .body("find { it.shareId == '$shareId' }.sealedShareKeyEpoch", equalTo(0))
     }
 
     // --- helpers ---
@@ -122,7 +126,7 @@ class SharePasswordSliceTest {
 
     private fun createWithPassword(userId: String, nodeId: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier","sealedPassword":"$sealedPassword"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"VIEWER","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier","sealedPassword":"$sealedPassword","sealedShareKey":"$shareKey","sealedShareKeyEpoch":0}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

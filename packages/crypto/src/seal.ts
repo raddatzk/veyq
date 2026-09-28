@@ -50,7 +50,9 @@ export const SEAL_PURPOSES = {
   'media-exif': [['scopeId', 'id'], ['mediaId', 'id']],
   'bucket-name': [['scopeId', 'id'], ['nodeId', 'id'], ['bucketId', 'id']],
   'share-identity-name': [['scopeId', 'id'], ['shareId', 'shareId'], ['identityId', 'id']],
-  'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId']],
+  // A share's K_share, recoverable by the Memory's scope members only: sealed under K_SC at the epoch stored beside
+  // it — a key no share link carries (ADR 0036 point 4), where K_mem is one every viewer/contributor link does.
+  'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId'], ['epoch', 'uint']],
   // A Memory's drop PRIVATE key (ADR 0031 point 7), under that Memory's K_mem — a node field of its own, never
   // inside node-meta, so a date or location edit never carries it.
   'drop-private-key': [['scopeId', 'id'], ['nodeId', 'id']],

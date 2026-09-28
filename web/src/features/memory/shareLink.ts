@@ -17,20 +17,21 @@
 // (The terms-acceptance helpers in `share.ts` are the deliberate exception — a `localStorage` flag genuinely is
 // browser state, not a layering fault, and `uc.sharing.share-accept` is browser-only by design.)
 import { b64url } from '@veyq/crypto/base64'
-import { recoverShareKey, type ShareAddress } from './share'
+import { recoverShareKey, type RecoveryCopy, type ShareAddress } from './share'
+import type { EpochKeys } from '../spaces/epochs'
 
 /** Build the copyable link `/s/{shareId}#k=<base64url(K_share)>` — the fragment carries `K_share`, never sent. */
 export function buildShareLink(shareId: string, kShare: Uint8Array): string {
   return `${window.location.origin}/s/${shareId}#k=${b64url(kShare)}`
 }
 
-/** Reconstruct a managed share's full copyable link by recovering `K_share` via `K_mem` (cr-0115, ADR 0036) — so
- *  the curator can re-copy **any** existing link, not just the freshly-minted one. Null when the share carries no
- *  recoverable key (minted before cr-0115) or the recovery fails. */
-export function recoverShareLink(share: ShareAddress, memoryKey: Uint8Array, sealedShareKey: string | null): string | null {
-  if (!sealedShareKey) return null
+/** Reconstruct a managed share's full copyable link by recovering `K_share` through the scope's epoch keys (ADR 0036
+ *  point 4) — so a scope member can re-copy **any** existing link, not just the freshly-minted one. Null when the
+ *  share carries no recoverable key or the recovery fails. */
+export function recoverShareLink(share: ShareAddress, epochs: EpochKeys, copy: RecoveryCopy): string | null {
+  if (!copy.sealedShareKey) return null
   try {
-    return buildShareLink(share.shareId, recoverShareKey(memoryKey, share, sealedShareKey))
+    return buildShareLink(share.shareId, recoverShareKey(epochs, share, copy))
   } catch {
     return null
   }

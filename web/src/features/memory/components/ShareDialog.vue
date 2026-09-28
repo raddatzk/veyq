@@ -5,8 +5,9 @@
 // creates them with a role switcher; the UPLOADER (drop-box) variant lists uploader shares and creates them with no
 // switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
-// reconstructed via the K_mem-recoverable K_share, cr-0115), edit name+note, and revoke / re-activate.
-// Operator-blind throughout: names/notes are sealed under K_share and decrypted on device.
+// reconstructed via the member-recoverable K_share), edit name+note, and revoke / re-activate.
+// Operator-blind throughout: names/notes are sealed under K_share and decrypted on device; K_share itself is
+// recovered through the scope's epoch keys (K_SC), which no share link carries (ADR 0036 point 4).
 import { ref, computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
@@ -23,12 +24,15 @@ import {
 } from '../share'
 import { recoverShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
+import type { EpochKeys } from '../../spaces/epochs'
 
 const props = defineProps<{
   /** The shared Memory's scope — every share's recovery copy of `K_share` is bound to it (ADR 0072). */
   scopeId: string
   nodeId: string
   memoryKey: Uint8Array
+  /** The scope's epoch keys — every share's recovery copy of `K_share` opens under `K_SC` at its epoch. */
+  epochs: EpochKeys
   memoryName: string
   /** The uploader (drop-box) variant: list only uploader shares, create with no role switcher. Identical otherwise. */
   uploader?: boolean
@@ -73,8 +77,8 @@ const decoded = computed(() => {
   const m = new Map<string, { name: string; hasNote: boolean }>()
   for (const s of shares.value) {
     m.set(s.shareId, {
-      name: readShareName(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedShareName),
-      hasNote: hasLocaleText(readShareNoteMap(props.memoryKey, addressOf(s), s.sealedShareKey, s.sealedNote)),
+      name: readShareName(props.epochs, addressOf(s), s, s.sealedShareName),
+      hasNote: hasLocaleText(readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)),
     })
   }
   return m
@@ -82,7 +86,7 @@ const decoded = computed(() => {
 const shareLinks = computed(() => {
   const m = new Map<string, string>()
   for (const s of shares.value) {
-    const link = recoverShareLink(addressOf(s), props.memoryKey, s.sealedShareKey)
+    const link = recoverShareLink(addressOf(s), props.epochs, s)
     if (link) m.set(s.shareId, link)
   }
   return m
@@ -236,6 +240,7 @@ function fmtDate(d: Date): string {
       :scope-id="scopeId"
       :node-id="nodeId"
       :memory-key="memoryKey"
+      :epochs="epochs"
       :memory-name="memoryName"
       :edit-share="editShare"
       :uploader="uploader"

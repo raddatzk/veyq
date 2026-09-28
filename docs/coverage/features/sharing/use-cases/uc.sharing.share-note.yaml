@@ -5,9 +5,10 @@ title: Share note — a curator attaches an editable message to a share
 # resolve/summary, a new owner-gated updateShare) → backend (two nullable TEXT columns on veyq_share, updateNote
 # owner-gated) → web (share.ts seal/recover/read + updateShareNote, the ShareDialog note field + in-place editor,
 # the ShareView note banner reusing the cr-0114 markdown renderer). The note seals under K_share (AAD share-note);
-# a K_mem-recoverable sealed_share_key lets the curator edit it in place — operator-blind (K_share never in the
-# clear). Backend slice tests run over the full HTTP stack; the note lifecycle is hermetic there (it needs the
-# grant flow + client crypto), and sharing.http asserts the updateShare auth wall.
+# a member-recoverable sealed_share_key (K_share under K_SC(epoch), ADR 0036 point 4) lets the curator edit it in
+# place — operator-blind (K_share never in the clear). Backend slice tests run over the full HTTP stack; the note
+# lifecycle is hermetic there (it needs the grant flow + client crypto), and sharing.http asserts the updateShare
+# auth wall.
 # cr-0116 extends this: the note becomes PER-LOCALE (a {de,en} JSON map under K_share, no contract change — the
 # viewer picks their locale), a share gains an optional private NAME (sealed_share_name under K_share, management-
 # only — never on the viewer resolve), and the dialog is redesigned (list-only + a separate create dialog, the
@@ -15,7 +16,7 @@ title: Share note — a curator attaches an editable message to a share
 # protection are later CRs (cr-0117 / cr-0118).
 acceptanceCriteria:
   - id: curator-sets-note-at-creation
-    text: When creating a share, the curator may attach an optional note; the client seals it under K_share (AAD share-note) and stores it alongside sealed_share_key = symWrap(K_mem, K_share). A share with no note stores nothing and shows no banner.
+    text: When creating a share, the curator may attach an optional note; the client seals it under K_share (AAD share-note) and stores it alongside sealed_share_key (K_share sealed under K_SC at the scope's current epoch, with that epoch). A share with no note stores nothing and shows no banner.
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithNoteThenAnonymousResolveReturnsIt, ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey] }
       web: { unit: [src/features/memory/share.test.ts] }
@@ -30,7 +31,12 @@ acceptanceCriteria:
       backend: { integration: [ShareNoteSliceTest.ownerEditsTheNoteInPlaceAtTheSameShareId, ShareNoteSliceTest.editingWithNullClearsTheNote, ShareNoteSliceTest.aNonOwnerEditIs404AndLeavesTheNoteUnchanged, ShareNoteSliceTest.renameViaUpdateShareChangesTheNameKeepsTheNoteAndTheLink] }
       web: { unit: [src/features/memory/share.test.ts] }
   - id: operator-blind
-    text: The server stores only ciphertext — sealed_note (per-locale) + sealed_share_name + sealed_share_key (openable only with K_mem, which the operator lacks); K_share is never in the clear, the name is never served to the viewer, and updateShare swaps one ciphertext for another. No key or plaintext crosses the boundary (ADR 0036).
+    text: The server stores only ciphertext — sealed_note (per-locale) + sealed_share_name + sealed_share_key (openable only with K_SC, which the operator lacks); K_share is never in the clear, the name is never served to the viewer, and updateShare swaps one ciphertext for another. No key or plaintext crosses the boundary (ADR 0036).
     coverage:
       backend: { integration: [ShareNoteSliceTest.createWithoutNoteResolvesNullAndTheManageListCarriesTheRecoverableKey, ShareNoteSliceTest.createWithANameShowsItInTheManageListButNeverToTheViewer] }
+      web: { unit: [src/features/memory/share.test.ts] }
+  - id: share-key-recoverable-by-members-only
+    text: A share's K_share is recoverable only by the Memory's scope members - its recovery copy is sealed under K_SC(epoch), which no share link carries. So no link, with or without a dump, opens another share's password, private label or note, or rebuilds its link. The copy is sealed at the scope's current epoch - a create at any other epoch is 409 stale_epoch with nothing written, and a key without its epoch (or the reverse) is 400.
+    coverage:
+      backend: { integration: [ShareKeyRecoveryEpochSliceTest.aCreateAtAnEpochOtherThanTheScopesCurrentIs409StaleEpochAndWritesNothing, ShareKeyRecoveryEpochSliceTest.aKeyWithoutItsEpochAndAnEpochWithoutItsKeyAreEach400, ShareKeyRecoveryEpochSliceTest.aCreateAtTheCurrentEpochSucceedsAndTheManageListServesThatEpoch] }
       web: { unit: [src/features/memory/share.test.ts] }
