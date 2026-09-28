@@ -1368,6 +1368,15 @@ components:
           type: array
           description: The node's materialized buckets — primaries (one per uploader) + any sub-buckets.
           items: { $ref: "#/components/schemas/BucketSummary" }
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          description: >
+            The node's drop private key sealed under its `K_mem` (as `NodeSummary.sealedDropPrivateKey`; opaque
+            base64) — what opens an UPLOADER primary's name through its `wrappedIdentityKey` (ADR 0031 point 7),
+            served with the buckets so the list is readable on its own. Null while the node has none.
+          contentEncoding: base64
+          maxLength: 256
+          example: null
 
     BucketSummary:
       type: object
