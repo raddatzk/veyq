@@ -80,6 +80,28 @@ direct-append, personal scope.**
    extends to the contributor's sealed name + contributed media: a reported contributor share URL carries the
    fragment key, so a reported share is decryptable. Intended, not a leak.
 
+8. **A guest's name is for the Memory's members only (owner's call, 2026-09-28).** Holders of a VIEWER or
+   CONTRIBUTOR link must not be able to read the name any guest gave; the Memory's members keep reading it. This
+   supersedes, once built, point 2's *"seals it under `K_mem`"* and point 5's *"the anonymous resolve returns each
+   share identity's sealed name"* (and [ADR 0031](0031-uploader-public-share.md) point 7's *"the display name"*
+   among what an uploader seals under its own key). Point 5 had no reader on the guest side: the guest page never
+   showed a name. What it did was let every `K_mem` holder open one.
+   - **A server refusal is not enough.** A VIEWER or CONTRIBUTOR link holds `K_mem`. Through the Memory's drop
+     private key it also holds every uploader's own key. So a name sealed under either key opens for the link
+     holder the moment the ciphertext reaches them: a response that serves it, or a dump next to a leaked link.
+     That is the threat ADR 0031 point 7 closes for content.
+   - **The name is sealed to a key only members hold.** The Memory gets a second hybrid keypair, the **name
+     keypair**. Its private half is sealed under `K_SC` at the scope's current epoch
+     ([ADR 0012](0012-content-key-hierarchy.md), [ADR 0024](0024-scope-key-rotation.md)). Chapter names use that
+     tier for the same reason: a share never carries `K_SC`. The public half is sealed under `K_share` on each
+     share, so the server can neither read nor substitute it. The guest `sealTo`s its name to that public half.
+     It is the same move as the drop key, with the private half one tier up.
+   - **The resolve serves no name.** It still serves what opens an upload: an uploader identity's wrapped key
+     (ADR 0031 point 7), and nothing else about any identity.
+   - **Consequence for point 7:** a reported link still decrypts the content it shares, but no longer the names
+     of the guests who added to it. That follows from the owner's call: a reported link is a guest's view.
+   - Not built yet: inbox #190.
+
 ## Consequences
 
 - **New server-visible surface, all opaque:** a `veyq_share_identity` row (opaque `identityId` + `K_mem`-sealed
