@@ -15,7 +15,8 @@ the code*, changes/README.md):
      `distributionSha256Sum`.
   4. **Gradle verifies dependencies.** Every Gradle build root (the directory of a tracked `gradlew`) has a
      `gradle/verification-metadata.xml` with `<verify-metadata>true</verify-metadata>`; its only trust rules are
-     the `-sources`/`-javadoc` ones an IDE sync needs (those never execute); and no tracked `gradle.properties`
+     the `-sources`/`-javadoc` jars and the Gradle `-src` zip an IDE sync needs (none of them executes); and no
+     tracked `gradle.properties`
      sets `org.gradle.dependency.verification`, which would turn it lenient or off for every run.
 
 **The defect that bought it.** Live when this guard was written (2026-09-27, cr-build-inputs-pinned): the npm
@@ -50,8 +51,13 @@ SKIP_PREFIXES = ("changes/", "docs/", "wiki/")
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
 GRADLE_COORD = re.compile(r"""["']org\.openapitools:openapi-generator:([^"'$]+)["']""")
 NS = "{https://schema.gradle.org/dependency-verification}"
-# The two trust rules an IntelliJ sync needs: it fetches sources and javadoc no task resolves, and neither executes.
-IDE_TRUST = {r".*-sources[.]jar", r".*-javadoc[.]jar"}
+# The trust rules an IntelliJ sync needs: it fetches sources and javadoc no task resolves, plus the Gradle
+# distribution's own `-src` zip (for navigating into Gradle's API), and none of them executes.
+IDE_TRUST = [
+    {"file": r".*-sources[.]jar", "regex": "true"},
+    {"file": r".*-javadoc[.]jar", "regex": "true"},
+    {"group": "gradle", "name": "gradle", "file": r"gradle-.*-src[.]zip", "regex": "true"},
+]
 
 errors: list[str] = []
 
@@ -166,9 +172,9 @@ def check_verification(files: list[str]) -> None:
         if not tree.findall(f"{NS}components/{NS}component"):
             fail(f"{rel}: lists no component — regenerate it with --write-verification-metadata sha256")
         for trust in tree.iter(f"{NS}trust"):
-            if dict(trust.attrib) not in ({"file": r, "regex": "true"} for r in IDE_TRUST):
-                fail(f"{rel}: trust rule {dict(trust.attrib)} exempts more than the -sources/-javadoc jars an IDE "
-                     f"sync fetches — an exempted artifact that executes is an unverified one")
+            if dict(trust.attrib) not in IDE_TRUST:
+                fail(f"{rel}: trust rule {dict(trust.attrib)} exempts more than the -sources/-javadoc jars and the "
+                     f"Gradle -src zip an IDE sync fetches — an exempted artifact that executes is an unverified one")
     for rel in named(files, "gradle.properties"):
         for line in (ROOT / rel).read_text().splitlines():
             if re.match(r"^\s*org\.gradle\.dependency\.verification\s*[=:]", line):
