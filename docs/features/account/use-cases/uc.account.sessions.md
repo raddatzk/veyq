@@ -200,7 +200,9 @@ Key again.
 - **E4 — the register is missing or stale** (a new device, cleared storage, a write that never landed): the
   affected families render unnamed and offer no wrap escalation, since there is no wrap to name. Nothing is
   blocked, and nothing is silently hidden — a session the register cannot name must still be visible and still
-  be revocable, or a lost device could hide from the very screen that exists to find it.
+  be revocable, or a lost device could hide from the very screen that exists to find it. A register this device
+  **refuses** — older than one it has held, missing after it held one, or unopenable — renders the same way, and
+  the view says why ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7).
 - **E5 — the escalation half-succeeds.** The session is revoked and the wrap deletion fails (offline, a server
   error). The user is told exactly that: signed out, saved key **not** removed. The register keeps the join row —
   it is pruned only from a later read of the server's wrap list, never from a delete this client merely

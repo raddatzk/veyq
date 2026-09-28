@@ -42,3 +42,12 @@ acceptanceCriteria:
     coverage:
       web: { unit: [src/features/account/identityPins.test.ts] }
       backend: { unit: [IdentityPinsSliceTest.bornEmptyStoreReadsNullBlobVersionZero, IdentityPinsSliceTest.firstWriteRoundTripsAndBumpsToVersionOne] }
+  - id: pin-store-never-goes-backwards
+    text: A device refuses a pin store older than one it has held, a missing store after it held one, and a store that does not open — none is read as empty. The refusal holds before every read and before every write (the master-key rotation's re-seal included), is named (trust_state_rolled_back / trust_state_unreadable), and pauses the grant-delivery worker rather than declining the job.
+    # ADR 0028 Decision 7, cr-trust-state-never-goes-backwards. Web only by construction: the marks never leave
+    # the device, and the server's half ({blob, version}) is unchanged. The three live defects (wipe, unopenable,
+    # rollback reinstating a retired key) were red on the untouched tree; each negative anchors on its code and
+    # has a control on the same served payload. `trustMarks.test.ts` pins the marks as a store (a maximum, one
+    # slot per account); the worker's pause and the notices that name a refusal are pinned where they live.
+    coverage:
+      web: { unit: [src/features/account/identityPins.test.ts, src/features/account/trustMarks.test.ts, src/features/tasks/grantDeliveryWorker.test.ts, src/features/spaces/useMemberDirectory.test.ts, src/app/activeSpace.test.ts] }

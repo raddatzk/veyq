@@ -241,7 +241,10 @@ by design rather than by accident.
   be a new fact about the account, not a convenience.
 - **This is a naming layer, not an access-control one.** Nothing here gates anything. A register that is
   missing, stale, unreadable or empty degrades to unnamed rows and a missing escalation, and changes no
-  permission, no revoke and no key. In particular **no unlock path reads it**: a device finds its own wrap by
+  permission, no revoke and no key. **Degrading the view is not reading it as empty:** a register served older
+  than one this device has held, missing after it held one, or one that does not open is refused
+  ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7) — no write re-seals
+  over it, so it does not repair itself on the next unlock, and the sessions view names the refusal. In particular **no unlock path reads it**: a device finds its own wrap by
   the id in its local record, so the register can never be what stands between someone and their vault — which
   it could not be anyway, since reading it requires the vault to be open already.
 - **What the wrap join still cannot reach: a wrap orphaned before it shipped.** Those have no register entry,

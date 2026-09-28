@@ -320,3 +320,15 @@ acceptanceCriteria:
       # camera-gated scan control in the same state, so an always-there button and a correctly ungated one are
       # told apart.
       web: { unit: [src/views/LoginView.test.ts] }
+  - id: a-linked-device-inherits-the-marks
+    text: >-
+      A linked device starts from its linker's trust-state marks (ADR 0028 Decision 7): the linking device puts
+      its pin-store, register and per-scope epoch marks into the pairing envelope, and the new device takes the
+      maximum of those and any it already holds before its first read — only out of an envelope whose MAC
+      verified, since the marks are read from what `openGrant` returns after the check.
+    coverage:
+      # The bite (linked by a device whose pin mark is 5, then served v4 → trust_state_rolled_back; control v5)
+      # was red on the untouched tree, through the real open and the real tail. The linker's half is the panel's
+      # suite (the envelope carries exactly this device's marks); the envelope's shape — round-trip, absent on an
+      # older linker, a malformed field refused, a hundred rotated scopes inside the 8192 ceiling — is pairing's.
+      web: { unit: [src/features/account/pairing/onboardTail.test.ts, src/features/account/pairing/AddDevicePanel.test.ts, src/features/account/pairing/pairing.test.ts] }

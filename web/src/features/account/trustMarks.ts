@@ -10,8 +10,8 @@
 // the Master Key, so the marks of two accounts on one browser never meet, and a server cannot steer a device to
 // an empty slot by reporting a different account id — the lever a userId-keyed slot would hand it. The cost is
 // that an account-key rotation moves the account to a new slot: the rotating device carries its marks across
-// ({@link carryMarks}); every other device signs in afresh with the password and Secret Key and starts without
-// marks, which is ADR 0028 Decision 7's named no-mark case.
+// ({@link carryMarks}); every other device must unlock afresh — with the password and Secret Key it starts without
+// marks (ADR 0028 Decision 7's named no-mark case), linked again it starts from its linker's.
 //
 // **Not a secret, so it survives sign-out** — only the session's convenience tiers are dropped there. No path
 // deletes the marks today, because none deliberately removes an account's saved device data: the one wholesale
