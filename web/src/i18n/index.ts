@@ -88,6 +88,10 @@ const en = {
     accept: 'Accept new key',
     refuse: 'Refuse',
     acceptFailed: 'Could not accept the key. Please try again.',
+    trustRolledBack:
+      'The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.',
+    trustUnreadable:
+      'The list of the keys you trust could not be opened. Nothing is shared with a key it cannot check until it can be read again.',
   },
   settings: {
     title: 'Settings',
@@ -205,6 +209,10 @@ const en = {
     renameHint: 'You are naming the device — every session from it will show this name.',
     renamed: 'The device was renamed.',
     renameFailed: 'The device could not be renamed. Please try again.',
+    registerRolledBack:
+      'Device names are unavailable: the server returned an older list of your devices than this device has already seen. Every session is still listed and can still be ended.',
+    registerUnreadable:
+      'Device names are unavailable: the list of your devices could not be opened. Every session is still listed and can still be ended.',
     escalate: 'Sign out and remove this device’s saved key',
     escalateShort: 'Sign out + remove key',
     escalateConfirmTitle: 'Sign out and remove the saved key',
@@ -1025,6 +1033,10 @@ const de: typeof en = {
     accept: 'Neuen Schlüssel akzeptieren',
     refuse: 'Ablehnen',
     acceptFailed: 'Der Schlüssel konnte nicht akzeptiert werden. Bitte erneut versuchen.',
+    trustRolledBack:
+      'Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist.',
+    trustUnreadable:
+      'Die Liste deiner vertrauten Schlüssel ließ sich nicht öffnen. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis sie wieder lesbar ist.',
   },
   settings: {
     title: 'Einstellungen',
@@ -1138,6 +1150,10 @@ const de: typeof en = {
     renameHint: 'Du benennst das Gerät — jede Sitzung von diesem Gerät zeigt diesen Namen.',
     renamed: 'Das Gerät wurde umbenannt.',
     renameFailed: 'Das Gerät konnte nicht umbenannt werden. Bitte versuche es erneut.',
+    registerRolledBack:
+      'Gerätenamen sind nicht verfügbar: Der Server hat eine ältere Liste deiner Geräte geliefert, als dieses Gerät schon gesehen hat. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden.',
+    registerUnreadable:
+      'Gerätenamen sind nicht verfügbar: Die Liste deiner Geräte ließ sich nicht öffnen. Jede Sitzung wird weiter angezeigt und lässt sich weiter beenden.',
     escalate: 'Abmelden und gespeicherten Schlüssel entfernen',
     escalateShort: 'Abmelden + Schlüssel entfernen',
     escalateConfirmTitle: 'Abmelden und gespeicherten Schlüssel entfernen',

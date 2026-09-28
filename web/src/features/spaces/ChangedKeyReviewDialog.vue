@@ -10,6 +10,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import Message from 'primevue/message'
 import { safetyNumber, getPin, acceptKeyChange } from '../account/identityPins'
+import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import { useAsyncAction } from '../../shared/state/useAsyncAction'
 
 const props = defineProps<{ member: { userId: string; username: string; identityPublicKey: string } }>()
@@ -39,7 +40,7 @@ const { run: runAccept, pending: busy } = useAsyncAction(
     emit('accepted')
     visible.value = false
   },
-  { onError: () => { error.value = t('verify.acceptFailed') } },
+  { onError: (e) => { error.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('verify.acceptFailed') } },
 )
 
 async function accept() {

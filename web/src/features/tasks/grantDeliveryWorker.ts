@@ -8,7 +8,8 @@ import { tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { identityPrivate } from '../../app/vault'
-import { checkAndPin } from '../account/identityPins'
+import { checkAndPin, type CheckResult } from '../account/identityPins'
+import { TrustStateRefused } from '../account/trustMarks'
 import { admissionVerifies, sealGrant } from '../spaces/grant'
 import { GRANT_DELIVERY } from './capabilityTags'
 import type { ClaimedJob } from '../../api/generated/tasks'
@@ -71,7 +72,17 @@ async function drain(scope: ScopeKeyHolder, signPrivateKey: Uint8Array): Promise
     // human resolves the change in the UI. Per key-holder, not a global veto: the exclusion is keyed on this
     // account (its other devices too), while a *different* key-holder without a conflicting pin still
     // TOFU-delivers. `acceptKeyChange` is what lifts it once a human resolves the change (ADR 0060 Decision 7).
-    if ((await checkAndPin(target.targetUserId, target.identityPublicKey)) === 'changed') {
+    let pin: CheckResult
+    try {
+      pin = await checkAndPin(target.targetUserId, target.identityPublicKey)
+    } catch (e) {
+      // This device refused the pin store itself (ADR 0028 Decision 7): no pin can be read or written, so no key
+      // can be judged. PAUSE, never decline — a decline is about this target and excludes this worker for good,
+      // while the refusal is about the store. Nothing is wrapped; the lease lapses and the job is offered again.
+      if (e instanceof TrustStateRefused) break
+      throw e
+    }
+    if (pin === 'changed') {
       await declineJob(job.jobId, 'identity_changed')
       continue
     }

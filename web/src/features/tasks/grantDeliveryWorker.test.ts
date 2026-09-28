@@ -14,6 +14,7 @@ import { runGrantDeliveryWorker, wrapScopeKeyToMember, ADMISSION_UNVERIFIED } fr
 import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
 import { checkAndPin } from '../account/identityPins'
+import { TrustStateRefused } from '../account/trustMarks'
 import { identityPrivate } from '../../app/vault'
 import { grantSignatureVerifies, tagAdmission } from '../spaces/grant'
 import * as v1 from '@veyq/crypto/v1'
@@ -168,6 +169,25 @@ describe('runGrantDeliveryWorker', () => {
     expect(declineTask).toHaveBeenCalledTimes(1)
     expect(declineTask.mock.calls[0][0].jobId).toBe('j1')
     expect(declineTask.mock.calls[0][0].declineRequest.reason).toBe('identity_changed')
+  })
+
+  it('pauses (neither wraps nor declines) when this device refuses its own pin store (ADR 0028 Decision 7)', async () => {
+    // A rolled-back store says nothing about THIS target, so a decline — which excludes this worker from the job
+    // for good — would be the wrong answer; nothing may be wrapped either, since no key can be judged.
+    vi.mocked(checkAndPin).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
+    const K_SC = v1.randomBytes(32)
+    const { completeTask, declineTask } = oneJob(job(admitted(K_SC, 0)))
+
+    expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
+    expect(completeTask).not.toHaveBeenCalled()
+    expect(declineTask).not.toHaveBeenCalled()
+  })
+
+  it('any other pin-store failure still propagates as itself — the pause is for the refusal only', async () => {
+    vi.mocked(checkAndPin).mockRejectedValue(new Error('network down'))
+    const K_SC = v1.randomBytes(32)
+    oneJob(job(admitted(K_SC, 0)))
+    await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toThrow('network down')
   })
 
   it('is a no-op when the member is already granted — nothing is claimable, no completion', async () => {

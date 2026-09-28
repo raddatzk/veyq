@@ -17,6 +17,7 @@ import { activeSpace, activeScopeKey, activeEpochKeys, enterScope, refreshActive
 import { ensurePersonalScope, openScope, openScopeById, openGroupByToken } from '../features/spaces/scopes'
 import { ScopeKind } from '../api/generated/scopes'
 import { TENANT_SCOPE } from '../features/memory/location'
+import { TrustStateRefused } from '../features/account/trustMarks'
 
 const PERSONAL_SCOPE = '~me'
 import { treeStore, resetTree } from '../features/memory/treeStore'
@@ -102,6 +103,20 @@ describe('enterScope — personal', () => {
     vi.mocked(openScope).mockResolvedValue(null)
     await enterScope(PERSONAL_SCOPE)
     expect(activeSpace.status).toBe('error')
+  })
+
+  it('names a trust-state refusal on the error (ADR 0028 Decision 7) — a shared grant\u2019s granter could not be checked', async () => {
+    vi.mocked(openScope).mockRejectedValue(new TrustStateRefused('trust_state_rolled_back', 'pins'))
+    await enterScope(TENANT_SCOPE)
+    expect(activeSpace.status).toBe('error')
+    expect(activeSpace.trustRefusal).toBe('verify.trustRolledBack')
+  })
+
+  it('control: any other failure is the plain error, with no refusal named', async () => {
+    vi.mocked(openScope).mockRejectedValue(new Error('boom'))
+    await enterScope(TENANT_SCOPE)
+    expect(activeSpace.status).toBe('error')
+    expect(activeSpace.trustRefusal).toBeNull()
   })
 })
 

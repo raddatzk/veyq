@@ -16,6 +16,7 @@ import { unlockWithGrantedMasterKey } from '../unlock/unlock'
 import { enrolDeviceKey } from '../rememberMe/deviceKeyWrap'
 import { cacheSessionVault } from '../rememberMe/sessionVault'
 import { rememberThisDeviceWrap } from '../deviceRegister'
+import { raiseMarks } from '../trustMarks'
 import { deviceId, guessDeviceLabel } from '../deviceIdentity'
 import { isHttpStatus, HttpStatus } from '../../../shared/httpError'
 import { i18n } from '../../../i18n'
@@ -87,6 +88,10 @@ async function adopt(refreshToken: string, staySignedIn: boolean): Promise<void>
  * propagates as-is. **Do not call it twice for one grant** — see [adopt].
  */
 export async function runOnboardTail(grant: PairingGrant, staySignedIn: boolean): Promise<void> {
+  // The linker's trust-state marks, before this device reads a single sealed document (ADR 0028 Decision 7):
+  // write moment 1 opens the register inside the unlock below. Taken as the maximum of those and any this
+  // browser already holds for the account; `grant` only exists once the envelope's MAC verified (`openGrant`).
+  if (grant.marks) await raiseMarks(grant.masterKey, grant.marks)
   await adopt(grant.refreshToken, staySignedIn)
   // Write moment 1 rides inside this call and carries the handed-over label, so there is no register write of
   // our own here — a fourth write moment is exactly what en.account.device-register forbids.

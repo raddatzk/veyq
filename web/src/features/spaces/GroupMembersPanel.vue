@@ -14,6 +14,7 @@ import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, re
 import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById } from './scopes'
 import { zeroEpochKeys } from './epochs'
 import { acceptKeyChange, IdentityChangedError } from '../account/identityPins'
+import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import { activeSpace, refreshActiveScope } from '../../app/activeSpace'
 import { getMyProfile } from '../account/profile/profile'
 import { isUnauthorized, isCodedError, HttpStatus } from '../../shared/httpError'
@@ -69,7 +70,7 @@ const purgeDay = computed(() => (purgeAfter.value ? purgeAfter.value.toLocaleDat
 // Shared directory core (members/trust/review/isOwner/load, cr-0156). The Group load body derives ownership from
 // the directory (the group role isn't the tenant role — match my per-tenant username) and reads the lifecycle
 // (pending-deletion) state alongside the roster.
-const { members, isOwner, trust, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 } =
+const { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 } =
   useMemberDirectory(async () => {
     addError.value = ''
     if (!props.scopeId) throw new Error('no-scope')
@@ -133,6 +134,11 @@ async function submit() {
       addError.value = t('groups.identityChanged')
       return
     }
+    if (e instanceof TrustStateRefused) {
+      // No pin can be read, so the invitee's key cannot be judged (ADR 0028 Decision 7) — named, not generic.
+      addError.value = t(refusalMessageKey(e))
+      return
+    }
     on401(e)
     if (isUnauthorized(e)) return
     const { code } = await memberError(e)
@@ -156,8 +162,8 @@ async function acceptChangedKeyAndRetry() {
   if (!pk) return
   try {
     await acceptKeyChange(pk.userId, pk.key)
-  } catch {
-    addError.value = t('groups.addMemberFailed')
+  } catch (e) {
+    addError.value = e instanceof TrustStateRefused ? t(refusalMessageKey(e)) : t('groups.addMemberFailed')
     return
   }
   pendingKeyChange.value = null
@@ -426,6 +432,8 @@ async function onRestore() {
       </form>
 
       <Message v-if="actionError" severity="error" :closable="false">{{ actionError }}</Message>
+      <!-- This device refused its own pin store (ADR 0028 Decision 7): no wrap to a foreign key until it reads. -->
+      <Message v-if="trustRefusal" severity="warn" :closable="false">{{ t(trustRefusal) }}</Message>
 
       <p v-if="loading" class="settings-muted">{{ t('members.loading') }}</p>
       <Message v-else-if="loadError === 'notAuthorized'" severity="warn" :closable="false">

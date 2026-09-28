@@ -12,6 +12,7 @@
 // who both reads the QR and runs the relay holds the channel key — nothing here claims otherwise.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+import type { TrustMarks } from '../trustMarks'
 
 /** The scanned code's marker. It exists ONLY so one scanner can dispatch between this and the Emergency Kit's
  *  `veyqkit:` — it is deliberately not a URL scheme, and ADR 0059 §4 is the reason: a code that could name an
@@ -57,12 +58,18 @@ const decoder = new TextDecoder()
  * caller's own address back** — without it that device cannot key its `DEVICE_KEY` record, its session vault,
  * or write moment 1's local wrap lookup, all of which are keyed by email. It is no leak: this envelope is
  * sealed to a key only the granted device holds, and that device is being handed the Master Key.
+ *
+ * `marks` are the linking device's trust-state marks (ADR 0028 Decision 7): the new device starts from them, so the
+ * server cannot hand it an older pin store, register or scope epoch than the device that vouched for it had held.
+ * They are read only out of an envelope whose MAC verified — {@link openGrant} checks it before it opens anything.
+ * Absent from an envelope sealed by a client that predates them, which inherits nothing.
  */
 export type PairingGrant = {
   email: string
   masterKey: Uint8Array
   refreshToken: string
   label: string
+  marks?: TrustMarks
 }
 
 /**
@@ -322,6 +329,7 @@ export function sealGrant(key: Uint8Array, pub: v1.Identity['pub'], grant: Pairi
       masterKey: b64std(grant.masterKey),
       refreshToken: grant.refreshToken,
       label: grant.label,
+      ...(grant.marks ? { marks: grant.marks } : {}),
     }),
   )
   const sealed = v1.sealTo(PAIRING_GRANT, { x: pub.kemX, m: pub.kemM }, plaintext)
@@ -346,10 +354,29 @@ export function openGrant(key: Uint8Array, priv: v1.Identity['priv'], envelope: 
     || typeof o.refreshToken !== 'string' || typeof o.label !== 'string') {
     throw new Error('pairing_grant_unreadable')
   }
+  const marks = o.marks === undefined ? undefined : readMarksField(o.marks)
   return {
     email: o.email,
     masterKey: fromB64std(o.masterKey),
     refreshToken: o.refreshToken,
     label: o.label,
+    ...(marks ? { marks } : {}),
   }
+}
+
+const isMark = (n: unknown): n is number => typeof n === 'number' && Number.isSafeInteger(n) && n >= 0
+
+/** The envelope's marks, exactly in the shape this client writes — anything else is not our envelope, and is
+ *  refused like any other unreadable body rather than half-read. */
+function readMarksField(raw: unknown): TrustMarks {
+  const m = raw as Partial<Record<keyof TrustMarks, unknown>> | null
+  if (!m || typeof m !== 'object' || !isMark(m.pins) || !isMark(m.register) || !m.epochs || typeof m.epochs !== 'object') {
+    throw new Error('pairing_grant_unreadable')
+  }
+  const epochs: Record<string, number> = {}
+  for (const [scopeId, e] of Object.entries(m.epochs as Record<string, unknown>)) {
+    if (!isMark(e)) throw new Error('pairing_grant_unreadable')
+    epochs[scopeId] = e
+  }
+  return { pins: m.pins, register: m.register, epochs }
 }

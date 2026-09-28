@@ -12,6 +12,7 @@ import { deriveEpochKeys, keyAt, writeKey, zeroEpochKeys, epochLinkContext, type
 import { admissionVerifies, grantContext, sealGrant, tagAdmission, type GrantScope, type SignedGrant } from './grant'
 import { me, verifyOwnGrant, GrantRefused, type Me } from './grantTrust'
 import { checkAndPin, IdentityChangedError } from '../account/identityPins'
+import { epochFloor, raiseEpochFloor } from '../account/trustMarks'
 import { deriveGroupNameKey, wrapNameKeyToInvitee, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon, openIcon } from './spaceIcon'
 import { ScopeKind, type ScopeSummary, type MyTenant, type ScopeMember } from '../../api/generated/scopes'
@@ -192,16 +193,23 @@ const recipientOf = (self: Me) => ({ userId: self.userId, identityPublicKeyB64: 
  * scope's row — or from another epoch — is refused, never opened as this scope's key. And it is opened only once
  * its granter's signature verifies (ADR 0028 Decision 6, {@link verifyOwnGrant}): the key inside a refused grant is
  * never used — {@link GrantRefused} is thrown before the unwrap, and the scope reads as awaiting access.
+ *
+ * A grant that opened raises this device's epoch floor for the scope to the grant's epoch (ADR 0024 Decision 6):
+ * the epoch is authentic because the grant is bound to it and signed, so the device now knows it exists.
  */
 async function openOwnGrant(
   scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }, self: Me,
 ): Promise<Uint8Array> {
   await verifyOwnGrant({ scopeId: scope.id, kind: scope.kind, epoch: scope.grantedEpoch }, scope.wrappedGrant, scope, self)
-  return v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant))
+  const key = v1.openAs(grantContext(scope.id, scope.grantedEpoch), v1.hybridSecret(priv), v1.hybridPublic(priv), fromB64std(scope.wrappedGrant))
+  await raiseEpochFloor(scope.id, scope.grantedEpoch)
+  return key
 }
 
 /** Our grant is older than the scope's current epoch (ADR 0024 Decision 6): a rotation skipped us, or its re-grant
- *  has not reached us yet. The scope reads as awaiting the current key — nothing is written into it. */
+ *  has not reached us yet. The scope reads as awaiting the current key — nothing is written into it. The same
+ *  state, with the same presentation, answers a grant below this device's own floor for the scope: an older epoch
+ *  than one this device has held, whatever `currentEpoch` the server pairs it with. */
 class AwaitingCurrentKey extends Error {
   constructor(readonly scopeId: string) {
     super(`awaiting_current_key: ${scopeId}`)
@@ -227,12 +235,18 @@ async function orAwaitingAccess<T>(open: () => Promise<T | null>): Promise<T | n
  *  epoch holds a key every member removed since also holds, so content sealed under it would be readable by them.
  *  Such a scope is not opened ({@link AwaitingCurrentKey}); the grant-delivery reconcile re-grants it. Only a
  *  rotation opens it anyway (`staleGrant: 'open'`): it states the epoch it creates, which the server refuses unless
- *  it is the scope's next, so a lagging rotator gets `stale_epoch` — the answer its callers already handle. */
+ *  it is the scope's next, so a lagging rotator gets `stale_epoch` — the answer its callers already handle.
+ *
+ *  **The floor is the half an active operator cannot argue with** (layer 2): a grant below the highest epoch this
+ *  device has held for the scope is refused the same way, and a rotation is no exception — one built on it would
+ *  state an epoch this device knows already exists. Reads are refused with it (owner decision, 2026-09-28): one
+ *  closed state for both halves, never a read-only open. */
 async function toOpenedScope(
   scope: ScopeSummary, priv: { kemX: Uint8Array; mlkemSeed: Uint8Array; sign: Uint8Array }, self: Me,
   staleGrant: 'refuse' | 'open' = 'refuse',
 ): Promise<OpenedScope> {
   if (staleGrant === 'refuse' && scope.grantedEpoch < scope.currentEpoch) throw new AwaitingCurrentKey(scope.id)
+  if (scope.grantedEpoch < (await epochFloor(scope.id))) throw new AwaitingCurrentKey(scope.id)
   const grantKey = await openOwnGrant(scope, priv, self)
   const epochs = await epochKeysFor(scope, grantKey)
   let name: string | undefined
@@ -594,6 +608,9 @@ export async function commitRotation(scopeId: string, members: ScopeMember[], ro
       const rotated = await withRefresh(() =>
         scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions, removesUserId: removes } }),
       )
+      // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
+      // server took as the next one; a server that later serves the older grant meets the floor.
+      await raiseEpochFloor(scopeId, epoch)
       return rotated.epoch
     } catch (e) {
       if (attempt === 0 && (await isStaleEpoch(e))) continue // superseded — re-open + rebuild once, fresh key

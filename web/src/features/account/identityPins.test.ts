@@ -1,4 +1,6 @@
+import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
 
 // The pin store's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so the tests
@@ -17,6 +19,7 @@ import {
   trustState,
   trustStates,
   IdentityMovedError,
+  resealPinsUnderNewMasterKey,
 } from './identityPins'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { masterKey, identityPrivate } from '../../app/vault'
@@ -72,6 +75,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   fakeDeclines()
+  // This device's local trust-state marks live in IndexedDB (ADR 0028 Decision 7): a fresh, empty one per test,
+  // so every test starts as a device that has held nothing.
+  globalThis.indexedDB = new IDBFactory()
 })
 
 describe('checkAndPin (TOFU)', () => {
@@ -110,13 +116,14 @@ describe('checkAndPin (TOFU)', () => {
     expect(srv.putIdentityPins).not.toHaveBeenCalled() // pure reads
   })
 
-  it('a store sealed at one version does not open as another — a rolled-back or replayed blob reads as foreign', async () => {
+  it('a store sealed at one version does not open as another — a rolled-back or replayed blob is refused', async () => {
     // ADR 0072: the blob is bound to the version it is stored at. The server serving the v3 blob as v4 (or v2) is
-    // refused at the seal; the reader then degrades to an empty store, so the contact reads as a first use.
+    // refused at the seal, and the reader refuses it as unreadable — never as an empty store (ADR 0028 Decision 7),
+    // which would make the pinned contact a first use.
     const blob = seal({ u9: { key: 'cHJlLXBpbm5lZA==', state: 'pinned', firstSeenAt: 1 } }, 3)
     expect(() => v1.open(pinsAt(4), MK, fromB64std(blob))).toThrow(new v1.OpenRefused('identity-pins'))
     fakeServer({ blob, version: 4 })
-    expect(await getPin('u9')).toBeNull()
+    await expect(getPin('u9')).rejects.toMatchObject({ code: 'trust_state_unreadable' })
     // control: the same blob at its own version opens
     fakeServer({ blob, version: 3 })
     expect((await getPin('u9'))?.key).toBe('cHJlLXBpbm5lZA==')
@@ -323,5 +330,90 @@ describe('trustState (badge read)', () => {
     ])
     expect(states).toEqual({ vf: 'verified', pn: 'pinned', ch: 'changed', new: 'unpinned' })
     expect(srv.getIdentityPins).toHaveBeenCalledTimes(1) // one store fetch for the whole directory
+  })
+})
+
+// ADR 0028 Decision 7 — a device never accepts older trust state than it has held. Every case below fixes its lever
+// (the payload the server serves) inside the test, and every negative names the refusal it must meet.
+describe('the pin store never goes backwards on this device (ADR 0028 Decision 7)', () => {
+  const OLD = 'b2xkLWtleQ=='
+  const NEW = 'bmV3LWtleQ=='
+  const pinOf = (key: string) => ({ u1: { key, state: 'pinned', firstSeenAt: 1 } })
+
+  it('wipe: once this device opened v3, a missing store is refused — the changed key is not pinned as a first use', async () => {
+    fakeServer({ blob: seal(pinOf(OLD), 3), version: 3 })
+    expect(await checkAndPin('u1', OLD)).toBe('match') // this device has now held v3
+    const wiped = fakeServer({ blob: null, version: 0 })
+    await expect(checkAndPin('u1', NEW)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(wiped.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('control: a device with no mark reads a missing store as empty, and pins on first use', async () => {
+    const srv = fakeServer({ blob: null, version: 0 })
+    expect(await checkAndPin('u1', NEW)).toBe('firstUse')
+    expect(srv.state.version).toBe(1)
+  })
+
+  it('unopenable: garbage bytes are refused as unreadable, never read as the empty store', async () => {
+    const srv = fakeServer({ blob: b64std(v1.randomBytes(64)), version: 2 })
+    await expect(checkAndPin('u1', NEW)).rejects.toMatchObject({ code: 'trust_state_unreadable' })
+    expect(srv.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('control: a valid blob at the same version opens', async () => {
+    fakeServer({ blob: seal(pinOf(OLD), 2), version: 2 })
+    expect(await checkAndPin('u1', OLD)).toBe('match')
+  })
+
+  it('rollback: a store below the mark cannot reinstate a retired key as a match', async () => {
+    fakeServer({ blob: seal(pinOf(NEW), 3), version: 3 })
+    expect((await getPin('u1'))?.key).toBe(NEW) // this device has held v3, where the pin is the new key
+    const rolled = fakeServer({ blob: seal(pinOf(OLD), 2), version: 2 }) // v2 still pins the retired one
+    await expect(checkAndPin('u1', OLD)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(rolled.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('a write raises the mark to the version it stored — the next missing store is refused', async () => {
+    const srv = fakeServer({ blob: null, version: 0 })
+    expect(await checkAndPin('u1', NEW)).toBe('firstUse') // stored at v1 by this device
+    expect(srv.state.version).toBe(1)
+    fakeServer({ blob: null, version: 0 })
+    await expect(checkAndPin('u1', OLD)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+  })
+
+  it('the open before a write is checked too: an accept over a rolled-back store writes nothing', async () => {
+    fakeServer({ blob: seal(pinOf(NEW), 3), version: 3 })
+    await getPin('u1')
+    const rolled = fakeServer({ blob: seal(pinOf(OLD), 2), version: 2 })
+    await expect(acceptKeyChange('u1', OLD)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(rolled.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('control: served v3, the retired key reads as changed', async () => {
+    fakeServer({ blob: seal(pinOf(NEW), 3), version: 3 })
+    expect((await getPin('u1'))?.key).toBe(NEW)
+    expect(await checkAndPin('u1', OLD)).toBe('changed')
+  })
+})
+
+describe('the master-key rotation\u2019s re-seal goes through the same open (ADR 0028 Decision 7)', () => {
+  const NEW_MK = v1.randomBytes(32)
+  const pinned = { u1: { key: 'a2V5', state: 'pinned', firstSeenAt: 1 } }
+
+  it('refuses to re-seal a store below the mark under the new key — the rollback would become the rotation\u2019s own', async () => {
+    fakeServer({ blob: seal(pinned, 3), version: 3 })
+    await getPin('u1') // this device has held v3
+    const rolled = fakeServer({ blob: seal(pinned, 2), version: 2 })
+    await expect(resealPinsUnderNewMasterKey(MK.slice(), NEW_MK)).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
+    expect(rolled.putIdentityPins).not.toHaveBeenCalled()
+  })
+
+  it('a re-seal that lands raises the NEW key\u2019s mark — the slot the account reads from after the switch', async () => {
+    const srv = fakeServer({ blob: seal(pinned, 3), version: 3 })
+    await resealPinsUnderNewMasterKey(MK.slice(), NEW_MK)
+    expect(srv.state.version).toBe(4)
+    vi.mocked(masterKey).mockImplementation(() => NEW_MK.slice()) // the vault has switched
+    fakeServer({ blob: null, version: 0 })
+    await expect(getPin('u1')).rejects.toMatchObject({ code: 'trust_state_rolled_back' })
   })
 })

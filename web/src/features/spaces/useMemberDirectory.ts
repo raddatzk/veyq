@@ -8,6 +8,7 @@ import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { ScopeMember } from './members'
 import { trustStates, type TrustState } from '../account/identityPins'
+import { TrustStateRefused, refusalMessageKey } from '../account/trustMarks'
 import { admissionVerifies } from './grant'
 import type { ScopeKind } from '../../api/generated/scopes'
 import { useAsyncData, loadErrorKind } from '../../shared/state/useAsyncData'
@@ -38,6 +39,9 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
   // surfaced (a key differing from the pin — a rotation or a substitution); verified/recognized are intentionally
   // not shown (proactive verify is gated behind scope-wide strict-mode, cr-0100). Drives the review dialog.
   const trust = ref<Record<string, TrustState>>({})
+  // The i18n key naming why this device refused its own pin store (ADR 0028 Decision 7), or null. Every wrap to a
+  // foreign key is blocked while it holds, so the panel says so rather than showing a directory with no flags.
+  const trustRefusal = ref<string | null>(null)
   const reviewTarget = ref<ScopeMember | null>(null)
   const reviewOpen = ref(false)
   // Admission (ADR 0020 move 6): a pending member whose admission tag does not verify under this scope's current
@@ -50,8 +54,10 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
   async function refreshTrust() {
     try {
       trust.value = await trustStates(members.value.map((m) => ({ userId: m.userId, directoryKey: m.identityPublicKey })))
-    } catch {
+      trustRefusal.value = null
+    } catch (e) {
       trust.value = {}
+      trustRefusal.value = e instanceof TrustStateRefused ? refusalMessageKey(e) : null
     }
   }
 
@@ -96,5 +102,5 @@ export function useMemberDirectory(loadBody: () => Promise<MemberLoad>, admissio
   // redirect handled it. (A non-member gets 404 → failed; see `loadErrorKind`.)
   const loadError = computed<'' | 'notAuthorized' | 'failed'>(() => loadErrorKind(error.value) ?? '')
 
-  return { members, isOwner, trust, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 }
+  return { members, isOwner, trust, trustRefusal, unadmitted, reviewTarget, reviewOpen, loading, loadError, refreshTrust, refreshAdmission, openReview, reload, on401 }
 }

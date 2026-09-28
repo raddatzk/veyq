@@ -8,12 +8,17 @@
 // firstSeenAt } } }`; `version` is the cleartext wire counter (the server's authority for concurrency — the
 // enabler's `{ version, pins }` shows both halves conceptually). Account-global: identity is one keypair per
 // account across tenants (ADR 0023), so there is one pin per contact everywhere.
+//
+// Every open — before a read and before every write — goes through this device's trust-state marks
+// (`trustMarks.ts`, ADR 0028 Decision 7): a store older than one this device has held, a missing store after it
+// held one, and a store that does not open are each refused as a `TrustStateRefused`, never read as empty.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import { accountIdentityPinsApi, tasksApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import { masterKey, identityPrivate } from '../../app/vault'
+import { openAccountDocument, raiseMarks } from './trustMarks'
 
 /** The pin store's seal context at a stored `version` (ADR 0072, vector `seal.sym.identity-pins`): bound to the
  *  version the server stores it at, so a blob served under another version does not open. */
@@ -75,16 +80,17 @@ const decoder = new TextDecoder()
 /** Bounds the re-read/merge/retry loop on a `409 stale_version` — a real conflict is a concurrent device write. */
 const MAX_WRITE_ATTEMPTS = 5
 
-/** Decrypt the pin map from a sealed blob; an unreadable/absent blob is treated as an empty store (never throws). */
-function unsealPins(mk: Uint8Array, blobB64: string | null, version: number): PinMap {
-  if (!blobB64) return {}
-  try {
-    const json = decoder.decode(v1.open(pinsContext(version), mk, fromB64std(blobB64)))
-    const parsed = JSON.parse(json) as { pins?: unknown }
-    return parsed && typeof parsed.pins === 'object' && parsed.pins !== null ? (parsed.pins as PinMap) : {}
-  } catch {
-    return {}
-  }
+/** Decrypt the pin map from a sealed blob. Throws on anything that is not a store this client wrote — a blob that
+ *  does not open, or opens to another shape; the caller refuses it as unreadable (ADR 0028 Decision 7). */
+function unsealPins(mk: Uint8Array, blobB64: string, version: number): PinMap {
+  const parsed = JSON.parse(decoder.decode(v1.open(pinsContext(version), mk, fromB64std(blobB64)))) as { pins?: unknown }
+  if (!parsed || typeof parsed.pins !== 'object' || parsed.pins === null) throw new Error('identity_pins_unreadable')
+  return parsed.pins as PinMap
+}
+
+/** Open a served store through this device's marks — refused if rolled back, missing after a mark, or unreadable. */
+function openPins(mk: Uint8Array, served: { blob: string | null; version: number }): Promise<PinMap> {
+  return openAccountDocument('pins', mk, served, (blob) => unsealPins(mk, blob, served.version), (): PinMap => ({}))
 }
 
 /** Seal a pin map under the Master Key for the version it will be stored at — the PUT's `version + 1`, since the
@@ -94,13 +100,14 @@ function sealPins(mk: Uint8Array, pins: PinMap, storedVersion: number): string {
   return b64std(v1.seal(pinsContext(storedVersion), mk, json))
 }
 
-/** Fetch + open the caller's pin store (born-empty → `{ version: 0, pins: {} }`). Requires an unlocked vault. */
+/** Fetch + open the caller's pin store (born-empty: version 0, no pins). Requires an unlocked vault. Throws
+ *  `TrustStateRefused` for a store this device must not accept. */
 async function loadStore(): Promise<OpenedStore> {
   const mk = masterKey()
   if (!mk) throw new Error('identity pin store requires an unlocked vault')
   try {
     const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-    return { version: res.version, pins: unsealPins(mk, res.blob, res.version) }
+    return { version: res.version, pins: await openPins(mk, res) }
   } finally {
     mk.fill(0)
   }
@@ -115,7 +122,9 @@ function isStaleVersion(e: unknown): Promise<boolean> {
  * Apply a change to the pin map and store it, version-guarded. On a `409 stale_version` (another device wrote
  * first) re-read the server's current store, **re-apply the same change on top of it** (client-side union-merge —
  * `apply` is written to be additive/idempotent, so a concurrent pin for another contact is preserved), and retry.
- * Starts from an already-loaded `base` to avoid a redundant GET on the common no-conflict path.
+ * Starts from an already-loaded `base` to avoid a redundant GET on the common no-conflict path. `base` and every
+ * re-base come from {@link loadStore}, so the open before each write meets the same marks as a read; a write that
+ * lands raises the mark to the version it stored.
  */
 async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): Promise<void> {
   let store = base
@@ -129,6 +138,7 @@ async function mutateAndSave(base: OpenedStore, apply: (pins: PinMap) => void): 
       await withRefresh(() =>
         accountIdentityPinsApi().putIdentityPins({ identityPinsUpdate: { blob, version: store.version } }),
       )
+      await raiseMarks(mk, { pins: store.version + 1 })
       return
     } catch (e) {
       if (attempt + 1 < MAX_WRITE_ATTEMPTS && (await isStaleVersion(e))) {
@@ -199,23 +209,29 @@ export async function acceptKeyChange(userId: string, identityPublicKeyB64: stri
  * grants with the old identity), so every other function in this file would seal under exactly the key the
  * rotation is retiring.
  *
- * **Best-effort by design, and the failure is a degradation rather than a lockout.** An unreadable blob already
- * degrades to an empty store ({@link unsealPins} swallows), so a re-seal that never lands costs the pins, not
- * the account: every contact falls back to `unpinned` and is re-pinned on first use. That is why the rotation
- * runs this *after* the irreversible publish — a re-seal before it would, on a failed publish, have thrown the
- * pins away for a rotation that never happened.
+ * **It opens through the same marks as every other read** (ADR 0028 Decision 7), under the old key's slot: a
+ * re-seal is a write, and re-sealing a rolled-back store under the new key would make the rollback the rotation's
+ * own. The mark it raises is the new key's, since that is the slot the account reads from once the vault switches;
+ * the rotation carries the rest of this device's marks across itself.
+ *
+ * **Best-effort by design** — the rotation runs it *after* the irreversible publish, so a re-seal before it would,
+ * on a failed publish, have re-keyed the pins for a rotation that never happened. **A re-seal that never lands is
+ * no longer a quiet loss:** the store stays sealed under the retired key, the new one cannot open it, and every
+ * later read is refused as `trust_state_unreadable` rather than starting over empty. There is no recovery path for
+ * that yet (ADR 0028 § What is still open).
  *
  * The pins themselves are carried across verbatim: rotating **this** account's identity says nothing about
  * anybody else's key, so dropping them would manufacture a `changed` for every contact at once.
  */
 export async function resealPinsUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
   const res = await withRefresh(() => accountIdentityPinsApi().getIdentityPins())
-  const pins = unsealPins(oldMk, res.blob, res.version)
+  const pins = await openPins(oldMk, res)
   await withRefresh(() =>
     accountIdentityPinsApi().putIdentityPins({
       identityPinsUpdate: { blob: sealPins(newMk, pins, res.version + 1), version: res.version },
     }),
   )
+  await raiseMarks(newMk, { pins: res.version + 1 })
 }
 
 /** Read a contact's current pin (or null), for a UI surface that shows trust state. No write. */
