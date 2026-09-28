@@ -9,8 +9,22 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
-These are your calls. The CR is written for the recommendation in each. No phase starts until they are
-answered, and phase 0 records the answers in ADR 0036 before any code changes.
+**Answered by the owner, 2026-09-28 — every recommendation taken:** 1 → **(b2)**; 2 → **keep the reveal**;
+3 → **one CR** (password, label, note and link reconstruction); 4 → **development reset, no migration** (the
+owner approved the reset; the coordinating session performs it after landing, the implementer does not);
+5 → **no crypto-gate here**. Implementation has the go and starts after `cr-guest-names-for-members-only`
+(#190) lands, because both touch `sharing.openapi.yaml`, `share.ts` and security-model's "What holds today".
+Phase 0 records these answers in ADR 0036 before any code changes.
+
+**Also settled with the owner — the removal residual, stated precisely.** Re-sealing the recovery copy under a
+new epoch on rotation would not help: a removed member who ever opened a share already holds its `K_share`,
+and `K_share` does not change. So a removed member *with a dump* keeps reading every share that existed while
+they were a member — including later edits of its password, label or note, which stay under that same
+`K_share` — and can still use its link. Shares minted after the removal are out of their reach. Cutting a
+removed member off an existing link means re-issuing the link (a new `K_share`); that is a product question
+for its own inbox row, not this CR. The docs this CR writes say so.
+
+The original questions, kept for the record:
 
 1. **Which fix.** The options, with their trade-offs, are in § Options below. **Recommendation: (b2) —
    seal the recovery copy of `K_share` under the scope key `K_SC` instead of under `K_mem`.** The defect is not
