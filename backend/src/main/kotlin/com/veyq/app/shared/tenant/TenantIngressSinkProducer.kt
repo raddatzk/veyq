@@ -64,6 +64,7 @@ class TenantIngressSinkProducer(
             bootstrapDomain = bootstrapDomain,
             adminDomain = hostname(ingress.adminDomain().orElse(null), "admin-domain"),
             upstreams = TraefikFileIngressSink.Upstreams(app = upstream.app(), blobs = upstream.blobs(), admin = upstream.admin()),
+            bucket = config.blobStore().bucket(),
         )
     }
 

@@ -123,8 +123,8 @@ class KubernetesIngressSink(
      * One host rule to the app `Service`, and no blobs route beside it. That is ADR 0064's own departure from
      * the compose sink: the ingress controller is operator-chosen and its prefix/Host-preservation behaviour is
      * not guaranteed, so the store gets an `Ingress` host of its own (with a bucket CORS policy and
-     * `SigningMode.STORE_ORIGIN`) instead of ADR 0013 §4's same-origin path route. A `/veyq` path rule here
-     * would be the compose assumption smuggled onto a target that does not make it.
+     * `SigningMode.STORE_ORIGIN`) instead of ADR 0013 §4's same-origin path route. A path rule for the bucket
+     * here would be the compose assumption smuggled onto a target that does not make it.
      */
     private fun ingressFor(name: String, domain: String): Ingress {
         val metadata = IngressBuilder()

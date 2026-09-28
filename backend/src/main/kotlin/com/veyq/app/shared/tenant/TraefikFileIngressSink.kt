@@ -28,7 +28,17 @@ class TraefikFileIngressSink(
     private val bootstrapDomain: String?,
     private val adminDomain: String?,
     private val upstreams: Upstreams,
+    /** `veyq.blob-store.bucket`, already refused by `BlobStoreStartupCheck` unless it is a valid S3 bucket name. */
+    bucket: String,
 ) : TenantIngressSink {
+
+    /**
+     * The blobs route is the bucket's path, derived and never spelled (ADR 0013 §4): path-style presigning puts
+     * every object at `/<bucket>/<key>`, so a literal serves the default bucket and 404s every other one. The
+     * trailing slash is load-bearing — Traefik's `PathPrefix` is a raw string prefix, and without it the store
+     * would also claim every app path that merely begins with the bucket's name.
+     */
+    private val blobsPrefix = "/$bucket/"
 
     /** Where the rendered services point — the recipe's topology, passed in as configuration (ADR 0063). */
     data class Upstreams(val app: String, val blobs: String, val admin: String)
@@ -75,7 +85,7 @@ class TraefikFileIngressSink(
                 // `veyq-tenant-` prefix keeps a tenant's name from ever colliding with the bootstrap pair's.
                 val name = if (domain == bootstrapDomain) "veyq" else "veyq-tenant-${domain.replace('.', '-')}"
                 router("$name-app", "Host(`$domain`)", priority = 1, service = APP)
-                router("$name-blobs", "Host(`$domain`) && PathPrefix(`/veyq`)", priority = 100, service = BLOBS, middleware = INERT)
+                router("$name-blobs", "Host(`$domain`) && PathPrefix(`$blobsPrefix`)", priority = 100, service = BLOBS, middleware = INERT)
             }
             adminDomain?.let { router(ADMIN, "Host(`$it`)", priority = null, service = ADMIN) }
         }

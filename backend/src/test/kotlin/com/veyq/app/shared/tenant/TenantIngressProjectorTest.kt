@@ -64,6 +64,10 @@ class TenantIngressProjectorTest {
     @Inject
     lateinit var sessions: SessionService
 
+    /** The configured bucket — the default here — whose path every blobs router must route (ADR 0013 §4). */
+    @Inject
+    lateinit var config: VeyqConfig
+
     /** The sink the producer built from this profile's configuration — its defaults are the ones under test. */
     @Inject
     lateinit var sink: TenantIngressSink
@@ -96,7 +100,7 @@ class TenantIngressProjectorTest {
 
         assertEquals(listOf("veyq-app", "veyq-blobs"), routerNames(file), "exactly the bootstrap pair:\n$file")
         assertTrue(file.contains("rule: \"Host(`$BOOTSTRAP_DOMAIN`)\""), "the bootstrap app router")
-        assertTrue(file.contains("rule: \"Host(`$BOOTSTRAP_DOMAIN`) && PathPrefix(`/veyq`)\""), "the bootstrap blobs router")
+        assertTrue(file.contains("rule: \"Host(`$BOOTSTRAP_DOMAIN`) && PathPrefix(`${blobsPrefix()}`)\""), "the bootstrap blobs router")
     }
 
     @Test
@@ -171,7 +175,7 @@ class TenantIngressProjectorTest {
 
         val file = Files.readString(Path.of(CONFIG_PATH))
         assertTrue(file.contains("rule: \"Host(`$domain`)\""), "the app router")
-        assertTrue(file.contains("rule: \"Host(`$domain`) && PathPrefix(`/veyq`)\""), "the same-origin blobs router")
+        assertTrue(file.contains("rule: \"Host(`$domain`) && PathPrefix(`${blobsPrefix()}`)\""), "the same-origin blobs router")
         val slug = "veyq-tenant-${domain.replace('.', '-')}"
         val app = routerBlock(file, "$slug-app")
         assertTrue(app.contains("service: veyq-app") && app.contains("priority: 1\n"), app)
@@ -326,7 +330,10 @@ class TenantIngressProjectorTest {
     private fun traefikSink(adminDomain: String? = null) = TraefikFileIngressSink(
         Path.of("build/test-tenant-ingress-render-only/tenants.yml"), BOOTSTRAP_DOMAIN, adminDomain,
         TraefikFileIngressSink.Upstreams(app = "http://app:8080", blobs = "http://garage:3900", admin = "http://admin:8080"),
+        bucket = config.blobStore().bucket(),
     )
+
+    private fun blobsPrefix() = "/${config.blobStore().bucket()}/"
 
     /** The router names, in file order — duplicates kept, since a duplicate is what some tests look for. */
     private fun routerNames(file: String): List<String> =

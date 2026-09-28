@@ -424,7 +424,7 @@ interface VeyqConfig {
 
         fun secretKey(): Optional<String>
 
-        @WithDefault("veyq")
+        @WithDefault("blobs")
         fun bucket(): String
 
         @WithDefault("us-east-1")
