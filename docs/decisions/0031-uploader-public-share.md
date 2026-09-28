@@ -90,8 +90,9 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
      identity: drop private key (under `K_mem`) → identity key → the media's keys. A member who later edits that
      media's metadata re-seals it under the same identity key, so no media ever changes path.
    - **What the guest holds:** `K_share` (the title, the note, the drop public key) and its own identity key. The
-     sibling shares' `K_share` is out of reach as well, because `sealed_share_key` opens only under `K_mem`
-     ([ADR 0036](0036-editable-share-note-recoverable-share-key.md)).
+     sibling shares' `K_share` is out of reach as well, because `sealed_share_key` opens only under `K_SC`
+     ([ADR 0036](0036-editable-share-note-recoverable-share-key.md) point 4) — which is also what keeps it out of a
+     VIEWER or CONTRIBUTOR link's reach, since those do hold `K_mem`.
 
 ## Consequences
 

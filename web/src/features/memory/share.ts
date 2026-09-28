@@ -117,6 +117,8 @@ function openShareName(kShare: Uint8Array, sealed: string): string {
 export function recoverShareKey(epochs: EpochKeys, share: ShareAddress, copy: RecoveryCopy): Uint8Array {
   const { sealedShareKey, sealedShareKeyEpoch: epoch } = copy
   if (sealedShareKey == null || epoch == null) throw new Error('share_key_not_recoverable')
+  // `keyAt` answers an epoch the caller does not hold with the WRITE key rather than refusing. That stays harmless
+  // only because the epoch is in the AAD: a copy served under an epoch label it was not sealed at opens under no key.
   return v1.open(shareKeyRecoveryContext(share, epoch), keyAt(epochs, epoch), fromB64std(sealedShareKey))
 }
 

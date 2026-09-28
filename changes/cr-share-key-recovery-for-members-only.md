@@ -1,7 +1,7 @@
 ---
 id: cr-share-key-recovery-for-members-only
 title: A share's key opens for the Memory's members only — no sibling link reads its password, label or note
-status: in-progress
+status: done
 satisfies: [uc.sharing.share-note, uc.sharing.share-password]
 adrs: ["0036", "0037", "0012", "0024", "0072", "0031"]
 invariants: [operator-blind E2EE, API-first]
@@ -249,7 +249,7 @@ rotation are out of their reach.
       · Done when: `npm run check` green in `web/`, and `python3 scripts/run_web_e2e.py` green, started from the
       **main checkout** (memory: a worktree start recreates the user's dev-compose services), with its log
       showing the contributor suite executed.
-- [ ] 4 docs + coverage:
+- [x] 4 docs + coverage:
       - **The new criterion lands in `uc.sharing.share-note`**, because that UC owns the recovery copy:
         *"A share's `K_share` is recoverable only by the Memory's scope members: its recovery copy is sealed
         under `K_SC(epoch)`, which no share link carries. So no link, with or without a dump, opens another
@@ -314,4 +314,19 @@ rotation are out of their reach.
 
 ## Retrospective
 
-(filled when done)
+- **Planning — a sibling CR's plan was cited as built.** The "precedent" paragraph described #190's `K_SC` name
+  keypair in the present tense; #190 landed without it (the owner chose the cheaper variant). The coordinator
+  caught it before implementation. Root cause: the refine read an in-flight CR's *design* as the tree's state.
+  Next time: a CR that leans on a sibling still in flight names the sibling's shape as *planned* and re-checks it
+  at the sibling's merge (harvested to `changes/README.md`).
+- **Planning — the e2e start instruction was stale.** Phase 3 said to start `run_web_e2e.py` from the main
+  checkout; the orchestrator's own docstring (2026-09-24) says the opposite — the main checkout's copy runs the
+  main checkout's *suites*, so it would have tested the old web code. The run used the worktree's copy with
+  `VEYQ_INFRA_DIR=<main>/infra`, as the coordinator's brief said. Root cause: a machine hint copied from memory
+  into the CR outlived the tool it described. Next time: a CR points at the tool's docstring for how to run it,
+  never restates it.
+- **Execution — one more untyped mock.** The stale-epoch retry test stubs `openScopeById` with an
+  `as unknown as` cast, the class #195 names. Known and left, because `OpenedScope` carries ten fields the retry
+  never reads; #195 decides the pattern. Tooling friction, not repo state: the worktree sandbox refused compound
+  shell commands (heredoc after `cd`, a `--tests` glob), and `packages/crypto`'s vitest swallows `console.log`,
+  so regenerating the vector went through a throwaway test writing to a file.

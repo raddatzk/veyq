@@ -230,11 +230,15 @@ server-blind tokens make this work without the server ever seeing content:
 - **An editable curator note (+ private name)** rides the same blind path: an optional **per-locale** message the
   sharer attaches (sealed under `K_share`, rendered on the share page in the viewer's locale) and an optional
   **private name** (sealed under `K_share`, a **management-only** label the viewer never receives). To make them
-  editable **in place**, the share also stores `sealed_share_key = symWrap(K_mem, K_share)` — a recoverable copy of
-  the per-share key, openable **only with `K_mem`** (which the operator lacks), so `K_share` never enters the
-  operator's reach. The conscious consequence: a `K_mem`-holder (a scope member) can now **derive** `K_share` for
-  that Memory's shares — harmless (they already read the content, and revoke stays owner-gated), recorded in
-  [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md).
+  editable **in place**, the share also stores `sealed_share_key` — a recoverable copy of the per-share key sealed
+  under the scope key **`K_SC` at the scope's current epoch** (stored with that epoch), openable **only with `K_SC`**,
+  which neither the operator nor any share link holds, so `K_share` never enters the operator's reach. The
+  conscious consequence: a **scope member** can now **derive** `K_share` for that Memory's shares — harmless (they
+  already read the content, and revoke stays owner-gated). It is deliberately *not* every `K_mem`-holder: a VIEWER or
+  CONTRIBUTOR link holds `K_mem`, and a copy under it would open every sibling share's password, label and note to
+  that link plus a dump. A member removed from a group keeps the `K_share` of each share they opened (it does not
+  change for the life of a link); cutting them off an existing link means re-issuing it. Recorded in
+  [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4.
 - **An optional share password** is an **operator-blind access-control gate**, *not* a cryptographic one
   ([ADR 0037](../decisions/0037-password-protected-shares.md)): the content stays E2EE under the unchanged
   `K_share` fragment, and the password gates **what the server serves** (a locked resolve returns only the
@@ -349,7 +353,7 @@ operator lacks can.
 | has a member seal new content under an epoch the removed member holds | **Cannot** once the member's device has held the newer epoch — each device remembers the highest epoch it has held for each scope and opens no older grant, whatever current epoch the operator pairs it with. A member who never learnt of the newer epoch is the fork (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 6 |
 | wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest version it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_mem`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
-| reads another share's password, private label or note, or rebuilds its link — with a viewer or contributor link of the same Memory and a dump | **Can** — each share's recovery copy of `K_share` is sealed under `K_mem`, which a viewer or contributor link carries | [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4 |
+| reads another share's password, private label or note, or rebuilds its link — with a viewer or contributor link of the same Memory and a dump | **Cannot** — each share's recovery copy of `K_share` is sealed under the scope key `K_SC`, which no share link carries; the link's `K_mem` and its own `K_share` open none of it. A member removed from a group keeps the `K_share` of each share they opened (below) | [ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4 |
 | makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:
@@ -364,6 +368,10 @@ operator lacks can.
   and bound to their node but not to the marking member — the read carries no member id by design — so the server
   can relabel which entry of a node's marks is the caller's own ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)
   § item favorites; a self-tag design is inbox #187);
+- a member removed from a group scope, holding a dump: they keep the `K_share` of every share they opened while a
+  member — it does not change for the life of the link — so they keep reading that share, including later edits of
+  its password, label or note, and can still use its link. Re-issuing the link is what cuts them off
+  ([ADR 0036](../decisions/0036-editable-share-note-recoverable-share-key.md) point 4);
 - the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served
   a guest's name, but the names stay sealed under `K_mem` (a contributor's) or an uploader's own key, which the
   link opens through the drop key — and the operator holds that ciphertext. Accepted: that link already decrypts

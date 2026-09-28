@@ -2,28 +2,34 @@
 
 - **ID:** uc.sharing.share-note
 - **Primary actor:** The **curator** (the person who owns/shares the Memory), signed in with the Memory open in
-  their scope — so they hold **`K_mem`**.
+  their scope — so they hold the scope's epoch keys (**`K_SC`**) and the Memory's **`K_mem`**.
 - **Goal:** Attach an **optional short note** to a share link (a greeting / instruction), **set when creating the
   share and editable in place afterward**, shown E2EE on the share page to whoever opens the link. One-way
   (curator → viewer).
 - **Preconditions:** A Memory the curator can share (personal-scope, v1); for an edit, an existing share of theirs.
-  The curator holds **`K_mem`** (the Memory is open) — the note seals under **`K_share`**, and `K_share` is
-  recovered from `K_mem` for a later edit ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+  The curator holds the scope's epoch keys (the Memory is open) — the note seals under **`K_share`**, and `K_share`
+  is recovered through `K_SC` for a later edit ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
 - **Postconditions (success):** the share carries a **`sealed_note`** (sealed under `K_share`) + a
-  **`sealed_share_key`** (`symWrap(K_mem, K_share)`); the anonymous share page decrypts and **renders** the note
+  **`sealed_share_key`** (`K_share` under `K_SC` at the scope's current epoch, stored with that epoch); the
+  anonymous share page decrypts and **renders** the note
   (markdown). Editing swaps the ciphertext — **the link stays valid**.
 
 ## The mechanism here
 
 The note is sealed under the share's own key **`K_share`** (AAD `share-note`) — per-share, least-privilege, only
 that link's holders read it (mirrors the Memory-name seal `sealedName`). Because `K_share` is minted once and
-never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key = symWrap(K_mem,
-K_share)`** (AAD `share-key-recovery` plus the share's id, since `K_mem` is common to all of a Memory's shares —
-[ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)) — so the curator, who always holds `K_mem`, can
-recover `K_share` **anytime** to re-seal (edit) the note without minting a new link
-([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+never stored in the clear, the share also carries a **recoverable copy** — **`sealed_share_key`**, `K_share`
+sealed under the scope key **`K_SC` at the scope's current epoch** (AAD `share-key-recovery` bound to scope,
+Memory, share and epoch — [ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)), with the epoch stored
+beside it — so every scope member can recover `K_share` **anytime** to re-seal (edit) the note without minting a
+new link ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)).
+**The recovery copy is for the Memory's members only.** It is deliberately *not* under `K_mem`: every VIEWER or
+CONTRIBUTOR link carries `K_mem`, so such a copy would let one link plus a database dump open every other share of
+the Memory — its password, its private label, its note, and (the dump holds every share id) its whole link.
+`K_SC` is a key no share carries (ADR 0036 point 4). A create sealed at a stale epoch is `409 stale_epoch`; the
+client re-opens its scope key and retries once.
 **Operator-blind:** the server stores only the two ciphertexts + the opaque note; it never sees `K_share`,
-`K_mem`, or the note text. The share page renders the note with the **safe markdown renderer** reused from tenant
+`K_SC`, `K_mem`, or the note text. The share page renders the note with the **safe markdown renderer** reused from tenant
 terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up).
 
 ## Main flow
@@ -34,8 +40,9 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 2. A visitor opens `/s/{shareId}#k=<K_share>` → the anonymous `resolveShare` returns `sealed_note`; the share page
    unwraps it with the fragment `K_share` and **renders it** — a banner under the title (VIEWER/CONTRIBUTOR) or the
    primary instruction above the name field (UPLOADER).
-3. Later, the curator **edits** the note: in the Memory's share dialog (which holds `K_mem`) they pick the share,
-   the client **recovers `K_share`** from `sealed_share_key`, re-seals the new note, and calls the owner-gated
+3. Later, the curator **edits** the note: in the Memory's share dialog (which holds the scope's epoch keys) they
+   pick the share, the client **recovers `K_share`** from `sealed_share_key` at its epoch, re-seals the new note,
+   and calls the owner-gated
    **`updateShare`** — the same link now shows the new note.
 
 ## Alternate / exception flows
@@ -47,9 +54,19 @@ terms ([ADR 0035](../../../decisions/0035-server-terms-of-service.md) follow-up)
 - **A non-owner tries to edit** → refused (`updateShare` is `owner_account`-gated); only the share's creator edits,
   and only while they are still a member of the share's scope — a creator who has left it gets a non-member's 404
   ([uc.sharing.share-shared-scope](uc.sharing.share-shared-scope.md) A3).
-- **A co-member reconstructs the link** (group/tenant scope, later) → possible (they hold `K_mem`), but grants
-  nothing new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
-  consequences). Moot in the v1 personal-scope cut (one member).
+- **A co-member reconstructs the link** (group/tenant scope) → possible (they hold `K_SC`), but grants nothing
+  new — they can already read the Memory, and **revoke stays owner-gated** ([ADR 0036](../../../decisions/0036-editable-share-note-recoverable-share-key.md)
+  consequences).
+- **A link holder tries the same** → nothing opens: a VIEWER or CONTRIBUTOR link holds `K_mem` and its own
+  `K_share`, neither of which is `K_SC`, so even with a dump it reads no other share's password, label or note and
+  rebuilds no other link (ADR 0036 point 4).
+- **A member removed from a group scope** keeps the `K_share` of every share they ever opened — it does not change
+  for the life of the link — so with a dump they keep reading that share, including later edits of its note, label
+  or password, and can still use its link. Shares minted after the removal are out of their reach; cutting them off
+  an existing link means re-issuing it (ADR 0036 point 4).
+- **A share minted before the recovery copy moved to `K_SC`** (an un-reset development instance) → its copy does not
+  open; the manage list shows no label, note or password for it and cannot re-copy its link. Its guests are
+  unaffected.
 
 ## What this means for you / Was das für dich bedeutet
 
@@ -72,4 +89,4 @@ kann sie nicht lesen — nur wer den Link von dir bekommt.
   share key + the editable note), [ADR 0029](../../../decisions/0029-public-viewer-share.md) (the share model +
   `K_share`), [ADR 0035](../../../decisions/0035-server-terms-of-service.md) (the reused markdown renderer).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (`sealed_share_key` = new opaque
-  ciphertext; the `K_share`-derivability note).
+  ciphertext; the members-only `K_share`-derivability note; the § What holds today row on a sibling link).
