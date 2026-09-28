@@ -1,7 +1,7 @@
 ---
 id: cr-share-key-recovery-for-members-only
 title: A share's key opens for the Memory's members only — no sibling link reads its password, label or note
-status: planned
+status: in-progress
 satisfies: [uc.sharing.share-note, uc.sharing.share-password]
 adrs: ["0036", "0037", "0012", "0024", "0072", "0031"]
 invariants: [operator-blind E2EE, API-first]
@@ -88,10 +88,12 @@ or without a dump, opens nothing of another share.
 - **The binding:** [ADR 0072](../docs/decisions/0072-a-seal-binds-its-object.md). The `share-key-recovery` row
   gains the epoch. Changing a row's fields changes stored bytes. Before V1 that is a vector update; after V1 it
   would be a suite v2 (`packages/crypto/src/seal.ts` header).
-- **The precedent:** `cr-guest-names-for-members-only` (inbox #190, in flight) seals a Memory's name private key
-  under `K_SC(epoch)` for the same reason: *"`K_SC`, which no share carries"*. The two CRs touch different
-  fields and are independent. Whichever lands second re-runs its locators, because both edit `share.ts`,
-  `sharing.openapi.yaml` and security-model § What holds today.
+- **No precedent — corrected at implement time.** This paragraph used to cite `cr-guest-names-for-members-only`
+  (inbox #190) as sealing a name private key under `K_SC(epoch)`. That CR landed (`aa34ab0`) without it: the owner
+  chose to stop serving guest names and accept the residual (ADR 0030 point 8, security-model § What stays open).
+  So this is the first seal under `K_SC(epoch)` in sharing, and the reasoning stands on its own: `K_SC` is the key
+  no share carries (ADR 0012). #190 did move `sharing.openapi.yaml` (`ShareIdentity`, `ShareMedia.identityId`),
+  `share.ts` and security-model; the locators were re-run on `aa34ab0`.
   - *Remembered, not checked:* `cr-trust-state-never-goes-backwards` (landed, `ea1cc98`) put a per-scope epoch
     floor on the device. A recovery copy read at an old epoch goes through `keyAt` like any other
     epoch-tagged seal. Re-check at implement time that `keyAt` is the floor-checked path.
@@ -213,7 +215,7 @@ rotation are out of their reach.
 
 ## Phases
 
-- [ ] 0 decision (docs only, after the owner answers):
+- [x] 0 decision (docs only, after the owner answers):
       - Record the chosen option in ADR 0036 as a new Decision point, and correct its *Consequences* premise
         ("a `K_mem`-holder" includes every VIEWER/CONTRIBUTOR link).
       - Add the row below to security-model § What holds today, reading **Can**. Wait until
