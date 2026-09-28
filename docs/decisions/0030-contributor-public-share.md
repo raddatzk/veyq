@@ -41,7 +41,8 @@ direct-append, personal scope.**
    enter a **display name**. The client **seals it under `K_mem`** (which it holds) and creates an anonymous
    **share identity**: the server stores a `veyq_share_identity` row — an opaque `identityId`, the shared
    `shareId`, the **`K_mem`-sealed display name** (ciphertext), and the hash of an unguessable **contributor
-   token** returned to the client. The server **never** sees the name. This is the **anonymous share identity**
+   token** returned to the client. The server **never** sees the name, and serves it back only to the Memory's
+   members (point 8). This is the **anonymous share identity**
    ADR 0029 named, and the **buckets hook**: name → sealed identity → (later) the per-contributor primary bucket.
 
 3. **A share-scoped, unauthenticated upload path (the presign mirror + blind capability).** Three endpoints mirror
@@ -60,11 +61,11 @@ direct-append, personal scope.**
    contributor's **`share_identity_id`**. It appears in the shared Memory **immediately** (direct-append — no
    review gate); the curator can delete it or revoke the link. Moderation (review-before-publish) is deferred.
 
-5. **Attribution stored, grouping deferred.** The anonymous resolve ([ADR 0029](0029-public-viewer-share.md))
-   returns each media's `identityId` and each share identity's sealed name. **v1 renders all contributed media
-   inline** in the one read-only gallery (a viewer sees the combined result). The **buckets UI** — grouping each
-   contributor's uploads under their name — is a later slice; the `identityId` link + the sealed name are the
-   hook it builds on, present from v1.
+5. **Attribution stored, shown to members.** Each contributed media is stamped with its `identityId`, and the
+   identity keeps the sealed name. That is the hook the **buckets** grouping builds on
+   ([ADR 0034](0034-media-uploader-buckets.md)): the Memory's members see each contributor's uploads under their
+   name. A guest's page renders all contributed media inline in the one read-only gallery and is told neither
+   the stamp nor the name (point 8).
 
 6. **Abuse controls.** An unauthenticated upload endpoint is an abuse surface. Defense: the curator opt-in
    (role CONTRIBUTOR), the per-identity **contributor token**, the share `enabled` gate (**revoke stops uploads**),
@@ -77,30 +78,25 @@ direct-append, personal scope.**
    served web code ([ADR 0026](0026-client-trust-tiers.md)), so it is **passive-operator-safe, not operator-proof
    against an active foreign operator** — surfaced by the same **footer link** to the security docs, not a
    per-page caveat. The T&S **decryptable-on-report** corollary ([security model](../crosscutting/security-model.md))
-   extends to the contributor's sealed name + contributed media: a reported contributor share URL carries the
-   fragment key, so a reported share is decryptable. Intended, not a leak.
+   extends to contributed media: a reported contributor share URL carries the fragment key, so a reported share
+   is decryptable — and, with the database the operator holds, so are its guests' names (point 8). Intended, not
+   a leak.
 
-8. **A guest's name is for the Memory's members only (owner's call, 2026-09-28).** Holders of a VIEWER or
-   CONTRIBUTOR link must not be able to read the name any guest gave; the Memory's members keep reading it. This
-   supersedes, once built, point 2's *"seals it under `K_mem`"* and point 5's *"the anonymous resolve returns each
-   share identity's sealed name"* (and [ADR 0031](0031-uploader-public-share.md) point 7's *"the display name"*
-   among what an uploader seals under its own key). Point 5 had no reader on the guest side: the guest page never
-   showed a name. What it did was let every `K_mem` holder open one.
-   - **A server refusal is not enough.** A VIEWER or CONTRIBUTOR link holds `K_mem`. Through the Memory's drop
-     private key it also holds every uploader's own key. So a name sealed under either key opens for the link
-     holder the moment the ciphertext reaches them: a response that serves it, or a dump next to a leaked link.
-     That is the threat ADR 0031 point 7 closes for content.
-   - **The name is sealed to a key only members hold.** The Memory gets a second hybrid keypair, the **name
-     keypair**. Its private half is sealed under `K_SC` at the scope's current epoch
-     ([ADR 0012](0012-content-key-hierarchy.md), [ADR 0024](0024-scope-key-rotation.md)). Chapter names use that
-     tier for the same reason: a share never carries `K_SC`. The public half is sealed under `K_share` on each
-     share, so the server can neither read nor substitute it. The guest `sealTo`s its name to that public half.
-     It is the same move as the drop key, with the private half one tier up.
-   - **The resolve serves no name.** It still serves what opens an upload: an uploader identity's wrapped key
-     (ADR 0031 point 7), and nothing else about any identity.
-   - **Consequence for point 7:** a reported link still decrypts the content it shares, but no longer the names
-     of the guests who added to it. That follows from the owner's call: a reported link is a guest's view.
-   - Not built yet: inbox #190.
+8. **A guest's name is for the Memory's members (owner's call, 2026-09-28).** No share link is served the name
+   any guest gave; the Memory's members read it through their bucket list, as before.
+   - **What a guest is served about an identity:** an UPLOADER identity's `{identityId, wrappedIdentityKey}`,
+     and only because a reader needs it to open that identity's media
+     ([ADR 0031](0031-uploader-public-share.md) point 7) — so only that media names its identity. No CONTRIBUTOR
+     identity is served at all, not even the reading link's own, which a VIEWER link keeps after a
+     CONTRIBUTOR→VIEWER change. The served identity has **no name field**, so no guest-side code can be written
+     to read one.
+   - **The residual, accepted:** the names stay sealed as they are — a contributor's under `K_mem`, an uploader's
+     under its own key, which a link opens through the drop private key. So a VIEWER or CONTRIBUTOR link **plus
+     a database dump** reads every guest's name; in practice, that is an operator holding a link. That holder
+     already decrypts every medium of the Memory, and a name is less than the photos it is attached to. A key
+     only members hold — a name keypair whose private half sits under `K_SC` — would close it, and was rejected
+     as more machinery than that difference is worth.
+   - **The guest is told:** the name pre-screen says that only the people the Memory belongs to see the name.
 
 ## Consequences
 

@@ -1,7 +1,7 @@
 ---
 id: cr-guest-names-for-members-only
 title: A guest's name reaches the Memory's members only — no share link is served it
-status: in-progress
+status: done
 satisfies: [uc.memory.buckets, uc.sharing.share-contributor, uc.sharing.share-uploader]
 adrs: ["0030", "0031", "0034"]
 invariants: [operator-blind E2EE, API-first]
@@ -104,23 +104,23 @@ The commands behind it:
 
 ## Phases
 
-- [ ] 0 red — on the untouched tree, write **B1** and record its reds (the failing assertion of each case goes
+- [x] 0 red — on the untouched tree, write **B1** and record its reds (the failing assertion of each case goes
       into the Retrospective). Not committed red.
-- [ ] 1 contracts — `ShareIdentity` without `sealedDisplayName`, `wrappedIdentityKey` required; the descriptions of
+- [x] 1 contracts — `ShareIdentity` without `sealedDisplayName`, `wrappedIdentityKey` required; the descriptions of
       `PublicShare.identities` and `ShareMedia.identityId`.
       Locator: `grep -n "ShareIdentity:\|identities:\|identityId:" contracts/api/sharing.openapi.yaml`.
       · Done when: `npm run generate:api` succeeds and the contracts guards are green. `./gradlew check` and
       web `npm run check` are red at the `ShareIdentity` construction and fixture until phases 2–3.
-- [ ] 2 backend — `readerIdentities` → uploader identities only; the resolve maps `identityId` only for them.
+- [x] 2 backend — `readerIdentities` → uploader identities only; the resolve maps `identityId` only for them.
       Turn `ShareContributorSliceTest`'s served-name assertion around; B1 green.
       Locator: `grep -rn "readerIdentities\|sealedDisplayName = it\|identities\.\(find\|size\)\|identities\[" backend/src`.
       · Done when: `./gradlew check` green.
-- [ ] 3 web — the generated type change (`share.ts` key map, the `shareUploader.test.ts` fixture); the pre-screen
+- [x] 3 web — the generated type change (`share.ts` key map, the `shareUploader.test.ts` fixture); the pre-screen
       sentence (EN+DE); the live e2e assertions below.
       Locator: `grep -rn "identities\|sealedDisplayName\|contributeIntro" web/src --exclude-dir=generated`.
       · Done when: web and admin-web `npm run check` green; `python3 scripts/run_web_e2e.py` green with both
       sharing suites executed.
-- [ ] 4 docs + coverage — ADR 0030 points 2, 5 and 8 (8 rewritten to this decision, *"Not built yet"* dropped);
+- [x] 4 docs + coverage — ADR 0030 points 2, 5 and 8 (8 rewritten to this decision, *"Not built yet"* dropped);
       the security-model row (§ *What holds today*); `uc.sharing.share-contributor` (step 3, the diagram's
       server note, both *What this means for you*, criteria `direct-append-attribution` and
       `sealed-name-anonymous-identity`'s comment); `uc.sharing.share-uploader`'s *"The price: …"* sentence
@@ -160,3 +160,22 @@ proven, by tier:** an operator that serves a guest a tampered page sees the type
 ([ADR 0026](../docs/decisions/0026-client-trust-tiers.md)).
 
 ## Retrospective
+
+B1 red on the untouched tree, each case on the predicted assertion: VIEWER — the name key present (`true`);
+CONTRIBUTOR — `identities.size()` 3 (two own guests + the uploader); flipped VIEWER — 2; contributor media —
+`identityId` stamped; the member control green. Re-bitten on the fixed tree: dropping the uploader predicate in
+`uploaderKeys` reddens all four, dropping the media filter only the media case.
+
+- **Planning (refine):** the refine designed a key hierarchy the owner then rejected in one sentence. Its own
+  inventory row already said a link plus a dump reads other links' guest names — and the same pair decrypts every
+  photo. Root cause: the refine priced the layer against the name, not against what that attacker reads anyway.
+  Harvested into `docs/ai/README.md` § Refinement checklist.
+- **Planning (this rewrite):** it predicted the contracts phase red in web at the fixture serving the removed
+  field; web stayed green, because that fixture reached the code cast `as unknown as`. Root cause: a prediction
+  written, not run. Harvested into `changes/README.md` § Phases only above real size; the 165 casts are inbox
+  #195.
+- **Process:** this sandbox refuses compound shell commands that touch paths or git (a heredoc Python edit, a
+  `git status` redirect), which cost four reruns; the sibling `cr-share-key-recovery-for-members-only` still cites
+  this CR's rejected `K_SC` keypair as its precedent — flagged, not edited, since its implementer owns it.
+  **Next time:** write multi-step edits as a script in the scratchpad from the start, and grep `changes/` for the
+  CR's own id when a design is rejected, so a sibling's citation is found the same day.

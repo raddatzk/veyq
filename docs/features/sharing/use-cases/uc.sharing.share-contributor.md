@@ -33,7 +33,9 @@ exactly as a viewer does, then seals new media under it. **v1 is deliberately na
    name pre-screen**. The visitor enters a display name; the client **seals it under `K_mem`** and creates an
    **anonymous share identity** under an `identityId` it mints (`POST /api/shares/{shareId}/identities
    { identityId, sealedDisplayName }` → `{ identityId, contributorToken }`, held on device). The server stores
-   only the ciphertext name + opaque ids.
+   only the ciphertext name + opaque ids, and serves the name back only to the Memory's members — never on a
+   link's resolve, and the pre-screen says so ([ADR 0030](../../../decisions/0030-contributor-public-share.md)
+   point 8).
 4. **View + contribute.** The Memory renders read-only (the shared viewer). An **Add photos** affordance lets the
    contributor pick images — through the **same picker** the curator's own gallery uses, so
    [uc.memory.upload](../../memory/use-cases/uc.memory.upload.md) § E3 (Safari's Photos gallery populates
@@ -60,7 +62,7 @@ sequenceDiagram
   S-->>C: shareId
   C->>V: hand off link /s/{shareId}#35;k=…   (fragment, never sent)
   V->>S: GET /api/shares/{shareId}   (no auth)
-  S-->>V: record (role CONTRIBUTOR) + sealed subtree
+  S-->>V: record (role CONTRIBUTOR) + sealed subtree — no guest's name
   V->>V: K_mem = unwrap(wrap, K_share)#59; seal display name under K_mem
   V->>S: POST /identities { identityId (client-minted), sealedDisplayName }
   S-->>V: identityId + contributorToken
@@ -109,6 +111,10 @@ sequenceDiagram
   ([ADR 0034](../../../decisions/0034-media-uploader-buckets.md)). This share stores the identity + shows
   contributed media inline; the buckets grouping reads that hook with **no migration** on the contributor half
   ([ADR 0030](../../../decisions/0030-contributor-public-share.md)).
+- **The name is for the Memory's members.** A link's resolve serves no contributor identity, not even its own
+  guests' — also after a CONTRIBUTOR→VIEWER change — and no contributed media names one, so a visitor learns
+  neither a name nor which uploads came from one person. A link plus a database dump still opens the names, as it
+  opens the photos: accepted in [ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8.
 - **Direct-append; moderation is later.** A contributed photo is live immediately — good for a shared album, but
   spam is visible until the curator deletes it or revokes the link. Review-before-publish is a deferred slice.
 - **Attribution is self-asserted.** Anyone with the link can name themselves anything; the contributor token binds
@@ -127,7 +133,8 @@ sequenceDiagram
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** You can turn one memory into a link where friends and family can **add their own photos** — not just
-look. They open it in a browser, type their name once (so you can see who added what), and drop in their pictures
+look. They open it in a browser, type their name once (so you can see who added what — other visitors of the link
+don't see it), and drop in their pictures
 — no account, nothing to install. It shows them **only that one memory**, never the rest of your space, and you
 can switch the link off any time. New photos show up right away; if something doesn't belong, you can remove it.
 The same honest note as always: on the web this is as private as your trust in whoever runs your veyq server —
@@ -135,7 +142,7 @@ if that's you, it's fully private; the "how safe is this?" link explains the det
 
 **DE —** Du kannst eine Erinnerung in einen Link verwandeln, bei dem Freunde und Familie **eigene Fotos beisteuern**
 können — nicht nur anschauen. Sie öffnen ihn im Browser, tippen einmal ihren Namen ein (damit du siehst, wer was
-beigetragen hat) und laden ihre Bilder hoch — ohne Konto, ohne Installation. Der Link zeigt **nur diese eine
+beigetragen hat — andere, die den Link öffnen, sehen ihn nicht) und laden ihre Bilder hoch — ohne Konto, ohne Installation. Der Link zeigt **nur diese eine
 Erinnerung**, nie den Rest deines Bereichs, und du kannst ihn jederzeit abschalten. Neue Fotos erscheinen sofort;
 was nicht passt, kannst du entfernen. Dieselbe ehrliche Anmerkung wie immer: im Browser ist das so privat wie dein
 Vertrauen in den, der deinen veyq-Server betreibt — bist das du selbst, ist es voll privat; der „Wie sicher ist
