@@ -37,9 +37,10 @@ via the **vendor-neutral AWS S3 SDK** (works against any S3-compatible store). T
 access key and no grant, and since [ADR 0067](../docs/decisions/0067-store-provisioning-from-a-declared-type.md)
 the **backend** closes that gap on its first start, from the declared store type
 (`veyq.blob-store.type=garage` plus the admin endpoint and token). It assigns a single-node layout, creates the
-`veyq` bucket, imports the **deterministic dev credentials** (so the e2e and a dev backend use fixed keys),
-grants them, and writes the bucket CORS policy. Every step is idempotent on its own, so a later start repairs a
-missing piece rather than skipping the lot, and a `down -v` wipe self-heals on the next start.
+bucket `veyq.blob-store.bucket` names (`blobs` by default), imports the **deterministic dev credentials** (so the
+e2e and a dev backend use fixed keys), grants them, and writes the bucket CORS policy. Every step is idempotent on
+its own, so a later start repairs a missing piece rather than skipping the lot, and a `down -v` wipe self-heals on
+the next start.
 
 There is no init sidecar any more, in dev or in production, and that is deliberate rather than a simplification:
 its image was built locally and published nowhere, so a Helm chart had nothing to pull
@@ -53,7 +54,7 @@ the Server Owner (the admin console's **Object store** rubric), which reports `P
 starts and looks healthy either way.
 
 - **S3 API** → `http://localhost:19000`. Dev key `GK0123456789abcdef01234567` / secret
-  `0123…` (64 hex, see `application-dev.properties`), bucket `veyq`, region `us-east-1` — local throwaway only.
+  `0123…` (64 hex, see `application-dev.properties`), bucket `blobs`, region `us-east-1` — local throwaway only.
 - **Admin API** → `http://localhost:19003`, token `veyq-dev-admin-token` — how the backend provisions the
   store, published local-only in dev and **not published at all** in production (the app reaches it on the
   compose network as `http://garage:3903`).
