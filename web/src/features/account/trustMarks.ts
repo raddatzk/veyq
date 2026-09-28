@@ -81,8 +81,10 @@ function merged(base: TrustMarks, raise: MarksRaise): TrustMarks {
   const out: TrustMarks = { pins: base.pins, register: base.register, epochs: { ...base.epochs } }
   if (isMark(raise.pins)) out.pins = Math.max(out.pins, raise.pins)
   if (isMark(raise.register)) out.register = Math.max(out.register, raise.register)
+  // An epoch-0 floor refuses nothing, so it is never stored: the marks of a device's unrotated scopes would only
+  // grow the record and the pairing envelope that carries it (whose contract caps it at 8192 characters).
   for (const [scopeId, e] of Object.entries(raise.epochs ?? {})) {
-    if (isMark(e)) out.epochs[scopeId] = Math.max(out.epochs[scopeId] ?? 0, e)
+    if (isMark(e) && e > 0) out.epochs[scopeId] = Math.max(out.epochs[scopeId] ?? 0, e)
   }
   return out
 }

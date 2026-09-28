@@ -43,6 +43,11 @@ describe('trust-state marks', () => {
     expect(await readMarks(B)).toEqual({ pins: 6, register: 1, epochs: { s1: 2, s2: 1 } })
   })
 
+  it('an epoch-0 floor is not stored — it refuses nothing, and would only grow what pairing carries', async () => {
+    await raiseMarks(A, { epochs: { unrotated: 0, rotated: 1 } })
+    expect((await readMarks(A)).epochs).toEqual({ rotated: 1 })
+  })
+
   it('a value that is not a mark is ignored, never stored', async () => {
     await raiseMarks(A, { pins: -1, register: 1.5, epochs: { s1: Number.NaN, s2: 2 } })
     expect(await readMarks(A)).toEqual({ pins: 0, register: 0, epochs: { s2: 2 } })
