@@ -3,7 +3,7 @@
 // does. Reuses the Memory cover's `deriveImage` seam (downscale + encode, taught `mimeType`/`background` in
 // cr-space-icon); the crop bake is icon-specific (a Memory cover stores a reference + crop and never bakes pixels).
 import { type MediaDeriver } from '../memory/mediaDeriver'
-import { type CropRect } from '../../components/ImageCropper.vue'
+import { type CropRect } from '../../shared/ui/ImageCropper.vue'
 import { ICON_ENCODED_BUDGET } from './spaceIcon'
 
 /** The fixed pixel box the icon re-encodes to — 256×256 carries ~2× headroom for a ~38px avatar (the use-case's box). */

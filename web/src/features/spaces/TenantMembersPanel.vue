@@ -10,7 +10,7 @@ import Button from 'primevue/button'
 import Message from 'primevue/message'
 import InviteMemberDialog from './InviteMemberDialog.vue'
 import SpaceIconDialog from './SpaceIconDialog.vue'
-import TenantAvatar from '../../components/app/TenantAvatar.vue'
+import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import {
   listMemberInvites,
   listScopeMembers,

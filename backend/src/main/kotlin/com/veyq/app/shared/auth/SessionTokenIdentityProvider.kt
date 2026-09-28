@@ -1,6 +1,5 @@
 package com.veyq.app.shared.auth
 
-import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.shared.identity.ServerRoles.SERVER_OWNER
 import com.veyq.app.shared.identity.VeyqUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -17,8 +16,8 @@ import jakarta.enterprise.context.ApplicationScoped
 
 /**
  * Resolves an opaque bearer access token into a [SecurityIdentity] — the one place token → caller resolution
- * happens (cr-0012). Wraps the existing authenticated-read guard [SessionService.resolveUserId] (ADR 0004, which
- * also enforces the session family is ACTIVE) and reads the global role from `veyq_user.server_role`.
+ * happens (cr-0012). Wraps the existing authenticated-read guard [AccessTokenResolver.resolveUserId] (ADR 0004,
+ * which also enforces the session family is ACTIVE) and reads the global role from `veyq_user.server_role`.
  *
  * Operator-blind: the identity carries only the userId principal, the management role, and the opaque token as a
  * credential — never a content key (those are the client-side scope-key grants). A token that is unknown,
@@ -28,7 +27,7 @@ import jakarta.enterprise.context.ApplicationScoped
  * and run in its own transaction (the provider is outside any request-scoped JTA context).
  */
 @ApplicationScoped
-class SessionTokenIdentityProvider(private val sessions: SessionService) :
+class SessionTokenIdentityProvider(private val sessions: AccessTokenResolver) :
     IdentityProvider<TokenAuthenticationRequest> {
 
     override fun getRequestType(): Class<TokenAuthenticationRequest> = TokenAuthenticationRequest::class.java

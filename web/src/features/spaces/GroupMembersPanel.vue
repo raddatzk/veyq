@@ -23,7 +23,7 @@ import { bumpSpaceIcon } from './spaceIconSignal'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
 import SpaceIconDialog from './SpaceIconDialog.vue'
-import TenantAvatar from '../../components/app/TenantAvatar.vue'
+import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 
 // Addressed by scope id (cr-0087) — the settings hub renders one panel per group the caller owns, not the

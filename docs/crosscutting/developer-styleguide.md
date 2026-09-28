@@ -30,7 +30,9 @@
   adapter shape is necessarily per-stack.
 - **Cross-cutting code lives in `shared/`** — `backend/src/main/kotlin/com/veyq/app/shared/`. **The directory is
   the list**; it cannot be out of date about itself, whereas the roll-call that used to stand here named six
-  slices of which two existed and omitted nine. `shared/` must not depend on a feature.
+  slices of which two existed and omitted nine. `shared/` must not depend on a feature;
+  [`validate_shared_imports_no_features.py`](../../scripts/validate_shared_imports_no_features.py) holds that for
+  its imports.
 - **Dependencies stay directed.** If a feature builds on a `shared/` slice, that slice must not reach back into
   the feature; share neutral rules through small interfaces.
 
