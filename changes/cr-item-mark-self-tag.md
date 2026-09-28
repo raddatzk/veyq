@@ -14,6 +14,8 @@ that re-runs it) or `remembered`.
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 **Q1 — How does an account-key rotation carry the caller's own marks over to the new key?** The self-tag key
 derives from the Master Key (Decision 2), and a rotation replaces the Master Key
 (`grep -n "newMasterKey = v1.randomBytes(32)" web/src/features/account/rotation/rotateKeys.ts` → 1; the only other

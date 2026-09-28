@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Move the check into ESLint, or widen the vitest scan?** The row asked whether to widen the scan and whether
    to promote it to `scripts/`. **Recommendation: neither. Make it an ESLint `no-restricted-syntax` block**,
    like `veyq/one-sign-out` in the same file. The case for it, measured below:

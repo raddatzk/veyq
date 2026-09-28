@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Keep the teardown bite as a permanent test, or run it once?** It is deterministic (3/3 red, 3/3 green at
    refine, under a second each) and it pins one line of shared setup that any later edit of `setup.ts` can drop
    without a single test noticing — which is exactly how this flake survived four sightings.

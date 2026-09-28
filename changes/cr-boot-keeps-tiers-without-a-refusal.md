@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **What does a boot that could not ask the server show?** The tiers stay either way; this is only about the
    screen.
    - (a) The sign-in page with the existing *"This instance can't be reached right now. Please try again."*

@@ -9,6 +9,8 @@ invariants: [self-hostable by default]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Where does the tool learn which owner the key must have?**
    - (a) From the key's **parent directory**. On the production recipe that directory is the
      `veyq-config-secret` volume, which Docker seeds from the image as `10001:10001`, and

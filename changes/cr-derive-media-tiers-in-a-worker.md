@@ -13,6 +13,8 @@ invariants:
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 Each question has a recommendation. Nothing below phase 0 starts until they are answered.
 
 1. **Lever (a), the Worker, or a newly measured lever (c): swap `toBlob` for the synchronous `toDataURL` on the

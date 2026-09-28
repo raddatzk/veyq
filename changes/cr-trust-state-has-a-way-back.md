@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, self-hostable by default]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Scope: does this CR also move the rotation's re-seal into the rotation's one transaction?** (Decision A.)
    It adds a contracts and a backend phase to what the inbox row framed as a web reset.
    **Recommendation: yes.** The rotation is the one honest writer on the client that leaves either document

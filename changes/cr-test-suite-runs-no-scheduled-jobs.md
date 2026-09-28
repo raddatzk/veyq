@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Halt the scheduler for the whole `%test` profile, or switch off only the sweep that deletes reclaim rows?**
    The flake needs only `StoreReclaimSweep`. The measured hazard is wider, though. The session purge runs
    during the suite on every app start, and `GrantDeliveryOriginator` creates grant-delivery jobs for every

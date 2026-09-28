@@ -9,6 +9,8 @@ invariants: ["operator-blind E2EE everywhere"]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **Kill the mutants, or lower the break?** The row asked which one. **Recommendation: kill them, keep
    `break: 95`.** Measured below, 40 of the 44 undetected mutants are real assertion gaps in the package's own
    suite. They include whole exports that no package test calls (`hybridSecret`, `hybridPublic`, both identity

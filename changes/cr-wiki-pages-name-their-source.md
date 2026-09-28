@@ -9,6 +9,8 @@ invariants: ["self-hostable by default"]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 1. **The wiki is not what the docs say it is. Which side moves?** `docs/features/README.md` says the wiki is
    *"DERIVED from these sections"*, the use-cases' bilingual *What this means for you*, by *"a Python generator
    … later"*. `validate_feature_format.py` check E justifies itself with that sentence: *"a missing half is a

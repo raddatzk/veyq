@@ -13,6 +13,8 @@ invariants:
 
 ## Open for the owner
 
+**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
 Refined 2026-09-28 from inbox #112, which the owner put on the pre-V1 list the same day for its security
 relevance. **ADR 0074 is `Proposed` until these questions are answered.** Each carries a recommendation, and
 none is answered here.
