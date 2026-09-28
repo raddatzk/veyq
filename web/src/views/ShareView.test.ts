@@ -123,3 +123,26 @@ describe('ShareView — accountless terms gate', () => {
     expect(wrapper.find('.share-view-header').exists()).toBe(true)
   })
 })
+
+// The name pre-screen tells a guest who reads the name it types (ADR 0030 point 8): the Memory's members, and no
+// other link holder — which is what the resolve serves, so the page must not promise "everyone" either.
+describe('ShareView — who sees a guest name', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    fetchShareTermsMock.mockReset().mockResolvedValue({ tenantId: TENANT, termsVersion: 0, terms: {} })
+  })
+
+  it.each([
+    [ShareRole.Contributor, { kind: 'read', memoryKey: new Uint8Array(32) }],
+    [ShareRole.Uploader, { kind: 'drop', nodeId: 'n1', dropPublicKey: new Uint8Array() }],
+  ])('the %s name screen says only the Memory\'s members see the name', async (role, access) => {
+    resolveShareMock.mockReset().mockResolvedValue({ ...viewerShare(), role, access })
+    const wrapper = mountShareView()
+    await flushPromises()
+
+    const card = wrapper.find('.share-name-card')
+    expect(card.exists()).toBe(true) // the gate itself, so the text checks below cannot pass on an empty page
+    expect(card.text()).toContain('Only the people this memory belongs to see your name.')
+    expect(card.text()).not.toContain('everyone')
+  })
+})

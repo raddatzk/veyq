@@ -679,10 +679,10 @@ export async function resolveShare(shareId: string, fragmentKey: string, pwToken
   }
   const keys = deriveSubtreeKeys(scopeId, share.nodes, rootKmem)
   // A media an UPLOADER guest added opens through its node's drop key and its identity's wrapped key, both served
-  // here: the node carries the one, the identities list the other (ADR 0031 point 7).
+  // here: the node carries the one, the identities list the other (ADR 0031 point 7). That list is all a guest is
+  // told about any identity — never a name, which is for the Memory's members (ADR 0030 point 8).
   const dropKeyOf = new Map(share.nodes.map((n) => [n.id, n.sealedDropPrivateKey]))
-  const wrapped = new Map<string, string>()
-  for (const i of share.identities ?? []) if (i.wrappedIdentityKey) wrapped.set(i.identityId, i.wrappedIdentityKey)
+  const wrapped = new Map((share.identities ?? []).map((i) => [i.identityId, i.wrappedIdentityKey]))
   const items: ShareItem[] = []
   for (const m of share.media) {
     const memoryKey = keys.get(m.nodeId)

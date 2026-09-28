@@ -13,10 +13,11 @@
 // `completeShareMedia`) that the authenticated path never exercises. It subsumes the viewer flow, because a
 // contributor share resolves through the identical `resolveShare` / `resolveShareBlob` pair (ADR 0029/0030).
 //
-// The cross-actor unseal deliberately does NOT go through the contract's `PublicShare.identities`, which
-// `resolveShare` drops and no web code reads. The live route is that the server *copies* the identity's
-// `sealedDisplayName` onto the contributor's primary bucket (`MediaStore.ensurePrimaryBucket`), which the curator
-// opens with `openBucketName(kMem, …, 'contributor')` — a stronger assertion, because it crosses that copy step.
+// The cross-actor unseal goes through the curator's bucket list because that is the only place a guest's name is
+// served at all: the public resolve serves no guest name and no contributor identity (ADR 0030 point 8), which
+// this suite asserts on the raw wire. The server *copies* the identity's `sealedDisplayName` onto the
+// contributor's primary bucket (`MediaStore.ensurePrimaryBucket`), and the curator opens it with
+// `openBucketName` — so the positive also crosses that copy step.
 //
 // The last two tests are the trash × sharing cross-feature proof at the altitude the original defect occurred at
 // (uc.memory.delete-media × uc.sharing.share-public-viewer): the backend already pins it in
@@ -32,6 +33,7 @@
 // instance) works too, minus the sweep.
 import { describe, it, expect } from 'vitest'
 import { b64url } from '@veyq/crypto/base64'
+import { publicSharesApi } from '../../api/client'
 import { HttpStatus, isHttpStatus } from '../../shared/httpError'
 import { birthInstance } from '../../test/e2eBootstrap'
 import { recordCanaries } from '../../test/canaries'
@@ -137,6 +139,18 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
       .toEqual(Array.from(bytes(3)))
     expect(Array.from(await openShareOriginal(shareId, control)), 'the second blob round-trips through the gated presign')
       .toEqual(Array.from(controlBytes))
+
+    // …and the link was told nothing about who added them, not even that one person did: the raw resolve (read
+    // past the generated client, which drops a field it does not know) carries no identity — not even this link's
+    // own guest — and neither contribution names one (ADR 0030 point 8). The curator recovers the name below.
+    const wire = (await (await publicSharesApi().resolveShareRaw({ shareId })).raw.json()) as {
+      identities?: unknown[]
+      media: { mediaId: string; identityId?: string | null }[]
+    }
+    expect(wire.media.map((m) => m.mediaId).sort(), 'the raw resolve serves both contributions')
+      .toEqual([first.mediaId, second.mediaId].sort())
+    expect(wire.identities ?? [], "the raw resolve serves no identity, not even this link's own guest").toEqual([])
+    expect(wire.media.map((m) => m.identityId ?? null), 'and no contribution names its identity').toEqual([null, null])
 
     // --- back to A: the contributions land in the curator's own Memory, attributed --------------------------
     const curatorItems = await listMedia(scopeId, nodeId)

@@ -931,7 +931,9 @@ const en = {
     contributorBadge: 'Shared with you · you can add photos',
     securityFooter: 'How safe is this?',
     // contributor pre-screen + add-photos (cr-0101)
-    contributeIntro: 'You can add your own photos to this memory. First, tell us your name so everyone can see who added what.',
+    contributeIntro: 'You can add your own photos to this memory. First, tell us your name.',
+    // ADR 0030 point 8: no share link is served a guest's name — only the Memory's members read it
+    nameVisibility: 'Only the people this memory belongs to see your name.',
     yourName: 'Your name',
     yourNamePlaceholder: 'e.g. Grandma',
     join: 'Continue',
@@ -1850,7 +1852,8 @@ const de: typeof en = {
     contributorBadge: 'Mit dir geteilt · du kannst Fotos hinzufügen',
     securityFooter: 'Wie sicher ist das?',
     // contributor pre-screen + add-photos (cr-0101)
-    contributeIntro: 'Du kannst eigene Fotos zu dieser Erinnerung hinzufügen. Sag uns zuerst deinen Namen, damit alle sehen, wer was beigetragen hat.',
+    contributeIntro: 'Du kannst eigene Fotos zu dieser Erinnerung hinzufügen. Sag uns zuerst deinen Namen.',
+    nameVisibility: 'Deinen Namen sehen nur die Personen, denen diese Erinnerung gehört.',
     yourName: 'Dein Name',
     yourNamePlaceholder: 'z. B. Oma',
     join: 'Weiter',
