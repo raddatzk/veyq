@@ -14,7 +14,49 @@ that re-runs it) or `remembered`.
 
 ## Open for the owner
 
-**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+**Answered by the owner, 2026-09-28: every recommendation in Q1 and Q2 is taken, and implementation has the go.** Read each of those recommendations as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+
+**Q3 is new and still open** — added by the refine of inbox #209 (the row Q2 split off), after that go. Its
+recommendation adds **documentation only** to phases 0 and 4 and no code, so it cannot conflict with work already
+started under the go; until the owner answers, Decision 9 and the phase lines marked *(Q3)* wait.
+
+**Q3 — The server replaying a member's earlier sets as extra entries (#209): close it, or accept and document it?**
+Measured in *What a replay adds* below: the read maps entries one to one and the count is one per entry, with no
+de-duplication. But the per-tile count is **already** not integrity-protected against the operator in either
+direction — it can withhold any row (deflate to zero), serve an earlier version of a set (freshness, ADR 0072 §5),
+keep counting a removed member's set, and, with any member the scope **ever** had (they all hold `E_0`), forge any
+number of entries. Replay adds exactly one thing: unbounded inflation by the server **alone**. And the #209 row's
+second claim measures false: duplicates do **not** move the *everyone's* filter, which is a set union — only an
+earlier version does, and that is freshness. Options:
+
+- **(A) — recommended. Accept and document; no code.** ADR 0068 states that the aggregate is exactly as honest as
+  the operator, lists the five powers, and records (B) and (C) as rejected with the condition that re-opens (C).
+  Why: neither fix closes deflation, freshness or member collusion; the harm is a wrong number on a heart — no
+  confidentiality, and after Decisions 1 and 6 no write into the caller's row; and the unbounded lie is the *more*
+  detectable one (a group of four whose tiles read 17). Deferring (C) forecloses nothing: the plaintext is JSON,
+  so a later optional pseudonym field is additive (`remembered/inferred` from Decision 6, which already reads a
+  malformed entry as someone else's).
+- **(B) Tag-keyed de-duplication.** Non-own entries with an identical self-tag count once (the tag is member-keyed
+  and content-bound, so an honest server never sends two equal ones). No new field, no privacy change. Bounds a
+  replay of *one* version only; a member's distinct historical sets — about one per toggle — still each count.
+  Carries a trap: the own entry must never merge with a same-tag non-own entry, or a co-member who copies the
+  caller's tag onto their own set launders their ids into the caller's row on the next toggle (step 3 below,
+  re-opened by a co-member without the server).
+- **(C) A per-(member, node) pseudonym** `p = HMAC(K_self, statement(scope, node))` inside the plaintext, and an
+  item's count = the number of distinct `p` holding it. Caps server-alone inflation at one count per member who
+  ever marked on the node, per Master-Key generation (a rotation mints a new `p`; the server keeps the old
+  versions). Costs: ceiling 1 257 → 1 256 (I21); ADR 0068 §6 / ADR 0072 §3 move from "anonymous in the data" to
+  "pseudonymous per node" — co-members can link every version of one member's set on one node (`inferred`: they can
+  mostly do it already by set difference, but not with certainty); a vector, a dedupe rule, a rotation note. Voided by any
+  current or former member colluding (they mint fresh `p`s), and blind to freshness and deflation.
+
+**Folded into this CR, not a CR of its own**: under (A) the whole change is sentences in the paragraphs phases 0 and
+4 already rewrite (ADR 0068's new decision, ADR 0072 §3, `security-model.md` § what stays open,
+`en.memory.favorites.md`'s two-seals bullet). A separate CR would edit the same sentences in parallel. Under (B)
+or (C) it folds too: same load path, same plaintext, one format change instead of two.
+**Re-open condition for (C)**, written into ADR 0068: once item marks stop sealing under `E_0` (so a former member
+can no longer forge) **and** a freshness floor covers them, replay is the last open power over the count — build
+(C) then.
 
 **Q1 — How does an account-key rotation carry the caller's own marks over to the new key?** The self-tag key
 derives from the Master Key (Decision 2), and a rotation replaces the Master Key
@@ -90,6 +132,28 @@ Measured by reading the code path, with the lines that carry each step:
 **Confidentiality is untouched** — every member opens every entry anyway (ADR 0072 §3). This is integrity of *which
 marks are mine*, and, through step 3, integrity of every member's aggregate.
 
+## What a replay adds — measured (#209, Q3)
+
+Every power the operator has over one node's aggregate, and what it needs. Rows 1–4 exist today without replay;
+row 5 is #209.
+
+| # | Power | Needs | Count | *Everyone's* filter | Locator |
+|---|---|---|---|---|---|
+| R1 | Withhold any entry | server alone | down to 0 | item drops out | the read maps whatever arrives, compares its length with nothing: `grep -n "entries.map" web/src/features/memory/itemFavorites.ts` → 1 |
+| R2 | Serve an earlier version of a member's set in place of the current one | server alone | an unmarked item still counts | an unmarked item still shows | ADR 0072 §5 (freshness accepted): `grep -n "it does not make it \*fresh\*" docs/decisions/0072-a-seal-binds-its-object.md` → 1 |
+| R3 | Keep serving a removed member's set | server alone (skips the delete) | +1 per removed member | their items stay | the honest path deletes: `grep -n 'ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2"' backend/src/main/kotlin/com/veyq/app/features/spaces/scope/ScopesStore.kt` → 294, 341 |
+| R4 | Forge any number of entries, any content | server + any current member, **or any member the scope ever had** | unbounded | any item | the seal key is `E_0`: `grep -n "keyAt(eks, 0)" web/src/views/MemoryHomeView.vue` → 1; ADR 0068 § Consequences, `grep -n "ever had holds it" docs/decisions/0068-favorites-two-confidentiality-levels.md` → 1 |
+| R5 | **Serve a stored version again as extra entries** (#209) | server alone | unbounded, on any item some member ever marked on the node | **no change** beyond R2 — the filter is a union | count: `grep -n "reduce((n, m) => n + (m.ids.has(mediaId)" web/src/app/itemFavoritesStore.ts` → 1; union: `grep -n "for (const m of itemFavoritesStore.marks) for (const id of m.ids) all.add(id)" web/src/app/itemFavoritesStore.ts` → 1 |
+
+A current member alone, through an honest server, cannot add a second entry: the row key is the token's user
+(I7). So R5's increment over today is **server-alone upward** manipulation beyond one count per removed member —
+of a number that R1 already lets the same server set to zero, and that R4 lets it set to anything once any member,
+present or past, helps. Nothing in the UI or the docs presents the count as operator-proof (`grep -rn -i
+"inflat\|extra entries" docs/decisions/0068-favorites-two-confidentiality-levels.md docs/crosscutting/security-model.md
+docs/features/memory/enablers/en.memory.favorites.md docs/features/memory/use-cases/uc.memory.gallery.md` → 0 at
+refine, `64c1f65` — nor as manipulable). The one replay effect that **persists** is an older *own* set served as
+`self` and then toggled — Decision 6 already names that as freshness.
+
 ## Inventory — measured
 
 | # | What | Locator (re-run it) | Result at `faf9ef4` |
@@ -111,6 +175,10 @@ marks are mine*, and, through step 3, integrity of every member's aggregate.
 | I15 | Size ceiling | the script under *Decision 5* | bare array 1 259 ids (reproduces ADR 0068's table); `{tag, ids}` 1 257 |
 | I16 | Rotation use case | `grep -n "re-sealed" docs/features/account/use-cases/uc.account.rotate-keys.md` | lines 18, 39, 161 name the Master-Key riders |
 | I17 | Endpoint probe registry | `grep -n "ItemFavorites" backend/src/test/kotlin/com/veyq/app/shared/http/OperatorBlindProbeTest.kt` | 2 probes (get, put) — a new endpoint joins it |
+| I18 | (Q3) No de-duplication anywhere on the read path | `grep -n "entries.map" web/src/features/memory/itemFavorites.ts`; `grep -n "reduce((n, m) => n + (m.ids.has(mediaId)" web/src/app/itemFavoritesStore.ts` | 1 and 1 (at `64c1f65`): one `MemberMarks` per wire entry, one count per `MemberMarks` |
+| I19 | (Q3) Consumers of the count and of the union | `grep -rn "markCount\|markedByAnyone" web/src \| grep -v "\.test\."` | `MemoryDetail.vue` (filter :89, tile prop :528), `MediaTile.vue` (badge :51, :57) — display only, nothing writes from them |
+| I20 | (Q3) Docs that state the count's honesty against the operator | `grep -rn -i "inflat\|extra entries" docs/decisions/0068-favorites-two-confidentiality-levels.md docs/decisions/0072-a-seal-binds-its-object.md docs/crosscutting/security-model.md docs/features/memory/enablers/en.memory.favorites.md docs/features/memory/use-cases/uc.memory.gallery.md` | 0 — no doc says it either way; `wiki/` does not mention item marks (`grep -rli "favorit" wiki/` → 0) |
+| I21 | (Q3 (C) only) Ceiling with a pseudonym field | the *Decision 5* script with `{"p":t,"tag":t,"ids":…}` | 1 256 (vs 1 257 for `{tag, ids}`), measured at refine |
 
 Gate baselines on this tree (`measured` at refine, recorded here so a done-when promises only what it can):
 see *Baselines* at the end.
@@ -181,6 +249,14 @@ addenda). ADR 0072 §3's item-favorites paragraph stops calling the gap accepted
 gains the self-tag as a decision of its own (it owns the object), corrects §5's wire shape (I14), and narrows §1's
 "bare id arrays" to the Memory pin.
 
+**9. (Q3, open) Replay of stored sets as extra entries is accepted and documented, not closed.** The client does
+not de-duplicate entries; the per-tile count stays "how many entries hold this id". ADR 0068 says, in the decision
+of Decision 8, that the aggregate is exactly as honest as the operator — R1–R5 in one sentence each — and records
+the two rejected closings with their reasons (Q3 (B), (C)) and the re-open condition for (C). Decision 6 is
+unchanged by this: a replay can inflate the count and stale the filter, it cannot put another member's marks in
+the caller's row. No UI string and no `wiki/` text changes — the end-user section's promise is confidentiality
+(*who* marked is not shown), and nothing in it claims the number is operator-proof (I20).
+
 ## Invariants — how each is held
 
 - **Operator-blind.** The tag is inside the `K_SC` seal; the size delta is constant. The new read (Q1 (A)) returns
@@ -191,7 +267,8 @@ gains the self-tag as a decision of its own (it owns the object), corrects §5's
   (Decision 2) nor link two tags (Decision 3). Bitten below (B4).
 - **ADR 0072 — binding, not freshness.** The seal context is unchanged (`item-favorites` keeps scope + node); the
   tag is a statement, not a seal purpose, so `SEAL_PURPOSES` and its both-ways vector check do not move. Replay of
-  the caller's own older set stays open and is named as such (Decision 6, Q2).
+  the caller's own older set stays open and is named as such (Decision 6, Q2); so does replay of any member's
+  stored set as an extra entry (Decision 9, Q3).
 
 ## Phases
 
@@ -202,7 +279,11 @@ gains the self-tag as a decision of its own (it owns the object), corrects §5's
   item-favorites paragraph rewritten to "bound to (scope, node); *whose* is a self-tag inside the plaintext (ADR
   0068)". · Done when: `grep -n "relabel\|#187" docs/decisions/0072-a-seal-binds-its-object.md` → 0 and
   `grep -n "memberId, ciphertext" docs/decisions/0068-favorites-two-confidentiality-levels.md` → 0; the guard glob
-  green.
+  green. **(Q3)** The same new ADR 0068 decision gains Decision 9's paragraph — "the aggregate is as honest as the
+  operator", R1–R5, rejected (B) and (C), the re-open condition — and ADR 0072 §3's rewritten paragraph names
+  extra entries beside freshness in one clause. · Done when (Q3): `grep -c "extra entries"
+  docs/decisions/0068-favorites-two-confidentiality-levels.md` ≥ 1 and the same in
+  `docs/decisions/0072-a-seal-binds-its-object.md` ≥ 1 (both 0 at refine, `64c1f65`).
 - [ ] **1 contracts.** (a) `contracts/crypto/vectors/v1.json`: the `item-favorites` seal vector's plaintext becomes
   the `{tag, ids}` form; a new `item_mark_self` section (master key, derived `K_self`, statement bytes, tag) —
   two cases, one id and several unsorted ids with a duplicate, so the canonicalisation is pinned.
@@ -232,13 +313,18 @@ today without a scope key, because a toggle from an empty own set would replace 
   grant path the vault still holds at that step (I10). · Done when: B6 and B7 red-then-green; `web` `npm run check`.
 - [ ] **4 docs + coverage.** `en.memory.favorites.md` (the two-seals bullet: the gap sentence becomes the
   self-tag, and the ceiling 1 257), `security-model.md` § what stays open (remove the item-favorites relabel
-  clause; keep `E_0`; name own-set replay as freshness), `uc.account.rotate-keys.md` (the fourth rider at the three
+  clause; keep `E_0`; name own-set replay as freshness; **(Q3)** name that the operator can inflate or deflate a
+  node's mark count — extra entries alone, forgery with any present or past member — pointing to ADR 0068), `uc.account.rotate-keys.md` (the fourth rider at the three
   I16 lines), `uc.memory.gallery.md` only if its text claims anything about *mine* being server-told (grep
   `self`), and the coverage YAMLs `docs/coverage/features/memory/use-cases/uc.memory.gallery.yaml` (a new item
   `my-marks-are-proven-mine`, refs to B1–B5) and `docs/coverage/features/account/use-cases/uc.account.rotate-keys.yaml`
-  (the rider, B6–B7). The inbox row closes. · Done when: `python3 scripts/validate_coverage.py` and the whole
+  (the rider, B6–B7). The inbox row closes — #187, and under Q3 (A) #209 too, as *accepted, documented*. **(Q3)**
+  `en.memory.favorites.md`'s two-seals bullet and `uc.memory.gallery.md`'s "aggregate is a presentation choice"
+  bullet each gain one clause: the count is the operator's report of how many sets hold the id (ADR 0068). · Done
+  when: `python3 scripts/validate_coverage.py` and the whole
   glob green; `grep -rn "relabel" docs/features docs/crosscutting docs/decisions web/src/features/memory packages/crypto/src`
-  → 0 hits that describe this gap as open.
+  → 0 hits that describe this gap as open; **(Q3)** `grep -c "extra entries"` ≥ 1 in each of
+  `docs/crosscutting/security-model.md`, `docs/features/memory/enablers/en.memory.favorites.md` (0 at refine, I20).
 
 ## Definition of done
 
@@ -261,6 +347,13 @@ untouched tree and the green on the fixed one. If the fixed signature adds a par
 | B6 | After `rotateKeys`, an entry tagged under the old Master Key verifies as *mine* under the new one | live defect of the new flow (red until 3c) | remove the rider call from `resealBestEffort` → red |
 | B7 | The rider does not re-tag a listed row whose tag fails the **old** key (a server-slipped co-member blob stays not-mine) | injection | remove the old-key check in the rider → red |
 | B8 | (Q1 (A)) `listOwnItemFavorites` never returns a co-member's row or a left scope's row | live defect of the new endpoint | return `ItemFavoritesEntity.listAll()` unfiltered → red |
+
+**Decision 9 (Q3) is docs-only, and its red-first demonstration is the phase 0 and 4 greps**: `grep -c "extra
+entries"` over the four named docs is 0 on the untouched tree (measured at refine, I20) and must read ≥ 1 in each
+after. Lever: delete the sentence from any one doc → that grep reads 0 again. Under Q3 (B) or (C) this line is
+replaced by two bites — the load counts a duplicated entry once (lever: remove the grouping → red), and **the own
+entry never merges with a non-own entry carrying the caller's tag** (lever: merge own into its tag group → the
+toggle PUTs the co-member's ids → red; this is B2's laundering, re-opened by a co-member).
 
 Also: `packages/crypto` mutation (`npx stryker run stryker.config.mjs`) has **no survivor in the three new
 functions** — the gate as a whole is red on untouched `v1.ts` (inbox #184), so this CR promises the new code only.
