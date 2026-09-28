@@ -24,7 +24,9 @@ COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha2
 # build step), and npm links it into node_modules at install time, so the sources have to be there already.
 COPY package.json package-lock.json /src/
 COPY packages/crypto /src/packages/crypto
-COPY admin-web/package.json ./
+# openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
+# verifier and the generator read the pinned version from it (without it the verifier fails the install).
+COPY admin-web/package.json admin-web/openapitools.json ./
 # Plain `npm ci`, and NOT `--omit=optional`: rolldown (Vite 8's bundler) ships its native binding as an
 # optional platform dependency, so omitting optionals produces an install that resolves and then dies with
 # "Cannot find native binding" at the first `vite build`. Measured here, on the first build of this file.

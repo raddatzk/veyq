@@ -29,7 +29,9 @@ COPY scripts/verify_openapi_generator_jar.mjs scripts/openapi_generator_jar.sha2
 # build step), and npm links it into node_modules at install time, so the sources have to be there already.
 COPY package.json package-lock.json /src/
 COPY packages/crypto /src/packages/crypto
-COPY web/package.json ./
+# openapitools.json travels with the manifest: `prepare` runs generate:api during `npm ci`, and both the JAR
+# verifier and the generator read the pinned version from it (without it the verifier fails the install).
+COPY web/package.json web/openapitools.json ./
 RUN npm ci
 COPY web/ ./
 # verify:no-backdoor is the prod guard from `npm run check` that asserts the dev auto-unlock seam
