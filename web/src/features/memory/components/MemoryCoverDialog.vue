@@ -11,7 +11,7 @@ import Button from 'primevue/button'
 import Dialog from 'primevue/dialog'
 import type { CoverCrop, CoverSaveIntent, MemoryCover } from '../memoryCover'
 import { useObjectUrl } from '../../../shared/state/useObjectUrls'
-import ImageCropper from '../../../components/ImageCropper.vue'
+import ImageCropper from '../../../shared/ui/ImageCropper.vue'
 
 const props = defineProps<{
   cover: MemoryCover | null // the current stored cover (restore its crop + enable Remove), or null
