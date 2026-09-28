@@ -72,8 +72,10 @@ class SharingResource(
             userId = identity.principal.name,
             shareId = createShareRequest.shareId,
             nodeId = createShareRequest.nodeId.toString(),
-            role = createShareRequest.role.value, // VIEWER | CONTRIBUTOR (cr-0101)
+            role = createShareRequest.role.value, // VIEWER | CONTRIBUTOR (cr-0101) | UPLOADER (cr-0102)
             wrap = createShareRequest.wrap,
+            sealedDropPublicKey = createShareRequest.sealedDropPublicKey, // UPLOADER: instead of the wrap (ADR 0031 point 7)
+            sealedDropPrivateKey = createShareRequest.sealedDropPrivateKey, // the Memory's first UPLOADER share only
             sealedName = createShareRequest.sealedName,
             expiresAt = createShareRequest.expiresAt?.toInstant(),
             sealedNote = createShareRequest.sealedNote, // cr-0115: optional curator note under K_share
@@ -161,12 +163,22 @@ class SharingResource(
                     scopeId = UUID.fromString(o.share.scopeId), // every K_mem seal the viewer opens is bound to it (ADR 0072)
                     passwordRequired = o.share.passwordRequired, // cr-0118: false, or true once unlocked with a valid token
                     pwSalt = if (o.share.passwordRequired) o.share.pwSalt else null,
-                    wrap = o.share.wrap,
+                    // ADR 0031 point 7: an UPLOADER guest is handed the drop public key, never `K_mem`. The role
+                    // decides here too, not only the stored row, so no UPLOADER response can ever carry a wrap.
+                    wrap = if (o.share.role == ShareEntity.UPLOADER) null else o.share.wrap,
+                    sealedDropPublicKey = if (o.share.role == ShareEntity.UPLOADER) o.share.sealedDropPublicKey else null,
+                    nodeId = UUID.fromString(o.share.nodeId), // an UPLOADER guest binds its identity key's wrap to it
                     sealedName = o.share.sealedName,
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.subtree.nodes.map(::toShareNode),
                     media = o.subtree.media.map(::toShareMedia),
-                    identities = o.identities.map { ShareIdentity(identityId = UUID.fromString(it.id), sealedDisplayName = it.sealedDisplayName) },
+                    identities = o.identities.map {
+                        ShareIdentity(
+                            identityId = UUID.fromString(it.id),
+                            sealedDisplayName = it.sealedDisplayName,
+                            wrappedIdentityKey = it.wrappedIdentityKey,
+                        )
+                    },
                 ),
             ).build()
             // cr-0118: password required + no token → a LOCKED shell (only the challenge; no wrap/name/note/subtree).
@@ -175,7 +187,7 @@ class SharingResource(
                     role = ShareRole.decode(o.share.role),
                     passwordRequired = true,
                     pwSalt = o.share.pwSalt,
-                    wrap = null, sealedName = null, sealedNote = null,
+                    wrap = null, sealedDropPublicKey = null, nodeId = null, sealedName = null, sealedNote = null,
                     nodes = emptyList(), media = emptyList(), identities = null,
                 ),
             ).build()
@@ -226,6 +238,7 @@ class SharingResource(
         epoch = n.epoch,
         wrappedContentKey = n.wrappedContentKey,
         wrappedMeta = n.wrappedMeta,
+        sealedDropPrivateKey = n.sealedDropPrivateKey,
     )
 
     private fun toShareMedia(m: ShareMediaRow) = ShareMedia(
@@ -259,6 +272,7 @@ class SharingResource(
     override fun createShareIdentity(shareId: String, createShareIdentityRequest: CreateShareIdentityRequest, xSharePassword: String?): Response =
         when (val o = handler.createIdentity(
             shareId, xSharePassword, createShareIdentityRequest.identityId.toString(), createShareIdentityRequest.sealedDisplayName,
+            createShareIdentityRequest.wrappedIdentityKey,
         )) {
             is CreateIdentityOutcome.Created -> Response.status(Response.Status.CREATED)
                 .entity(ShareIdentityCreated(identityId = UUID.fromString(o.identityId), contributorToken = o.contributorToken)).build()

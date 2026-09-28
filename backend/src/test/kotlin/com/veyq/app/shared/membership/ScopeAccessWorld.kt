@@ -8,6 +8,7 @@ import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.TestFixtures.shareKeysJson
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
@@ -126,7 +127,7 @@ class ScopeAccessWorld(
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
         val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$shareRole","wrap":"$B64","sealedName":"$B64"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         given().header("Authorization", auth).contentType(ContentType.JSON)

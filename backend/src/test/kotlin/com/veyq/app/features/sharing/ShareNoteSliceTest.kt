@@ -5,6 +5,7 @@ import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.TestFixtures.shareKeysJson
 import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -256,7 +257,7 @@ class ShareNoteSliceTest {
 
     private fun createWithRole(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName","sealedShareKey":"$shareKey"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName","sealedShareKey":"$shareKey"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

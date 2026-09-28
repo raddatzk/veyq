@@ -10,6 +10,8 @@ import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.identityKeyJson
+import com.veyq.app.testing.TestFixtures.shareKeysJson
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -100,7 +102,7 @@ class ShareLinkStorageLimitSliceTest {
     @Test
     fun aSecondLinkOfTheTenantHasItsOwnRoom() {
         val f = fixture()
-        val other = link(f, createShare(f, "CONTRIBUTOR"))
+        val other = link(f, createShare(f, "CONTRIBUTOR"), "CONTRIBUTOR")
         contribute(f, s)
         setLimit(f.tenantId, s.byteSize)
         startOk(other, s) // the other link holds nothing of the first's
@@ -182,7 +184,7 @@ class ShareLinkStorageLimitSliceTest {
     @Test
     fun aZeroLimitRefusesEveryLinkStart() {
         val f = fixture()
-        val other = link(f, createShare(f, "UPLOADER"))
+        val other = link(f, createShare(f, "UPLOADER"), "UPLOADER")
         putLimit(f, 0).then().statusCode(200)
         start(f, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
         start(other, s).then().statusCode(200).body("results[0].error", equalTo("quota_exceeded"))
@@ -229,13 +231,13 @@ class ShareLinkStorageLimitSliceTest {
         }
         val memory = seedNode(scopeId, wrappedContentKey = CONTENT_KEY)
         val partial = Link(tenantId, scopeId, memory, ownerId, shareId = "", token = "")
-        return link(partial, createShare(partial, role))
+        return link(partial, createShare(partial, role), role)
     }
 
     /** A second identity-bearing handle on share [shareId] of [f]'s Memory. */
-    private fun link(f: Link, shareId: String): Link {
+    private fun link(f: Link, shareId: String, role: String): Link {
         val token = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="}""")
+            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"c2VhbGVkLW5hbWU="${identityKeyJson(role)}}""")
             .`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         return f.copy(shareId = shareId, token = token)
@@ -243,7 +245,7 @@ class ShareLinkStorageLimitSliceTest {
 
     private fun createShare(f: Link, role: String): String =
         given().header("Authorization", bearer(f.ownerId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${f.memory}","role":"$role","wrap":"d3JhcA==","sealedName":"c2VhbGVk"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"${f.memory}","role":"$role",${shareKeysJson(role, f.memory)},"sealedName":"c2VhbGVk"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 

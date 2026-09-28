@@ -68,6 +68,9 @@ data class BucketRow(
     /** A contributor primary's share: its name is the identity's `share-identity-name` seal, bound to (scope,
      *  share, identity) (ADR 0072). Null for every other bucket. */
     val shareId: String? = null,
+    /** An UPLOADER identity's primary: the identity's key wrapped to the Memory's drop key — its name is sealed
+     *  under that key, not `K_mem` (ADR 0031 point 7). Null for every other bucket. */
+    val wrappedIdentityKey: String? = null,
 )
 
 /**
@@ -446,11 +449,23 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             else -> OwnerKey.User("unknown")
         }.format()
 
-    /** The share a contributor primary's identity belongs to — null for any other bucket. */
-    private fun contributorShareOf(b: BucketEntity): String? {
+    /** The share identity a contributor primary belongs to — null for any other bucket. */
+    private fun contributorIdentityOf(b: BucketEntity): ShareIdentityEntity? {
         if (!b.isPrimary) return null
         val owner = OwnerKey.parse(b.ownerKey) as? OwnerKey.Share ?: return null
-        return ShareIdentityEntity.findById(owner.shareIdentityId)?.shareId
+        return ShareIdentityEntity.findById(owner.shareIdentityId)
+    }
+
+    /**
+     * The wrapped identity key of every UPLOADER identity that owns one of [rows] (identity id → wrap): a row such a
+     * guest added is sealed under the guest's own key, which only this wrap — opened through the Memory's drop key —
+     * yields (ADR 0031 point 7). A CONTRIBUTOR identity has none: its rows are under `K_mem`.
+     */
+    fun uploaderKeys(rows: List<MediaRow>): Map<String, String> {
+        val ids = rows.mapNotNull { r -> r.ownerKey?.let { (OwnerKey.parse(it) as? OwnerKey.Share)?.shareIdentityId } }.toSet()
+        if (ids.isEmpty()) return emptyMap()
+        return ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", ids).list()
+            .associate { it.id to it.wrappedIdentityKey!! }
     }
 
     /** A primary's sealed name: for a contributor (`share:{id}`) copy the identity's sealed name; else null (member → username). */
@@ -514,7 +529,10 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
         return BucketEntity.find("nodeId = ?1 order by isPrimary desc, createdAt", nodeId).list().map { b ->
             val count = MediaEntity.count("nodeId = ?1 and bucketId = ?2 and deletedAt is null", nodeId, b.id).toInt()
-            BucketRow(b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count, contributorShareOf(b))
+            val identity = contributorIdentityOf(b)
+            BucketRow(
+                b.id, b.ownerKey, b.parentBucketId, b.isPrimary, b.sealedName, count, identity?.shareId, identity?.wrappedIdentityKey,
+            )
         }
     }
 

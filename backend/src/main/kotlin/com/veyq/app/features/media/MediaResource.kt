@@ -23,6 +23,7 @@ import com.veyq.app.generated.model.MediaMetaUpdate
 import com.veyq.app.generated.model.MediaResultItem
 import com.veyq.app.generated.model.MediaSummary
 import com.veyq.app.generated.model.PresignedUrl
+import com.veyq.app.generated.model.UploaderKey
 import com.veyq.app.shared.blobstore.PresignedRef
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
@@ -125,6 +126,8 @@ class MediaResource(
                     mediaRevision = o.mediaRevision,
                     deleteRevision = o.deleteRevision,
                     mediaIds = o.mediaIds?.map(UUID::fromString),
+                    sealedDropPrivateKey = o.sealedDropPrivateKey,
+                    uploaderKeys = o.uploaderKeys.map { (id, wrap) -> UploaderKey(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
                 ),
             ).header("ETag", "\"${o.mediaRevision}\"").build() // the ETag doubles as the client's next If-None-Match
             ListMediaOutcome.NotModified -> Response.notModified().build() // 304 — no body, no media query (idle fast path)

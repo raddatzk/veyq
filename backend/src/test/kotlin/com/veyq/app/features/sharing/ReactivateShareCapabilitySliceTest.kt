@@ -44,7 +44,9 @@ class ReactivateShareCapabilitySliceTest {
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
                 this.id = id; ownerAccount = s.ownerId; scopeId = s.scopeId; nodeId = s.nodeId; this.role = role
-                wrap = B64; sealedName = B64; enabled = false; createdAt = Instant.now()
+                // an UPLOADER link carries the drop public key where every other role carries the wrap (ADR 0031 point 7)
+                if (role == ShareEntity.UPLOADER) sealedDropPublicKey = B64 else wrap = B64
+                sealedName = B64; enabled = false; createdAt = Instant.now()
             }.persist()
         }
         return id

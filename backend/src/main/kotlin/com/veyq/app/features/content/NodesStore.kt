@@ -17,6 +17,8 @@ data class NodeRow(
     val epoch: Int,
     val wrappedContentKey: String?,
     val wrappedMeta: String?,
+    /** A MEMORY's drop private key sealed under its `K_mem` (ADR 0031 point 7), or null until its first UPLOADER share. */
+    val sealedDropPrivateKey: String? = null,
 )
 
 /** One soft-deleted subtree ROOT in the space's trash (uc.memory.delete-node). `deletedAt` is the marker the
@@ -122,7 +124,10 @@ class NodesStore {
 
     fun list(scopeId: String): List<NodeRow> =
         NodeEntity.find("scopeId = ?1 and deletedAt is null", scopeId).list().map {
-            NodeRow(it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey, it.wrappedMeta)
+            NodeRow(
+                it.id, it.parentId, it.kind, it.encryptedName, it.slugToken, it.orderIndex, it.epoch, it.wrappedContentKey,
+                it.wrappedMeta, it.sealedDropPrivateKey,
+            )
         }
 
     /** Re-load the node **inside** the transaction (the one the handler validated may be detached) and mutate

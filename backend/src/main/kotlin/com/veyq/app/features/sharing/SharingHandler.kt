@@ -17,6 +17,7 @@ import com.veyq.app.features.spaces.scope.ScopesStore
 import com.veyq.app.shared.blobstore.BlobStore
 import com.veyq.app.shared.blobstore.PresignedRef
 import com.veyq.app.shared.blobstore.presignGets
+import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
 import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
 import com.veyq.app.shared.http.FailureStatus.SERVICE_UNAVAILABLE
@@ -54,6 +55,12 @@ sealed interface CreateShareOutcome {
     /** The node is not a MEMORY (only a Memory can be public-shared, ADR 0029 §6) — a 422. */
     object IllegalScope : CreateShareOutcome, HttpFailure by httpFailure("illegal_scope", UNPROCESSABLE)
     object IdTaken : CreateShareOutcome, HttpFailure by Failures.idTaken
+    /** The keys do not match the role: a wrap on an UPLOADER share, a drop key on any other — a 400. */
+    object InvalidRequest : CreateShareOutcome, HttpFailure by Failures.invalidRequest
+    /** An UPLOADER share brought a drop private key, but the Memory already has one — a 409, nothing written. */
+    object DropKeyExists : CreateShareOutcome, HttpFailure by httpFailure("drop_key_exists", CONFLICT)
+    /** An UPLOADER share brought no drop private key, and the Memory has none — a 409, nothing written. */
+    object DropKeyMissing : CreateShareOutcome, HttpFailure by httpFailure("drop_key_missing", CONFLICT)
 }
 
 sealed interface ResolveShareOutcome {
@@ -73,6 +80,8 @@ sealed interface CreateIdentityOutcome {
     /** Unknown/disabled/expired share, or password-protected with no token given (cr-0164) — a 404. */
     object NotFound : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     object IdTaken : CreateIdentityOutcome, HttpFailure by Failures.idTaken
+    /** A wrapped identity key that does not match the role: missing on UPLOADER, present on CONTRIBUTOR — a 400. */
+    object InvalidRequest : CreateIdentityOutcome, HttpFailure by Failures.invalidRequest
     /** The share does not accept contributions (not CONTRIBUTOR/UPLOADER) — a 403. */
     object NotContributable : CreateIdentityOutcome, HttpFailure by httpFailure("share_not_contributable", FORBIDDEN)
     /** Password-protected + a wrong token (cr-0164) — a 403. */
@@ -203,13 +212,15 @@ class SharingHandler(
 ) {
 
     fun create(
-        userId: String, shareId: String, nodeId: String, role: String, wrap: String, sealedName: String, expiresAt: Instant?,
+        userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
+        sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
         if (!capabilities.isActive(capabilityFor(role))) return CreateShareOutcome.CapabilityDisabled
+        val keys = shareKeys(role, wrap, sealedDropPublicKey, sealedDropPrivateKey) ?: return CreateShareOutcome.InvalidRequest
         val node = store.findNode(nodeId) ?: return CreateShareOutcome.NoNode
         access.check(userId, node.scopeId, WRITE)
             .refusal(CreateShareOutcome.NoNode, CreateShareOutcome.Suspended, CreateShareOutcome.Deleting)?.let { return it }
@@ -218,11 +229,29 @@ class SharingHandler(
         if (node.kind != NodeEntity.MEMORY) return CreateShareOutcome.IllegalScope
         // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it.
         val created = store.create(
-            shareId, userId, node.scopeId, nodeId, role, wrap, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareName,
+            shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareName,
             passwordRequired, pwSalt, pwVerifier, sealedPassword,
         )
-        return if (created) CreateShareOutcome.Created(shareId) else CreateShareOutcome.IdTaken
+        return when (created) {
+            SharingStore.CreateResult.CREATED -> CreateShareOutcome.Created(shareId)
+            SharingStore.CreateResult.ID_TAKEN -> CreateShareOutcome.IdTaken
+            SharingStore.CreateResult.DROP_KEY_EXISTS -> CreateShareOutcome.DropKeyExists
+            SharingStore.CreateResult.DROP_KEY_MISSING -> CreateShareOutcome.DropKeyMissing
+        }
     }
+
+    /**
+     * The keys a share of [role] carries, or null when the request's do not match it (ADR 0031 point 7). An
+     * UPLOADER share never carries `symWrap(K_share, K_mem)` — the one party it exists to keep out would hold the
+     * Memory's read key — and every other role never carries a drop key. Sent-but-empty counts as sent: refused.
+     */
+    private fun shareKeys(role: String, wrap: String?, dropPublic: String?, dropPrivate: String?): ShareKeys? =
+        if (role == ShareEntity.UPLOADER) {
+            if (wrap != null || dropPublic.isNullOrEmpty() || dropPrivate?.isEmpty() == true) null
+            else ShareKeys.Drop(dropPublic, dropPrivate)
+        } else {
+            if (wrap.isNullOrEmpty() || dropPublic != null || dropPrivate != null) null else ShareKeys.MemoryWrap(wrap)
+        }
 
     /**
      * The caller's own shares — "my shares". Account-addressed, so it filters instead of refusing: a share in a space
@@ -301,11 +330,12 @@ class SharingHandler(
             PwCheck.OK -> {}
         }
         if (ShareAccessPolicy.canView(share.role)) {
-            return ResolveShareOutcome.Found(share, store.subtree(share.scopeId, share.nodeId), store.listIdentities(shareId))
+            val subtree = store.subtree(share.scopeId, share.nodeId)
+            return ResolveShareOutcome.Found(share, subtree, store.readerIdentities(shareId, subtree))
         }
         // UPLOADER: the minimal capability — no nodes, no media, no identities. The client seals its uploads under
-        // `K_mem` (from the share `wrap`) and shows the title (from `sealedName`); it needs nothing from the subtree.
-        // Returning even the root node would hand the uploader that node's `K_mem`-decryptable `wrappedMeta`.
+        // its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of
+        // the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
         return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyList())
     }
 
@@ -335,7 +365,9 @@ class SharingHandler(
     // --- contributor / uploader (cr-0101, cr-0102) -----------------------------
 
     /** Name yourself on a contributable share (CONTRIBUTOR/UPLOADER): seal-name in, an anonymous identity + token out. */
-    fun createIdentity(shareId: String, pwToken: String?, identityId: String, sealedDisplayName: String): CreateIdentityOutcome {
+    fun createIdentity(
+        shareId: String, pwToken: String?, identityId: String, sealedDisplayName: String, wrappedIdentityKey: String?,
+    ): CreateIdentityOutcome {
         val share = activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
             PwCheck.MISSING -> return CreateIdentityOutcome.NotFound // no token → non-enumerable 404 (no role reveal)
@@ -344,11 +376,16 @@ class SharingHandler(
             PwCheck.OK -> {}
         }
         if (!ShareAccessPolicy.canUpload(share.role)) return CreateIdentityOutcome.NotContributable
+        // ADR 0031 point 7: an UPLOADER identity seals under its own key and must hand it over wrapped to the drop
+        // key, or nobody could ever open what it uploads; a CONTRIBUTOR seals under `K_mem` and has none to hand.
+        val uploader = share.role == ShareEntity.UPLOADER
+        if (uploader == wrappedIdentityKey.isNullOrEmpty()) return CreateIdentityOutcome.InvalidRequest
         // The only guest call that writes a row before any upload exists — bounded per share (ADR 0051,
         // `@RateLimit(key = SHARE)`), after the authorization gates so an unauthorized caller spends nothing.
         if (!rateLimiter.allowIdentity(shareId)) return CreateIdentityOutcome.RateLimited
         // The client-minted identity id (ADR 0072): the sealed display name is bound to it.
-        val token = store.createIdentity(identityId, shareId, sealedDisplayName) ?: return CreateIdentityOutcome.IdTaken
+        val token = store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
+            ?: return CreateIdentityOutcome.IdTaken
         return CreateIdentityOutcome.Created(identityId, token)
     }
 
