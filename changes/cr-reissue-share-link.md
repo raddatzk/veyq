@@ -100,6 +100,10 @@ only re-issued. A group owner removing a member can, in the same act, turn off e
 - **Per-scope policy:** [ADR 0025](../docs/decisions/0025-forward-secrecy-policy-per-scope.md) — groups rotate on
   removal, the tenant does not, personal has no removal.
 - **Drop key:** [ADR 0031](../docs/decisions/0031-uploader-public-share.md) point 7.
+- **Siblings that land after this CR** (refined 2026-09-28, planned): `cr-tenant-removal-share-links` (inbox #210)
+  adds a per-scope removal counter to Decision 2's predicate and moves Decision 5's hint server-side;
+  `cr-share-link-delete` (inbox #211) makes Decision 1's old row a tombstone instead of `enabled = false`, because a
+  voluntary re-issue leaves the old link re-activatable by any member. Build this CR as written; those two amend it.
 - **Precedent for "one request":** `cr-removal-rotates-in-one-request` (landed) closed a removal that could end
   without its rotation. Re-issue has the same shape: a create that lands without its revoke leaves the old link
   live while the curator believes it is cut.
