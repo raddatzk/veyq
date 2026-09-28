@@ -191,7 +191,7 @@ describe('createContributorIdentity (cr-0101)', () => {
     const kMem = v1.randomBytes(32)
 
     const shareId = ADDR.shareId
-    const session = await createContributorIdentity(shareId, SCOPE_ID, kMem, 'Oma')
+    const session = await createContributorIdentity(shareId, SCOPE_ID, { kind: 'read', memoryKey: kMem }, 'Oma')
 
     const req = create.mock.calls[0][0].createShareIdentityRequest
     // the client mints the identity id (the name is bound to it) and the session carries exactly that id
@@ -269,7 +269,7 @@ describe('addSharePhoto — the contributor transport signs each next window (AD
     const noTiers = { deriveImage: vi.fn(), deriveVideoPoster: vi.fn() } as unknown as MediaDeriver
 
     const done = await addSharePhoto(
-      { identityId: 'id-1', contributorToken: 'tok-1', shareId: 'share-1', scopeId: SCOPE_ID, memoryKey: v1.randomBytes(32), pwToken: 'pw-1' },
+      { identityId: 'id-1', contributorToken: 'tok-1', shareId: 'share-1', scopeId: SCOPE_ID, sealKey: v1.randomBytes(32), pwToken: 'pw-1' },
       { blob: new Blob([new Uint8Array(2 * CHUNK_SIZE + 1)]), mediaType: 'application/pdf' },
       noTiers,
     )

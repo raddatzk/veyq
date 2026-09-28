@@ -7,7 +7,12 @@ import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
+import com.veyq.app.testing.TestFixtures.DROP_PRIVATE_KEY
+import com.veyq.app.testing.TestFixtures.DROP_PUBLIC_KEY
+import com.veyq.app.testing.TestFixtures.WRAPPED_UPLOADER_KEY
 import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.identityKeyJson
+import com.veyq.app.testing.TestFixtures.shareKeysJson
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -16,6 +21,7 @@ import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
@@ -27,6 +33,9 @@ import java.util.UUID
  * against the in-memory store. Covers the drop-box's two structural guarantees + the delete-own:
  *  - **write-only:** the anonymous resolve of an UPLOADER share serves `media: []` **even with existing media**
  *    (and no identities) — "cannot see others" is enforced by the `canView` gate, never gallery filtering;
+ *  - **never `K_mem` (ADR 0031 point 7):** it serves the Memory's drop public key instead of the wrap, the drop
+ *    private key is set on the Memory once, an UPLOADER identity must hand over its wrapped key, and every reader
+ *    of the Memory — a viewer link, a member's media page and buckets — is served what opens an upload;
  *  - **contribute:** an uploader names itself + uploads, and the media **attaches to the shared root stamped
  *    with its identity** (same path as CONTRIBUTOR);
  *  - **delete-own:** the token-gated `DELETE /media/{id}` removes + reclaims the caller's own media (a single-row
@@ -47,16 +56,132 @@ class ShareUploaderSliceTest {
         seedMedia(scopeId, memory, identityId = null) // a curator's existing photo on the Memory
         val shareId = createShare(userId, memory, role = "UPLOADER")
 
-        // the anonymous resolve of an UPLOADER share is write-only: NO media, NO identities, NO nodes — only the
-        // wrap (to seal uploads under K_mem) + the sealed title. The minimal capability an uploader needs.
+        // the anonymous resolve of an UPLOADER share is write-only: NO media, NO identities, NO nodes, and NO wrap —
+        // only the drop public key (the guest seals its own identity key to it, ADR 0031 point 7), the node it binds
+        // that wrap to, and the sealed title. The guest is never handed K_mem.
         given().`when`().get("/api/shares/$shareId")
             .then().statusCode(200)
             .body("role", equalTo("UPLOADER"))
-            .body("wrap", equalTo(wrap))
+            .body("wrap", nullValue())
+            .body("sealedDropPublicKey", equalTo(DROP_PUBLIC_KEY))
+            .body("nodeId", equalTo(memory))
             .body("sealedName", equalTo(sealedName))
             .body("media.size()", equalTo(0)) // the existing photo is NOT served
             .body("identities.size()", equalTo(0))
             .body("nodes.size()", equalTo(0)) // not even the root node — no K_mem-decryptable node metadata leaks
+
+        // control, same Memory: a VIEWER resolve still carries the wrap, and no drop public key
+        val viewerShare = createShare(userId, memory, role = "VIEWER")
+        given().`when`().get("/api/shares/$viewerShare")
+            .then().statusCode(200)
+            .body("wrap", equalTo(wrap))
+            .body("sealedDropPublicKey", nullValue())
+
+        // an UPLOADER row stored with a wrap (the shape before the drop key) still resolves without it: the role
+        // decides what the resolve hands out, not only what was stored
+        val legacy = TestIds.shareId()
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity().apply {
+                // `this@ShareUploaderSliceTest.` is load-bearing: inside `apply` a bare `wrap` is the entity's own
+                // (still null) field, which seeded a row with no wrap and made this control pass vacuously.
+                id = legacy; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.UPLOADER
+                this.wrap = this@ShareUploaderSliceTest.wrap; sealedName = this@ShareUploaderSliceTest.sealedName; enabled = true; createdAt = Instant.now()
+            }.persist()
+        }
+        given().`when`().get("/api/shares/$legacy").then().statusCode(200).body("role", equalTo("UPLOADER")).body("wrap", nullValue())
+    }
+
+    @Test
+    fun theKeysAShareCarriesFollowItsRole() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val drop = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\",\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\""
+
+        // an UPLOADER share that carries a wrap is refused — the guest would hold K_mem — and nothing is written
+        postShare(userId, memory, "UPLOADER", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
+        postShare(userId, memory, "UPLOADER", "\"wrap\":\"$wrap\"").then().statusCode(400).body("code", equalTo("invalid_request"))
+        QuarkusTransaction.requiringNew().run { assertNull(NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
+        // a VIEWER share that carries a drop key is refused, as is one with no wrap
+        postShare(userId, memory, "VIEWER", "\"wrap\":\"$wrap\",$drop").then().statusCode(400).body("code", equalTo("invalid_request"))
+        postShare(userId, memory, "VIEWER", "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\"").then().statusCode(400)
+        // controls: each role's own keys are accepted
+        postShare(userId, memory, "UPLOADER", drop).then().statusCode(201)
+        postShare(userId, memory, "VIEWER", "\"wrap\":\"$wrap\"").then().statusCode(201)
+    }
+
+    @Test
+    fun theDropKeyIsSetOnceOnTheMemory() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val public = "\"sealedDropPublicKey\":\"$DROP_PUBLIC_KEY\""
+
+        // a first UPLOADER share without the private half has nothing to seal to — refused, nothing written
+        postShare(userId, memory, "UPLOADER", public).then().statusCode(409).body("code", equalTo("drop_key_missing"))
+        // the first one with it stores it on the Memory
+        postShare(userId, memory, "UPLOADER", "$public,\"sealedDropPrivateKey\":\"$DROP_PRIVATE_KEY\"").then().statusCode(201)
+        QuarkusTransaction.requiringNew().run { assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
+        // a second private half would orphan every upload sealed to the first — refused, and the first stays
+        val second = "c2Vjb25kLWRyb3AtcHJpdmF0ZQ=="
+        postShare(userId, memory, "UPLOADER", "$public,\"sealedDropPrivateKey\":\"$second\"")
+            .then().statusCode(409).body("code", equalTo("drop_key_exists"))
+        QuarkusTransaction.requiringNew().run { assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
+        // control: a later UPLOADER share seals to the Memory's existing key and brings none
+        postShare(userId, memory, "UPLOADER", public).then().statusCode(201)
+    }
+
+    @Test
+    fun anUploaderIdentityHandsOverItsWrappedKey() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val uploader = createShare(userId, memory, role = "UPLOADER")
+        val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
+        val keyed = ",\"wrappedIdentityKey\":\"$WRAPPED_UPLOADER_KEY\""
+
+        // an UPLOADER identity without its key could never be read by anyone — refused
+        postIdentity(uploader, "").then().statusCode(400).body("code", equalTo("invalid_request"))
+        val id = postIdentity(uploader, keyed).then().statusCode(201).extract().path<String>("identityId")
+        QuarkusTransaction.requiringNew().run { assertEquals(WRAPPED_UPLOADER_KEY, ShareIdentityEntity.findById(id)!!.wrappedIdentityKey) }
+        // a CONTRIBUTOR seals under K_mem and has no key to hand over — refused with one; control: without, accepted
+        postIdentity(contributor, keyed).then().statusCode(400).body("code", equalTo("invalid_request"))
+        postIdentity(contributor, "").then().statusCode(201)
+    }
+
+    @Test
+    fun everyReaderOfTheMemoryIsServedWhatOpensAnUpload() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+        val uploader = createShare(userId, memory, role = "UPLOADER")
+        val contributor = createShare(userId, memory, role = "CONTRIBUTOR")
+        val uploaderIdentity = createIdentity(uploader)
+        val contributorIdentity = postIdentity(contributor, "").then().statusCode(201).extract().path<String>("identityId")
+        seedMedia(scopeId, memory, identityId = uploaderIdentity)
+        seedMedia(scopeId, memory, identityId = contributorIdentity)
+        val viewer = createShare(userId, memory, role = "VIEWER")
+
+        // a viewer link: the Memory's sealed drop private key on its node, and the uploader identity's wrapped key
+        // (served although it belongs to another share); the contributor's own share lists none for it
+        given().`when`().get("/api/shares/$viewer").then().statusCode(200)
+            .body("nodes[0].sealedDropPrivateKey", equalTo(DROP_PRIVATE_KEY))
+            .body("identities.size()", equalTo(1))
+            .body("identities[0].identityId", equalTo(uploaderIdentity))
+            .body("identities[0].wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
+        // a member: the node, the media page (drop key + one uploader key — the contributor's rows need none) and
+        // the uploader's primary bucket
+        val auth = bearer(userId)
+        given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes").then().statusCode(200)
+            .body("find { it.id == '$memory' }.sealedDropPrivateKey", equalTo(DROP_PRIVATE_KEY))
+        given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes/$memory/media").then().statusCode(200)
+            .body("media.size()", equalTo(2))
+            .body("sealedDropPrivateKey", equalTo(DROP_PRIVATE_KEY))
+            .body("uploaderKeys.size()", equalTo(1))
+            .body("uploaderKeys[0].identityId", equalTo(uploaderIdentity))
+            .body("uploaderKeys[0].wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
+        given().header("Authorization", auth).`when`().get("/api/scopes/$scopeId/nodes/$memory/buckets").then().statusCode(200)
+            .body("sealedDropPrivateKey", equalTo(DROP_PRIVATE_KEY))
+            .body("buckets.find { it.ownerKey == 'share:$uploaderIdentity' }.wrappedIdentityKey", equalTo(WRAPPED_UPLOADER_KEY))
+            // the contributor's primary is there (so the null below is not a missing row) and carries no key
+            .body("buckets.find { it.ownerKey == 'share:$contributorIdentity' }.isPrimary", equalTo(true))
+            .body("buckets.find { it.ownerKey == 'share:$contributorIdentity' }.wrappedIdentityKey", nullValue())
     }
 
     @Test
@@ -83,9 +208,7 @@ class ShareUploaderSliceTest {
         val shareId = createShare(userId, memory, role = "UPLOADER")
 
         // name yourself — NO bearer (uploader path is open like CONTRIBUTOR); identity + capability token out
-        val idResp = given().contentType(ContentType.JSON)
-            .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+        val idResp = postIdentity(shareId, identityKeyJson("UPLOADER"))
             .then().statusCode(201)
             .body("identityId", notNullValue()).body("contributorToken", notNullValue())
             .extract()
@@ -184,16 +307,22 @@ class ShareUploaderSliceTest {
     // --- helpers ---
 
     private fun createShare(userId: String, nodeId: String, role: String): String =
-        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
-            .`when`().post("/api/shares")
-            .then().statusCode(201).extract().path("shareId")
+        postShare(userId, nodeId, role, shareKeysJson(role, nodeId, wrap)).then().statusCode(201).extract().path("shareId")
 
+    private fun postShare(userId: String, nodeId: String, role: String, keys: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",$keys,"sealedName":"$sealedName"}""")
+            .`when`().post("/api/shares")
+
+    private fun postIdentity(shareId: String, key: String) =
+        given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"$key}""")
+            .`when`().post("/api/shares/$shareId/identities")
+
+    /** An identity on an UPLOADER share — with the wrapped key such an identity must hand over. */
     private fun createIdentity(shareId: String): String = createIdentityWithToken(shareId).first
 
     private fun createIdentityWithToken(shareId: String): Pair<String, String> {
-        val r = given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedUploaderName"}""")
-            .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract()
+        val r = postIdentity(shareId, identityKeyJson("UPLOADER")).then().statusCode(201).extract()
         return r.path<String>("identityId") to r.path<String>("contributorToken")
     }
 

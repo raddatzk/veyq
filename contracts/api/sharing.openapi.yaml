@@ -81,7 +81,11 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: The `shareId` is already taken (`id_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: >
+            The `shareId` is already taken (`id_taken`), or the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4). For UPLOADER: the request carries a drop private key the
+            Memory already has one of (`drop_key_exists`), or carries none while the Memory has none
+            (`drop_key_missing`) — nothing is written in either case.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: id_taken } }
         "422":
@@ -343,14 +347,17 @@ paths:
       operationId: createShareIdentity
       summary: Name yourself as a contributor (unauthenticated) → an anonymous share identity.
       description: >
-        **No auth.** For a **CONTRIBUTOR** share (cr-0101, ADR 0030), before uploading the visitor must name
-        themselves. The client mints the identity's id (`identityId`, ADR 0072 Decision 3), **seals the display
-        name under `K_mem`** (which it unwrapped from the fragment key) bound to scope, share and that id, and
-        POSTs the ciphertext; the server stores an anonymous **share identity** under that id and mints an
+        **No auth.** For a **CONTRIBUTOR** or **UPLOADER** share (cr-0101, ADR 0030, ADR 0031), before uploading
+        the visitor must name themselves. The client mints the identity's id (`identityId`, ADR 0072 Decision 3),
+        **seals the display name** bound to scope, share and that id, and POSTs the ciphertext. A CONTRIBUTOR
+        guest seals under `K_mem` (which it unwrapped from the fragment key). An UPLOADER guest never holds
+        `K_mem` (ADR 0031 point 7): it mints its own identity key `K_up`, seals the name and every later upload
+        under it, and posts `K_up` wrapped to the Memory's drop public key (`wrappedIdentityKey`) — required for
+        UPLOADER, absent for CONTRIBUTOR, else `400 invalid_request`. The server stores an anonymous **share identity** under that id and mints an
         unguessable **`contributorToken`** (held on device) that authorizes subsequent uploads. A taken
         `identityId`, in any share, is `409 id_taken` (never overwritten, not idempotent). The server stores
-        only the sealed name (opaque) + the token hash + the `shareId`; it never sees the name or the person. A
-        disabled/expired/unknown share, or a non-CONTRIBUTOR share, is a `404`/`403`.
+        only the sealed name and wrapped key (opaque) + the token hash + the `shareId`; it never sees the name,
+        the key or the person. A disabled/expired/unknown share is a `404`; a VIEWER share is a `403`.
         **Password-protected shares (cr-0164, ADR 0037):** the password gate fronts this write endpoint too —
         with **no** `X-Share-Password` the share is a non-enumerable `404`; a **wrong** token → `403
         share_password_incorrect`. A guest names themselves only after presenting the password.
@@ -371,7 +378,7 @@ paths:
               schema: { $ref: "#/components/schemas/ShareIdentityCreated" }
               example: { identityId: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, contributorToken: Y29udHJpYnV0b3ItdG9rZW4tb3BhcXVl }
         "400":
-          description: Malformed request (missing/invalid fields).
+          description: Malformed request (missing/invalid fields, or a `wrappedIdentityKey` that does not match the share's role).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "403":
@@ -641,7 +648,13 @@ components:
 
     CreateShareRequest:
       type: object
-      required: [shareId, nodeId, role, wrap, sealedName]
+      required: [shareId, nodeId, role, sealedName]
+      description: >
+        The share's keys follow its role (ADR 0031 point 7). A VIEWER or CONTRIBUTOR share carries `wrap` and no
+        drop key. An UPLOADER share carries **no** `wrap` — its guest never holds `K_mem` — and instead the
+        Memory's drop public key sealed under `K_share` (`sealedDropPublicKey`); the Memory's first UPLOADER share
+        also carries the drop private key sealed under `K_mem` (`sealedDropPrivateKey`), which the server stores
+        on the Memory. Any other combination is `400 invalid_request`.
       properties:
         shareId:
           x-veyq-visibility: id
@@ -665,12 +678,35 @@ components:
         role:
           $ref: "#/components/schemas/ShareRole"
         wrap:
-          type: string
-          description: The Memory's `K_mem` wrapped under the fresh per-share key — `symWrap(K_share, K_mem)` (opaque base64).
+          type: [string, "null"]
+          description: >
+            The Memory's `K_mem` wrapped under the fresh per-share key — `symWrap(K_share, K_mem)` (opaque base64).
+            Required for VIEWER and CONTRIBUTOR; absent for UPLOADER.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
-          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPublicKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER only: the Memory's drop public key sealed under `K_share` (AAD `drop-public-key`, opaque base64)
+            — the key the guest wraps its own identity key to (ADR 0031 point 7). Required for UPLOADER, absent
+            otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: c2VhbGVkLWRyb3AtcHVibGljLWtleQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER only, and only while the Memory has no drop key yet: the drop private key sealed under `K_mem`
+            (AAD `drop-private-key`, bound to scope + node; opaque base64), stored on the Memory in the same
+            transaction as the share. Present when the Memory already has one ⇒ `409 drop_key_exists` (the client
+            re-reads the node and seals to that key); absent when it has none ⇒ `409 drop_key_missing`.
+          contentEncoding: base64
+          maxLength: 256
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         sealedName:
           type: string
           description: The Memory name re-sealed under `K_share` (seal purpose `share-memory-name`, opaque base64) — so a viewer with only the fragment key can show the title without `K_SC`.
@@ -918,8 +954,9 @@ components:
       description: >
         A resolved share. When `passwordRequired` is true and the guest presented **no** (or a wrong) password
         token, the response is **locked**: only `role` + `passwordRequired` + `pwSalt` are set and `wrap` /
-        `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are omitted/empty — the client prompts for
-        the password and re-resolves with the token (cr-0118, ADR 0037).
+        `sealedDropPublicKey` / `nodeId` / `sealedName` / `sealedNote` / `nodes` / `media` / `identities` are
+        omitted/empty — the client prompts for the password and re-resolves with the token (cr-0118, ADR 0037).
+        An unlocked UPLOADER response carries `sealedDropPublicKey` **instead of** `wrap` (ADR 0031 point 7).
       properties:
         role:
           $ref: "#/components/schemas/ShareRole"
@@ -945,10 +982,28 @@ components:
           example: null
         wrap:
           type: [string, "null"]
-          description: The wrap `symWrap(K_share, K_mem)` (opaque base64) — the viewer unwraps `K_mem` with the fragment key. Null in a locked (password-gated) response.
+          description: >
+            The wrap `symWrap(K_share, K_mem)` (opaque base64) — the viewer unwraps `K_mem` with the fragment key.
+            Null for an UPLOADER share (its guest never holds `K_mem`) and in a locked (password-gated) response.
           contentEncoding: base64
           maxLength: 256
           example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+        sealedDropPublicKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER only: the Memory's drop public key sealed under `K_share` (AAD `drop-public-key`, opaque
+            base64). The guest wraps its own identity key to it. Null for every other role and in a locked response.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+        nodeId:
+          x-veyq-visibility: id
+          type: [string, "null"]
+          format: uuid
+          description: >
+            The shared Memory. An UPLOADER guest binds its identity key's wrap to it (`upload-identity-key`, ADR
+            0072), since it is served no node. Null in a locked response.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
         sealedName:
           type: [string, "null"]
           description: The Memory name re-sealed under `K_share` (opaque base64). Null in a locked response.
@@ -972,9 +1027,10 @@ components:
         identities:
           type: [array, "null"]
           description: >
-            The anonymous **contributor identities** of a CONTRIBUTOR share (cr-0101) — each an opaque `identityId`
-            + the `K_mem`-sealed display name. Lets a viewer attribute/group contributed media (the buckets hook);
-            null/empty for a VIEWER share or one with no contributions yet.
+            The anonymous identities a reader needs (cr-0101): this share's own contributor identities, plus every
+            UPLOADER identity with media in the served subtree — each an opaque `identityId`, its sealed display
+            name and, for an UPLOADER identity, its wrapped identity key, without which that identity's media
+            cannot be opened (ADR 0031 point 7). Empty for an UPLOADER share (it is served nothing).
           items: { $ref: "#/components/schemas/ShareIdentity" }
 
     ShareNode:
@@ -1018,6 +1074,15 @@ components:
           contentEncoding: base64
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
+        sealedDropPrivateKey:
+          type: [string, "null"]
+          description: >
+            The Memory's drop private key sealed under its `K_mem` (AAD `drop-private-key`, bound to scope + node;
+            opaque base64) — what opens the media an UPLOADER guest added (ADR 0031 point 7). Null until the
+            Memory's first UPLOADER share.
+          contentEncoding: base64
+          maxLength: 256
+          example: null
 
     ShareMedia:
       type: object
@@ -1135,16 +1200,29 @@ components:
     # --- contributor (cr-0101) ---------------------------------------------------
     ShareIdentity:
       type: object
-      description: An anonymous contributor identity — an opaque id + the `K_mem`-sealed display name (attribution/grouping hook).
+      description: >
+        An anonymous share identity — an opaque id + its sealed display name (attribution/grouping hook) and, for
+        an UPLOADER identity, its wrapped identity key.
       required: [identityId, sealedDisplayName]
       properties:
         identityId: { type: string, format: uuid, example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c, x-veyq-visibility: id }
         sealedDisplayName:
           type: string
-          description: The contributor's display name AEAD-sealed under `K_mem` (AAD `share-identity-name`; opaque base64).
+          description: >
+            The display name AEAD-sealed (AAD `share-identity-name`; opaque base64) — under `K_mem` for a
+            CONTRIBUTOR identity, under the identity's own key for an UPLOADER one.
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER identities only: the identity's own key `K_up` wrapped to the Memory's drop public key (AAD
+            `upload-identity-key`, bound to scope + node + identity; opaque base64). Everything the identity sealed
+            opens under `K_up` (ADR 0031 point 7). Null for a CONTRIBUTOR identity, whose seals are under `K_mem`.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
 
     CreateShareIdentityRequest:
       type: object
@@ -1159,11 +1237,23 @@ components:
           example: 6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c
         sealedDisplayName:
           type: string
-          description: The contributor's display name sealed under `K_mem` (opaque base64) — mandatory, never in clear.
+          description: >
+            The display name sealed (opaque base64) — under `K_mem` for CONTRIBUTOR, under `K_up` for UPLOADER;
+            mandatory, never in clear.
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLW5hbWUtdW5kZXItay1tZW0=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        wrappedIdentityKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER only (required there, absent for CONTRIBUTOR): the guest's own identity key `K_up` wrapped to
+            the Memory's drop public key (AAD `upload-identity-key`, bound to scope + node + this `identityId`;
+            opaque base64).
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareIdentityCreated:
       type: object

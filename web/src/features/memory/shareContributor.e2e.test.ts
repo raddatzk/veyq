@@ -48,6 +48,7 @@ import {
   openShareOriginal,
   readShareName,
   resolveShare,
+  sessionSealKey,
   type ShareItem,
 } from './share'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -111,10 +112,12 @@ describe.skipIf(!process.env.VEYQ_E2E)('contributor share e2e (live, real crypto
     expect(resolved.scopeId, 'the unlocked share names the scope its seals are bound to').toBe(scopeId)
 
     // --- anonymous: name yourself, then upload TWO media through the share-scoped transport ------------------
-    const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.rootMemoryKey, CONTRIBUTOR_NAME)
+    const session = await createContributorIdentity(shareId, resolved.scopeId, resolved.access, CONTRIBUTOR_NAME)
     expect(session.contributorToken, 'the server minted a capability token for this session').toBeTruthy()
+    const sealKey = sessionSealKey(session, resolved.access)
+    expect(sealKey, 'a contributor seals under the K_mem its link holds').not.toBeNull()
 
-    const upload = { ...session, shareId, scopeId: resolved.scopeId, memoryKey: resolved.rootMemoryKey }
+    const upload = { ...session, shareId, scopeId: resolved.scopeId, sealKey: sealKey! }
     // raw bytes with no MIME ⇒ the original-only path (nothing derivable) — the byte transport is what this gates
     const first = await addSharePhoto(upload, { blob: new Blob([bytes(3) as BlobPart]), mediaType: '' })
     const second = await addSharePhoto(upload, { blob: new Blob([bytes(101) as BlobPart]), mediaType: '' })

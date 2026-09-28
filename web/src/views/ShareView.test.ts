@@ -59,7 +59,7 @@ function mountShareView() {
 }
 
 function viewerShare() {
-  return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, rootMemoryKey: new Uint8Array(), items: [] }
+  return { memoryName: 'My Memory', noteByLocale: {}, role: ShareRole.Viewer, access: { kind: 'read', memoryKey: new Uint8Array() }, items: [] }
 }
 
 describe('ShareView — accountless terms gate', () => {

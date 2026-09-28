@@ -1332,7 +1332,12 @@ row's share) and there were seven — the public share's scope, a shared chapter
 granted epoch, an invitation's name epoch, the caller's own user id, and a member mark's author, which the read
 omits *by design* and so became an accepted gap instead of a field. Each surfaced mid-implementation as a contract
 change, and one as an owner question. Run the reader angle at refine: for every bound field, `grep` the read
-schema the opener consumes for it, and list the misses in the CR.
+schema the opener consumes for it, and list the misses in the CR. **The same holds for a new KEY a reader needs,
+and there the reader is every surface that shows the object, not the schema the key was put on.**
+cr-uploader-never-holds-the-memory-key put an identity's wrapped key on `ShareIdentity`, which only that link's own
+resolve serves; the curator's gallery, the curator's buckets and a viewer link of the same Memory each read the
+upload through a different response, so three read fields surfaced mid-implementation (the media page, the bucket
+list, and a resolve that serves other links' uploader identities).
 
 ### A CR that changes a gate runs the opt-in suites whose fixtures pass through it
 

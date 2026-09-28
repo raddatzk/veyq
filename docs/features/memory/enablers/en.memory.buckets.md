@@ -17,7 +17,9 @@
   anonymous **share identity** ([ADR 0030](../../../decisions/0030-contributor-public-share.md) / cr-0101) for the
   guest `owner_key`.
 - **Preconditions:** an **unlocked** vault; an **open Memory** whose `K_mem` is unwrapped (bucket names + any
-  sub-bucket names wrap under it); media with an uploader (a member or a share contributor).
+  sub-bucket names wrap under it — except an UPLOADER guest's primary, whose name is under that guest's own key,
+  [ADR 0031](../../../decisions/0031-uploader-public-share.md) point 7); media with an uploader (a member or a share
+  contributor).
 - **Postconditions (success):** each medium carries a **denormalized `created_by`** (the uploader's `owner_key`)
   and a **`bucket_id`** (`null` = the uploader's primary, resolved lazily). Buckets exist as **rows only when
   materialized** (lazy). The server holds **opaque `owner_key`s + the bucket structure + sealed names** — **no

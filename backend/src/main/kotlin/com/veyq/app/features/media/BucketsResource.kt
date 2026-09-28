@@ -34,7 +34,9 @@ class BucketsResource(
 
     override fun listNodeBuckets(scopeId: UUID, nodeId: UUID): Response =
         when (val o = handler.listBuckets(identity.principal.name, scopeId.toString(), nodeId.toString())) {
-            is ListBucketsOutcome.Ok -> Response.ok(BucketListResponse(buckets = o.buckets.map(::toSummary))).build()
+            is ListBucketsOutcome.Ok -> Response.ok(
+                BucketListResponse(buckets = o.buckets.map(::toSummary), sealedDropPrivateKey = o.sealedDropPrivateKey),
+            ).build()
             is HttpFailure -> httpError(o)
         }
 
@@ -80,5 +82,6 @@ class BucketsResource(
         parentBucketId = b.parentBucketId?.let(UUID::fromString),
         sealedName = b.sealedName,
         shareId = b.shareId,
+        wrappedIdentityKey = b.wrappedIdentityKey,
     )
 }

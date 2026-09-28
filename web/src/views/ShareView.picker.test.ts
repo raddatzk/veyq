@@ -106,7 +106,7 @@ describe('ShareView — the contributor picker inherits E3s re-read window', () 
       role: ShareRole.Contributor,
       // the shared Memory's scope: a contributor's uploads are sealed bound to it, so without one nothing enqueues
       scopeId: '5c09e000-0000-4000-8000-0000000000df',
-      rootMemoryKey: new Uint8Array(32),
+      access: { kind: 'read', memoryKey: new Uint8Array(32) },
       items: [],
     })
   })

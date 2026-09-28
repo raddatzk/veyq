@@ -119,5 +119,6 @@ class ContentResource(
         parentId = if (parentId == scopeId) null else UUID.fromString(parentId),
         wrappedContentKey = wrappedContentKey,
         wrappedMeta = wrappedMeta,
+        sealedDropPrivateKey = sealedDropPrivateKey,
     )
 }

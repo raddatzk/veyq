@@ -51,6 +51,9 @@ export const SEAL_PURPOSES = {
   'bucket-name': [['scopeId', 'id'], ['nodeId', 'id'], ['bucketId', 'id']],
   'share-identity-name': [['scopeId', 'id'], ['shareId', 'shareId'], ['identityId', 'id']],
   'share-key-recovery': [['scopeId', 'id'], ['nodeId', 'id'], ['shareId', 'shareId']],
+  // A Memory's drop PRIVATE key (ADR 0031 point 7), under that Memory's K_mem — a node field of its own, never
+  // inside node-meta, so a date or location edit never carries it.
+  'drop-private-key': [['scopeId', 'id'], ['nodeId', 'id']],
   // No member id: a reader addresses every member's entry by scope + node only, because the read deliberately
   // carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA). Binding the marking member would
   // need that id on the wire; so the server can still relabel which entry is the caller's own (`self`), an
@@ -69,6 +72,9 @@ export const SEAL_PURPOSES = {
   'share-note': [],
   'share-name': [],
   'share-password': [],
+  // The Memory's drop PUBLIC key on an UPLOADER share: the guest seals to it, so the server can neither read nor
+  // substitute it.
+  'drop-public-key': [],
   // Purpose only: under a KEK with a fresh salt, or under the account's own Master Key.
   'master-key': [],
   'identity-priv': [],
@@ -78,6 +84,9 @@ export const SEAL_PURPOSES = {
 export const SEAL_TO_PURPOSES = {
   'scope-grant': [['scopeId', 'id'], ['epoch', 'uint']],
   'group-name-key': [['scopeId', 'id'], ['nameEpoch', 'uint']],
+  // An UPLOADER guest's own identity key K_up, wrapped to the Memory's drop public key (ADR 0031 point 7). The
+  // reader addresses it by the Memory it opens and the identity the media names.
+  'upload-identity-key': [['scopeId', 'id'], ['nodeId', 'id'], ['identityId', 'id']],
   // Purpose only: a single-use pairing envelope to a fresh ephemeral key (ADR 0072 Decision 2).
   'pairing-grant': [],
 } as const satisfies Schema

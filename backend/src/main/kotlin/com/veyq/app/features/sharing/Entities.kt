@@ -39,9 +39,14 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "role", nullable = false, length = 16)
     lateinit var role: String
 
-    /** `symWrap(K_share, K_mem)` — the Memory's content key sealed under the fresh per-share key (opaque base64). */
-    @Column(name = "wrap", nullable = false)
-    lateinit var wrap: String
+    /** `symWrap(K_share, K_mem)` — the Memory's content key sealed under the fresh per-share key (opaque base64).
+     *  Null for an UPLOADER share: its guest never holds `K_mem` (ADR 0031 point 7). */
+    @Column(name = "wrap")
+    var wrap: String? = null
+
+    /** UPLOADER only: the Memory's drop public key sealed under `K_share` (opaque base64) — served instead of [wrap]. */
+    @Column(name = "sealed_drop_public_key")
+    var sealedDropPublicKey: String? = null
 
     /** The Memory name re-sealed under `K_share` (opaque base64) — a viewer with only the fragment key shows the title. */
     @Column(name = "sealed_name", nullable = false)
@@ -117,9 +122,14 @@ class ShareIdentityEntity : PanacheEntityBase {
     @Column(name = "share_id", nullable = false, length = 64)
     lateinit var shareId: String
 
-    /** The contributor's display name AEAD-sealed under `K_mem` (opaque base64). */
+    /** The display name AEAD-sealed (opaque base64) — under `K_mem` for a CONTRIBUTOR identity, under the identity's
+     *  own key for an UPLOADER one. */
     @Column(name = "sealed_display_name", nullable = false)
     lateinit var sealedDisplayName: String
+
+    /** UPLOADER identities only: the identity's own key wrapped to the Memory's drop public key (opaque base64). */
+    @Column(name = "wrapped_identity_key")
+    var wrappedIdentityKey: String? = null
 
     /** SHA-256 hash of the capability token handed to the client (a DB dump yields no usable token). */
     @Column(name = "token_hash", nullable = false, length = 64)

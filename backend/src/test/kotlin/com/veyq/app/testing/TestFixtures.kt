@@ -167,6 +167,27 @@ object TestFixtures {
         return id
     }
 
+    /** The opaque sealed drop keypair halves and a wrapped UPLOADER identity key (ADR 0031 point 7). */
+    const val DROP_PUBLIC_KEY = "c2VhbGVkLWRyb3AtcHVibGljLWtleQ=="
+    const val DROP_PRIVATE_KEY = "c2VhbGVkLWRyb3AtcHJpdmF0ZS1rZXk="
+    const val WRAPPED_UPLOADER_KEY = "d3JhcHBlZC11cGxvYWRlci1rZXk="
+
+    /**
+     * The key fields of a `createShare` body for [role], as JSON members (ADR 0031 point 7): a VIEWER or CONTRIBUTOR
+     * share carries [wrap]; an UPLOADER share carries the drop public key instead, plus the drop private key while
+     * the Memory [nodeId] has none yet — exactly what the owner's client sends.
+     */
+    fun shareKeysJson(role: String, nodeId: String, wrap: String = "d3JhcA=="): String {
+        if (role != "UPLOADER") return """"wrap":"$wrap""""
+        val hasDropKey = QuarkusTransaction.requiringNew().call { NodeEntity.findById(nodeId)?.sealedDropPrivateKey != null }
+        return """"sealedDropPublicKey":"$DROP_PUBLIC_KEY"""" +
+            if (hasDropKey) "" else ""","sealedDropPrivateKey":"$DROP_PRIVATE_KEY""""
+    }
+
+    /** The key field of a `createShareIdentity` body for a share of [role], as a leading-comma JSON member (or ""). */
+    fun identityKeyJson(role: String): String =
+        if (role == "UPLOADER") ""","wrappedIdentityKey":"$WRAPPED_UPLOADER_KEY"""" else ""
+
     /** A fresh session's `Authorization` header value for [userId]. */
     fun bearer(userId: String): String =
         "Bearer ${Arc.container().instance(SessionService::class.java).get().issue(userId).accessToken}"

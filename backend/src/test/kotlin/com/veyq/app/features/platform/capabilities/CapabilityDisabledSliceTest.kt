@@ -1,6 +1,8 @@
 package com.veyq.app.features.platform.capabilities
 
 import com.veyq.app.shared.TestIds
+import com.veyq.app.testing.TestFixtures.DROP_PRIVATE_KEY
+import com.veyq.app.testing.TestFixtures.DROP_PUBLIC_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.test.junit.QuarkusTest
@@ -49,7 +51,7 @@ class CapabilityDisabledSliceTest {
         // UPLOADER needs the disabled `sharing.uploader-links` → 422 capability_disabled, checked before any node
         // lookup so it reads as instance policy (not a node/scope error).
         given().header("Authorization", bearer).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$someNode","role":"UPLOADER","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$someNode","role":"UPLOADER","sealedDropPublicKey":"$DROP_PUBLIC_KEY","sealedDropPrivateKey":"$DROP_PRIVATE_KEY","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(422).body("code", equalTo("capability_disabled"))
 

@@ -485,3 +485,54 @@ export function deserializeIdentityPrivate(bytes: Uint8Array): Identity['priv'] 
   }
   return { kemX: next(), mlkemSeed: next(), sign: next() }
 }
+
+/**
+ * A Memory's **drop keypair** (ADR 0031 point 7): a hybrid X25519 + ML-KEM-768 KEM keypair with no signing half.
+ * Its private half is sealed under the Memory's `K_mem` (`drop-private-key`), its public half under each UPLOADER
+ * share's `K_share` (`drop-public-key`). An UPLOADER guest wraps its own identity key to the public half
+ * (`upload-identity-key`), so the guest never holds `K_mem` and every reader of the Memory opens what it uploaded.
+ */
+export type DropKey = { kemX: Uint8Array; mlkemSeed: Uint8Array }
+
+export const generateDropKey = (): DropKey => ({ kemX: randomBytes(32), mlkemSeed: randomBytes(64) })
+
+/** The drop key's public half, re-derived from the private half (the Memory stores only the private half). */
+export const dropKeyPublic = (k: DropKey): HybridPublic => ({
+  x: x25519.getPublicKey(k.kemX),
+  m: ml_kem768.keygen(k.mlkemSeed).publicKey,
+})
+
+/** The drop key as `openAs` takes it — noble decapsulates with the expanded ML-KEM secret (cf. [hybridSecret]). */
+export const dropKeySecret = (k: DropKey): HybridSecret => ({ x: k.kemX, m: ml_kem768.keygen(k.mlkemSeed).secretKey })
+
+const ML_KEM_768_PUBLIC_BYTES = 1184
+
+/** Read exactly one length-prefixed field per entry of `sizes`, each of exactly that size, and nothing after them. */
+function readFixedLp(bytes: Uint8Array, sizes: readonly number[], what: string): Uint8Array[] {
+  const out: Uint8Array[] = []
+  let o = 0
+  for (const size of sizes) {
+    if (o + 4 > bytes.length) throw new Error(`${what}: truncated`)
+    const len = new DataView(bytes.buffer, bytes.byteOffset + o, 4).getUint32(0, false)
+    o += 4
+    if (len !== size || o + len > bytes.length) throw new Error(`${what}: malformed`)
+    out.push(bytes.slice(o, o + len))
+    o += len
+  }
+  if (o !== bytes.length) throw new Error(`${what}: trailing bytes`)
+  return out
+}
+
+/** Drop private serialization: lp(kemX) || lp(mlkemSeed) — the plaintext of a `drop-private-key` seal. */
+export const serializeDropKey = (k: DropKey): Uint8Array => concat(lp(k.kemX), lp(k.mlkemSeed))
+export function deserializeDropKey(bytes: Uint8Array): DropKey {
+  const [kemX, mlkemSeed] = readFixedLp(bytes, [32, 64], 'drop key')
+  return { kemX, mlkemSeed }
+}
+
+/** Hybrid public serialization: lp(x) || lp(m) — the plaintext of a `drop-public-key` seal. */
+export const serializeHybridPublic = (p: HybridPublic): Uint8Array => concat(lp(p.x), lp(p.m))
+export function deserializeHybridPublic(bytes: Uint8Array): HybridPublic {
+  const [x, m] = readFixedLp(bytes, [32, ML_KEM_768_PUBLIC_BYTES], 'hybrid public key')
+  return { x, m }
+}

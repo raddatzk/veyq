@@ -51,6 +51,11 @@ class NodeEntity : PanacheEntityBase {
     @Column(name = "wrapped_meta")
     var wrappedMeta: String? = null
 
+    /** A MEMORY's drop private key sealed under its `K_mem` (opaque base64) — set once, by its first UPLOADER share,
+     *  never replaced: the media UPLOADER guests added open through it (ADR 0031 point 7). */
+    @Column(name = "sealed_drop_private_key")
+    var sealedDropPrivateKey: String? = null
+
     /** The node's standalone **cover** blob id (cr-0073): a veyq_blob with NO veyq_media row (never in the gallery), or null. Opaque — the server never learns it is "the cover" (that stays in the sealed `wrappedMeta.cover`). */
     @Column(name = "cover_blob_id", length = 36)
     var coverBlobId: String? = null

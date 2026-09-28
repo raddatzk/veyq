@@ -112,6 +112,10 @@ sealed interface ListMediaOutcome {
         val mediaRevision: Int,
         val deleteRevision: Int,
         val mediaIds: List<String>?,
+        /** The node's sealed drop private key and the wrapped key of every UPLOADER identity among [rows]' owners:
+         *  what opens a row an UPLOADER guest added, served with the rows (ADR 0031 point 7). */
+        val sealedDropPrivateKey: String? = null,
+        val uploaderKeys: Map<String, String> = emptyMap(),
     ) : ListMediaOutcome
     /** The client's `If-None-Match` equals the node's `media_revision` — nothing changed (a 304, no media query ran). */
     object NotModified : ListMediaOutcome
@@ -191,7 +195,8 @@ sealed interface PurgeMediaOutcome {
 }
 
 sealed interface ListBucketsOutcome {
-    data class Ok(val buckets: List<BucketRow>) : ListBucketsOutcome
+    /** [sealedDropPrivateKey]: the node's, which opens an UPLOADER primary's name (ADR 0031 point 7). */
+    data class Ok(val buckets: List<BucketRow>, val sealedDropPrivateKey: String? = null) : ListBucketsOutcome
     object Suspended : ListBucketsOutcome, HttpFailure by Failures.tenantSuspended
     /** No such scope/node, or the caller holds no grant (a 404, no reveal). */
     object NoNode : ListBucketsOutcome, HttpFailure by Failures.nodeNotFound
@@ -520,13 +525,20 @@ class MediaHandler(
         val node = store.findNode(scopeId, nodeId) ?: return ListMediaOutcome.NoNode
         // The Trash tab (cr-0110): a plain full list of the node's trashed media (carrying deletedAt/deletedBy), no
         // conditional-GET/delta — the trash isn't live-polled, so the ETag/since/id-set machinery doesn't apply.
-        if (trashed) return ListMediaOutcome.Page(store.listNodeTrashed(scopeId, nodeId), node.mediaRevision, node.deleteRevision, null)
+        if (trashed) {
+            val rows = store.listNodeTrashed(scopeId, nodeId)
+            return ListMediaOutcome.Page(
+                rows, node.mediaRevision, node.deleteRevision, null, node.sealedDropPrivateKey, store.uploaderKeys(rows),
+            )
+        }
         val mediaRevision = node.mediaRevision
         val deleteRevision = node.deleteRevision
         if (ifNoneMatch != null && ifNoneMatch == mediaRevision) return ListMediaOutcome.NotModified
         val rows = store.listNodeMediaSince(scopeId, nodeId, since)
         val mediaIds = if (sinceDelete < deleteRevision) store.listNodeMediaIds(scopeId, nodeId) else null
-        return ListMediaOutcome.Page(rows, mediaRevision, deleteRevision, mediaIds)
+        return ListMediaOutcome.Page(
+            rows, mediaRevision, deleteRevision, mediaIds, node.sealedDropPrivateKey, store.uploaderKeys(rows),
+        )
     }
 
     /** The media's lazy, panel-only tier for the detail panel. Non-member or unknown media → NoMedia (a 404, no reveal). */
@@ -631,8 +643,8 @@ class MediaHandler(
     fun listBuckets(userId: String, scopeId: String, nodeId: String): ListBucketsOutcome {
         access.check(userId, scopeId, READ)
             .refusal(ListBucketsOutcome.NoNode, ListBucketsOutcome.Suspended)?.let { return it }
-        if (store.findNode(scopeId, nodeId) == null) return ListBucketsOutcome.NoNode
-        return ListBucketsOutcome.Ok(store.listBuckets(scopeId, nodeId))
+        val node = store.findNode(scopeId, nodeId) ?: return ListBucketsOutcome.NoNode
+        return ListBucketsOutcome.Ok(store.listBuckets(scopeId, nodeId), node.sealedDropPrivateKey)
     }
 
     /**

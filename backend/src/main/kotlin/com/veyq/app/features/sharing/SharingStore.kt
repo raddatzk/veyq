@@ -22,6 +22,8 @@ data class ShareNodeRow(
     val epoch: Int,
     val wrappedContentKey: String?,
     val wrappedMeta: String?,
+    /** The Memory's drop private key sealed under its `K_mem` — every reader of the subtree opens uploads through it. */
+    val sealedDropPrivateKey: String?,
 )
 
 /** One media under a shared subtree — the original blob ref + role-tagged derivatives, tagged with its owning node. */
@@ -52,6 +54,16 @@ data class ShareDerivativeRow(
 /** The sealed subtree of a share: its nodes (for the `K_mem` chain) + every media attached under it. */
 data class SubtreeData(val nodes: List<ShareNodeRow>, val media: List<ShareMediaRow>)
 
+/**
+ * What a share hands its guest, fixed by its role (ADR 0031 point 7): a VIEWER or CONTRIBUTOR share wraps `K_mem`
+ * under `K_share`; an UPLOADER share carries the Memory's drop public key under `K_share` instead, and the Memory's
+ * first UPLOADER share also brings the drop private key sealed under `K_mem`, which the Memory keeps.
+ */
+sealed interface ShareKeys {
+    data class MemoryWrap(val wrap: String) : ShareKeys
+    data class Drop(val sealedPublicKey: String, val sealedPrivateKey: String?) : ShareKeys
+}
+
 /** A blob to presign for a viewer: its object-store prefix + chunk count. */
 data class ShareBlobRef(val storageKey: String, val chunkCount: Int)
 
@@ -69,23 +81,40 @@ class SharingStore(
 
     fun findNode(nodeId: String): NodeEntity? = NodeEntity.findById(nodeId)
 
+    enum class CreateResult { CREATED, ID_TAKEN, DROP_KEY_EXISTS, DROP_KEY_MISSING }
+
     /** Persist a share under the client-minted [id] — 256 random bits, base64url, the unguessable half of the
-     *  capability (ADR 0072 keeps its form). False, nothing written, if any share already holds it. */
+     *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if any share already holds it. An UPLOADER
+     *  share's drop private key is set on the Memory **once**, by a conditional update in this transaction: a
+     *  second one would orphan every upload sealed to the first, so a Memory that already has one is
+     *  `DROP_KEY_EXISTS` (the client re-reads the node), and a request with none for a Memory with none is
+     *  `DROP_KEY_MISSING` — nothing written in either case. */
     @Transactional
     fun create(
         id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
-        wrap: String, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
         sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-    ): Boolean {
-        if (ShareEntity.findById(id) != null) return false
+    ): CreateResult {
+        if (ShareEntity.findById(id) != null) return CreateResult.ID_TAKEN
+        if (keys is ShareKeys.Drop) {
+            if (keys.sealedPrivateKey != null) {
+                val set = NodeEntity.update(
+                    "sealedDropPrivateKey = ?1 where id = ?2 and sealedDropPrivateKey is null", keys.sealedPrivateKey, nodeId,
+                )
+                if (set != 1) return CreateResult.DROP_KEY_EXISTS
+            } else if (NodeEntity.findById(nodeId)?.sealedDropPrivateKey == null) {
+                return CreateResult.DROP_KEY_MISSING
+            }
+        }
         ShareEntity().apply {
             this.id = id
             this.ownerAccount = ownerAccount
             this.scopeId = scopeId
             this.nodeId = nodeId
             this.role = role
-            this.wrap = wrap
+            this.wrap = (keys as? ShareKeys.MemoryWrap)?.wrap
+            this.sealedDropPublicKey = (keys as? ShareKeys.Drop)?.sealedPublicKey
             this.sealedName = sealedName
             this.enabled = true
             this.expiresAt = expiresAt
@@ -98,7 +127,7 @@ class SharingStore(
             this.sealedPassword = sealedPassword
             createdAt = Instant.now()
         }.persist()
-        return true
+        return CreateResult.CREATED
     }
 
     /** The 3-way result of an in-place share edit (cr-0119): applied, no such owned share, or an illegal role change. */
@@ -172,16 +201,18 @@ class SharingStore(
 
     // --- contributor identities (cr-0101) --------------------------------------
 
-    /** Create an anonymous contributor identity under the client-minted [id]: store the `K_mem`-sealed name +
-     *  the token hash, return the token — or null, nothing written, if any identity already holds [id]. */
+    /** Create an anonymous share identity under the client-minted [id]: store the sealed name (+ an UPLOADER
+     *  identity's wrapped key) + the token hash, return the token — or null, nothing written, if any identity
+     *  already holds [id]. */
     @Transactional
-    fun createIdentity(id: String, shareId: String, sealedDisplayName: String): String? {
+    fun createIdentity(id: String, shareId: String, sealedDisplayName: String, wrappedIdentityKey: String?): String? {
         if (ShareIdentityEntity.findById(id) != null) return null
         val token = Tokens.random() // the unguessable contributor capability token handed to the client
         ShareIdentityEntity().apply {
             this.id = id
             this.shareId = shareId
             this.sealedDisplayName = sealedDisplayName
+            this.wrappedIdentityKey = wrappedIdentityKey
             this.tokenHash = Tokens.hash(token)
             createdAt = Instant.now()
         }.persist()
@@ -194,9 +225,17 @@ class SharingStore(
         return ShareIdentityEntity.find("shareId = ?1 and tokenHash = ?2", shareId, hash).firstResult()
     }
 
-    /** All contributor identities of a share (for the resolve's attribution list). */
-    fun listIdentities(shareId: String): List<ShareIdentityEntity> =
-        ShareIdentityEntity.find("shareId = ?1", shareId).list()
+    /**
+     * The identities a reader of [subtree] needs: this share's own (the attribution list), plus every UPLOADER
+     * identity — of any share — that added a media served in [subtree], because that media is sealed under the
+     * identity's own key and opens only through its wrapped key (ADR 0031 point 7).
+     */
+    fun readerIdentities(shareId: String, subtree: SubtreeData): List<ShareIdentityEntity> {
+        val own = ShareIdentityEntity.find("shareId = ?1", shareId).list()
+        val uploaderIds = subtree.media.mapNotNull { it.identityId }.toSet() - own.map { it.id }.toSet()
+        if (uploaderIds.isEmpty()) return own
+        return own + ShareIdentityEntity.find("id in ?1 and wrappedIdentityKey is not null", uploaderIds).list()
+    }
 
     /**
      * Delete one contributed media the caller owns (cr-0102, the UPLOADER/CONTRIBUTOR delete-own). Authorized
@@ -239,6 +278,7 @@ class SharingStore(
                 epoch = n.epoch,
                 wrappedContentKey = n.wrappedContentKey,
                 wrappedMeta = n.wrappedMeta,
+                sealedDropPrivateKey = n.sealedDropPrivateKey,
             )
         }
         // `deletedAt is null` — a trashed medium (uc.memory.delete-media, cr-0110) is a soft-delete, so without
