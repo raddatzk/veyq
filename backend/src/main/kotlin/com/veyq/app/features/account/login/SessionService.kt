@@ -1,5 +1,6 @@
 package com.veyq.app.features.account.login
 
+import com.veyq.app.shared.auth.AccessTokenResolver
 import com.veyq.app.shared.crypto.Tokens
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -49,7 +50,7 @@ data class SessionFamilyView(
  * **hash matches** a stored superseded row, which cannot be forged without the token itself.
  */
 @ApplicationScoped
-class SessionService {
+class SessionService : AccessTokenResolver {
 
     /** Issue a fresh nameless session family for a user. */
     @Transactional
@@ -152,7 +153,7 @@ class SessionService {
      * matched, so it cannot be forged from a database dump.
      */
     @Transactional
-    fun resolveUserId(accessToken: String): String? {
+    override fun resolveUserId(accessToken: String): String? {
         val row = AccessTokenEntity.find("tokenHash", Tokens.hash(accessToken)).firstResult() ?: return null
         if (row.expiresAt.isBefore(Instant.now())) return null
         val family = SessionFamilyEntity.findById(row.familyId) ?: return null
