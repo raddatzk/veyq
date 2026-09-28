@@ -82,6 +82,8 @@ class ShareUploaderSliceTest {
         val legacy = TestIds.shareId()
         QuarkusTransaction.requiringNew().run {
             ShareEntity().apply {
+                // `this@ShareUploaderSliceTest.` is load-bearing: inside `apply` a bare `wrap` is the entity's own
+                // (still null) field, which seeded a row with no wrap and made this control pass vacuously.
                 id = legacy; ownerAccount = userId; this.scopeId = scopeId; nodeId = memory; role = ShareEntity.UPLOADER
                 this.wrap = this@ShareUploaderSliceTest.wrap; sealedName = this@ShareUploaderSliceTest.sealedName; enabled = true; createdAt = Instant.now()
             }.persist()

@@ -15,21 +15,29 @@ title: Share a Memory as an uploader link (a write-only drop-box)
 # protection and moderation are separate later slices.
 acceptanceCriteria:
   - id: create-uploader-share
-    text: A curator turns one of their personal-scope Memories into an UPLOADER share — picks the Uploader role in the Share dialog; the client mints K_share, wraps K_mem, re-seals the name, and POSTs { nodeId, role UPLOADER, wrap, sealedName }. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
+    text: A curator turns one of their personal-scope Memories into an UPLOADER share — picks the Uploader role in the Share dialog; the client mints K_share, re-seals the name, and seals the Memory's drop public key under K_share (the Memory's first UPLOADER share also mints the drop keypair and brings its private half sealed under K_mem, set on the Memory once), and POSTs { nodeId, role UPLOADER, sealedDropPublicKey, sealedName } with no wrap. The server stores it opaquely (role plaintext). The link is /s/{shareId}#k=base64url(K_share).
     coverage:
       backend:
-        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting]
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.theKeysAShareCarriesFollowItsRole, ShareUploaderSliceTest.theDropKeyIsSetOnceOnTheMemory]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: guest-never-holds-the-memory-key
+    text: The guest's client never holds the Memory's key - its uploads are sealed under its own identity key, wrapped to the Memory's drop key. The UPLOADER resolve serves the drop public key sealed under K_share and no wrap, and the client opens no wrap for that role even when one is served; the guest seals its name, blob keys, media meta and EXIF under its own K_up and hands K_up over wrapped to the drop public key. Every reader of the Memory - the curator's gallery and buckets, a viewer link - is served the node's sealed drop private key and the identity's wrapped key, and opens the upload through them; a member's metadata edit re-seals under the same K_up.
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.anUploaderIdentityHandsOverItsWrappedKey, ShareUploaderSliceTest.everyReaderOfTheMemoryIsServedWhatOpensAnUpload]
+      web:
+        unit: [src/features/memory/shareUploader.test.ts]
+        e2e: [src/features/memory/shareUploader.e2e.test.ts]
   - id: write-only-no-view-of-others
-    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns media=[], nodes=[], identities=[] for an UPLOADER share (only role + wrap + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks). The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
+    text: The canView gate ({VIEWER,CONTRIBUTOR}) is enforced at BOTH guest read paths. The anonymous resolve returns media=[], nodes=[], identities=[] for an UPLOADER share (only role + the sealed drop public key + sealedName — not even the root node, so no K_mem-decryptable node metadata leaks). The blob download (GET /shares/{id}/blobs/{blobId}) is role-gated too - an UPLOADER share 404s before the subtree check, so a leaked in-subtree id yields nothing. Write-only is a real server capability, not just id-secrecy (ids are also unguessable and never handed to the uploader). canUpload={CONTRIBUTOR,UPLOADER}.
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderResolveServesNoMediaEvenWithExisting, ShareUploaderSliceTest.uploaderShareHasNoBlobDownloadCapability, ShareUploaderSliceTest.viewerShareRejectsUploadAndDelete]
       web:
         unit: [src/features/memory/optimisticUpload.test.ts]
   - id: session-own-gallery-no-download
-    text: The uploader names themselves (sealed under K_mem -> anonymous identity) and adds photos via the share-scoped upload path (as CONTRIBUTOR). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
+    text: The uploader names themselves (sealed under its own identity key -> anonymous identity) and adds photos via the share-scoped upload path (as CONTRIBUTOR). The client keeps each returned mediaId + the LOCAL preview in session memory and renders its own uploads with the same gallery mechanic (MediaGrid + optimistic tile) from the local preview — never a download. A reload shows nothing (session-only).
     coverage:
       backend:
         integration: [ShareUploaderSliceTest.uploaderNamesUploadsAttachesStampedAndDeletesOwn]

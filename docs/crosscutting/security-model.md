@@ -95,7 +95,8 @@ request the **user** turned on, straight to the chosen provider.
   item's **trash state** (a trashed flag + who trashed it + when, until the scheduled purge); a media item's
   **uploader attribution + bucket structure** (an opaque `owner_key` per medium — `user:{id}` / `share:{id}` —
   plus its `bucket_id` and the bucket rows' shape: node, parentage, `is_primary`, per-bucket counts; the
-  bucket/uploader **names stay sealed** under `K_mem`, [ADR 0034](../decisions/0034-media-uploader-buckets.md));
+  bucket/uploader **names stay sealed** under `K_mem` — an UPLOADER guest's under its own key, [ADR 0034](../decisions/0034-media-uploader-buckets.md),
+  [ADR 0031](../decisions/0031-uploader-public-share.md) point 7);
   per-parent blinded tokens; to a **public share's guest**, the shared Memory's **scope id** — every `K_mem` seal the
   viewer opens is bound to it ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)), so it rides with the
   subtree, and two links into one space are therefore linkable by anyone holding both (the ids of the shared
@@ -140,7 +141,7 @@ personal memory that is publicly shared becomes "shared" for these purposes.
 | State | Meaning |
 |---|---|
 | **Unshared** | Only the owner's keys. Maximum confidentiality; the one guarantee applies in full. |
-| **Shared** (group, tenant, public view, public uploader) | Content keys wrapped to other parties by the owner's explicit, informed action. Confidentiality from the *operator* still holds; from the *recipients* it is intentionally given up. |
+| **Shared** (group, tenant, public view, public uploader) | Content keys wrapped to other parties by the owner's explicit, informed action. Confidentiality from the *operator* still holds; from the *recipients* it is intentionally given up — except from a public uploader, who is handed no content key at all, only the Memory's drop public key ([ADR 0031](../decisions/0031-uploader-public-share.md) point 7). |
 
 ## Key hierarchy (envelope encryption)
 
@@ -347,7 +348,7 @@ operator lacks can.
 | gets a removed group member re-granted by the removal's own rotation | **Cannot** — the removal and its rotation are one request, and the remover's client wraps the new epoch only to the members it picked from, minus the one it removes, however the server lists them afterwards. A rotation *queued* to another key-holder is outside this row (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 4 |
 | has a member seal new content under an epoch the removed member holds | **Can** — a client writes nothing while the server reports its grant as older than the scope's epoch, but the operator makes that report, and no client remembers an epoch | ADR 0024 Decision 6's per-device floor — inbox #161 (b) |
 | wipes or rolls back the pin store, so a detected key change becomes a silent first use | **Can** — a store that does not open even counts as empty | ADR 0028 Decision 7 — inbox #161 (c) |
-| reads an uploader link's Memory — with the link and a dump; no activity needed | **Can** | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 — inbox #161 (d) |
+| reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_mem`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
 | makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:

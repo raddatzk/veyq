@@ -132,10 +132,3 @@ uploads and a token-gated **delete-own**. **v1: role UPLOADER, personal scope, d
 - **A drop key per share instead of per Memory.** Every reader would then need the private half of every
   uploader share the Memory ever had, found through each media's identity and share. Per Memory, it travels with
   the node, where every reader already looks.
-
-## What is still open
-
-Point 7 is decided and not built (inbox #161 (d)). Today every uploader resolves `symWrap(K_share, K_mem)` and
-holds `K_mem` in memory, and write-only is enforced by the server alone. A leaked uploader link plus a database
-and store dump therefore reads the whole shared Memory, and through `sealed_share_key` every sibling share's key
-and password.
