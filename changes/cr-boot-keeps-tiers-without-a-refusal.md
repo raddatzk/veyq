@@ -9,7 +9,10 @@ invariants: [operator-blind E2EE]
 
 ## Open for the owner
 
-**Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
+**Question 1 was answered by the owner on 2026-09-28: its recommendation is taken, and implementation has the go.**
+Read its recommendation as the decision. Where it proposed a separate inbox row, that row exists (#197–#221,
+`docs/inbox.md`). **Question 2 is new and still open.** The inbox #208 refine added it on 2026-09-28, after the
+go. It widens this CR by one function and one test, and the go does not cover that until it is answered.
 
 1. **What does a boot that could not ask the server show?** The tiers stay either way; this is only about the
    screen.
@@ -24,8 +27,30 @@ invariants: [operator-blind E2EE]
    screen and a retry loop for an outage that a reload already covers; (c) hides why the prompt appeared, which
    is exactly what makes a user re-enter a password they did not need to.
 
-Nothing else is open: the line itself is already decided (uc.account.sign-out E1, ADR 0070 Decision 3); this CR
-extends it to the one caller it did not reach.
+2. **Inbox #208: when the served remember-me wrap does not open under this device's key, is the key kept or
+   dropped?** Today it is dropped. `restoreDeviceKey` (`web/src/features/account/rememberMe/deviceKeyWrap.ts`,
+   the `catch` after `crypto.subtle.decrypt`) deletes the local record. This runs on the same boot path, right
+   after a successful refresh (`restoreVaultFromCache`). uc.account.remember-this-device E2 promises the
+   opposite: *"no silent self-wipe on a single server response"*. Either the doc or the code has to move.
+   - (a) **The code follows E2.** Keep the local record, fall back to the floor, and change nothing else. This
+     is one deleted line, and the existing test flips (see Phase 1).
+   - (b) **The doc follows the code.** E2 would gain an exception: *"a wrap served under this device's id that
+     does not open drops the local key"*.
+
+   **Recommendation: (a), folded into this CR.** It is the same rule this CR already applies: the device drops a
+   tier only on a refusal of the session. A served wrap that does not open is not a refusal. The server cannot
+   use a kept key: it is non-extractable, and a failed AES-GCM open reveals nothing a forger could use. Keeping
+   it also matches the three sibling sites. `unlockWithDevice` keeps its key on a missing wrap. The missing-wrap
+   branch of `restoreDeviceKey` does too. The `restoreVaultFromCache` comment even describes this function as
+   anti-withholding. (b) buys nothing. It makes E2 carry an exception whose only effect is that a single bad
+   response costs the user their remember-me. **The kept key is cleaned up without new code:** the next sign-in
+   on this device runs `enrolConvenienceWrap` (`web/src/views/LoginView.vue`). With *remember me* on, that
+   replaces the record (`enrolDeviceKey`). With it off, it clears it (`clearDeviceKey`). A 401 at the next boot
+   also drops it. The one place a stale record survives is the locked entry's `noPersist` path. The
+   missing-wrap branch already leaves a record there today, so this adds no new state.
+
+The line itself is already decided (uc.account.sign-out E1, ADR 0070 Decision 3). This CR extends it to the one
+caller it did not reach and, if question 2 goes to (a), to the one tier-drop that is keyed on a served answer.
 
 ## Goal
 
@@ -36,6 +61,10 @@ about the session, yet it costs the user the key: the next start asks for the pa
 device the key is gone for good until they sign in again). This CR makes boot drop the tiers **only when the
 server refused the session** — the same predicate (`isSessionRefusal`) that already decides it for a tab that
 holds a session — and shows everything else as *unreachable*, keeping the tiers for the next boot.
+
+**If Open question 2 goes to (a) (inbox #208):** the same rule reaches the one step after a *successful*
+refresh. `restoreDeviceKey` keeps the remember-me key when the wrap served under its id does not open. The
+device falls back to the floor, as it already does when that wrap is missing.
 
 ## Context & constraints
 
@@ -73,7 +102,19 @@ holds a session — and shows everything else as *unreachable*, keeping the tier
     - `features/account/unlock/unlock.ts:170` — drops the session vault when the cached Master Key does not fit
       the served key material. Keyed on a successful response, not a failure. Out of scope.
     - `features/account/rememberMe/deviceKeyWrap.ts` `restoreDeviceKey` — drops the local key when a served
-      wrap does not open (tamper). Keyed on a response, not a transport failure; see *Out of scope*.
+      wrap does not open (tamper). Keyed on a response, not a transport failure. Open question 2 (inbox #208).
+      Measured at the #208 refine on `64c1f65`:
+      `grep -n "s.delete(RECORD_KEY)" web/src/features/account/rememberMe/deviceKeyWrap.ts` → line 135, inside
+      the `catch` of the AES-GCM open. `grep -n "restore drops the local record" web/src/features/account/rememberMe/deviceKeyWrap.test.ts`
+      → line 126. That test pins the drop (`isRemembered()` → `false`). Its sibling at line 116,
+      *"keeps the local key when the matching wrap is gone server-side"*, pins the keep.
+      The sibling sites that keep a key on a served answer:
+      `grep -n "DON'T destroy the local key\|intentionally left" web/src/features/account/unlock/unlock.ts`
+      → `unlockWithDevice` and `restoreVaultFromCache`. The second one's comment already calls
+      `restoreDeviceKey` anti-withholding. That is true of its missing-wrap branch and false of its open-failure
+      branch.
+      The same file's header still calls the remembered vault *"portable"*. ADR 0058 removed that claim
+      (`grep -n portable web/src/features/account/rememberMe/deviceKeyWrap.ts` → line 4).
   - Second angle, keyed on the swallow rather than the drop —
     `grep -rn "catch(() => false)" web/src/app web/src/features/account --include='*.ts' | grep -v '\.test\.'`:
     the boot line is the one that feeds a deletion.
@@ -81,10 +122,8 @@ holds a session — and shows everything else as *unreachable*, keeping the tier
   - `restoreVaultFromCache()` after a *successful* refresh swallows a failed key-material fetch
     (`sed -n 52,53p web/src/app/boot.ts`): the tab stays locked for that load, but nothing is deleted, so the
     next boot restores. Not destructive.
-  - `restoreDeviceKey` dropping the key on a wrap that does not open: a hostile server can end the session with
-    a 401 anyway and the tiers go with it (E1), so this hands it no new lever — but uc.account.remember-this-device
-    E2's wording ("no silent self-wipe on a single server response") reads broader than the code. Proposed as a
-    separate inbox row, not fixed here.
+  - ~~`restoreDeviceKey` dropping the key on a wrap that does not open~~. This became inbox #208 and is now Open
+    question 2. It is in scope if that question goes to (a).
 
 ## Decisions
 
@@ -98,6 +137,11 @@ holds a session — and shows everything else as *unreachable*, keeping the tier
 - **No ending at boot, as before.** A refusal at boot still drops the tiers locally and still runs no ending
   (E2): `rotateSession` already calls `endSession()`, which is a no-op in a tab that holds no session.
 - **The dev auto-unlock still runs after a non-refusal** — it is DEV-gated and harmless; nothing changes there.
+- **A served wrap that does not open keeps the key (Open question 2 (a), inbox #208).** `restoreDeviceKey`'s
+  `catch` returns `null` without deleting the record. Its doc comment then says what both branches do: *"A wrap
+  that is missing, or served under this device's id but does not open, falls back to the floor and keeps the
+  local key (uc.account.remember-this-device E2): one server answer never deletes local key material."* The
+  file header drops *"portable +"* (ADR 0058).
 - **ADR 0070 amendment (phase 0).** Decision 3 gains one sentence: *"At boot, before a tab holds a session, the
   same line decides whether the device's local convenience tiers are dropped: only a refusal drops them; a boot
   that could not get an answer keeps them and says the instance is unreachable."*
@@ -139,6 +183,14 @@ instance again keeps a key that opens nothing without the server-held wrap.
         tree is restored by snapshot, not `git checkout` (§ bite-proof a guard).
       - **E2 unchanged:** the existing `sessionRefresh.test.ts` case *"a 401 at boot … is the ordinary
         not-signed-in path"* stays green — no `location.replace` at boot.
+      - **A served wrap that does not open (Open question 2 (a) only):** in `deviceKeyWrap.test.ts`, the case
+        *"restore drops the local record when the ciphertext will not open under the local key"* is rewritten
+        **first** as *"restore keeps the local record when the served wrap will not open"*. It uses the same
+        tampered fixture and asserts `restoreDeviceKey(...)` → `null` **and** `isRemembered()` → `true`. It is seen
+        red on the untouched `restoreDeviceKey`, and the one-line fix turns it green. The lever is putting
+        the `s.delete(RECORD_KEY)` line back, which turns it red again. The assertion reads stored state and
+        has no spy, for the same reason as the harness above. The sibling *"keeps the local key when the matching
+        wrap is gone server-side"* stays green unchanged.
 
       · Done when: `npm run check` (web) green, and every bite above was seen red where stated.
 - [ ] 2 docs + coverage:
@@ -146,6 +198,15 @@ instance again keeps a key that opens nothing without the server-held wrap.
         drops them, and a boot that got no answer keeps them and shows the instance as unreachable."*
       - uc.account.remember-this-device E2 gains the transport half: *"An instance that does not answer at start-up
         is not a reason to drop the key: the next start that reaches it restores the session."*
+        With Open question 2 at (a), it also gains: *"The same holds for a wrap the instance serves under this
+        device's id that does not open under the local key. The device falls back to the first-sign-in screen and
+        keeps its key, and that sign-in replaces or clears it. Only a refusal of the session or an explicit
+        forget drops it on the spot."*
+      - With Open question 2 at (a), `docs/coverage/features/account/use-cases/uc.account.remember-this-device.yaml`
+        gains criterion `served-wrap-that-does-not-open-keeps-the-key` →
+        `src/features/account/rememberMe/deviceKeyWrap.test.ts` (web unit). It is web-only, like
+        `one-screen-adaptive` in the same file. The backend is owed per use-case, not per criterion, and other
+        criteria already carry it.
       - `docs/coverage/features/account/use-cases/uc.account.sign-out.yaml` gains criterion
         `boot-keeps-tiers-without-a-refusal` → `src/app/boot.test.ts`.
       - The EN/DE *What this means for you* paragraph of uc.account.remember-this-device, if it promises anything
@@ -160,6 +221,9 @@ instance again keeps a key that opens nothing without the server-held wrap.
   refine** (the refine worktree had no `node_modules`), so the implementer records its exit code first; a red
   there is not this CR's.
 - Every *keeps* bite was seen red on the untouched `boot.ts`, and both predicate swaps were seen red.
+- With Open question 2 at (a): the rewritten `deviceKeyWrap.test.ts` case was seen red on the untouched
+  `restoreDeviceKey`, and `grep -n "s.delete(RECORD_KEY)" web/src/features/account/rememberMe/deviceKeyWrap.ts`
+  returns nothing. `dropRememberKey` in `convenienceTiers.ts` is now the only local delete of that record.
 - `grep -n 'catch(() => false)' web/src/app/boot.ts` returns nothing: no rejection value is discarded before the
   tier decision.
 - A one-shot proof suffices, no new guard: the invariant is behavioural (which answer drops the tiers) and the
