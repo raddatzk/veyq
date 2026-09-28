@@ -223,7 +223,7 @@ rotation are out of their reach.
         *"reads another share's password, private label or note, or rebuilds its link — with a viewer or
         contributor link of the same Memory and a dump"*.
       · Done when: all `scripts/validate_*.py` green.
-- [ ] 1 contracts:
+- [x] 1 contracts:
       - **Crypto:** the `share-key-recovery` row gains the epoch (`packages/crypto/src/seal.ts`), and its vector
         is regenerated in `contracts/crypto/vectors/v1.json`.
       - **API:** `sealedShareKeyEpoch` on `CreateShareRequest` and `ShareSummary`, plus a `409 stale_epoch` on

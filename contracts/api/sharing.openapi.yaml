@@ -68,7 +68,7 @@ paths:
               schema: { $ref: "#/components/schemas/ShareCreated" }
               example: { shareId: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i }
         "400":
-          description: Malformed request (missing/invalid fields).
+          description: Malformed request (missing/invalid fields, keys that do not match the role, or a `sealedShareKey` without its `sealedShareKeyEpoch` or the reverse).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
         "401":
@@ -82,8 +82,10 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
           description: >
-            The `shareId` is already taken (`id_taken`), or the space is being deleted and read-only
-            (`scope_deleting`, uc.spaces.delete-group A4). For UPLOADER: the request carries a drop private key the
+            The `shareId` is already taken (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current epoch
+            (`stale_epoch` — the caller's scope key lags a rotation; re-open it and re-seal, ADR 0024 Decision 6), or
+            the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). For UPLOADER: the
+            request carries a drop private key the
             Memory already has one of (`drop_key_exists`), or carries none while the Memory has none
             (`drop_key_missing`) — nothing is written in either case.
           content:
@@ -234,7 +236,8 @@ paths:
       description: >
         Edits an existing share **without minting a new link** (cr-0115/cr-0116/cr-0119, ADR 0036). Sets the
         `K_share`-sealed **note** (`sealedNote`) + **private name** (`sealedShareName`) — the caller recovers
-        `K_share` from the share's `sealedShareKey` (`symWrap(K_mem, K_share)`, which they hold `K_mem` for),
+        `K_share` from the share's `sealedShareKey` (sealed under `K_SC` at `sealedShareKeyEpoch`, which every scope
+        member holds and no share link does — ADR 0036 point 4),
         re-seals them, and PATCHes them (null/blank clears a field). Optionally changes the **`role`** in place
         (cr-0119) — a plaintext authorization change, no re-crypto, **VIEWER ↔ CONTRIBUTOR** only (UPLOADER →
         `422`). Owner-gated: only the share's `owner_account` may edit, and only while still a member of its space —
@@ -744,13 +747,25 @@ components:
         sealedShareKey:
           type: [string, "null"]
           description: >
-            OPTIONAL recoverable copy of the per-share key — `symWrap(K_mem, K_share)` (AAD `share-key-recovery`,
-            opaque base64). Lets the curator (who holds `K_mem`) recover `K_share` later to edit the note/name in
-            place. Openable only with `K_mem`; the operator never sees `K_share` (cr-0115, ADR 0036).
+            OPTIONAL recoverable copy of the per-share key — `K_share` sealed under the scope key `K_SC` at
+            `sealedShareKeyEpoch` (AAD `share-key-recovery`, bound to scope + Memory + share + epoch; opaque base64).
+            Lets every scope member recover `K_share` later to reveal, edit and re-copy the share. `K_SC` is the key
+            no share link carries, so a viewer or contributor link — which holds `K_mem` — opens nothing of another
+            share; the operator never sees `K_share` (ADR 0036 point 4). Sent together with `sealedShareKeyEpoch`.
           contentEncoding: base64
           maxLength: 256
-          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWttZW0=
+          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareKeyEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: >
+            The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024). Present iff `sealedShareKey` is
+            (else `400 invalid_request`), and must be the scope's **current** epoch (else `409 stale_epoch`, nothing
+            stored).
+          minimum: 0
+          example: 0
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
         passwordRequired:
           x-veyq-visibility: flag
           type: boolean
@@ -905,10 +920,17 @@ components:
         sealedShareKey:
           type: [string, "null"]
           description: >
-            The recoverable per-share key `symWrap(K_mem, K_share)` (opaque base64), or null — lets the manage UI
-            recover `K_share` to decrypt/edit the note + name (cr-0115/cr-0116, ADR 0036).
+            The recoverable per-share key — `K_share` sealed under `K_SC` at `sealedShareKeyEpoch` (opaque base64),
+            or null — lets a scope member's manage UI recover `K_share` to reveal, edit and re-copy the share
+            (ADR 0036 point 4).
           contentEncoding: base64
           maxLength: 256
+          example: null
+        sealedShareKeyEpoch:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          description: The scope content-key epoch `sealedShareKey` is sealed under (ADR 0024) — null exactly when `sealedShareKey` is.
+          minimum: 0
           example: null
         passwordRequired:
           x-veyq-visibility: flag
