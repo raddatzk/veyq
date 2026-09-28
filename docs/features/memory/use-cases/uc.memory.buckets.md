@@ -61,6 +61,10 @@ Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-
 - **Operator-blind.** The grouping reads the **opaque `owner_key`** + the bucket structure the operator already
   relays, and **unseals** the names **client-side** under `K_mem`. The operator learns **no cleartext name and no
   content**; a personal Memory with no share exposes only the account owner's `owner_key`.
+- **A guest's name is for the members.** The member bucket list is the one read that serves a guest's sealed name.
+  No share link's resolve does, and none serves a contributor's identity or stamps a contributor's media with it
+  ([ADR 0030](../../../decisions/0030-contributor-public-share.md) point 8, which also states the accepted
+  residual: a link plus a database dump opens the names, as it opens the photos).
 - **A real data model.** The bucket table ([en.memory.buckets](../enablers/en.memory.buckets.md)) carries
   sub-buckets from day one, and the organizer UI (create/rename/delete a sub-bucket, move media in) is built on the
   shipped endpoints.
@@ -76,13 +80,15 @@ Uploaders span **members** (`owner_key = user:{userId}`, display name = the per-
 **EN —** In a shared memory, see who added what: a "Contributions" view groups the photos and videos by the person
 who uploaded them — you, a fellow member, or someone who added through a public link. It's just a lens over the
 same memory; nothing is moved or changed, and everything stays encrypted — the grouping happens on your device, and
-the server never learns anyone's name.
+the server never learns anyone's name. The names guests type in are shown to the people this memory belongs to,
+never to others who open the link.
 
 **DE —** In einer geteilten Erinnerung siehst du, wer was beigetragen hat: eine „Beiträge"-Ansicht gruppiert die
 Fotos und Videos nach der Person, die sie hochgeladen hat — du selbst, ein anderes Mitglied oder jemand, der über
 einen öffentlichen Link beigesteuert hat. Es ist nur eine Linse auf dieselbe Erinnerung; nichts wird verschoben
 oder verändert, und alles bleibt verschlüsselt — die Gruppierung passiert auf deinem Gerät, und der Server erfährt
-keinen Namen.
+keinen Namen. Die Namen, die Gäste eintippen, sehen die Personen, denen die Erinnerung gehört — nie andere, die den
+Link öffnen.
 
 ## Related
 

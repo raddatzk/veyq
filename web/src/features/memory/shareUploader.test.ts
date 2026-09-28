@@ -17,7 +17,7 @@ vi.mock('../../api/client', () => ({
 import { resolveShare, createContributorIdentity, sessionSealKey, addSharePhoto, openShareOriginal } from './share'
 import { listMediaPage, openOriginal, unsealMeta, setMediaMeta, listBuckets, openBucketName, type MediaDeriver } from './media'
 import { publicSharesApi, mediaApi, bucketsApi } from '../../api/client'
-import { ShareRole } from '../../api/generated/sharing'
+import { NodeKind, ShareRole, type PublicShare } from '../../api/generated/sharing'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std } from '@veyq/crypto/base64'
 
@@ -202,17 +202,19 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
     const [primary] = await listBuckets(SCOPE_ID, NODE_ID)
     expect(openBucketName(SCOPE_ID, NODE_ID, kMem, primary)).toBe('Gast')
 
-    // a viewer link of the same Memory: its node carries the drop key, its identities the guest's wrapped key
+    // a viewer link of the same Memory: its node carries the drop key, its identities the guest's wrapped key — and
+    // no name, which the contract no longer has a field for (ADR 0030 point 8). Typed, so a shape change is loud here.
     const kViewer = v1.randomBytes(32)
+    const viewerResolve = {
+      role: ShareRole.Viewer, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
+      wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
+      sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
+      nodes: [{ id: NODE_ID, kind: NodeKind.Memory, epoch: 0, sealedDropPrivateKey }],
+      media: [{ ...row, nodeId: NODE_ID, identityId }],
+      identities: [{ identityId, wrappedIdentityKey: identity.wrappedIdentityKey! }],
+    } satisfies PublicShare
     vi.mocked(publicSharesApi).mockReturnValue({
-      resolveShare: vi.fn(async () => ({
-        role: ShareRole.Viewer, passwordRequired: false, scopeId: SCOPE_ID, nodeId: NODE_ID,
-        wrap: b64std(v1.seal({ purpose: 'share-key' }, kViewer, kMem)),
-        sealedName: b64std(v1.seal({ purpose: 'share-memory-name' }, kViewer, v1.utf8('Hochzeit'))),
-        nodes: [{ id: NODE_ID, kind: 'MEMORY', epoch: 0, sealedDropPrivateKey }],
-        media: [{ ...row, nodeId: NODE_ID, identityId }],
-        identities: [{ identityId, sealedDisplayName: identity.sealedDisplayName, wrappedIdentityKey: identity.wrappedIdentityKey }],
-      })),
+      resolveShare: vi.fn(async () => viewerResolve),
       resolveShareBlob: vi.fn(async () => ({ presignedGets: presigned.results[0].presignedGets })),
     } as unknown as ReturnType<typeof publicSharesApi>)
     const viewer = await resolveShare(VIEWER_SHARE, b64url(kViewer))

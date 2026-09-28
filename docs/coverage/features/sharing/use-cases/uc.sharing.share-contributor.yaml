@@ -31,9 +31,9 @@ acceptanceCriteria:
     coverage:
       # The e2e proves the CROSS-ACTOR half no other layer reaches: an anonymous stranger seals a display name
       # under K_mem, the server relays it as ciphertext onto the contributor's primary bucket, and the curator —
-      # who never met them — opens it with openBucketName(kMem, ..., 'contributor'). Note the route: the web
-      # client does NOT read the contract's PublicShare.identities (resolveShare drops it and nothing in web/src
-      # consumes it), so the live path goes through the bucket copy, which is a strictly stronger assertion.
+      # who never met them — opens it with openBucketName. The route is the bucket copy because it is the only
+      # read that serves a guest's name at all: no public resolve does (ADR 0030 point 8; uc.memory.buckets
+      # guest-names-for-members-only).
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:
@@ -49,13 +49,11 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: direct-append-attribution
-    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous resolve returns each media with its identityId and each identity's sealed name; v1 renders all contributed media inline (the buckets grouping UI is deferred, the identity link is the hook).
+    text: Contributed media attaches to the shared Memory root node (share.nodeId), stamped with the contributor's share_identity_id, and appears immediately (direct-append, no review gate). The anonymous resolve serves it with no identityId and serves no contributor identity or name; the stamp and the sealed name reach the Memory's members through their bucket list, which groups by it (ADR 0030 point 8). A guest's page renders all contributed media inline.
     coverage:
-      # What the web e2e proves here, stated narrowly because the criterion text is wider than the client: the
-      # contribution attaches to the share's root node, surfaces immediately in BOTH the anonymous resolve and the
-      # curator's own listMedia, and its attribution is recoverable. It does NOT exercise "the resolve returns each
-      # media with its identityId and each identity's sealed name" through the client — that contract field has no
-      # web reader (see sealed-name-anonymous-identity); the backend slice is what covers it.
+      # The web e2e proves it on the live wire: the contribution attaches to the share's root node, surfaces
+      # immediately in BOTH the anonymous resolve and the curator's own listMedia, the raw resolve carries no
+      # identity and a null identityId, and the curator still recovers the attribution through the bucket.
       backend:
         integration: [ShareContributorSliceTest.contributeFlowAttachesStampsIdentityAndSurfacesInResolve]
       web:

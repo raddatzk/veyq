@@ -58,7 +58,11 @@ TypeScript client turns a new required field into a missing-property error and a
 excess-property error at every call site that builds the request, so after `npm run generate:api` a contracts
 phase that reshapes a request is red in `web/` and `admin-web/` until the client phase lands.
 `cr-cold-credential-proves-the-secret-key` wrote "`npm run check` (web and admin-web) green" into exactly such a
-phase; the Done-when for it is `generate:api` plus the contracts guards.
+phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
+other way round: it reddens only code that reads it and fixtures typed against the model.**
+`cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
+because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
+a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
 
 **The qualifier is load-bearing: an operation on a NEW tag ends green.** A new tag generates a *new* `…Api`
 interface that no `…Resource` implements yet, and an unimplemented interface compiles — so that contracts phase

@@ -8,7 +8,8 @@
 // What only this layer can prove: that the resolve the SERVER actually sends an uploader carries no wrap, and that
 // what a guest sealed through the real share transport — under its own key, wrapped to the Memory's drop key — is
 // opened by every reader of the Memory through the real read paths: the curator's gallery, the curator's buckets,
-// and a viewer link of the same Memory. The unit layer (`shareUploader.test.ts`) proves the same chain against a
+// and a viewer link of the same Memory — which the server serves that key and nothing else about the guest, no
+// name (ADR 0030 point 8). The unit layer (`shareUploader.test.ts`) proves the same chain against a
 // server it scripts itself; here the server's own storage and serving of the three new fields is in the loop.
 //
 //   python3 scripts/run_web_e2e.py web/src/features/memory/shareUploader.e2e.test.ts
@@ -118,6 +119,18 @@ describe.skipIf(!process.env.VEYQ_E2E)('uploader share e2e (live, real crypto, t
     expect(shared, "the upload is in the viewer link's gallery").toBeDefined()
     expect(Array.from(await openShareOriginal(viewer.shareId, shared!)), 'a viewer opens the guest upload')
       .toEqual(Array.from(photo))
+    // …through that key and nothing more: the raw resolve (read past the generated client, which drops a field it
+    // does not know) serves exactly the uploader's identity, with its key and no name (ADR 0030 point 8)
+    const viewerWire = (await (await publicSharesApi().resolveShareRaw({ shareId: viewer.shareId })).raw.json()) as {
+      identities: Record<string, unknown>[]
+      media: { mediaId: string; identityId?: string | null }[]
+    }
+    expect(viewerWire.identities.map((i) => i.identityId), 'the viewer is served the uploader identity only')
+      .toEqual([session.identityId])
+    expect(Object.keys(viewerWire.identities[0]).sort(), 'with its key and nothing else — no name')
+      .toEqual(['identityId', 'wrappedIdentityKey'])
+    expect(viewerWire.media.find((m) => m.mediaId === uploaded.mediaId)?.identityId, 'the upload names the identity that finds its key')
+      .toBe(session.identityId)
 
     // Every value recovered by UNSEALING what the server returned (ADR 0053): the title and the guest's name.
     recordCanaries(resolved.memoryName, recoveredName)

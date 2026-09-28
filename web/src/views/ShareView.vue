@@ -430,6 +430,8 @@ onBeforeUnmount(() => {
           :placeholder="t('share.yourNamePlaceholder')"
           :disabled="naming"
         />
+        <!-- who reads the name: the Memory's members, never another link holder (ADR 0030 point 8) -->
+        <p class="share-name-intro">{{ t('share.nameVisibility') }}</p>
         <button class="share-name-submit" type="submit" :disabled="naming || !displayName.trim()">
           {{ naming ? t('share.joining') : t('share.join') }}
         </button>

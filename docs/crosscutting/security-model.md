@@ -349,7 +349,6 @@ operator lacks can.
 | has a member seal new content under an epoch the removed member holds | **Cannot** once the member's device has held the newer epoch — each device remembers the highest epoch it has held for each scope and opens no older grant, whatever current epoch the operator pairs it with. A member who never learnt of the newer epoch is the fork (below) | [ADR 0024](../decisions/0024-scope-key-rotation.md) Decision 6 |
 | wipes or rolls back the pin store or the device register, so a detected key change becomes a silent first use | **Cannot** on a device that has held one — it keeps the highest version it opened and refuses an older store, a missing one and one that does not open, before every read and every write; a linked device starts from its linker's marks. A device with no mark yet trusts the first store it is served (below) | [ADR 0028](../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7 |
 | reads an uploader link's Memory — with the link and a dump; no activity needed | **Cannot** — an uploader link carries no wrap of `K_mem`, only the Memory's drop public key; its guests seal under keys of their own, wrapped to that drop key, so the link plus a dump reads what its guests uploaded and nothing else — no other media, no sibling share's key | [ADR 0031](../decisions/0031-uploader-public-share.md) point 7 |
-| reads the names a Memory's guests gave — with a viewer or contributor link of it; no dump needed | **Can** — so can the link holder alone. The resolve serves the names of the link's own contributors, which a viewer link keeps once it was a contributor link. It also serves the name of every uploader whose media it shows. The first are sealed under `K_mem`; the others under the uploader's own key, which the link opens through the drop key | [ADR 0030](../decisions/0030-contributor-public-share.md) point 8 — inbox #190 |
 | makes every unlock derive near-forever | **Cannot** — a client derives only with the profile it writes | [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md) rule 5 |
 
 **What stays open once every row reads *Cannot*** — each named where it is decided:
@@ -363,7 +362,11 @@ operator lacks can.
 - item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)),
   and bound to their node but not to the marking member — the read carries no member id by design — so the server
   can relabel which entry of a node's marks is the caller's own ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)
-  § item favorites; a self-tag design is inbox #187).
+  § item favorites; a self-tag design is inbox #187);
+- the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served
+  a guest's name, but the names stay sealed under `K_mem` (a contributor's) or an uploader's own key, which the
+  link opens through the drop key — and the operator holds that ciphertext. Accepted: that link already decrypts
+  every medium of the Memory ([ADR 0030](../decisions/0030-contributor-public-share.md) point 8).
 
 **A stronger unlock method does not move this boundary** ([ADR 0026](../decisions/0026-client-trust-tiers.md)
 records why): the operator ships the code that consumes whatever the unlock produces. Unlock convenience and

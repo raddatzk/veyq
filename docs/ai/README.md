@@ -222,6 +222,13 @@ A refined CR nails **decisions, not keystrokes**:
   specific observable** (`isHttpStatus(e, notFound)`), never on "it threw" — a bare rejection is equally produced
   by a network error, a boot failure, or a crypto failure. All three gaps were sitting in the file the CR already
   pointed at.
+- **Price a confidentiality layer against what the same attacker already reads.** `cr-guest-names-for-members-only`
+  was refined to a per-Memory name keypair under `K_SC` so that *a link plus a database dump* could not read guest
+  names — an attacker who, with that same link and dump, decrypts every photo of the Memory. The owner took the
+  response-only fix and a stated residual instead, and the refine's own inventory already held the fact that
+  settled it (another link's guests were reachable that way before the CR). Before designing keys for a field,
+  name the weakest attacker the new layer stops and what that attacker reads anyway, and put the cheap variant
+  with its residual beside the expensive one.
 - **Spike when the shape is unclear.** The right abstraction often only emerges from N real usages (that is why
   `shared/membership/MembershipStore` came out clean — 5 usages, not a guess). If refinement can't settle the
   shape from reasoning, run a time-boxed subagent spike over the surface and fold the inventory back in — don't

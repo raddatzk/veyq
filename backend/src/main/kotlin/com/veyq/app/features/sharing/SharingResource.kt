@@ -172,13 +172,7 @@ class SharingResource(
                     sealedNote = o.share.sealedNote, // cr-0115: the share page renders it (null when none)
                     nodes = o.subtree.nodes.map(::toShareNode),
                     media = o.subtree.media.map(::toShareMedia),
-                    identities = o.identities.map {
-                        ShareIdentity(
-                            identityId = UUID.fromString(it.id),
-                            sealedDisplayName = it.sealedDisplayName,
-                            wrappedIdentityKey = it.wrappedIdentityKey,
-                        )
-                    },
+                    identities = o.uploaderKeys.map { (id, wrap) -> ShareIdentity(identityId = UUID.fromString(id), wrappedIdentityKey = wrap) },
                 ),
             ).build()
             // cr-0118: password required + no token → a LOCKED shell (only the challenge; no wrap/name/note/subtree).

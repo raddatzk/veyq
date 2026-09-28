@@ -64,7 +64,8 @@ sealed interface CreateShareOutcome {
 }
 
 sealed interface ResolveShareOutcome {
-    data class Found(val share: ShareEntity, val subtree: SubtreeData, val identities: List<ShareIdentityEntity>) : ResolveShareOutcome
+    /** [uploaderKeys]: identity id → wrapped identity key, the only thing a guest is served about any identity. */
+    data class Found(val share: ShareEntity, val subtree: SubtreeData, val uploaderKeys: Map<String, String>) : ResolveShareOutcome
     /** Unknown, disabled, or expired — a non-enumerable 404 (identical in every case). */
     object NotFound : ResolveShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
     /** Password-protected + no token given (cr-0118) — a LOCKED shell (only `passwordRequired` + `pwSalt`). */
@@ -317,7 +318,8 @@ class SharingHandler(
 
     /**
      * Resolve a share for a guest. For a **viewable** role (VIEWER/CONTRIBUTOR) the full sealed subtree + the
-     * contributor identities cross; for an **UPLOADER** (write-only drop-box, ADR 0031) the resolve is gated to
+     * wrapped keys of the UPLOADER identities whose media it holds cross — no guest's name, no contributor
+     * identity (ADR 0030 point 8); for an **UPLOADER** (write-only drop-box, ADR 0031) the resolve is gated to
      * `media: []` + the **root node only** and **no identities** — the uploader is structurally handed nothing to
      * see (no gallery, no other guests). The `canView` gate is the server-side enforcement of "cannot see others".
      */
@@ -331,12 +333,17 @@ class SharingHandler(
         }
         if (ShareAccessPolicy.canView(share.role)) {
             val subtree = store.subtree(share.scopeId, share.nodeId)
-            return ResolveShareOutcome.Found(share, subtree, store.readerIdentities(shareId, subtree))
+            val uploaderKeys = store.uploaderKeys(subtree)
+            // A media names its identity only where the guest needs it to find the key (ADR 0031 point 7); a
+            // contributor's opens under K_mem, and its id would only tell a guest which uploads came from one
+            // person (ADR 0030 point 8). Derived from the same map, so the two can never disagree.
+            val media = subtree.media.map { if (it.identityId in uploaderKeys) it else it.copy(identityId = null) }
+            return ResolveShareOutcome.Found(share, SubtreeData(subtree.nodes, media), uploaderKeys)
         }
         // UPLOADER: the minimal capability — no nodes, no media, no identities. The client seals its uploads under
         // its own identity key, wrapped to the Memory's drop public key (served sealed under `K_share` in place of
         // the wrap, ADR 0031 point 7), and shows the title (from `sealedName`); it needs nothing from the subtree.
-        return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyList())
+        return ResolveShareOutcome.Found(share, SubtreeData(emptyList(), emptyList()), emptyMap())
     }
 
     /**

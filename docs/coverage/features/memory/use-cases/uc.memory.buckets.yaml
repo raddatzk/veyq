@@ -39,6 +39,24 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/memory/media.buckets.test.ts]
+  - id: guest-names-for-members-only
+    text: >-
+      A guest's name reaches the Memory's members only, through their bucket list. No public share's resolve serves
+      a guest's sealed name, or any CONTRIBUTOR identity — not even the reading link's own, including on a VIEWER
+      link that was once a CONTRIBUTOR link. It serves an UPLOADER identity as its wrapped key alone, which a reader
+      needs to open that identity's media, and only that media names its identity. The name pre-screen tells the
+      guest who sees the name. A link plus a database dump still opens the names — the residual ADR 0030 point 8
+      accepts.
+    coverage:
+      # Each negative carries a positive on the same predicate: the served identity set is EXACTLY the uploader's
+      # (so an empty list cannot pass), the name's absence is asserted on that present identity, and the member
+      # bucket list still serves both guests' names. Live, both sharing e2e suites read the raw resolve past the
+      # generated client, which would drop an unknown field.
+      backend:
+        integration: [ShareGuestNamesSliceTest.aViewerLinkIsServedTheUploadersKeyButNoName, ShareGuestNamesSliceTest.aContributorLinkIsServedNoneOfItsOwnGuests, ShareGuestNamesSliceTest.aViewerLinkThatWasAContributorLinkKeepsNoGuest, ShareGuestNamesSliceTest.onlyAnUploadersMediaNamesItsIdentity, ShareGuestNamesSliceTest.theMembersStillReadBothNames]
+      web:
+        unit: [src/views/ShareView.test.ts]
+        e2e: [src/features/memory/shareContributor.e2e.test.ts, src/features/memory/shareUploader.e2e.test.ts]
   - id: operator-blind-buckets
     text: Grouping and ownership run over the opaque owner_key + the bucket structure (node, parentage, is_primary, counts) the operator already relays; names are unsealed client-side and a wrong AAD context can never open one. The operator never learns a cleartext bucket/uploader name nor any content, and a personal Memory with no share exposes only the account owner's owner_key.
     coverage:
