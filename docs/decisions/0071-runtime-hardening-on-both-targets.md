@@ -88,6 +88,12 @@ Forces:
   its own, and a file the app left owner-only stops its file provider while the proxy stays up and routes nothing
   (measured on `traefik:v3.6`). The app therefore writes that file world-readable; it is routing config, never a
   secret.
+  **Proven once, live, 2026-09-28** (the production recipe on a Mac's Docker Desktop, the locally built JVM app
+  image and admin image, throwaway secrets, ACME staging): every service up and healthy (Garage and Traefik up,
+  they have no healthcheck) and `volume-ownership` `Exited (0)`; `acme.json` exists owned by 65532, mode 0600;
+  Traefik's log carries no `permission denied`; `/api/setup` answers through the admin port; from the Traefik
+  container `mariadb:3306` does not resolve (`nc: bad address`), while the same tool on `veyq_db` reaches
+  MariaDB's greeting, the positive control.
 - **What cannot be proven here, named.** `helm template` proves what the chart renders, not that a cluster
   enforces it. Whether a NetworkPolicy binds depends on the CNI, and this repository has no cluster to run
   one on.

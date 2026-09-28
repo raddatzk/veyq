@@ -1206,6 +1206,24 @@ image's `npm ci` before `openapitools.json` had been copied in). So a CR that ad
 **every consumer that resolves or runs the verified input** — the dev loop, the IDE sync, each image build —
 and its done-when **runs each one**, not the test suite that happens to share the build file.
 
+### A refine that changes who runs a process lists what that process reads, and what the proxy must still reach
+
+Two misses of cr-runtime-hardening-both-targets, found only by building it. **A new uid meets old file modes:** a
+non-root Traefik could not read `tenants.yml`, which the app wrote 0600 — the file provider failed silently while
+the proxy stayed up. **A network split meets every upstream:** ADR 0071 §3's "admin shares a network with the app
+alone" left the proxy's admin router with no path. So when a refine changes a process's uid, it lists every file
+that process reads which another process writes, with the writer's mode; and when it splits networks, it checks
+the split against every upstream the ingress sink renders (`VEYQ_TENANT_INGRESS_UPSTREAM_*`), not only the ones
+the ADR names.
+
+### Split an expensive live proof so its no-daemon half runs anywhere
+
+cr-admin-origin-hsts wrote only the Docker proof, and the implementing session could run no Docker — so two of its
+"believed" points waited a day although neither needed a daemon: nginx's header-merge semantics were one function
+in its source, and the entrypoint hook's switch values were a one-shot run of the hook with its paths redirected.
+Where a refine leaves a tool's semantics "believed, not measured", it reads the tool's source then, and it splits
+the proof so the part that needs no daemon is done by whoever implements.
+
 ### A live proof that names a screen names the instance state that screen needs
 
 cr-app-shell-served-by-backend's Definition of done said *"the app boots to sign-in with zero CSP violations"* and
