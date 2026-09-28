@@ -1,0 +1,29 @@
+useCase: uc.account.confirm-email-address
+feature: account
+title: Confirm the address a password reset is sent to
+status: planned
+# Refined 2026-09-28 from inbox #112 (ADR 0074, Proposed). Planned in cr-email-address-confirmation; nothing is
+# built. Each criterion below names the event or refusal it pins, so the implementing CR can put one slice test
+# under each, and its per-bite levers are in the CR.
+acceptanceCriteria:
+  - id: member-invite-redemption-confirms
+    text: Redeeming a MEMBER invite confirms the account's address, on both the register and the sign-in branch, because a member invite only ever arrives by mail. Redeeming the Server Owner's bootstrap OWNER invite, and first-run setup, confirm nothing.
+  - id: completed-reset-confirms
+    text: Completing a password reset (the mailed token plus the Secret-Key proof) confirms the account's address. A release that is never completed confirms nothing.
+  - id: confirmation-needs-the-accounts-own-session
+    text: A confirmation link confirms only for a caller signed in as the account the token was minted for, and only while that account's address equals the one mailed. Another account's session is refused with the same answer as an unknown token, and it leaves the token live and the address unconfirmed.
+  - id: token-hashed-expiring-superseded-single-use
+    text: Only the SHA-256 hash of the one-time token is stored, bound to the account and the mailed address, with a PT24H expiry. A fresh request supersedes the outstanding token, and consumption is a compare-and-set, so a token confirms at most once.
+  - id: mail-only-through-a-member-tenants-relay
+    text: A confirmation is mailed only through the relay of the tenant the request's Host resolves to, and only for a member of that tenant, in veyq-fixed copy over the closed link/domain/expiry set. A non-member is refused and nothing is mailed.
+  - id: no-mail-no-confirmation
+    text: A tenant that cannot send answers 503 mail_unavailable and mints nothing. No copy-link is ever offered.
+  - id: send-budget-per-account
+    text: Confirmation mails are bounded per account per window. A request over budget answers 429 and sends nothing.
+  - id: gates-nothing
+    text: An unconfirmed account is refused nothing. In particular, a password-recovery request for an unconfirmed member mints and mails a token exactly as for a confirmed one.
+  - id: state-shows-the-servers-address
+    text: The account holder sees the address the server holds, which is the one a reset would mail, and whether it is confirmed. The tenant owner is offered a confirmation right after saving sendable mail settings.
+gaps:
+  backend: "Planned in cr-email-address-confirmation: no confirmation column, token table, endpoint or stamp exists yet (ADR 0074)."
+  web: "Planned in cr-email-address-confirmation: no settings card, confirmation route or mail-settings hint exists yet."
