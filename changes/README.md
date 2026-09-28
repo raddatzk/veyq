@@ -1393,6 +1393,28 @@ out *on purpose*, and cleared by the server so it is no longer open); the refine
 So wherever a CR pairs a client-side skip with a server-side completeness check, it names how the request says
 "this one, deliberately not" — and what the server does with it.
 
+### A device-local defence against the server is filed under a key the server cannot name
+
+**Local state that guards against the operator is only as good as the index it is looked up by.**
+cr-trust-state-never-goes-backwards said the marks are kept "per device and per account" and left *what names the
+account* open. The obvious index is the account id the client already has — and every client learns it from
+`GET /api/account/key-material`, i.e. from the server. A server that reports another id sends the device to an
+empty slot, which is the no-mark case on demand: the whole floor, silently off, with every bite still green,
+because the tests serve one honest id. The slot became a one-way derivation of the Master Key, which the server
+cannot choose (ADR 0028 Decision 7). So a CR that adds device-local trust state names its key and asks of it the
+question it asks of the state: **could the operator choose this?**
+
+### Turning a degradation into a refusal inventories every path that reached the degradation
+
+**A store that "degrades to empty" was also the recovery path of everything that could leave it unreadable.**
+The same CR made an unopenable pin store and register a refusal instead of the empty store, as ADR 0028 Decision 7
+decided. The attack it closes is real; so is the honest writer it strands: an account-key rotation re-seals both
+best-effort *after* its irreversible publish, and a re-seal that never lands used to cost the pins and now costs
+every wrap to a foreign key, with nothing to reset it (inbox #192). Neither the ADR nor the CR listed who produces
+an unreadable store honestly. So a CR that turns *degrade* into *refuse* greps for the writers of the degraded
+state (`grep -rn 'reseal\|best-effort' …`) and gives each one a way back — or an inbox row, in the CR, before the
+refusal ships.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong
