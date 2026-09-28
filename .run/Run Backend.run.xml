@@ -28,7 +28,7 @@
            A double hyphen is illegal inside an XML comment — spell such a flag out in prose, or IntelliJ
            fails to parse this file and silently offers no run config at all.
            PUBLIC_ENDPOINT is the browser origin the presigned PUT/GET URLs are signed for: it MUST equal the host
-           in the address bar (SigV4 signs host+path; the Vite dev server proxies /veyq same-origin to the store).
+           in the address bar (SigV4 signs host+path; the Vite dev server proxies /blobs/ same-origin to the store).
            It is developer-specific — set it to whatever origin you browse. Here: veyq.localhost:8081 (the *.localhost
            per-tenant workspace flow, cr-0051, served by Vite on VITE_PORT=8081). Adjust per setup. -->
       <option name="env">

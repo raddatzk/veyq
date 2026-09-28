@@ -55,8 +55,8 @@ services:
 
   # Reverse proxy so the bundled store is reachable same-origin (ADR 0013 §4). Routes only the bucket path, from
   # a static file: like production, the file provider is its only provider, so no container holds the Docker
-  # socket. The Vite dev server proxies `/veyq` itself, so nothing in the dev loop reads this route — a broken one
-  # stays silent; `curl -sI http://localhost:18080/veyq/` answering from Garage is the check.
+  # socket. The Vite dev server proxies `/blobs/` itself, so nothing in the dev loop reads this route — a broken one
+  # stays silent; `curl -sI http://localhost:18080/blobs/` answering from Garage is the check.
   traefik:
     image: traefik:v3.6@sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d
     container_name: veyq-traefik
@@ -66,7 +66,7 @@ services:
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--entrypoints.web.address=:80"
     ports:
-      - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /veyq/<obj> → Garage
+      - "18080:80"     # same-origin entry: presigned URLs signed for host:18080, path /blobs/<obj> → Garage
     volumes:
       - "./traefik-dev:/etc/traefik/dynamic:ro"
 
