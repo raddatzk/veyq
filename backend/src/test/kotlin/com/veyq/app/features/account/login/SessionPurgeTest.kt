@@ -13,12 +13,15 @@ import java.time.temporal.ChronoUnit
  * cr-0011 — the scheduled session purge deletes expired access/refresh tokens, stale login challenges and
  * token-less families, while keeping live tokens and (crucially) **unexpired SUPERSEDED** refresh tokens so
  * reuse-detection survives. Uses distinct ids/emails so the JVM-lived H2 mem DB does not bleed across tests.
+ *
+ * Drives `SessionPurge.run()`, the scheduled entry: the suite's scheduler is halted (`ScheduledJobsHaltedInTestTest`),
+ * so this test is the only place it executes.
  */
 @QuarkusTest
 class SessionPurgeTest {
 
     @Inject
-    lateinit var sessions: SessionService
+    lateinit var purge: SessionPurge
 
     @Test
     fun purgesExpiredRowsAndEmptyFamiliesButKeepsLiveAndSupersededTokens() {
@@ -46,10 +49,9 @@ class SessionPurgeTest {
             challenge(CHALLENGE_LIVE, future)
         }
 
-        sessions.purgeExpiredAccessTokens(now)
-        sessions.purgeExpiredRefreshTokens(now)
-        sessions.purgeExpiredChallenges(now)
-        sessions.purgeEmptyFamilies()
+        // The real entry, so its call order is under test too: the token deletes must run before the family
+        // delete, or the expired session's family is still holding tokens when it is looked at ("empty family kept").
+        purge.run()
 
         QuarkusTransaction.requiringNew().run {
             // Live session intact.
