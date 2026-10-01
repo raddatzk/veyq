@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 Nothing below is decided. Each question carries a recommendation; the CR is written for the recommendations.
 **Order:** this CR lands **after** `cr-reissue-share-link` (planned, owner-approved), because it adds a field to
 that CR's re-issue request. It is independent of `cr-tenant-removal-share-links`; with `cr-share-link-delete`

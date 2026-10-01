@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 **Added 2026-10-01 by folding in inbox #225 (D9), after both rounds of answers: Q6 and Q7 are open.** They gate
 only D9. Everything decided below, D1–D8 included, keeps its go.
 

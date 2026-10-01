@@ -17,6 +17,8 @@ invariants:
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 **Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
 
 Each question carries a recommendation; the CR below is written as if every recommendation is taken, and names

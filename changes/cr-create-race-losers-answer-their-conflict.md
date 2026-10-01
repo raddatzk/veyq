@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE everywhere]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 1. **Scope: the three sites #223 named, or every create that has the same shape?** Inventory 4–11 lists eight
    more creates that check "taken?" with an unlocked read and then insert. Each has the same loser (a 500 from
    a unique index), and each has a named answer already on the wire. **Recommendation: all eleven, one phase

@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 **Open — added 2026-10-01 by the inbox #230 fold, not yet answered.** The CR below is written as if both
 recommendations are taken; the go given for questions 1–2 does not cover them.
 

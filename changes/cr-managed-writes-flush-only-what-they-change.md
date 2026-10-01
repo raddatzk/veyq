@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE everywhere]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 1. **`@DynamicUpdate` on every entity, or only on the eight the sweep implicates?** **Recommendation: every
    entity.** The trap is a default, not a defect of particular sites. All eight implicated entities got it the
    same way: a writer was added somewhere else, and nobody re-read every managed write of the row. An entity

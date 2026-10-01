@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 **Third refine wave, 2026-10-01 — open, not covered by the answer below.** Inbox #229 (*drop share-identity rows
 whose media were all erased*) is folded in here: it is the "later hygiene step" question 4 left out, and it needs
 this CR's tombstone to be safe. Questions 8–9 and § *Folded: inbox #229* below carry it; the go on questions 1–7

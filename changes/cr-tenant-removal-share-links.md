@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
+
 **Third refine wave, 2026-10-01 — open, not covered by the answer below.** Inbox #228 (*a standalone "turn off
 every link in this space" for scope owners*) is folded in here, because this CR already owns the predicate that
 decides whether a turned-off link may come back. Questions 6–8 and § *Folded: inbox #228* below carry it; the
