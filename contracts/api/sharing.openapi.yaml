@@ -4,8 +4,8 @@ info:
   version: 0.1.0
   description: >
     Public **viewer** shares of a single Memory (uc.sharing.share-public-viewer, cr-0100,
-    [ADR 0029](../../docs/decisions/0029-public-viewer-share.md)). A curator turns **one of their own
-    personal-scope Memories** into a **read-only, anonymous, revocable** link `/s/{shareId}#k=<K_share>`. The
+    [ADR 0029](../../docs/decisions/0029-public-viewer-share.md)). A member of a scope turns **one Memory
+    of it** (personal, group or tenant — ADR 0029 §6) into an **anonymous, revocable** link `/s/{shareId}#k=<K_share>`. The
     share adds an **independent second wrap** of that Memory's content key — `symWrap(K_share, K_mem)`
     ([ADR 0012](../../docs/decisions/0012-content-key-hierarchy.md)) — whose secret `K_share` rides the **URL
     fragment** ([ADR 0015](../../docs/decisions/0015-operator-blind-readable-urls.md)) and **never reaches the
@@ -16,8 +16,8 @@ info:
     `K_share`, `K_mem`, any name, the viewer, or — because blobs are fetched direct-from-store via presigned
     GETs — which media a viewer opens.
 
-    **Two authorization surfaces.** Curator management (`create` / `list` / `revoke`) is **authenticated**
-    (`bearerAuth`) and gated to a **personal-scope** Memory the caller owns. The guest **resolve** + **gated
+    **Two authorization surfaces.** Curator management (`create` / `list` / `revoke` / `reissue` …) is
+    **authenticated** (`bearerAuth`) and gated to a member of the Memory's scope. The guest **resolve** + **gated
     blob GET** are **unauthenticated** — a parallel authz path keyed on share state (`enabled` + `expiresAt`),
     never a relaxed scope filter. Both `shareId` **and** the fragment key are required: the id alone is inert
     (the wrap can't be opened without `K_share`), an unknown/disabled/expired id is a non-enumerable `404`.
@@ -167,12 +167,17 @@ paths:
       operationId: reactivateShare
       summary: Re-activate a soft-revoked share and adopt its ownership.
       description: >
-        Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller — for a share
-        auto-deactivated when its creator was removed from the scope (cr-0104, ADR 0029 §6). Any **current member**
-        of the share's scope may adopt it; the link resolves again (its `#k=K_share` fragment is unchanged), now
-        owned by the caller. Idempotent for a share the caller may already adopt. Re-activating is a publication
-        like creating, so it passes the same checks: a current member outside the space's deletion grace, and the
-        instance's sharing capability for the share's role (uc.sharing.share-shared-scope A2).
+        Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller. Any **current
+        member** of the share's scope may adopt it, and the **same** link resolves again — which is why a link a
+        departed member may hold is never re-activated
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)): when the share's
+        owner is no longer a member of its scope, or its recovery copy is sealed below the scope's current epoch
+        (every member then could rebuild the link, one since removed included), the answer is
+        `409 reissue_required`, nothing written, and the caller re-issues it (`reissueShare`) instead. A share with
+        no recovery copy is judged by its owner's membership alone. Idempotent for a share the caller may already
+        adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
+        the space's deletion grace, and the instance's sharing capability for the share's role
+        (uc.sharing.share-shared-scope A2).
       security:
         - bearerAuth: []
       parameters:
@@ -189,11 +194,90 @@ paths:
           description: No such share, or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            A departed member may hold this link (`reissue_required`, nothing written — its owner is no longer a
+            member of the scope, or its recovery copy is sealed below the scope's current epoch; re-issue it, ADR
+            0075), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
         "422":
           description: >
             The instance capability this share's role needs is disabled (ADR 0032) — the same check
             `createShare` runs, since a re-activation publishes the link again.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
+
+  /api/shares/{shareId}/reissue:
+    post:
+      tags: [sharing]
+      operationId: reissueShare
+      summary: Re-issue a share — a new link with a fresh key, the old one turned off, in one request.
+      description: >
+        Creates a **new** share with a fresh client-minted `shareId` and a fresh `K_share`, carrying the old one's
+        settings, and turns the old one off (`enabled = false`) in the **same transaction** — what cuts a departed
+        member off a link they could copy
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). The client
+        opens the old share through its recovery copy, re-seals its note, label and password under the new
+        `K_share` (the password with a fresh salt) and seals the new recovery copy at the scope's current epoch.
+        The server takes the Memory, the scope and the **role** from the old share, so a re-issue cannot move a
+        link or change its role; the keys must match that role (`400`, as `createShare`). An UPLOADER re-issue
+        seals the Memory's **existing** drop public key and carries no drop private key — every upload so far is
+        sealed to that key (ADR 0031 point 7). Guest identities stay with the old share: their photos stay in the
+        Memory, and a returning guest names themself again on the new link.
+
+        An **enabled** share is re-issued only by its owner (as `revokeShare`); a **disabled** one by any current
+        member of its scope, who owns the new share (as `reactivateShare` adopts). The old link then `404`s exactly
+        as a revoked one does — no redirect, which would hand the new id to the person the re-issue is for. Any
+        refusal writes nothing: the old link keeps its state and the new id stays free.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ReissueShareRequest" }
+            example:
+              shareId: 9Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i3q2-7v
+              wrap: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+              sealedName: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+              sealedShareKey: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
+              sealedShareKeyEpoch: 1
+      responses:
+        "201":
+          description: The new share exists and the old one is off.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ShareCreated" }
+              example: { shareId: 9Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i3q2-7v }
+        "400":
+          description: Malformed request (missing/invalid fields, or keys that do not match the old share's role).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such share, the caller is not a member of its scope, or the share is enabled and not the caller's —
+            one non-enumerable answer.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409":
+          description: >
+            The new `shareId` is already taken (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current
+            epoch (`stale_epoch` — re-open the scope key and re-seal, ADR 0024 Decision 6), or the space is being
+            deleted and read-only (`scope_deleting`). Nothing is written in any case.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: stale_epoch } }
+        "422":
+          description: >
+            The instance capability the share's role needs is disabled (`capability_disabled`, ADR 0032) — a
+            re-issue publishes a link, so it checks what `createShare` checks.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: capability_disabled } }
 
@@ -602,7 +686,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      description: The opaque access token issued by login / refresh. The caller must own the shared node's personal scope (enforced by code).
+      description: The opaque access token issued by login / refresh. The caller must be a member of the shared node's scope (enforced by code).
 
   parameters:
     ShareId:
@@ -861,6 +945,117 @@ components:
           contentEncoding: base64
           maxLength: 512
           example: c2VhbGVkLXBhc3N3b3Jk
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    ReissueShareRequest:
+      type: object
+      required: [shareId, sealedName, sealedShareKey, sealedShareKeyEpoch]
+      description: >
+        The new share of a re-issue (ADR 0075): `createShare`'s body without `nodeId` and `role` — both come from
+        the old share — and without `sealedDropPrivateKey`, since an UPLOADER re-issue keeps the Memory's existing
+        drop key. The keys follow the old share's role as in `CreateShareRequest`: `wrap` for VIEWER/CONTRIBUTOR,
+        `sealedDropPublicKey` for UPLOADER, any other combination `400 invalid_request`. The recovery copy is
+        **required**: a re-issue is made by a member who opened the old one, and its link must stay recoverable.
+      properties:
+        shareId:
+          x-veyq-visibility: id
+          type: string
+          description: >
+            The new share's client-minted id (ADR 0072 Decision 3) — fresh, never the old one's; its recovery copy
+            is bound to it. Taken ⇒ `409 id_taken`, nothing written.
+          minLength: 43
+          maxLength: 43
+          pattern: "^[A-Za-z0-9_-]{43}$"
+          example: 9Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i3q2-7v
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(min = 43, max = 43) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9_-]{43}")'
+        wrap:
+          type: [string, "null"]
+          description: >
+            `symWrap(K_share', K_mem)` under the **new** per-share key (opaque base64). Required when the old share
+            is VIEWER or CONTRIBUTOR; absent for UPLOADER.
+          contentEncoding: base64
+          maxLength: 256
+          example: d3JhcHBlZC1rLW1lbS11bmRlci1rLXNoYXJl
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedDropPublicKey:
+          type: [string, "null"]
+          description: >
+            UPLOADER only: the Memory's **existing** drop public key sealed under the new `K_share` (AAD
+            `drop-public-key`, opaque base64). Required when the old share is UPLOADER, absent otherwise.
+          contentEncoding: base64
+          maxLength: 2048
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 2048) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedName:
+          type: string
+          description: The Memory name sealed under the new `K_share` (seal purpose `share-memory-name`, opaque base64).
+          contentEncoding: base64
+          maxLength: 4096
+          example: c2VhbGVkLW5hbWUtdW5kZXItay1zaGFyZQ==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 4096) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        expiresAt:
+          x-veyq-visibility: time
+          type: [string, "null"]
+          format: date-time
+          description: The new share's expiry — the old one's carried, or changed in the re-issue dialog. Null = no expiry.
+          example: null
+        sealedNote:
+          type: [string, "null"]
+          description: The curator note (per-locale JSON map) sealed under the new `K_share` (AAD `share-note`). Absent = no note.
+          contentEncoding: base64
+          maxLength: 16384
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 16384) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareName:
+          type: [string, "null"]
+          description: The private label sealed under the new `K_share` (AAD `share-name`), management-only. Absent = none.
+          contentEncoding: base64
+          maxLength: 512
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareKey:
+          type: string
+          description: >
+            The new `K_share` sealed under the scope key `K_SC` at `sealedShareKeyEpoch` (AAD `share-key-recovery`,
+            bound to scope + Memory + the **new** share id + epoch; opaque base64) — the members' recovery copy
+            (ADR 0036 point 4).
+          contentEncoding: base64
+          maxLength: 256
+          example: cmVjb3ZlcmFibGUtc2hhcmUta2V5LXVuZGVyLWtzYw==
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 256) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedShareKeyEpoch:
+          x-veyq-visibility: structure
+          type: integer
+          description: The scope epoch `sealedShareKey` is sealed under — must be the scope's **current** one (else `409 stale_epoch`, nothing written).
+          minimum: 0
+          example: 1
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Min(0)'
+        passwordRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          default: false
+          description: Protect the new share with a password (ADR 0037) — the old one's carried by default. When true, `pwSalt` + `pwVerifier` (+ optionally `sealedPassword`) accompany it.
+          example: false
+        pwSalt:
+          type: [string, "null"]
+          description: A **fresh** salt for `pwToken = Argon2id(password, pwSalt)` (opaque base64). Present iff `passwordRequired`.
+          contentEncoding: base64
+          maxLength: 64
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        pwVerifier:
+          type: [string, "null"]
+          description: '`SHA-256(pwToken)` under the fresh salt (opaque base64) — the server never sees the raw password (ADR 0037).'
+          contentEncoding: base64
+          maxLength: 64
+          example: null
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 64) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        sealedPassword:
+          type: [string, "null"]
+          description: The password sealed under the new `K_share` (AAD `share-password`, opaque base64) — the management-only reveal copy.
+          contentEncoding: base64
+          maxLength: 512
+          example: null
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 512) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
     ShareCreated:
