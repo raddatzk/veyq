@@ -295,7 +295,7 @@ class ScopesHandler(
     }
 
     /**
-     * Add an existing tenant member to a **group** by username (en.spaces.add-group-member, cr-0086). Admission
+     * Add an existing tenant member to a **group** by username (uc.spaces.add-group-member, cr-0086). Admission
      * is owner-gated ([ADR 0014](0014) §4 — only a group OWNER; the tenant owner has no say); the username is
      * resolved **within the scope's own tenant** (ADR 0020 — never a global search). Records a **grant-less**
      * MEMBER membership — no key crosses the wire; grant-delivery wraps `K_SC` to them afterwards (cr-0076). The

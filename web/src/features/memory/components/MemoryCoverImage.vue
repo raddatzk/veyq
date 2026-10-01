@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// en.memory.cover (web) — the pure display of a Memory's chosen cover (uc.memory.cover, cr-0072). Given a
+// uc.memory.cover (web) — the pure display of a Memory's chosen cover (cr-0072). Given a
 // decrypted source URL + a normalized crop, it renders that ONE crop at ANY container size: the `<img>` sits in an
 // `overflow:hidden` box and is expanded + offset by `coverImageStyle`, so a single stored `0..1` crop reads
 // identically on the browse card, the detail header, the map pin and the sidebar's Favorites tile. No `src` ⇒

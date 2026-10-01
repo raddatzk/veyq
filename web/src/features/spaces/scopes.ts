@@ -1,4 +1,4 @@
-// uc.spaces.personal-scope (web) — birth + open a member's per-tenant PERSONAL scope. Operator-blind: the
+// en.spaces.personal-scope (web) — birth + open a member's per-tenant PERSONAL scope. Operator-blind: the
 // scope key is generated on-device and sealed to the member's own identity (sealTo, the hybrid KEM); only
 // the ciphertext grant reaches the server. The active tenant is resolved server-side from the Host.
 import * as v1 from '@veyq/crypto/v1'

@@ -123,10 +123,18 @@ since the package split.
       web/src/features/memory/useMemoryDate.ts:1: cites uc.memory.date-place, …
       web/src/features/spaces/scopes.ts:1: cites uc.spaces.personal-scope, …
       ```
-- [ ] 2 fix: Decision 4, plus the rename's readers (Q2 locator). The contracts edit is description-only;
+- [x] 2 fix: Decision 4, plus the rename's readers (Q2 locator). The contracts edit is description-only;
       `npm run generate:api` in `web/` and `./gradlew check` in `backend/` confirm nothing else moved.
       · Done when: the guard is green, `./gradlew check` and `npm run check` (`web/`) are green, and
       `validate_guard_gaps.py` is green with the new case below.
+      **Measured:** the guard is green (`doc citations OK … across 937 scanned file(s)`); cases 29 + 30 hold
+      (`check_case` run for those two alone → `None, None`). Repoints: the four wrong prefixes as tabled; all
+      four `date-place` sites are the date half (editor, composable, header slice, date maths) → `uc.memory.date`;
+      `boot.ts` → `uc.admin.setup-server` step 1, `instance.ts` → that + `uc.platform.capability-discovery` for
+      the suites; `ProfilePanel.vue` → `en.spaces.member-identity`. Rename readers: `docs/decisions/README.md:8`
+      and inbox #95. **Not repointed, on purpose:** three live CRs name the old file in their done-when
+      (`cr-trust-state-has-a-way-back`, `cr-email-address-confirmation`, `cr-boot-keeps-tiers-without-a-refusal`);
+      they are in flight in this wave, so the coordinator renames them after the merge.
 
 ## Definition of done
 
@@ -141,6 +149,14 @@ since the package split.
     `SCAN` this was green, which shows the derivation is load-bearing.
   - **(c) The anchor, both ways.** Put `uc.nosuchfeature.x` in a comment: **green**, which is the documented
     limit. Put `uc.memory.nosuchdoc` in one: red.
+  **Measured** (snapshot-and-restore, `bite.py` in the session scratchpad; the working-tree porcelain status
+  identical before and after, every file byte-equal to its snapshot):
+  - (a) `memoryDate.ts` + `// en.memory.date` → exit 1, `memoryDate.ts:139: cites en.memory.date, …`.
+  - (b) `admin-web/src/main.ts` + `// ADR 9999` → exit 1, `admin-web/src/main.ts:30: cites ADR 9999, …`; the
+    `7a34c57` guard run over the same injected tree → exit 0 (`… across 855 scanned file(s) …`).
+  - (c) `uc.nosuchfeature.x` → exit 0 (the limit); `uc.memory.nosuchdoc` → exit 1, naming the file and line.
+  - Beyond the DoD, the `cc.` half: `cc.security.nosuch` → exit 1; `cc.security.csp.md` and
+    `cc.inclusive-language` → exit 0.
 - **Pin the closed hole** in `scripts/validate_guard_gaps.py` as a *rejected* case: a `web/src` comment citing
   a non-existent `uc.memory.*` id must be refused. Pin (c)'s first half as an *open* gap, so that tightening the
   anchor later flips it visibly.

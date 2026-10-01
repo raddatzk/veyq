@@ -82,6 +82,9 @@ Rejected — regression-pins for closed holes (a forgery the guard must now catc
      checks sat until #153
   28 `MoveMediaRequest.mediaIds`' `@Size` says one more than its `maxItems` — rejected: the two are one rule
      written twice, value for value, and an annotation drifting from its schema is the same gap as a missing one
+  29 a `web/src` comment citing a use-case id under a real feature that names no doc — rejected:
+     `validate_doc_citations` resolves `uc.`/`en.`/`cc.` ids, not only `ADR NNNN`. Before it, 7 such ids dangled
+     at 12 sites across the client, the backend and a spec, and two agents followed them into nothing (inbox #122)
 Open gaps — a forgery the guard still passes (a documented limit, not a defect to fix blindly):
   4b a lying `status: planned` on an implemented use-case passes. **Left open on purpose** — the obvious rule
      "planned ⇒ no coverage refs" is *false in general*: a use-case can be legitimately `planned` while carrying
@@ -145,6 +148,10 @@ Open gaps — a forgery the guard still passes (a documented limit, not a defect
      literals at the call. **Left open on purpose** — following a constant to its use is data flow, which a
      buildless grep does not have, and the realistic regression (a hand parse copied from an old resource) is a
      literal and is caught. Pinned so the limit in that guard's docstring is executable rather than a sentence.
+  30 a `web/src` comment citing a use-case id under a feature directory that does not exist passes
+     `validate_doc_citations`, which reads an id only under a real feature directory. **Left open on purpose** —
+     that anchor is what keeps attribute chains (`.parent.parent`, `.value.trim()`) from reading as ids; without
+     it the guard cries wolf on Python and TypeScript alike. Pinned so tightening the anchor flips it visibly.
 Out of reach by construction, not deferred work: the mutation **total-vs-per-glob** asymmetry (needs a report
 fixture + git, so it belongs to a mutation-job-local test, not this buildless glob) and the **rate-limit posture
 sweep** (ADR 0051). The sweep is a JVM test — it enumerates JAX-RS endpoints by reflection over compiled classes
@@ -600,6 +607,29 @@ def forge_dead_class_inside_a_selector(root: pathlib.Path) -> str:
             "(the anchor-only open gap)")
 
 
+def _web_comment_citing(root: pathlib.Path, feature: str) -> None:
+    # A new file rather than an edit: the probe needs no anchor in existing source, so it cannot drift. The id is
+    # assembled, not written, so this guard's own source carries no dangling id for anyone to copy.
+    probe = root / "web" / "src" / "guardGapProbe.ts"
+    probe.write_text("// " + ".".join(["uc", feature, "guard-gap-no-such-doc"]) + " (web) — a guard-gap probe\n"
+                     "export const guardGapProbe = 1\n")
+
+
+def forge_feature_id_dangles(root: pathlib.Path) -> str:
+    if not (root / "docs" / "features" / "memory").is_dir():
+        raise ForgeError("docs/features/memory is gone — re-anchor this forgery on a live feature directory")
+    _web_comment_citing(root, "memory")
+    return "a web/src comment citing a use-case id under a real feature that names no doc"
+
+
+def forge_feature_id_under_unknown_feature(root: pathlib.Path) -> str:
+    feature = "guard-gap-no-such-feature"
+    if (root / "docs" / "features" / feature).exists():
+        raise ForgeError(f"docs/features/{feature} exists — pick another non-feature name")
+    _web_comment_citing(root, feature)
+    return "a web/src comment citing a use-case id under a feature that does not exist (the anchor open gap)"
+
+
 # id, target guard, forgery, expect_pass (True = guard passes the forgery = gap still open; False = must reject)
 CASES = [
     ("1",  "validate_coverage.py",  forge_web_ref_nontest,      False),
@@ -630,6 +660,8 @@ CASES = [
     ("26", "validate_request_bounds.py", forge_request_bound_unannotated, False),
     ("27", "validate_request_bounds.py", forge_request_cascade_dropped,   False),
     ("28", "validate_request_bounds.py", forge_request_annotation_drifts, False),
+    ("29", "validate_doc_citations.py", forge_feature_id_dangles,            False),
+    ("30", "validate_doc_citations.py", forge_feature_id_under_unknown_feature, True),
 ]
 
 

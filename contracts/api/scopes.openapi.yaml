@@ -260,7 +260,7 @@ paths:
       summary: Add an existing tenant member to a group by username (admission; the key is delivered later).
       description: >
         Admits an existing member of the scope's tenant to a **GROUP** scope, picked by their per-tenant
-        `username` (en.spaces.add-group-member, cr-0086). The server resolves the username **within the scope's
+        `username` (uc.spaces.add-group-member, cr-0086). The server resolves the username **within the scope's
         own tenant** (never a global user-search, ADR 0020) and records a **grant-less** GROUP membership
         (`role=MEMBER`, no grant) — admission only. **No key crosses the wire**: `K_SC` is delivered afterwards by
         any group key-holder's `grant-delivery` job (ADR 0020/0021, cr-0076), so the returned member starts with

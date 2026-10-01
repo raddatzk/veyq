@@ -190,7 +190,7 @@ const trashVideoIds = computed(() => videoIdSet(trashedItems.value))
 const activeTab = ref<'gallery' | 'chapters' | 'beitraege' | 'trash'>('gallery') // local (the #fragment carries the tree path, cr-0031)
 const fileInput = ref<HTMLInputElement | null>(null)
 
-// --- Memory date (cr-0067, uc.memory.date-place) → extracted into `useMemoryDate` (cr-0145). The effective range
+// --- Memory date (cr-0067, uc.memory.date) → extracted into `useMemoryDate` (cr-0145). The effective range
 // is sealed on the NODE under K_mem (operator-blind) and shown in the header; `auto` materializes from the
 // Memory's own media and self-heals on open + after an upload batch (via `reconcileAuto`, called at the settle
 // points below). Props are passed as getters so the composable stays reactive to them.

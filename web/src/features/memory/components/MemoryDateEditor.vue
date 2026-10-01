@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// The Memory date editor (cr-0067, uc.memory.date-place main flow §2). A mode switch — `auto` / `single` /
+// The Memory date editor (cr-0067, uc.memory.date main flow §2). A mode switch — `auto` / `single` /
 // `range` / `ongoing` — reveals the fitting inputs (none / one day / from+to / a start). `auto` shows the
 // materialized range derived from the Memory's media (read-only preview); the manual modes take `YYYY-MM-DD`
 // days via the ported IsoDateField. On save the parent seals the chosen [MemoryDate] under `K_mem` — this
