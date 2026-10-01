@@ -230,7 +230,7 @@ before building a Worker around it.
       Worker has no wall-time payoff, and the CR **stops here** and reports to the owner. That is a legitimate
       outcome, not a failure. · Done when: both runs recorded, and the gate decided in writing.
 
-- [ ] 1 web — **one pixel module, two ports (behaviour-preserving refactor).** Extract
+- [x] 1 web — **one pixel module, two ports (behaviour-preserving refactor).** Extract
       `halvingPlan(w, h, maxEdge): { steps: {w,h}[]; final: {w,h} }` from `drawEncoded`'s loop, and make
       `drawEncoded` / `drawStep` take the canvas port (Decision 3). The page deriver passes today's
       `HTMLCanvasElement` + `toBlob` port, so no runtime behaviour changes. ·

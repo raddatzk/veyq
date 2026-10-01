@@ -4,6 +4,7 @@
 // sees a pixel). The stage sits behind an injectable `MediaDeriver` so `media.ts`'s add-media wiring is
 // unit-testable against a stub; the real Canvas/`<video>` path is exercised by a live browser round-trip.
 import { type MediaDerivativeKind } from '../../api/generated/media'
+import { drawEncoded, type CanvasPort } from './mediaPixels'
 
 /**
  * Derivative tier specs (en.memory.derivatives → *The three tiers*). `preview` is pinned from the legacy E2EE
@@ -61,15 +62,23 @@ export interface MediaDeriver {
   probeDimensions?(source: Blob, mediaType: string): Promise<Dimensions | null>
 }
 
+export { scaleToMaxEdge } from './mediaPixels'
+
 /**
- * Longest-edge target math (pure): scale `width`×`height` so the longest edge is ≤ `maxEdge`, preserving the
- * aspect ratio and **never upscaling**. Each side is at least 1px.
+ * The page-thread canvas port: today's `HTMLCanvasElement` + `toBlob`. Chromium runs that encode in an idle
+ * period, so in a tab that is not being painted (backgrounded, minimized, occluded) each call waits for one that
+ * may not come until a fallback timeout fires.
  */
-export function scaleToMaxEdge(width: number, height: number, maxEdge: number): { width: number; height: number } {
-  const longest = Math.max(width, height)
-  if (longest <= maxEdge || longest === 0) return { width, height }
-  const scale = maxEdge / longest
-  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) }
+const PAGE_PORT: CanvasPort<HTMLCanvasElement> = {
+  create(width, height) {
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    return canvas
+  },
+  encode(canvas, mimeType, quality) {
+    return new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, quality))
+  },
 }
 
 /** The real browser deriver — Canvas decode/downscale + `<video>` first-frame poster. DOM-only (used live). */
@@ -80,7 +89,7 @@ export function createBrowserDeriver(): MediaDeriver {
       try {
         // The intrinsic size rides back with the bytes: this decode already knows it, and it is exactly what
         // the sealed metadata tier wants. Without it the same original is decoded a second time just to measure.
-        const bytes = await drawEncoded(bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
+        const bytes = await drawEncoded(PAGE_PORT, bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
         return { bytes, source: { w: bitmap.width, h: bitmap.height } }
       } finally {
         bitmap.close()
@@ -106,7 +115,7 @@ export function createBrowserDeriver(): MediaDeriver {
         await firstPresentedFrame(video)
         video.pause()
         // the poster is encoded at the preview tier and reused for the (smaller) thumbnail tier as-is
-        return drawEncoded(video, video.videoWidth, video.videoHeight, TIER_SPECS.PREVIEW.maxEdge, TIER_SPECS.PREVIEW.quality)
+        return drawEncoded(PAGE_PORT, video, video.videoWidth, video.videoHeight, TIER_SPECS.PREVIEW.maxEdge, TIER_SPECS.PREVIEW.quality)
       } finally {
         video.removeAttribute('src')
         video.load() // detach the source so Safari releases the decoder/buffers promptly
@@ -138,52 +147,6 @@ export function createBrowserDeriver(): MediaDeriver {
       return null
     },
   }
-}
-
-async function drawEncoded(
-  src: CanvasImageSource, w: number, h: number, maxEdge: number, quality: number,
-  mimeType = 'image/jpeg', background?: string,
-): Promise<Uint8Array> {
-  const { width, height } = scaleToMaxEdge(w, h, maxEdge)
-  // Progressive-halving downscale. A single large drawImage (e.g. 4032→512 ≈ 8×) stays soft even at
-  // imageSmoothingQuality:'high' — the browser applies ONE bilinear pass, not an iterative filter, so it drops
-  // high-frequency detail. Halving in ≤2× steps (each with high smoothing) preserves that detail, approximating
-  // the multi-tap resample the legacy server did with libvips (frontend-noe2ee derived server-side; operator-blind
-  // forces it on-device here). scaleToMaxEdge never upscales, so a small source just skips the loop.
-  // The intermediate steps keep alpha (no fill); the background is applied only on the FINAL canvas that is encoded.
-  let curSrc: CanvasImageSource = src
-  let curW = w
-  let curH = h
-  while (curW > width * 2 || curH > height * 2) {
-    const nextW = Math.max(Math.round(curW / 2), width)
-    const nextH = Math.max(Math.round(curH / 2), height)
-    curSrc = drawStep(curSrc, nextW, nextH)
-    curW = nextW
-    curH = nextH
-  }
-  const canvas = drawStep(curSrc, width, height, background)
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, mimeType, quality))
-  if (!blob) throw new Error('encode_failed')
-  return new Uint8Array(await blob.arrayBuffer())
-}
-
-/** One high-quality `drawImage` onto a fresh canvas at `width`×`height` (each downscale step of drawEncoded).
- *  `background` (a CSS colour) fills the canvas before drawing, so a transparent source lands on it rather than
- *  the transparent-black default; omit it to preserve alpha (only meaningful with an alpha-capable encode). */
-function drawStep(src: CanvasImageSource, width: number, height: number, background?: string): HTMLCanvasElement {
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) throw new Error('canvas_unavailable')
-  if (background) {
-    ctx.fillStyle = background
-    ctx.fillRect(0, 0, width, height)
-  }
-  ctx.imageSmoothingEnabled = true
-  ctx.imageSmoothingQuality = 'high'
-  ctx.drawImage(src, 0, 0, width, height)
-  return canvas
 }
 
 /** Cap the wait for a <video> to expose metadata / decode a seeked frame. Safari silently fires NEITHER the event
