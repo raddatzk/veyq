@@ -616,9 +616,9 @@ easy shape, and "we tried that, here is why it cannot work" is the only thing th
 **A guard that parses its corpus refuses what does not parse — it never falls back to reading lines.** The first
 YAML-reading guard over every workflow (`validate_action_pins.py`) found on its first run that `mutation.yml`
 did not load at all — a step name holding an unquoted `: ` — so that workflow could not have run. Two guards
-already read every workflow and both stepped around it in silence: `validate_image_pins.py` falls back to a line
-regex (written for Helm templates), and `validate_coverage.py` skips it (rightly for its own question — a
-workflow that does not parse runs nothing — but without saying so). A fallback written for one kind of file is a
+already read every workflow and both stepped around it in silence: `validate_image_pins.py` fell back to a line
+regex (written for Helm templates), and `validate_coverage.py` skipped it (rightly for its own question — a
+workflow that does not parse runs nothing — but without saying so); both now name it and go red. A fallback written for one kind of file is a
 silent pass for every broken file of another kind; make a parse failure red unless the file is one the fallback
 was written for, and where skipping is right, say so in the output.
 
