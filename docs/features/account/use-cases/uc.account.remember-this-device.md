@@ -76,7 +76,11 @@ sequenceDiagram
 - **E2 — convenience wrap / cookie unusable** (key cleared, wrap gone, token expired/rotated): the device
   degrades to the **first-sign-in** screen (email + password + Secret Key) — no silent self-wipe on a single
   server response (mirrors [uc.account.trust-device](uc.account.trust-device.md) E1). The Secret-Key floor is
-  the always-reachable recovery.
+  the always-reachable recovery. An instance that does not answer at start-up is not a reason to drop the key:
+  the next start that reaches it restores the session. The same holds for a wrap the instance serves under this
+  device's id that does not open under the local key. The device falls back to the first-sign-in screen and
+  keeps its key, and that sign-in replaces or clears it. Only a refusal of the session or an explicit forget
+  drops it on the spot.
 - **E3 — a genuinely untrusted machine:** there is **no** app-level "remember nothing" mode (ADR 0005 §19 —
   "every device is mine"); use the browser's **private / incognito** window (no persisted IndexedDB/cookie).
 

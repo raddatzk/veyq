@@ -123,18 +123,19 @@ describe('deviceKeyWrap (web remember-me, cr-0054)', () => {
     expect(await isRemembered()).toBe(true)
   })
 
-  it('restore drops the local record when the ciphertext will not open under the local key', async () => {
+  it('restore keeps the local record when the served wrap will not open', async () => {
     const add = vi.fn().mockResolvedValue({ id: 'wrap-1' })
     mockWrapsApi(add, vi.fn())
     await enrolDeviceKey('a@b.com', masterKey())
-    // a wrap with our id but tampered ciphertext → AEAD open fails → stale record dropped.
+    // a wrap with our id but tampered ciphertext → AEAD open fails → fall back to the floor, and keep the key:
+    // one server answer never deletes local key material (uc.account.remember-this-device E2).
     const material = {
       suiteId: 'v1',
       wrappedIdentityPrivateKey: '',
       wraps: [{ id: 'wrap-1', method: 'DEVICE_KEY', wrappedKey: 'dGFtcGVyZWQ=', kdfParams: 'aXYtMTJieXRlcw==' }],
     } as unknown as AccountKeyMaterial
     expect(await restoreDeviceKey(material)).toBeNull()
-    expect(await isRemembered()).toBe(false)
+    expect(await isRemembered()).toBe(true)
   })
 
   it('clear removes the server wrap and drops the local key', async () => {

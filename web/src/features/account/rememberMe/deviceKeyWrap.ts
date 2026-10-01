@@ -1,7 +1,7 @@
 // uc.account.remember-this-device / auto-unlock (web "remember me", cr-0054). The password-less DEVICE_KEY
 // wrap: a NON-EXTRACTABLE AES-GCM device key lives in IndexedDB and seals the Master Key, but the **ciphertext**
 // is uploaded to the blind server as a DEVICE_KEY MasterKeyWrap — not parked locally (the cr-0052 model). So
-// the remembered vault is portable + server-revocable; only the device key (never its bytes — XSS can decrypt
+// the remembered vault is server-revocable; only the device key (never its bytes — XSS can decrypt
 // while it runs but cannot carry the key off-device) and the wrap id stay local. Boot: fetch key material →
 // find the DEVICE_KEY wrap → decrypt with the local key → Master Key, no password (ADR 0005 §18-20).
 //
@@ -110,10 +110,11 @@ export async function rememberedWrapId(email: string): Promise<string | null> {
 
 /**
  * Boot restore (no prompt): given the already-fetched key material, decrypt the Master Key from this device's
- * DEVICE_KEY wrap with the local key. Returns null when this device isn't enrolled, the matching wrap is gone
- * server-side (orphan — don't destroy the local key on a single server response, mirrors unlockWithDevice), or
- * the ciphertext won't open under the local key (tampered/rotated — that local record is dropped). The caller
- * holds the live session (boot revives it from the cookie first) and does the openVault.
+ * DEVICE_KEY wrap with the local key. Returns null when this device isn't enrolled. A wrap that is missing, or
+ * served under this device's id but does not open, falls back to the floor and keeps the local key
+ * (uc.account.remember-this-device E2): one server answer never deletes local key material. The next sign-in on
+ * this device replaces or clears the kept record. The caller holds the live session (boot revives it from the
+ * cookie first) and does the openVault.
  */
 export async function restoreDeviceKey(
   material: AccountKeyMaterial,
@@ -132,7 +133,8 @@ export async function restoreDeviceKey(
     )
     return { email: record.email, masterKey: new Uint8Array(plain) }
   } catch {
-    await run('readwrite', (s) => s.delete(RECORD_KEY)) // can't open it under our key → stale record, drop it
+    // Does not open under our key: a forged or stale wrap. Kept anyway — the key is non-extractable and a failed
+    // AES-GCM open tells a forger nothing, while dropping it would let one served answer cost the remember-me.
     return null
   }
 }

@@ -1,13 +1,11 @@
 // App boot sequence (uc.admin.setup-server step 1): before any content loads, discover the instance's state and
-// route accordingly. A fresh instance lands on first-run setup; an already-set-up instance on the (stubbed)
-// login; an unreachable instance surfaces a clear error state rather than a blank/broken screen.
-//
-// Trimmed for this CR: only the setup-status branch exists. The remembered-session / unlock machinery from
-// the legacy boot arrives with the login CR.
+// route accordingly. A fresh instance lands on first-run setup; an already-set-up instance on sign-in, or straight
+// into the shell when a remembered session restores; an unreachable instance surfaces a clear error state rather
+// than a blank/broken screen.
 import { getSetupStatus } from '../features/account/instance/instance'
 import { useServerState } from '../shared/state/useServerState'
 import { setCapabilities, useCapabilities } from '../shared/state/useCapabilities'
-import { refreshSession } from './sessionRefresh'
+import { isSessionRefusal, refreshSession } from './sessionRefresh'
 import { restoreVaultFromCache } from '../features/account/unlock/unlock'
 import { clearDeviceKey } from '../features/account/rememberMe/deviceKeyWrap'
 import { clearSessionVault } from '../features/account/rememberMe/sessionVault'
@@ -47,16 +45,30 @@ export async function boot(): Promise<void> {
   if (!serverState.setupCompleted) return
   // Restore a "remember me" session (cr-0054): the httpOnly refresh cookie revives the session, then the
   // device's password-less DEVICE_KEY wrap re-opens the Master Key — so a browser restart lands straight in the
-  // shell, no prompt. All best-effort: no cookie/wrap (or expired) → stays logged out and the router lands on
-  // login; with no live session, drop the local device key so it can never outlive its session.
-  const restored = await refreshSession().then(() => true).catch(() => false)
-  if (restored) await restoreVaultFromCache().catch(() => {})
-  else {
-    // No live session (no cookie, or expired) → drop both local vault tiers so neither outlives its session.
-    await clearSessionVault().catch(() => {})
-    await clearDeviceKey(false).catch(() => {})
-  }
+  // shell, no prompt. No cookie/wrap (or expired) → stays logged out and the router lands on login.
+  // The rejection is kept, not flattened to "not restored": what the server answered decides the tiers.
+  const failure = await refreshSession().then(
+    () => null,
+    (e: unknown) => ({ e }),
+  )
+  if (failure === null) await restoreVaultFromCache().catch(() => {})
+  else await keepOrDropTiers(failure.e)
   // DEV-ONLY (cr-dev-auto-unlock): if still locked, an opt-in (`?devlogin`) local-dev auto-unlock from seed creds.
   // A no-op — and tree-shaken to nothing — in any prod build (import.meta.env.DEV-gated). Best-effort, never blocks.
   await maybeDevAutoUnlock()
+}
+
+/**
+ * A boot refresh failed. Only the server refusing the session drops the device's convenience tiers, so neither
+ * outlives its session; anything else is no answer about the session, so both stay for the next boot that reaches
+ * the instance (ADR 0070 Decision 3, uc.account.sign-out E2). The predicate is the one the refresh path itself
+ * uses — never a second copy of the status list here.
+ */
+async function keepOrDropTiers(e: unknown): Promise<void> {
+  const { setUnreachable, setSuspended } = useServerState()
+  if (await isSessionRefusal(e)) {
+    await clearSessionVault().catch(() => {})
+    await clearDeviceKey(false).catch(() => {})
+  } else if (await isTenantSuspended(e)) setSuspended(true)
+  else setUnreachable(true)
 }
