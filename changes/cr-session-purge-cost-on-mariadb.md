@@ -1,7 +1,7 @@
 ---
 id: cr-session-purge-cost-on-mariadb
 title: The session purge's cost and lock footprint on MariaDB are measured, and its family delete stops relying on NOT IN
-status: planned
+status: done
 satisfies: []
 adrs: ["0004"]
 invariants: []
@@ -145,7 +145,7 @@ built only if the measurement crosses the owner's gate.
 
 ## Phases
 
-- [ ] 1 measurement (no repo change) — **a throwaway MariaDB container, never the dev one.**
+- [x] 1 measurement (no repo change) — **a throwaway MariaDB container, never the dev one.**
   - Start the image digest pinned in `infra/docker-compose.yml:8` under a **new container name and port**, so
     that `veyq-mariadb` is not touched.
   - Apply `backend/src/main/resources/db/migration/V*.sql` in version order (`sort -V`) with the `mariadb`
@@ -170,7 +170,7 @@ built only if the measurement crosses the owner's gate.
     that B's refresh touches. B **must** wait, or the probe cannot see a lock at all.
   - · Done when: M0–M3 are recorded for S and L in *Retrospective*, each number with the command that produced
     it, and owner question 2's gate reads either tripped or not tripped.
-- [ ] 2 backend — **D1, then D3/D4 only if Phase 1 tripped the gate.**
+- [x] 2 backend — **D1, then D3/D4 only if Phase 1 tripped the gate.**
   1. **D1.** Change the HQL. `SessionPurgeTest` must stay green. It passes before and after, so its power is
      proven by injection, not by a red-first run. Snapshot-and-restore `SessionService.kt`, and record which
      assertion fires:
@@ -209,4 +209,51 @@ built only if the measurement crosses the owner's gate.
 
 ## Retrospective
 
-*(written at close)*
+**Measurement (Phase 1 + after), all on a throwaway `mariadb:11.4@sha256:70cc07…` container (`cr218-measure-aa75`,
+no published port, own anonymous volume, removed afterwards), driven by a scratchpad Python harness through
+`docker exec … mariadb`. Fixed clock `2026-10-01 12:00`. The host's load average was 30–180 throughout (a parallel
+wave), so durations are upper bounds, not a quiet-machine figure.**
+- Seeds: **S** = 1 000 families + 20 token-less, 40 160 refresh / 200 access / 80 challenge rows; **L** = 100 000 +
+  20 families, 4 016 000 refresh / 20 000 access / 8 000 challenge rows (40 refresh rows per family; per device one
+  live access token and an hour's worth of expired rows in every table). The first L seed, one 4 M-row
+  `INSERT … SELECT`, killed the container (exit 137); chunked by 200 000 it took 463 s.
+- **M0:** `@@tx_isolation` = `REPEATABLE-READ`, lock wait 50 s; InnoDB created `fk_access_token_family` and
+  `fk_refresh_token_family`; no `expires_at` index anywhere; the challenge table's key is `nonce`.
+- **M1:** today's `NOT IN` → family `ALL` + `index_subquery` on both FK indexes; `NOT EXISTS` → family `ALL` + `ref`
+  on both FK indexes. Same cost shape, as remembered. All three token/challenge deletes `ALL`.
+- **M2 (one transaction, as `run()` did it, rolled back), S:** 10–11 ms either form, 20/20 families. **L:** 19–31 s
+  (refresh-token delete 11–13 s, family delete 8–9 s), 20/20 families either form.
+- **M3 bite:** A held `FOR UPDATE` on the probed refresh row → B's refresh hit `1205 Lock wait timeout` (5 s). The
+  probe sees a lock.
+- **M3 (gate), A holding `run()`'s four deletes:** at **S and L** every probe — challenge insert, login family
+  insert, refresh `FOR UPDATE` — waited the full 5 s. Live, with A running `run()` for real and B on the
+  production 50 s lock wait: the refresh waited 3.3–5.2 s and the **login deadlocked** (`1213`). **Gate tripped.**
+- **D3 alone** (three indexes): the optimizer used `ix_refresh_token_expires` (`range`) but still full-scanned access
+  tokens and challenges (80 % / 50 % expired). `run()` 11–15 s; held, all three probes still timed out (the refresh
+  now on the family `UPDATE`). **Gate still tripped → D4.**
+- **D3 + D4, after** (refresh index only, each step its own transaction, family pick + batch delete): live, B made
+  16–26 probe rounds per run, worst wait **login 13–22 ms, refresh 10–20 ms, challenge 4–9 ms**, no errors. Step
+  durations: access 137–235 ms, refresh 8.0–10.3 s (range, B unaffected), challenges 19–27 ms, family pick 2.6–2.9 s
+  (snapshot read), batch delete 1.5–2.6 ms. The batch delete plans as `range` on `PRIMARY`.
+- **H2 harness (throwaway `@QuarkusTest`, removed):** 1 000 / 4 000 / 16 000 families: `NOT IN` 7–238 / 15–18 /
+  51–68 ms, `NOT EXISTS` 4–32 / 5 / 9–11 ms, shipped pick+batch 6–63 / 6–7 / 10 ms, 20/20 every run. With an
+  access-token writer (~150 000–230 000 rows) at 16 000 families, `NOT IN` hit the 60 s transaction timeout twice
+  (`57014` — the suite's symptom, on H2's own) while `NOT EXISTS` took 11–18 ms and the shipped pair 10–32 ms.
+- **Levers (`SessionPurgeTest`):** D1 (a) self-correlated access subquery → "empty family kept" (line 65); D1 (b)
+  refresh clause dropped → **the FK refuses** (`FK_REFRESH_TOKEN_FAMILY`), all three tests error; re-check dropped
+  from the batch delete → the re-check test errors on the FK (line 103); loop stopped after one batch → "a
+  token-less family outlived the run" (line 87). Full `./gradlew check` after Phase 2: 924 tests, 0 failed.
+
+What went wrong:
+- **Planning — D3's premise was false for two of its three tables.** "The three deletes then take a range scan"
+  held only for refresh tokens; the other two are mostly expired at purge time and are full-scanned with or without
+  the index. Shipped only `ix_refresh_token_expires` (V59), and the migration says why. Root cause: an index was
+  planned from the statement's text, not from the fraction of rows it selects. Next time: EXPLAIN a planned index
+  against the seeded shape before freezing it (harvested to `changes/README.md`).
+- **Planning — the gate's wording cannot clear for the access-token step.** After D3 + D4 the probes never waited
+  more than ~22 ms, but a login that lands inside the access-token delete waits that step out, and the step took
+  137–235 ms at L on this loaded host. The gate's > 100 ms is therefore met by a bound, not by an observation.
+  Not built further here; proposed as a row (batch that delete by primary key like the families, or measure it on a
+  quiet host first).
+- **Execution — the first L seed killed the container**, and `--rm` took its logs with it. Next time: a throwaway
+  measurement container runs without `--rm` (removed by hand afterwards) and with a memory cap, and seeds in chunks.
