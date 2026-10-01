@@ -15,7 +15,8 @@
 - **Postconditions (success):** The account has a **new Master Key** and a **new published identity public
   key**. Every wrap that could not be rewritten (`DEVICE`, `DEVICE_KEY`, `PASSKEY`) is gone; the `PASSWORD` and
   `RECOVERY` wraps are rewritten under the **same** KEKs, so the **Emergency Kit stays valid**. Every
-  Master-Key-sealed blob is re-sealed; the Secret-Key proof key is unchanged. Self-served scopes sit at a new
+  Master-Key-sealed blob is re-sealed and the caller's item marks are re-tagged; the Secret-Key proof key is
+  unchanged. Self-served scopes sit at a new
   epoch granted to the new identity; every shared scope carries a queued rotation for another key-holder to
   complete. Every other session is revoked. **What the old identity already read is not retracted.**
 
@@ -36,7 +37,10 @@
 4. **Re-wrap the account.** `symWrap(MK', identityPriv')` replaces `wrappedIdentityPrivateKey`; the `PASSWORD`
    and `RECOVERY` wraps are rewritten under their existing KEKs; every `DEVICE`, `DEVICE_KEY` and `PASSKEY`
    wrap is **deleted**, because their key material is device-held and cannot be rewritten from here; the
-   identity-pin store and the device register are re-sealed under `MK'`. The request carries a signature of
+   identity-pin store, the device register and the Memory pins are re-sealed under `MK'`, and the caller's own
+   item marks are re-tagged — their self-tag's key derives from the Master Key, and only a mark whose tag verifies
+   under the old key is carried ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9).
+   These four run best-effort once the server has accepted the request. The request carries a signature of
    the **Secret-Key proof key** over what it installs, and the server refuses it without one that verifies.
 5. **Publish.** The new identity public bundle replaces the directory value. From this moment every contact
    who ever pinned this account sees **changed**, and every automated wrap to it declines
@@ -160,7 +164,8 @@ vergleicht — bevor du wieder drin bist.
   [en.account.identity-pinning](../enablers/en.account.identity-pinning.md) (why the new key is `changed` for
   everyone), [en.spaces.scope-key-rotation](../../spaces/enablers/en.spaces.scope-key-rotation.md) (the
   machinery step 6–7 drive), [en.account.device-register](../enablers/en.account.device-register.md)
-  (Master-Key-sealed, so re-sealed)
+  (Master-Key-sealed, so re-sealed), [en.memory.favorites](../../memory/enablers/en.memory.favorites.md) (the
+  Memory pins re-sealed, the item marks re-tagged)
 - Use-cases: [uc.account.sessions](uc.account.sessions.md) (containment, the step before this one),
   [uc.account.onboard-device](uc.account.onboard-device.md) (E4 — the mistake this answers),
   [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the re-admission review),

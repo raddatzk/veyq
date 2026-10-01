@@ -97,6 +97,8 @@
   cannot aggregate for us — so the client receives the **per-member** blobs and *could* name who marked what.
   Showing only a count is a decision about the UI, not a property of the data. Therefore **no string on this
   screen may suggest that nobody can see what you marked**: *"only mine"* names a **filter**, never a promise.
+  Nor is the count operator-proof: it is the operator's report of how many stored sets hold the id, which it can
+  lower by leaving entries out and raise by serving stored sets again as extra entries (ADR 0068 §9).
   The reasoning and the rejected alternatives are in
   [ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md).
 - **Two carriers tell the user the mark is shared, because neither covers the other's case.** The per-tile

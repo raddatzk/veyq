@@ -105,7 +105,8 @@ blob for that Memory; the `PUT` writes only the caller's.
   level down, which is why that one was fixed rather than deferred.
 - **The write shape is the size limit, and it is why item blobs are per-node.** The whole set is re-sealed on
   every single toggle, so a set's size is also its *per-click upload*. `measured` (real UUIDs +
-  `JSON.stringify`, against this tree): a 65 536-char `ciphertext` cap holds **1 259** ids, and at 500 ids a
+  `JSON.stringify`, against this tree): a 65 536-char `ciphertext` cap holds **1 259** bare ids — **1 257** beside
+  an item mark's self-tag (below) — and at 500 ids a
   single toggle already re-uploads 25 KiB. Partitioning item marks **per node** keeps the ceiling beyond a
   Memory's practical media count and the upload at that Memory's set — and it costs **no** extra metadata,
   because the client has just fetched that node's media list, so the server already observed the node id. A
@@ -116,14 +117,20 @@ blob for that Memory; the `PUT` writes only the caller's.
   and `item-favorites` — so a blob authenticated for one can never be opened as the other — each bound to the
   slot it is stored at (the scope, and for an item mark also the node), so the server cannot serve one scope's
   pins or one node's marks as another's. An item mark is **not** bound to the member who made it: the read names
-  no member (ADR 0068 §6), so a reader has none to bind. The server can therefore relabel which of a node's
-  entries is the caller's own (`self`) — an integrity gap within one node's marks, accepted for V1; a self-tag
-  only the marking member can check is inbox #187 ([ADR 0072](../../../decisions/0072-a-seal-binds-its-object.md)).
+  no member (ADR 0068 §6), so a reader has none to bind. *Whose* it is rides inside the plaintext,
+  `{"tag","ids"}`: an HMAC under a key derived from the marking member's master key, over the scope, the node and
+  the marked set, which only that member's client can compute. An entry is the caller's own only when the server
+  flags it `self` **and** the tag verifies; anything else counts as someone else's
+  ([ADR 0068](../../../decisions/0068-favorites-two-confidentiality-levels.md) §9). The per-tile count is the
+  operator's report of how many stored sets hold the id: it can leave entries out, serve an older version of a set,
+  or serve stored sets again as **extra entries**, and with any present or past member forge more (ADR 0068 §9).
 - **The pin rides the master-key rotation re-seal.** The master key rotates
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)), so the pin blob must be re-sealed from
   the old key to the new one alongside the identity-pin store and the device register — best-effort, like they
-  are: a re-seal that never lands costs the pins, not the account. Item marks are unaffected; they seal under
-  `K_SC`, not the master key.
+  are: a re-seal that never lands costs the pins, not the account. Item marks stay sealed under `K_SC`, but their
+  self-tag's key derives from the master key, so the rotation also **re-tags** the caller's own marks — those whose
+  tag verifies under the old key — read through `GET /api/item-favorites`, best-effort too: a set whose re-tag does
+  not land counts as someone else's, and the next toggle on that Memory starts the caller's set from empty.
 - **The base epoch survives only on the shared side.** Item marks seal under `K_SC` at the **base epoch `E_0`**,
   so a scope-key rotation cannot strand a set. Pins no longer need that: the master key does not rotate with
   scope epochs.

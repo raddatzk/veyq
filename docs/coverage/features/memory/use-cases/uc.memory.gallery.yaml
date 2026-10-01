@@ -207,6 +207,19 @@ acceptanceCriteria:
         unit:
           - src/app/itemFavoritesStore.test.ts
           - src/features/memory/components/MemoryDetail.test.ts
+  - id: my-marks-are-proven-mine
+    text: >
+      Which of a node's entries is the caller's own is proven by the caller's client, not told by the server: the
+      plaintext carries a self-tag, an HMAC under a key derived from the marking member's Master Key over the
+      scope, the node and the marked set, and an entry is the caller's own only when the server flags it `self`
+      AND the tag verifies. Another member's set flagged `self` is not shown as mine, a toggle never writes it into
+      the caller's row, a co-member's copy of the caller's tag over another set does not verify, and nothing a
+      co-member holds computes the caller's tag. Everything not provably mine counts as someone else's — a
+      degradation, never a refusal. (ADR 0068 §9; the tag's vectors are pinned by packages/crypto's conformance
+      suite, which is not a coverage surface.)
+    coverage:
+      backend: { integration: [ItemFavoritesSliceTest.getReturnsEveryMembersBlobNotJustTheCallers] }
+      web: { unit: [src/features/memory/itemFavorites.test.ts] }
   - id: item-marks-are-partitioned-per-memory
     text: >
       Marks are stored per node, not per scope: the partition keeps the 65 536-char ciphertext cap out of
