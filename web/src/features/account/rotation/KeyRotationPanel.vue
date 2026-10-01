@@ -1,7 +1,8 @@
 <script setup lang="ts">
-// The "Security" section of the settings hub — uc.account.rotate-keys, ADR 0060. The one surface that ends a
-// compromise: someone holds this account's key material (a phished device-link grant), and signing that device
-// out is not enough, because a revoke takes back no key.
+// The "Security" section of the settings hub — uc.account.rotate-keys, ADR 0060. Its first section is the account's
+// email address (`EmailAddressSection`, uc.account.confirm-email-address); everything below it is rotation, the
+// one surface that ends a compromise: someone holds this account's key material (a phished device-link grant),
+// and signing that device out is not enough, because a revoke takes back no key.
 //
 // **Three things this screen must never do**, each of which is a way to make the feature worse than absent:
 //
@@ -31,6 +32,7 @@ import Message from 'primevue/message'
 import { rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
+import EmailAddressSection from '../email/EmailAddressSection.vue'
 
 const { t } = useI18n()
 
@@ -80,6 +82,9 @@ async function confirm() {
 
 <template>
   <section class="veyq-surface settings-panel">
+    <!-- The address a reset would mail, and whether it is confirmed (uc.account.confirm-email-address) — the
+         Security rubric's first section, above the rotation that ends a compromise. -->
+    <EmailAddressSection />
     <section class="settings-form">
       <div class="settings-section-header">
         <div>

@@ -229,7 +229,7 @@ phases 1–3 write new prose:
 - [x] **2 backend.** The migration (I11), the entity, store, handler, resource, mailer, limiter and purge
   (D2–D8), and the three stamp sites (D6). **Done when:** `./gradlew check` is green, with the new slice test
   carrying every bite below. The fixtures in I16 are re-run and green.
-- [ ] **3 web.** Generated client use, the settings card, the mail-settings offer, the `/confirm-email` route and
+- [x] **3 web.** Generated client use, the settings card, the mail-settings offer, the `/confirm-email` route and
   view, and i18n (D9). **Done when:** `npm run check` in `web/` is green, with unit tests for the card's
   four states and the view's three arrivals.
 - [ ] **4 docs.**

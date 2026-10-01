@@ -15,6 +15,7 @@ import MemoryHomeView from './views/MemoryHomeView.vue'
 import GroupInvitationsView from './views/GroupInvitationsView.vue'
 import ShareView from './views/ShareView.vue'
 import RecoverView from './views/RecoverView.vue'
+import ConfirmEmailView from './views/ConfirmEmailView.vue'
 
 // A fresh instance lands on /not-set-up; an already-set-up one on /login. First-run setup is NOT a route here
 // any more — it moved to `admin-web` with the rest of the Server-Owner surface (ADR 0065), which is what lets
@@ -55,6 +56,10 @@ const router = createRouter({
     // that the caller has no password to get one with. The one-time token rides the #fragment, like every other
     // veyq secret in a link, and the view strips it from the address bar as soon as it has been read.
     { path: '/recover', name: 'recover', component: RecoverView },
+    // Address confirmation (uc.account.confirm-email-address, ADR 0074). Needs a SESSION — the view confirms only for
+    // the account signed in on this device — but deliberately not an unlocked vault (operational state, not content),
+    // so it is neither `requiresUnlock` nor in the app shell. The one-time token rides the #fragment.
+    { path: '/confirm-email', name: 'confirm-email', component: ConfirmEmailView },
     { path: '/:pathMatch(.*)*', redirect: { name: 'login' } },
   ],
 })

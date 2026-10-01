@@ -431,6 +431,36 @@ const en = {
     noEscrow:
       'If your Emergency Kit is gone too, nothing can bring your memories back — there is no master key on our side.',
   },
+  emailConfirm: {
+    title: 'Email address',
+    sub: 'A password-reset link is sent to this address. Confirm once that it reaches you.',
+    loading: 'Loading your email address…',
+    loadFailed: 'Couldn’t load your email address.',
+    confirmed: 'Confirmed — a reset link will reach you here.',
+    unconfirmed:
+      'Not confirmed yet. If you forget your password, the reset link goes to this address, so make sure it is one you read.',
+    send: 'Send confirmation',
+    sent: 'A confirmation is on its way to {email}. Open the link on a device where you are signed in. If it never arrives, the address may be wrong — and a reset link would not reach you either.',
+    mailUnavailable:
+      'This space can’t send email yet, so password reset is unavailable here too. Ask the space owner to set up email.',
+    notMember:
+      'The confirmation is sent through a space you belong to. Open veyq through one of your spaces and try again.',
+    rateLimited: 'Too many confirmation emails for now. Try again later.',
+    requestFailed: 'The confirmation couldn’t be sent. Check your connection and try again.',
+    mailOffer: 'Send a confirmation to yourself — it also tests that this email server reaches someone.',
+    mailOfferSent: 'Sent. If it arrives, this email server works, and your address is confirmed once you open the link.',
+    pageTitle: 'Confirm your email address',
+    confirming: 'Confirming…',
+    done: 'Your email address is confirmed.',
+    toSettings: 'Go to your settings',
+    signInFirst:
+      'Sign in on this device first, then open the link from the email again — or open it on a device where you are already signed in.',
+    toSignIn: 'Sign in',
+    invalid:
+      'This link doesn’t work — it has expired, was replaced by a newer one, was already used, or belongs to a different account. Ask for a new one in your settings.',
+    noLink: 'This page confirms your email address from the link in a confirmation email. Ask for one in your settings.',
+    failed: 'The confirmation didn’t go through. Check your connection and try again.',
+  },
   login: {
     title: 'Sign in',
     submit: 'Sign in',
@@ -1368,6 +1398,36 @@ const de: typeof en = {
       'Danach meldet sich jedes Gerät neu an, du gibst deinen Secret Key dort also noch einmal ein.',
     noEscrow:
       'Ist auch dein Notfall-Kit weg, kann nichts deine Erinnerungen zurückholen — bei uns liegt kein Hauptschlüssel.',
+  },
+  emailConfirm: {
+    title: 'E-Mail-Adresse',
+    sub: 'Ein Link zum Zurücksetzen des Passworts geht an diese Adresse. Bestätige einmal, dass er dich erreicht.',
+    loading: 'Deine E-Mail-Adresse wird geladen…',
+    loadFailed: 'Deine E-Mail-Adresse konnte nicht geladen werden.',
+    confirmed: 'Bestätigt – ein Link zum Zurücksetzen erreicht dich hier.',
+    unconfirmed:
+      'Noch nicht bestätigt. Vergisst du dein Passwort, geht der Link zum Zurücksetzen an diese Adresse – stell sicher, dass du sie liest.',
+    send: 'Bestätigung senden',
+    sent: 'Eine Bestätigung ist unterwegs an {email}. Öffne den Link auf einem Gerät, auf dem du angemeldet bist. Kommt sie nie an, ist die Adresse vielleicht falsch – dann würde dich auch kein Link zum Zurücksetzen erreichen.',
+    mailUnavailable:
+      'Dieser Bereich kann noch keine E-Mails senden, daher ist auch das Zurücksetzen des Passworts hier nicht möglich. Bitte die Person, die den Bereich verwaltet, E-Mail einzurichten.',
+    notMember:
+      'Die Bestätigung wird über einen Bereich gesendet, zu dem du gehörst. Öffne veyq über einen deiner Bereiche und versuche es erneut.',
+    rateLimited: 'Gerade wurden zu viele Bestätigungen gesendet. Versuche es später erneut.',
+    requestFailed: 'Die Bestätigung konnte nicht gesendet werden. Prüfe deine Verbindung und versuche es erneut.',
+    mailOffer: 'Schick dir selbst eine Bestätigung – das testet auch, ob dieser Mailserver jemanden erreicht.',
+    mailOfferSent: 'Gesendet. Kommt sie an, funktioniert der Mailserver, und deine Adresse ist bestätigt, sobald du den Link öffnest.',
+    pageTitle: 'E-Mail-Adresse bestätigen',
+    confirming: 'Wird bestätigt…',
+    done: 'Deine E-Mail-Adresse ist bestätigt.',
+    toSettings: 'Zu deinen Einstellungen',
+    signInFirst:
+      'Melde dich zuerst auf diesem Gerät an und öffne dann den Link aus der E-Mail erneut – oder öffne ihn auf einem Gerät, auf dem du schon angemeldet bist.',
+    toSignIn: 'Anmelden',
+    invalid:
+      'Dieser Link funktioniert nicht – er ist abgelaufen, wurde durch einen neueren ersetzt, wurde schon benutzt oder gehört zu einem anderen Konto. Fordere in deinen Einstellungen einen neuen an.',
+    noLink: 'Diese Seite bestätigt deine E-Mail-Adresse über den Link in einer Bestätigungsmail. Fordere eine in deinen Einstellungen an.',
+    failed: 'Die Bestätigung hat nicht geklappt. Prüfe deine Verbindung und versuche es erneut.',
   },
   login: {
     title: 'Anmelden',

@@ -22,6 +22,7 @@ import { useAsyncAction } from '../../shared/state/useAsyncAction'
 import { useToast } from '../../shared/state/useToast'
 import { handle401 } from '../../shared/handle401'
 import { decodeHttpError, isUnauthorized, HttpStatus } from '../../shared/httpError'
+import { requestEmailConfirmation, requestErrorKey } from '../account/email/emailConfirmation'
 
 const { t } = useI18n()
 const toast = useToast()
@@ -117,6 +118,11 @@ const { run: runSave, pending: saving } = useAsyncAction(
     applyView(saved)
     password.value = '' // consume — the plaintext never lingers in component state (invariant)
     toast.success(t('mail.saved'))
+    // A save that leaves the relay able to send is the owner's natural moment to confirm their own address — a
+    // copy-link bootstrap owner is the one account nothing has proven (ADR 0074 § Consequences) — and a mail to
+    // themselves is also the first proof the relay reaches anyone. Offered once per such save, never pressed.
+    confirmOffer.value = sendReady.value ? 'offered' : 'none'
+    confirmError.value = ''
   },
   {
     onError: async (e) => {
@@ -131,6 +137,24 @@ const { run: runSave, pending: saving } = useAsyncAction(
             : status === HttpStatus.forbidden
               ? t('mail.notOwner')
               : t('mail.saveFailed')
+    },
+  },
+)
+
+// The post-save confirmation offer (uc.admin.tenant-mail-settings, uc.account.confirm-email-address).
+const confirmOffer = ref<'none' | 'offered' | 'sent'>('none')
+const confirmError = ref('')
+const { run: sendConfirmation, pending: confirming } = useAsyncAction(
+  async () => {
+    confirmError.value = ''
+    await requestEmailConfirmation()
+    confirmOffer.value = 'sent'
+  },
+  {
+    onError: (e) => {
+      on401(e)
+      if (isUnauthorized(e)) return
+      confirmError.value = t(requestErrorKey(e))
     },
   },
 )
@@ -230,12 +254,25 @@ async function save() {
         <div class="mail-actions">
           <Button :label="t('mail.save')" icon="pi pi-save" :loading="saving" @click="save" />
         </div>
+
+        <div v-if="confirmOffer === 'offered'" class="mail-confirm-offer" data-testid="mail-confirm-offer">
+          <p>{{ t('emailConfirm.mailOffer') }}</p>
+          <Message v-if="confirmError" severity="error" :closable="false">{{ confirmError }}</Message>
+          <Button :label="t('emailConfirm.send')" icon="pi pi-envelope" severity="secondary" :loading="confirming" @click="sendConfirmation()" />
+        </div>
+        <Message v-else-if="confirmOffer === 'sent'" severity="info" :closable="false">{{ t('emailConfirm.mailOfferSent') }}</Message>
       </template>
     </section>
   </section>
 </template>
 
 <style scoped>
+.mail-confirm-offer {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: start;
+  margin-top: 0.75rem;
+}
 .mail-readiness {
   margin-bottom: 0.25rem;
 }
