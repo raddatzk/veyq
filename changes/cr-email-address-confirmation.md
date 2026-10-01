@@ -1,7 +1,7 @@
 ---
 id: cr-email-address-confirmation
 title: Record address control where nothing else proves it — confirm the address a reset is sent to
-status: planned
+status: done
 satisfies: [uc.account.confirm-email-address]
 adrs: ["0074", "0054", "0055", "0049", "0003", "0044", "0051"]
 invariants:
@@ -300,4 +300,24 @@ would add nothing over it. So none is promoted, and the retrospective says so.
 
 ## Retrospective
 
-(filled at implement-session close)
+Baseline on the untouched tree (`main` @ 3268213): the whole guard glob green, `./gradlew check` green (5m12s).
+
+- **Planning — "a new tag ends green" was false here, and the CR inherited it.** Phase 1's done-when said
+  `./gradlew check` stays green; it was red on exactly one test, `OperatorBlindProbeTest`, which derives every
+  contract operation from the generated interfaces and refuses an unclassified one. Root cause: the rule in
+  `changes/README.md` was written from a run that predated that test's derivation. Harvested there as the named
+  exception. Next time: a contracts-phase prediction greps `backend/src/test` for readers of
+  `com.veyq.app.generated.api` before promising green.
+- **Planning — two bites could not bite as written, both instances of rules that already exist.**
+  `confirmNeedsTheAccountsOwnSession` was planned as a live defect, but with the account check absent the address
+  check refused B anyway (addresses are unique), so it stayed green; an isolating case (the mailed address handed
+  on to B) reddened instead — *each layer of a defence in depth is tested with the other layers held off*. And the
+  CAS lever of `tokenConfirmsAtMostOnce` changes no handler answer, because the liveness read refuses a replay
+  first; the CAS is pinned at the store, with the reason at the line. Next time: for every lever, the refine names
+  the read that runs before it.
+- **Planning — D9's link to the settings card met `veyq/one-settings-door`**, an eslint rule the refine did not
+  grep for. Taken through the rule's own door (an `ignores` entry with its reason). Next time: a CR that adds a
+  navigation greps `web/eslint.config.js` for rules on it.
+- **Process — the worktree sandbox refuses compound shell commands**, so edits ran as scratch scripts; and the
+  bite harness's `git status` comparison was void because web files were edited during its run — the byte
+  compare per file held. Run a harness before editing anything else.

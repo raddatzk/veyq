@@ -126,6 +126,9 @@ class EmailConfirmationHandler(
         if (row.userId != userId) return ConfirmOutcome.Invalid
         val user = VeyqUser.findById(userId) ?: return ConfirmOutcome.Invalid
         if (user.email != row.email) return ConfirmOutcome.Invalid
+        // The liveness read above already refuses a replay; this compare-and-set decides only the race that read
+        // cannot see (two confirmations that both read the row live). A test of it must therefore spend one row
+        // twice at the store — through this method, removing the CAS changes no observable answer.
         if (!store.consume(row.id)) return ConfirmOutcome.Invalid
         user.confirmAddress(row.email)
         return ConfirmOutcome.Confirmed
