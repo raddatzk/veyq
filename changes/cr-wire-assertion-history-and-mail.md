@@ -23,7 +23,8 @@ invariants:
 
 Each question carries a recommendation; the CR below is written as if every recommendation is taken, and names
 what changes where one is not. This CR builds on
-[`cr-wire-assertion-server-logs`](cr-wire-assertion-server-logs.md) (approved, not yet built): it reuses that
+`cr-wire-assertion-server-logs` (built 2026-10-01 and deleted; its state is the concern's log row and
+`scripts/run_web_e2e.py`): it reuses that
 CR's `canary_needles`, its run-level slot after the group loop (its D1) and its "armed by a positive control on
 the same matcher" rule (its D5). **It is not folded into that CR** — see question 4.
 

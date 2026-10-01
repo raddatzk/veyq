@@ -1002,6 +1002,20 @@ retry wraps the wiped, all-zero buffer: a key that differs from the first attemp
 with the wipe moved too reddened them; an assertion that the retry's key is not the zeroed buffer caught both.
 Where an injection changes a value's lifetime, the cleanup that bounded the old lifetime is part of the lever.
 
+**An armed-sensor control's predicate is chosen against the lever that must break it, not only against the
+surface.** `cr-wire-assertion-server-logs` asked each boot log to "contain its database name" and bit that control
+by deleting the `Database:` line — but a restored member's log names its schema on three other Flyway lines, so a
+name-anywhere predicate would have stayed met with the lever pulled. The control that bites is the JDBC URL
+(`/<name>` followed by a non-identifier character), which only that line carries. Write the control and its lever
+side by side and ask whether the lever removes *every* occurrence the predicate accepts.
+
+**On an expensive, machine-wide-serialised run, levers may share one run — each on its own artifact, each naming
+its own failure.** The same CR's ten levers would have been ten e2e runs behind a lock other sessions were
+queueing on; they ran in four, because each lever touched a different log (or a different call) and the sweep
+names file, line and control per finding, so one red carries every verdict separately. Never two levers on one
+predicate (the second masks the first), and a lever that must stay green — a measurement of a gap — gets a run
+whose only other levers cannot turn it red.
+
 ### Each layer of a defence in depth is tested with the other layers held off
 
 **Layers that overlap mask each other's tests, and the mask is the fix working.** `cr-inert-store-responses`
