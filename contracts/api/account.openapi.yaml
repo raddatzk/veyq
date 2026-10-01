@@ -27,6 +27,10 @@ info:
     identity keypair are replaced **together**, in one transaction, and every scope the account shares gets a
     queued rotation for a different key-holder. It is forward secrecy, not repair — what the old identity
     already read stays read — and it receives, as everything here does, only ciphertext and a public key.
+
+    `/api/account/email` shows the caller the address a password reset would mail and whether they have
+    confirmed reading it, and runs that confirmation (uc.account.confirm-email-address, ADR 0074). The record
+    is a fact, not a gate: no request anywhere is refused because an account is unconfirmed.
 tags:
   - name: account
     description: Authenticated account key material (for client-side unlock).
@@ -51,6 +55,9 @@ tags:
   - name: account-password
     description: Change the password of a signed-in, unlocked account — uc.account.change-password. Separate
       tag → its own resource interface.
+  - name: account-email
+    description: The caller's own address as the server holds it, whether it is confirmed, and the
+      confirmation mail — uc.account.confirm-email-address (ADR 0074). Separate tag → its own resource interface.
 
 paths:
   /api/account/key-material:
@@ -472,6 +479,121 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
               example: { code: rotation_unavailable }
+
+  /api/account/email:
+    get:
+      tags: [account-email]
+      operationId: getAccountEmail
+      summary: The caller's address as the server holds it, and whether it is confirmed.
+      description: >
+        The address is the one a password reset would mail (ADR 0054) — the server's copy, which is not implied
+        by anything the client holds: the client remembers what it typed, the server mails what it stored.
+        `confirmed` is true once the account holder has shown they read mail sent to it (ADR 0074 Decision 2).
+        Session only; unlock is not required, because this is operational state, not content.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's address and its state.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AccountEmail" }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+
+  /api/account/email/confirmation:
+    post:
+      tags: [account-email]
+      operationId: requestEmailConfirmation
+      summary: Mail a one-time confirmation link to the caller's own address.
+      description: >
+        Mints a one-time token, stores only its SHA-256 hash with the address it is mailed to and a `PT24H`
+        expiry, supersedes any outstanding one, and mails the link through the relay of the tenant this
+        request's `Host` resolves to (ADR 0074 Decisions 4 and 6). The mail carries link, domain and expiry
+        only. The mint commits before the send; a send that fails supersedes the fresh token and answers `503`,
+        never a silent `202`.
+
+        Checked in this order: the tenant can send (`503`), the caller is a member of it (`404`), the
+        per-account send budget (`429`). **There is no copy-link**: a link shown on the caller's own screen
+        proves nothing about their mailbox (ADR 0074 Decision 6).
+      security:
+        - bearerAuth: []
+      responses:
+        "202":
+          description: The confirmation mail was sent.
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            `tenant_not_found` — no tenant answers this `Host`, or the caller is not a member of it. A relay
+            carries a link only for its own tenant's members (ADR 0054 §4). Nothing was mailed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: tenant_not_found }
+        "429":
+          description: The per-account send budget is spent; retry after the indicated delay. Nothing was mailed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: rate_limited }
+        "503":
+          description: >
+            `mail_unavailable` — this tenant cannot send mail, or the send failed. No live token is left
+            behind (ADR 0055 §4, §6).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: mail_unavailable }
+
+  /api/account/email/confirmation/confirm:
+    post:
+      tags: [account-email]
+      operationId: confirmEmail
+      summary: Confirm the caller's address with the token from a confirmation mail.
+      description: >
+        Confirms only for a caller signed in as the account the token was minted for, and only while that
+        account's address still equals the one mailed (ADR 0074 Decision 5): whoever reads a mistyped mailbox
+        must not be able to mark the wrong address confirmed. The token is spent with a compare-and-set, so it
+        confirms at most once. Every refusal is the same `404` and spends nothing.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/EmailConfirmationRequest" }
+      responses:
+        "204":
+          description: The address is confirmed.
+        "400":
+          description: The request was malformed (a missing or oversized token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: invalid_request }
+        "401":
+          description: Generic authentication failure (missing, invalid, expired, or revoked access token).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: authentication_failed }
+        "404":
+          description: >
+            `email_confirmation_invalid` — the token is unknown, expired, superseded or spent, was minted for
+            another account, or was mailed to an address the account no longer holds. Deliberately one answer.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
+              example: { code: email_confirmation_invalid }
 
   /api/account/password:
     post:
@@ -1004,6 +1126,44 @@ components:
           maxLength: 128
           example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    AccountEmail:
+      type: object
+      description: The caller's own address as the server holds it, and whether it is confirmed (ADR 0074).
+      required: [email, confirmed]
+      properties:
+        email:
+          x-veyq-visibility: pii
+          x-veyq-rationale: >-
+            The account's login identifier and the only channel a password reset can reach (ADR 0003, ADR 0054) —
+            already server-held plaintext; shown back to its holder so they can see the address a reset will mail.
+          type: string
+          format: email
+          description: The address a password reset would mail — the server's copy, not the client's memory.
+          maxLength: 254
+          example: kevin@example.com
+        confirmed:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            Whether the account holder has shown they read mail sent to this address — by redeeming a member
+            invite, completing a reset, or a confirmation link (ADR 0074 Decision 2). Gates nothing.
+          example: false
+
+    EmailConfirmationRequest:
+      type: object
+      description: The one-time token from a confirmation mail.
+      required: [token]
+      properties:
+        token:
+          x-veyq-visibility: token
+          type: string
+          description: >
+            The one-time token from the confirmation link's URL fragment. Only its SHA-256 hash is stored, so the
+            server recognises it at use and can never reproduce it.
+          maxLength: 512
+          example: Y29uZmlybWF0aW9uLXRva2Vu
+          x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 512)'
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'

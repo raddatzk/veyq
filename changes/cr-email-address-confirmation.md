@@ -221,7 +221,7 @@ phases 1–3 write new prose:
 
 ## Phases
 
-- [ ] **1 contracts.** The `account-email` tag with the three operations of D5, their schemas, the visibility
+- [x] **1 contracts.** The `account-email` tag with the three operations of D5, their schemas, the visibility
   markers and the request-bound annotation. **Done when:** `npm run generate:api` succeeds in `web/`; the
   contract guards are green (`validate_contracts_common.py`, `validate_field_visibility.py`,
   `validate_request_bounds.py`, `validate_http_failure_projection.py`); and `./gradlew check` is **green**,
