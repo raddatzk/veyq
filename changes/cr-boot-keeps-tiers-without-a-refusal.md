@@ -160,7 +160,7 @@ instance again keeps a key that opens nothing without the server-held wrap.
 
 - [x] 0 docs — ADR 0070 Decision 3 amendment (the sentence above).
       · Done when: `python3 scripts/validate_doc_citations.py` and `python3 scripts/validate_doc_links.py` green.
-- [ ] 1 web — `boot()` keeps the rejection, asks `isSessionRefusal`, drops the tiers only then, otherwise marks
+- [x] 1 web — `boot()` keeps the rejection, asks `isSessionRefusal`, drops the tiers only then, otherwise marks
       unreachable (or suspended). Locator: `grep -n 'refreshSession\|clearDeviceKey\|clearSessionVault' web/src/app/boot.ts`.
 
       **Order: red first.** The defect is live, so the bites are written and seen red on the untouched
