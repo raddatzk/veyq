@@ -1,7 +1,7 @@
 ---
 id: cr-crypto-mutation-gate-green
 title: The shared-crypto mutation gate is green on main again, and says what it measured
-status: planned
+status: done
 satisfies: []
 adrs: ["0045"]
 invariants: ["operator-blind E2EE everywhere"]
@@ -122,7 +122,7 @@ loosely" class, not in the four.
 
 ## Phases
 
-- [ ] 1 crypto: Decisions 1–3, in that order.
+- [x] 1 crypto: Decisions 1–3, in that order.
       1. Run the baseline first and paste its table: exit 1, 90.48 %, or whatever `main` then says.
       2. Write the kill tests one class at a time. After each class, re-run with `--force` (the incremental
          cache keeps stale verdicts: `stryker.config.mjs`' own comment).
@@ -149,4 +149,25 @@ loosely" class, not in the four.
 
 ## Retrospective
 
-_(filled at implement)_
+Measured at implement (2026-10-01, `--force`, node v23.11.0): guard glob 43/43 green before the first edit.
+**Red first:** main `7a34c57` exit 1, 89.83 % (v1.ts 83.67 %, 25 survived, 22 NoCoverage). After each class:
+96.54 % → 98.70 % → 99.13 % (exactly the four) → 100.00 %, exit 0, with the disables. Bite (b): exactly the
+scopeKind mutant Survived, 99.78 %. Bite (a) as written did **not** red, see below; `describe.skip` on the KAT
+suite did (49.34 %, exit 1).
+
+- **Planning — lever (a) could not cross the margin, and the arithmetic was one report away.** Deleting one round
+  trip orphans no mutant (the offset test covers the same ones); deleting all of `identity.test.ts` orphans 24
+  and still scored 95.20 %, exit 0, because 5 points of 458 is 23 mutants and two of the orphans timed out.
+  Root cause: the lever was named before any kill test existed, so nobody counted what it alone covers. Next
+  time: compute a threshold lever from the last report's `coveredBy` against the margin before writing it down.
+- **Planning — the prescribed disable form was wider than the decision.** `// Stryker disable next-line
+  ConditionalExpression` is line-wide (Stryker matches the mutated node's start line), so on the one-line
+  conditions it would also have switched off nine killed mutants, among them each condition's `→ false`, i.e.
+  *accept anything*. Each `typeof` now sits on a line of its own, behind the check that already subsumes it.
+  And "a truncated and an over-long identity bundle refused" described a bounds check the identity
+  deserializers do not have; only the cut-inside-a-prefix case is true, and that is what is pinned.
+- **Execution — the refine's "killed today" was a timeout.** `authSign`, `sha256Digest`, `sharesPwToken` and
+  `wrapDigest` survived here; static (module-level) mutants run every test and time out on a loaded machine,
+  which counts as detected. One more, `wrapDigest`, was a second runner artefact: its statements were built at
+  suite collection. The isolation classifier refused every compound shell command with a variable, which cost
+  several rounds until the bites moved into a Python helper — next time, write that helper first.
