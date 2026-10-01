@@ -1,7 +1,7 @@
 ---
 id: cr-wire-assertion-server-logs
 title: The wire sweep reaches the logs the operator reads
-status: in-progress
+status: done
 satisfies: []
 adrs: ["0053", "0044", "0040"]
 invariants:
@@ -180,7 +180,7 @@ variant. Re-derive it at implement time rather than trusting the numbers above: 
     is logged** (I5 was read from source, not run); if it is not, the plant becomes a signed HEAD through the
     operator tool's store handle, and the concern says which.
 - [x] **3 · `sweep_http` uses the needles** (question 5) · Done when: a run green; B6 red first.
-- [ ] **4 · State and harvest** · Done when: `python3 scripts/validate_doc_links.py`,
+- [x] **4 · State and harvest** · Done when: `python3 scripts/validate_doc_links.py`,
       `python3 scripts/validate_changes.py` and `python3 scripts/validate_e2e_canaries.py` green, and the whole
       `for f in scripts/validate_*.py; do python3 "$f"; done` glob green **reporting how many ran**.
   - Concern: the log row → **live**, naming the sensor, the logs, the needles and the controls; the Status line
@@ -236,4 +236,20 @@ by existing.
 
 ## Retrospective
 
-<!-- filled at close -->
+- **Planning — a tool default was carried as settled.** Phase 4 said the admin nginx and Traefik "both default to
+  no request log in both deployment targets". True for Traefik (no `accesslog` anywhere in `infra/` or `charts/`),
+  **false for the admin nginx**: its base image's `nginx.conf` sets `access_log … main` (method, URI, query) and
+  links it to `/dev/stdout` — one `docker run --entrypoint cat` on a local image. The concern now says so and a
+  row is proposed. Root cause: a third-party image's default is a tool property, and § *run it once, at refine*
+  already asks for exactly that measurement.
+- **Planning — a control as worded would not have bitten under its own lever.** D5's "contain its database name"
+  plus B3's "delete its `Database:` line": a restored member's log names its schema on other Flyway lines, so the
+  lever moves nothing. Caught while writing the control, before a run; the control anchors on the JDBC URL instead.
+  Harvested to changes/README § *a control's LEVER must itself be bitten*.
+- **Execution — one wasted e2e run.** B5's first lever replaced the two encoding flags with a placeholder
+  `-Dveyq.lever…` property, and Quarkus refuses an unknown `veyq.*` property at boot (`SRCFG00050`), so the
+  store-init boot died — § *check the lever survives the tool*, ignored. A pure removal was the lever as written.
+  The same session's AST parse check before each run did catch a Python 3.9 f-string quote clash in a lever.
+- **Next time:** a lever removes or replaces with something the tool already accepts — never a new knob; and the
+  shell's locale is measured before any claim about "this Mac's" output (this session's was `C`, which is what
+  made D6 load-bearing here, not merely belt-and-braces: without it the boot log's `—` became `?`).

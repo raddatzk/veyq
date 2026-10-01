@@ -25,9 +25,11 @@ restore worked" and "nothing was restored" can be told apart from outside. Membe
 through `$VEYQ_GROUP_DIR`, a directory that outlives the boot.
 
 **The wire assertion (ADR 0053).** Each suite writes the plaintext it recovered by *unsealing the server's own
-responses* to `$VEYQ_CANARY_FILE`; this side then proves none of it is readable in the database — see
-[sweep_database]. The two halves are deliberately split by what each can reach: only the suite holds the keys,
-only this process holds Docker and the database root credential.
+responses* to `$VEYQ_CANARY_FILE`; this side then proves none of it is readable where an operator could read it —
+per suite in the database ([sweep]), the HTTP recording ([sweep_http]) and the object store ([sweep_store]), and
+once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]). The two
+halves are deliberately split by what each can reach: only the suite holds the keys, only this process holds
+Docker and the database root credential.
 
 **Why a fresh instance per file.** Every suite cold-births its own Server Owner and asserts
 `setupRequired === true`, and a server is single-owner-per-instance. `ci.yml` used to call this "a fresh in-mem
@@ -64,7 +66,8 @@ not do it for you (it builds test classes, not the fast-jar). The web mirror of 
 red that was measured against code the run never saw.
 
 **The run directory survives the run** (`.e2e-out/<stamp>/`, gitignored). It holds each boot's log, its
-per-boot config-secret file and its canary file. It used to be a `tempfile.TemporaryDirectory` discarded on
+per-boot config-secret file, its canary file and its HTTP recording, and — once the run-level sweep
+has read them — every container's log over the run's window (`container-<service>.log`). It used to be a `tempfile.TemporaryDirectory` discarded on
 exit, which left the boot log — the surface where an error `message` or a stack trace would carry plaintext —
 not merely unswept but unavailable (ADR 0053 § Decision 4). Nothing prunes it; it is a developer artifact and
 CI throws the runner away.
@@ -477,8 +480,9 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
         env["VEYQ_BLOB_STORE_BUCKET"] = bucket
     handle = log_path.open("w")
     # The log is a sweep surface ([sweep_logs]), so the bytes it holds must not depend on the host: with stdout a
-    # FILE, Java 21 encodes it in the host locale's charset, and a non-UTF-8 locale writes a non-ASCII canary as
-    # `?` — which the raw needle then silently misses. Pinned here; [sweep_logs] reads the file as UTF-8.
+    # FILE, Java 21 encodes it in the host locale's charset. Measured: without these two flags, under `LC_ALL=C`,
+    # the boot log's `—` came out as `?` — and a non-ASCII canary would too, which the needles then miss.
+    # Pinned here; [sweep_logs] reads the file as UTF-8.
     return subprocess.Popen(
         ["java", "-Dquarkus.profile=e2e", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-jar", str(JAR)],
         cwd=str(REPO), env=env, stdout=handle, stderr=subprocess.STDOUT,
@@ -576,9 +580,9 @@ def sweep(database: str, canary_file: Path, rel: str) -> str | None:
     surface this sensor reads*. It does not prove the flow sealed everything it should have: a value the client
     never sealed is not a canary, correctly, and is therefore invisible here — that case belongs to the opacity
     check over the `contentEncoding: base64` fields and to `validate_field_visibility.py`. It does not prove an
-    unswept surface is clean: the object store and the boot log are separate change-requests, and the log is
-    merely *retained* here. Its residual gap is coverage, not correctness — the sweep sees only flows some suite
-    drives, and four e2e suites exist. And passing cannot be arranged from inside the client (the bytes are in a
+    unswept surface is clean: the store, the HTTP recording and the logs are their own sweeps ([sweep_store],
+    [sweep_http], [sweep_logs], [sweep_containers]). Its residual gap is coverage, not correctness — the sweep
+    sees only flows some suite drives. And passing cannot be arranged from inside the client (the bytes are in a
     database this process does not write), but a canary can still be *removed* — a visible diff, exactly like
     widening an allowlist would be, which is weaker than tamper-proof and should not be stated as more.
     """
