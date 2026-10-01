@@ -14,7 +14,8 @@ the index and carries no header):
       user-facing claim is made.
 The header is an HTML comment because `wiki-sync.yml` publishes `wiki/` alone: a relative link into `docs/`
 would be dead on the published wiki, and a visible absolute link would put engineering docs in front of the
-plain-language reader on every page.
+plain-language reader on every page. That GitHub's wiki renderer hides the comment is **remembered, not
+measured**: there is no remote to publish to yet, so look at one published page on the first real sync.
 
 The defect that bought it (inbox #120): `wiki/{en,de}/account-keys-and-recovery.md` told users their password is
 sent to the server to log in — the opposite of the design, where the device derives a keypair and shows the server
