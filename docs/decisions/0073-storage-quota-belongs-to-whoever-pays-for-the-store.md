@@ -52,7 +52,8 @@ Who pays for the store differs by deployment. Today there is one store connectio
      quota.
    - **Not counted:**
      - Reclaim tombstones. They carry no scope by design (ADR 0062 §6), so they cannot be attributed, and the
-       sweep's lag bounds them.
+       sweep's lag bounds them: a recorded key waits out `veyq.media.upload.retention`, so no signed PUT can
+       re-create its bytes after the sweep, then goes on the next tick (ADR 0062 Decision 1).
      - Material kept in the database: icons, share notes, job results, identity pins. It is not in the store, and
        the contract bounds each field.
    - The size is the declared `byteSize`. `complete` admits a blob only when every chunk is present at exactly

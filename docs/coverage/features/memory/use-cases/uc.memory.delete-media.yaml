@@ -50,7 +50,7 @@ acceptanceCriteria:
       web:
         e2e: [src/features/memory/shareContributor.e2e.test.ts]
   - id: scheduled-hard-purge
-    text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order, with their store objects written to the reclaim list in the SAME transaction and deleted by the reclaim sweep on its next tick. The purge is irreversible and is not a member action.
+    text: A scheduled job hard-deletes each media trashed longer than the retention window (default 30 days, operator-configurable) — its derivative + media + blob rows in FK order, with their store objects written to the reclaim list in the SAME transaction and deleted by the reclaim sweep once no URL signed for them can still land (ADR 0062 Decision 1). The purge is irreversible and is not a member action.
     coverage:
       backend:
         integration: [MediaTrashSliceTest.purgeHardDeletesTrashedPastRetention, MediaTrashSliceTest.retentionPurgeHandsTheTrashedMediasChunkKeysToTheStore]

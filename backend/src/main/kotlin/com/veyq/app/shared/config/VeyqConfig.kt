@@ -332,7 +332,8 @@ interface VeyqConfig {
              *  floor is **measured, not chosen**: every window's presigned PUTs are signed under
              *  `veyq.blob-store.presign-ttl-seconds`, so a session with no new window past that TTL can receive no
              *  further byte. What this buffers is only a PUT that started inside the TTL and is still streaming —
-             *  one 256 KiB chunk. */
+             *  one 256 KiB chunk. **Also the reclaim list's not-before** (`StoreReclaimStore.record`, ADR 0062
+             *  Decision 1): it carries the same meaning there, so lowering it below the TTL breaks both. */
             @WithDefault("PT1H")
             fun retention(): Duration
 
@@ -342,8 +343,9 @@ interface VeyqConfig {
 
     /** `veyq.store-reclaim.*` — the single store-object deleter (ADR 0062). */
     interface StoreReclaim {
-        /** How often the sweep drains the reclaim list. This is also the **latency the design accepts**: bytes
-         *  linger up to one interval after the rows that named them are gone (Decision 3). */
+        /** How often the sweep drains the reclaim list. With the not-before it is the **latency the design
+         *  accepts**: bytes linger up to `veyq.media.upload.retention` plus one interval after the rows that named
+         *  them are gone, because a recorded key waits until no PUT signed for it can still land (Decision 1). */
         fun sweep(): Interval
 
         /** Refusals a row survives before it is stamped abandoned and its bytes become a countable leak. An

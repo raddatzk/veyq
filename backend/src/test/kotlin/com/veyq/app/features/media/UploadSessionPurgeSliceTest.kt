@@ -6,6 +6,7 @@ import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKeys
 import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
+import com.veyq.app.shared.blobstore.ageReclaimRowsPastThePresignBound
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import io.quarkus.narayana.jta.QuarkusTransaction
@@ -69,6 +70,7 @@ class UploadSessionPurgeSliceTest {
         clearReclaim()
         recorder.reset()
         purge.run()
+        ageReclaimRowsPastThePresignBound(config) // past the not-before, so the sweep may delete
         sweep.run()
 
         // the row is physically gone
@@ -91,6 +93,7 @@ class UploadSessionPurgeSliceTest {
         clearReclaim()
         recorder.reset()
         purge.run()
+        ageReclaimRowsPastThePresignBound(config) // past the not-before, so the sweep may delete
         sweep.run()
 
         // the row survives — a slow uploader is not a garbage collector's business
@@ -118,6 +121,7 @@ class UploadSessionPurgeSliceTest {
         clearReclaim()
         recorder.reset()
         purge.run()
+        ageReclaimRowsPastThePresignBound(config) // past the not-before, so the sweep may delete
         sweep.run()
 
         assertNull(QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(sessionId) })
@@ -145,6 +149,7 @@ class UploadSessionPurgeSliceTest {
         clearReclaim()
         recorder.reset()
         purge.run()
+        ageReclaimRowsPastThePresignBound(config) // past the not-before, so the sweep may delete
         sweep.run()
 
         assertNotNull(QuarkusTransaction.requiringNew().call { UploadSessionEntity.findById(live) }) {

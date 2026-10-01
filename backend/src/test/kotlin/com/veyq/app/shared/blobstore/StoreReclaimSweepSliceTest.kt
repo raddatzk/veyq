@@ -12,6 +12,7 @@ import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assertions.fail
 import org.junit.jupiter.api.Test
+import java.time.Duration
 import java.time.Instant
 import java.util.UUID
 
@@ -48,6 +49,67 @@ class StoreReclaimSweepSliceTest {
     private val recorder: RecordingBlobStore get() = blobStore as RecordingBlobStore
 
     /**
+     * The not-before (cr-reclaim-waits-out-the-presign-ttl). Several paths drop the row naming a key inside the
+     * presign TTL of the last window signed for it — a media purged straight from the trash, a replaced or
+     * cleared cover — and a PUT on such a URL still lands after the drop. A sweep that deleted at the next tick
+     * would let that PUT re-create the object under a key nothing names, which no quota counts and no sweep ever
+     * deletes. So a recorded key is not due until `veyq.media.upload.retention` — the bound that already says
+     * "after this, no signed PUT can still land" — has passed.
+     *
+     * Three rows on one tick, each the others' control:
+     * - recorded **now**: the property itself;
+     * - recorded **TTL − 1s ago**: a URL signed the instant before its row was dropped is still valid, so this one
+     *   pins the floor at the TTL rather than at "some delay" — a bound one second shorter deletes it;
+     * - **already due** (`nextAttemptAt` in the past): the positive control on the same predicate, without which
+     *   "nothing was deleted" is indistinguishable from "the sweep did not run".
+     * Then the first row is aged one second past the bound and must go, keys and row both.
+     */
+    @Test
+    fun aRecordedKeyIsNotDeletedWhileAPutSignedForItCanStillLand() {
+        val bound = config.media().upload().retention()
+        val ttl = Duration.ofSeconds(config.blobStore().presignTtlSeconds().toLong())
+        val freshKey = UUID.randomUUID().toString()
+        val insideTtlKey = UUID.randomUUID().toString()
+        val dueKey = UUID.randomUUID().toString()
+        clearBacklog()
+        val freshId = seed(freshKey, chunkCount = 2)
+        val insideTtlId = seed(insideTtlKey, chunkCount = 1)
+        backdateReclaimRows(ttl.minusSeconds(1)) { it.id == insideTtlId }
+        val dueId = seed(dueKey, chunkCount = 1)
+        makeDue(dueId)
+
+        recorder.reset()
+        sweep.run()
+
+        // the control: a due row on the same tick is deleted and settled
+        assertNull(row(dueId), "a row past its not-before must be settled")
+        assertTrue(chunkKey(dueKey, 0) in recorder.deletedKeys) {
+            "a due row's keys must reach the store; handed: ${recorder.deletedKeys}"
+        }
+        // the property: neither row whose key a signed PUT can still reach was touched
+        assertTrue(recorder.deletedKeys.none { it.startsWith("$freshKey/") }) {
+            "a key recorded just now must not be deleted while a PUT signed for it can still land; " +
+                "handed: ${recorder.deletedKeys}"
+        }
+        assertTrue(recorder.deletedKeys.none { it.startsWith("$insideTtlKey/") }) {
+            "a key recorded TTL − 1s ago must not be deleted: a URL signed just before its row drop is still " +
+                "valid; handed: ${recorder.deletedKeys}"
+        }
+        assertEquals(0, requireRow(freshId, "a row inside its not-before must stay on the list").attempts)
+        assertEquals(0, requireRow(insideTtlId, "a row inside the TTL must stay on the list").attempts)
+
+        // past the bound, the same row goes — the wait is a wait, not a drop
+        backdateReclaimRows(bound.plusSeconds(1)) { it.id == freshId }
+        recorder.reset()
+        sweep.run()
+        assertNull(row(freshId), "once no signed PUT can land, the row must be settled")
+        assertTrue(recorder.deletedKeys.containsAll(chunkKeys(freshKey, 2))) {
+            "every chunk of the aged row must reach the store; handed: ${recorder.deletedKeys}"
+        }
+        QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteById(insideTtlId) }
+    }
+
+    /**
      * The retry path, and its positive control on the same tick. A store that refuses one key must leave that
      * row standing — counted and deferred — while the row next to it is reclaimed and dropped. Without the
      * second half, a sweep that did nothing at all would satisfy the first perfectly.
@@ -60,9 +122,11 @@ class StoreReclaimSweepSliceTest {
         clearBacklog()
         val refusedId = seed(refusedKey, chunkCount = 2)
         val cleanId = seed(cleanKey, chunkCount = 1)
+        ageReclaimRowsPastThePresignBound(config)
 
         recorder.reset()
         recorder.failOnKeyMarker = marker
+        val tick = Instant.now()
         try {
             sweep.run()
 
@@ -76,8 +140,10 @@ class StoreReclaimSweepSliceTest {
             val held = requireRow(refusedId, "a row the store refused must not be settled")
             assertEquals(1, held.attempts, "the refusal must be counted on the row")
             assertNull(held.abandonedAt, "one refusal is far below the give-up threshold")
-            assertTrue(held.nextAttemptAt.isAfter(held.createdAt)) {
-                "the retry must be deferred past its first due time, not left due on the next tick"
+            // against the tick, not against `createdAt`: an aged row's not-before already lies after its
+            // recording, so that comparison would hold with no deferral at all
+            assertTrue(held.nextAttemptAt.isAfter(tick)) {
+                "the retry must be deferred past the tick that was refused, not left due on the next tick"
             }
             // and NOTHING of it was recorded as handed over — a store that refuses deleted nothing
             assertTrue(recorder.deletedKeys.none { it.startsWith(refusedKey) }) {

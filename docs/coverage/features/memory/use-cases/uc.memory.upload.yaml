@@ -46,8 +46,8 @@ acceptanceCriteria:
       chunk objects the client already PUT direct-to-store, since that row is the only pointer to their
       `storage_key` and a row-only delete would orphan the bytes permanently. Those are two components since
       ADR 0062 and the tests drive both — the purge deletes the row and records the key prefix in the same
-      transaction, and `StoreReclaimSweep` hands the objects to the store on the next tick. A session still
-      inside the window loses neither half. The window is measured from the session's LAST ISSUED WINDOW, not its
+      transaction, and `StoreReclaimSweep` hands the objects to the store once no URL signed for them can still
+      land. A session still inside the window loses neither half. The window is measured from the session's LAST ISSUED WINDOW, not its
       start — a large upload is signed window by window, so its start says nothing about whether it is alive —
       and it is bounded by construction rather than chosen: every window's PUT URLs are signed under the presign
       TTL, so a session with no new window past that TTL can receive no further byte. This is the SERVER half of

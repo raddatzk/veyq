@@ -1194,6 +1194,13 @@ the CR named for deletion. Run that count before trusting the migration, and nam
 negative assertions (`not.toContain(…)`) were the other risk: left on a stub string the app never renders, they
 stay green on every tree, so each one was resolved through the real source and read back.
 
+**A count catches a lost assertion, not a disarmed one.** A migration that moves a *quantity* — backdating
+timestamps so a test survives a new wait — keeps every assertion and can still turn one vacuous: it compares
+against what was moved. cr-reclaim-waits-out-the-presign-ttl aged reclaim rows past a new not-before, and
+`StoreReclaimSweepSliceTest`'s "the retry is deferred" check read `nextAttemptAt.isAfter(createdAt)` — true on an
+aged row with no deferral at all. So read every assertion the moved quantity reaches, re-anchor the ones it
+disarms (there, on the tick's own start), and bite the re-anchored one with the lever it guards.
+
 ### A test that mutates shared singleton/global state writes its restore in the same edit
 
 **As the mutation, not after a flake.** The `%test` H2 mem DB — and any generated file like the config-secret key — is **JVM-shared
