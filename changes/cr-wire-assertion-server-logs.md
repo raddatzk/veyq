@@ -179,7 +179,7 @@ variant. Re-derive it at implement time rather than trusting the numbers above: 
     `/<bucket>/<sentinel>` — unsigned, refused, and logged. **Confirm at implement time that the refused request
     is logged** (I5 was read from source, not run); if it is not, the plant becomes a signed HEAD through the
     operator tool's store handle, and the concern says which.
-- [ ] **3 · `sweep_http` uses the needles** (question 5) · Done when: a run green; B6 red first.
+- [x] **3 · `sweep_http` uses the needles** (question 5) · Done when: a run green; B6 red first.
 - [ ] **4 · State and harvest** · Done when: `python3 scripts/validate_doc_links.py`,
       `python3 scripts/validate_changes.py` and `python3 scripts/validate_e2e_canaries.py` green, and the whole
       `for f in scripts/validate_*.py; do python3 "$f"; done` glob green **reporting how many ran**.

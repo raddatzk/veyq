@@ -708,6 +708,11 @@ def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
     calls both produce "no leak found", which is indistinguishable from a clean run — the same trap
     `changes/README` § *a bite test must tell "the guard held" apart from "nothing ran"* records, arriving
     through a measurement instead of a test.
+
+    **A canary is searched in every spelling [canary_needles] models, not only raw.** The recorder stores a URL as
+    the client BUILT it — percent-encoded — so a raw match never saw a canary with a space in a path or a query
+    string, and most canaries have one. Measured, not read: a suite that sent a space-bearing canary to
+    `GET /api/setup?lever=…` passed the raw-only version of this sweep green.
     """
     if not record_file.is_file():
         return (f"{rel} recorded no HTTP traffic at {record_file.name} — the recorder did not arm, so this "
@@ -740,8 +745,10 @@ def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
             entry.get("requestBody") or "", entry.get("responseBody") or "",
         ]))
         for canary in canaries:
-            if canary in haystack:
-                leaks.append((where, canary, "url/header/body"))
+            for variant, needle in canary_needles(canary):
+                if needle in haystack:
+                    leaks.append((where, canary, f"url/header/body [{variant}]"))
+                    break
 
     if opacity or leaks:
         log(f"WIRE ASSERTION FAILED for {rel} on HTTP — {len(opacity)} opacity, {len(leaks)} canary hit(s):")
