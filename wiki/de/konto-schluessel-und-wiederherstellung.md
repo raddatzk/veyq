@@ -32,15 +32,20 @@ nie neu verschlüsselt.**
 
 - **Das erste Mal auf einem Gerät** — dein **Passwort + der Secret Key** aus deinem Notfall-Kit. Den
   Secret Key tippst du hier einmal, danach auf diesem Gerät nicht wieder.
-- **Ein Gerät, dem du vertraust** — ab dann reicht dein Passwort. Setzt du stattdessen das Häkchen bei
-  **„angemeldet bleiben"**, öffnet das Gerät direkt deine Erinnerungen, ganz ohne Tippen.
-- **Ein fremder Rechner** — nutze ein privates/Inkognito-Fenster; es bleibt nichts zurück.
+- **Danach auf demselben Gerät** — reicht dein Passwort; das richtet veyq bei dieser ersten Anmeldung von
+  selbst ein. Setzt du stattdessen das Häkchen bei **„Auf diesem Gerät angemeldet bleiben"**, öffnet das
+  Gerät direkt deine Erinnerungen, ganz ohne Tippen.
+- **Ein fremder Rechner** — nutze ein privates/Inkognito-Fenster und melde dich am Ende ab. Das Fenster
+  vergisst seinen Schlüssel, sobald du es schließt; auf dem Server bleibt nur eine gesperrte Kopie, die
+  niemand mehr öffnen kann.
 
-Manche Browser können sich ein Gerät gar nicht merken — private/Inkognito-Fenster und einige stark
-abgeschottete Konfigurationen. veyq sagt dir Bescheid, wenn du in so einem bist: Entsperren braucht
-dort jedes Mal deinen Secret Key. Das ist eine Grenze des Browsers, kein Fehler an deinem Konto.
+Einige stark abgeschottete Browser können gar keinen Schlüssel behalten. Dort braucht Entsperren jedes Mal
+deinen Secret Key, und unter Einstellungen → Geräte und Sitzungen steht das auch. Private Fenster erkennt
+veyq nicht — ein gewöhnliches behält seinen Schlüssel, bis du es schließt. Und wer deinen Server betreibt,
+kann diese Bequemlichkeit für alle abschalten; dann brauchst du deinen Secret Key bei jeder Anmeldung. Ein
+Fehler an deinem Konto ist nichts davon.
 
-Der Secret Key wird nur dieses erste Mal gebraucht. Warum überhaupt?
+Normalerweise wird der Secret Key also nur dieses erste Mal gebraucht. Warum überhaupt?
 
 Dein Passwort verlässt dein Gerät nie — auch nicht zum Anmelden. Dein Gerät rechnet daraus ein
 Schlüsselpaar aus und zeigt dem Server nur die öffentliche Hälfte; aus ihr lässt sich dein Passwort nicht
@@ -60,20 +65,23 @@ angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht.
 
 Das gilt auch auf einem **geliehenen oder nagelneuen Gerät** — und genau so eines hast du meistens in der Hand,
 wenn ein Laptop verschwunden ist. Wähle auf dessen Anmeldeseite **„Ich habe meinen Secret Key nicht dabei"**:
-Du meldest dich an, deine Erinnerungen bleiben gesperrt, und angeboten wird genau eines — jedes Gerät abmelden,
-dieses eingeschlossen. Dieses Gerät behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet
-bleibst du nur, bis der Browser geschlossen wird.
+Du meldest dich an, deine Erinnerungen bleiben gesperrt, und angeboten werden zwei Dinge: **„Überall abmelden,
+auch hier"** — oder, falls das Kit doch noch auftaucht, hier entsperren, ohne auf diesem Gerät etwas zu
+speichern. Dieses Gerät behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet bleibst du nur,
+bis der Browser geschlossen wird. Die Liste deiner Geräte braucht entsperrte Erinnerungen; von dort aus meldest
+du also alle Geräte ab, nicht ein bestimmtes.
 
 **Abmelden ist nicht die ganze Geschichte, und diesen Teil liest du am besten zweimal.** Ein Gerät abzumelden
 hindert es daran, den Server zu erreichen; es hindert es *nicht* daran, deine Erinnerungen zu öffnen, denn ein
-Gerät, dem du vertraut hast, hält ein eigenes Schloss auf deinem Master-Schlüssel (das Bild oben auf dieser
-Seite). Ist ein Gerät wirklich weg, nimm stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**. Wer
-das Gerät dann hat, braucht dein Passwort *und* deinen Secret Key — heb dir das also für wirklich verlorene
-Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit.
+Gerät, an dem du angemeldet warst, hält ein eigenes Schloss auf deinem Master-Schlüssel (das Bild oben auf
+dieser Seite). Ist ein Gerät wirklich weg, nimm stattdessen **„Abmelden + Schlüssel entfernen"** in seiner
+Zeile (fehlt der Knopf dort, entferne seinen Schlüssel unter **„Geräte mit gespeichertem Schlüssel"**). Wer das
+Gerät dann hat, braucht dein Passwort *und* deinen Secret Key — heb dir das also für wirklich verlorene Geräte
+auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit.
 
-Zwei ehrliche Hinweise. Die Gerätenamen erfährt der Server nie: Sie liegen verschlüsselt und sind erst nach dem
-Entsperren lesbar, auf einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und nichts davon greift
-auf das verlorene Gerät selbst durch — entzogen wird ihm, was der Server für es aufbewahrt hat.
+Zwei ehrliche Hinweise. Die Gerätenamen erfährt der Server nie: Sie liegen verschlüsselt, und lesen kann sie nur
+deine entsperrte App. Und nichts davon greift auf das verlorene Gerät selbst durch — entzogen wird ihm, was der
+Server für es aufbewahrt hat.
 
 ## Wenn jemand in dein Konto gekommen ist
 
@@ -91,10 +99,11 @@ Lies diese vier Punkte, bevor du anfängst. Sie sind das ganze Bild, und keiner 
 weiterhin. Es gibt keine Variante davon, die in ihr Gerät greift und Gelesenes löscht. Was es tut, ist einen
 Strich ziehen: ab hier nichts Neues mehr.
 
-**Alle anderen Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel.** Jedes braucht danach
-wieder dein Passwort, und ein Gerät, das nur einen gespeicherten Schlüssel hatte — eines, das du per Code
-hinzugefügt hast — braucht dein Notfall-Kit. Mach das also dort, wo du an dein Kit kommst, nicht zwischen
-Tür und Angel.
+**Jedes Gerät verliert seinen gespeicherten Schlüssel, auch dieses.** Alle anderen Geräte werden abgemeldet,
+und jedes braucht danach dein Passwort **und** dein Notfall-Kit, um wieder hineinzukommen — genau den
+gespeicherten Schlüssel nimmt das hier weg. Das Gerät, an dem du es machst, bleibt angemeldet, fragt aber bei
+der nächsten Anmeldung dort ebenfalls nach beidem. Mach das also dort, wo du an dein Kit kommst, nicht
+zwischen Tür und Angel.
 
 **Du brauchst dein Notfall-Kit, und genau das ist der Punkt.** Es ist das Einzige, was die andere Person
 nicht hat. Ohne diese Bedingung könnte *sie* die Schlüssel zuerst ersetzen und *dich* dauerhaft aussperren —
@@ -105,7 +114,8 @@ Schutz.
 die dich kennen, aus wie eine fremde Person, die behauptet, du zu sein — und genau das soll die App ja
 merken. Jemand anderes im jeweiligen Raum bestätigt, dass du wirklich du bist, am besten indem ihr die
 Sicherheitsnummer am Telefon vergleicht. Erst dann bist du wieder drin. Bis dahin bist du draußen, und daran
-ändert nichts, was du allein tust.
+ändert nichts, was du allein tust. (Nachfragen kann die App nur bei einem Schlüssel, den sie schon kennt: Ein
+Mitglied, dessen App deinen alten Schlüssel nie hatte, lässt dich ohne Nachfrage wieder herein.)
 
 Eine Sache lohnt sich, *bevor* du das je brauchst: **mach in einem Raum, den nur du besitzt, jemanden zur
 zweiten Besitzerin oder zum zweiten Besitzer.** Sonst ist dort niemand, der dich wieder hereinlassen kann.
@@ -114,9 +124,10 @@ Dein Notfall-Kit funktioniert danach weiter — dein Secret Key ändert sich nic
 
 ## Was der Server tatsächlich speichert
 
-Nur die **gesperrten** Kopien deines Master-Schlüssels — nie etwas, das sie öffnet. Das, was eine Kopie
-entsperrt, entsteht für einen Moment beim Anmelden auf deinem Gerät und wird dann verworfen. Es wird nie
-gespeichert und nie gesendet. Genau das hält den Server blind.
+Nur die **gesperrten** Kopien deines Master-Schlüssels — nie etwas, das sie öffnet. Was eine Kopie mit deinem
+Passwort entsperrt, entsteht für einen Moment beim Anmelden auf deinem Gerät und wird dann verworfen.
+Aufbewahrt werden nur die Schlüssel, die ein Gerät für seine eigene Kopie hält, und die bleiben auf diesem
+Gerät. Gesendet wird keiner davon. Genau das hält den Server blind.
 
 ## Wenn du dein Passwort vergisst
 
@@ -139,11 +150,12 @@ Nach dem Zurücksetzen meldet sich jedes Gerät neu an. Du gibst deinen Secret K
 auch auf dem, das du gerade in der Hand hast.
 
 **Zwei ehrliche Grenzen.** Sind Passwort **und** Kit weg, bringt nichts deine Erinnerungen zurück: bei uns
-liegt kein Hauptschlüssel, und eine Hintertür gibt es nicht. Und wenn auf dem Server, den du nutzt, keine
-E-Mail eingerichtet ist, kann der Link nicht verschickt werden — anfordern kannst du ihn trotzdem, und du
-bekommst dann klar gesagt, dass es nicht geht, statt auf eine Mail zu warten, die nie kommt. Bitte die Person,
-die den Server betreibt, E-Mail einzurichten; mit deinem Konto ist alles in Ordnung, und sobald das erledigt ist,
-funktioniert das Zurücksetzen.
+liegt kein Hauptschlüssel, und eine Hintertür gibt es nicht. Und wenn für deinen Bereich keine E-Mail
+eingerichtet ist, kann der Link nicht verschickt werden — anfordern kannst du ihn trotzdem, und du bekommst
+dann klar gesagt, dass es nicht geht, statt auf eine Mail zu warten, die nie kommt. E-Mail wird pro Bereich
+eingerichtet, von einer Person, der der Bereich gehört, in dessen Einstellungen — nicht von der Person, die
+den Server betreibt. Sprich also jemanden an, dem dein Bereich gehört; mit deinem Konto ist alles in Ordnung,
+und sobald das erledigt ist, funktioniert das Zurücksetzen.
 
 **Warum ein vergessenes Passwort deine Erinnerungen nicht verliert:** alles hängt an deinem *Schlüssel*,
 nicht am Passwort. Hol den Schlüssel zurück, und alles kommt auf einmal wieder.

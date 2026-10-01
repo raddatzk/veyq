@@ -95,7 +95,8 @@ stateDiagram-v2
   counterpart [uc.account.login](uc.account.login.md) gates a session but never unlocks content.
 - **Ephemeral by default.** This flow holds the Master Key in memory for the working session only; it does
   **not** persist it. Routine re-unlock without re-entering the high-entropy Secret Key (a DEVICE wrap /
-  biometric) is the **"Trust this device"** use-case — so this floor path is typically the *first* unlock
+  biometric) is [uc.account.trust-device](uc.account.trust-device.md), enrolled automatically at sign-in — so
+  this floor path is typically the *first* unlock
   on a device.
 - **One Secret-Key control, wherever the Secret Key is asked for.** This use-case owns the property, and the
   other screens that ask for a Secret Key — the recovery reset ([uc.account.recover-access](uc.account.recover-access.md)),

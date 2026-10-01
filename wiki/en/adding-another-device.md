@@ -10,18 +10,19 @@ the other everything it needs.**
 Both do exactly the same thing. What differs is which device shows a code and which one scans it, so
 whichever device has a camera is the one that scans.
 
-**From the device you are already signed in on** — choose **"add a device"**.
+**From the device you are already signed in on** — open **"Add a device"** in Settings.
 
-1. It shows a code.
-2. Your new device scans it.
+1. Press **"Show a code"**; it shows a code.
+2. Your new device scans it — on its sign-in screen, with the **"Scan QR code"** button beside the secret key
+   field.
 3. Both screens now show a short number.
 4. Check they match, name the new device, and slide to confirm.
 
-**Standing at the new device, with nothing but the app open** — choose **"sign in with a QR code"** on the
+**Standing at the new device, with nothing but the app open** — choose **"Sign in with a QR code"** on the
 sign-in screen. You need no camera on this one, only on the other.
 
 1. The new device shows a code.
-2. You scan it with the device you are already signed in on.
+2. You scan it with the device you are already signed in on (**"Add a device"** → **"Scan a code"**).
 3. *That* device now shows you a short number.
 4. You type that number into the new device, and confirm on the signed-in one.
 
@@ -73,8 +74,9 @@ out from that moment on — it cannot take back what was already read, and it ne
 
 **A device added this way has no password saved on it.** You never typed one there, and it never learns
 one. If it ever forgets its key — you clear the browser, or another device removes its saved key — it will
-ask you for your password or your Emergency Kit, neither of which was ever typed on it. Keep the Emergency
-Kit somewhere you can reach.
+ask you for your password **and** your Emergency Kit, neither of which was ever typed on it (or you add it
+again from a signed-in device). Keep the Emergency Kit somewhere you can reach. And if you don't choose to stay
+signed in on it, closing the browser ends its access, and you add it again next time.
 
 ## Related
 

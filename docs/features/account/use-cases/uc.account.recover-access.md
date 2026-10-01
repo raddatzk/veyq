@@ -63,7 +63,9 @@
   Step 2 answers success anyway and no mail is sent. The actor learns nothing about who is registered on the
   instance. Neither does this tenant's owner, whose relay would otherwise have carried another tenant's link
   ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §4).
-- **A2 — No mail transport configured.** The request is refused with **`503 mail_unavailable`** and nothing is
+- **A2 — No mail transport configured.** Mail is per tenant: the account's tenant has no sendable SMTP settings
+  ([uc.admin.tenant-mail-settings](../../admin/use-cases/uc.admin.tenant-mail-settings.md) — set by a tenant
+  owner; there is no instance-wide fallback). The request is refused with **`503 mail_unavailable`** and nothing is
   minted — the instance says so plainly instead of offering a control that silently fails. There is deliberately
   **no copy-link fallback**: passing a recovery link through the operator would make them a participant in a flow
   built to exclude them ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) § Decision 4).
@@ -100,8 +102,8 @@
 
 **EN —** If you forget your password, you are not locked out — as long as you still have your Emergency Kit.
 Ask for a reset link, open the mail we send you, and enter the Secret Key from your kit. Asking is always
-offered — and if the server you are on cannot send email yet, it tells you so right there, instead of leaving you
-waiting for a link that was never going to arrive. You choose a new
+offered — and if your space cannot send email yet, it tells you so right there, instead of leaving you waiting
+for a link that was never going to arrive (an owner of your space sets email up, in its settings). You choose a new
 password, and everything you have saved is still there: your memories are never re-encrypted, and your kit keeps
 working afterwards. Two things have to come together, on purpose: reading your mail, and holding your kit.
 Someone who breaks into your mailbox gets nothing they can open. What we cannot do is help if both the password
@@ -111,8 +113,9 @@ will enter your Secret Key once more on each of them.
 
 **DE —** Wenn du dein Passwort vergisst, bist du nicht ausgesperrt — solange du dein Notfall-Kit noch hast.
 Fordere einen Link an, öffne die Mail, die wir dir schicken, und gib den Secret Key aus deinem Kit ein. Anfordern
-kannst du immer — und kann der Server, auf dem du bist, noch keine E-Mails verschicken, sagt er dir das direkt,
-statt dich auf einen Link warten zu lassen, der nie gekommen wäre. Du
+kannst du immer — und kann dein Bereich noch keine E-Mails verschicken, bekommst du das direkt gesagt, statt
+auf einen Link zu warten, der nie gekommen wäre (E-Mail richtet eine Person ein, der dein Bereich gehört, in
+dessen Einstellungen). Du
 wählst ein neues Passwort, und alles Gespeicherte ist weiterhin da: deine Erinnerungen werden nie neu
 verschlüsselt, und dein Kit funktioniert danach weiter. Zwei Dinge müssen zusammenkommen, und das ist Absicht:
 Zugriff auf dein Postfach und das Kit in der Hand. Wer in dein Postfach einbricht, bekommt nur etwas, das er

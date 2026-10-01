@@ -10,10 +10,11 @@ Gerät, an dem du schon angemeldet bist, gibt dem anderen alles Nötige.**
 Beide tun genau dasselbe. Der Unterschied ist nur, welches Gerät einen Code zeigt und welches ihn scannt —
 so scannt immer das Gerät, das eine Kamera hat.
 
-**Am Gerät, an dem du schon angemeldet bist** — wähle **„Gerät hinzufügen"**.
+**Am Gerät, an dem du schon angemeldet bist** — öffne in den Einstellungen **„Gerät hinzufügen"**.
 
-1. Es zeigt einen Code.
-2. Dein neues Gerät scannt ihn.
+1. Tippe auf **„Code anzeigen"**; es zeigt einen Code.
+2. Dein neues Gerät scannt ihn — auf seiner Anmeldeseite, mit dem Knopf **„QR-Code scannen"** neben dem Feld
+   für den Secret Key.
 3. Danach zeigen beide Bildschirme eine kurze Zahl.
 4. Prüfe, dass sie übereinstimmt, gib dem neuen Gerät einen Namen und schiebe zur Bestätigung.
 
@@ -21,7 +22,7 @@ so scannt immer das Gerät, das eine Kamera hat.
 anmelden"**. Dieses Gerät braucht keine Kamera, nur das andere.
 
 1. Das neue Gerät zeigt einen Code.
-2. Du scannst ihn mit dem Gerät, an dem du schon angemeldet bist.
+2. Du scannst ihn mit dem Gerät, an dem du schon angemeldet bist (**„Gerät hinzufügen"** → **„Code scannen"**).
 3. *Dieses* Gerät nennt dir dann eine kurze Zahl.
 4. Du tippst die Zahl am neuen Gerät ein und bestätigst am angemeldeten.
 
@@ -74,8 +75,10 @@ und du brauchst dafür dein Notfall-Kit.
 
 **Ein so hinzugefügtes Gerät hat kein Passwort gespeichert.** Du hast dort nie eines eingetippt, und es
 lernt auch keines. Sollte es seinen Schlüssel je verlieren — du löschst die Browserdaten, oder ein anderes
-Gerät entfernt seinen gespeicherten Schlüssel — fragt es dich nach deinem Passwort oder deinem Notfall-Kit,
-und beides wurde dort nie eingegeben. Bewahre das Notfall-Kit also erreichbar auf.
+Gerät entfernt seinen gespeicherten Schlüssel — fragt es dich nach deinem Passwort **und** deinem Notfall-Kit,
+und beides wurde dort nie eingegeben (oder du fügst es von einem angemeldeten Gerät aus erneut hinzu). Bewahre
+das Notfall-Kit also erreichbar auf. Und bleibst du darauf nicht angemeldet, endet sein Zugang mit dem
+Schließen des Browsers, und du fügst es beim nächsten Mal erneut hinzu.
 
 ## Verwandt
 

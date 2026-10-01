@@ -193,8 +193,11 @@ flowchart TB
 
 Standard, well-reviewed primitives only (no home-grown crypto); **post-quantum from the start** for encryption
 (a hybrid KEM, secure if either component holds) because decade-lived memories make harvest-now-decrypt-later
-real, while signatures stay classical for now; and **crypto-agility** via a versioned suite id on every
-artifact, so upgrades never break old data. The strategy, its rejected alternatives, and the conformance
+real, while signatures stay classical for now; and **crypto-agility** via a versioned suite id, so upgrades never
+break old data. Built today, that id is stored **per account** (`veyq_user.suite_id`) and bound into every wrap's
+authenticated data (`wrapAad`), not carried in the bytes of each artifact — ADR 0017's "every artifact carries"
+holds only while one suite exists, and nothing re-wraps old data onto a newer suite. Content itself is
+AES-256-GCM alone; the hybrid KEM wraps keys. The strategy, its rejected alternatives, and the conformance
 vectors that pin a suite's bytes are all
 [ADR 0017](../decisions/0017-crypto-primitives-and-post-quantum-strategy.md).
 
@@ -217,7 +220,10 @@ server-blind tokens make this work without the server ever seeing content:
   the URL fragment (`#…`)** and never reaches the server. Anyone with the link decrypts client-side.
 - **Trust & Safety operates at the share boundary.** An abuse report includes the full share URL (and
   thus the secret), so the operator **can decrypt a reported public share** to verify, quarantine,
-  preserve evidence and act. The same intake serves takedown requests.
+  preserve evidence and act. The same intake serves takedown requests. **Built today: neither half.** There is
+  no report intake, and the operator has no action on a single share — revoking one is its creator's alone
+  (`SharingHandler.revoke`); the operator's only lever is suspending the whole tenant, every link in it
+  ([uc.admin.suspend-tenant](../features/admin/use-cases/uc.admin.suspend-tenant.md)).
 - **Consequently:** private (unshared) content is **unscannable** by design; public shares are
   decryptable-on-report — notice-and-takedown works exactly where content is distributed.
 - **Revocation is soft, and independent of scope rotation.** Disabling a share / expiry stops *new* access;
@@ -277,13 +283,20 @@ and read what is wrapped to it. The defense is **trust-on-first-use pinning + sa
   indistinguishable on-wire. In the **UI** it is
   a **notice** (not a lock-out); the user reviews and, on **accept**, re-pins. The **automated grant-delivery
   worker** (no human) **blocks** — it will not wrap `K_SC` to a changed key (delivery is irreversible) — and
-  **declines the job** back to the server + flags it for human review.
+  **declines the job** back to the server (`identity_changed`). The human review is the UI's changed-key review:
+  accepting there re-pins and clears that account's declines, so the next claim delivers.
 - **Verification** is the **identity fingerprint / safety number** — a deterministic digest of the identity
   public bundle. Two users compare it out-of-band; the ergonomic form is **QR** (scan the other device's
-  fingerprint → the app compares it against the pin → feedback). It elevates *pinned* → *verified* and is how
-  a **legitimately rotated** key is accepted.
+  fingerprint → the app compares it against the pin → feedback). It elevates *pinned* → *verified*.
+  **Not surfaced yet:** the only safety-number comparison the UI offers is inside the changed-key review (expected
+  vs. current, then accept or refuse) — which is also how a legitimately rotated key is accepted today, without
+  verification. The proactive ceremony is
+  [uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md),
+  planned.
 - **Opt-in strict mode** turns the change-notice into a **hard block** and requires *verified*-before-share;
-  the worker then skips unverified members (they stay *awaiting access*) until a human verifies them.
+  the worker then skips unverified members (they stay *awaiting access*) until a human verifies them. **Not
+  built, and its shape is open:** a per-account flag cannot protect a shared scope, which any co-member can key
+  (same use-case, A2).
 - **The first-use gap (honest, unchanged):** if the operator substitutes Bob's key *before* Alice ever
   pinned the real one — and re-wraps genuine content too — nothing looks wrong until **manual verification**
   or **Key Transparency** (the eventual end-state). TOFU cannot detect a lie told before first sight.

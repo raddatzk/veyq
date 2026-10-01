@@ -7,7 +7,9 @@ und darum, was danach von allein passiert.
 
 ## Jemanden einladen
 
-Du lädst per **E-Mail-Adresse** ein. Das ist deine eine Entscheidung: wer hereindarf.
+Du lädst per **E-Mail-Adresse** ein — sofern dir der Bereich gehört; Einladen und alles unter *Schon
+verschickte Einladungen* weiter unten ist nur für Besitzerinnen und Besitzer. Das ist deine eine Entscheidung:
+wer hereindarf.
 
 Die Einladung geht dann **per Mail an diese Person**. Sie ist an sie adressiert, also nicht deine, um sie
 weiterzugeben — es gibt keinen Link auf deinem Bildschirm zum Kopieren, Weiterleiten oder in einen Chat
@@ -40,8 +42,10 @@ jemanden an, der schon in deinem Bereich ist.
 Auch eine erneut verschickte Einladung geht an die eingeladene Person, nicht an dich — genau wie die erste, und
 aus demselben Grund.
 
-## Wenn der Server keine E-Mails verschicken kann
+## Wenn dein Bereich keine E-Mails verschicken kann
 
-Weil die Einladung nur per Mail reist, kann eine Instanz ohne eingerichtete E-Mail niemanden einladen. Statt
-eine Einladung zu erzeugen, die nie jemand bekommt, lehnt veyq ab und sagt das auch. Wenn dir das begegnet,
-wende dich an die Person, die den Server betreibt.
+Weil die Einladung nur per Mail reist, kann ein Bereich ohne eingerichtete E-Mail niemanden einladen. Statt
+eine Einladung zu erzeugen, die nie jemand bekommt, lehnt veyq ab und sagt das auch. E-Mail wird **pro Bereich
+eingerichtet, von einer Person, der er gehört**, in den Einstellungen des Bereichs unter **E-Mail** — nicht von
+der Person, die den Server betreibt. Gehört dir der Bereich, findest du es dort; dieselbe Einstellung ist auch
+das, womit deine Mitglieder ein vergessenes Passwort zurücksetzen können.
