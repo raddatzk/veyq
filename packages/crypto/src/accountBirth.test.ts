@@ -137,7 +137,9 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     })
 
     it('rejects a Secret Key that is not 32 bytes, and mints a fresh one when the option is absent', () => {
-      expect(() => buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).toThrow()
+      expect(() => buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).toThrow(
+        'buildAccount: secretKey must be 32 bytes',
+      )
       expect(buildAccount('a@b.test', 'pw', new Uint8Array(16)).emergencyKit.secretKey).toBe(b64std(seededBytes(2, 32)))
     })
   })

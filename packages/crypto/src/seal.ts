@@ -158,12 +158,25 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
       }
       return utf8(value)
     case 'uint':
-      if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+      // The `typeof` operand sits on a line of its own because a Stryker directive is line-wide: on the one-line form
+      // it would also have switched off the killed mutants of the whole condition. The same holds for the two below.
+      if (
+        !Number.isSafeInteger(value) ||
+        // Stryker disable next-line ConditionalExpression: equivalent, Number.isSafeInteger refused every non-number
+        // (a boxed Number included) already, so `false` here admits nothing more; it only narrows `value` for TS.
+        typeof value !== 'number' ||
+        value < 0
+      ) {
         throw new SealContextInvalid(`${purpose}.${name} is not an unsigned integer`)
       }
       return u64be(value)
     case 'role':
-      if (typeof value !== 'string' || !ROLES.includes(value)) {
+      if (
+        !ROLES.includes(value as string) ||
+        // Stryker disable next-line ConditionalExpression: equivalent, includes() compares by SameValueZero and so
+        // refused every non-string (a boxed String included) already; this operand only narrows `value` for TS.
+        typeof value !== 'string'
+      ) {
         throw new SealContextInvalid(`${purpose}.${name} is not a blob role`)
       }
       return utf8(value)
@@ -172,7 +185,12 @@ function encodeField(purpose: string, name: string, kind: FieldKind, value: unkn
       if (value === null) return new Uint8Array(0)
       return encodeField(purpose, name, 'id', value)
     case 'scopeKind':
-      if (typeof value !== 'string' || !SCOPE_KINDS.includes(value)) {
+      if (
+        !SCOPE_KINDS.includes(value as string) ||
+        // Stryker disable next-line ConditionalExpression: equivalent, includes() compares by SameValueZero and so
+        // refused every non-string (a boxed String included) already; this operand only narrows `value` for TS.
+        typeof value !== 'string'
+      ) {
         throw new SealContextInvalid(`${purpose}.${name} is not a scope kind`)
       }
       return utf8(value)

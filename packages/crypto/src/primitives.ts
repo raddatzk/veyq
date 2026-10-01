@@ -9,6 +9,9 @@ import { sha256 } from '@noble/hashes/sha2.js'
 import { gcm } from '@noble/ciphers/aes.js'
 
 const te = new TextEncoder()
+// Stryker disable next-line StringLiteral: reported Survived with 0 tests completed, but killed in fact.
+// `normalize('')` throws a RangeError, and v1.ts calls utf8 at module load, so every suite that imports v1 fails to
+// import and vitest exits 1 — but Stryker's vitest runner counts a file that fails to import as no failing test.
 export const utf8 = (s: string): Uint8Array => te.encode(s.normalize('NFC'))
 
 export function concat(...arrs: Uint8Array[]): Uint8Array {

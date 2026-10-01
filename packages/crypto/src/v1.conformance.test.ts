@@ -80,6 +80,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
   it('auth salt (deriveAuthSalt — HKDF, ADR 0003)', () => {
     const a = vectors.auth.auth_salt
     expect(hex(v1.deriveAuthSalt(unhex(a.instance_salt), a.email_utf8))).toBe(a.auth_salt)
+    // The normalization is part of the derivation: the address as typed, padded and capitalised, is the same account.
+    expect(hex(v1.deriveAuthSalt(unhex(a.instance_salt), `  ${a.email_utf8.toUpperCase()}\t`))).toBe(a.auth_salt)
   })
 
   it('auth keypair (deriveAuthKeypair — Argon2id → Ed25519, ADR 0003)', () => {
@@ -87,6 +89,16 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     const kp = v1.deriveAuthKeypair(a.password_utf8, unhex(a.auth_salt), a.params)
     expect(hex(kp.privateKey)).toBe(a.private_key)
     expect(hex(kp.publicKey)).toBe(a.public_key)
+  })
+
+  // The keypair is the vector's, so no Argon runs here; Ed25519 is deterministic, but the vectors carry no login
+  // signature, so the pin is that the server's check accepts it, and only for the message it was made over.
+  it('auth signature (authSign — Ed25519 over the login nonce, ADR 0003)', () => {
+    const a = vectors.auth.auth_keypair
+    const nonce = new TextEncoder().encode('login-nonce')
+    const sig = v1.authSign(unhex(a.private_key), nonce)
+    expect(v1.authVerify(unhex(a.public_key), nonce, sig)).toBe(true)
+    expect(v1.authVerify(unhex(a.public_key), new TextEncoder().encode('login-noncf'), sig)).toBe(false)
   })
 
   // The PRODUCTION cost parameters, pinned against the contract's own `kdf_params` vector — the params every
@@ -264,6 +276,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         ['a negative epoch', { ...base, epoch: -1 }, /epoch is not an unsigned integer/],
         ['a fractional epoch', { ...base, epoch: 1.5 }, /epoch is not an unsigned integer/],
         ['an extra field', { ...base, parentId: (base as { nodeId: string }).nodeId }, /node-name does not bind parentId/],
+        ['two extra fields', { ...base, parentId: 'x', role: 'COVER' }, /node-name does not bind parentId, role$/],
         ['an unknown purpose', { purpose: 'album-name' }, /unknown purpose album-name/],
         ['an inherited purpose', { purpose: 'toString' }, /unknown purpose toString/],
       ])('%s', (_name, ctx, message) => {
@@ -275,6 +288,43 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         expect(() =>
           v1.encodeSealContext({ ...r, shareId: (r as { nodeId: string }).nodeId } as v1.SealContext),
         ).toThrow(/shareId is not a share id/)
+      })
+      // The anchors are load-bearing: without `^` or `$`, an id with an extra character in front of or behind its
+      // canonical core would still match the core.
+      it.each([
+        ['in front', (s: string) => `a${s}`],
+        ['behind', (s: string) => `${s}a`],
+      ])('an id or a share id with an extra character %s is refused', (_where, pad) => {
+        const r = symCtx('share-key-recovery') as unknown as Record<string, string>
+        expect(() => v1.encodeSealContext({ ...r, nodeId: pad(r.nodeId) } as unknown as v1.SealContext)).toThrow(
+          /nodeId is not a canonical lowercase UUID/,
+        )
+        expect(() => v1.encodeSealContext({ ...r, shareId: pad(r.shareId) } as unknown as v1.SealContext)).toThrow(
+          /shareId is not a share id/,
+        )
+      })
+      // `typeof` is the guard here, not a formality: RegExp.prototype.test coerces its argument, so a boxed String
+      // passes the pattern and would then be encoded exactly like the primitive.
+      it('a boxed String is refused where an id, a share id or a pairing code is due', () => {
+        const r = symCtx('share-key-recovery') as unknown as Record<string, string>
+        expect(() =>
+          v1.encodeSealContext({ ...r, nodeId: new String(r.nodeId) } as unknown as v1.SealContext),
+        ).toThrow(/nodeId is not a canonical lowercase UUID/)
+        expect(() =>
+          v1.encodeSealContext({ ...r, shareId: new String(r.shareId) } as unknown as v1.SealContext),
+        ).toThrow(/shareId is not a share id/)
+        expect(() =>
+          v1.encodeStatement({
+            purpose: 'pairing-sign-in-answer',
+            transportKey: new Uint8Array(32),
+            code: new String('123456'),
+          } as unknown as v1.StatementContext),
+        ).toThrow(/code is not a six-digit pairing code/)
+      })
+      it.each(['ORIGINAL', 'THUMBNAIL', 'PREVIEW', 'COVER'])('blob role %s is accepted, encoded as its name', (role) => {
+        const b = symCtx('blob-key')
+        const encoded = hex(v1.encodeSealContext({ ...b, role } as v1.SealContext))
+        expect(encoded.endsWith(hex(v1.lp(new TextEncoder().encode(role))))).toBe(true)
       })
       it('a blob role outside the four is refused', () => {
         const b = symCtx('blob-key')
@@ -329,10 +379,13 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
 
     // Each case pins the bytes AND the signature: the backend rebuilds the statement itself, so an encoding
     // drift on either side is a refused request in production, not a local test failure.
-    const cases: [string, Uint8Array, { domain: string; statement: string; signature: string }][] = [
+    // Each statement is built INSIDE its test, never while the suite is collected: a statement builder that throws
+    // at collection fails the file's import, and Stryker's vitest runner counts a file that fails to import as zero
+    // failing tests — a mutant that breaks the builder was reported Survived while it in fact killed the file.
+    const cases: [string, () => Uint8Array, { domain: string; statement: string; signature: string }][] = [
       [
         'rotation',
-        v1.rotationProofStatement({
+        () => v1.rotationProofStatement({
           currentIdentityPublicKey: unhex(p.rotation.current_identity_public_key),
           identityPublicKey: unhex(p.rotation.identity_public_key),
           wrappedIdentityPrivateKey: unhex(p.rotation.wrapped_identity_private_key),
@@ -343,7 +396,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       ],
       [
         'change-password',
-        v1.passwordChangeProofStatement({
+        () => v1.passwordChangeProofStatement({
           currentAuthPublicKey: unhex(p.change_password.current_auth_public_key),
           authPublicKey: unhex(p.change_password.auth_public_key),
           passwordWrap: wrap(p.change_password.password_wrap),
@@ -352,7 +405,7 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
       ],
       [
         'recovery',
-        v1.recoveryProofStatement({
+        () => v1.recoveryProofStatement({
           token: p.recovery.token_utf8,
           authPublicKey: unhex(p.recovery.auth_public_key),
           passwordWrap: wrap(p.recovery.password_wrap),
@@ -360,7 +413,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
         p.recovery,
       ],
     ]
-    it.each(cases)('%s statement and signature', (_name, stmt, v) => {
+    it.each(cases)('%s statement and signature', (_name, build, v) => {
+      const stmt = build()
       expect(hex(stmt)).toBe(v.statement)
       expect(hex(v1.secretKeyProofSign(key.privateKey, stmt))).toBe(v.signature)
       expect(v1.authVerify(key.publicKey, stmt, unhex(v.signature))).toBe(true)
@@ -369,8 +423,8 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     it('the three domains differ, so no statement answers for another flow', () => {
       const domains = new Set([p.rotation.domain, p.change_password.domain, p.recovery.domain])
       expect(domains.size).toBe(3)
-      for (const [, stmt, v] of cases) {
-        expect(new TextDecoder().decode(stmt.slice(4, 4 + v.domain.length))).toBe(v.domain)
+      for (const [, build, v] of cases) {
+        expect(new TextDecoder().decode(build().slice(4, 4 + v.domain.length))).toBe(v.domain)
       }
     })
   })
