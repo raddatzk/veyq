@@ -238,18 +238,14 @@ const decodeB64 = (value: string, reason: PairingRefusal): Uint8Array => {
 const encodeAnswer = (serializedPub: Uint8Array, mac: Uint8Array): string =>
   b64std(v1.concat(v1.lp(serializedPub), v1.lp(mac)))
 
-/** Read an answer's key and MAC. The key must re-serialize to exactly the bytes the MAC covers, so the key a grant
- *  is sealed to is byte for byte the key that was authenticated. */
+/** Read an answer's key and MAC. The key a grant is sealed to must be byte for byte the key that was authenticated;
+ *  the identity decoder gives that, because it refuses every encoding but the one `serializeIdentityPublic` writes. */
 function readAnswer(answer: string): { pub: v1.Identity['pub']; serializedPub: Uint8Array; mac: Uint8Array } {
   const [serializedPub, mac] = readPair(decodeB64(answer, 'answer_unreadable'), 'answer_unreadable')
   let pub: v1.Identity['pub']
   try {
     pub = v1.deserializeIdentityPublic(serializedPub)
   } catch {
-    throw new PairingRefused('answer_unreadable')
-  }
-  const again = v1.serializeIdentityPublic(pub)
-  if (again.length !== serializedPub.length || again.some((b, i) => b !== serializedPub[i])) {
     throw new PairingRefused('answer_unreadable')
   }
   return { pub, serializedPub, mac }

@@ -459,31 +459,37 @@ export function fingerprint(pub: Identity['pub']): string {
 export const serializeIdentityPrivate = (id: Identity): Uint8Array =>
   concat(lp(id.priv.kemX), lp(id.priv.mlkemSeed), lp(id.priv.sign))
 
-/** Inverse of serializeIdentityPublic: read three length-prefixed fields → a public identity bundle. Used to
- *  seal a scope key to *another* member's published identity (`sealTo` a foreign identity — cr-0076). */
-export function deserializeIdentityPublic(bytes: Uint8Array): Identity['pub'] {
+const ML_KEM_768_PUBLIC_BYTES = 1184
+
+/** Read exactly one length-prefixed field per entry of `sizes`, each of exactly that size, and nothing after them.
+ *  Every v1 length-prefixed codec reads through this, so each has ONE encoding per value: the server serves the
+ *  identity bundles of other members, and pairing relies on the decoded key being byte for byte the MACed one. */
+function readFixedLp(bytes: Uint8Array, sizes: readonly number[], what: string): Uint8Array[] {
+  const out: Uint8Array[] = []
   let o = 0
-  const next = (): Uint8Array => {
+  for (const size of sizes) {
+    if (o + 4 > bytes.length) throw new Error(`${what}: truncated`)
     const len = new DataView(bytes.buffer, bytes.byteOffset + o, 4).getUint32(0, false)
     o += 4
-    const v = bytes.slice(o, o + len)
+    if (len !== size || o + len > bytes.length) throw new Error(`${what}: malformed`)
+    out.push(bytes.slice(o, o + len))
     o += len
-    return v
   }
-  return { kemX: next(), kemM: next(), sign: next() }
+  if (o !== bytes.length) throw new Error(`${what}: trailing bytes`)
+  return out
 }
 
-/** Inverse of serializeIdentityPrivate: read three length-prefixed fields. */
+/** Inverse of serializeIdentityPublic → a public identity bundle. Used to seal a scope key to *another* member's
+ *  published identity (`sealTo` a foreign identity — cr-0076), so its bytes are the server's. */
+export function deserializeIdentityPublic(bytes: Uint8Array): Identity['pub'] {
+  const [kemX, kemM, sign] = readFixedLp(bytes, [32, ML_KEM_768_PUBLIC_BYTES, 32], 'identity public key')
+  return { kemX, kemM, sign }
+}
+
+/** Inverse of serializeIdentityPrivate. */
 export function deserializeIdentityPrivate(bytes: Uint8Array): Identity['priv'] {
-  let o = 0
-  const next = (): Uint8Array => {
-    const len = new DataView(bytes.buffer, bytes.byteOffset + o, 4).getUint32(0, false)
-    o += 4
-    const v = bytes.slice(o, o + len)
-    o += len
-    return v
-  }
-  return { kemX: next(), mlkemSeed: next(), sign: next() }
+  const [kemX, mlkemSeed, sign] = readFixedLp(bytes, [32, 64, 32], 'identity private key')
+  return { kemX, mlkemSeed, sign }
 }
 
 /**
@@ -504,24 +510,6 @@ export const dropKeyPublic = (k: DropKey): HybridPublic => ({
 
 /** The drop key as `openAs` takes it — noble decapsulates with the expanded ML-KEM secret (cf. [hybridSecret]). */
 export const dropKeySecret = (k: DropKey): HybridSecret => ({ x: k.kemX, m: ml_kem768.keygen(k.mlkemSeed).secretKey })
-
-const ML_KEM_768_PUBLIC_BYTES = 1184
-
-/** Read exactly one length-prefixed field per entry of `sizes`, each of exactly that size, and nothing after them. */
-function readFixedLp(bytes: Uint8Array, sizes: readonly number[], what: string): Uint8Array[] {
-  const out: Uint8Array[] = []
-  let o = 0
-  for (const size of sizes) {
-    if (o + 4 > bytes.length) throw new Error(`${what}: truncated`)
-    const len = new DataView(bytes.buffer, bytes.byteOffset + o, 4).getUint32(0, false)
-    o += 4
-    if (len !== size || o + len > bytes.length) throw new Error(`${what}: malformed`)
-    out.push(bytes.slice(o, o + len))
-    o += len
-  }
-  if (o !== bytes.length) throw new Error(`${what}: trailing bytes`)
-  return out
-}
 
 /** Drop private serialization: lp(kemX) || lp(mlkemSeed) — the plaintext of a `drop-private-key` seal. */
 export const serializeDropKey = (k: DropKey): Uint8Array => concat(lp(k.kemX), lp(k.mlkemSeed))
