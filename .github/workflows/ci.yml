@@ -122,5 +122,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
+      # Docker-free: who owns the config-secret key a restore places, and that an unplaceable one is refused
+      # before the first write. Beside the rehearsal below, which drives the same tool as one user end to end.
+      - name: Backup tool self-test (the restored key's owner)
+        run: python3 scripts/instance_backup_selftest.py
+
       - name: Run web E2E suites against a live backend
         run: python3 scripts/run_web_e2e.py
