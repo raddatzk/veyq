@@ -1,7 +1,7 @@
 ---
 id: cr-reclaim-waits-out-the-presign-ttl
 title: The reclaim sweep deletes a key only once no signed PUT for it can still land
-status: planned
+status: done
 satisfies: []
 adrs: ["0062", "0013", "0073"]
 invariants: [operator-blind E2EE everywhere]
@@ -92,7 +92,7 @@ comment on `veyq.media.upload.retention` already relies on the first half.
 
 ## Phases
 
-- [ ] 1 backend: the wait, and the tests from Inventory 6 moved onto backdated rows. Add a new test
+- [x] 1 backend: the wait, and the tests from Inventory 6 moved onto backdated rows. Add a new test
       in `StoreReclaimSweepSliceTest` named for the property, e.g.
       `aRecordedKeyIsNotDeletedWhileAPutSignedForItCanStillLand`. It does three things:
       - it records a key and sweeps at `now`, and asserts **no** delete reached the `RecordingBlobStore`;
@@ -101,7 +101,7 @@ comment on `veyq.media.upload.retention` already relies on the first half.
         deleted at `now`.
 
       · Done when: `./gradlew check` is green in `backend/`.
-- [ ] 2 docs: ADR 0062 amendment, the `VeyqConfig` KDoc, the `application.properties` comment, and the
+- [x] 2 docs: ADR 0062 amendment, the `VeyqConfig` KDoc, the `application.properties` comment, and the
       ADR 0073 quota note if the bound touches it (`grep -n 'reclaim' docs/decisions/0073-*.md`).
       · Done when: the trust-chain glob is green.
 
@@ -118,3 +118,17 @@ comment on `veyq.media.upload.retention` already relies on the first half.
 - The trust-chain glob is green. Inbox #134's row carries the outcome of Open question 3.
 
 ## Retrospective
+
+- **Planning — the Decisions did not check the bean's shape.** "`record` stamps `now + bound`, read through
+  `VeyqConfig`" was right, but constructor injection failed at ArC build time: the test `@Alternative`
+  `RefusingStoreReclaimStore` subclasses the bean, and ArC cannot add a proxy no-args constructor to a subclass
+  whose parent has none. Field injection fixed it (trap commented at the line). Root cause: the inventory greped
+  for callers of `record`, not for subclasses of its class. Next time: a CR that adds a dependency to a bean greps
+  `: <Bean>(` in `src/test` too.
+- **Execution — the migration disarmed one assertion that no count would show.** Ageing rows past the bound made
+  `aRefusedKey…`'s `nextAttemptAt.isAfter(createdAt)` true with no deferral at all. Caught by reading the moved
+  assertions rather than counting them; re-anchored on the tick start and bitten (drop the backoff push → red by
+  name). Harvested into `changes/README.md` § test migration.
+- **Process — the Inventory 6 locator over-reported.** It lists helpers and `ScheduledJobsHaltedInTestTest`; only
+  four files drive the sweep after a record. Harmless here, but a locator whose hits need a second filter to
+  become the work list should carry that filter (`grep -l 'sweep.run()'`). Next time: run it as the list it is.

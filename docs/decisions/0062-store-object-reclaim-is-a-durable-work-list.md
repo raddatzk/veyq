@@ -40,6 +40,16 @@ can no longer die with the row that held it. This needs no listing of the bucket
 `BlobStore` has no `list` operation and `storage_key` is a flat UUID with no scope prefix — a listing would be
 an unpartitionable full-bucket scan.
 
+**A recorded key is not due until no PUT signed for it can still land.** `record` stamps `next_attempt_at` at
+`veyq.media.upload.retention` after the recording — the bound the upload-session purge already derives as
+*presign TTL plus one chunk still streaming*, so one number with one meaning rather than a second knob that
+would have to be kept at least as large by hand. The wait is needed because several paths drop the row naming a
+key inside the TTL of the last window signed for it (a media purged straight from the trash, a replaced or
+cleared cover, the over-budget purge), and S3 accepts a PUT on a still-valid URL onto a key that was deleted in
+the meantime. Without the wait, a sweep tick between the drop and that PUT deletes the objects and settles the
+row, and the PUT re-creates bytes under a key no row, no reclaim row and no quota names. The wait is sufficient
+because no URL for a key is signed after its row drop: a window is signed only for a live upload session.
+
 **2. `BlobStore.delete` reports what it could not delete.** It returns the keys that failed instead of `Unit`,
 and `S3BlobStore` stops swallowing per-key failures silently. Without this the rest of this ADR is inert: the
 sweep would hand its keys over, see a normal return, and clear the reclaim row whether or not the bytes went —
@@ -52,8 +62,9 @@ decides whether the row stays.
 **3. Exactly one component deletes store objects.** `StoreReclaimSweep` drains the list; no other code calls
 `blobStore.delete`. This collapses nine call sites to one, so there is exactly one place that can fail, one
 place that retries, and one place to read to know what the system does with bytes. The cost is latency: bytes
-linger up to one sweep interval after the rows are gone. Nothing user-facing depends on the object being gone
-at the instant the row is — every one of these paths has already removed the item from every read.
+linger up to the not-before of Decision 1 plus one sweep interval after the rows are gone. Nothing user-facing
+depends on the object being gone at the instant the row is — every one of these paths has already removed the
+item from every read.
 
 **4. `ScopePurge` loses its exception.** It writes reclaim rows inside its per-scope transaction like everyone
 else, and stops deleting objects itself. Its mirror hazard disappears without needing a design of its own, and
@@ -99,16 +110,19 @@ messaging pattern this codebase does not have.
   after it), and [ADR 0061](0061-node-deletion-reversible-node-trash.md) Decision 7 pins the same wording for
   the node purge.
 - **Backup `verify` keeps tolerating orphaned objects, on a better reason.** A capture taken between a row
-  delete and the next sweep tick legitimately holds objects whose rows are gone — so the asymmetry stands, but
-  because reclaim is *pending*, not because deletion is *unreliable*.
+  delete and the sweep tick that drains it legitimately holds objects whose rows are gone — so the asymmetry
+  stands, but because reclaim is *pending*, not because deletion is *unreliable*.
 - **A bucket-versus-database reconcile becomes worth building later, and only now means something.** Until this
   ADR, an orphaned object was the documented steady state, so a report of them asserted nothing. Once reclaim is
   guaranteed, "objects no row claims and no reclaim row explains" is an anomaly with a meaning — and a report of
   it can have a Definition of done other than *"finds nothing"*. It is deliberately not built here: there is no
   production instance for it to measure. Four things it will have to solve are already decided or measured, and
   are recorded here so that design starts from them rather than re-deriving them:
-  - **It needs a new port operation, and the listing is unpartitionable.** Decision 1 above states why the
-    reclaim list needs no listing; the same two facts are what make a reconcile expensive rather than free.
+  - **Built in the backend, it needs a new port operation, and the listing is unpartitionable.** Decision 1
+    above states why the reclaim list needs no listing; the same two facts are what make a backend reconcile
+    expensive rather than free. Built as an **operator tool** instead, it needs no port at all:
+    `scripts/instance_backup.py` already lists and mirrors the bucket through rclone, so a reconcile there is
+    `rclone lsf` plus one database snapshot.
   - **The keys now live in three tables, not two** — `veyq_blob`, `veyq_upload_session` and
     `veyq_store_reclaim`. An object is an anomaly only when **none** of the three explains it, and the third is
     what turns the question from unanswerable into answerable: before it, an object whose row was legitimately
@@ -119,13 +133,17 @@ messaging pattern this codebase does not have.
     which is why `veyq_store_reclaim` carries no unique index on that column.
   - **It starts read-only because of the stock, not because the race is unsolvable — and the window that
     excludes the race is stateable, so no design here needs a heuristic.** The write paths leave no moment at
-    which an object exists unnamed: `presignPut` has exactly one caller in the backend and it runs *after*
-    `MediaStore.createSession` has committed (`@Transactional`, with no enclosing transaction on the resource or
-    handler), the `storage_key` and every chunk key are server-minted and signed into the URL by SigV4, and
-    `persistBlob` writes no object at all — it inherits the session's key, and both callers delete the session
-    row in the same transaction that inserts the blob row. What is left is a **read-order** artifact, and two
-    rules remove it: read the three tables in **one** snapshot, or a key promoted from `veyq_upload_session` to
-    `veyq_blob` between two SELECTs is missed by both; and **bracket** the listing with a read before and a read
+    which an object exists unnamed. At **presign** time: `presignPut` is reached only through `presignPuts`,
+    whose one caller (`MediaHandler.presignWindow`) runs *after* `MediaStore.createSession` has committed
+    (`@Transactional`, with no enclosing transaction on the resource or handler), the `storage_key` and every
+    chunk key are server-minted and signed into the URL by SigV4, and `persistBlob` writes no object at all — it
+    inherits the session's key, and both callers delete the session row in the same transaction that inserts the
+    blob row. At **PUT** time, which the presign argument alone does not reach: a signed URL outlives the row
+    that named its key for up to the presign TTL, so the reclaim row Decision 1 writes is not due until that
+    window has passed — the not-before. Without it a member could purge a just-completed blob and re-PUT its
+    chunks after the next tick, 16 MiB per presign window per cycle, under a key nothing names. What is left
+    is a **read-order** artifact, and two rules remove it: read the three tables in **one** snapshot, or a key
+    promoted from `veyq_upload_session` to `veyq_blob` between two SELECTs is missed by both; and **bracket** the listing with a read before and a read
     after, reporting only what *both* fail to explain — the later read catches the upload that began during the
     listing, the earlier one the row deleted and reclaim-drained during it (the sweep deletes objects before it
     settles the row, which is what makes the earlier read sufficient). No age threshold covers anything those
@@ -141,9 +159,10 @@ messaging pattern this codebase does not have.
   would live in the S3 implementation the suite never reaches.
 - **Rejected — keep the immediate delete at every call site and use the list only as a safety net**, clearing
   the row on a confirmed success. It removes the latency Decision 3 accepts: bytes would go the moment the rows
-  do, rather than up to one sweep interval later. It loses on what that latency buys — two deleters means two
-  bookkeeping paths and two places that can fail, and the *exactly one call site* invariant, this ADR's
-  completeness proof and the one every future reclaim path will be tempted to bypass, becomes unstateable. The
+  do, rather than up to the not-before plus one sweep interval later — and at that moment a PUT signed shortly
+  before can still re-create them, so the immediate delete was never the complete one. It loses on what that
+  latency buys — two deleters means two bookkeeping paths and two places that can fail, and the *exactly one
+  call site* invariant, this ADR's completeness proof and the one every future reclaim path will be tempted to bypass, becomes unstateable. The
   latency is invisible to the user (the rows, and therefore every read, are already gone) and visible only to
   whoever watches the bucket.
 - **Rejected — a `deleted_at` tombstone on `veyq_blob` instead of a separate table.** It saves the table by

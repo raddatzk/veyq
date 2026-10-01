@@ -16,9 +16,10 @@ import java.time.Instant
  * one that retries, and one to read to know what the system does with bytes —
  * `scripts/validate_store_reclaim_arity.py` is what keeps that true.
  *
- * **The cost of being the only deleter is latency, and it is accepted:** bytes linger up to one sweep interval
- * after the rows that named them are gone. Nothing user-facing depends on the object being absent at the instant
- * the row is — every one of those paths already removed the item from every read.
+ * **The cost of being the only deleter is latency, and it is accepted:** bytes linger up to the not-before
+ * [StoreReclaimStore.record] stamps plus one sweep interval after the rows that named them are gone. Nothing
+ * user-facing depends on the object being absent at the instant the row is — every one of those paths already
+ * removed the item from every read.
  *
  * **Not gated on [BlobStore.canPresign].** The reason is [com.veyq.app.features.media.UploadSessionPurge]'s: a
  * store that cannot presign still has to be told, and gating here would make the half this sweep exists for

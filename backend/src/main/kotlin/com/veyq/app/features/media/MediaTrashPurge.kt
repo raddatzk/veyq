@@ -17,7 +17,7 @@ import java.time.Instant
  * never content.
  *
  * **The rows and the reclaim entries go in one transaction; the objects are not this job's** (ADR 0062): it hands
- * the keys to `veyq_store_reclaim` and `StoreReclaimSweep` deletes them, up to one sweep interval later. The
+ * the keys to `veyq_store_reclaim` and `StoreReclaimSweep` deletes them once no URL signed for them can still land. The
  * post-commit `blobStore.delete` this used to make could fail silently, and by then the row that named the key
  * was gone.
  */

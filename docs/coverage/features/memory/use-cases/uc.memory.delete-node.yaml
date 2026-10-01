@@ -76,7 +76,7 @@ acceptanceCriteria:
         unit: [src/features/memory/components/SpaceTrashDialog.test.ts]
 
   - id: scheduled-purge-erases-the-subtree
-    text: "A scheduled job hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows AND their reclaim entries inside one transaction, the objects deleted by the single reclaim sweep on its next tick, ADR 0062) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."
+    text: "A scheduled job hard-erases each subtree whose deleted_at is older than the retention window — media, derivative, bucket and blob rows in FK order and the store objects behind them, then the node rows — routed through the shared per-media purge body (rows AND their reclaim entries inside one transaction, the objects deleted by the single reclaim sweep once no URL signed for them can still land, ADR 0062) rather than a fourth copy of that logic. The cover-blob reclaim moves out of the delete path into this job, so a restore never returns a Memory whose cover was already reclaimed."
     coverage:
       # Observed through the RecordingBlobStore seam, not from the DB alone: the in-memory store's delete is a
       # no-op, so a row-only assertion would prove the chunk keys were COMPUTED and never that they arrived.
