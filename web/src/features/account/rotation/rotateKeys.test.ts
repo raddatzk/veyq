@@ -27,6 +27,7 @@ vi.mock('../../../app/vault', () => ({
 vi.mock('../identityPins', () => ({ resealPinsUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../deviceRegister', () => ({ resealRegisterUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../../memory/favorites', () => ({ resealFavoritesUnderNewMasterKey: vi.fn(async () => {}) }))
+vi.mock('../../memory/itemFavorites', () => ({ retagItemMarksUnderNewMasterKey: vi.fn(async () => {}) }))
 vi.mock('../../spaces/members', () => ({ listScopeMembers: vi.fn() }))
 
 // The two Argon-bearing KEK derivations run for REAL but at a light cost. They stay **input-sensitive**, which
@@ -50,6 +51,7 @@ import { accountApi, accountRotationApi, scopesApi } from '../../../api/client'
 import { identityPrivate, masterKey, setUnlocked, unlockOrigin } from '../../../app/vault'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
+import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
 import { listScopeMembers } from '../../spaces/members'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -406,12 +408,38 @@ describe('what a rotation leaves behind', () => {
     expect(await readMarks(newMk)).toEqual({ pins: 3, register: 2, epochs: { [SCOPE_SHARED]: 4, [SCOPE_PERSONAL]: 1 } })
   })
 
+  /**
+   * **B6, at the rotation.** The item marks' self-tag key derives from the Master Key, so a rotation that did not
+   * re-tag would empty *only mine* on every Memory, and the first toggle on each would replace the old set. The rider
+   * must get the OLD key (it licenses the re-tag) and the NEW one the vault ends up holding — copied at call time,
+   * because the rotation zeroes both buffers once it is done. It runs before the vault swap: it opens each scope's
+   * grant with the old identity.
+   */
+  it('re-tags the caller’s item marks from the old Master Key to the one the vault ends up holding', async () => {
+    let seen: [Uint8Array, Uint8Array] | null = null
+    let swappedBefore = true
+    vi.mocked(retagItemMarksUnderNewMasterKey).mockImplementationOnce(async (o, n) => {
+      seen = [o.slice(), n.slice()]
+      swappedBefore = vi.mocked(setUnlocked).mock.calls.length > 0
+    })
+    fakeServer({ queued: ['s1'] })
+
+    await rotateKeys(PASSWORD, SECRET_KEY_B64)
+
+    expect(retagItemMarksUnderNewMasterKey).toHaveBeenCalledTimes(1)
+    expect(seen).not.toBeNull()
+    expect(b64std(seen![0])).toBe(b64std(MK))
+    expect(b64std(seen![1])).toBe(b64std(vi.mocked(setUnlocked).mock.calls[0][0]))
+    expect(swappedBefore).toBe(false)
+  })
+
   it('does not fail a published rotation because a Master-Key-sealed blob could not be re-sealed', async () => {
     // None is worth failing a rotation the server has already committed: an unpinned Memory is still there, an
     // unnamed device still revokes, and a pin store left under the retired key is refused as unreadable
     // (ADR 0028 Decision 7) rather than taking the account's access with it.
     vi.mocked(resealFavoritesUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     vi.mocked(resealPinsUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
+    vi.mocked(retagItemMarksUnderNewMasterKey).mockRejectedValueOnce(new Error('offline'))
     fakeServer({ queued: ['s1'] })
 
     await expect(rotateKeys(PASSWORD, SECRET_KEY_B64)).resolves.toBeDefined()

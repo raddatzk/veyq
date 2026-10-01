@@ -20,9 +20,11 @@
 // set into my own row. Everything not provably mine counts as someone else's: a degradation, never a refusal.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
-import { itemFavoritesApi } from '../../api/client'
+import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { masterKey } from '../../app/vault'
+import { openScopeById } from '../spaces/scopes'
+import { keyAt, zeroEpochKeys } from '../spaces/epochs'
 
 /**
  * Every member's marks on one node, bound to (scope, node) (ADR 0072). Deliberately NOT to the marking member: the
@@ -134,5 +136,43 @@ export async function saveItemFavorites(
     await putMarks(scopeId, nodeId, scopeKey, selfKey, ids)
   } finally {
     selfKey.fill(0)
+  }
+}
+
+/**
+ * Re-tag the caller's own marks from the **old** Master Key to a **new** one — key rotation (ADR 0060, ADR 0068 §9).
+ * Both keys are explicit for the reason the other Master-Key riders take them: the vault still holds the old key
+ * (and the old identity, which is what opens each scope's grant here) while the rotation runs.
+ *
+ * **The old key is what licenses a re-tag.** The listing is the server's — a hint, not a proof — so a row is
+ * re-sealed under the new key only when its tag verifies under the old one; a co-member's blob slipped into the
+ * listing stays not-mine. **Best-effort per Memory**, like the riders it joins: a scope that does not open (another
+ * tenant than the one this app is on, a grant awaiting the current key) or a write that fails leaves that Memory's
+ * set reading as someone else's until its next toggle, and every other Memory is still re-tagged.
+ */
+export async function retagItemMarksUnderNewMasterKey(oldMk: Uint8Array, newMk: Uint8Array): Promise<void> {
+  const rows = await withRefresh(() => ownItemFavoritesApi().listOwnItemFavorites())
+  const byScope = new Map<string, typeof rows>()
+  for (const row of rows) byScope.set(row.scopeId, [...(byScope.get(row.scopeId) ?? []), row])
+  const oldKey = v1.itemMarkSelfKey(oldMk)
+  const newKey = v1.itemMarkSelfKey(newMk)
+  try {
+    for (const [scopeId, scopeRows] of byScope) {
+      const opened = await openScopeById(scopeId).catch(() => null)
+      if (!opened) continue
+      try {
+        const e0 = keyAt(opened.epochs, 0)
+        for (const { nodeId, ciphertext } of scopeRows) {
+          const { ids, tag } = openMarks(scopeId, nodeId, e0, ciphertext)
+          if (!tag || !v1.itemMarkSelfTagVerifies(oldKey, { scopeId, nodeId, ids }, tag)) continue
+          await putMarks(scopeId, nodeId, e0, newKey, ids).catch(() => undefined)
+        }
+      } finally {
+        zeroEpochKeys(opened.epochs)
+      }
+    }
+  } finally {
+    oldKey.fill(0)
+    newKey.fill(0)
   }
 }

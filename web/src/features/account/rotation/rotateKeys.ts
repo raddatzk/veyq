@@ -19,6 +19,7 @@ import { identityPrivate, setUnlocked } from '../../../app/vault'
 import { ColdCredentialRefused, proveColdCredential } from '../coldCredential'
 import { resealPinsUnderNewMasterKey } from '../identityPins'
 import { resealFavoritesUnderNewMasterKey } from '../../memory/favorites'
+import { retagItemMarksUnderNewMasterKey } from '../../memory/itemFavorites'
 import { resealRegisterUnderNewMasterKey } from '../deviceRegister'
 import { carryMarks } from '../trustMarks'
 import { commitRotation } from '../../spaces/scopes'
@@ -152,7 +153,9 @@ export async function rotateKeys(password: string, secretKeyB64: string): Promis
     // cannot open, which this device then refuses as unreadable (ADR 0028 Decision 7).
     //
     // Memory pins joined this list when they moved off `K_SC` onto the Master Key (ADR 0068). Their two lists
-    // partition the caller's scopes, so the union is every scope a pin set can exist in.
+    // partition the caller's scopes, so the union is every scope a pin set can exist in. Item marks are the fourth
+    // rider: sealed under `K_SC`, but their self-tag's key derives from the Master Key (ADR 0068 §9). They open each
+    // scope's `E_0` through the caller's grant, which is why this runs while the vault still holds the old identity.
     await resealBestEffort(oldMasterKey, newMasterKey, [
       ...result.soleMemberScopeIds,
       ...result.queuedScopeIds,
@@ -199,6 +202,11 @@ async function resealBestEffort(oldMk: Uint8Array, newMk: Uint8Array, scopeIds: 
     await resealFavoritesUnderNewMasterKey(oldMk, newMk, scopeIds)
   } catch {
     /* an unreadable pin set is an empty one; the Memories are all still there, just no longer pinned */
+  }
+  try {
+    await retagItemMarksUnderNewMasterKey(oldMk, newMk)
+  } catch {
+    /* an item mark whose tag the new key does not verify counts as someone else's set (ADR 0068 §9) */
   }
 }
 

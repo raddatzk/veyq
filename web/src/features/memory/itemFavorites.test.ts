@@ -15,8 +15,16 @@ vi.mock('../../api/client', () => ({
 }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: () => (vault.mk ? vault.mk.slice() : null) }))
+// The rider opens each scope's E_0 through the caller's own grant; here every scope opens to a COPY of K_SC (the
+// rider zeroes what it opened), and a scope listed in `unopenable` does not open at all.
+const scopes = vi.hoisted(() => ({ unopenable: new Set<string>(), key: null as Uint8Array | null }))
+vi.mock('../spaces/scopes', () => ({
+  openScopeById: vi.fn(async (scopeId: string) =>
+    scopes.unopenable.has(scopeId) ? null : { epochs: { current: 0, keys: new Map([[0, scopes.key!.slice()]]) } },
+  ),
+}))
 
-import { loadItemFavorites, saveItemFavorites } from './itemFavorites'
+import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from '../../app/itemFavoritesStore'
 
 const SCOPE = 'c0ffee00-0000-4000-8000-0000000000a1'
@@ -30,16 +38,16 @@ const BOBS = [media(2), media(3)]
 const CLICKED = media(9)
 
 /** Seal `ids` as the member whose Master Key is `mk`, through the module's own write, and return the PUT's blob. */
-async function blobAs(mk: Uint8Array, ids: string[]): Promise<string> {
+async function blobAs(mk: Uint8Array, ids: string[], nodeId = NODE): Promise<string> {
   vault.mk = mk
   api.put.mockClear()
-  await saveItemFavorites(SCOPE, NODE, K_SC, new Set(ids))
+  await saveItemFavorites(SCOPE, nodeId, K_SC, new Set(ids))
   return api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext as string
 }
 
 /** The ids a written blob holds, whichever plaintext form the tree writes (a bare array, or `{tag, ids}`). */
-function idsIn(ciphertext: string): string[] {
-  const pt = JSON.parse(new TextDecoder().decode(v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId: NODE }, K_SC, fromB64std(ciphertext))))
+function idsIn(ciphertext: string, nodeId = NODE): string[] {
+  const pt = JSON.parse(new TextDecoder().decode(v1.open({ purpose: 'item-favorites', scopeId: SCOPE, nodeId }, K_SC, fromB64std(ciphertext))))
   return [...(Array.isArray(pt) ? pt : pt.ids)].sort()
 }
 
@@ -55,6 +63,8 @@ beforeEach(() => {
   api.put.mockResolvedValue(undefined)
   clearItemFavorites()
   vault.mk = null
+  scopes.unopenable.clear()
+  scopes.key = K_SC
 })
 
 describe('which item-mark entry is mine (ADR 0068 §9)', () => {
@@ -202,6 +212,71 @@ describe('everything not provably mine counts as someone else’s (ADR 0068 §9)
     const mark = { scopeId: SCOPE, nodeId: NODE, ids: MINE }
     expect(v1.itemMarkSelfTagVerifies(v1.itemMarkSelfKey(MK_ME), mark, tag)).toBe(true)
     expect(v1.itemMarkSelfTagVerifies(v1.itemMarkSelfKey(MK_BOB), mark, tag)).toBe(false)
+  })
+})
+
+describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)', () => {
+  const MK_NEW = v1.randomBytes(32)
+  const NODE2 = 'c0ffee00-0000-4000-8000-0000000000b2'
+  const putsByNode = () => new Map(api.put.mock.calls.map((c) => [c[0].nodeId as string, c[0].putItemFavoritesRequest.ciphertext as string]))
+
+  /**
+   * **B6.** After the rider, a set tagged under the OLD Master Key reads as mine under the NEW one — and before it,
+   * under the new key, it does not (the control that says it is the rider, not the load, that made it mine).
+   */
+  it('B6: an entry tagged under the old Master Key verifies as mine under the new one after the re-tag', async () => {
+    const mine = await blobAs(MK_ME, MINE)
+    vault.mk = MK_NEW
+    serve([{ self: true, ciphertext: mine }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([])
+
+    api.listOwn.mockResolvedValue([{ scopeId: SCOPE, nodeId: NODE, ciphertext: mine }])
+    api.put.mockClear()
+    await retagItemMarksUnderNewMasterKey(MK_ME, MK_NEW)
+
+    expect(api.put).toHaveBeenCalledTimes(1)
+    const retagged = putsByNode().get(NODE)!
+    expect(idsIn(retagged)).toEqual(MINE)
+    serve([{ self: true, ciphertext: retagged }])
+    expect(ownSets(await loadItemFavorites(SCOPE, NODE, K_SC))).toEqual([MINE])
+  })
+
+  /**
+   * **B7.** The listing is the server's, a hint and not a proof: a co-member's blob slipped into it must NOT be
+   * re-tagged as the caller's — only a row whose tag verifies under the OLD key is. The caller's genuine row in the
+   * same listing is the positive control.
+   */
+  it('B7: a listed row whose tag fails the old key is not re-tagged; the caller’s genuine one is', async () => {
+    const bobs = await blobAs(MK_BOB, BOBS)
+    const mine = await blobAs(MK_ME, MINE, NODE2)
+    api.listOwn.mockResolvedValue([
+      { scopeId: SCOPE, nodeId: NODE, ciphertext: bobs },
+      { scopeId: SCOPE, nodeId: NODE2, ciphertext: mine },
+    ])
+    api.put.mockClear()
+
+    await retagItemMarksUnderNewMasterKey(MK_ME, MK_NEW)
+
+    expect([...putsByNode().keys()]).toEqual([NODE2])
+  })
+
+  it('is best-effort per Memory: an unopenable scope and a failed write leave the rest re-tagged', async () => {
+    const OTHER_SCOPE = 'c0ffee00-0000-4000-8000-0000000000a2'
+    const first = await blobAs(MK_ME, MINE)
+    const second = await blobAs(MK_ME, BOBS, NODE2)
+    api.listOwn.mockResolvedValue([
+      { scopeId: OTHER_SCOPE, nodeId: NODE, ciphertext: first },
+      { scopeId: SCOPE, nodeId: NODE, ciphertext: first },
+      { scopeId: SCOPE, nodeId: NODE2, ciphertext: second },
+    ])
+    scopes.unopenable.add(OTHER_SCOPE)
+    api.put.mockClear()
+    api.put.mockRejectedValueOnce(new Error('offline'))
+
+    await expect(retagItemMarksUnderNewMasterKey(MK_ME, MK_NEW)).resolves.toBeUndefined()
+
+    expect(api.put.mock.calls.map((c) => [c[0].scopeId, c[0].nodeId])).toEqual([[SCOPE, NODE], [SCOPE, NODE2]])
+    expect(idsIn(putsByNode().get(NODE2)!, NODE2)).toEqual([...BOBS].sort())
   })
 })
 
