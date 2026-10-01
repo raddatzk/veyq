@@ -10,6 +10,7 @@ import { useI18n } from 'vue-i18n'
 import Button from 'primevue/button'
 import InputText from 'primevue/inputtext'
 import Message from 'primevue/message'
+import Checkbox from 'primevue/checkbox'
 import { listScopeMembers, addGroupMember, resolveGroupMember, setMemberRole, removeGroupMember, memberError, SetMemberRoleRequestRoleEnum, type ScopeMember } from './members'
 import { rotateGroupForRemoval, deleteGroup, restoreGroup, scopeLifecycle, wrapGroupNameKeyForInvitee, renameGroup, setSpaceIcon, clearSpaceIcon, openGroupIcon, openScopeById } from './scopes'
 import { zeroEpochKeys } from './epochs'
@@ -47,6 +48,13 @@ const pendingKeyChange = ref<{ userId: string; key: string; username: string } |
 const actionError = ref('')
 const pendingRemove = ref<string | null>(null) // userId shown in inline "remove?" confirm (destructive → rotates)
 const removing = ref(false)
+// ADR 0075: the removal confirmation's opt-in — also turn off every link of the group. Unchecked by default, reset
+// every time a confirmation opens.
+const revokeLinks = ref(false)
+function askRemove(userId: string) {
+  revokeLinks.value = false
+  pendingRemove.value = userId
+}
 // Group rename (cr-0097) — owner-only inline edit of the group's own name; re-seals under the current epoch.
 const renaming = ref(false)
 const nameDraft = ref('')
@@ -217,7 +225,7 @@ async function removeMember(m: ScopeMember) {
   actionError.value = ''
   removing.value = true
   try {
-    await rotateGroupForRemoval(props.scopeId, members.value, m.userId)
+    await rotateGroupForRemoval(props.scopeId, members.value, m.userId, revokeLinks.value)
     // Shown without the removed member however the server lists them: the directory is display, not a key decision.
     members.value = (await listScopeMembers(props.scopeId)).filter((r) => r.userId !== m.userId)
     if (activeSpace.scopeId === props.scopeId) await refreshActiveScope()
@@ -475,6 +483,13 @@ async function onRestore() {
                  last-owner guard is enforced server-side. You can't remove yourself here. -->
             <div v-if="isOwner && pendingRemove === m.userId" class="management-actions">
               <span class="settings-muted remove-confirm-label">{{ t('groups.removeConfirm') }}</span>
+              <div class="remove-revoke-links">
+                <Checkbox v-model="revokeLinks" input-id="remove-revoke-links" binary :disabled="removing" />
+                <label for="remove-revoke-links">
+                  <span>{{ t('groups.removeRevokeLinks') }}</span>
+                  <span class="settings-muted remove-revoke-links-hint">{{ t('groups.removeRevokeLinksHint') }}</span>
+                </label>
+              </div>
               <Button
                 :label="t('groups.removeConfirmYes')"
                 icon="pi pi-user-minus"
@@ -530,7 +545,7 @@ async function onRestore() {
                 severity="danger"
                 outlined
                 size="small"
-                @click="pendingRemove = m.userId"
+                @click="askRemove(m.userId)"
               />
             </div>
           </div>
@@ -575,6 +590,22 @@ async function onRestore() {
 </template>
 
 <style scoped>
+/* The removal confirmation's opt-in (ADR 0075) takes a row of its own, like NodeMutationDialog's opt-in. */
+.management-actions:has(.remove-revoke-links) {
+  flex-wrap: wrap;
+}
+.remove-revoke-links {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+.remove-revoke-links label {
+  display: grid;
+  gap: 0.12rem;
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
 
 .danger-zone {
   margin-top: 1.5rem;

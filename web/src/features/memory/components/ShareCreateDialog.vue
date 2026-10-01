@@ -15,7 +15,7 @@ import SelectButton from 'primevue/selectbutton'
 import ToggleSwitch from 'primevue/toggleswitch'
 import DatePicker from 'primevue/datepicker'
 import LocaleMarkdownEditor from '../../../shared/ui/LocaleMarkdownEditor.vue'
-import { createShare, updateShare, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
+import { createShare, updateShare, reissueShare, readShareNoteMap, readShareName, readSharePassword, hasLocaleText, type LocaleMap, type ManagedShare } from '../share'
 import { buildShareLink } from '../shareLink'
 import { ShareRole } from '../../../api/generated/sharing'
 import type { EpochKeys } from '../../spaces/epochs'
@@ -36,6 +36,9 @@ const props = defineProps<{
   memoryName: string
   /** When set, the dialog edits this share's name + note in place instead of creating a new one. */
   editShare?: ManagedShare | null
+  /** When set, the dialog RE-ISSUES this share (ADR 0075): the create form pre-filled from it, role fixed, and on
+   *  submit a new link replaces it — the old one is switched off in the same request. */
+  reissueFrom?: ManagedShare | null
   /** The uploader (drop-box) variant: role fixed to UPLOADER, no switcher. Identical otherwise. */
   uploader?: boolean
 }>()
@@ -43,13 +46,19 @@ const emit = defineEmits<{ close: []; saved: [] }>()
 const { t } = useI18n()
 
 const isEdit = computed(() => !!props.editShare)
+const isReissue = computed(() => !isEdit.value && !!props.reissueFrom)
 // A share's recovery copy is bound to (scope, Memory, share) (ADR 0072): this dialog's scope + Memory, never the row's.
 const addressOf = (s: ManagedShare) => ({ scopeId: props.scopeId, nodeId: props.nodeId, shareId: s.shareId })
 // The role switcher shows in the normal flow on BOTH create and edit (cr-0119: an existing VIEWER/CONTRIBUTOR share
 // can be re-graded in place); the uploader variant never shows it (its role is fixed, its promise not flippable).
-const showRoleSwitcher = computed(() => !props.uploader)
+// A re-issue keeps the old share's role (the server takes it from the old row), so it shows no switcher either.
+const showRoleSwitcher = computed(() => !props.uploader && !isReissue.value)
 const headerLabel = computed(() =>
-  isEdit.value ? t('share.editTitle') : props.uploader ? t('share.uploaderCreate') : t('share.createNew'),
+  isEdit.value
+    ? t('share.editTitle')
+    : isReissue.value
+      ? t('share.reissueTitle')
+      : props.uploader ? t('share.uploaderCreate') : t('share.createNew'),
 )
 const name = ref('')
 const role = ref<ShareRole>(props.uploader ? ShareRole.Uploader : ShareRole.Viewer)
@@ -77,8 +86,11 @@ const copied = ref(false)
 const passwordTooShort = computed(() => passwordEnabled.value && password.value.trim().length < MIN_PW)
 
 onMounted(() => {
-  const s = props.editShare
-  if (s && s.sealedShareKey) {
+  // Edit and re-issue both start from an existing share. A re-issue pre-fills even without a recovery copy (nothing
+  // then opens, so the form starts empty) — and a password it cannot read leaves the toggle on with an empty field,
+  // which blocks the submit until one is typed: a re-issue never quietly drops a link's protection.
+  const s = props.editShare ?? props.reissueFrom
+  if (s && (s.sealedShareKey || isReissue.value)) {
     name.value = readShareName(props.epochs, addressOf(s), s, s.sealedShareName)
     note.value = readShareNoteMap(props.epochs, addressOf(s), s, s.sealedNote)
     role.value = s.role
@@ -125,6 +137,12 @@ const { run: runSubmit, pending: busy } = useAsyncAction(
       )
       emit('saved')
       emit('close')
+    } else if (isReissue.value && props.reissueFrom) {
+      const minted = await reissueShare(props.reissueFrom, props.memoryKey, props.epochs, props.memoryName, {
+        note: effectiveNote, name: name.value, password: passwordEnabled.value ? password.value : '', expiresAt: expiry,
+      })
+      link.value = buildShareLink(minted.shareId, minted.kShare)
+      emit('saved')
     } else {
       const minted = await createShare(
         props.scopeId, props.nodeId, props.memoryKey, props.epochs, props.memoryName, role.value, expiry,
@@ -211,7 +229,8 @@ function endOfDay(d: Date): Date {
         <SelectButton v-model="role" :options="roleOptions" option-label="label" option-value="value" :allow-empty="false" :disabled="busy" class="share-role-switcher" />
         <p class="share-hint">{{ roleHint }}</p>
       </div>
-      <p v-else-if="uploader && !isEdit" class="share-hint share-uploader-desc">{{ t('share.roleUploaderHint') }}</p>
+      <p v-else-if="uploader && !isEdit && !isReissue" class="share-hint share-uploader-desc">{{ t('share.roleUploaderHint') }}</p>
+      <p v-if="isReissue" class="share-hint share-reissue-warning">{{ t('share.reissueWarning') }}</p>
 
       <!-- The optional note, grouped in a card behind a toggle (like the password). On → the per-locale editor. -->
       <div class="share-group">
@@ -290,12 +309,14 @@ function endOfDay(d: Date): Date {
         </div>
       </div>
 
-      <p v-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : t('share.createFailed') }}</p>
+      <p v-if="error" class="share-error">{{ isEdit ? t('share.noteSaveFailed') : isReissue ? t('share.reissueFailed') : t('share.createFailed') }}</p>
       <div class="veyq-dialog-action-row">
         <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="busy" @click="emit('close')" />
         <Button
-          :label="busy ? (isEdit ? t('share.noteSaving') : t('share.creating')) : (isEdit ? t('share.noteSave') : t('share.create'))"
-          :icon="isEdit ? 'pi pi-check' : 'pi pi-link'"
+          :label="busy
+            ? (isEdit ? t('share.noteSaving') : isReissue ? t('share.reissuing') : t('share.creating'))
+            : (isEdit ? t('share.noteSave') : isReissue ? t('share.reissueSubmit') : t('share.create'))"
+          :icon="isEdit ? 'pi pi-check' : isReissue ? 'pi pi-replay' : 'pi pi-link'"
           :loading="busy"
           :disabled="busy || passwordTooShort"
           @click="onSubmit"
@@ -321,7 +342,8 @@ function endOfDay(d: Date): Date {
   font-size: 0.82rem;
 }
 /* The uploader-flow description stands in for the (absent) role switcher, so it carries the field's spacing. */
-.share-uploader-desc {
+.share-uploader-desc,
+.share-reissue-warning {
   margin-bottom: 1.1rem;
 }
 /* A grouped, lighter card for an optional section (note / password): a toggle-led header + a body shown when on. */

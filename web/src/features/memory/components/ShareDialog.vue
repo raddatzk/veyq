@@ -5,7 +5,9 @@
 // creates them with a role switcher; the UPLOADER (drop-box) variant lists uploader shares and creates them with no
 // switcher (a separate memory action, capability-gated at that action). Each row shows the share's private name (or
 // the role), badges (note present / disabled / by another member), and per-row actions: **copy link** (copy-only —
-// reconstructed via the member-recoverable K_share), edit name+note, and revoke / re-activate.
+// reconstructed via the member-recoverable K_share), edit name+note, revoke / re-activate, and **renew** (re-issue,
+// ADR 0075): a new link with a fresh key, the old one off. A share whose link a departed member may hold is marked
+// and offers no re-activate — re-activation would revive that very link.
 // Operator-blind throughout: names/notes are sealed under K_share and decrypted on device; K_share itself is
 // recovered through the scope's epoch keys (K_SC), which no share link carries (ADR 0036 point 4).
 import { ref, computed, onMounted } from 'vue'
@@ -17,6 +19,8 @@ import {
   listSharesFor,
   revokeShare,
   reactivateShare,
+  isReissueRequired,
+  mintedBeforeKeyChange,
   readShareName,
   readShareNoteMap,
   hasLocaleText,
@@ -51,6 +55,8 @@ const copiedLinkId = ref<string | null>(null)
 // The create/edit dialog: `createOpen` for a new share, `editShare` for editing an existing one's name + note.
 const createOpen = ref(false)
 const editShare = ref<ManagedShare | null>(null)
+// The share being re-issued (ADR 0075) — the create dialog pre-filled from it.
+const reissueFrom = ref<ManagedShare | null>(null)
 
 // The two flows differ only in which shares they list + their labels — the uploader variant filters to UPLOADER, the
 // normal variant to everything else. Guaranteed identical look because it is the SAME component.
@@ -107,18 +113,31 @@ onMounted(loadShares)
 
 function openCreate() {
   editShare.value = null
+  reissueFrom.value = null
   createOpen.value = true
 }
 function openEdit(share: ManagedShare) {
+  reissueFrom.value = null
   editShare.value = share
   createOpen.value = true
 }
+function openReissue(share: ManagedShare) {
+  editShare.value = null
+  reissueFrom.value = share
+  createOpen.value = true
+}
+// The epoch half of the server's re-activation refusal, readable from the list (ADR 0075 Decision 4): such a share is
+// marked and offers renew instead of re-activate.
+const beforeKeyChange = (share: ManagedShare) => mintedBeforeKeyChange(share, props.epochs)
+// Renew: the owner's own share, enabled or not; anyone's share once it is off (the new one is then theirs).
+const canReissue = (share: ManagedShare) => share.mine || !share.enabled
 async function onSaved() {
   await loadShares()
 }
 function onDialogClose() {
   createOpen.value = false
   editShare.value = null
+  reissueFrom.value = null
 }
 
 async function copyShareLink(share: ManagedShare) {
@@ -145,14 +164,16 @@ async function onRevoke(shareId: string) {
     revokingId.value = null
   }
 }
-async function onReactivate(shareId: string) {
-  reactivatingId.value = shareId
+async function onReactivate(share: ManagedShare) {
+  reactivatingId.value = share.shareId
   actionError.value = false
   try {
-    await reactivateShare(shareId)
+    await reactivateShare(share.shareId)
     await loadShares()
-  } catch {
-    actionError.value = true
+  } catch (e) {
+    // The other half of the refusal — its owner left — is the server's to know: offer the renew it asks for.
+    if (await isReissueRequired(e)) openReissue(share)
+    else actionError.value = true
   } finally {
     reactivatingId.value = null
   }
@@ -185,6 +206,7 @@ function fmtDate(d: Date): string {
             <span v-if="share.passwordRequired" class="veyq-badge"><span class="pi pi-lock" /> {{ t('share.passwordBadge') }}</span>
             <span v-if="!share.mine" class="veyq-badge muted">{{ t('share.byMember') }}</span>
             <span v-if="!share.enabled" class="veyq-badge muted">{{ t('share.disabled') }}</span>
+            <span v-if="beforeKeyChange(share)" class="veyq-badge muted share-key-changed" :title="t('share.keyChangedHint')">{{ t('share.keyChangedBadge') }}</span>
           </div>
         </div>
         <div class="share-list-actions">
@@ -209,7 +231,17 @@ function fmtDate(d: Date): string {
             @click="openEdit(share)"
           />
           <Button
-            v-if="!share.enabled"
+            v-if="canReissue(share)"
+            type="button"
+            icon="pi pi-replay"
+            :aria-label="t('share.reissue')"
+            :title="t('share.reissue')"
+            severity="secondary"
+            text
+            @click="openReissue(share)"
+          />
+          <Button
+            v-if="!share.enabled && !beforeKeyChange(share)"
             type="button"
             icon="pi pi-refresh"
             :aria-label="t('share.reactivate')"
@@ -217,10 +249,10 @@ function fmtDate(d: Date): string {
             severity="secondary"
             text
             :disabled="reactivatingId === share.shareId"
-            @click="onReactivate(share.shareId)"
+            @click="onReactivate(share)"
           />
           <Button
-            v-else-if="share.mine"
+            v-else-if="share.enabled && share.mine"
             type="button"
             icon="pi pi-trash"
             :aria-label="t('share.revoke')"
@@ -243,6 +275,7 @@ function fmtDate(d: Date): string {
       :epochs="epochs"
       :memory-name="memoryName"
       :edit-share="editShare"
+      :reissue-from="reissueFrom"
       :uploader="uploader"
       @saved="onSaved"
       @close="onDialogClose"
