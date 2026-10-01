@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate that every relative link under `docs/` and `changes/` resolves to a real file.
+"""Validate that every relative link under `docs/`, `changes/` and `wiki/` resolves to a real file.
 
 **Asserts:** every inline markdown link/image in those trees points at a path that exists. The reliable,
 false-positive-free half of "are the docs (incl. ADRs) still correct?": a doc linking to a
@@ -8,7 +8,9 @@ moved/renamed/deleted file is unambiguously broken, unlike fuzzy prose-drift, wh
 **Bought by:** cr-0038's ADR 0001 finding — a doc pointing at a path that no longer exists. `changes/` was
 added to the walk later for the same reason `.claude/` got its own `validate_skill_links.py`: it is a
 pointer-heavy tree that sat outside every link guard. `changes/README.md` defines the guard-docstring
-contract and is cited from four other files, so a rename would have rotted those pointers silently.
+contract and is cited from four other files, so a rename would have rotted those pointers silently. `wiki/`
+joined with cr-wiki-pages-name-their-source: the published pages carried 36 relative links between themselves
+that no run read, so the one surface strangers see was the one whose links nothing checked.
 
 **Limit — resolution, never aptness.** A link that resolves is not thereby a link that points at the *right*
 thing. External (http/https/mailto/tel) and pure in-page anchors (`#section`) are skipped, and a `#fragment`
@@ -34,7 +36,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-DOC_ROOTS = [ROOT / "docs", ROOT / "changes"]
+DOC_ROOTS = [ROOT / "docs", ROOT / "changes", ROOT / "wiki"]
 
 LINK = re.compile(r"!?\[[^\]]*\]\(([^)]+)\)")
 SKIP_SCHEME = ("http://", "https://", "mailto:", "tel:")

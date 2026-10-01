@@ -115,9 +115,22 @@ published pages that speak for it.
       (*"the wiki generator"*), and a comment in `uc.account.rotate-keys.yaml`. It now returns only
       `wiki-sync.yml:4`, which says the *repo* is the wiki's source of truth, which is true. Glob without
       `validate_guard_gaps.py`: `ran=42 failures=0`.
-- [ ] 2 guard, red: Decisions 3 and 4, with no headers written yet. · Done when: on the untouched wiki the
+- [x] 2 guard, red: Decisions 3 and 4, with no headers written yet. · Done when: on the untouched wiki the
       guard fails for **all 11 pages**, each with *no header*, and every other guard is green. Paste the
       output.
+      **Measured** (`python3 scripts/validate_wiki_sources.py`, exit 1), each line ending
+      `no header — line 1 must be <!-- speaks-for: …; pair: … -->`:
+      ```
+      wiki/de/ein-weiteres-geraet-hinzufuegen.md · wiki/de/konto-schluessel-und-wiederherstellung.md
+      wiki/de/quantencomputer-und-deine-fotos.md · wiki/de/sind-meine-daten-sicher.md
+      wiki/de/wer-in-deinen-bereich-kommt.md · wiki/en/account-keys-and-recovery.md
+      wiki/en/adding-another-device.md · wiki/en/is-my-data-safe.md
+      wiki/en/quantum-computers-and-your-photos.md · wiki/en/running-your-instance.md
+      wiki/en/who-gets-into-your-space.md
+      ```
+      `validate_doc_links.py` with `wiki/` in `DOC_ROOTS`: `all relative links in 202 doc(s) resolve`. The
+      guard-gap pins land in Phase 3: `validate_guard_gaps.py` refuses a case whose guard is red on the
+      un-forged copy, so they can only be written once the headers exist.
 - [ ] 3 anchors: write the 11 headers and the missing backlinks. Read each page against its declared docs
       while doing it. A claim that disagrees is recorded as a new inbox row, not fixed silently.
       · Done when: every `validate_*.py` is green.
