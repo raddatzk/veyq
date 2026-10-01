@@ -1,7 +1,7 @@
 ---
 id: cr-test-suite-runs-no-scheduled-jobs
 title: The backend test suite runs no scheduled job on its own — every job body runs only when a test calls it
-status: in-progress
+status: done
 satisfies: []
 adrs: []
 invariants: []
@@ -245,7 +245,7 @@ answered "fold". The two phases are independent, so Phase 1 lands first and alon
   · Done when: steps 1–5 are recorded (red assertion, both injection reds, 57014 count), and `./gradlew check` is
     green.
 
-- [ ] 2 backend — **the four `run()` bodies the halt leaves unexecuted get a direct test** (D4–D6; only if
+- [x] 2 backend — **the four `run()` bodies the halt leaves unexecuted get a direct test** (D4–D6; only if
   owner question 4 is answered "fold").
   1. **Re-measure the gap on the tree you start from.** Run the four `grep -rlw` locators in *Context* again.
      A row that no longer reads 0 has been covered meanwhile, so drop it from this phase and say so.
@@ -292,4 +292,28 @@ answered "fold". The two phases are independent, so Phase 1 lands first and alon
 
 ## Retrospective
 
-*(written at close)*
+Recorded (all measured in worktree `agent-aa7509960bce802f8`, base `7a34c57`):
+- Baseline full `./gradlew check` on the untouched tree: 919 tests, 0 failed, **19 × `SQLState: 57014`** in 19
+  XML files, every one under `IntervalTrigger [id=1_…SessionPurge#run]`; test span 4 m 00 s, load ≈ 30.
+- Red first: `ScheduledJobsHaltedInTestTest` red at line 36 (`isRunning()`), assertions 1–2 green. Fix → green.
+  Bites (snapshot-and-restore, bytes-equal restore checked): `start-mode=normal` → line 36 (`isRunning()`);
+  `enabled=false` → line 34 (`isStarted()`).
+- Full check after Phase 1: 920 tests, 0 failed, **0 × 57014**; test span 5 m 35 s, but at load ≈ 150–180, so no
+  timing comparison is possible from these two runs. After Phase 2: 922 tests, 0 failed, 0 × 57014, span 4 m 14 s.
+- Phase 2 levers, each by the assertion that fired: D4 (a) swap → R5 (line 55); D4 (b) no `expireOverdue` → R2
+  (line 52); D5 (a) no `+ rotated` → M4 (line 64); D5 (b) no `grantless` → M1 (line 63); D5 (c) no live-job skip
+  → M6 (line 68); D6 (a) family purge first → "empty family kept"; D6 (b) swap → the added invite assertion;
+  restore removed → "the restore removed the job…" (line 76). **Transaction-wrapper levers moved nothing**
+  (`@Transactional` off `RecoveryPurge.run()` and off `SessionPurge.run()`, both green): on a test thread each
+  store call opens its own transaction, so the wrapper is a scheduler-thread property only — recorded in
+  `RecoveryPurgeTest`'s KDoc (and `SessionPurge.run()` loses the wrapper in `cr-session-purge-cost-on-mariadb`).
+
+What went wrong:
+- **Planning — D5's fixture could not bite its own lever (a).** It put M6 (grant-less) in scope B, so B was
+  selected through `grantless` already and dropping `+ rotated` would have left M4 green. Moved M6 to scope A,
+  which makes B reachable only as a rotated scope; lever (a) then reddened M4. Root cause: a witness for one half
+  of a union was placed in a set the other half also selects. Next time: for a lever that removes one operand of
+  a union, the CR names a row that ONLY that operand selects, and says why no other operand reaches it.
+- **Execution — the worktree guard refuses compound shell lines** (heredocs into files, `$(…)` arithmetic, a
+  `gradlew` inside `&&`/`;` chains). Every injection and summary ran through small Python scripts instead, which
+  is the repo's rule anyway. Next time: start with the Python harness, not the shell one-liner.
