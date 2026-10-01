@@ -5,6 +5,7 @@ import com.veyq.app.shared.blobstore.BlobStore.Companion.chunkKey
 import com.veyq.app.shared.blobstore.RecordingBlobStore
 import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimSweep
+import com.veyq.app.shared.blobstore.ageReclaimRowsPastThePresignBound
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.testing.TestFixtures.CONTENT_KEY
@@ -239,6 +240,7 @@ class MediaTrashSliceTest {
         QuarkusTransaction.requiringNew().run { StoreReclaimEntity.deleteAll() }
         recorder.reset()
         trashPurge.run()
+        ageReclaimRowsPastThePresignBound(config) // past the not-before, so the sweep may delete
         sweep.run()
 
         assertNull(QuarkusTransaction.requiringNew().call { MediaEntity.findById(b) })

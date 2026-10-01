@@ -1,8 +1,10 @@
 package com.veyq.app.shared.blobstore
 
+import com.veyq.app.shared.config.VeyqConfig
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheCompanionBase
 import io.quarkus.hibernate.orm.panache.kotlin.PanacheEntityBase
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.inject.Inject
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
@@ -69,7 +71,8 @@ class StoreReclaimEntity : PanacheEntityBase {
     @Column(name = "attempts", nullable = false)
     var attempts: Int = 0
 
-    /** The earliest tick that may retry this row; `createdAt` on insert, then pushed out by the backoff. */
+    /** The earliest tick that may attempt this row: `createdAt` plus the presign bound on insert
+     *  ([StoreReclaimStore.record]), then pushed out by the backoff. */
     @Column(name = "next_attempt_at", nullable = false)
     lateinit var nextAttemptAt: Instant
 
@@ -94,6 +97,25 @@ class StoreReclaimEntity : PanacheEntityBase {
 @ApplicationScoped
 class StoreReclaimStore {
 
+    /** Field-injected, not a constructor parameter: a test `@Alternative` subclasses this bean, and ArC can give
+     *  that normal-scoped subclass its proxy's no-args constructor only if this class keeps one. */
+    @Inject
+    lateinit var config: VeyqConfig
+
+    /**
+     * How long a recorded key waits before the sweep may delete its objects: `veyq.media.upload.retention`, the
+     * bound that already reads "after this, no PUT signed for a key can still land" (presign TTL plus one chunk
+     * still streaming). **Not a second knob on purpose** — one would have to be kept at least this large by hand.
+     *
+     * Why a recorded key must wait at all: the row a caller drops can name a key whose last window was signed
+     * moments earlier — a media purged straight from the trash, a replaced or cleared cover, the budget purge —
+     * and S3 accepts a PUT on that still-valid URL onto a key that was deleted in the meantime, because a key is
+     * only a name. A sweep that deleted on the next tick would let that PUT re-create the object under a key no
+     * row, no reclaim row and no quota names. The wait is sufficient because no URL for a key is signed after its
+     * row drop: a window is signed only for a live upload session.
+     */
+    private val notBefore: Duration get() = config.media().upload().retention()
+
     /** Put [refs] on the reclaim list, **joining the caller's transaction**. Empty input is a no-op. */
     @Transactional(Transactional.TxType.MANDATORY)
     fun record(refs: Collection<StoreObjectRef>) {
@@ -106,7 +128,7 @@ class StoreReclaimStore {
                 chunkCount = ref.chunkCount
                 createdAt = now
                 attempts = 0
-                nextAttemptAt = now // due on the next tick; the backoff only starts after a refusal
+                nextAttemptAt = now.plus(notBefore) // the backoff only starts after a refusal
             }.persist()
         }
     }
