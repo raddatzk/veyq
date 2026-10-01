@@ -20,8 +20,11 @@ the code*, changes/README.md):
      sets `org.gradle.dependency.verification`, which would turn it lenient or off for every run.
   5. **The wrapper JAR is pinned.** Every tracked `gradle-wrapper.jar` hashes to a 64-hex line of
      `scripts/gradle_wrapper_jar.sha256` (whose header names the services.gradle.org checksum it was cross-checked
-     against), and no tracked workflow turns `validate-wrappers` off — CI's own check of the same JAR against
-     Gradle's published list.
+     against), and every workflow job with a step that runs `gradlew` runs `gradle/actions/wrapper-validation` in
+     an EARLIER step — CI's own check of the same JAR against Gradle's published list, before anything executes
+     it. (It was `setup-gradle`'s `validate-wrappers` input until cr-workflow-actions-pinned-by-commit dropped
+     that action for `setup-java`'s `cache: gradle`: its live major caches through a proprietary component by
+     default.)
 
 **The defect that bought it.** Live when this guard was written (2026-09-27, cr-build-inputs-pinned): the npm
 wrapper downloaded the generator JAR with no checksum and ran any file already in its storage dir, the wrapper
@@ -40,7 +43,9 @@ task, plugin or OS-specific artifact still owes a `--write-verification-metadata
 `--dependency-verification` flag or `-F` passed on a command line, and it does not verify signatures, only
 checksums. Check 5 proves the JAR is the pinned bytes, not that the pin is Gradle's: a swapped JAR plus a matching
 new pin line is green here, and only that one readable pin line in the diff (and CI's wrapper validation against
-Gradle's published list) shows it. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, and npm packages are the lockfile's.
+Gradle's published list) shows it. The workflow half sees `gradlew` only in a step's `run:`: a Dockerfile that runs
+it (the release image build) is covered because that job `needs:` one that validates, which this guard does not
+check, and a script that calls `gradlew` indirectly is invisible. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, and npm packages are the lockfile's.
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
 
@@ -52,10 +57,18 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
+    print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PIN_FILE = ROOT / "scripts/openapi_generator_jar.sha256"
 WRAPPER_JAR_PIN_FILE = ROOT / "scripts/gradle_wrapper_jar.sha256"
 WORKFLOW_DIR = ".github/workflows/"
+WRAPPER_VALIDATION = "gradle/actions/wrapper-validation"
+GRADLEW = re.compile(r"(^|[\s/])gradlew(\s|$)", re.MULTILINE)
 VERIFIER = "scripts/verify_openapi_generator_jar.mjs"
 
 SKIP_PREFIXES = ("changes/", "docs/", "wiki/")
@@ -179,10 +192,26 @@ def check_wrapper_jar(files: list[str]) -> None:
     workflows = [p for p in files if p.startswith(WORKFLOW_DIR) and p.endswith((".yml", ".yaml"))]
     if not workflows:
         fail(f"no tracked workflow under {WORKFLOW_DIR} — re-anchor this guard")
+    gradle_jobs = 0
     for rel in workflows:
-        for n, line in enumerate((ROOT / rel).read_text().splitlines(), 1):
-            if re.match(r"""^\s*validate-wrappers\s*:\s*["']?false["']?\s*(#.*)?$""", line):
-                fail(f"{rel}:{n}: `{line.strip()}` turns off CI's validation of the wrapper JAR")
+        try:
+            doc = yaml.safe_load((ROOT / rel).read_text()) or {}
+        except yaml.YAMLError as e:
+            fail(f"{rel} does not parse ({str(e).splitlines()[0]}) — its gradlew steps cannot be checked")
+            continue
+        for job_id, job in (doc.get("jobs") or {}).items():
+            validated = False
+            for index, step in enumerate((job or {}).get("steps") or []):
+                if str(step.get("uses", "")).startswith(WRAPPER_VALIDATION):
+                    validated = True
+                if GRADLEW.search(str(step.get("run", ""))):
+                    gradle_jobs += 1
+                    if not validated:
+                        fail(f"{rel}: job `{job_id}` step {index + 1} (`{step.get('name', '')}`) runs gradlew with no "
+                             f"`{WRAPPER_VALIDATION}@…` step before it — CI would execute the wrapper JAR unchecked")
+                    break
+    if not gradle_jobs:
+        fail("no workflow step runs gradlew — re-anchor this guard's wrapper-validation half")
 
 
 def check_verification(files: list[str]) -> None:
