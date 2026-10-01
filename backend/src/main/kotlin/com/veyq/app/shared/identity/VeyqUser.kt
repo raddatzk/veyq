@@ -52,8 +52,28 @@ class VeyqUser : PanacheEntityBase {
     @Column(name = "require_group_add_consent", nullable = false)
     var requireGroupAddConsent: Boolean = false
 
+    /** When the account holder last showed they read mail sent to [email] (ADR 0074 Decision 1) — a fact about the
+     *  address, not a permission: nothing is gated on it (Decision 3). Null until one of the three events in
+     *  [confirmAddress]'s callers. Server-visible operational metadata, like the address itself. */
+    @Column(name = "email_confirmed_at")
+    var emailConfirmedAt: Instant? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
+
+    /**
+     * Record address control, **iff** [address] — the address the proof was mailed to — is still this account's
+     * [email] (ADR 0074 Decision 1: the record is bound to the address it confirmed). Returns whether it stamped.
+     *
+     * The one writer of [emailConfirmedAt], called in the same transaction as each of the three events that prove
+     * it (Decision 2): a redeemed MEMBER invite, a completed reset, and a confirmation link. A future path that
+     * changes [email] must clear the stamp in the same write.
+     */
+    fun confirmAddress(address: String, at: Instant = Instant.now()): Boolean {
+        if (normalizeEmail(address) != email) return false
+        emailConfirmedAt = at
+        return true
+    }
 
     companion object : PanacheCompanionBase<VeyqUser, String>
 }

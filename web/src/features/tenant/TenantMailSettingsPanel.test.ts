@@ -13,6 +13,10 @@ vi.mock('./tenantMailSettings', () => ({
   getTenantMailSettings: vi.fn(),
   updateTenantMailSettings: vi.fn(),
 }))
+vi.mock('../account/email/emailConfirmation', async (orig) => ({
+  ...(await orig<typeof import('../account/email/emailConfirmation')>()),
+  requestEmailConfirmation: vi.fn(),
+}))
 vi.mock('../../shared/state/useToast', () => ({
   useToast: () => ({ success: vi.fn(), showUndo: vi.fn(), dismissUndo: vi.fn() }),
 }))
@@ -22,6 +26,7 @@ import { getTenantMailSettings, updateTenantMailSettings } from './tenantMailSet
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
 import { realI18n, t } from '../../test/i18n'
+import { requestEmailConfirmation } from '../account/email/emailConfirmation'
 
 const READY_VIEW = {
   host: 'smtp.example.com', port: 587, from: 'noreply@x.z', username: 'fam',
@@ -166,5 +171,50 @@ describe('TenantMailSettingsPanel (uc.admin.tenant-mail-settings, web)', () => {
     const wrapper = await mountPanel()
     expect(wrapper.text()).toContain(t('mail.sendReady'))
     expect(wrapper.text()).not.toContain(t('mail.kekUnavailable'))
+  })
+
+  // uc.account.confirm-email-address — the owner's natural moment: right after saving settings that can send.
+  const offerButton = (w: Awaited<ReturnType<typeof mountPanel>>) =>
+    w.findAll('button').find((b) => b.text() === t('emailConfirm.send'))
+
+  it('offers a confirmation to yourself once a save leaves the relay able to send, and sends it on request', async () => {
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(requestEmailConfirmation).mockResolvedValue(undefined)
+    const wrapper = await mountPanel()
+    expect(offerButton(wrapper)).toBeUndefined() // nothing before a save
+
+    await saveButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(t('emailConfirm.mailOffer'))
+    expect(requestEmailConfirmation).not.toHaveBeenCalled() // offered, never pressed for the owner
+
+    await offerButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(requestEmailConfirmation).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain(t('emailConfirm.mailOfferSent'))
+    expect(offerButton(wrapper)).toBeUndefined() // once
+  })
+
+  it('does not offer it after a save that cannot send', async () => {
+    const notReady = { ...READY_VIEW, enabled: false }
+    vi.mocked(getTenantMailSettings).mockResolvedValue(notReady as never)
+    vi.mocked(updateTenantMailSettings).mockResolvedValue(notReady as never)
+    const wrapper = await mountPanel()
+    await saveButton(wrapper).trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).not.toContain(t('emailConfirm.mailOffer'))
+    expect(offerButton(wrapper)).toBeUndefined()
+  })
+
+  it('renders a refused offer by its status, and keeps the offer up to retry', async () => {
+    vi.mocked(getTenantMailSettings).mockResolvedValue(READY_VIEW as never)
+    vi.mocked(requestEmailConfirmation).mockRejectedValue(httpError(503, 'mail_unavailable'))
+    const wrapper = await mountPanel()
+    await saveButton(wrapper).trigger('click')
+    await flushPromises()
+    await offerButton(wrapper)!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(t('emailConfirm.mailUnavailable'))
+    expect(offerButton(wrapper)).toBeDefined()
   })
 })

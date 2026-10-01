@@ -109,8 +109,11 @@ request the **user** turned on, straight to the chosen provider.
   (plaintext — the login identifier and the source of the deterministic auth salt,
   [ADR 0003](../decisions/0003-operator-blind-password-auth.md); named here to close a prior inventory gap); a
   tenant's **per-tenant SMTP config** (host/port/from/username/TLS + the owner-authored invite **template text** —
-  operator-visible operational config) and the **send-fact** of an invite mail (recipient + coarse timing, once a
-  tenant has configured SMTP), while the SMTP **password is a server-held secret sealed at rest** (AES-256-GCM
+  operator-visible operational config) and the **send-fact** of every mail veyq sends — a member invite, a
+  password-recovery link and an address confirmation (recipient + coarse timing, once a tenant has configured
+  SMTP), plus the account's **`email_confirmed_at`** (when its holder last showed they read that address —
+  operational metadata of the address's own class, gating nothing,
+  [ADR 0074](../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)), while the SMTP **password is a server-held secret sealed at rest** (AES-256-GCM
   under a server-managed KEK — ciphertext + nonce only, [ADR 0050](../decisions/0050-operator-config-secret-encryption.md):
   the KEK is a `0600` key **file** generated on first start, plus a non-invertible HKDF **fingerprint**
   of it on the instance singleton so a lost/changed key is detected, never a silent unseal — the fingerprint is a

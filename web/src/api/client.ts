@@ -15,6 +15,7 @@ import {
   AccountApi,
   AccountIdentityPinsApi,
   AccountDeviceRegisterApi,
+  AccountEmailApi,
   AccountPasswordApi,
   AccountProfileApi,
   AccountRotationApi,
@@ -96,6 +97,11 @@ export function accountIdentityPinsApi(): AccountIdentityPinsApi {
 
 export function accountDeviceRegisterApi(): AccountDeviceRegisterApi {
   return new AccountDeviceRegisterApi(new AccountConfiguration(bearerParams()))
+}
+
+/** The caller's own address and its confirmation (ADR 0074) — session-authenticated, unlock not required. */
+export function accountEmailApi(): AccountEmailApi {
+  return new AccountEmailApi(new AccountConfiguration(bearerParams()))
 }
 
 export function accountRotationApi(): AccountRotationApi {

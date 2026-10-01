@@ -89,13 +89,18 @@ export default defineConfigWithVueTs(
     // `` `/settings/${id}` ``), the named route (`{ name: 'settings' }`), and a static or bound `to`/`href`. It
     // matches AST nodes, so a comment naming the route is not a door. Ignored: `router.ts` declares the route,
     // `ProfileMenu.vue` IS the door, and `SettingsHubView.vue` navigates INSIDE the hub (a door from the hub to the
-    // hub has nothing to catch). A second legitimate door is one more `ignores` entry. LIMIT: a path assembled at
-    // runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
+    // hub has nothing to catch). `ConfirmEmailView.vue` is the second door: a page outside the shell that a mail
+    // link opens, whose one onward step is the Security card showing the address it just confirmed
+    // (uc.account.confirm-email-address). A further legitimate door is one more `ignores` entry. LIMIT: a path
+    // assembled at runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
     // `window.location`). And flat config resolves a rule by name, last block wins: a later block that sets
     // `no-restricted-syntax` for these files replaces these selectors rather than adding to them.
     name: 'veyq/one-settings-door',
     files: ['src/**/*.{ts,vue}'],
-    ignores: ['src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue'],
+    ignores: [
+      'src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue',
+      'src/views/ConfirmEmailView.vue',
+    ],
     rules: {
       'no-restricted-syntax': ['error', ...SETTINGS_DOOR],
       'vue/no-restricted-syntax': ['error', ...SETTINGS_DOOR],

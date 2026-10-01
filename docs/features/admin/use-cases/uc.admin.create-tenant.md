@@ -2,18 +2,20 @@
 
 - **ID:** uc.admin.create-tenant
 - **Primary actors:** **Server Owner** (creates the tenant) and the **invited Tenant Owner** (activates
-  it). Two parties, handed off asynchronously by an invite email.
+  it). Two parties, handed off asynchronously by an invite link the Server Owner passes on.
 - **Goal:** Provision a new tenant — a domain-scoped container reached by its `Host` — and hand its
   **content ownership** to an invited owner, **without the Server Owner ever holding a content key**.
 - **Preconditions:** The instance is set up; the actor is a **Server Owner** (global role); the chosen
   domain is not already mapped to a tenant.
 - **Postconditions (success):** The tenant exists and is **`ACTIVE`** with a domain↔tenant mapping; the
   invited owner has an account and holds the **first grant** to the tenant's cold-born scope key; the
-  Server Owner holds **no** content keys.
+  Server Owner holds **no** content keys. The owner's address is **unconfirmed** until they confirm it
+  ([uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)): the link
+  never passed through their mailbox, so nothing has shown that a password reset would reach them.
 
 ## Main flow
 
-The flow has two acts with a mailbox in between: the Server Owner's act is **purely structural** (no
+The flow has two acts with a hand-off in between: the Server Owner's act is **purely structural** (no
 keys); the invited owner's act is where the tenant's cryptographic root is **born cold**.
 
 ### Act 1 — Server Owner creates the tenant (structural, no keys)
@@ -23,9 +25,11 @@ keys); the invited owner's act is where the tenant's cryptographic root is **bor
 2. On confirm, the server validates the **domain is free and well-formed**, creates the tenant in
    **`PENDING`** (not yet active — no content is possible yet), stores name + domain + owner email as
    **operational cleartext**, mints a **single-use, time-limited invite token** (a *bootstrap secret*,
-   not a key) **bound to the owner email**, and returns it to the Server Owner. Delivery is by email **if a
-   mailer is configured**, or by the Server Owner **copying the invite link** (the bootstrap secret in the URL
-   fragment) — so tenant onboarding works with no SMTP, self-hostable by default. The server holds **no keys**.
+   not a key) **bound to the owner email**, and returns it to the Server Owner. Delivery is the Server Owner
+   **copying the invite link** (the bootstrap secret in the URL fragment) and passing it on: a `PENDING` tenant
+   has no mail settings of its own, and a server-level mailer was rejected
+   ([ADR 0055](../../../decisions/0055-mail-is-a-precondition-not-a-capability.md) §3) — so tenant onboarding
+   works with no SMTP, self-hostable by default. The server holds **no keys**.
 
 ### Act 2 — Invited owner activates the tenant (cold scope birth)
 
@@ -33,8 +37,7 @@ keys); the invited owner's act is where the tenant's cryptographic root is **bor
    to the server until acceptance).
 4. **Identity (bound to the invited email):** the accepting account must **own the invited email** — an
    existing user **logs in** as that account; a new user **registers cold** with that email (identity
-   keypair, Master Key + wraps, Emergency Kit — see the account model). The owner may **change their
-   email later**; the binding is a one-time gate at acceptance, not a permanent constraint. The login branch
+   keypair, Master Key + wraps, Emergency Kit — see the account model). The login branch
    unlocks on this screen, so it asks for a Secret Key and uses the shared control for it
    ([uc.account.unlock](../../account/use-cases/uc.account.unlock.md) § *One Secret-Key control*), with the
    invited email as the expected account; the cold-register branch **mints** the Secret Key and asks for none.
@@ -56,8 +59,8 @@ sequenceDiagram
   Note over SO,IO: Act 1 — structural, no keys
   SO->>S: POST tenants<br>{ tenantName, domain, ownerEmail }
   S->>S: validate domain free#59;<br>create tenant = PENDING#59;<br>mint single-use invite token
-  S-)IO: invite email ( link #35;fragment = bootstrap secret )
-  S-->>SO: tenant created (PENDING)
+  S-->>SO: tenant created (PENDING) + invite link
+  SO-)IO: invite link, passed on by hand ( #35;fragment = bootstrap secret )
   Note over SO,IO: Act 2 — cold scope birth
   IO->>IO: open link#59; log in OR register cold<br>(identity keypair, Master Key, Emergency Kit)
   IO->>IO: generate TENANT scope cold —<br>scope key K_SC#59; seal grant to OWN identity key
@@ -82,7 +85,7 @@ sequenceDiagram
 ## Server Owner management of pending tenants
 
 The Server Owner can **list all tenants** (active and pending) and, for a **`PENDING`** tenant whose
-owner has not yet accepted: **resend** the invite email, **reassign** the owner email (re-binding the
+owner has not yet accepted: **re-issue** the invite link, **reassign** the owner email (re-binding the
 invite — this is what keeps the strict email-binding above painless), or **revoke** the pending tenant.
 These are operational actions on cleartext metadata; they touch **no keys**. Acting on an **`ACTIVE`**
 tenant is a **separate** use-case: suspending/reactivating it is [uc.admin.suspend-tenant](uc.admin.suspend-tenant.md)
@@ -128,7 +131,7 @@ stateDiagram-v2
   generate it cold, exactly like the first account in `setup-server` but for a *scope*. This distinct
   path is recorded in [ADR 0006](../../../decisions/0006-cold-tenant-scope-birth.md).
 - **The invite token is a bootstrap secret, not a key.** It only **gates acceptance** (proves the
-  recipient holds the emailed link); it transports **no content key**. The server may therefore hold it
+  recipient holds the link); it transports **no content key**. The server may therefore hold it
   without breaking operator-blindness — content access exists only once the owner has cold-born the
   scope.
 - **Invite lifecycle mirrors the session refresh-token model** ([ADR 0004](../../../decisions/0004-session-tokens.md),

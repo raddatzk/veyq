@@ -1,6 +1,6 @@
 # ADR 0074 — Address control is recorded where nothing else proves it, and gates nothing
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-09-28
 
 ## Context
@@ -72,7 +72,11 @@ backfill, so every existing row starts unconfirmed.
   holder asks for each of them.
 
 The record is **surfaced** instead. The account holder sees the address the server holds, which is the address
-a reset will mail, and whether it is confirmed, while it can still be acted on. **One gate is decided now, for
+a reset will mail, and whether it is confirmed, while it can still be acted on. It is shown in two places and no
+third: the account's **security settings**, and a one-time offer in the **mail settings** right after a save that
+leaves the relay able to send. There is **no app-wide banner**, because the only unconfirmed accounts left are the
+bootstrap owners and a Server Owner who joined as one — tenant owners who stand in that mail-settings panel
+anyway. **One gate is decided now, for
 later:** a path that lets someone create an account for an address, other than an invite redeemed by mail, must
 prove address control *before* the account exists. That covers open self-registration. The reason is that
 creation binds the globally unique address and its auth salt, and a squat cannot be undone by confirming later.
@@ -128,13 +132,17 @@ at will. None of that matters, because nothing is gated on it (Decision 3).
   - **An address confirmed once and later abandoned** is caught only if the holder confirms again. Repeating a
     confirmation is allowed for that reason.
   - **A wrong address has no correction path.** No flow changes an account's address. A detected mistake can be
-    named but not fixed until one exists, and that is its own piece of work: re-deriving the auth keypair under
-    the new salt, and the stale address inside an existing Emergency Kit.
+    named but not fixed until one exists, and that is its own piece of work, deliberately after V1: re-deriving
+    the auth keypair under the new salt (which needs the password), confirming the new address before it takes
+    effect, clearing the stamp, and the stale address inside an existing Emergency Kit. The V1 owner types their
+    own address and then sees it on the join screen, in the Emergency Kit and at every sign-in, so a typo that
+    survives all of that is rare; an address abandoned years later is the real case, and it is the later one.
   - **A member invite mailed to a wrong address** can still be redeemed by that mailbox's owner. The
     key-holder's admission step is the human check there ([ADR 0020](0020-grant-distribution-invite-wrap.md)),
     not this record.
-- **ADR 0054 § Consequences** said verification "becomes load-bearing for V1 … recovery-gating first". That is
-  superseded by Decision 3: recovery gates on the mailed token, never on this record.
+- **Recovery gates on the mailed token, never on this record** (Decision 3); ADR 0054 § Consequences states the
+  same from its side. A reader who expects "verification" to gate recovery, as an earlier reading of #112 did,
+  will find the reason there and here.
 - **Rejected:**
   - **Gating recovery on confirmation.** It adds no factor, because the mailed token already proves the mailbox
     at use time, and it strands the accounts it is meant to protect.

@@ -15,7 +15,9 @@
   one ([ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) §4). The account was born with a
   `RECOVERY` wrap and with the public half of its **Secret-Key proof key** registered
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 2). The actor holds the
-  **Secret Key**. No session is required, and none helps.
+  **Secret Key**. No session is required, and none helps. The actor can **read the account's mailbox** — which is
+  what [uc.account.confirm-email-address](uc.account.confirm-email-address.md) shows in advance, and which a
+  completed reset records in turn; recovery itself never asks whether it was shown.
 - **Postconditions (success):** The account has a **new `PASSWORD` wrap** and a **new `auth_public_key`**; every
   wrap but `PASSWORD` and `RECOVERY` is gone (today every `DEVICE` and `DEVICE_KEY`; the survivor rule is
   [en.account.key-model](../enablers/en.account.key-model.md)'s) and every session is revoked; the recovery token
