@@ -361,6 +361,36 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
+  /api/item-favorites:
+    get:
+      tags: [item-favorites]
+      operationId: listOwnItemFavorites
+      summary: List the caller's own sealed item-mark blobs, across every scope they are an accepted member of.
+      description: >
+        Returns the **caller's own** item-mark rows — never a co-member's — for every scope the caller is an accepted
+        member of whose tenant is not suspended; a row of a scope the caller has left, or only been proposed to, is
+        left out. It is what an account-key rotation re-tags: the self-tag inside each blob derives from the Master
+        Key, so a rotation re-seals the caller's marks under the new one
+        ([ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §9). The server already holds
+        exactly these rows under the caller's id, so this read tells it nothing; it is a hint, not a proof — the
+        client re-tags only a blob whose tag verifies under its old key. A filter, not an answer: a scope it may
+        not show is left out, never refused.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: The caller's own item-mark blobs (empty when none stored).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/OwnItemFavoritesEntry" }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+
   /api/scopes/{scopeId}/favorites:
     get:
       tags: [favorites]
@@ -722,17 +752,19 @@ components:
           x-veyq-visibility: flag
           type: boolean
           description: >
-            True on the caller's own blob. This is the ONLY identity on the wire, and deliberately so: the array
-            already separates the members, and an item's count is simply how many entries contain its id — so no
-            member id is needed to render "everyone's / only mine" or the aggregate. Leaving it out makes the
-            aggregate-only rule a property of the DATA rather than a convention the UI is trusted to keep: a
-            client cannot attribute a mark to a named member because it was never told who. The caller cannot
-            derive this flag from anything else the read carries, and the server knows it truthfully — it is the
-            token's principal.
+            True on the caller's own blob — the server's claim of WHICH ROW is the caller's, which the client
+            checks against the self-tag inside the plaintext: an entry counts as the caller's own only when it is
+            flagged here AND its tag verifies under the caller's Master-Key-derived key
+            ([ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §9). This is the ONLY
+            identity on the wire, and deliberately so: the array already separates the members, and an item's count
+            is simply how many entries contain its id — so no member id is needed to render "everyone's / only
+            mine" or the aggregate. Leaving it out makes the aggregate-only rule a property of the DATA rather than
+            a convention the UI is trusted to keep: a client cannot attribute a mark to a named member because it
+            was never told who.
           example: true
         ciphertext:
           type: string
-          description: That member's marked-media-id set for this node, AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
+          description: That member's marked-media-id set for this node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64).
           contentEncoding: base64
           maxLength: 65536
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
@@ -743,11 +775,34 @@ components:
       properties:
         ciphertext:
           type: string
-          description: The caller's marked-media-id set for this node, AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
+          description: The caller's marked-media-id set for this node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64). No member id — the caller can only replace their own blob.
           contentEncoding: base64
           maxLength: 65536
           example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 65536) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+
+    OwnItemFavoritesEntry:
+      type: object
+      required: [scopeId, nodeId, ciphertext]
+      properties:
+        scopeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The scope the row is stored under.
+          example: 7b1f0c2e-3d4a-4b5c-8d6e-9f0a1b2c3d4e
+        nodeId:
+          x-veyq-visibility: id
+          type: string
+          format: uuid
+          description: The Memory the row's marks are in.
+          example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d
+        ciphertext:
+          type: string
+          description: The caller's own marked-media-id set for that node with their self-tag, `{"tag","ids"}` AEAD-sealed under `K_SC` at the base epoch, context `item-favorites` (opaque base64) — exactly what the node's read serves as the caller's entry.
+          contentEncoding: base64
+          maxLength: 65536
+          example: aXRlbS1mYXZvcml0ZXMtY2lwaGVy
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
