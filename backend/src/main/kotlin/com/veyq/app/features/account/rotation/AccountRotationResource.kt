@@ -47,6 +47,8 @@ class AccountRotationResource(
                 passwordWrap = rotateAccountKeysRequest.passwordWrap.toRewritten(),
                 recoveryWrap = rotateAccountKeysRequest.recoveryWrap.toRewritten(),
                 secretKeyProofSignature = rotateAccountKeysRequest.secretKeyProofSignature,
+                pins = rotateAccountKeysRequest.identityPins.let { ResealedDocument(it.blob, it.version) },
+                register = rotateAccountKeysRequest.deviceRegister.let { ResealedDocument(it.blob, it.version) },
             )
         ) {
             is RotationOutcome.Applied -> Response.ok(

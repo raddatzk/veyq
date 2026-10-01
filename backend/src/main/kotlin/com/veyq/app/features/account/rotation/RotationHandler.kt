@@ -1,6 +1,10 @@
 package com.veyq.app.features.account.rotation
 
+import com.veyq.app.features.account.deviceregister.DeviceRegisterStore
+import com.veyq.app.features.account.identitypins.IdentityPinsStore
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.account.deviceregister.PutResult as RegisterPut
+import com.veyq.app.features.account.identitypins.PutResult as PinsPut
 import com.veyq.app.features.account.pairing.PairingStore
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.config.VeyqConfig
@@ -28,7 +32,18 @@ sealed interface RotationOutcome {
 
     /** The request did not prove the Secret Key (ADR 0060 Decision 2) — nothing was written. */
     data object SecretKeyProofFailed : RotationOutcome, HttpFailure by httpFailure("secret_key_proof_failed", FORBIDDEN)
+
+    /**
+     * The pin store or the device register moved since the client read it — **the whole rotation rolled back**,
+     * so nothing was published and there is nothing to repair. The client re-reads, re-seals and resubmits with
+     * the same new keys and the same signature (the documents are not part of the proof's statement).
+     */
+    data object TrustStateStale : RotationOutcome, HttpFailure by httpFailure("stale_version", CONFLICT)
 }
+
+/** One Master-Key-sealed account document as the rotation re-sealed it: the blob under `MK'`, guarded by the
+ *  version the client read. */
+data class ResealedDocument(val blob: String, val expectedVersion: Long)
 
 /**
  * The account-side half of key rotation after a compromise (ADR 0060, uc.account.rotate-keys).
@@ -50,6 +65,8 @@ class RotationHandler(
     private val tasks: TasksStore,
     private val pairings: PairingStore,
     private val sessions: SessionService,
+    private val identityPins: IdentityPinsStore,
+    private val deviceRegister: DeviceRegisterStore,
     config: VeyqConfig,
 ) {
     private val maxAttempts: Int = config.tasks().maxAttempts()
@@ -60,7 +77,12 @@ class RotationHandler(
      * The order inside it is not arbitrary. The Secret-Key proof is checked before anything, inside the same
      * transaction that reads the identity it binds — so the identity it was verified against is the one replaced.
      * The account rewrite runs next and can still refuse; everything
-     * after it is a consequence that must not happen for an account that was never rewritten. Then the live
+     * after it is a consequence that must not happen for an account that was never rewritten. The pin store and
+     * the device register, re-sealed under the new Master Key, are written next through their own
+     * compare-and-set stores (ADR 0060 § Consequences): a stale version on either is **not** a partial success —
+     * the transaction is rolled back, so the account rewrite above is undone with it and the answer is
+     * `409 stale_version`. Written after the publish instead, a failed re-seal left a document under a key that
+     * no longer exists, which every device then refuses (ADR 0028 Decision 7). Then the live
      * pairing channels are superseded (their envelopes carry the *old* Master Key and a live delegated session,
      * so a later collect would hand a device a dead key and a working login), then the scope rotations are
      * queued, and the sessions are cut **last** — the session revoke is the one step that changes what the
@@ -82,6 +104,27 @@ class RotationHandler(
         passwordWrap: RewrittenWrap,
         recoveryWrap: RewrittenWrap,
         secretKeyProofSignature: String,
+        pins: ResealedDocument,
+        register: ResealedDocument,
+    ): RotationOutcome = try {
+        applyAll(
+            userId, presentedAccessToken, identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap,
+            secretKeyProofSignature, pins, register,
+        )
+    } catch (_: StaleDocumentRollback) {
+        RotationOutcome.TrustStateStale
+    }
+
+    private fun applyAll(
+        userId: String,
+        presentedAccessToken: String?,
+        identityPublicKey: String,
+        wrappedIdentityPrivateKey: String,
+        passwordWrap: RewrittenWrap,
+        recoveryWrap: RewrittenWrap,
+        secretKeyProofSignature: String,
+        pins: ResealedDocument,
+        register: ResealedDocument,
     ): RotationOutcome = QuarkusTransaction.requiringNew().call<RotationOutcome> {
         val user = VeyqUser.findById(userId) ?: return@call RotationOutcome.Unavailable
         val statement = SecretKeyProof.rotationStatement(
@@ -100,6 +143,15 @@ class RotationHandler(
         )
         if (!applied) return@call RotationOutcome.Unavailable
 
+        // Both documents or no rotation. Each store's `put` joins this transaction, so a Stale here means the
+        // writes above are still pending — the throw is what rolls them back, not a compensating write.
+        // (`setRollbackOnly` + returning an outcome does not work here: `call` then tries to commit and fails
+        // with a RollbackException, which reached the client as a 500.)
+        val pinsStale = identityPins.put(userId, pins.blob, pins.expectedVersion) is PinsPut.Stale
+        if (pinsStale || deviceRegister.put(userId, register.blob, register.expectedVersion) is RegisterPut.Stale) {
+            throw StaleDocumentRollback()
+        }
+
         pairings.supersede(pairings.liveChannels(userId).map { it.id })
 
         // The split (ADR 0060 Decision 5): a scope with exactly one member is self-served — nobody to be
@@ -113,4 +165,8 @@ class RotationHandler(
 
         RotationOutcome.Applied(soleMemberScopeIds = sole, queuedScopeIds = shared)
     }
+
+    /** Thrown inside the rotation's transaction to roll every write in it back; [rotate] maps it to
+     *  [RotationOutcome.TrustStateStale]. Never escapes this class. */
+    private class StaleDocumentRollback : RuntimeException(null, null, false, false)
 }
