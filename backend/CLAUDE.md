@@ -14,7 +14,7 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   --write-verification-metadata sha256 help check quarkusBuild pitest`. **The empty Gradle home is the point** —
   a warm cache hides what a cold one fetches: the first write, from a warm cache, missed
   `okhttp-bom-5.3.2.module`, which every clean build (the Dockerfile's, a fresh CI runner's) resolves. Those four
-  tasks cover the native build too, but **not `quarkusDev`**: its `quarkusBootstrapResolverConfiguration` is
+  tasks cover the Dockerfile's build too, but **not `quarkusDev`**: its `quarkusBootstrapResolverConfiguration` is
   resolved only when the task *executes*, so after a Quarkus bump also start `quarkusDev` once against the
   written metadata and add what it refuses (2026-09-28: two POMs were missing and the dev backend would not
   start). Read the diff before committing it; its checksums are trusted on first write. The only trust rules are

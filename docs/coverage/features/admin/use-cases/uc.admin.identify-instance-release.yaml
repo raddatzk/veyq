@@ -2,8 +2,8 @@ useCase: uc.admin.identify-instance-release
 feature: admin
 title: Know which release an instance runs, and which release a backup came from
 # cr-release-identity delivers it: a `VERSION` file the publish stamps into the image, a workflow that derives
-# the version from the tree offline and refuses to republish a tag, the production recipe copied into both
-# runtime targets, an owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a
+# the version from the tree offline and refuses to republish a tag, the production recipe copied into the
+# runtime image, an owner-gated `GET /api/instance/release`, the Settings → Server → Release panel, and a
 # backup manifest that reads the release off the app CONTAINER instead of off the capture process's environment.
 #
 # `status: planned` is nonetheless correct, and it is not a formality. It rests on two conditions, and the

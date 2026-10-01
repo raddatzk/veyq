@@ -152,7 +152,7 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
 via the stub-`Database` seam in front of the first write, so that bite needed no Docker. Positive control green: `scripts/run_web_e2e.py` over the four
 `instanceBackup/{restore,legthree}.*` files, against this branch's jar → `total: 4 passed: 4` (the same-user path,
 plan *as-is*; the A5 and unsupplied-key refusals still fire). `kubectl cp`'s `tar` was
-measured: present in the JVM runtime base, **absent** from the native target's `ubi-minimal`. **Open, and the
+measured: present in the JVM runtime base, **absent** from the native target's `ubi-minimal` (that target is removed since, inbox #200). **Open, and the
 reason this file is not deleted:** the red-first run and phase 3 both need a production compose stack and root,
 which an implement agent cannot bring up (no production `up` from an agent session). The owner runs phase 3's
 procedure once — today's tool first if it is still at hand (`0:0 600`, `ABSENT`), then this one

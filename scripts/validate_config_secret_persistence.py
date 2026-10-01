@@ -12,8 +12,9 @@ container. Resolution follows the real rule rather than a paraphrase of it:
 That is three files that must agree — `Dockerfile`, `VeyqConfig.kt`, and a compose file — which no build, test
 or type checks against each other. It also asserts that **every `runtime-*` target's `WORKDIR` agrees**: a
 service that names a published `image:` cannot say which target it runs, so the relative default is only
-resolvable while the two targets have not drifted apart. And it refuses to pass vacuously: zero app services
-across all of `infra/` is a failure, not a green run over nothing.
+resolvable while the targets have not drifted apart. There is one today (`runtime-jvm`; inbox #200 removed
+`runtime-native`), so that half bites only once a second target exists. And it refuses to pass vacuously: zero
+app services across all of `infra/` is a failure, not a green run over nothing.
 
 **The defect that bought it.** ADR 0056 § Consequences surfaced it and this guard's CR fixed it: no image
 declared a volume for the key file and no compose file mounted one, so a recreated app container regenerated
@@ -116,7 +117,7 @@ def covers(container_path: str, mount_point: str) -> bool:
 
 
 def runtime_workdirs() -> dict[str, str]:
-    """Every `runtime-*` stage's WORKDIR. There is more than one, and a guard anchored on one is no guard."""
+    """Every `runtime-*` stage's WORKDIR — one today, and every one if a second target is ever added."""
     body = DOCKERFILE.read_text()
     found: dict[str, str] = {}
     stages = [(m.start(), m.group(1)) for m in STAGE.finditer(body)]
@@ -146,7 +147,7 @@ if not workdirs:
 distinct = set(workdirs.values())
 if len(distinct) > 1:
     # A service that names a published `image:` cannot say which target it runs, so the relative default is
-    # only meaningful while both agree. Drift here is the finding, not a detail to paper over.
+    # only meaningful while all agree. Drift here is the finding, not a detail to paper over.
     errors.append(
         "the runtime stages disagree about WORKDIR (" +
         ", ".join(f"{name}={path}" for name, path in sorted(workdirs.items())) +

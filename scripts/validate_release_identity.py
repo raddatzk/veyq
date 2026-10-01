@@ -17,11 +17,12 @@ naming a release names a shape the pipeline actually emits (ADR 0057).
      — neither with `--force`, and both keyed on the *tree-derived* version rather than on anything else. The
      `build` job stamps the same value into the image as `VEYQ_VERSION`, which is what the running instance
      later reports.
-  4. **The deployment recipe travels in the image, in every runtime target.** Both `runtime-*` stages of the
-     `Dockerfile` copy `infra/docker-compose.prod.yml` and `infra/.env.example` from their real in-tree paths,
-     to the same destination, and that destination is neither `/work` (it holds `quarkus-app/`; a mount there
-     freezes an upgrade — see the Dockerfile's own comment) nor under `/var/lib/veyq` (the config-secret
-     volume). Plus: every veyq image tag written down under `infra/` matches a tag the pipeline emits.
+  4. **The deployment recipe travels in the image, in every runtime target.** Every `runtime-*` stage of the
+     `Dockerfile` (one today, `runtime-jvm`) copies `infra/docker-compose.prod.yml` and `infra/.env.example`
+     from their real in-tree paths, to the same destination, and that destination is neither `/work` (it holds
+     `quarkus-app/`; a mount there freezes an upgrade — see the Dockerfile's own comment) nor under
+     `/var/lib/veyq` (the config-secret volume). Plus: every veyq image tag written down under `infra/` matches
+     a tag the pipeline emits.
   5. **Every service in the release recipe runs an image the operator can PULL.** No service in
      `infra/docker-compose.prod.yml` carries a `build:` stanza, and every veyq-namespaced image it names is one
      `.github/workflows/container.yml` actually publishes — the set is read out of that workflow's build
@@ -157,7 +158,7 @@ VERSION_EXPR = "${{ needs.version.outputs.version }}"
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
 COPY = re.compile(r"^\s*COPY\s+(?!--from)(?:--\S+\s+)*(\S+)\s+(\S+)\s*$", re.IGNORECASE)
 
-# The deployment recipe, by its in-tree path. Both files, both runtime targets (ADR 0057 §3).
+# The deployment recipe, by its in-tree path. Both files, every runtime target (ADR 0057 §3).
 RECIPE = ("infra/docker-compose.prod.yml", "infra/.env.example")
 # Forbidden destinations, with the reason each is forbidden. /work holds quarkus-app/, so a volume mounted
 # there is seeded once and never refreshed — an upgrade that silently keeps running the first image's jar.

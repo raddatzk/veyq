@@ -13,14 +13,14 @@ root pod outright, and a non-root process cannot bind a port below 1024 in the f
 passes (a) and fails (b) ships a container that starts and then dies binding its listener.
 
 **The defect that bought it — a live one, and the same rule failing to travel for the second time.** The app
-image's runtime stages have run as uid 10001 since the `Dockerfile` was recovered, and
+image's runtime stage has run as uid 10001 since the `Dockerfile` was recovered, and
 `validate_app_volume_ownership.py` leans on that `USER` line. The admin image (ADR 0065) was added later from a
 stock `nginx:<pinned>-alpine`, which runs its master as root and binds port 80 — `grep -rn '^USER ' admin-web/Dockerfile`
 returned nothing on 2026-09-14. Under compose that is invisible; under ADR 0064's chart it is an instance whose
 admin surface — the one where first-run setup happens — cannot be scheduled into a `restricted` namespace at all,
 so nobody can set it up. The first version of this predicate, run against the untouched tree, was green on both
-app stages and red on exactly `admin-web/Dockerfile runtime-nginx` (`USER=None`, `EXPOSE 80`), which is the
-whole argument for a guard over prose: the rule was written in the `Dockerfile` and in a sibling guard's
+app stages of the time and red on exactly `admin-web/Dockerfile runtime-nginx` (`USER=None`, `EXPOSE 80`), which
+is the whole argument for a guard over prose: the rule was written in the `Dockerfile` and in a sibling guard's
 docstring, and the second image did not inherit it, because prose is not enumerated.
 
 **Its limits — what a green run does NOT prove.** It reads Dockerfiles, so it proves what a *stage* declares
@@ -41,8 +41,10 @@ of `.github/workflows/container.yml` (read out of the workflow, never listed) na
 because `docker build .` with no `--target` builds the last stage. Bought on 2026-09-28 (inbox #191): the app
 `Dockerfile` ended on `runtime-native` while the release publishes `runtime-jvm`, so a bare build built the
 unshipped target — and that target did not even build (its `microdnf install curl` conflicted with the base's
-`curl-minimal`), which is how a plain `docker build .` met a failure no released image had. Limit: it proves the
-order, not that either target builds; and a target published from some other workflow is out of its reach.
+`curl-minimal`), which is how a plain `docker build .` met a failure no released image had. That target has since
+been removed (inbox #200); the assertion stays, because every Dockerfile here still has build stages after which
+the published one must come. Limit: it proves the order, not that the target builds; and a target published from
+some other workflow is out of its reach.
 
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """

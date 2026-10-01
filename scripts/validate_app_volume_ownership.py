@@ -109,8 +109,8 @@ def is_app(name: str, service: dict) -> bool:
 
 
 def runtime_stages() -> dict[str, str]:
-    """Each `runtime-*` stage's body, keyed by stage name. There is more than one, and a guard anchored on
-    one is no guard — the published image could have been built from either target."""
+    """Each `runtime-*` stage's body, keyed by stage name. One today (`runtime-jvm`, since inbox #200 removed
+    `runtime-native`); every one is checked, so a second target added later is held to the same rule."""
     body = DOCKERFILE.read_text()
     stages = [(m.start(), m.group(1)) for m in STAGE.finditer(body)]
     out: dict[str, str] = {}
