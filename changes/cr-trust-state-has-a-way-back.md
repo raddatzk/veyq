@@ -192,7 +192,7 @@ The reset re-opens exactly what Decision 7 closed — an empty store — so the 
         device, knowingly, through one confirmed action; that write is the only thing that lowers a mark, and no
         server response reaches it. The server can therefore withhold a document until the user resets it — a
         downgrade that is now consented, not silent."* § What is still open drops the *no way back* bullet.
-      · Done when: `python3 scripts/validate_adr_citations.py` and `python3 scripts/validate_doc_links.py` green.
+      · Done when: `python3 scripts/validate_doc_citations.py` and `python3 scripts/validate_doc_links.py` green.
 - [ ] 1 contracts — `RotateAccountKeysRequest` gains `identityPins` and `deviceRegister` (`$ref` to the existing
       update schemas), both in `required`; the description records "not bound into the proof" and the new 409.
       `rotateAccountKeys` documents `409 stale_version`. `scripts/validate_rotation_shape.py`'s pinned set and
