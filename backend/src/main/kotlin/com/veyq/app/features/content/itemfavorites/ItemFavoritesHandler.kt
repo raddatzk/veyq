@@ -1,6 +1,7 @@
 package com.veyq.app.features.content.itemfavorites
 
 import com.veyq.app.shared.http.Failures
+import com.veyq.app.shared.membership.Access
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
@@ -13,6 +14,9 @@ sealed interface GetItemFavoritesOutcome {
     object Suspended : GetItemFavoritesOutcome, HttpFailure by Failures.tenantSuspended
     object NoScope : GetItemFavoritesOutcome, HttpFailure by Failures.scopeNotFound
 }
+
+/** One of the caller's own item-mark rows, addressed by the slot it is stored at. */
+data class OwnItemFavorites(val scopeId: String, val nodeId: String, val ciphertext: String)
 
 sealed interface PutItemFavoritesOutcome {
     object Stored : PutItemFavoritesOutcome
@@ -37,6 +41,20 @@ class ItemFavoritesHandler(private val store: ItemFavoritesStore, private val ac
         access.check(userId, scopeId, READ)
             .refusal(GetItemFavoritesOutcome.NoScope, GetItemFavoritesOutcome.Suspended)?.let { return it }
         return GetItemFavoritesOutcome.Found(store.listForNode(userId, scopeId, nodeId))
+    }
+
+    /**
+     * The caller's own rows across every scope the gate still lets them read — what an account-key rotation re-tags
+     * (ADR 0068 §9). **A filter, not an answer:** a row of a scope the caller has left or was only proposed to, or
+     * whose tenant is suspended, is left out rather than refused, so the read says nothing about which scopes those
+     * are. The filter is the gate's own READ answer, asked once per scope, so "may this caller see this scope" keeps
+     * its one definition (uc.spaces.scope-access). A co-member's row cannot appear: the store reads by the caller's id.
+     */
+    fun listOwn(userId: String): List<OwnItemFavorites> {
+        val readable = HashMap<String, Boolean>()
+        return store.listOwn(userId)
+            .filter { row -> readable.getOrPut(row.scopeId) { access.check(userId, row.scopeId, READ) == Access.Ok } }
+            .map { OwnItemFavorites(it.scopeId, it.nodeId, it.ciphertext) }
     }
 
     fun put(userId: String, scopeId: String, nodeId: String, ciphertext: String): PutItemFavoritesOutcome {

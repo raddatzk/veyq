@@ -44,6 +44,13 @@ tags:
       server has already observed that node id (the client just listed its media), so the partition adds no
       metadata; a scope-wide set would instead be capped and would re-upload on every toggle. Operator-blind:
       the server never sees *which* items are marked, only opaque ciphertext + its size.
+  - name: own-item-favorites
+    description: >
+      The caller's **own** item-mark blobs across every scope (`/api/item-favorites`) — the same rows the
+      `item-favorites` resource serves per node, read account-wide for an account-key rotation's re-tag
+      ([ADR 0068](../../docs/decisions/0068-favorites-two-confidentiality-levels.md) §9). A tag of its own because
+      one tag is one resource interface with one root path: under `item-favorites` the generated interface's
+      root would widen to `/api`, and the per-node routes would then lose to the `/api/scopes` resources.
 
 paths:
   /api/scopes/{scopeId}/nodes:
@@ -363,7 +370,7 @@ paths:
 
   /api/item-favorites:
     get:
-      tags: [item-favorites]
+      tags: [own-item-favorites]
       operationId: listOwnItemFavorites
       summary: List the caller's own sealed item-mark blobs, across every scope they are an accepted member of.
       description: >

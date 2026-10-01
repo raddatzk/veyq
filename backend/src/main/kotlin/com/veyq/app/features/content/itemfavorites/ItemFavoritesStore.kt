@@ -26,6 +26,12 @@ class ItemFavoritesStore {
         ItemFavoritesEntity.list("scopeId = ?1 and nodeId = ?2", scopeId, nodeId)
             .map { MemberItemFavorites(own = it.userId == callerId, ciphertext = it.ciphertext) }
 
+    /**
+     * The caller's **own** rows, every scope and node, unfiltered by access: which of them the caller may still see
+     * is the handler's question, because a row can outlive the membership it was written under.
+     */
+    fun listOwn(userId: String): List<ItemFavoritesEntity> = ItemFavoritesEntity.list("userId = ?1", userId)
+
     /** Last-write-wins upsert of the **caller's own** blob for the node. */
     @Transactional
     fun upsert(userId: String, scopeId: String, nodeId: String, ciphertext: String) {
