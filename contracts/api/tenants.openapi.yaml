@@ -566,11 +566,27 @@ paths:
         then owner-gated (`403 not_tenant_owner`); the **last-owner guard** rejects removing
         the last tenant OWNER (`409 last_owner`, ADR 0007). Operator-blind: only membership deletions + a lifecycle
         timestamp — never a key. Enforced by code, not this spec (ADR 0008).
+
+        Every scope the removal cuts — the TENANT scope and each co-shared GROUP — counts the removal in the same
+        transaction, so a co-member's link minted before it, which the removed member could have rebuilt from its
+        recovery copy, can no longer be re-activated, only re-issued
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4). With
+        `revokeLinks=true` the same transaction also turns off **every** enabled public share of the **TENANT scope**,
+        whoever created it, each then coming back only by re-issue (point 5) — not the co-shared groups', which the
+        tenant owner need not see. A refused removal (`not_tenant_owner`, `member_not_found`, `last_owner`) writes
+        nothing, the switch-off included.
       security:
         - bearerAuth: []
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - { name: userId, in: path, required: true, description: Opaque id of the member to remove., schema: { type: string, format: uuid } }
+        - name: revokeLinks
+          in: query
+          required: false
+          description: >
+            Also turn off every enabled public share of the TENANT scope in the removal's transaction (ADR 0075).
+            Omitted or false = only the removed member's own shares go off.
+          schema: { type: boolean, default: false }
       responses:
         "204":
           description: The member was removed (shared access cut; own scopes grace-tombstoned).

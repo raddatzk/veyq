@@ -29,7 +29,8 @@ tags:
     description: >
       Public viewer shares — the curator's create/list/revoke (authenticated) plus the anonymous guest
       resolve + gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
-      `/api/shares` subtree.
+      `/api/shares` subtree, plus the one scope-addressed switch-off of every share of a scope
+      (`/api/scopes/{scopeId}/shares/revoke`).
 
 paths:
   /api/shares:
@@ -133,6 +134,51 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
 
+  /api/scopes/{scopeId}/shares/revoke:
+    post:
+      tags: [sharing]
+      operationId: revokeScopeShares
+      summary: Turn off every link of a scope — they come back only by re-issue.
+      description: >
+        A scope **owner** (group owner, tenant owner, the personal scope's owner) turns off **every** enabled public
+        share of the scope, whoever created it, in one transaction: each one's link then `404`s, and each is marked
+        so it comes back only through `reissueShare` — a new id and a new `K_share` — never `reactivateShare`
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A
+        switch-off says "a link may have leaked", and a link with no recovery copy leaks like any other, so the mark
+        holds for every share it turns off. A share minted afterwards is untouched. Answers how many links it turned
+        off; idempotent — a second call answers `revoked: 0`. Membership-gated first (a non-member gets the same
+        `404` as an unknown scope, ADR 0042), then owner-gated. No body.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: scopeId
+          in: path
+          required: true
+          description: The scope whose shares are turned off.
+          schema: { type: string, format: uuid, example: 7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c }
+      responses:
+        "200":
+          description: Every enabled share of the scope is off and marked; the body counts them.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScopeSharesRevoked" }
+              example: { revoked: 2 }
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403":
+          description: >
+            The caller is a member of the scope but not its owner (`not_scope_owner`), or the tenant is suspended
+            (`tenant_suspended`, uc.spaces.scope-access).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } }
+        "404":
+          description: No such scope, or the caller is not a member of it (indistinguishable, ADR 0042).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+
   /api/shares/{shareId}/revoke:
     post:
       tags: [sharing]
@@ -170,12 +216,14 @@ paths:
         Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller. Any **current
         member** of the share's scope may adopt it, and the **same** link resolves again — which is why a link a
         departed member may hold is never re-activated
-        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)): when the share's
-        owner is no longer a member of its scope, or its recovery copy is sealed below the scope's current epoch
-        (every member then could rebuild the link, one since removed included), the answer is
-        `409 reissue_required`, nothing written, and the caller re-issues it (`reissueShare`) instead. A share with
-        no recovery copy is judged by its owner's membership alone. Idempotent for a share the caller may already
-        adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): when a
+        bulk switch-off turned the share off (`revokeScopeShares`, or a removal's `revokeLinks`), when its owner is no
+        longer a member of its scope, or when it carries a recovery copy and either that copy is sealed below the
+        scope's current epoch or the scope has lost an accepted member since the share was minted (every member then
+        could rebuild the link, one since removed included), the answer is `409 reissue_required`, nothing written,
+        and the caller re-issues it (`reissueShare`) instead — the same predicate the list's `reissueRequired`
+        carries. A share with no recovery copy is judged by the switch-off and its owner's membership alone.
+        Idempotent for a share the caller may already adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
         the space's deletion grace, and the instance's sharing capability for the share's role
         (uc.sharing.share-shared-scope A2).
       security:
@@ -196,9 +244,10 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
           description: >
-            A departed member may hold this link (`reissue_required`, nothing written — its owner is no longer a
-            member of the scope, or its recovery copy is sealed below the scope's current epoch; re-issue it, ADR
-            0075), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+            A departed member may hold this link (`reissue_required`, nothing written — a bulk switch-off turned it
+            off, its owner is no longer a member of the scope, or its recovery copy predates the scope's current
+            epoch or its last member removal; re-issue it, ADR 0075), or the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
         "422":
@@ -1070,9 +1119,20 @@ components:
           maxLength: 43
           example: 3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i
 
+    ScopeSharesRevoked:
+      type: object
+      required: [revoked]
+      properties:
+        revoked:
+          x-veyq-visibility: measure
+          type: integer
+          minimum: 0
+          description: How many enabled shares the switch-off turned off — 0 when there were none (idempotent).
+          example: 2
+
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1154,6 +1214,16 @@ components:
             list also includes other members' shares (cr-0104); a disabled share by anyone can be re-activated by
             a member, which transfers ownership.
           example: true
+        reissueRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when a departed member may hold this link, so it comes back only by `reissueShare`, never
+            `reactivateShare` — a bulk switch-off turned it off, its owner has left the scope, or its recovery copy
+            predates the scope's current epoch or its last member removal (ADR 0075 point 4). The server computes it
+            with the same predicate the re-activation refusal runs, so the manage panel's hint and the refusal cannot
+            disagree.
+          example: false
         expiresAt:
           x-veyq-visibility: time
           type: [string, "null"]
