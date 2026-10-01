@@ -4,7 +4,8 @@
 **What it asserts.** In `contracts/api/account.openapi.yaml`:
 
   1. `components.schemas.RotateAccountKeysRequest` has exactly the property set
-     {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature}.
+     {identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature,
+     identityPins, deviceRegister}.
   2. Its `required` list equals that same set — **every** property is mandatory. An optional field is a
      discriminator spelled by omission: leave `recoveryWrap` out and you have asked for a rotation that
      rewrites one cold wrap and leaves the other holding the old Master Key, which is identity-only rotation
@@ -13,6 +14,12 @@
      {wrappedKey, kdfParams} — no `method`. Which cold wrap is being rewritten is the *field it arrives in*,
      never a value inside it, so a `wraps: [{method, …}]` array cannot come back one level down and carry a
      subset again.
+  4. `identityPins` and `deviceRegister` are `$ref`s to the documents' own `IdentityPinsUpdate` /
+     `DeviceRegisterUpdate`. The rotation re-seals both inside its one transaction (ADR 0060 § Consequences):
+     re-sealed after the publish, a failed re-seal left a document under a key that no longer exists, which every
+     device then refuses (ADR 0028 Decision 7). Required like the rest — "this rotation leaves the pin store
+     behind" is the omission this guard exists to make unsayable, and an account with no document yet sends it
+     empty rather than leaving the field out.
 
 ADR 0060 Decision 1 is that the Master Key and the identity keypair rotate **together, always**: every path to
 the identity private key runs through the Master Key, so an identity compromise implies a Master-Key
@@ -34,8 +41,9 @@ response, at path/query parameters, at headers, or inside the opaque base64 fiel
 ciphertext blob is invisible here and always will be. Of the cold-credential gate (ADR 0060 Decision 2) it pins
 only that `secretKeyProofSignature` is present and required; whether the server *verifies* it is the backend's
 bite tests' job, and the password half is client-side and has no contract surface at all. Green means exactly:
-**the rotation request still has these five mandatory fields and no sixth, and its wraps still carry no
-method.**
+**the rotation request still has these seven mandatory fields and no eighth, its wraps still carry no
+method, and its two documents still arrive as their own update shapes.** That the server writes those two
+documents inside the rotation's transaction is `RotationSliceTest`'s to prove, not this guard's.
 
 Two narrower predicates were reached for first and are wrong; recorded so the next reader does not re-derive
 them (§ *run the predicate against the untouched tree*, `changes/README.md`):
@@ -63,16 +71,21 @@ REQUEST = "RotateAccountKeysRequest"
 WRAP = "RotatedWrap"
 
 # ADR 0060 Decision 1 + § Consequences: the new identity, the private key under the new Master Key, both cold
-# wraps rewritten, and the Secret-Key proof over all of it (Decision 2). Nothing optional, nothing selectable.
+# wraps rewritten, the Secret-Key proof (Decision 2), and the two Master-Key-sealed account documents re-sealed
+# under the new key. Nothing optional, nothing selectable.
 REQUEST_PROPS = {
     "identityPublicKey",
     "wrappedIdentityPrivateKey",
     "passwordWrap",
     "recoveryWrap",
     "secretKeyProofSignature",
+    "identityPins",
+    "deviceRegister",
 }
 WRAP_PROPS = {"wrappedKey", "kdfParams"}
 WRAP_REFS = ("passwordWrap", "recoveryWrap")
+# Each document arrives in its own named field, as the shape its own PUT already takes.
+DOCUMENT_REFS = {"identityPins": "IdentityPinsUpdate", "deviceRegister": "DeviceRegisterUpdate"}
 
 # Spellings a mode would plausibly arrive under. Not the enforcement — the property-set pin above is — but a
 # named hit earns a message that says *why* rather than "unexpected field".
@@ -152,6 +165,15 @@ def main() -> int:
             errors.append(
                 f"{REQUEST}.{name}: must be a $ref to {WRAP}. Each cold wrap arrives in its own named field so "
                 f"that 'rewrite one and leave the other' is unsayable; an inline shape or a list re-opens it."
+            )
+
+    for name, target in DOCUMENT_REFS.items():
+        prop = (request.get("properties") or {}).get(name)
+        if isinstance(prop, dict) and prop.get("$ref") != f"#/components/schemas/{target}":
+            errors.append(
+                f"{REQUEST}.{name}: must be a $ref to {target}, the shape the document's own write takes. A "
+                f"rotation re-seals it under the new Master Key inside its one transaction (ADR 0060 "
+                f"§ Consequences); an inline or list shape is how a subset of documents comes back."
             )
 
     wrap_props = set(wrap.get("properties") or {})

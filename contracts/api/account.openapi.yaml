@@ -409,7 +409,8 @@ paths:
         (uc.account.rotate-keys, ADR 0060): publish the new identity public key; replace
         `wrappedIdentityPrivateKey` with the identity private key sealed under the new Master Key; rewrite the
         `PASSWORD` and `RECOVERY` wraps; **delete every other wrap** (`DEVICE`, `DEVICE_KEY`, `PASSKEY` — their
-        key material is device-held and cannot be rewritten from here);
+        key material is device-held and cannot be rewritten from here); store the identity-pin store and the
+        device register re-sealed under the new Master Key, each guarded by the version the client read;
         supersede every live pairing channel (an unspent envelope carries the *old* Master Key and a live
         delegated session, so a later collect would hand a device a dead key and a working login); revoke every
         other session; and originate a `scope-rotation` job for each scope the caller shares with somebody.
@@ -473,12 +474,18 @@ paths:
               example: { code: secret_key_proof_failed }
         "409":
           description: >
-            The account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the rotation cannot be
-            applied whole. **Nothing was written** — a half-rotated account is a lockout, not a degraded state.
+            `rotation_unavailable` — the account has no `PASSWORD` floor or no `RECOVERY` wrap to rewrite, so the
+            rotation cannot be applied whole. `stale_version` — the `version` sent with `identityPins` or
+            `deviceRegister` is no longer the stored one (another device wrote it meanwhile); the client re-reads,
+            re-seals and resubmits with the same new keys and the same signature, which does not cover the two
+            documents. **Nothing was written** in either case — a half-rotated account is a lockout, not a
+            degraded state.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ErrorResponse" }
-              example: { code: rotation_unavailable }
+              examples:
+                unavailable: { value: { code: rotation_unavailable } }
+                stale: { value: { code: stale_version } }
 
   /api/account/email:
     get:
@@ -1012,7 +1019,17 @@ components:
         does not change, so what logs in is untouched and the Emergency Kit survives; no wrap `method` — see
         `RotatedWrap`; no list of wraps to delete — every non-cold wrap goes, always, because device-held key
         material cannot be rewritten from here.
-      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature]
+
+        **The two Master-Key-sealed account documents ride in the same body** (`identityPins`,
+        `deviceRegister`), re-sealed under the new Master Key and written by the same transaction as everything
+        above. Written after the publish they could be left under a key that no longer exists, and every device
+        refuses a document that does not open (ADR 0028 Decision 7) — so a rotation that cannot re-seal them does
+        not happen. Both are required: an account that never wrote one sends it empty, sealed for version 1
+        against `version: 0`. **They are not bound into `secretKeyProofSignature`, on purpose.** The proof
+        defends against a session holder without the Secret Key, and that holder can already write both
+        documents through their own endpoints with the session alone; binding them would change the
+        conformance-pinned statement for no defended case.
+      required: [identityPublicKey, wrappedIdentityPrivateKey, passwordWrap, recoveryWrap, secretKeyProofSignature, identityPins, deviceRegister]
       properties:
         identityPublicKey:
           type: string
@@ -1049,6 +1066,12 @@ components:
           maxLength: 128
           example: c2VjcmV0LWtleS1wcm9vZi1zaWduYXR1cmU=
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        identityPins:
+          $ref: "#/components/schemas/IdentityPinsUpdate"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
+        deviceRegister:
+          $ref: "#/components/schemas/DeviceRegisterUpdate"
+          x-field-extra-annotation: '@field:jakarta.validation.Valid'
 
     RotateAccountKeysResult:
       type: object
