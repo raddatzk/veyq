@@ -9,6 +9,25 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Third refine wave, 2026-10-01 — open, not covered by the answer below.** Inbox #229 (*drop share-identity rows
+whose media were all erased*) is folded in here: it is the "later hygiene step" question 4 left out, and it needs
+this CR's tombstone to be safe. Questions 8–9 and § *Folded: inbox #229* below carry it; the go on questions 1–7
+stands for the rest of the CR whatever the answer.
+
+8. **When may an identity row go?** Its `wrappedIdentityKey` is the only way anyone opens an uploader guest's media,
+   its sealed name is the only name their bucket shows, and its token is a live guest's session. **Recommendation:
+   only when all three are dead at once** — its share is tombstoned (no guest can use the token again: every guest
+   write starts at `activeShare`), **and** no media row (live or trashed — a trashed one can be restored)
+   references it, **and** no bucket does. An open upload session does not hold it: such a session can never
+   complete once the share is gone, and the stale-session sweep reclaims its objects by storage key alone.
+   Measured, this means: a guest who never uploaded goes with the link's delete; a guest who did goes with the
+   purge of the last Memory that held their uploads (primary buckets are erased only by a node or scope purge).
+9. **Fold #229 into this CR?** **Recommendation: yes.** The rule rests on the tombstone (question 1b) and runs in
+   the same two places this CR already edits — the tombstone body and `NodeSubtreePurge`. As its own CR it would
+   land after this one and re-open both. Its value is erasure, not tidiness: a guest's sealed name and wrapped key
+   are the last trace of them once the Memory they gave to is erased, and security-model § Deletion & erasure should
+   be able to say so.
+
 **Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
 
 Nothing below is decided. Each question carries a recommendation; the CR is written for the recommendations.
@@ -179,4 +198,60 @@ The `200`-after-purge in row 8 is read from the code, not run; B1 is written red
   unchanged (a trashed node's share is **not** tombstoned — only the purge does that).
 
 **Not proven:** that a malicious operator erases anything (a dump or backup keeps the old row, as for every erasure
-in security-model § Deletion & erasure); that deleting identities of an erased Memory is safe (left out, question 4).
+in security-model § Deletion & erasure); that deleting identities of an erased Memory is safe (left out, question 4;
+taken up by § *Folded: inbox #229* if the owner answers question 9 yes).
+
+## Folded: inbox #229 — share identities go once nothing can use or open them (third refine wave, 2026-10-01)
+
+Written for questions 8–9's recommendations. Until the owner answers them this section has **no go**; questions
+1–7 and everything above keep theirs.
+
+### Inventory — measured on `main` @ `7a34c57`, 2026-10-01
+
+| # | Fact | Locator |
+|---|---|---|
+| I1 | Three things reference an identity id: a media row (`share_identity_id`, any `deleted_at`), a primary bucket (`owner_key = share:{id}`) and an upload session (`opener_share_identity_id`, no foreign key). | `grep -rn "shareIdentityId\|openerShareIdentityId" backend/src/main/kotlin/com/veyq/app/features/media/Entities.kt`; `grep -n "PREFIX_SHARE = " backend/src/main/kotlin/com/veyq/app/features/media/OwnerKey.kt`; `grep -n "opener_share_identity_id" backend/src/main/resources/db/migration/V51__upload_session_opener_and_window.sql` |
+| I2 | What reads an identity: the token lookup (guest writes), the uploader-key map (any share's identity, by media), and the bucket name (primary buckets only). | `grep -n "fun findIdentity\|fun uploaderKeys" backend/src/main/kotlin/com/veyq/app/features/sharing/SharingStore.kt`; `grep -n "private fun contributorIdentityOf" -A4 backend/src/main/kotlin/com/veyq/app/features/media/MediaStore.kt` |
+| I3 | Every guest write path starts at `activeShare`, before the token lookup — a tombstoned share's token is unusable. | `grep -n "val share = activeShare(shareId) ?: return" backend/src/main/kotlin/com/veyq/app/features/sharing/SharingHandler.kt` |
+| I4 | Only the scope purge deletes identities today. | `grep -rn "ShareIdentityEntity.delete" backend/src/main/kotlin` |
+| I5 | A primary bucket is deleted only by a node or scope purge; a sub-bucket delete reparents to the primary; media moves stay within one node. | `grep -rn "BucketEntity.delete" backend/src/main/kotlin`; `grep -n "fun deleteBucketReparent\|fun moveMedia" backend/src/main/kotlin/com/veyq/app/features/media/MediaStore.kt` |
+| I6 | One body erases a media row for every purge (retention, member-expedited, contributor delete-own, node purge); the node purge then deletes the subtree's buckets. | `grep -n "fun purgeMediaRows" backend/src/main/kotlin/com/veyq/app/features/media/MediaStore.kt`; `grep -n "purgeMediaRows\|BucketEntity.delete" backend/src/main/kotlin/com/veyq/app/features/content/NodeSubtreePurge.kt` |
+| I7 | The stale-session sweep deletes sessions and records their objects by storage key, without reading the opener. | `grep -n "fun purgeSessionsIdleSince" -A6 backend/src/main/kotlin/com/veyq/app/features/media/MediaStore.kt` |
+
+### Decisions
+
+10. **`SharingStore.dropDeadIdentities(candidateIds)`** — the one body: deletes each candidate whose share has
+    `deleted_at` set and that no media row (any state) and no bucket references. Candidates are passed in; it never
+    scans the table.
+11. **Callers, both inside transactions this CR already edits:** the tombstone body (Decision 2) passes the share's
+    identities; `NodeSubtreePurge` collects the identity ids of the media and buckets it erases **before** erasing
+    them, and calls it **after** the bucket delete and Decision 6's tombstones — so a link deleted earlier loses its
+    identities when the last Memory holding their uploads is purged.
+12. **Sessions do not hold an identity** (question 8): no change to the stale-session sweep.
+
+### Phases (merged into the CR's phases above)
+
+- **Phase 2** adds: Decisions 10–12.
+- **Phase 4** adds: security-model § Deletion & erasure — a guest's identity row (sealed name, wrapped key) is erased
+  once its link is deleted and nothing of theirs remains; `uc.memory.delete-node` E4's wording covers it; inbox
+  #229 → done.
+
+### Definition of done (added)
+
+- **B6 — a dead identity goes, a live one stays (red-first: today no path but the scope purge deletes one).** In
+  `ShareDeletedNodeSliceTest`:
+  - **Setup:** UPLOADER share U on Memory X. Guest G1 names themself and never uploads; guest G2 uploads media M;
+    guest G3 uploads media M3 and deletes it again (delete-own), so G3 keeps an empty primary bucket.
+  - **Action 1:** delete U. **After:** G1's row is gone; G2's row stays with its `wrappedIdentityKey`, and the
+    members' media page still returns M's `uploaderKeys` entry (B3's assertion, unchanged); G3's row stays (its
+    bucket still shows its name). **Red today:** the delete does not exist, and nothing removes G1 — the assertion
+    expected to fail first is "G1's row is gone".
+  - **Action 2:** trash and purge X. **After:** G2's and G3's rows are gone.
+  - **Control for the share condition:** share V on Memory Y stays enabled; its guest G4 uploads only into chapter
+    C under Y; trash and purge C (not Y) → G4's media and buckets are erased, and G4's row **stays** — V is live and
+    G4's token is still a session.
+  - **Bite, per lever** (in a snapshot copy, restored after each): drop the `deleted_at` condition → the G4 control
+    goes red; drop the bucket condition → G3's Action 1 assertion goes red; drop the media condition → G2's Action
+    1 assertion goes red.
+
+**Not proven (added):** that a backup forgets the rows (the same limit as every erasure above).
