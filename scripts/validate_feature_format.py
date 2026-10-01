@@ -21,8 +21,9 @@ What it asserts, and why each one is worth a check:
      something runs*, and prose paragraphs describing a mechanism are not that. `uc.memory.place` had a rich,
      correct, entirely un-followable flow for months, and nobody could point at what was wrong with it.
   E. A use-case carries the bilingual end-user section with **both** an `**EN —**` and a `**DE —**` block —
-     it is the single source the wiki is derived from, so a missing half is a missing wiki page. Enablers
-     must NOT carry one (they have no standalone end-user story).
+     it is the plain-language account of the use-case that a hand-written wiki page draws on, and the
+     published wiki is bilingual, so a missing half is a missing translation. Enablers must NOT carry one
+     (they have no standalone end-user story).
 
 **Why an enabler owes no `## Main flow`.** `docs/features/README.md` says an enabler carries "the same
 Main-flow / exceptions" as a use-case. Measured against the 13 that exist, that is not true and never was:
@@ -104,7 +105,7 @@ def check(doc: pathlib.Path, is_uc: bool) -> None:
     if is_uc:
         if bil is None:
             errors.append(f"{rel(doc)}: missing `## {BILINGUAL} / Was das für dich bedeutet` — it is the "
-                          f"single source the wiki is derived from")
+                          f"plain-language account a wiki page draws on")
         else:
             for lang in ("EN", "DE"):
                 if not re.search(r"\*\*" + lang + r"\s*[—-]", bil):

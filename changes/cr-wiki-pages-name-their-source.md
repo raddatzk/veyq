@@ -1,7 +1,7 @@
 ---
 id: cr-wiki-pages-name-their-source
 title: Every published wiki page names the docs it speaks for, and those docs name it back
-status: planned
+status: in-progress
 satisfies: []
 adrs: []
 invariants: ["self-hostable by default"]
@@ -106,8 +106,15 @@ published pages that speak for it.
 
 ## Phases
 
-- [ ] 1 docs: Decision 1. · Done when: the trust-chain glob is green, and the locator returns no sentence that
+- [x] 1 docs: Decision 1. · Done when: the trust-chain glob is green, and the locator returns no sentence that
       calls the wiki derived or generated.
+      **Measured:** the Decision-1 locator returns nothing. A second angle
+      (`grep -rn -i wiki docs/ CLAUDE.md .claude/skills scripts/*.py .github | grep -v docs/inbox.md | grep -i
+      "deriv\|generat\|single source\|assembl"`) found three more the locator could not see, all corrected:
+      `docs/ai/README.md` § Two documentation audiences (*"Single source, derive the wiki"*) and § Start light
+      (*"the wiki generator"*), and a comment in `uc.account.rotate-keys.yaml`. It now returns only
+      `wiki-sync.yml:4`, which says the *repo* is the wiki's source of truth, which is true. Glob without
+      `validate_guard_gaps.py`: `ran=42 failures=0`.
 - [ ] 2 guard, red: Decisions 3 and 4, with no headers written yet. · Done when: on the untouched wiki the
       guard fails for **all 11 pages**, each with *no header*, and every other guard is green. Paste the
       output.
@@ -119,6 +126,8 @@ published pages that speak for it.
 
 - Before the first edit, run the guard baseline and paste it: `for f in scripts/validate_*.py; do python3 "$f";
   done`. It ends green.
+  **Measured** on `7a34c57` (this session ran the sibling CR first; this baseline precedes both):
+  `ran=43 failures=0`.
 - **Red first:** Phase 2's output.
 - **Bites.** Each is snapshot-and-restore, with one lever per check:
   - (b) Point a `speaks-for` at a missing doc.

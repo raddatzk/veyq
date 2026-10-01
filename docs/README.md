@@ -27,11 +27,11 @@ docs/
 
 ## The five kinds
 
-| Kind | Answers | Contains (altitude) | A CR can `satisfies:` it? | Wiki source? |
+| Kind | Answers | Contains (altitude) | A CR can `satisfies:` it? | A wiki page speaks for it? |
 |---|---|---|---|---|
-| **Use-case** `uc.*` | *What can a user **do**?* | user-observable behavior + failure modes | **yes** | **yes** (plain-language EN+DE) |
-| **Enabler** `en.*` | *What **feature-scoped** foundation makes use-cases possible?* | mechanism / how-it's-built (one feature) | **yes** | no |
-| **Crosscutting** `cc.*` / `crosscutting/` | *A **cross-feature** concern or model?* | mechanism/model/convention spanning features | **yes** | no (unless it carries one) |
+| **Use-case** `uc.*` | *What can a user **do**?* | user-observable behavior + failure modes | **yes** | **yes** — its EN+DE section is the page's raw material |
+| **Enabler** `en.*` | *What **feature-scoped** foundation makes use-cases possible?* | mechanism / how-it's-built (one feature) | **yes** | yes, when the page explains the model (`en.account.key-model`) |
+| **Crosscutting** `cc.*` / `crosscutting/` | *A **cross-feature** concern or model?* | mechanism/model/convention spanning features | **yes** | yes (`security-model.md`) |
 | **ADR** `decisions/` | *Why did we **decide** it this way?* | one settled choice **+ its rejected alternatives** | **no** — referenced via `adrs:` | no |
 | **Architecture** `architecture/` | *How is the **whole system** built, right now?* | synthesized overview that **indexes** the rest | no (a map, kept current) | no |
 

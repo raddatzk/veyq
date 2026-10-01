@@ -83,7 +83,7 @@ acceptanceCriteria:
   - id: forward-secrecy-not-repair
     # No test can assert "no surface implies repair" — that is prose, and the coverage refs below reach only
     # the copy keys that carry it. What actually holds this is review of the four facts the panel states before
-    # any button, the per-scope result status, and the EN+DE wiki section derived from the use-case.
+    # any button, the per-scope result status, and the use-case's EN+DE section and the wiki page that speaks for it.
     text: No surface of the flow implies that rotating undoes a compromise. Content the old identity already read is not retracted; rotation ends the exposure going forward, and the copy says so before the confirmation, not after it.
     coverage:
       web: { unit: [src/features/account/rotation/rotateKeys.test.ts] }

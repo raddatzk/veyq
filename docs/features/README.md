@@ -1,8 +1,8 @@
 # Features
 
 Product capabilities. Each feature is a folder with an overview (`_index.md`), its **use-cases**, and its
-**enablers**. A use-case is the unit of the trust chain *and* the single source for the end-user wiki; an
-enabler is shared foundation that several use-cases build on.
+**enablers**. A use-case is the unit of the trust chain *and* carries the plain-language account a wiki page
+draws on; an enabler is shared foundation that several use-cases build on.
 
 > **What belongs in which kind of doc** (use-case vs enabler vs crosscutting vs ADR vs architecture) is
 > canonical in [`../README.md`](../README.md). This page covers the **format** of use-cases + enablers.
@@ -61,8 +61,8 @@ required sections, numbered flow steps, and the EN+DE pair. What it cannot check
 
 ## What this means for you / Was das für dich bedeutet
 **EN —** plain language.  **DE —** dieselbe Aussage.
-The end-user wiki is DERIVED from these sections (+ the standalone safety pages) — do not
-maintain a parallel wiki page by hand.
+The plain-language source a wiki page draws on. The page itself is written by hand and names this doc
+in its `speaks-for` header; this doc links the page back under ## Related.
 
 ## Related
 Actors, cross-cutting concepts, decisions (ADRs), related use-cases.
@@ -74,8 +74,11 @@ the next implementer guessing at the sequence. If a paragraph explains a rule ra
 `## Quality notes`; if it explains a structure, it belongs in the enabler. (`uc.memory.place` was four bold
 paragraphs and no steps for months — correct, rich, and unusable as a build order.)
 
-The bilingual section is the **single source** behind `wiki/` (a Python generator assembles the wiki
-from it later — deferred under start-light; author the section now so it's free then).
+The bilingual section is the plain-language material behind `wiki/`, **not** the wiki itself. The wiki is a
+small set of hand-written topic pages, each spanning several docs, and nothing generates it. What keeps a page
+from drifting silently away from its docs is an address, not a derivation: line 1 of every page declares the
+docs it speaks for and its other-language pair, and each declared doc under `docs/` links the page back, so a
+change to the doc shows which published page to re-read (`scripts/validate_wiki_sources.py`).
 
 ## Enabler format
 
