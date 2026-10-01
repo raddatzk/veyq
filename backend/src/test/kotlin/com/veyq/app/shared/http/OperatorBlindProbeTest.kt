@@ -164,6 +164,12 @@ class OperatorBlindProbeTest {
         "revokeShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/revoke") },
         "reactivateShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/reactivate") },
         "updateShare" to Probe(Address.SHARE) { s -> Call("PATCH", "/api/shares/${s.shareId}", "{}") },
+        "reissueShare" to Probe(Address.SHARE) { s ->
+            Call(
+                "POST", "/api/shares/${s.shareId}/reissue",
+                """{"shareId":"${TestIds.shareId()}","wrap":"$B64","sealedName":"$B64","sealedShareKey":"$B64","sealedShareKeyEpoch":0}""",
+            )
+        },
         // --- tasks ---
         "enqueueTask" to Probe(Address.SCOPE) { s ->
             Call("POST", "/api/tasks/enqueue", """{"scopeId":"${s.scopeId}","capabilityTag":"$JOB_TAG","sealedBody":"$B64"}""")

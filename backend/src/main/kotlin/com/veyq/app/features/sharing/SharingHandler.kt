@@ -176,6 +176,23 @@ sealed interface ReactivateShareOutcome {
     object CapabilityDisabled : ReactivateShareOutcome, HttpFailure by Failures.capabilityDisabled
     /** No such share, or the caller is not a member of its scope — a non-enumerable 404. */
     object NotFound : ReactivateShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** A departed member may hold this link ([ReissuePolicy], ADR 0075) — a 409, nothing written; re-issue it. */
+    object ReissueRequired : ReactivateShareOutcome, HttpFailure by httpFailure("reissue_required", CONFLICT)
+}
+
+sealed interface ReissueShareOutcome {
+    data class Created(val shareId: String) : ReissueShareOutcome
+    object Suspended : ReissueShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : ReissueShareOutcome, HttpFailure by Failures.scopeDeleting
+    /** No such share, the caller is not a member of its scope, or it is enabled and not theirs — one 404. */
+    object NotFound : ReissueShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+    /** The capability the old share's role needs is off (ADR 0032) — a re-issue publishes a link. */
+    object CapabilityDisabled : ReissueShareOutcome, HttpFailure by Failures.capabilityDisabled
+    /** The keys do not match the old share's role — a 400, as on create. */
+    object InvalidRequest : ReissueShareOutcome, HttpFailure by Failures.invalidRequest
+    /** The recovery copy is not sealed at the scope's current epoch (ADR 0024 Decision 6) — a 409, nothing written. */
+    object StaleEpoch : ReissueShareOutcome, HttpFailure by Failures.staleEpoch
+    object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
 }
 
 /** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
@@ -315,15 +332,52 @@ class SharingHandler(
     /** Re-activate a soft-revoked share and adopt it (cr-0104): any current member of the share's scope may flip
      *  it back on, which transfers ownership to them. A non-member / unknown share is a non-enumerable 404.
      *  Re-activating publishes the link again, so it passes what creating does (share-shared-scope A2): the gate
-     *  (no adoption during the space's deletion grace) and the instance capability for the share's role. */
+     *  (no adoption during the space's deletion grace) and the instance capability for the share's role. A link a
+     *  departed member may hold is refused `reissue_required` (ADR 0075) — re-activation revives the same link. */
     fun reactivate(userId: String, shareId: String): ReactivateShareOutcome {
         val share = store.find(shareId) ?: return ReactivateShareOutcome.NotFound
         access.check(userId, share.scopeId, WRITE)
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
         if (!capabilities.isActive(capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
+        // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead. "Still a
+        // member" is what the gate itself answers for a writer — the scope AND the tenant, so a member removed from
+        // the tenant, whose rows on other spaces linger through the grace window, counts as gone.
+        val ownerIsMember = access.check(share.ownerAccount, share.scopeId, WRITE) == Access.Ok
+        val currentEpoch = scopes.currentEpoch(share.scopeId) ?: return ReactivateShareOutcome.NotFound
+        if (ReissuePolicy.required(ownerIsMember, share.sealedShareKeyEpoch, currentEpoch)) {
+            return ReactivateShareOutcome.ReissueRequired
+        }
         store.reactivate(userId, shareId)
         return ReactivateShareOutcome.Done
+    }
+
+    /**
+     * Re-issue a share (ADR 0075): a new share under the client-minted [newShareId] with a fresh `K_share`, and the
+     * old one turned off, in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
+     * the old row, so a re-issue can neither move a link nor flip it into or out of UPLOADER. An enabled share is
+     * the owner's to re-issue (as revoke); a disabled one any member's, who owns the new share (as re-activation
+     * adopts). Every refusal writes nothing.
+     */
+    fun reissue(
+        userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
+        sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int,
+        sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+    ): ReissueShareOutcome {
+        val old = store.find(shareId) ?: return ReissueShareOutcome.NotFound
+        access.check(userId, old.scopeId, WRITE)
+            .refusal(ReissueShareOutcome.NotFound, ReissueShareOutcome.Suspended, ReissueShareOutcome.Deleting)?.let { return it }
+        if (old.enabled && old.ownerAccount != userId) return ReissueShareOutcome.NotFound
+        if (!capabilities.isActive(capabilityFor(old.role))) return ReissueShareOutcome.CapabilityDisabled
+        // No drop private key: the old UPLOADER share proves the Memory already holds one (it is set once and
+        // never cleared), and every upload so far is sealed to it (ADR 0031 point 7).
+        val keys = shareKeys(old.role, wrap, sealedDropPublicKey, null) ?: return ReissueShareOutcome.InvalidRequest
+        if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return ReissueShareOutcome.StaleEpoch
+        val created = store.reissue(
+            old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
+            sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+        )
+        return if (created) ReissueShareOutcome.Created(newShareId) else ReissueShareOutcome.IdTaken
     }
 
     /**

@@ -9,6 +9,7 @@ import com.veyq.app.generated.model.CreateShareRequest
 import com.veyq.app.generated.model.LocalizedMarkdown
 import com.veyq.app.generated.model.PresignedUrl
 import com.veyq.app.generated.model.PublicShare
+import com.veyq.app.generated.model.ReissueShareRequest
 import com.veyq.app.generated.model.ShareBlobDownload
 import com.veyq.app.generated.model.ShareBlobUploadResultItem
 import com.veyq.app.generated.model.ShareBlobUploadsRequest
@@ -134,6 +135,30 @@ class SharingResource(
     override fun reactivateShare(shareId: String): Response =
         when (val o = handler.reactivate(identity.principal.name, shareId)) {
             ReactivateShareOutcome.Done -> Response.noContent().build()
+            is HttpFailure -> httpError(o)
+        }
+
+    // Re-issue (ADR 0075): the new share's node + role come from the old row, never from the request.
+    override fun reissueShare(shareId: String, reissueShareRequest: ReissueShareRequest): Response =
+        when (val o = handler.reissue(
+            userId = identity.principal.name,
+            shareId = shareId,
+            newShareId = reissueShareRequest.shareId,
+            wrap = reissueShareRequest.wrap,
+            sealedDropPublicKey = reissueShareRequest.sealedDropPublicKey,
+            sealedName = reissueShareRequest.sealedName,
+            expiresAt = reissueShareRequest.expiresAt?.toInstant(),
+            sealedNote = reissueShareRequest.sealedNote,
+            sealedShareKey = reissueShareRequest.sealedShareKey,
+            sealedShareKeyEpoch = reissueShareRequest.sealedShareKeyEpoch,
+            sealedShareName = reissueShareRequest.sealedShareName,
+            passwordRequired = reissueShareRequest.passwordRequired ?: false,
+            pwSalt = reissueShareRequest.pwSalt,
+            pwVerifier = reissueShareRequest.pwVerifier,
+            sealedPassword = reissueShareRequest.sealedPassword,
+        )) {
+            is ReissueShareOutcome.Created -> Response.status(Response.Status.CREATED)
+                .entity(ShareCreated(shareId = o.shareId)).build()
             is HttpFailure -> httpError(o)
         }
 
