@@ -1,7 +1,7 @@
 ---
 id: cr-restore-places-the-key-as-the-runtime-user
 title: A restore places the config-secret key where the app can read it — on both deployment targets
-status: planned
+status: in-progress     # phases 1, 2, 4 landed 2026-10-01; phase 3 (live, root, production stack) is the owner's
 satisfies: [uc.admin.back-up-and-restore-instance]
 adrs: ["0050", "0056", "0064"]
 invariants: [self-hostable by default]
@@ -106,13 +106,13 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
 
 ## Phases
 
-- [ ] 1 tool: extract `key_owner_plan` and `place_key`, move the key check into the gates, and add a docker-free
+- [x] 1 tool: extract `key_owner_plan` and `place_key`, move the key check into the gates, and add a docker-free
       self-test next to the tool. Following `scripts/mutation_meta_check_selftest.py`'s shape, it goes outside
       the `validate_*` glob, because it asserts nothing about the repository. It exercises every branch of
       `key_owner_plan` and one real `place_key` into a temporary directory the invoking user owns.
       Locator for every call site: `grep -n 'config_secret_file\|KEY_NAME\|write_key' scripts/instance_backup.py scripts/run_web_e2e.py`.
       · Done when: the self-test is green, and `python3 scripts/instance_backup.py restore --help` still parses.
-- [ ] 2 docs, both targets: `infra/README.md` gets the compose-production restore command and § Restore under
+- [x] 2 docs, both targets: `infra/README.md` gets the compose-production restore command and § Restore under
       Helm. The use-case gets step 9's clause. Update the module docstring's "Everything this tool writes is
       owner-only" paragraph with the new owner rule.
       · Done when: `for f in scripts/validate_*.py; do python3 "$f"; done` is green.
@@ -123,7 +123,7 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
       - `GET /api/tenants/{id}/mail-settings`, which must report `configSecretState: OK`.
 
       · Done when: both are recorded in this CR.
-- [ ] 4 coverage: `docs/coverage/…/uc.admin.back-up-and-restore-instance.yaml` notes where the ownership
+- [x] 4 coverage: `docs/coverage/…/uc.admin.back-up-and-restore-instance.yaml` notes where the ownership
       precondition is proven: the self-test, and phase 3's recorded run.
       · Done when: `python3 scripts/validate_coverage.py` is green.
 
@@ -143,4 +143,26 @@ The instance behaves as if leg (c) were missing, even though the key is sitting 
   README says in plain words that it is derived, not rehearsed, as § An upgrade already does for its own steps.
 - The trust-chain glob is green.
 
+## Where it stands
+
+**2026-10-01.** Phases 1, 2 and 4 are in; the self-test's two bites went red on the named case
+(plan forced to *as-is* → the #188 case; the gate call dropped → "refused at the gates, before the database"),
+via the stub-`Database` seam in front of the first write, so that bite needed no Docker. Positive control green: `scripts/run_web_e2e.py` over the four
+`instanceBackup/{restore,legthree}.*` files, against this branch's jar → `total: 4 passed: 4` (the same-user path,
+plan *as-is*; the A5 and unsupplied-key refusals still fire). `kubectl cp`'s `tar` was
+measured: present in the JVM runtime base, **absent** from the native target's `ubi-minimal`. **Open, and the
+reason this file is not deleted:** the red-first run and phase 3 both need a production compose stack and root,
+which an implement agent cannot bring up (no production `up` from an agent session). The owner runs phase 3's
+procedure once — today's tool first if it is still at hand (`0:0 600`, `ABSENT`), then this one
+(`10001:10001 600`, `OK`) — records both here, and then this CR closes. The Helm procedure is documented as
+derived, not rehearsed.
+
 ## Retrospective
+
+- **The CR's red-first was unrunnable by the session it was handed to.** Its lever is a production stack plus
+  root, and the wave's rules forbid the first while the sandbox lacks the second; the CR said "with the owner"
+  for phase 3 but put the same requirement in the DoD's *first* step as if the implementer could run it. Next
+  time: a refine that needs an owner-run live proof marks the DoD step owner-run too, and names the cheapest
+  agent-runnable red (here: the self-test against today's tool, which has no gate to refuse with).
+- **One finding beyond the CR:** the native target cannot take part in either Helm `kubectl cp` (no `tar`), which
+  no doc said; written into infra/README's Helm restore block.

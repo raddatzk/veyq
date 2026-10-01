@@ -1,0 +1,17 @@
+# The Gradle wrapper JAR, pinned by SHA-256 (ADR 0057 §6).
+#
+# The JAR is a tracked binary that no review can read, and it is what downloads and checks the Gradle
+# distribution (gradle-wrapper.properties' distributionSha256Sum). scripts/validate_build_input_pins.py holds
+# every tracked gradle-wrapper.jar to a line below, so swapping the binary needs a readable one-line diff here to
+# go green.
+#
+# How a line is obtained (and how the next one must be): hash the JAR `./gradlew wrapper` wrote, and cross-check
+# it against Gradle's own published checksum for the wrapper of the Gradle version that wrote it:
+#   https://services.gradle.org/distributions/gradle-<v>-wrapper.jar.sha256
+# 8.14.3, done 2026-09-28 and re-fetched 2026-10-01: that URL answers the value below. The same bytes are Gradle's
+# published wrapper for 8.14.1–8.14.5; the JAR is older than the 9.5.1 distribution it launches, which is
+# harmless (the wrapper's contract with the distribution is stable). Trust-on-first-write, like the generator pin.
+#
+# Format: `<gradle version> <sha256>`, one per line. A wrapper upgrade adds the new line; the old one may go once
+# no tracked JAR hashes to it.
+8.14.3 7d3a4ac4de1c32b59bc6a4eb8ecb8e612ccd0cf1ae1e99f66902da64df296172

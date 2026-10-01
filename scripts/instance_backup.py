@@ -51,6 +51,14 @@ mirror is `root:root`, files `0644`, directories `0755` — which this process c
 Docker Desktop for macOS the bind mount maps the owner to the invoking user, with the same modes. Either way the
 capture root's `0700` is what keeps another local user out of `objects/`, and it is checked.
 
+**Owner-only means the application's owner for the one file `restore` writes outside the capture: the key.** It
+takes the owner of the directory it lands in (`key_owner_plan`) — on the production recipe the volume Docker
+seeded from the image as `10001:10001`, the uid the app runs as — because a key born `root:root 0600` there is a
+key the app cannot read, and the instance then refuses invites and resets as if leg (c) were missing (inbox
+#188). Only root can give a file away, so a non-root invoker facing a directory it does not own is refused at the
+gates, before the first write, and told to run as root or to copy the key in through the app container.
+`scripts/instance_backup_selftest.py` exercises every branch without Docker.
+
 **Why the manifest is not decoration.** It is what lets `verify` and `restore` refuse before doing damage:
 `restore` demands `--domain` and refuses unless it names a tenant this backup actually held (ADR 0056 §4 —
 a restore onto a different hostname yields an instance nobody can reach, holding mailed links nobody can
@@ -101,8 +109,9 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import NamedTuple
 
-REPO = Path(__file__).resolve().parent.parent
+REPO =Path(__file__).resolve().parent.parent
 DEFAULT_COMPOSE = REPO / "infra" / "docker-compose.yml"
 DEFAULT_BACKUP_ROOT = REPO / "infra" / "backups"
 
@@ -546,6 +555,86 @@ def write_key(source: Path, dest: Path) -> None:
         out.write(source.read_bytes())
 
 
+AS_IS, CHOWN, REFUSE = "as-is", "chown", "refuse"
+
+
+class KeyOwnerPlan(NamedTuple):
+    """Who the restored key will belong to: leave the owner the open gives it, hand it to `uid:gid`, or refuse."""
+    action: str
+    uid: int = -1
+    gid: int = -1
+    reason: str = ""
+
+
+def effective_uid() -> int:
+    """The euid `key_gate` plans for — a function of its own so the self-test can plan as another user."""
+    return os.geteuid()
+
+
+def key_owner_plan(euid: int, parent_uid: int, parent_gid: int, existing_uid: int | None) -> KeyOwnerPlan:
+    """Decide who must own the restored key, from the owner of the directory it lands in (inbox #188).
+
+    The directory is the authority because it is the one thing every target already gets right: Docker seeds the
+    production `veyq-config-secret` volume from the image as `10001:10001` (validate_app_volume_ownership.py), a
+    pod's `fsGroup` owns its claim, and the dev loop's directory is the invoking user's. A key the app cannot read
+    is caught by `ConfigSecretSeal.readOrGenerate` and reads as ABSENT — the instance refuses invites and resets
+    with the key sitting right there. Only root can give a file away, and `O_TRUNC` keeps an existing file's owner,
+    so a root restore over a missing key would otherwise leave it `root:root 0600`.
+    """
+    if euid == 0:
+        owner_after_open = 0 if existing_uid is None else existing_uid
+        if owner_after_open == parent_uid and (existing_uid is not None or parent_gid == 0):
+            return KeyOwnerPlan(AS_IS)
+        return KeyOwnerPlan(CHOWN, parent_uid, parent_gid)
+    if parent_uid != euid:
+        return KeyOwnerPlan(REFUSE, reason=(
+            f"the key's directory belongs to uid {parent_uid}, and this tool runs as uid {euid}, which cannot hand "
+            f"a file to another user — the key would be born yours, and an application running as uid "
+            f"{parent_uid} could not read it (configSecretState: ABSENT). Run the restore as root (`sudo -E`), or "
+            f"restore the key to a file of your own and copy it in through the application container "
+            f"(`docker cp`, `kubectl cp`), as infra/README.md § Restore shows."))
+    if existing_uid is not None and existing_uid != euid:
+        return KeyOwnerPlan(REFUSE, reason=(
+            f"a key already there belongs to uid {existing_uid}; overwriting it keeps that owner, which this tool "
+            f"(uid {euid}) can neither write as nor change. Remove it, or run the restore as root."))
+    return KeyOwnerPlan(AS_IS)
+
+
+def key_gate(target: Path) -> KeyOwnerPlan:
+    """The key's placement, decided and checked before the restore writes anything (A5 would refuse a retry)."""
+    parent = target.parent
+    if not parent.is_dir():
+        raise BackupError(f"--config-secret-file {target}: its directory {parent} does not exist. On the production "
+                          f"recipe it is the veyq-config-secret volume's mountpoint, created by the first `up`; "
+                          f"a missing one is almost always a wrong path, so this tool does not create it.")
+    st = parent.stat()
+    existing_uid = target.stat().st_uid if target.exists() else None
+    euid = effective_uid()
+    plan = key_owner_plan(euid, st.st_uid, st.st_gid, existing_uid)
+    if plan.action == REFUSE:
+        raise BackupError(f"--config-secret-file {target}: {plan.reason}")
+    if euid != 0 and existing_uid is not None and not os.access(target, os.W_OK):
+        raise BackupError(f"--config-secret-file {target} exists and is not writable by this tool")
+    return plan
+
+
+def place_key(source: Path, target: Path) -> KeyOwnerPlan:
+    """Write leg (c) at `target`, `0600`, owned per `key_gate` — owner and mode set BEFORE the bytes land, so the
+    restored key is never readable by a user it was not meant for, not even for a moment."""
+    plan = key_gate(target)
+    fd = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        if plan.action == CHOWN:
+            os.fchown(fd, plan.uid, plan.gid)
+        os.fchmod(fd, 0o600)
+    except BaseException:
+        os.close(fd)
+        raise
+    with os.fdopen(fd, "wb") as out:
+        out.write(source.read_bytes())
+    return plan
+
+
 def require_key_from_fits(args: argparse.Namespace, manifest: dict) -> None:
     """`--key-from` names where a SEPARATELY kept key is. For any other placement it would be a second source
     competing with the one the manifest names, so it is refused rather than silently preferred or ignored."""
@@ -870,6 +959,12 @@ def cmd_restore(args: argparse.Namespace) -> int:
         if not key_source.is_file():
             key_source = None
 
+    # Where the key lands is checked HERE, not where it is written: placement runs after the database and the
+    # objects are in, so a refusal there would leave a half-restored instance the A5 gate then refuses to retry.
+    target_key = Path(args.config_secret_file)
+    if key_source is not None:
+        key_gate(target_key)
+
     db = Database(args, require_db_password())
     store = Store(args)
 
@@ -910,16 +1005,19 @@ def cmd_restore(args: argparse.Namespace) -> int:
             f"restore. A partial restore is not repaired in place."
         ) from e
 
-    target_key = Path(args.config_secret_file)
     if key_source is not None:
         log(f"placing the config-secret key from {key_source} at {target_key}")
-        target_key.parent.mkdir(parents=True, exist_ok=True)
-        # Over the key a fresh install generated, which is expected; chmodded BEFORE the bytes land, so an
-        # existing file's looser mode never holds the restored key.
-        fd = os.open(target_key, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "wb") as out:
-            out.write(key_source.read_bytes())
+        # Over the key a fresh install generated, which is expected (or onto none: the seal generates its key
+        # lazily, so a fresh install's one start usually leaves the file absent).
+        try:
+            plan = place_key(key_source, target_key)
+        except (BackupError, OSError) as e:
+            # The gate above passed, so the target changed under the run. Legs (a) and (b) are in; say so.
+            raise BackupError(f"{e}\n[backup] Legs (a) and (b) ARE already loaded; only the key failed. Place it "
+                              f"by hand at {target_key}, readable by the application's user, then start the "
+                              f"application.") from e
+        if plan.action == CHOWN:
+            log(f"the key belongs to {plan.uid}:{plan.gid}, the owner of its directory — the application's user")
     else:
         log(f"WARNING: this restore places no config-secret key (leg (c) {placement}"
             f"{', and --without-key was given' if args.without_key else ''}). The instance will start and serve "

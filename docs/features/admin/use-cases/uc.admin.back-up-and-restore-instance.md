@@ -43,7 +43,8 @@
    so the instance is at the version it was captured at.
 8. The operator **pushes the mirrored objects back** into that bucket.
 9. The operator **puts the config-secret key file**, from wherever it was kept, where the application expects
-   it, on storage that survives a container being recreated.
+   it, on storage that survives a container being recreated, **readable by the application's runtime user** — a
+   key the application cannot read reports `ABSENT` and refuses invites and resets exactly as a missing one does.
 10. The operator **starts the application**.
 
 **Verify — the step that separates a restore from a hope.**

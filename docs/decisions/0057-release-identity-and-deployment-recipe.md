@@ -96,8 +96,13 @@ nothing about what actually runs. So:
   tool starts.
 - **At build time**, the Dockerfile bases are pinned by their multi-arch index digest. The OpenAPI generator
   JAR is checked against a pinned SHA-256 before it runs, because its npm wrapper checks nothing. The Gradle
-  distribution carries its `distributionSha256Sum`, and the backend's dependency graph is held by Gradle
-  dependency verification. The surfaces run one generator version.
+  distribution carries its `distributionSha256Sum`, the wrapper JAR that checks it is pinned by SHA-256 and
+  validated against Gradle's published list in every CI job that runs it, and the backend's dependency graph is
+  held by Gradle dependency verification. The surfaces run one generator version. The actions that build and sign
+  the release are pinned by **commit** SHA with the full version they resolve to as a comment
+  (`@<sha> # v6.0.1`) — a tag can be moved, and a major-only comment goes stale at the first bump —
+  held by `scripts/validate_action_pins.py`; that a pin is a commit and not an annotated tag object is checked
+  through the API when it is bumped, since an offline guard cannot tell the two apart.
 
 Bumping a pin is part of cutting a release, not something that happens on its own.
 

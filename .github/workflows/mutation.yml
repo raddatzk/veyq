@@ -62,13 +62,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The meta-check diffs against the PR base to see whether a mutate-scope file changed.
           fetch-depth: 0
 
       - name: Set up Node
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: npm
@@ -78,7 +78,7 @@ jobs:
       # covering tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved
       # each run so the next PR starts warm.
       - name: Restore Stryker incremental cache
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             web/reports/stryker-incremental.json
@@ -97,7 +97,7 @@ jobs:
       # Stryker's test runner is the project's own vitest and neither project collects the other's suites, so
       # each manifest must be mutated where its killing tests live — a single run across the boundary would
       # report a green score over uncovered files, the exact failure the meta-check below exists to catch.
-      - name: Run shared-crypto mutation gate (scope: stryker.mutate.json)
+      - name: "Run shared-crypto mutation gate (scope: stryker.mutate.json)"
         working-directory: packages/crypto
         # Full scope, incremental-accelerated. stryker.config.mjs breaks the build below the calibrated break
         # threshold — that is the gate.
