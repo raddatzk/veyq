@@ -1,7 +1,7 @@
 ---
 id: cr-identity-codec-refuses-malformed-fields
 title: The identity codec refuses a field of the wrong length, and anything after the last one
-status: in-progress
+status: done
 satisfies: []
 adrs: ["0028", "0045"]
 invariants: [operator-blind E2EE]
@@ -81,7 +81,7 @@ grep -rn 'deserializeIdentityPublic\|deserializeIdentityPrivate' web/src admin-w
 
 ## Phase (single)
 
-- [ ] crypto + web — decoders, tests T1–T2, pairing deletion · Done when: `packages/crypto` `npm run check` and
+- [x] crypto + web — decoders, tests T1–T2, pairing deletion · Done when: `packages/crypto` `npm run check` and
   `npm run mutation -- --force` green; `web/` and `admin-web/` `npm run generate:api && npm run check` green.
 
 ## Bite tests
@@ -105,3 +105,16 @@ grep -rn 'deserializeIdentityPublic\|deserializeIdentityPrivate' web/src admin-w
 T1 red then green, T2 bitten by its lever, the gates above green, the guard glob green, inbox #240 done.
 
 ## Retrospective
+
+- **Planning — the red prediction missed two of eight rows.** T1 predicted only "cut inside the first length
+  prefix" would red on a message; rows 2 and 3 did too (a `DataView` `RangeError` once the unbounded reader walks
+  past the end), and only rows 4–8 reddened on *no throw*. Harmless, because the cases pin the full message, but
+  the prediction was written from the first row's shape, not run. Next time: for an unbounded reader, predict per
+  row by where the cursor lands, or run the table once before writing the prediction.
+- **Process — a restated figure rotted in two places, and the row that reported it restated it a third time.**
+  ADR 0045 carried "134 mutants in `v1.ts`" while the config comment held the live count; the inbox row's
+  correction (464) was itself the whole-package figure, not `v1.ts` (186). Rule 2 (*point at one canonical source*)
+  already covers this; it was not honoured by the ADR. The fix deleted the number instead of updating it. Next
+  time: when a doc quotes a measured count that a config comment already states, point at the comment.
+- **Process — the worktree sandbox refuses compound shell commands** (heredoc + `npx`, `cd && git`), which cost a
+  few re-tries; scripts went to the scratch dir and git ran as single commands. Nothing to change in the repo.
