@@ -232,7 +232,7 @@ phases 1–3 write new prose:
 - [x] **3 web.** Generated client use, the settings card, the mail-settings offer, the `/confirm-email` route and
   view, and i18n (D9). **Done when:** `npm run check` in `web/` is green, with unit tests for the card's
   four states and the view's three arrivals.
-- [ ] **4 docs.**
+- [x] **4 docs.**
   - ADR 0074 → `Accepted`, with the owner's answers folded in.
   - Edit the sites under *Claims this CR supersedes* in the shape named there, after re-running the sweep.
   - `uc.admin.create-tenant`: the first owner is unconfirmed until they confirm.

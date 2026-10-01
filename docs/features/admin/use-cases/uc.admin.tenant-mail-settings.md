@@ -45,6 +45,11 @@ channel, stated honestly.
 5. From then on, a new **member** invite ([uc.spaces.add-member](../../spaces/use-cases/uc.spaces.add-member.md)) is
    rendered from the tenant's template (or veyq's default) over `{link, domain, expiry}` and sent from the tenant's
    own address; the raw link still rides the URL **fragment** ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md)).
+6. A save that leaves the relay able to send **offers, once, a confirmation mail to the owner's own address**
+   ([uc.account.confirm-email-address](../../account/use-cases/uc.account.confirm-email-address.md)). It is offered,
+   never sent unasked. The owner admitted by the bootstrap copy-link is the one account whose address nothing has
+   proven, and a mail to themselves is also the first proof that this relay reaches anyone
+   ([ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
 
 ## Alternate / exception flows
 

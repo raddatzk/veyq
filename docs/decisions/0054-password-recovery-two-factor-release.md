@@ -152,9 +152,10 @@ limiter so the two answers cannot be paired into an address-level oracle
   the kit (the Secret Key is unchanged, so the old kit stays valid). The wiki must be corrected to describe what
   veyq actually does. Re-issuing a kit — which means rotating the Secret Key and re-wrapping — is a separate
   capability that does not exist today and is not part of this decision.
-- **Email verification (#112) becomes load-bearing for V1**, and for a different reason than that row argues.
-  Its semantics are now *recovery-gating* first: what matters is that the address is provably controlled at the
-  time of release.
+- **Recovery never gates on a stored confirmation.** The mailed token proves address control at the time of
+  release, which is what matters; a flag recorded months earlier adds no factor. Address confirmation
+  ([ADR 0074](0074-address-control-is-recorded-where-nothing-else-proves-it.md)) is therefore recorded and shown,
+  never gated on (its Decision 3) — and a completed reset is one of the events that sets it.
 - **The Secret-Key proof key is a correctness dependency.** An account whose proof key is missing or wrong
   cannot recover, cannot change its password, and cannot rotate.
 - **The invite-token lifecycle is the template**, not a new invention: `Tokens.random()` → store only

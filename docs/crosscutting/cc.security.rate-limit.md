@@ -68,7 +68,8 @@ Three properties worth knowing before tuning anything (ADR 0052 owns the reasoni
 - **Time is monotonic** (`System.nanoTime()`), so a wall-clock/NTP jump cannot move a bucket.
 
 All bounds are **in-memory and per-instance** (see *Known limits* below). Config lives under
-`veyq.ratelimit.*` (`auth.*` = the per-IP bound, prefix kept for config compatibility; `user.*`, `invite.*`) and
+`veyq.ratelimit.*` (`auth.*` = the per-IP bound, prefix kept for config compatibility; `user.*`, `invite.*`,
+`recovery.*`, `email-confirmation.*` — the last three are mail limiters a handler charges before it mints) and
 `veyq.share.*` (`upload.rate.*`, `identity.rate.*`, `password.rate.*`).
 
 ## Governs (per-IP bound)
@@ -233,4 +234,5 @@ exhausted share does not spend another's budget; and the identity budget is sepa
 - Decision: [ADR 0052](../decisions/0052-token-bucket-rate-limit-core.md) (the one token-bucket core behind it)
 - Code: `backend/.../shared/ratelimit/` (the vocabulary, the two boundary filters, the shared bucket core),
   `backend/.../features/sharing/{ShareRateLimiter,SharePasswordAttemptLimiter}.kt`,
-  `backend/.../features/admin/tenant/InviteMailRateLimiter.kt`
+  `backend/.../features/admin/tenant/InviteMailRateLimiter.kt`,
+  `backend/.../features/account/{recovery/RecoveryRateLimiter,email/EmailConfirmationRateLimiter}.kt`

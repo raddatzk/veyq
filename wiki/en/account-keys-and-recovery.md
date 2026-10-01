@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
+<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
 # Account keys & recovery
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). Because veyq is end-to-end
@@ -136,6 +136,11 @@ Neither is enough alone. Someone who breaks into your mailbox receives a locked 
 open it. Someone who finds your kit gets no link. Once both are in place you pick a new password, and
 everything you saved is still there — your memories are never re-encrypted, and **your kit keeps working**,
 because your secret key doesn't change.
+
+**Make sure that link can reach you.** Under *Settings → Security* you see the email address a reset link would
+go to, and whether it's confirmed. If you joined through an emailed invite, it already is. If you set up your
+space through a link someone handed you, send yourself a confirmation once and open it while you're signed in —
+then you know the link arrives before the day you need it. Nothing is locked if you don't.
 
 After a reset, every device signs in fresh. You'll enter your secret key once more on each one — including the
 one you're holding.

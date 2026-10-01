@@ -1,4 +1,4 @@
-<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: en/account-keys-and-recovery.md -->
+<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md, docs/features/account/use-cases/uc.account.confirm-email-address.md; pair: en/account-keys-and-recovery.md -->
 # Konto-Schlüssel & Wiederherstellung
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Weil veyq
@@ -145,6 +145,12 @@ Keines von beiden reicht allein. Wer in dein Postfach einbricht, bekommt eine ge
 Schlüssels und keine Möglichkeit, sie zu öffnen. Wer dein Kit findet, bekommt keinen Link. Sind beide da,
 wählst du ein neues Passwort, und alles Gespeicherte ist weiterhin da — deine Erinnerungen werden nie neu
 verschlüsselt, und **dein Kit funktioniert weiter**, weil dein Secret Key sich nicht ändert.
+
+**Sorg dafür, dass dich der Link erreicht.** Unter *Einstellungen → Sicherheit* siehst du, an welche
+E-Mail-Adresse ein Link zum Zurücksetzen ginge und ob sie bestätigt ist. Bist du über eine E-Mail-Einladung
+beigetreten, ist sie das schon. Hast du deinen Bereich über einen Link eingerichtet, den dir jemand gegeben hat,
+schick dir einmal eine Bestätigung und öffne sie, während du angemeldet bist — dann weißt du, dass der Link
+ankommt, bevor du ihn brauchst. Gesperrt wird nichts, wenn du es nicht tust.
 
 Nach dem Zurücksetzen meldet sich jedes Gerät neu an. Du gibst deinen Secret Key dort also noch einmal ein —
 auch auf dem, das du gerade in der Hand hast.

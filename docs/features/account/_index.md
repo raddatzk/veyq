@@ -49,11 +49,11 @@ holds only **public** keys and ciphertext, never the password and never a conten
   re-issue the kit. An instance that cannot send mail refuses the request with `503 mail_unavailable` rather than
   a silent `202` ([ADR 0055](../../decisions/0055-mail-is-a-precondition-not-a-capability.md)); the sign-in screen
   offers the link unconditionally and lets it fail honestly
-- [uc.account.confirm-email-address](use-cases/uc.account.confirm-email-address.md) — **refined, not yet built**
-  (`cr-email-address-confirmation`). Confirm the address a reset is sent to. The record is set by a mailed member
-  invite, a completed reset, or a confirmation link opened while signed in. It is shown to the holder and gates
-  nothing. It exists for the tenant's first owner, the one account whose address nothing proves
-  ([ADR 0074](../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md), Proposed).
+- [uc.account.confirm-email-address](use-cases/uc.account.confirm-email-address.md) — **built (web)**
+  (cr-email-address-confirmation). Confirm the address a reset is sent to. The record is set by a mailed member
+  invite, a completed reset, or a confirmation link opened while signed in. It is shown to the holder in the
+  Security settings and gates nothing. It exists for the tenant's first owner, the one account whose address
+  nothing proves ([ADR 0074](../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)).
 - [Rotate my keys after a compromise](use-cases/uc.account.rotate-keys.md) — **refined, not yet built**
   (end a compromise: the Master Key **and** the identity are replaced together and every scope re-keyed; gated
   on the Secret Key, because that is the one thing a phished device never received; forward secrecy, **not**

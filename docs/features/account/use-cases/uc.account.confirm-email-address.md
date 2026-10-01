@@ -56,6 +56,8 @@ Two other events set the same record without this flow:
     mailbox.
   - The screen says that this space cannot send mail, so password reset is unavailable here too, and that the
     space owner has to set mail up.
+  - A send that fails after the mint answers the same way, and the fresh token is superseded, so no live token is
+    left without a mail behind it.
 - **A2 — The actor is not a member of the `Host`'s tenant.** Step 3 is refused with the tenant's not-found
   answer, and nothing is mailed. A relay may carry a link only for its own tenant's members. One case is the
   Server Owner before they join any tenant, who can neither confirm nor recover.
@@ -111,6 +113,7 @@ auch kein Passwort zurücksetzen. Bitte die Person, die den Bereich betreibt, E-
   prompted).
 - **Cross-cutting:** [security-model](../../../crosscutting/security-model.md) (the address, the stamp and the
   send-fact as server-visible metadata).
+- **End-user view (wiki):** [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)
 - **Decisions:** [ADR 0074](../../../decisions/0074-address-control-is-recorded-where-nothing-else-proves-it.md)
   (what the record means, what sets it, what it gates),
   [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) (the token lifecycle and relay rule
