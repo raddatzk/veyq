@@ -54,10 +54,12 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
      is a *capability*, still `AND`-ed with the instance's `sharing.public-links` / `sharing.uploader-links`
      capability, [ADR 0032](0032-capability-discovery-version-gating.md), and the role-`AND`-scope gate.)
    - **Member removal — deactivate the removed member's shares.** Removing a member **soft-revokes every share
-     that member created** in that scope (`enabled = false`, §7). The share is **not** deleted: **any remaining
-     member may re-activate it, which transfers its ownership** to the re-activating member — so an active share
-     is always tied to a *current* member's responsibility, never orphaned to a removed one. Re-activation is
-     gated like creation: the instance capability for the share's role still applies. This deactivation is
+     that member created** in that scope (`enabled = false`, §7). The share is **not** deleted, but it is **not
+     revived either**: a link its removed creator holds is re-issued — a new id and a new `K_share`, the old one
+     off — never re-activated ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md), which also
+     lets the removal turn off every link of the group). Re-activation, which transfers ownership to the
+     re-activating member, stays for a share no departed member could hold, and is gated like creation: the
+     instance capability for the share's role still applies. This deactivation is
      the **honest-server forward-secrecy layer for a public link**: because `K_mem` is stable and never re-keyed
      (Consequences — *scope rotation does not revoke a share*), a link **cannot be rotated away**, so the
      server-side soft-revoke *is* the revocation. It composes with, and is independent of, the scope-key rotation
