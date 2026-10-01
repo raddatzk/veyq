@@ -219,7 +219,7 @@ before building a Worker around it.
 
 ## Phases
 
-- [ ] 0 measure — **the before-number, and the entry gate.** No code. Use a fixed batch of 12 photos at
+- [x] 0 measure — **the before-number, and the entry gate.** No code. Use a fixed batch of 12 photos at
       3024×4032 against the dev backend with S3, as on 2026-09-20. Pick in **desktop Chrome**, twice: (i) the tab
       stays visible, (ii) switch to another tab right after the pick and come back when the tray is done. Per
       run, record pick → first PUT, batch total, and time on the wire: the sum of `PUT` durations to the store
@@ -300,7 +300,30 @@ numbers written down.
 
 ## Retrospective
 
-_To be filled at implement time — what went wrong in planning, in execution, and in process/collaboration
-(did we honour the conventions we already agreed: language, workflow, the memory notes?), root cause, and one
-concrete "next time". Record phase 0's and phase 3's numbers here, both tab states, and the per-photo figure
-that proves the Worker ran._
+### Measurements
+
+**Substrate (all rows, measured):** a separate **desktop Google Chrome 154.0.8037.58** instance with its own
+throw-away profile, driven over CDP, on an Apple M4 Pro (14 cores), macOS. The page bundles the **real**
+`deriveTiers` + `createBrowserDeriver` (the before-row from `a706db7`'s `mediaDeriver.ts`, the after-row from
+the worktree's), served from a loopback HTTP origin, and derives 12 synthetic 3024×4032 JPEGs (≈1.86 MB each,
+seeded, identical across runs) serially, as the queue does. **Pixel stage only — no backend, no seal, no wire.**
+The dev-backend run phase 0 names (pick → first PUT, wire time) was **not** taken: the implement brief forbade
+touching the owner's dev instance. So every figure below is the pixel stage alone, which is a **lower bound** on
+"batch total minus wire". Safari: not measured. "Background tab" = another tab activated in the same window
+(`document.visibilityState === 'hidden'` confirmed per photo); "minimized" = the window minimized via CDP.
+
+| Phase | Tab state | 12 photos, serial (ms) | per photo |
+|---|---|---|---|
+| 0 (before) | visible | 828, 774, 799, 833, 882 | ≈ 65–73 ms |
+| 0 (before) | background tab | 7 812, 6 543, 6 870, 7 957, 7 936 | ≈ 545–663 ms |
+| 0 (before) | minimized window | 6 968, 8 892 | ≈ 580–741 ms |
+
+Encode probes in the same pages (page-thread `toBlob`, 4 calls each): visible, a 1536×2048 JPEG 14–27 ms and a
+384×512 one 1–24 ms; hidden, 94–1 305 ms (one 6 819 ms outlier) and 7–1 185 ms. A 1×1 `toBlob` took 0–7 ms
+hidden. So **desktop Chrome 154 does stall, but not at the preview Chromium's fixed ~1 s floor**: the wait per
+encode varies between ~0.1 s and ~1.2 s from run to run, and per photo it costs ≈ 0.5–0.7 s, not ≈ 2 s.
+
+**Gate (phase 0), decided:** run (ii)'s pixel stage alone is 6.5–8.9 s over five hidden runs, every one above
+12 × 0.5 s = 6.0 s, and the full batch minus its wire can only be larger. **Proceed.** The margin is narrow
+(8–48 %), and the payoff in desktop Chrome is ≈ 0.5–0.7 s per photo — about a quarter of what the Inventory
+predicted from the preview Chromium.
