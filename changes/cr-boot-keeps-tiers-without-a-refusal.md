@@ -1,7 +1,7 @@
 ---
 id: cr-boot-keeps-tiers-without-a-refusal
 title: A boot refresh that fails without refusing the session keeps the remember-me key and the session vault
-status: planned
+status: in-progress
 satisfies: [uc.account.sign-out, uc.account.remember-this-device]
 adrs: ["0070", "0005", "0004"]
 invariants: [operator-blind E2EE]
@@ -158,7 +158,7 @@ instance again keeps a key that opens nothing without the server-held wrap.
 
 ## Phases
 
-- [ ] 0 docs — ADR 0070 Decision 3 amendment (the sentence above).
+- [x] 0 docs — ADR 0070 Decision 3 amendment (the sentence above).
       · Done when: `python3 scripts/validate_doc_citations.py` and `python3 scripts/validate_doc_links.py` green.
 - [ ] 1 web — `boot()` keeps the rejection, asks `isSessionRefusal`, drops the tiers only then, otherwise marks
       unreachable (or suspended). Locator: `grep -n 'refreshSession\|clearDeviceKey\|clearSessionVault' web/src/app/boot.ts`.
