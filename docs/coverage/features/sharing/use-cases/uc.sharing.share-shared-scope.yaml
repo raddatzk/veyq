@@ -1,11 +1,12 @@
 useCase: uc.sharing.share-shared-scope
 feature: sharing
 title: Public-share a Memory in a shared scope (group / tenant)
-# Built (web vertical, cr-0104 + ADR 0029 §6): lifts the v1 personal-scope-only restriction so ANY member of a
+# Built (web vertical, cr-0104 + ADR 0029 §6; re-issue + the re-activation refusal, ADR 0075): ANY member of a
 # group or tenant scope may public-share a Memory there (all three built roles), gated on scope-membership AND the
 # role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal soft-revokes
-# (enabled=false) every share the removed member created in that scope; any remaining member may re-activate a
-# deactivated share, which transfers its owner_account. K_mem is stable across rotation (ADR 0024), so the share
+# (enabled=false) every share the removed member created in that scope (or, opted in, every share of the group); any
+# remaining member may re-activate a deactivated share, which transfers its owner_account — unless a departed member
+# may hold its link, which then comes back only as a re-issue (a new id + key, the old one off, one transaction). K_mem is stable across rotation (ADR 0024), so the share
 # follows new content and cannot be rotated away — the server-side deactivation IS the honest-server revocation
 # (the only forward layer for a tenant, which is ACL-revoke).
 acceptanceCriteria:
@@ -40,3 +41,24 @@ acceptanceCriteria:
         integration: [ShareSharedScopeSliceTest.groupMemberCanShareAndAnonymousResolveWorks, ShareSharedScopeSliceTest.listForNodeShowsEveryMembersSharesWithMineFlag]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: reactivation-refuses-a-departed-members-link
+    text: Re-activation is refused 409 reissue_required, nothing written, when the share's owner is no longer a member of its scope (a removed group member, or a removed tenant member's own tenant-scope share) or its recovery copy is sealed below the scope's current epoch; a share without a copy is judged by its owner alone. The manage panel marks the epoch case and offers renew instead of re-activate (ADR 0075).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.reactivatingARemovedMembersShareIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingAShareSealedBeforeTheKeyChangedIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingOwnShareSealedAtTheCurrentEpochResolves, ShareSharedScopeSliceTest.reactivatingARemovedTenantMembersTenantShareIs409ReissueRequired]
+      web:
+        unit: [src/features/memory/components/ShareDialog.test.ts]
+  - id: reissue-replaces-a-link-in-one-request
+    text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, an UPLOADER keeping the Memory's drop key) and turns the old one off in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]
+      web:
+        unit: [src/features/memory/share.test.ts]
+  - id: removal-can-turn-off-every-link
+    text: A removal-rotation with revokeLinks turns off every enabled share of the group, whoever created it, in the removal's transaction; without it only the removed member's own go off; revokeLinks without removesUserId is 400 with nothing stored. The removal confirmation carries the opt-in, unchecked by default (ADR 0075).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.aRemovalWithRevokeLinksTurnsOffEveryLinkOfTheGroup, ShareSharedScopeSliceTest.removingGroupMemberDeactivatesOnlyTheirShares, ShareSharedScopeSliceTest.revokeLinksWithoutARemovalIs400AndStoresNothing]
+      web:
+        unit: [src/features/spaces/GroupMembersPanel.test.ts]

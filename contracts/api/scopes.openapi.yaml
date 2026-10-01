@@ -525,7 +525,12 @@ paths:
         commits the epoch in **one transaction**, so a removal never ends without its rotation and a failed one
         leaves the member in place. The request's grants must not name that member (`422
         removed_member_granted`, nothing stored); the last-owner guard applies (`409 last_owner`). The removed
-        member's admission goes with the membership, so the rotation need not re-tag or drop it.
+        member's admission goes with the membership, so the rotation need not re-tag or drop it. With
+        `revokeLinks: true` the same transaction also turns off **every** enabled public share of the group, whoever
+        created it — a link the removed member could have copied from the manage panel then `404`s, and each
+        share's owner re-issues the ones they still want
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). `revokeLinks`
+        without `removesUserId` is `400 invalid_request`, nothing stored.
       security:
         - bearerAuth: []
       parameters:
@@ -548,7 +553,7 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ScopeRotated" }
               example: { epoch: 1 }
-        "400": { description: Malformed (missing/invalid link or grant)., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
+        "400": { description: "Malformed (missing/invalid link or grant), or `revokeLinks` without `removesUserId`.", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_request } } } }
         "401": { description: Generic authentication failure., content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } } } }
         "403": { description: "The caller is a member of the group but not its OWNER (`not_scope_owner`), or the tenant is suspended (`tenant_suspended`, uc.spaces.scope-access).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: not_scope_owner } } } }
         "404": { description: "No such scope — or the caller is not a member of it (indistinguishable, ADR 0042); or `removesUserId` names no member of the group (`member_not_found`, nothing stored).", content: { application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: scope_not_found } } } }
@@ -1223,6 +1228,14 @@ components:
             from, minus this member — never from a list read after the removal. Omitted = a rotation that removes
             no one (a queued rotation, an account rotation).
           example: 4e2a9b1d-8b2c-4f2d-9e4a-5b6c7c3f0e2a
+        revokeLinks:
+          x-veyq-visibility: flag
+          type: [boolean, "null"]
+          description: >
+            A removal-rotation only (with `removesUserId`, else `400 invalid_request`): also turn off every enabled
+            public share of the scope in the same transaction (ADR 0075), not only the removed member's own.
+            Omitted or false = only the removed member's shares go off.
+          example: false
 
     ScopeRotated:
       type: object

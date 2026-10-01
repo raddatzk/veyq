@@ -120,6 +120,8 @@ sealed interface RotateOutcome {
     object LastOwner : RotateOutcome, HttpFailure by Failures.lastOwner
     /** A removal-rotation re-grants the member it removes (ADR 0024 Decision 4) — nothing stored. */
     object RemovedMemberGranted : RotateOutcome, HttpFailure by httpFailure("removed_member_granted", UNPROCESSABLE)
+    /** `revokeLinks` without `removesUserId` (ADR 0075) — nothing stored. */
+    object InvalidRequest : RotateOutcome, HttpFailure by Failures.invalidRequest
 }
 
 /** Outcome of reading the epoch-chain links (cr-0088). */
@@ -430,17 +432,21 @@ class ScopesHandler(
      *
      * With [removes] it is a **removal-rotation** (ADR 0024 Decision 4): [ScopesStore.rotate] deletes the membership
      * and soft-revokes the public shares that member created in the group (cr-0104) in the **same transaction** as
-     * the epoch commit, so a commit that fails after the delete rolls the removal back with it.
+     * the epoch commit, so a commit that fails after the delete rolls the removal back with it. [revokeLinks]
+     * (removals only) turns off every other link of the group in that same transaction too (ADR 0075).
      */
     fun rotateScope(
         callerId: String, scopeId: String, epoch: Int, wrappedPrev: String,
         grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
+        revokeLinks: Boolean = false,
     ): RotateOutcome {
+        // A request-shape refusal, like the bean validation before it: `revokeLinks` belongs to a removal (ADR 0075).
+        if (revokeLinks && removes == null) return RotateOutcome.InvalidRequest
         access.check(callerId, scopeId, WRITE)
             .refusal(RotateOutcome.ScopeNotFound, RotateOutcome.Suspended, RotateOutcome.Deleting)?.let { return it }
         if (!store.isScopeOwner(callerId, scopeId)) return RotateOutcome.NotOwner
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
-        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped, removes)) {
+        return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped, removes, revokeLinks)) {
             is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
             RotationDecision.Stale -> RotateOutcome.StaleEpoch
             RotationDecision.AdmissionsIncomplete -> RotateOutcome.AdmissionsIncomplete

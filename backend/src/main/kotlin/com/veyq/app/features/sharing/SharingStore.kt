@@ -107,6 +107,40 @@ class SharingStore(
                 return CreateResult.DROP_KEY_MISSING
             }
         }
+        persistShare(
+            id, ownerAccount, scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+        )
+        return CreateResult.CREATED
+    }
+
+    /** Re-issue [oldId] under the client-minted [newId] (ADR 0075): persist the new share — the old one's scope,
+     *  node and role, everything else from the request — and turn the old one off, in **one** transaction. False,
+     *  nothing written, when any share already holds [newId]. The id check comes first on purpose: a re-issue that
+     *  turned the old link off and then failed would leave the curator with no link at all, believing they had a
+     *  new one. Never touches the Memory's drop key — an UPLOADER re-issue seals to the one it already has. */
+    @Transactional
+    fun reissue(
+        oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
+        sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+    ): Boolean {
+        if (ShareEntity.findById(newId) != null) return false
+        val old = ShareEntity.findById(oldId) ?: return false
+        old.enabled = false
+        persistShare(
+            newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+            sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+        )
+        return true
+    }
+
+    private fun persistShare(
+        id: String, ownerAccount: String, scopeId: String, nodeId: String, role: String,
+        keys: ShareKeys, sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String?,
+        sealedShareKeyEpoch: Int?, sealedShareName: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+    ) {
         ShareEntity().apply {
             this.id = id
             this.ownerAccount = ownerAccount
@@ -128,7 +162,6 @@ class SharingStore(
             this.sealedPassword = sealedPassword
             createdAt = Instant.now()
         }.persist()
-        return CreateResult.CREATED
     }
 
     /** The 3-way result of an in-place share edit (cr-0119): applied, no such owned share, or an illegal role change. */
@@ -199,6 +232,13 @@ class SharingStore(
             "enabled = false where ownerAccount = ?1 and scopeId = ?2 and enabled = true",
             ownerAccount, scopeId,
         )
+
+    /** Soft-revoke **every** enabled share of a scope, whoever created it — a group removal's `revokeLinks`
+     *  (ADR 0075 Decision 5): every member could rebuild every link, so a removed one may hold any of them. Each
+     *  owner re-issues what they still want. Runs inside the removal-rotation's transaction. */
+    @Transactional
+    fun deactivateSharesInScope(scopeId: String): Int =
+        ShareEntity.update("enabled = false where scopeId = ?1 and enabled = true", scopeId)
 
     // --- contributor identities (cr-0101) --------------------------------------
 

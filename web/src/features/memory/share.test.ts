@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('../../api/client', () => ({
   sharesApi: vi.fn(),
   publicSharesApi: vi.fn(),
+  contentApi: vi.fn(),
   tokenApi: vi.fn(),
 }))
 // Only the scope RE-OPEN a `stale_epoch` retry performs is stubbed; `isStaleEpoch` stays real, because which refusal
@@ -13,11 +14,11 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
+import { createShare, reissueShare, mintedBeforeKeyChange, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
-import { sharesApi, publicSharesApi } from '../../api/client'
+import { sharesApi, publicSharesApi, contentApi } from '../../api/client'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import type { EpochKeys } from '../spaces/epochs'
@@ -544,6 +545,92 @@ describe('a link opens nothing of a sibling share (W1)', () => {
     const kShareB = v1.open(bContext, EPOCHS.keys.get(b.sealedShareKeyEpoch)!, fromB64std(b.sealedShareKey))
     expect(new TextDecoder().decode(v1.open({ purpose: 'share-password' }, kShareB, fromB64std(b.sealedPassword)))).toBe('correct horse battery')
     expect(readSharePassword(EPOCHS, addressOf(b), b, b.sealedPassword)).toBe('correct horse battery')
+  })
+}, PRODUCTION_ARGON_TIMEOUT_MS)
+
+// W1 (ADR 0075): a re-issue carries the old share's settings under a FRESH K_share. The old K_share is exactly what a
+// departed member may hold, so it must open nothing the new share carries. Through the real reissueShare, capturing
+// the request it posts.
+describe('reissueShare (ADR 0075, W1)', () => {
+  /** A share minted through the real create path, returned the way the manage list serves it, plus its K_share. */
+  async function oldShare(kMem: Uint8Array, role: ShareRole = ShareRole.Viewer, password = 'correct horse battery') {
+    const create = vi.fn().mockResolvedValue({})
+    const reissue = vi.fn().mockResolvedValue({})
+    vi.mocked(sharesApi).mockReturnValue({ createShare: create, reissueShare: reissue } as unknown as ReturnType<typeof sharesApi>)
+    const minted = await createShare(SCOPE_ID, NODE_ID, kMem, EPOCHS, 'Rom', role, null, { en: 'note for B' }, 'For Grandma', password)
+    const c = create.mock.calls.at(-1)![0].createShareRequest
+    const old: ReissuableShare = {
+      ...addressOf(c), role, expiresAt: null, sealedShareKey: c.sealedShareKey, sealedShareKeyEpoch: c.sealedShareKeyEpoch,
+      sealedNote: c.sealedNote ?? null, sealedShareName: c.sealedShareName ?? null,
+      passwordRequired: !!c.passwordRequired, sealedPassword: c.sealedPassword ?? null,
+    }
+    return { old, oldKey: minted.kShare, reissue }
+  }
+
+  it('re-seals note, label and password under the new K_share, and the old K_share opens none of it', async () => {
+    const kMem = v1.randomBytes(32)
+    const { old, oldKey, reissue } = await oldShare(kMem)
+
+    const minted = await reissueShare(old, kMem, EPOCHS, 'Rom')
+
+    expect(reissue).toHaveBeenCalledTimes(1)
+    expect(reissue.mock.calls[0][0].shareId).toBe(old.shareId) // the share it replaces
+    const r = reissue.mock.calls[0][0].reissueShareRequest
+    expect(r.shareId).toMatch(SHARE_ID)
+    expect(r.shareId).not.toBe(old.shareId)
+    expect(minted.shareId).toBe(r.shareId)
+    const dec = (b: Uint8Array) => new TextDecoder().decode(b)
+    // the settings open under the NEW key
+    expect(JSON.parse(dec(v1.open({ purpose: 'share-note' }, minted.kShare, fromB64std(r.sealedNote))))).toEqual({ en: 'note for B' })
+    expect(dec(v1.open({ purpose: 'share-name' }, minted.kShare, fromB64std(r.sealedShareName)))).toBe('For Grandma')
+    expect(dec(v1.open({ purpose: 'share-password' }, minted.kShare, fromB64std(r.sealedPassword)))).toBe('correct horse battery')
+    expect(r.pwVerifier).toBe(b64std(v1.sha256Digest(v1.sharesPwToken('correct horse battery', fromB64std(r.pwSalt)))))
+    // the recovery copy is at the write epoch, bound to the NEW share id
+    expect(r.sealedShareKeyEpoch).toBe(EPOCHS.current)
+    const ctx = { purpose: 'share-key-recovery', scopeId: SCOPE_ID, nodeId: NODE_ID, shareId: r.shareId, epoch: EPOCHS.current } as const
+    expect(v1.open(ctx, EPOCHS.keys.get(EPOCHS.current)!, fromB64std(r.sealedShareKey))).toEqual(minted.kShare)
+    // the old K_share — what a departed member may hold — opens none of the new fields
+    const fields: [Parameters<typeof v1.open>[0], string][] = [
+      [{ purpose: 'share-note' }, r.sealedNote], [{ purpose: 'share-name' }, r.sealedShareName],
+      [{ purpose: 'share-password' }, r.sealedPassword], [{ purpose: 'share-key' }, r.wrap],
+      [{ purpose: 'share-memory-name' }, r.sealedName],
+    ]
+    for (const [ctx, field] of fields) {
+      expect(() => v1.open(ctx, oldKey, fromB64std(field))).toThrow(v1.OpenRefused)
+    }
+    // positive control: a member holding the epoch keys reveals the new password through the new copy
+    expect(readSharePassword(EPOCHS, addressOf(r), r, r.sealedPassword)).toBe('correct horse battery')
+  })
+
+  it('an UPLOADER re-issue seals the Memory’s existing drop public key and carries no wrap and no private key', async () => {
+    const kMem = v1.randomBytes(32)
+    const drop = v1.generateDropKey()
+    const sealedDropPrivateKey = b64std(v1.seal({ purpose: 'drop-private-key', scopeId: SCOPE_ID, nodeId: NODE_ID }, kMem, v1.serializeDropKey(drop)))
+    vi.mocked(contentApi).mockReturnValue({
+      listNodes: vi.fn().mockResolvedValue([{ id: NODE_ID, sealedDropPrivateKey }]),
+    } as unknown as ReturnType<typeof contentApi>)
+    const { old, reissue } = await oldShare(kMem, ShareRole.Uploader, '')
+
+    const minted = await reissueShare(old, kMem, EPOCHS, 'Rom')
+
+    const r = reissue.mock.calls[0][0].reissueShareRequest
+    expect(r.wrap).toBeUndefined()
+    expect(r.sealedDropPrivateKey).toBeUndefined()
+    expect(v1.open({ purpose: 'drop-public-key' }, minted.kShare, fromB64std(r.sealedDropPublicKey)))
+      .toEqual(v1.serializeHybridPublic(v1.dropKeyPublic(drop)))
+  })
+
+  it('refuses to carry a password it cannot read rather than dropping the protection', async () => {
+    const kMem = v1.randomBytes(32)
+    const { old, reissue } = await oldShare(kMem)
+    await expect(reissueShare({ ...old, sealedPassword: null }, kMem, EPOCHS, 'Rom')).rejects.toThrow('share_password_not_recoverable')
+    expect(reissue).not.toHaveBeenCalled()
+  })
+
+  it('mintedBeforeKeyChange marks a copy below the current epoch, never one at it or none', () => {
+    expect(mintedBeforeKeyChange({ sealedShareKey: 'k', sealedShareKeyEpoch: 1 }, EPOCHS)).toBe(true)
+    expect(mintedBeforeKeyChange({ sealedShareKey: 'k', sealedShareKeyEpoch: 2 }, EPOCHS)).toBe(false)
+    expect(mintedBeforeKeyChange(NO_COPY, EPOCHS)).toBe(false)
   })
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 

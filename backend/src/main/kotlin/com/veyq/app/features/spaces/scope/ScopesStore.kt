@@ -321,6 +321,7 @@ class ScopesStore(
     fun rotate(
         scopeId: String, epoch: Int, wrappedPrev: String, granterId: String,
         grants: List<RotationGrant>, retags: List<Pair<String, String>>, dropped: Set<String>, removes: String? = null,
+        revokeLinks: Boolean = false,
     ): RotationDecision {
         val scope = ScopeEntity.findById(scopeId, LockModeType.PESSIMISTIC_WRITE)!!
         val all = MembershipEntity.find("scopeId", scopeId).list()
@@ -340,6 +341,8 @@ class ScopesStore(
             all.filter { it.userId == removed }.forEach { it.delete() }
             ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", removed, scopeId)
             shares.deactivateSharesByOwnerInScope(removed, scopeId) // cr-0104: their public links 404 from now on
+            // ADR 0075: and, opted into, every other link of the group — any of them the removed member could copy
+            if (revokeLinks) shares.deactivateSharesInScope(scopeId)
             all.filter { it.userId != removed }
         } ?: all
         scope.currentEpoch = plan.newEpoch

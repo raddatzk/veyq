@@ -74,20 +74,22 @@ parts.
    - **A copy that does not open degrades to "no label, no note, no password, no link"** in the manage list; it is
      not a refusal. Its only honest producer is a share minted before this decision on an instance that was not
      reset, and that share's guests are unaffected.
-   - **The residual, stated.** `K_share` does not change for the life of a link, so a member removed from a
-     group scope who ever opened a share keeps its `K_share` — and with a dump keeps reading that share,
-     including later edits of its password, label or note, and can still use its link. Re-sealing the copy under
-     a new epoch on rotation would not help; cutting such a member off an existing link means re-issuing the link
-     (a new `K_share`), which is a product question of its own (inbox). Shares minted after the removal are out of
-     their reach. The same class as `K_mem` not rotating on removal (ADR 0012 *Rotation / revocation*).
+   - **The residual, stated.** `K_share` does not change for the life of a link, and every member can rebuild
+     every link of a Memory from its copy — so a member removed from a group may hold every link that existed on
+     the group's Memories while they belonged, and uses one with no dump at all (with a dump they also read its
+     later password, label or note edits). Re-sealing the copy under a new epoch on rotation would not help;
+     cutting such a member off an existing link means **re-issuing** it — a new id and a new `K_share`
+     ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)). Shares minted after the removal are
+     out of their reach. The Memory's content under `K_mem` stays the class of `K_mem` not rotating on removal
+     (ADR 0012 *Rotation / revocation*).
    - **Rejected alternatives.** Storing only the password verifier (drop the reveal) closes the password, even
      against members, but leaves the label, the note and the link; sealing only the password under `K_SC` costs
      the same machinery and closes the same one field. Either can be layered on this one; neither replaces it.
      Folding the password into the key (the crypto-gate [ADR 0037](0037-password-protected-shares.md) defers)
      answers a different threat and needs a new link format.
 
-**Roles + scope.** All three roles (VIEWER / CONTRIBUTOR / UPLOADER) carry a note. **v1 = personal-scope shares**
-(the current share cut); the note rides the group/tenant lift with no extra work.
+**Roles + scope.** All three roles (VIEWER / CONTRIBUTOR / UPLOADER) carry a note, in every scope a share can
+live in — personal, group or tenant ([ADR 0029](0029-public-viewer-share.md) §6).
 
 ## Operator-blindness
 

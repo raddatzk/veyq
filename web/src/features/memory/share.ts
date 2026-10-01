@@ -1,5 +1,5 @@
 // uc.sharing.share-public-viewer (web) — the public viewer share data layer (cr-0100, ADR 0029). Operator-blind:
-// a curator turns ONE personal-scope Memory into a read-only, anonymous, revocable link `/s/{shareId}#k=<K_share>`.
+// a member turns ONE Memory of their scope into an anonymous, revocable link `/s/{shareId}#k=<K_share>`.
 // The share adds an INDEPENDENT second wrap of that Memory's `K_mem` — sealed under `K_share` (ADR 0012) —
 // whose secret `K_share` rides the URL **fragment** (ADR 0015) and never reaches the server. The Memory name is
 // re-sealed under `K_share` so a viewer with only the fragment key can show the title without `K_SC`.
@@ -241,10 +241,7 @@ export async function createShare(
   // ADR 0036: a recoverable copy of K_share under K_SC(epoch) (so every scope member can reveal, edit and re-copy it
   // later — and no link can, point 4), and the optional per-locale note + private name under K_share. The copy is on
   // EVERY share, so a note/name can be added later even to one minted without them.
-  const recoveryCopy = (ek: EpochKeys) => ({
-    sealedShareKey: b64std(v1.seal(shareKeyRecoveryContext({ scopeId, nodeId, shareId }, ek.current), writeKey(ek), kShare)),
-    sealedShareKeyEpoch: ek.current,
-  })
+  const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : undefined
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
@@ -286,6 +283,93 @@ export async function createShare(
       throw e
     }
   }
+}
+
+/** The recovery copy of [kShare] for the share at [address], sealed under the scope's write key at its current epoch
+ *  (ADR 0036 point 4) and bound to that share id and epoch (ADR 0072). */
+function recoveryCopyOf(address: ShareAddress, kShare: Uint8Array) {
+  return (ek: EpochKeys) => ({
+    sealedShareKey: b64std(v1.seal(shareKeyRecoveryContext(address, ek.current), writeKey(ek), kShare)),
+    sealedShareKeyEpoch: ek.current,
+  })
+}
+
+/** What a re-issue gives the new share — the settings the curator confirmed in the pre-filled dialog. */
+export type ReissueSettings = { note: LocaleMap; name: string; password: string; expiresAt: Date | null }
+
+/** The old share a re-issue starts from, as the manage list serves it. */
+export type ReissuableShare = ShareAddress & RecoveryCopy &
+  Pick<ManagedShare, 'role' | 'expiresAt' | 'sealedNote' | 'sealedShareName' | 'passwordRequired' | 'sealedPassword'>
+
+/**
+ * The old share's settings, read through its recovery copy — what a re-issue carries unless the curator changes it
+ * (ADR 0075 Decision 2). A password-protected share whose password cannot be read is refused rather than carried
+ * without one: a re-issue must never quietly drop a link's protection.
+ */
+export function carriedSettings(epochs: EpochKeys, old: ReissuableShare): ReissueSettings {
+  const password = readSharePassword(epochs, old, old, old.sealedPassword)
+  if (old.passwordRequired && !password) throw new Error('share_password_not_recoverable')
+  return {
+    note: readShareNoteMap(epochs, old, old, old.sealedNote),
+    name: readShareName(epochs, old, old, old.sealedShareName),
+    password,
+    expiresAt: old.expiresAt,
+  }
+}
+
+/**
+ * Re-issue a share (ADR 0075): a new share id and a fresh `K_share`, carrying [settings], and the old link turned off
+ * — one request, one server transaction. This is what cuts a departed member off a link they could copy: the old id
+ * 404s and nothing of the new one is derivable from the old `K_share`. The note, label and password are re-sealed
+ * under the new key (the password with a fresh salt), the recovery copy is sealed at the scope's current epoch, and
+ * the role is the old share's (the server takes it from the old row). A VIEWER/CONTRIBUTOR link wraps `K_mem`; an
+ * UPLOADER link seals the Memory's **existing** drop public key — every upload so far is sealed to it (ADR 0031
+ * point 7) — and is refused here rather than minting a new one. `stale_epoch` re-opens the scope key and retries
+ * once, as {@link createShare} does. The caller shows the returned link once, as after a create.
+ */
+export async function reissueShare(
+  old: ReissuableShare,
+  memoryKey: Uint8Array,
+  epochs: EpochKeys,
+  memoryName: string,
+  settings: ReissueSettings = carriedSettings(epochs, old),
+): Promise<MintedShare> {
+  const { scopeId, nodeId } = old
+  const kShare = v1.randomBytes(32) // never the old one: the old K_share is what the departed member may hold
+  const shareId = newShareId()
+  const uploader = old.role === ShareRole.Uploader
+  const wrap = uploader ? undefined : b64std(v1.seal(SHARE_KEY, kShare, memoryKey))
+  const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName)))
+  const sealedNote = hasLocaleText(settings.note) ? sealNoteMap(kShare, settings.note) : undefined
+  const sealedShareName = settings.name.trim() ? sealShareName(kShare, settings.name) : undefined
+  const pw = settings.password.trim() ? buildPasswordFields(kShare, settings.password) : undefined
+  const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
+  let recovery = recoveryCopy(epochs)
+  let sealedDropPublicKey: string | undefined
+  if (uploader) {
+    const existing = await currentSealedDropKey(scopeId, nodeId)
+    if (!existing) throw new Error('drop_key_missing') // an UPLOADER share proves the Memory has one
+    sealedDropPublicKey = dropKeysForShare(scopeId, nodeId, memoryKey, kShare, existing).sealedDropPublicKey
+  }
+  const post = () =>
+    withRefresh(() =>
+      sharesApi().reissueShare({
+        shareId: old.shareId,
+        reissueShareRequest: {
+          shareId, wrap, sealedDropPublicKey, sealedName, sealedNote, sealedShareName,
+          expiresAt: settings.expiresAt ?? undefined, ...recovery,
+          passwordRequired: pw?.passwordRequired, pwSalt: pw?.pwSalt, pwVerifier: pw?.pwVerifier, sealedPassword: pw?.sealedPassword,
+        },
+      }),
+    )
+  try {
+    await post()
+  } catch (e) {
+    if (!(await isStaleEpoch(e))) throw e
+    recovery = await freshRecoveryCopy(scopeId, recoveryCopy)
+    await post()
+  }
+  return { shareId, kShare }
 }
 
 /** Re-open the scope's key after a `stale_epoch` and seal the recovery copy at its current epoch; the re-opened
@@ -394,9 +478,26 @@ export async function revokeShare(shareId: string): Promise<void> {
 }
 
 /** Re-activate a soft-revoked share and adopt its ownership (cr-0104) — any current member may take over an
- *  orphaned (disabled) share on a shared Memory; the guest link then resolves again, now owned by the caller. */
+ *  orphaned (disabled) share on a shared Memory; the guest link then resolves again, now owned by the caller. The
+ *  server refuses `409 reissue_required` for a link a departed member may hold (ADR 0075) — see
+ *  {@link isReissueRequired}; such a share comes back only through {@link reissueShare}. */
 export async function reactivateShare(shareId: string): Promise<void> {
   await withRefresh(() => sharesApi().reactivateShare({ shareId }))
+}
+
+/** Whether a re-activation was refused because a departed member may hold the link (ADR 0075). */
+export async function isReissueRequired(e: unknown): Promise<boolean> {
+  return isCodedError(e, HttpStatus.conflict, 'reissue_required')
+}
+
+/**
+ * Whether the manage panel marks a share "made before the group's key last changed": its recovery copy is sealed
+ * below the scope's current epoch, so every member of that older epoch — one removed since included — could rebuild
+ * its link. The same predicate as the epoch half of the server's re-activation refusal (ADR 0075 Decision 4), so a
+ * share this marks is one re-activation refuses. A share without a copy is never marked.
+ */
+export function mintedBeforeKeyChange(share: RecoveryCopy, epochs: EpochKeys): boolean {
+  return share.sealedShareKeyEpoch != null && share.sealedShareKeyEpoch < epochs.current
 }
 
 // --- contributor / uploader (anonymous, no session; cr-0101, cr-0102) --------

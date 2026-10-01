@@ -520,9 +520,14 @@ export async function openGroupIcon(scopeId: string): Promise<Uint8Array | null>
  * **before** the removal; every row carrying `removedUserId` is dropped from it — a duplicate included — so a server
  * that re-lists the removed member cannot get the new epoch wrapped to their genuine key. Never pass a list read
  * after the removal: that is the server's word on who remains, not the owner's.
+ *
+ * `revokeLinks` (ADR 0075) also turns off every public link of the group in the same transaction — any of them the
+ * removed member could have copied; each link's owner then renews the ones still needed.
  */
-export async function rotateGroupForRemoval(scopeId: string, pickedFrom: ScopeMember[], removedUserId: string): Promise<number> {
-  return commitRotation(scopeId, pickedFrom, undefined, removedUserId)
+export async function rotateGroupForRemoval(
+  scopeId: string, pickedFrom: ScopeMember[], removedUserId: string, revokeLinks = false,
+): Promise<number> {
+  return commitRotation(scopeId, pickedFrom, undefined, removedUserId, revokeLinks)
 }
 
 /** One re-grant a rotation carries: the new epoch key wrapped to a member's identity, signed by the rotator. */
@@ -558,7 +563,9 @@ type CarriedAdmission = { admissionId: string; admissionTag: string }
  * With `removes` it is a removal-rotation ({@link rotateGroupForRemoval}): no row with that id is carried, and the
  * request names them so the server deletes their membership in the same commit.
  */
-export async function commitRotation(scopeId: string, members: ScopeMember[], rotator?: Rotator, removes?: string): Promise<number> {
+export async function commitRotation(
+  scopeId: string, members: ScopeMember[], rotator?: Rotator, removes?: string, revokeLinks = false,
+): Promise<number> {
   const carry = removes === undefined ? members : members.filter((m) => m.userId !== removes)
   for (let attempt = 0; ; attempt++) {
     // Our grant → the epoch keys we hold (E_n = the write key). Opened even when it lags the scope: the server
@@ -606,7 +613,7 @@ export async function commitRotation(scopeId: string, members: ScopeMember[], ro
         for (const invite of await withRefresh(() => tenantsApi().listMemberInvites({ tenantId: scopeId }))) carryAdmission('', invite)
       }
       const rotated = await withRefresh(() =>
-        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions, removesUserId: removes } }),
+        scopesApi().rotateScope({ scopeId, rotateScopeRequest: { epoch, wrappedPrev, grants, admissions, droppedAdmissions, removesUserId: removes, revokeLinks: revokeLinks || undefined } }),
       )
       // This device made the epoch, so it now holds it (ADR 0024 Decision 6) — the epoch it stated, which the
       // server took as the next one; a server that later serves the older grant meets the floor.

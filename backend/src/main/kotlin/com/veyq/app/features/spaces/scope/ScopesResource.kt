@@ -164,6 +164,7 @@ class ScopesResource(
             rotateScopeRequest.admissions.map { it.admissionId.toString() to it.admissionTag },
             rotateScopeRequest.droppedAdmissions.orEmpty().map { it.toString() }.toSet(),
             rotateScopeRequest.removesUserId?.toString(),
+            rotateScopeRequest.revokeLinks ?: false,
         )) {
             is RotateOutcome.Ok -> Response.status(Response.Status.CREATED).entity(ScopeRotated(epoch = outcome.epoch)).build()
             is HttpFailure -> httpError(outcome)

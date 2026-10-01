@@ -9,8 +9,8 @@ import jakarta.persistence.Table
 import java.time.Instant
 
 /**
- * A public viewer share (uc.sharing.share-public-viewer, cr-0100, ADR 0029): one personal-scope Memory turned
- * into a read-only, anonymous, revocable link `/s/{id}#k=<K_share>`. Operator-blind: the row holds only the
+ * A public share (uc.sharing.share-public-viewer, ADR 0029): one Memory of a personal, group or tenant scope
+ * (ADR 0029 §6) turned into an anonymous, revocable link `/s/{id}#k=<K_share>`. Operator-blind: the row holds only the
  * opaque 256-bit `id`, the wrap `symWrap(K_share, K_mem)`, the plaintext `role`, the `K_share`-sealed name,
  * and the shared `nodeId` — never `K_share`, `K_mem`, a name, or the viewer. `K_share` rides the URL fragment
  * (ADR 0015) and never reaches the server. Soft (L1) revoke: `enabled = false` / a passed `expiresAt` makes the
@@ -24,11 +24,11 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "id", length = 64)
     lateinit var id: String
 
-    /** The veyq user who created the share (list/revoke authz). */
+    /** The veyq user who owns the share (list/revoke authz) — its creator, or the member who adopted it by re-activation. */
     @Column(name = "owner_account", nullable = false, length = 36)
     lateinit var ownerAccount: String
 
-    /** The shared node's scope — **personal** only in v1 (ADR 0029 §6); used to gate the subtree walk. */
+    /** The shared node's scope — personal, group or tenant (ADR 0029 §6); gates the curator ops and the subtree walk. */
     @Column(name = "scope_id", nullable = false, length = 36)
     lateinit var scopeId: String
 

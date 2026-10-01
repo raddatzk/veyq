@@ -58,6 +58,11 @@ const stubs = {
     template: '<div class="icon-dialog"><button class="dialog-save" @click="doSave">save</button></div>',
   },
   ChangedKeyReviewDialog: true,
+  Checkbox: {
+    props: ['modelValue'],
+    emits: ['update:modelValue'],
+    template: '<input type="checkbox" class="revoke-links" :checked="modelValue" @change="$emit(\'update:modelValue\', $event.target.checked)" />',
+  },
 }
 
 const OWNER_ROW = [{ userId: 'u-own', username: 'owner', role: 'OWNER', hasGrant: true, pendingConsent: false }]
@@ -126,7 +131,7 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
     globalThis.URL.revokeObjectURL = vi.fn()
   })
 
-  async function removeBob() {
+  async function removeBob(tickRevokeLinks = false) {
     // The server lists bob before the removal — and keeps listing him after it.
     vi.mocked(listScopeMembers).mockResolvedValue(PICKED as never)
     vi.mocked(getMyProfile).mockResolvedValue({ username: 'owner' } as never)
@@ -136,6 +141,7 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
     await flushPromises()
     await button(w, t('groups.remove'))!.trigger('click') // bob's row — the owner cannot remove themselves here
     await flushPromises()
+    if (tickRevokeLinks) await w.find('input.revoke-links').setValue(true) // ADR 0075's opt-in
     await button(w, t('groups.removeConfirmYes'))!.trigger('click') // the inline confirm
     await flushPromises()
     return w
@@ -145,9 +151,16 @@ describe('GroupMembersPanel — removing a member is one request (ADR 0024 Decis
     const w = await removeBob()
     expect(removeGroupMember).not.toHaveBeenCalled()
     expect(rotateGroupForRemoval).toHaveBeenCalledTimes(1)
-    expect(rotateGroupForRemoval).toHaveBeenCalledWith('g-1', PICKED, 'u-bob')
+    // the fourth argument is ADR 0075's "turn off every link" — unchecked unless the owner ticks it
+    expect(rotateGroupForRemoval).toHaveBeenCalledWith('g-1', PICKED, 'u-bob', false)
     // A re-listing server does not bring the removed member back into view.
     expect(w.text()).not.toContain('@bob')
     expect(w.text()).toContain('@owner') // control: the remaining member is still listed
+  })
+
+  it('carries the ticked "turn off every link" opt-in into the same removal request (ADR 0075)', async () => {
+    await removeBob(true)
+    expect(rotateGroupForRemoval).toHaveBeenCalledTimes(1)
+    expect(rotateGroupForRemoval).toHaveBeenCalledWith('g-1', PICKED, 'u-bob', true)
   })
 })

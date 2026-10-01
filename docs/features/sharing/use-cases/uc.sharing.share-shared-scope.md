@@ -42,10 +42,16 @@ create-gate (scope) and a member-removal hook are new.
   removal also triggers ([ADR 0024](../../../decisions/0024-scope-key-rotation.md)); for a **tenant** (ACL-revoke,
   no rotation — [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md)) it is the *only* forward
   layer for the link.
-- **A2 — re-activate a deactivated share → ownership transfers.** Any **remaining member** may re-enable a
-  deactivated share; doing so **transfers its ownership** (`owner_account`) to the re-activating member. An active
-  share is thus always tied to a *current* member's responsibility, never orphaned to a removed one — and a
-  later removal of the new owner would deactivate it again. Re-activating is a publication like creating, so it
+- **A2 — re-activate a deactivated share → ownership transfers, unless a departed member may hold its link.** Any
+  **remaining member** may re-enable a deactivated share; doing so **transfers its ownership** (`owner_account`) to
+  the re-activating member, and the **same** link works again. So re-activation is refused (`409
+  reissue_required`, nothing written) for a link a departed member may hold
+  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)): the share's owner is no
+  longer a member of the scope (in a tenant too: a removed tenant member's own links), or its recovery copy is
+  sealed below the scope's current epoch — every member could rebuild every link from its copy, one since removed
+  included. A share with no copy is judged by its owner alone. The manage panel marks the epoch case *"made before
+  the group's key last changed"* (a key rotation after a compromise moves the epoch too) and offers **renew** (A4)
+  in place of re-activate. Re-activating is a publication like creating, so it
   passes the same checks: a current member (not an unaccepted invitee, not during the group's deletion grace,
   [uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)) **and** the instance's sharing
   capability for the share's role — `422 capability_disabled` when the operator has switched that kind of link
@@ -53,6 +59,20 @@ create-gate (scope) and a member-removal hook are new.
 - **A3 — a creator who has left the scope** keeps nothing: editing or revoking their former share answers them
   as a non-member (404). Ownership is a claim of a *current* member; the share's `owner_account` alone never
   authorizes.
+- **A4 — renew (re-issue) a link.** One request makes a **new** share — a new id, a fresh `K_share` — carrying the
+  old one's note, private label, expiry and password (re-sealed under the new key, the password with a fresh salt),
+  and turns the old one off in the **same transaction**; any refusal writes nothing. The role and the Memory come
+  from the old share; an uploader link keeps the Memory's drop key, since every upload so far is sealed to it. The
+  owner renews their own share, live or off; any member renews a share that is off, and owns the new one. The old
+  link `404`s exactly as a revoked one — no redirect, which would hand the new link to the person it is meant to cut
+  off — and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
+  again on the new link and can no longer delete their earlier uploads (a guest's session is per link), and the new
+  link's storage budget starts at zero.
+- **A5 — a removal can turn off every link of the group.** The group owner's removal confirmation carries an
+  unchecked box, *"also turn off every link on this group"*; ticked, the removal-rotation (`revokeLinks`) turns off
+  every enabled share of the group — whoever made it — in the removal's own transaction, and each share's owner
+  renews (A4) the ones still wanted. Forcing it on every removal would break every guest's link even when someone
+  leaves on good terms; the group owner already holds the stronger power of deleting the group.
 - **E1 — non-member / lost grant:** a caller who is not a member of the scope (or cannot open `K_mem`) cannot
   create a share there — the same 404/authorization path as any non-member scope access (no reveal).
 
@@ -63,7 +83,10 @@ create-gate (scope) and a member-removal hook are new.
   signal. The server never sees `K_share`, `K_mem`, names, or the visitor.
 - **Already-read is not retractable.** Deactivation stops *new* access; a removed member who kept both the link
   and the ciphertext they already fetched can replay *that* — and, because they kept `K_mem`, could decrypt further
-  ciphertext only via a **colluding malicious operator**. This is the same accepted limit as
+  ciphertext only via a **colluding malicious operator**. A link they could copy works against an honest server
+  with **no dump at all** until it is renewed (A4) — what renewing buys is that honest-server cut, not dump
+  resistance ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). This is the
+  same accepted limit as
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md) / the [security model](../../../crosscutting/security-model.md);
   the honest-server 404 is the instant layer.
 - **Who may publish = any member.** A deliberately permissive governance choice (symmetric to member capabilities),
@@ -73,13 +96,16 @@ create-gate (scope) and a member-removal hook are new.
 
 **EN —** Shared spaces get the same public links your personal memories already have: anyone in the group or
 household can turn a shared memory into a browser link for people outside. And it stays honest when someone leaves —
-the moment a member is removed, the links *they* made stop working; if the group still wants one alive, another
-member re-activates it and it becomes theirs.
+the moment a member is removed, the links *they* made stop working, and you can switch off every link of the group in
+the same step. A link made before someone left keeps working until you **renew** it: renewing gives it a new address
+and switches the old one off for good, so hand the new one out — your guests keep their photos.
 
 **DE —** Geteilte Bereiche bekommen dieselben öffentlichen Links wie deine persönlichen Erinnerungen: jede:r in der
 Gruppe oder im Haushalt kann eine geteilte Erinnerung in einen Browser-Link für Außenstehende verwandeln. Und es
-bleibt ehrlich, wenn jemand geht — sobald ein Mitglied entfernt wird, hören *seine* Links auf zu funktionieren;
-will die Gruppe einen weiter offen halten, aktiviert ihn ein anderes Mitglied und übernimmt ihn damit.
+bleibt ehrlich, wenn jemand geht — sobald ein Mitglied entfernt wird, hören die Links auf zu funktionieren, die diese
+Person erstellt hat, und im selben Schritt lassen sich alle Links der Gruppe abschalten. Ein Link, der entstanden ist,
+bevor jemand gegangen ist, funktioniert weiter, bis du ihn **erneuerst**: Dann bekommt er eine neue Adresse, und die
+alte wird endgültig abgeschaltet — gib die neue weiter; deine Gäste behalten ihre Fotos.
 
 ## Related
 
@@ -88,6 +114,7 @@ will die Gruppe einen weiter offen halten, aktiviert ihn ein anderes Mitglied un
   [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md)
 - Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) §6 (scope + removal governance),
+  [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) (re-issue, never revive),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (`K_mem` stable across rotation),
   [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (tenant = ACL-revoke, group = rotation),
   [ADR 0032](../../../decisions/0032-capability-discovery-version-gating.md) (the `sharing.*` capability gate)

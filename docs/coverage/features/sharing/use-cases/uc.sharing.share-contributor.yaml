@@ -1,7 +1,7 @@
 useCase: uc.sharing.share-contributor
 feature: sharing
 title: Share a Memory as a contributor link (anyone with the link can add photos)
-# Built (web vertical, cr-0101 + ADR 0030): a CONTRIBUTOR public share of one personal-scope Memory — the viewer
+# Built (web vertical, cr-0101 + ADR 0030): a CONTRIBUTOR public share of one Memory (any scope, ADR 0029 §6) — the viewer
 # share (symWrap(K_share, K_mem), key in the URL fragment) plus a mandatory display name sealed under K_mem → an
 # anonymous share identity (the buckets forward-compat hook), share-scoped UNAUTHENTICATED upload endpoints
 # (presign mirror + complete, gated by role CONTRIBUTOR + enabled + a contributor token), and direct-append
