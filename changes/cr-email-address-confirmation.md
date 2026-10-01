@@ -245,7 +245,7 @@ phases 1–3 write new prose:
 
   **Done when:** `validate_doc_links.py`, `validate_feature_format.py`, `validate_feature_wiring.py` and
   `validate_doc_citations.py` are green.
-- [ ] **5 coverage.** `docs/coverage/features/account/use-cases/uc.account.confirm-email-address.yaml` drops
+- [x] **5 coverage.** `docs/coverage/features/account/use-cases/uc.account.confirm-email-address.yaml` drops
   `status: planned` and fills each criterion with its test refs. Any web e2e is cited only if the `web-e2e` run
   executes it (ADR 0040). **Done when:** `python3 scripts/validate_coverage.py` is green.
 
