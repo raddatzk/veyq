@@ -1,10 +1,13 @@
 // en.memory.derivatives (web) — the on-device pixel stage split out of `media.ts` (cr-0143).
 // A media's role-tagged derivatives (thumbnail/preview; a video's first-frame poster) are generated here:
 // decode → progressive-halving downscale → JPEG re-encode, all client-side (operator-blind — the server never
-// sees a pixel). The stage sits behind an injectable `MediaDeriver` so `media.ts`'s add-media wiring is
+// sees a pixel). The image pixel code itself lives in `mediaPixels.ts` and runs in the media Worker where the
+// browser offers one (`mediaDeriveWorker.ts`), on the page thread otherwise; the video poster always runs here.
+// The stage sits behind an injectable `MediaDeriver` so `media.ts`'s add-media wiring is
 // unit-testable against a stub; the real Canvas/`<video>` path is exercised by a live browser round-trip.
 import { type MediaDerivativeKind } from '../../api/generated/media'
 import { drawEncoded, type CanvasPort } from './mediaPixels'
+import { deriveImageWorkerFirst } from './mediaDeriveWorker'
 
 /**
  * Derivative tier specs (en.memory.derivatives → *The three tiers*). `preview` is pinned from the legacy E2EE
@@ -81,19 +84,30 @@ const PAGE_PORT: CanvasPort<HTMLCanvasElement> = {
   },
 }
 
-/** The real browser deriver — Canvas decode/downscale + `<video>` first-frame poster. DOM-only (used live). */
+/** The page-thread image derivation: the media Worker's fallback, and the whole path where no Worker runs. */
+async function deriveImageOnPage(
+  source: Blob,
+  { maxEdge, quality, mimeType = 'image/jpeg', background }: Parameters<MediaDeriver['deriveImage']>[1],
+): Promise<{ bytes: Uint8Array; source: Dimensions | null }> {
+  const bitmap = await createImageBitmap(source)
+  try {
+    // The intrinsic size rides back with the bytes: this decode already knows it, and it is exactly what
+    // the sealed metadata tier wants. Without it the same original is decoded a second time just to measure.
+    const bytes = await drawEncoded(PAGE_PORT, bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
+    return { bytes, source: { w: bitmap.width, h: bitmap.height } }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** The real browser deriver — images Worker-first, the `<video>` poster and the dimension probe on the page. */
 export function createBrowserDeriver(): MediaDeriver {
   return {
-    async deriveImage(source, { maxEdge, quality, mimeType = 'image/jpeg', background }) {
-      const bitmap = await createImageBitmap(source)
-      try {
-        // The intrinsic size rides back with the bytes: this decode already knows it, and it is exactly what
-        // the sealed metadata tier wants. Without it the same original is decoded a second time just to measure.
-        const bytes = await drawEncoded(PAGE_PORT, bitmap, bitmap.width, bitmap.height, maxEdge, quality, mimeType, background)
-        return { bytes, source: { w: bitmap.width, h: bitmap.height } }
-      } finally {
-        bitmap.close()
-      }
+    // Worker-first (mediaDeriveWorker.ts): every caller — the member and contributor upload, the standalone cover,
+    // the space icon — gets the off-page-thread encode through this one factory, with today's page path as the
+    // per-request fallback.
+    deriveImage(source, opts) {
+      return deriveImageWorkerFirst(source, opts, () => deriveImageOnPage(source, opts))
     },
     async deriveVideoPoster(source) {
       const url = URL.createObjectURL(source)

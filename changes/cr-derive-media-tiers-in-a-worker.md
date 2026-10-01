@@ -244,7 +244,7 @@ before building a Worker around it.
       `npm run check` green in `web/`, B1 green and red under each lever, and no runtime behaviour changed (the
       page port is the old code path).
 
-- [ ] 2 web — **the Worker, Worker-first behind the one factory.** Add `mediaDerive.worker.ts` next to
+- [x] 2 web — **the Worker, Worker-first behind the one factory.** Add `mediaDerive.worker.ts` next to
       `mediaDeriver.ts`: it imports the pixel module, answers `{id, ok, bytes (transferred), source}` or
       `{id, ok: false, kind: 'source' | 'infra', error}`, and feature-detects `OffscreenCanvas` and its 2D
       context per request, answering `infra` if either is absent. `createBrowserDeriver().deriveImage` dispatches

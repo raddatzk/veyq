@@ -11,7 +11,8 @@
 // - style-src needs 'unsafe-inline': PrimeVue/@primeuix inject runtime <style> tags + the app uses :style
 //   bindings; neither is nonce-able. Style injection is far lower-risk than script, so this is an accepted gap.
 // - img-src data: + blob: — favicon SVG / QR data URLs, and decrypted media object URLs. media-src blob: — same.
-// - worker-src 'self': the Argon2 worker is a same-origin module worker (no blob: worker).
+// - worker-src 'self': both workers — the Argon2 worker and the media pixel-stage worker — are same-origin module
+//   workers (no blob: worker).
 // - object-src/frame-src 'none': the app embeds no <object>/<embed>/<iframe>.
 // - frame-ancestors 'none': no page on any origin may frame the app (anti-clickjacking). It only works in a
 //   response header, which is one reason the policy is never a <meta>: the build emits it as a file the backend's
