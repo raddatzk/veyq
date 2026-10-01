@@ -381,4 +381,19 @@ development instance's marks read as someone else's until re-toggled, or reset i
 
 ## Retrospective
 
-(written at implement close)
+B1 red on the untouched module: `expected [ [ …(2) ] ] to deeply equal []` (its honest-label control green); B2:
+`expected [ …(3) ] to deeply equal [ Array(1) ]` — bob's two ids plus the click, written into the caller's row.
+
+- **The CR's contract shape was never run through the generator.** `GET /api/item-favorites` under tag
+  `item-favorites` widened the generated interface's root to `/api`, and every existing per-node route answered
+  404/405 — caught only by the slice run in phase 2, fixed with a tag of its own. Root cause: a refine that adds an
+  operation to an existing tag reasons about the path, not about the interface the tag becomes. Harvested into
+  `backend/CLAUDE.md` (API-first). Next time: a refine that adds an operation names its tag's resulting root path.
+- **Two done-whens the phase order could not meet.** Phase 1 promised a conformance case for functions phase 3a
+  writes (the case moved to 3a, which ran before phase 2); phase 3b said both "`onToggleMark` returns early" and
+  "MemoryDetail should not need edits" — the locked-vault guard landed in `saveItemFavorites` (it throws before any
+  PUT; the store's existing revert makes it a no-write, tested). Next time: read each done-when against the
+  phase's own diff before freezing it.
+- **My own miss:** the first "a tag answers for nothing else" negative dropped the first id — a no-op on the case
+  with a duplicate, so it read green-for-the-wrong-reason until the run said otherwise. Next time: a set-valued
+  fixture is mutated by value, never by position.
