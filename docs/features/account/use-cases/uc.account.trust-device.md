@@ -8,8 +8,9 @@
   server stores only the new ciphertext wrap.
 - **Preconditions:** An **authenticated session** exists; the device is being (or has just been)
   **unlocked**, so the in-memory Master Key can be wrapped under a new KEK **and** the account password is
-  still in hand (the unlock flow clears it right after — enrolment is offered *at unlock time*, see
-  [uc.account.unlock](uc.account.unlock.md)); WebCrypto + IndexedDB are available.
+  still in hand (the unlock flow clears it right after — enrolment runs *at the sign-in that unlocks*, see
+  [uc.account.remember-this-device](uc.account.remember-this-device.md)); WebCrypto + IndexedDB are available, and
+  the operator has not disabled the `account.device-trust` capability.
 - **Postconditions (success):** A **DEVICE** wrap (ciphertext) exists server-side; this device's IndexedDB
   holds its **non-extractable** device key plus the wrap's **salt** and server **id**; subsequent unlocks on
   this device open the Master Key from **password + device key** (2-factor, no Secret Key). The Secret Key
@@ -35,14 +36,16 @@ at rest is the **rejected** anti-pattern ([ADR 0005](../../../decisions/0005-unl
 
 ## Main flow — enrol ("trust this device")
 
-Enrolment happens **at unlock time**, not as a later "settings" action. The unlock flow
-([uc.account.unlock](uc.account.unlock.md)) **clears the password immediately after** deriving the KEK, so a
-separate post-unlock control would have to re-prompt for it; instead the unlock card offers a **"Trust this
-device"** choice and enrolment runs **right after a successful unlock**, reusing the password just entered —
-which is **known-correct** (it just opened the floor wrap) and not yet cleared.
+Enrolment happens **at sign-in**, not as a later "settings" action, and there is **no "Trust this device"
+tick**: login and unlock are one screen ([uc.account.remember-this-device](uc.account.remember-this-device.md)),
+and its single toggle, **"Stay signed in on this device"** (off by default), picks the wrap. Off → this DEVICE
+wrap, enrolled automatically; on → the password-less `DEVICE_KEY` wrap instead. The unlock flow
+([uc.account.unlock](uc.account.unlock.md)) **clears the password immediately after** deriving the KEK, so
+enrolment runs **right after a successful unlock**, reusing the password just entered — which is
+**known-correct** (it just opened the floor wrap) and not yet cleared.
 
-1. On the unlock card the user ticks **"Trust this device"** and unlocks normally (this first time with
-   password + Secret Key). On success, before the password is cleared, enrolment runs:
+1. The user signs in with "Stay signed in" off (this first time with password + Secret Key). On success,
+   before the password is cleared, enrolment runs:
 2. The client generates a **non-extractable** HMAC `deviceKey` and stores it in **IndexedDB** (this device
    only; it never syncs).
 3. The client derives the device KEK from the **password + the device key** (a fresh salt; the exact
@@ -63,7 +66,7 @@ sequenceDiagram
   participant C as Client<br>(unlocked)
   participant DB as IndexedDB
   participant S as Server<br>(blind)
-  U->>C: "Trust this device" (+ password)
+  U->>C: sign in, "Stay signed in" off (+ password)
   C->>DB: generate + store non-extractable deviceKey
   C->>C: df = HMAC(deviceKey, info)<br>KEK = Argon2id(password + df, salt)<br>DEVICE wrap = symWrap(KEK, masterKey)
   C->>S: add DEVICE wrap (ciphertext + kdfParams)
@@ -121,12 +124,15 @@ a plain revoke does *not* do it, is [ADR 0058](../../../decisions/0058-revoke-ne
   every trusted device to wipe its key). A stale key/wrap is harmless ciphertext + an unusable handle;
   explicit untrust, or a re-trust (which replaces), is what cleans it up.
 - **E2 — enrol without a successful unlock:** there is no in-memory Master Key (and no in-hand password) to
-  wrap → nothing to enrol. "Trust this device" is bound to the unlock action, so it can only succeed when the
-  unlock it rides on succeeds.
+  wrap → nothing to enrol. Enrolment is bound to the unlock action, so it can only succeed when the unlock it
+  rides on succeeds.
 - **E3 — wrong password at unlock:** the KEK fails to open the wrap (AEAD tag mismatch) → **generic unlock
   failure**, identical to the PASSWORD path; the server is uninvolved.
-- **E4 — WebCrypto / IndexedDB unavailable** (private mode, locked-down browser): trust-device is
-  **unsupported** on this device → only the PASSWORD floor is offered. No silent downgrade.
+- **E4 — WebCrypto / IndexedDB unavailable** (a locked-down browser), or the operator disabled
+  `account.device-trust`: trust-device is **unsupported** → only the PASSWORD floor is offered, and the
+  *Devices and sessions* row says so. No silent downgrade. The check is presence only
+  (`isRememberSupported`): an ordinary private window has both APIs, so it **enrols** — its local key dies with
+  the window and its server wrap is left as harmless E1 ciphertext.
 
 ## Trust state
 
@@ -160,12 +166,12 @@ stateDiagram-v2
   Nothing per-login is re-uploaded on either side: a DEVICE wrap is inherently per-device and long-lived, and
   a session family carries no client blob at all, so there is nothing to correlate that the count doesn't
   already imply.
-- **A password change invalidates every DEVICE wrap.** Since `KEK = Argon2id(deviceFactor + password)`,
-  changing the account password makes every DEVICE wrap un-openable — and the password-change client can
-  **not** re-wrap them (it lacks the other devices' `deviceFactor`). So after a password change each trusted
-  device falls back to the PASSWORD floor and **re-trusts** on next use. This is inherent to a *device +
-  password* wrap (a stolen device alone must not unlock) and is ADR-0005-consistent; the future
-  **change-password** use-case must state it and re-offer "trust this device" afterwards.
+- **A password change ends every DEVICE wrap.** Since `KEK = Argon2id(deviceFactor + password)`, a new
+  password would leave every DEVICE wrap un-openable anyway — the password-change client can **not** re-wrap
+  them (it lacks the other devices' `deviceFactor`) — so the server **deletes** them with every other
+  non-survivor wrap ([uc.account.change-password](uc.account.change-password.md) step 8, the survivor rule in
+  [en.account.key-model](../enablers/en.account.key-model.md)). Each other device falls back to the PASSWORD
+  floor (password + Secret Key) and re-enrols at that sign-in; the changing device is offered a re-enrol.
 - **Reuse the affordance, never the naive data layer.** The obvious way to build "remember login" is to put
   the Secret Key or the raw Master Key in browser storage — which is exactly the pattern
   [ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) rejects, and it is what an earlier
@@ -173,29 +179,31 @@ stateDiagram-v2
 
 ## Out of scope (separate increments)
 
-- **Worker-cached re-lock / reload persistence** ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §6):
-  caching the unlocked Master Key in a worker so a reload doesn't re-prompt is orthogonal (it applies to
-  *every* method) and is its own slice.
-- **Biometric / passkey unlock** (PASSKEY method, WebAuthn PRF) and **cross-device onboarding** (QR / push)
-  are their own use-cases.
+- **Reload persistence** ([ADR 0005](../../../decisions/0005-unlock-methods-and-device-trust.md) §6): keeping the
+  unlocked Master Key across a reload is orthogonal (it applies to *every* method) and lives in the session vault
+  of [uc.account.remember-this-device](uc.account.remember-this-device.md).
+- **Biometric / passkey unlock** (PASSKEY method, WebAuthn PRF) — planned, nothing but the wrap method exists —
+  and **cross-device onboarding** ([uc.account.onboard-device](uc.account.onboard-device.md)) are their own
+  use-cases.
 
 ## What this means for you / Was das für dich bedeutet
 
 **EN —** The first time you open your memories on a new device you use your **password** and your **Secret
-Key** (from your Emergency Kit). After that you can **trust this device** so next time you only need your
-**password** — your Secret Key goes back in the drawer. Trusting works by locking a key *inside this browser*
-that can't be copied out; opening still needs your password too, so a stolen laptop alone isn't enough. The
-server never sees any of this — only scrambled data. You can **untrust** a device whenever you want, and on a
-device you haven't trusted you can always fall back to password + Secret Key.
+Key** (from your Emergency Kit). From then on that device needs only your **password** — veyq sets this up by
+itself at that first sign-in, and your Secret Key goes back in the drawer. It works by locking a key *inside
+this browser* that can't be copied out; opening still needs your password too, so a stolen laptop alone isn't
+enough. The server never sees any of this — only scrambled data. You can make a device **forget** its saved
+key whenever you want (under *Devices and sessions*), and a device without one always falls back to
+password + Secret Key.
 
 **DE —** Wenn du deine Erinnerungen das erste Mal auf einem neuen Gerät öffnest, brauchst du dein **Passwort**
-und deinen **Secret Key** (aus dem Notfall-Kit). Danach kannst du **diesem Gerät vertrauen**, sodass beim
-nächsten Mal nur noch dein **Passwort** nötig ist — der Secret Key wandert zurück in die Schublade. Das
-Vertrauen funktioniert über einen Schlüssel, der *in diesem Browser* eingeschlossen ist und nicht
-herauskopiert werden kann; zum Öffnen braucht es trotzdem dein Passwort, ein gestohlener Laptop allein
-genügt also nicht. Der Server sieht davon nichts — nur verschlüsselte Daten. Du kannst einem Gerät jederzeit
-das Vertrauen **entziehen**, und auf einem nicht vertrauten Gerät geht immer der Weg über Passwort + Secret
-Key.
+und deinen **Secret Key** (aus dem Notfall-Kit). Ab dann braucht dieses Gerät nur noch dein **Passwort** — das
+richtet veyq bei dieser ersten Anmeldung von selbst ein, und der Secret Key wandert zurück in die Schublade.
+Das funktioniert über einen Schlüssel, der *in diesem Browser* eingeschlossen ist und nicht herauskopiert
+werden kann; zum Öffnen braucht es trotzdem dein Passwort, ein gestohlener Laptop allein genügt also nicht.
+Der Server sieht davon nichts — nur verschlüsselte Daten. Du kannst ein Gerät seinen gespeicherten Schlüssel
+jederzeit **vergessen** lassen (unter *Geräte und Sitzungen*), und ein Gerät ohne ihn nimmt immer den Weg über
+Passwort + Secret Key.
 
 ## Related
 
@@ -206,6 +214,7 @@ Key.
   key + password; non-extractable backing; re-lock; method precedence), [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md)
   (auth vs. unlock)
 - Related use-cases: [unlock](uc.account.unlock.md) (the DEVICE wrap is one of its unlock paths; PASSWORD is
-  the floor); passkey — planned (biometric / WebAuthn PRF); onboard device — planned (QR / push); manage
-  sessions — planned
+  the floor); [remember this device](uc.account.remember-this-device.md) (the sign-in screen that enrols it);
+  [onboard device](uc.account.onboard-device.md); [sessions](uc.account.sessions.md); passkey — planned
+  (biometric / WebAuthn PRF)
 - End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)

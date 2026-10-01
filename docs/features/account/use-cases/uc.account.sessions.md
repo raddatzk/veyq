@@ -39,7 +39,9 @@ flowchart LR
 A locked device therefore shows a complete and fully actionable list — every session, every revoke — with
 coarse dates instead of names. That is the whole degradation, and it is deliberate: **the security action
 must never be gated behind the cosmetic half.** What a locked device still lacks is a *way in* — see **E3**,
-which owns that obligation.
+which owns that obligation. **Not reachable today:** the panel mounts only in the settings hub, whose route
+requires an unlocked vault (`router.ts`), so no locked device ever sees this list; a locked device gets E3's
+card, whose one action is to sign every device out.
 
 ## Main flow — see the sessions
 
@@ -255,16 +257,17 @@ a laptop is lost, or you signed in on someone else's machine and forgot to sign 
 ends every other session in one go and keeps you signed in where you are. You don't need your Secret Key for
 any of this — and that holds on a borrowed or brand-new device too, which is the one you are most likely to be
 holding when a laptop goes missing. On the sign-in screen there, choose **"I don't have my Secret Key with
-me"**: you sign in and your memories stay locked. From there you have two ways on. If you still have a device
-you are signed in on, **sign in with a QR code** and let this one in properly — that is usually what you came
-for. If the device is really gone, the other way is to sign every device out, this one included; it keeps
-nothing afterwards — no saved key, and you stay signed in only until the browser closes. If a device is really gone, use **"sign out and remove this device's saved key"** instead: signing
-out alone stops it reaching the server, but that device could still open your memories with just your password.
+me"**: you sign in, your memories stay locked, and what you can do there is sign every device out, this one
+included (or, if the kit turns up after all, unlock without saving anything). It keeps nothing afterwards — no
+saved key, and you stay signed in only until the browser closes. (If you still have a device you are signed in
+on, you don't need this: choose **"Sign in with a QR code"** on the sign-in screen instead and let this one in
+properly.) If a device is really gone, use **"Sign out + remove key"** on its row instead: signing out alone
+stops it reaching the server, but that device could still open your memories with just your password.
 Removing its saved key means whoever has it needs your password *and* your Secret Key — so keep that for
 devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
-time. Two honest details: the server never learns your device names — those are stored scrambled and are
-readable only after you unlock, so on a locked screen you'll see dates instead of names. And none of this
-reaches into the lost device itself; what it takes away is what the server was keeping for it.
+time. Two honest details: the server never learns your device names — those are stored scrambled and only your
+unlocked app can read them. And none of this reaches into the lost device itself; what it takes away is what
+the server was keeping for it.
 
 **DE —** Du siehst hier jede Stelle, an der du gerade angemeldet bist, und kannst jede davon von hier aus
 abmelden — praktisch, wenn ein Laptop weg ist oder du dich auf einem fremden Rechner angemeldet und das
@@ -272,17 +275,17 @@ Abmelden vergessen hast. „Überall sonst abmelden" beendet alle anderen Sitzun
 dort angemeldet, wo du gerade bist. Deinen Secret Key brauchst du dafür nicht — auch nicht auf einem geliehenen
 oder nagelneuen Gerät, und genau so eines hast du meistens in der Hand, wenn ein Laptop verschwunden ist. Wähle
 auf dessen Anmeldeseite „Ich habe meinen Secret Key nicht dabei": Du meldest dich an, deine Erinnerungen
-bleiben gesperrt. Von dort führen zwei Wege weiter. Hast du noch ein Gerät, an dem du angemeldet bist, dann
-nimm **„Über QR-Code anmelden"** und lass dieses Gerät richtig herein — meistens ist genau das der Grund, warum
-du hier bist. Ist das Gerät wirklich weg, ist der andere Weg, jedes Gerät abzumelden, dieses eingeschlossen. Es
-behält danach nichts: keinen gespeicherten Schlüssel, und angemeldet bleibst du nur, bis der Browser
-geschlossen wird. Ist ein Gerät wirklich weg, nimm
-stattdessen **„abmelden und gespeicherten Schlüssel entfernen"**: Abmelden allein hindert das Gerät nur daran,
+bleiben gesperrt, und tun kannst du dort eines: jedes Gerät abmelden, dieses eingeschlossen (oder, falls das
+Kit doch auftaucht, entsperren, ohne etwas zu speichern). Das Gerät behält danach nichts: keinen gespeicherten
+Schlüssel, und angemeldet bleibst du nur, bis der Browser geschlossen wird. (Hast du noch ein Gerät, an dem du
+angemeldet bist, brauchst du das nicht: Wähle auf der Anmeldeseite stattdessen **„Über QR-Code anmelden"** und
+lass dieses Gerät richtig herein.) Ist ein Gerät wirklich weg, nimm stattdessen **„Abmelden + Schlüssel
+entfernen"** in seiner Zeile: Abmelden allein hindert das Gerät nur daran,
 den Server zu erreichen — deine Erinnerungen könnte es mit deinem Passwort weiterhin öffnen. Ohne seinen
 gespeicherten Schlüssel braucht es dein Passwort *und* deinen Secret Key. Heb dir das also für wirklich
 verlorene Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit. Zwei ehrliche
-Hinweise: Die Gerätenamen erfährt der Server nie — sie liegen verschlüsselt und sind erst nach dem Entsperren
-lesbar, auf einem gesperrten Bildschirm siehst du deshalb Daten statt Namen. Und nichts davon greift auf das
+Hinweise: Die Gerätenamen erfährt der Server nie — sie liegen verschlüsselt, und lesen kann sie nur deine
+entsperrte App. Und nichts davon greift auf das
 verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewahrt hat.
 
 ## Related

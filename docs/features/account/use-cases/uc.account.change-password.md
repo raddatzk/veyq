@@ -54,7 +54,8 @@
 9. The actor's current device asks for the Secret Key once more (step 2 already did this) and may **re-enrol**
    its own `DEVICE`/`DEVICE_KEY` wrap in a follow-up call to the existing
    [uc.account.trust-device](uc.account.trust-device.md) endpoint, so it is not left signed out of its own
-   change. Every *other* device is signed out and must sign in fresh with the new password.
+   change. Every *other* device is signed out and, its wrap deleted in step 8, must sign in fresh with the new
+   password **and** the Secret Key.
 
 ## Alternate / exception flows
 
@@ -127,7 +128,8 @@ password" email. You need three things: your current password, your Secret Key f
 new password. Both of the first two are checked on your device before anything is sent, so a wrong one costs
 you a retry and nothing else. If you've genuinely forgotten your current password, use the reset-by-email
 route instead — being signed in is not enough on its own, on purpose: it is also all a thief with your unlocked
-phone would have. Your other devices are signed out and will need the new password to sign back in — this one
+phone would have. Your other devices are signed out and lose their saved key, so each will need the new
+password and your Secret Key to sign back in — this one
 stays signed in and just asks you to reconfirm you want it remembered.
 
 **DE —** Du kannst dein Passwort jederzeit ändern, während du angemeldet bist — du musst nicht auf eine
@@ -136,7 +138,8 @@ Notfall-Kit und das neue Passwort. Die ersten beiden werden auf deinem Gerät ge
 gesendet wird — ein Tippfehler kostet dich also einen zweiten Versuch und sonst nichts. Hast du dein aktuelles
 Passwort wirklich vergessen, nimm den Weg über die E-Mail-Zurücksetzung: angemeldet zu sein reicht hier
 absichtlich nicht — genau das hätte auch jemand, der dein entsperrtes Handy in die Hand bekommt. Deine anderen
-Geräte werden abgemeldet und müssen sich mit dem neuen Passwort neu anmelden — dieses Gerät bleibt angemeldet
+Geräte werden abgemeldet und verlieren ihren gespeicherten Schlüssel; jedes braucht zum neuen Anmelden das neue
+Passwort und deinen Secret Key — dieses Gerät bleibt angemeldet
 und fragt dich nur, ob es sich weiter merken soll.
 
 ## Related
