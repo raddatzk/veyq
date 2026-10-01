@@ -1,7 +1,7 @@
 ---
 id: cr-doc-citations-resolve-from-code
 title: A use-case or enabler id cited from code resolves, checked by the guard that already does it for ADRs
-status: planned
+status: in-progress
 satisfies: []
 adrs: []
 invariants: []
@@ -104,9 +104,25 @@ since the package split.
 
 ## Phases
 
-- [ ] 1 guard, red: Decisions 1–3. · Done when: on the untouched tree the new guard prints **exactly the 12
+- [x] 1 guard, red: Decisions 1–3. · Done when: on the untouched tree the new guard prints **exactly the 12
       sites** of the table (the live defect is its red) and exits 1, and every other `validate_*.py` is green.
       Paste the output here.
+      **Measured** (`python3 scripts/validate_doc_citations.py` on `7a34c57` + the rename, exit 1; the 41 other
+      guards bar `validate_guard_gaps.py` green, which joins in Phase 2):
+      ```
+      contracts/api/scopes.openapi.yaml:263: cites en.spaces.add-group-member, …
+      backend/…/spaces/scope/ScopesHandler.kt:298: cites en.spaces.add-group-member, …
+      web/src/app/boot.ts:1: cites uc.platform.app-shell, …
+      web/src/features/account/instance/instance.ts:1: cites uc.platform.app-shell, …
+      web/src/features/account/profile/ProfilePanel.vue:2: cites uc.account.profile, …
+      web/src/features/memory/components/MemoryCoverImage.vue:2: cites en.memory.cover, …
+      web/src/features/memory/components/MemoryDateEditor.vue:2: cites uc.memory.date-place, …
+      web/src/features/memory/components/MemoryDetail.vue:193: cites uc.memory.date-place, …
+      web/src/features/memory/memoryDate.ts:1: cites en.memory.date, …
+      web/src/features/memory/memoryDate.ts:1: cites uc.memory.date-place, …
+      web/src/features/memory/useMemoryDate.ts:1: cites uc.memory.date-place, …
+      web/src/features/spaces/scopes.ts:1: cites uc.spaces.personal-scope, …
+      ```
 - [ ] 2 fix: Decision 4, plus the rename's readers (Q2 locator). The contracts edit is description-only;
       `npm run generate:api` in `web/` and `./gradlew check` in `backend/` confirm nothing else moved.
       · Done when: the guard is green, `./gradlew check` and `npm run check` (`web/`) are green, and
@@ -116,6 +132,7 @@ since the package split.
 
 - Before the first edit, run the guard baseline and paste it: `for f in scripts/validate_*.py; do python3 "$f";
   done`. It ends green.
+  **Measured** on `7a34c57`, before any edit: `ran=43 failures=0`.
 - **Red first:** Phase 1's output.
 - **Bites.** Each is snapshot-and-restore, each has its own lever, and each is recorded here:
   - **(a) Wrong prefix, after the fix.** Put `// en.memory.date` in a `web/src` comment. Red, naming the file
