@@ -931,6 +931,13 @@ has no behaviour of its own — it is asserted only where some test compares it 
 writing such a bite into a CR, run it; and when it comes back green, ask which of the two answers applies
 before touching either the lever or the design.
 
+**A lever against a threshold with a margin is arithmetic, and the last report has already done it.**
+cr-crypto-mutation-gate-green's done-when said deleting the identity codec's round trip would take the mutation
+gate below its 95 break. It moved nothing: another test covered the same mutants. Deleting the whole file
+orphaned 24 mutants and still scored 95.20 %, because 5 points of 458 is 23 mutants and two orphans timed out,
+which counts as detected. Count the mutants only that lever covers (`coveredBy` in `mutation.json`) and set
+them against the margin before writing the bite down; one that cannot cross is a question about the threshold.
+
 **An ORDER assertion over async work can be satisfied by the event loop instead of the code.**
 `cr-upload-windowed-presign` asserted that its upload pump asks for the next presign window *before* the signed
 range runs out (`window:10` logged before `put:9`), and removing the look-ahead left it green: every fake answered

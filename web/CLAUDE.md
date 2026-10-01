@@ -104,7 +104,9 @@ here; the server is blind.
   per-file list) + config in `stryker.mutate.json` + `stryker.config.mjs`, gated in CI by
   [`mutation.yml`](../.github/workflows/mutation.yml). **There are TWO of those pairs since the package split**
   — `web/`'s (the six crypto-logic files that stayed) and `packages/crypto/`'s (the shared suite);
-  run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites. **Footgun: it mutates the real source files _in place_**
+  run both, because Stryker's runner is the project's own vitest and neither project sees the other's suites.
+  With no remote, that CI job has never run, so **a commit that touches `packages/crypto/src` records the
+  package gate's exit code** (`npm run mutation -- --force`) in its message. **Footgun: it mutates the real source files _in place_**
   (originals backed up to `.stryker-tmp/backup-*`, restored on exit), so mid-run `git status` shows hundreds of
   transient `M` files + stray `stryker-setup-*.js` — never run other `web/` work (git ops, `npm run check`, an
   edit) against the tree while a mutation run is live; wait for it to finish and restore.

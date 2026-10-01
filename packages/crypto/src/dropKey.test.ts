@@ -34,15 +34,23 @@ describe('drop key', () => {
     expect(v1.serializeHybridPublic(v1.dropKeyPublic(drop)).length).toBe(4 + 32 + 4 + 1184)
   })
 
+  // Each mangle is refused with its OWN message. A match on /drop key/ alone cannot tell a truncation from a
+  // malformed field from trailing bytes, and that looseness let two of readFixedLp's bounds checks be deleted with
+  // every case still green: the read past the end just fell through to the next check's message.
   it.each([
-    ['truncated', (b: Uint8Array) => b.slice(0, b.length - 1)],
-    ['trailing bytes', (b: Uint8Array) => v1.concat(b, Uint8Array.of(0))],
-    ['a wrong field length', (b: Uint8Array) => v1.concat(v1.lp(new Uint8Array(31)), b.slice(4 + 32))],
-  ])('a %s serialization is refused', (_name, mangle) => {
+    ['cut inside the first length prefix', (b: Uint8Array) => b.slice(0, 2), 'truncated'],
+    ['cut inside the second length prefix', (b: Uint8Array) => b.slice(0, 4 + 32 + 2), 'truncated'],
+    ['cut right after the second length prefix', (b: Uint8Array) => b.slice(0, 4 + 32 + 4), 'malformed'],
+    ['short by its last byte', (b: Uint8Array) => b.slice(0, b.length - 1), 'malformed'],
+    ['followed by trailing bytes', (b: Uint8Array) => v1.concat(b, Uint8Array.of(0)), 'trailing bytes'],
+    ['a wrong field length', (b: Uint8Array) => v1.concat(v1.lp(new Uint8Array(31)), b.slice(4 + 32)), 'malformed'],
+  ])('a serialization %s is refused as %s', (_name, mangle, verdict) => {
     const drop = v1.generateDropKey()
-    expect(() => v1.deserializeDropKey(mangle(v1.serializeDropKey(drop)))).toThrow(/drop key/)
+    expect(() => v1.deserializeDropKey(mangle(v1.serializeDropKey(drop)))).toThrow(
+      new RegExp(`^drop key: ${verdict}$`),
+    )
     expect(() => v1.deserializeHybridPublic(mangle(v1.serializeHybridPublic(v1.dropKeyPublic(drop))))).toThrow(
-      /hybrid public key/,
+      new RegExp(`^hybrid public key: ${verdict}$`),
     )
   })
 })
