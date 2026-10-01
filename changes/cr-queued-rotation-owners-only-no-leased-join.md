@@ -9,6 +9,44 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Added 2026-10-01 by the #233–#235 refine: Q8 and Q9 are open.** They gate only D10 (#234) and D11 (#235).
+Everything decided below, D1–D9 included, keeps its go. Inbox #233, the granter lock, is **not** folded here: it is
+a different mechanism (which key a grant is verified under), it shares no decision with this CR, and it is now its
+own planned CR, [`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md). Where
+this CR says "the granter lock" or "the proposed row", read that CR (planned).
+
+8. **How do a scope's other owners learn that its compromise rotation needs them (#234)?** D9 tells only the
+   rotator, and the rotator is the one person who may not act. **Recommendation: a nullable field on the owner's
+   own scope row, `compromiseRotation` (`stalled` | `failed`), plus an owner re-queue from `failed` (D10).** The
+   row is `ScopeSummary`, and `MyTenant` for a tenant root: the two reads that already carry the caller's grant.
+   - **A field on the reads every client already makes**, not a new endpoint. The sidebar builds its groups from
+     `listMyScopes` and its tenant row from `listMyTenants` on every entry, and already marks a scope *awaiting
+     access* there (`grep -n -e "listMyGroups()" -e "awaitingAccess" web/src/components/app/AppSidebar.vue`),
+     so the state shows wherever the scope does, with no extra call and no polling. The server knows the value
+     from rows it holds, and no existing field implies it (changes/README.md § before adding a read field).
+   - **Only `stalled` and `failed`.** `waiting` needs nothing from an owner, since their own worker already
+     claims it on entry (`grep -n "immediate: true" web/src/features/tasks/scopeRotationPolling.ts`). `secured` needs
+     nothing from anyone.
+   - **Only on an owner's row.** Owners are the only ones who can act (D1, and the promote remedy of E4). A plain
+     member learns nothing they did not know.
+   - **The re-queue is D9's, seen from the scope.** It re-originates the scope's rotation excluding every rotator
+     whose state is `failed`, through the same `originateScopeRotationExcluding`. The caller is not excluded,
+     unless they are one of those rotators, so their own worker can claim it at once.
+   - **Cheaper alternative: read-only** (the field without the re-queue). The owner then sees `failed` and can do
+     nothing but tell the rotator, who can re-queue (D9). It works, one hop slower.
+   - **What it needs from the sibling CR.** Under the granter lock an owner's re-queue dead-letters again for the
+     same reason. Once `cr-grant-verifies-under-its-signing-key` lands, `failed` no longer has a deterministic
+     cause, and the re-queue is a real remedy. D10 can land before it; it then reports truthfully and its action
+     waits on the lock.
+9. **Does D8's completion check become a compare-and-set for every tag (#235)?** `complete` reads the job, checks
+   the holder, then writes `DONE` with no condition (§ Inventory for the #234/#235 fold). A worker whose lease
+   expired and was reclaimed between that read and that write completes anyway, and erases the new holder's lease.
+   **Recommendation: yes, here, for every tag (D11).** D8 already rewrites this branch for `scope-rotation`, and its
+   check belongs inside the same guarded statement. The registry promises the rule for every tag (*"completed only
+   by the worker holding its lease (ADR 0021 §6)"*), and a per-tag fix would leave `grant-delivery` making that
+   promise falsely. The harm today is small, a reclaimer's work and result dropped, which is why it is folded and
+   not a CR of its own. `cr-one-time-secrets-spend-by-compare-and-set` names it as out of its scope.
+
 **Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
 
 **Added 2026-10-01 by folding in inbox #225 (D9), after both rounds of answers: Q6 and Q7 are open.** They gate
@@ -168,6 +206,19 @@ After the #225 fold, also:
   or `failed`. The answer comes from the server's rows, not from a status the client synthesised once;
 - `secured` is never shown while the old identity can still hold the current epoch;
 - from `failed`, the rotator can queue the rotation again, still excluded from it.
+
+*Added by the #234/#235 fold.* Two more gaps in the same rows and the same statement:
+- **#234: the other owners are never told.** D9 serves the state to the rotator only. The scope's other owners are
+  the ones who can complete or re-queue the rotation, and promote a co-owner where none is eligible, and nothing
+  shows them that it is `stalled` or `failed`.
+- **#235: `complete` writes `DONE` without a condition.** The holder check is a read on an unlocked row, and the
+  write that follows names only the job id. Every other lease transition (claim, heartbeat, fail, decline, the
+  stale-epoch release) is a compare-and-set on the lease already.
+
+After the #234/#235 fold, also:
+- an owner sees, on their own scope row, when the scope's compromise rotation is `stalled` or `failed`, and can
+  re-queue a `failed` one;
+- a completion lands only for the worker that holds the lease at the moment it lands, for every tag.
 
 ## Context & constraints
 
@@ -367,11 +418,42 @@ freezes every non-owner member the rotator signed for. That is a defect in its o
 CR: it is proposed as a row (§ Proposed inbox rows (#225 fold)). It belongs here only as the reason the dead-letter is
 reachable by honest clients alone.
 
+*Updated by the #233–#235 refine:* the row is inbox #233, and the chain is now **run**, not only read:
+[`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md) (planned) § Inventory 5
+(the server serves the rotator's new key beside the signature made with the old one) and 6 (an owner holding that
+grant cannot open the scope, `commitRotation` throws, and accepting the new key does not help).
+
 **The ordering D9's "newest" rule rests on.** Under D3 a new rotation job is created only when no `PENDING` one
 exists, so at any moment at most one job of a scope is `PENDING`, and it is the newest live one. An account
 rotation's exclusion therefore always lands on the scope's **newest** job, whether it joins that job or creates
 it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carries the D3 guarantee. A re-queue
 (Q6) creates or joins a newer job still. Measured by reading D3/D5 above, not run.
+
+### Inventory for the #234/#235 fold: measured on `main` @ `857d711`, 2026-10-01
+
+*Added by the #234/#235 fold.* Read, not run, except where a row says otherwise. `B=backend/src/main/kotlin/com/veyq/app`.
+
+**#234: nothing shows an owner the state.**
+
+| Claim | Locator |
+|---|---|
+| D9's read serves the caller's own rows only, and its "which scopes" is keyed on the caller's own `rotation_originator` decline. | § Decisions D9, *The read* and *Which scopes* (planned, not built) |
+| Neither scope read carries anything about a rotation. | `python3 -c "import yaml;d=yaml.safe_load(open('contracts/api/scopes.openapi.yaml'))['components']['schemas'];print(sorted(d['ScopeSummary']['properties']), sorted(d['MyTenant']['properties']))"` lists no rotation field |
+| The sidebar builds its groups from `listMyScopes` and its tenant row from `listMyTenants`, on entry, and marks a scope *awaiting access* there. | `grep -n -e "listMyGroups()" -e "listMyTenants" -e "awaitingAccess" web/src/components/app/AppSidebar.vue` |
+| The owner surfaces where a co-owner is promoted, which is E4's remedy for `stalled`. | `grep -rln "awaitingAccess" web/src --include='*.vue'` → `GroupMembersPanel.vue`, `TenantMembersPanel.vue` (and the sidebar) |
+| An owner online drains `waiting` jobs by itself: the worker runs on entry and every 45 s. | `grep -n -e "POLL_INTERVAL_MS = " -e "immediate: true" web/src/features/tasks/scopeRotationPolling.ts` |
+
+**#235: the completion is a check, then an unconditioned write.**
+
+| Claim | Locator |
+|---|---|
+| `complete` reads the job without a lock, checks status and holder on that read, and ends with a write that names only the id. | `grep -n -e "val job = JobEntity.findById(jobId) ?: return CompleteResult.NotFound" -e "job.leaseHolder != userId) return CompleteResult.NotHolder" -e "JobEntity.DONE, jobId" $B/features/tasks/TasksStore.kt` → 187, 189, 224 |
+| Every other lease transition is a compare-and-set on the lease: the claim (on `PENDING`, and on the exact expiry it read for a reclaim), heartbeat, fail, decline, and the stale-epoch release inside `complete` itself. | `grep -n -e "and leaseHolder = ?" -e "where id = ?4 and status = ?5" $B/features/tasks/TasksStore.kt` |
+| For `grant-delivery` the membership write comes **before** the `DONE` write, in the same transaction. | the line numbers of `grep -n -e "MembershipEntity.update(" -e "JobEntity.DONE, jobId" $B/features/tasks/TasksStore.kt` (216 < 224) |
+| The window: a holder whose lease expired completes while another worker reclaims. The holder's read sees itself, the reclaim commits, and the holder's write then erases the new lease. The reclaimer's heartbeat answers `NotHolder`, and its own completion is answered `Done` with its result dropped. | the reclaim branch (`grep -n "Reclaim: guard on the exact expiry" $B/features/tasks/TasksStore.kt`); the idempotent early return (`grep -n "if (job.status == JobEntity.DONE) return CompleteResult.Done" $B/features/tasks/TasksStore.kt`); a lease is 5 minutes (`grep -n "^veyq.tasks.lease.ttl" backend/src/main/resources/application.properties`) |
+| The registry promises the rule for every tag. | `grep -c "completed only by the worker holding its lease" contracts/tasks/tags/v1.json` → 1 (on `grant-delivery`; the registry has two tags, `python3 -c "import json;print(list(json.load(open('contracts/tasks/tags/v1.json'))['tags']))"`) |
+| **Run elsewhere:** H2 in `MODE=MariaDB` blocks a second guarded `UPDATE` on a row lock and re-evaluates its `WHERE` after the first commits, so a held-transaction test can make the race deterministic. | `cr-one-time-secrets-spend-by-compare-and-set` § Inventory 9 (5 rounds, run 2026-10-01); the test datasource: `grep -n "jdbc.url" backend/src/main/resources/application-test.properties` |
+| The harm today is small: under `grant-delivery` the stale holder's grant is a valid one, and a reclaimer's work is duplicate work. What breaks is ADR 0021 §6's rule, which D8 and D9 now lean on for `scope-rotation`. | the two rows above; D8 *"The mark"* defines "leased to" with no expiry test |
 
 ## Options
 
@@ -446,6 +528,24 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
   job with no declines, which is exactly what a fixed lock needs. The lock itself is the proposed row.
 - **(e) Surface the state to the scope's other owners as well.** They are the ones who can act. It is not taken
   here: under the granter lock they cannot act either, and their surface is part of the proposed row's design.
+  *#234 fold:* now taken as D10 (§ Options for #234 and #235).
+
+**For #234 and #235** (*added by the #234/#235 fold*):
+- **Fold both, not sibling CRs.** #234's state is D9's derivation read from the scope's side, and its action is
+  D9's re-queue; specified apart, it would be written against a function this CR has not built. #235's guarded
+  write is the statement D8 rewrites for `scope-rotation`. Inbox #233 is the opposite case and went to its own CR
+  (§ Open for the owner).
+- **#234 (a) a field on the owner's scope row, plus an owner re-queue. Recommended (D10, Q8).**
+- **#234 (b) the field only.** The owner can tell the rotator, who re-queues (D9).
+- **#234 (c) a per-scope endpoint, read when the owner opens the space's member panel.** No contract change to
+  the list reads, but the owner learns only by visiting that panel, which is the silence #234 names.
+- **#234 (d) push or app-entry notice.** Out, as for D9: no push channel exists (ADR 0021 defers SSE).
+- **#235 (a) one guarded statement for every tag. Recommended (D11, Q9).**
+- **#235 (b) guard `scope-rotation` only, inside D8.** Leaves `grant-delivery` breaking the rule its registry
+  entry states.
+- **#235 (c) lock the job row (`PESSIMISTIC_WRITE`) at the read.** Also sound, but every other transition here
+  is a compare-and-set, and a lock taken before the scope row would invert D4's lock order on the
+  `grant-delivery` path.
 
 ## Decisions (for the recommendations)
 
@@ -587,8 +687,8 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
     - The re-queue button appears only on `failed`, and the promote-a-co-owner hint only on `stalled`.
     - Copy for `waiting` and `failed` says, in plain words, that until the rotation lands the old key still reads
       what is new in that space. Forward secrecy, not repair (ADR 0060 Decision 3).
-  - **Not in this CR:** a push or app-entry notice, and the other owners' side. Both are listed in § Options for
-    #225 and in the proposed rows.
+  - **Not in this CR:** a push or app-entry notice. ~~And the other owners' side.~~ *#234 fold:* that is D10.
+    Both were listed in § Options for #225 and in the proposed rows.
   - **Operator-blind.** The read serves scope ids, which the server routes on already, and one enum derived from
     job, decline and membership rows the server already holds. It carries no key and no body. The re-queue writes
     the same job and decline rows a rotation already writes.
@@ -597,6 +697,46 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
     endpoint declares `@RateLimitExempt` with that reason, as `rotateAccountKeys` does
     (`grep -n "@RateLimitExempt" -A6 backend/src/main/kotlin/com/veyq/app/features/account/rotation/AccountRotationResource.kt`).
     `RateLimitPostureSweepTest` holds them to declaring one.
+- **D10 (#234, added by the #234/#235 fold): an owner's scope row says when the scope's compromise rotation is
+  `stalled` or `failed`, and an owner can re-queue a `failed` one.** Q8 gates it.
+  - **The value.** For every account that holds a `rotation_originator` decline on a `scope-rotation` job of the
+    scope and is still a member, D9's derivation gives that rotator's state, with D9 rule 1's *"the caller's own
+    grant"* read as *"that rotator's grant"*. The row carries `failed` if any is `failed`, else `stalled` if any is
+    `stalled`, else nothing. One pure function serves D9 and D10; D10 adds no second derivation.
+  - **Where.** A nullable `compromiseRotation` (`stalled` | `failed`) on `ScopeSummary` and on `MyTenant` (for a
+    tenant root), set only where the caller's membership is `OWNER`. Every other row carries null.
+  - **Cost.** Each list read runs one query for `rotation_originator` declines over the caller's owned scope ids,
+    and derives only for the hits.
+  - **The action.** `POST /api/scopes/{scopeId}/rotation/requeue`, behind the scope-access gate.
+    - A non-owner answers `403 not_scope_owner`. A state other than `failed` answers `409 rotation_not_failed`,
+      and nothing is written.
+    - Under D4's scope-row lock it calls `originateScopeRotationExcluding(scopeId, R)` for every rotator `R` whose
+      state is `failed`. D3 and D5 apply unchanged: the first call creates or joins the `PENDING` job, and every
+      call writes its rotator's decline on every live job.
+    - The caller is not excluded (unless they are one of those rotators), so their own worker can claim it.
+    - It answers the row's new value (null or `stalled`).
+    - Rate-limit posture: `@RateLimitExempt`, for D9's reason. The state gate bounds it to one live covering job,
+      and a job needs five failed claims before it is re-queueable.
+  - **The surface.** The sidebar marks the scope (beside *awaiting access*), and the scope's member panel
+    (`GroupMembersPanel`, `TenantMembersPanel`) shows a notice: on `failed` with the re-queue, on `stalled` with
+    the promote-a-co-owner hint (E4). The copy says in plain words that until the re-key lands, the old key still
+    reads what is new in that space. EN and DE.
+  - **Operator-blind.** An enum per row the caller owns, derived from rows the server holds; the re-queue writes
+    the rows a rotation already writes. Rotator ids are not served: the notice does not name who rotated.
+- **D11 (#235, added by the #234/#235 fold): a completion lands in one guarded statement, for every tag.** Q9
+  gates it.
+  - **The write.** `status = DONE, leaseHolder = null, leaseExpiresAt = null` (and `sealedResult` when one is
+    posted) `where id = ? and status = LEASED and leaseHolder = ?`, and for `scope-rotation` also
+    `and rotatedEpoch is not null`. D8's check thereby moves into the statement.
+  - **The answer on zero rows**, from a fresh read: `DONE` → `Done` (the idempotent no-op stays);
+    `scope-rotation`, leased to the caller, no mark → `RotationNotCommitted` (D8); anything else → `NotHolder`.
+  - **A lost completion writes nothing.** On `grant-delivery` the membership write must not survive a lost
+    compare-and-set: either it runs after the guarded `DONE` succeeds, or the transaction is rolled back on zero
+    rows. Implementer's choice; B11 bites both. Either order keeps D4's lock order: the scope row is taken first
+    (the stale-epoch read already locks it), and every writer of both a job row and a membership row of one scope
+    holds that scope row first, so the two cannot deadlock against each other.
+  - **Unchanged:** "holder" still means `LEASED` and `leaseHolder` equal to the caller with no expiry test, as D8
+    defines it. A holder whose lease expired but was not reclaimed still completes.
 - **Unchanged, stated:**
   - Coalescing into a `PENDING` job stays, so many removals before anyone is online still cost one rotation.
   - ~~`complete` still does not verify that a rotation happened during the lease (proposed as a new inbox row).~~
@@ -635,6 +775,13 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
         - Q5's bound becomes *"lapses from the dead-letter until the rotator re-queues"*.
       - *Added by the #225 fold:* **ADR 0060 Decision 6** (*"the honest surface is a per-scope status"*) gains
         one sentence: the status is the server's, it is re-readable, and it includes `failed`.
+      - *Added by the #234/#235 fold:*
+        - **uc.spaces.complete-queued-rotation** (Q4) names the owners' view (D10) among its failure modes: an
+          owner sees `stalled` and `failed` on their own scope row, re-queues `failed`, and promotes a co-owner on
+          `stalled`. uc.account.rotate-keys E3 and E4 point there.
+        - **[background-tasks](../docs/crosscutting/background-tasks.md)**: the completion is a compare-and-set
+          on the lease like every other transition (D11), next to the sentence
+          `grep -n "Only the lease holder heartbeats, completes" docs/crosscutting/background-tasks.md` finds.
       · Done when: all `scripts/validate_*.py` green.
 - [ ] 1 contracts (descriptions only for D1–D8; the generator emits none for them, so they cause no backend
       delta. The #206/#207 fold's error codes are prose on the generic `ErrorResponse`, so this still holds for
@@ -661,6 +808,15 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
           (`validate_field_visibility.py`);
         - the requeue's `409 rotation_not_failed` and `404` documented on `ErrorResponse`;
         - `RotateAccountKeysResult.queuedScopeIds` points at the new read for the state over time.
+      - *Added by the #234/#235 fold:*
+        - **`scopes.openapi.yaml`:** `compromiseRotation` on `ScopeSummary` and `MyTenant`, a nullable enum of
+          `stalled` and `failed` with an `x-veyq-visibility: enum` marker, described as owner-only; the operation
+          `requeueScopeRotation` (`POST /api/scopes/{scopeId}/rotation/requeue`) with its `403 not_scope_owner`
+          and `409 rotation_not_failed`. This adds an operation to an **existing** tag, so the backend does not
+          compile until phase 2 (changes/README.md § phases only above real size), and the response field reddens
+          only code that reads it.
+        - **`tasks.openapi.yaml` `completeTask`:** the description says the completion lands only for the worker
+          that holds the lease when it lands (D11). Description only.
       · Done when: `CapabilityTagRegistryTest` and the contract guards are green (`./gradlew check` runs the
       former), and `npm run generate:api` then `npm run check` are green in `web/`. The generated client is
       gitignored (`git check-ignore -v web/src/api/generated/tasks`), so "no diff" cannot be the check;
@@ -689,6 +845,12 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
         - The requeue under D4's scope-row lock, through `originateScopeRotationExcluding`.
         - Update that function's KDoc "bound" paragraph a second time: the lapse now ends at a re-queue.
         - Write B8 and B9 first and record each red.
+      - *Added by the #234/#235 fold:*
+        - D10: the owner value in `listMine` and `myTenants` through D9's pure function, and the re-queue on
+          `ScopesResource` with its `@RateLimitExempt` reason, under D4's lock.
+        - D11 in `TasksStore.complete`, and its KDoc: the decision is the guarded write, the earlier read only
+          chooses the answer.
+        - Write B10 and B11 first and record each red.
       · Done when: `./gradlew check` green.
 - [ ] 3 web:
       - D2 in `scopeRotationWorker.ts`.
@@ -708,6 +870,8 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
           (`grep -n "rotation.statusHint" web/src/i18n/i18n.test.ts`). Every new key is checked by hand in both
           blocks.
         - Write W3 first.
+      - *Added by the #234/#235 fold:* D10's sidebar mark and the member-panel notice with its re-queue and
+        promote hint, EN and DE. Write W4 first.
       · Done when: `npm run check` green in `web/`. No e2e is needed: the live `scopeRotation.e2e.test.ts` claims
       as B, who owns G, and no phase here changes an existing request shape. D9's endpoints are new, and B8/B9 bite
       them at the HTTP layer. If the implementer changes one anyway,
@@ -733,6 +897,8 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
         - A new criterion in uc.account.rotate-keys, `queued-rotation-state-readable`, carries B8, B9 and W3.
         - `outside-until-readmitted`'s *"the result surface reports this per scope"* now names the re-readable
           server state.
+      - *Added by the #234/#235 fold:* B10 and W4 go to the new use-case's failure-mode criterion (Q4); B11 goes
+        beside B7, the completion half.
       - **E6 has no existing home.** The enqueue refusal of `grant-delivery` is covered nowhere today
         (`git grep -n "enqueueRejectsStructuralGrantDeliveryTag" docs/coverage` prints nothing on `faf9ef4`).
         With Q4 yes it goes to the new use-case. With Q4 no it goes to `coshared-group-rotation`, the criterion
@@ -746,7 +912,8 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
   echo "RED $f"; done` printed nothing. The implementer runs it again before the first edit, and a red from
   that run is not this CR's. *Fold:* the same command printed nothing again, on `64c1f65` before the fold and on
   the fold's own docs (this CR and two inbox cells). *#225 fold:* the same command printed nothing on `7a34c57`
-  plus the #225 fold's own docs (this CR and one inbox cell).
+  plus the #225 fold's own docs (this CR and one inbox cell). *#234/#235 fold:* the same command printed nothing
+  on `857d711` plus that refine's own docs (this CR, `cr-grant-verifies-under-its-signing-key`, three inbox cells).
 - **B1: a non-owner is never offered a rotation job (#180).** A backend slice test, a **live defect** (red on
   the untouched tree).
   - **Setup:** one group with owner O and member M, both granted. A `scope-rotation` job is originated through
@@ -907,6 +1074,47 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
   - **Red today:** no read call is made, and `waiting` is synthesised
     (`grep -n "status: 'waiting'" web/src/features/account/rotation/rotateKeys.ts`).
   - **Lever:** render the requeue control on every row; the `failed`-only assertion goes red.
+- *B10, B11 and W4 were added by the #234/#235 fold.*
+- **B10: an owner sees a stuck compromise rotation on their own row, and can re-queue a failed one (D10).** Slice
+  tests, a **missing behaviour**: red today as the absent field and a `404`/`405` on the re-queue.
+  - **Setup:** a group G with owners R, O2 and O3 and a plain member M, all granted. R rotates through the real
+    endpoint. The dead-letter is reached through the real path: O2 claims and fails the covering job
+    `maxAttempts` times (B8's rule: a seeded `FAILED` row tests the reader, not the path).
+  - **`waiting`:** before any failure, O2's row for G carries null.
+  - **`failed`:** afterwards O2's and O3's rows carry `failed`. M's row carries null: the owner-only control.
+  - **`stalled`:** on a fresh group where R is the only granted owner and O4 an owner without a grant, after R
+    rotates O4's row carries `stalled`.
+  - **Tenant root:** the same `failed` value on `MyTenant` for a tenant scope set up the same way.
+  - **Re-queue:** O3 posts it for G: `200`, value null. A fresh `PENDING` job carries R's `rotation_originator`
+    decline and none for O3; O3's claim answers `200` with that job; R's well-formed commit on G answers
+    `403 rotation_excluded` (D7 clause 1 re-armed).
+  - **Refusals, nothing written:** a second re-queue answers `409 rotation_not_failed`, and M's answers
+    `403 not_scope_owner`; the job count is unchanged after each.
+  - **Levers:**
+    - Serve the value on every row, whatever the role: the M control goes red.
+    - Exclude the caller instead of the failed rotators: O3's claim answers `204` and R's commit `201`.
+    - Drop the state gate: the second re-queue answers `200`.
+- **B11: a completion that lost its lease writes nothing (D11).** A backend slice test, a **live defect**.
+  - **Setup:** a `grant-delivery` job leased to worker A through the real claim, then A's lease moved into the
+    past.
+  - **Action:** worker B claims it (the lazy reclaim) inside a transaction the test holds open for 300 ms after the
+    claim, while A posts its completion from a second thread inside that window.
+  - **Assert:** after both commit, A's completion answered `409`, the job is `LEASED` to B, and the target
+    membership is still grant-less. **Red today:** `204`, the job `DONE` with no holder, and A's grant written.
+  - **Positive control, same harness:** with no reclaim, A's completion answers `204`.
+  - **Scope-rotation leg:** the same race on a `scope-rotation` job whose mark A set during its own lease (D8):
+    A's completion answers `409`, and the job stays `LEASED` to B.
+  - **Lever:** drop `and leaseHolder = ?` from the guarded write. The main leg goes red.
+  - **If H2 does not block A's write on B's open lock,** B11 cannot be made red; stop and report it
+    (changes/README.md § a bite test you cannot make red). `cr-one-time-secrets-spend-by-compare-and-set` § Inventory
+    9 measured that it does.
+- **W4: an owner's stuck rotation is shown, with the action that fits it (D10).** A web unit test for the member
+  panel, a **missing behaviour**.
+  - **Setup:** the scope row carries `failed`, then `stalled`, then null.
+  - **Assert:** on `failed` the notice and the re-queue control render, and clicking it calls `requeueScopeRotation`
+    with the scope id and re-renders the answered value. On `stalled` the notice renders with the promote hint and
+    no re-queue control. On null nothing renders. The sidebar marks the scope on both non-null values.
+  - **Lever:** render the re-queue control on `stalled` too; the `stalled` assertion goes red.
 - **Existing tests carry over per assertion, not by count.** Every hit of `git grep -n "SCOPE_ROTATION"
   backend/src/test web/src` keeps its assertions. Comments that say *"live"* where they now mean *"pending"* are
   corrected (`grep -n "live rotation job" backend/src/test`).
@@ -917,15 +1125,18 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
   - **Operator-blind.** Every change is job rows, decline rows and a lock. The fold adds one integer column on a
     job row (D8). No key, no body, and no new API field. *#225 fold:* D9 adds two operations. They serve the
     caller's own scope ids and an enum derived from rows the server already holds, and their re-queue writes the
-    rows a rotation already writes (D9, Operator-blind).
+    rows a rotation already writes (D9, Operator-blind). *#234 fold:* D10 adds one owner-only enum on two scope
+    reads and one operation that writes the same rows (D10, Operator-blind). D11 changes a `WHERE` clause.
   - **API-first.** Phase 1 is description-only for D1–D8, and no DTO is written by hand. D9's two operations are
-    contract-first, and their DTOs are generated.
+    contract-first, and their DTOs are generated. So are D10's field and operation.
 
 **Not proven:**
 - *Added by the #225 fold:* **that a `failed` state can be cleared at all under the granter lock.** A re-queue
   under that lock dead-letters again, for the reason § Inventory for #225 measures. D9 makes the state honest,
-  not reachable. The lock is the proposed row.
-- *Added by the #225 fold:* **that the other owners learn of it.** They are not told (§ Options for #225 (e)).
+  not reachable. *Updated by the #233–#235 refine:* the lock is `cr-grant-verifies-under-its-signing-key`
+  (planned), and until it lands D10's owner re-queue dead-letters the same way.
+- ~~*Added by the #225 fold:* **that the other owners learn of it.**~~ *#234 fold:* D10 and B10/W4 now cover it.
+  What stays unproven: **that an owner looks.** The value is shown where the scope is; nothing pushes it.
 - **Anything against an active operator.** A queued rotation re-grants the directory the server returns
   (ADR 0024 § Guarantee), and an operator can simply not offer the job. Both are unchanged.
 - ~~**That a completed job rotated.**~~ *Fold:* D8 and B7 now prove that the holder committed an epoch during
@@ -941,7 +1152,9 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
 ## Proposed inbox rows (#225 fold)
 
 The refine does not number rows. Once these have numbers, phase 0 replaces every "the proposed row" in this CR
-with the number.
+with the number. *Updated by the #233–#235 refine:* both are filed. The first is inbox #233, refined into
+[`cr-grant-verifies-under-its-signing-key`](cr-grant-verifies-under-its-signing-key.md), which takes the snapshot
+shape below and rejects the re-sign shape. The second is inbox #234, folded here as D10.
 - **The granter lock: an account rotation leaves every grant the rotator signed unverifiable, and when that
   covers every owner the queued rotation can never land** (security, rotation, crypto). § Inventory for #225 has
   the six-link chain, read but not run. It also freezes every non-owner member the rotator signed for, and no
