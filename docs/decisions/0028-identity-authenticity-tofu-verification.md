@@ -108,6 +108,15 @@ split by whether a human is present. Key Transparency stays the (out-of-scope) e
      marks: the rotating device carries its own across; every other device must unlock afresh, and does so
      without marks when it uses the password and Secret Key (the no-mark case below), or with its linker's when
      it is linked again.
+   - **A refused document has one way back: the user starts it over on a device, knowingly, through one
+     confirmed action.** That write is the only thing that lowers a mark — to the version it just wrote itself,
+     which is the one copy the mark cannot be protecting the device from — and no server response reaches it.
+     It writes the empty document, so it costs what an empty store costs (every contact first-seen again, every
+     verification gone; every device unnamed), and the confirmation says so. The server can therefore withhold
+     a document until the user resets it: a downgrade that is now consented, not silent. Another device heals
+     by reading where its mark sits at or below the reset's version; one whose mark sits above it (after a
+     backup restore) refuses it as rolled back and is offered the same reset, because a device cannot tell a
+     restore from an attack.
    - **What it cannot see:** a device with no mark — one that signed in with the password and Secret Key, or
      lost its local storage — trusts the first store it is served, which is the first-use gap applied to trust
      state; and a newer store the server keeps from a device that never held it (a fork).
@@ -166,13 +175,8 @@ the rotation's re-grant reaches the recipient, and the recipient's pin of them r
 accepts it — both are the Decision 1–2 behaviour for a changed key, not new failure modes. Decision 7 is built
 for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each refusal is named
 (`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one rather than
-declining, and the nearest existing notice names it. Three further things remain:
-
-- **A store that does not open has no way back.** Refusing it is the decision; nothing yet replaces it. The
-  realistic cause is not an attack but an account-key rotation whose re-seal never landed after the publish:
-  the store stays under the retired key, and every device refuses it until someone rebuilds it. A deliberate
-  reset — the user confirming they start the pin store over — is the missing piece, and it must not be
-  something a server can trigger (inbox #192).
+declining, and the nearest existing notice names it and links to the settings hub's one reset. Two further
+things remain:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
   ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)

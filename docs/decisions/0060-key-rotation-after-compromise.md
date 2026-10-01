@@ -36,6 +36,13 @@ rejected-alternative (d) with a button in front of it: a new identity re-wrapped
 still readable. Offering the choice would ask the user a question they cannot answer and let them pick the
 useless half.
 
+So the request has one shape and **every field is mandatory**, because an optional field is a mode spelled by
+omission: the new identity public key, the new identity private key under the new Master Key, the `PASSWORD`
+and `RECOVERY` wraps rewritten, the Secret-Key proof (Decision 2), and the **identity-pin store and the device
+register re-sealed under the new Master Key**. An account that has never written either document sends it
+empty. The two documents are not part of the proof's statement: a session holder without the Secret Key can
+already write both through their own endpoints, so binding them would defend no case.
+
 **2. Rotation requires the Secret Key — a cold unlock, never a device wrap or a restored session.** The
 `PASSWORD` floor takes password + Secret Key; the `RECOVERY` wrap takes the Secret Key alone, released against
 address control ([ADR 0054](0054-password-recovery-two-factor-release.md) — there is **no** separate recovery
@@ -127,8 +134,11 @@ rotation whose re-admission cannot be delivered is a rotation that strands the a
 - **Rotation is a re-onboarding ceremony, not a button, and its cost is stated up front.** Every `DEVICE` and
   `DEVICE_KEY` wrap dies — their key material is device-held and cannot be rewritten — so every other device
   needs the password (or a fresh link) again. The pin store and the device register are Master-Key-sealed and
-  must be re-sealed. The Secret-Key proof key survives unchanged (Decision 2), so recovery keeps working without
-  a re-registration.
+  are re-sealed inside the same transaction as the rewrite: a rotation that cannot re-seal them does not
+  happen. Re-sealing them after the publish would leave both under a key that no longer exists whenever the
+  re-seal failed, and every device refuses a document that does not open
+  ([ADR 0028](0028-identity-authenticity-tofu-verification.md) Decision 7). The Secret-Key proof key survives
+  unchanged (Decision 2), so recovery keeps working without a re-registration.
 - **The Emergency Kit stays valid.** The Secret Key is not rotated: the `PASSWORD` and `RECOVERY` wraps are
   rewritten under the *same* KEK. Rotating the Secret Key is a separate operation
   ([ADR 0054](0054-password-recovery-two-factor-release.md)), and folding it in would make the one operation
