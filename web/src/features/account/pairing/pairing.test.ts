@@ -248,6 +248,18 @@ describe('the add-a-device answer (ADR 0059 §5, §11)', () => {
     expect(refusal(() => readTransportAnswer(key, b64std(v1.concat(fromB64std(answer), Uint8Array.of(0)))))).toBe('answer_unreadable')
     expect(refusal(() => readTransportAnswer(key, answer))).toBe('none')
   })
+
+  // The MAC covers the key's BYTES, and a grant is sealed to the key DECODED from them — so they must be one
+  // encoding of one key. Here the MAC is honest over a non-canonical key (a trailing byte inside the key field,
+  // not after the answer), so neither readPair nor the MAC refuses it: only the identity decoder can.
+  it('refuses a key whose MACed bytes are not its one encoding as unreadable', () => {
+    const transport = mintTransportKey()
+    const { key } = aChannel()
+    const tailed = v1.concat(v1.serializeIdentityPublic(transport.pub), Uint8Array.of(0))
+    const mac = v1.pairingMac(key, { purpose: 'pairing-answer', transportKey: tailed })
+
+    expect(refusal(() => readTransportAnswer(key, b64std(v1.concat(v1.lp(tailed), v1.lp(mac)))))).toBe('answer_unreadable')
+  })
 })
 
 describe('the check number (ADR 0059 §5, D2)', () => {

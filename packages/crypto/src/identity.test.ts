@@ -28,13 +28,53 @@ describe('identity codec', () => {
     expect(v1.deserializeIdentityPublic(pubView)).toEqual(id.pub)
     expect(v1.deserializeIdentityPrivate(privView)).toEqual(id.priv)
   })
+})
 
-  it('a bundle cut inside a length prefix is refused', () => {
+// Both decoders share the drop-key codec's bounded reader, so each mangle is refused with its OWN message (a bare
+// .toThrow() also passes on the DataView RangeError an unbounded reader throws — ADR 0045). The public bundle is
+// served by the server for other members, so the overrun and wrong-length cases are what an operator could hand a
+// client: both used to be read as a key.
+describe('a malformed identity bundle is refused', () => {
+  const kemMStart = 4 + 32
+  const signStart = kemMStart + 4 + 1184
+  const privSignStart = kemMStart + 4 + 64
+
+  it.each([
+    ['cut inside the first length prefix', 'truncated', (b: Uint8Array) => b.slice(0, 2)],
+    ['cut inside the second length prefix', 'truncated', (b: Uint8Array) => b.slice(0, kemMStart + 2)],
+    ['cut right after the second length prefix', 'malformed', (b: Uint8Array) => b.slice(0, kemMStart + 4)],
+    ['short by its last byte', 'malformed', (b: Uint8Array) => b.slice(0, b.length - 1)],
+    ['followed by trailing bytes', 'trailing bytes', (b: Uint8Array) => v1.concat(b, Uint8Array.of(0))],
+    ['with a wrong first field length', 'malformed', (b: Uint8Array) => v1.concat(v1.lp(new Uint8Array(31)), b.slice(kemMStart))],
+  ])('a bundle %s is refused as %s', (_name, verdict, mangle) => {
+    const id = v1.generateIdentity()
+    expect(() => v1.deserializeIdentityPublic(mangle(v1.serializeIdentityPublic(id.pub)))).toThrow(
+      new RegExp(`^identity public key: ${verdict}$`),
+    )
+    expect(() => v1.deserializeIdentityPrivate(mangle(v1.serializeIdentityPrivate(id)))).toThrow(
+      new RegExp(`^identity private key: ${verdict}$`),
+    )
+  })
+
+  it('a last length prefix that overruns the bundle is refused, not clamped to the bytes that are there', () => {
+    const id = v1.generateIdentity()
+    const overrun = (b: Uint8Array, at: number) => v1.concat(b.slice(0, at), v1.lp(new Uint8Array(33)).slice(0, 4), b.slice(at + 4))
+    expect(() => v1.deserializeIdentityPublic(overrun(v1.serializeIdentityPublic(id.pub), signStart))).toThrow(
+      /^identity public key: malformed$/,
+    )
+    expect(() => v1.deserializeIdentityPrivate(overrun(v1.serializeIdentityPrivate(id), privSignStart))).toThrow(
+      /^identity private key: malformed$/,
+    )
+  })
+
+  it('a middle field of a self-consistent wrong length is refused', () => {
     const id = v1.generateIdentity()
     const pub = v1.serializeIdentityPublic(id.pub)
+    const shortKemM = v1.concat(pub.slice(0, kemMStart), v1.lp(id.pub.kemM.slice(1)), pub.slice(signStart))
+    expect(() => v1.deserializeIdentityPublic(shortKemM)).toThrow(/^identity public key: malformed$/)
     const priv = v1.serializeIdentityPrivate(id)
-    expect(() => v1.deserializeIdentityPublic(pub.slice(0, 4 + 32 + 2))).toThrow()
-    expect(() => v1.deserializeIdentityPrivate(priv.slice(0, 4 + 32 + 2))).toThrow()
+    const longSeed = v1.concat(priv.slice(0, kemMStart), v1.lp(v1.concat(id.priv.mlkemSeed, Uint8Array.of(0))), priv.slice(privSignStart))
+    expect(() => v1.deserializeIdentityPrivate(longSeed)).toThrow(/^identity private key: malformed$/)
   })
 })
 

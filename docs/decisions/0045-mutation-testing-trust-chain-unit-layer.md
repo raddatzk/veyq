@@ -100,7 +100,11 @@ layer.**
    not missed. There is **no native git-`--since` in StrykerJS OSS** — that is arcmutate (§1, commercial), so do
    not reach for a `--since` flag; file-level diff scoping, if ever wanted, is external `git diff → --mutate` glue
    (as on the backend), never a Stryker flag. A high `break` threshold on the mutate scope is the gate;
-   report-only elsewhere until a baseline exists. Backend: the incremental history file as the CI cache; git-diff
+   report-only elsewhere until a baseline exists. **The shared crypto package's `break` is 100, with no margin**
+   (inbox #241, 2026-10-01): there every equivalent mutant is disabled at its own line with its measured reason,
+   so a margin buys no headroom for one — only blindness, and at 95 it was 23 mutants, enough to lose the identity
+   codec's whole test file at exit 0. A margin stays right where equivalents are left in the score; the reasoning
+   and the bite live in `packages/crypto/stryker.config.mjs`. Backend: the incremental history file as the CI cache; git-diff
    scoping is optional glue and largely moot, because the unit-layer target is small and boot-free. A **diff-aware
    meta-check** asserts *mutants > 0 over the intended glob* only when that glob has changed files — a run that
    mutates nothing and reports 100% is itself a claim nothing backs.
@@ -170,7 +174,9 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   (`expect(hex(frame)).toBe(f.frame)`): any change to `frameAad`/`wrapAad` alters the tag and fails there. So a
   wrong-index or wrong-context test only re-asserts what those two already give — which is why `openFrame`'s
   *"a dropped, reordered or appended frame fails to open"* comment **is** backed, indirectly, and needs no test
-  of its own. Measured, not argued: of 134 mutants in `v1.ts`, **zero** frame-, wrap- or AAD-survivors.
+  of its own. Measured, not argued: the package gate's `--force` run leaves **zero** frame-, wrap- or
+  AAD-survivors (the code now spans `v1.ts`, `primitives.ts` and `seal.ts`; the current mutant counts are stated
+  once, in `packages/crypto/stryker.config.mjs`, and not here, where a figure rotted from 134 to 186 unseen).
   The one rejection **veyq makes itself** — `decodeKdfParams`'s length guard, a plain `if` with no primitive
   behind it — was the gate's only gap, and its test is what took `v1.ts` to 100%. That test pins the error
   *message*, and must keep doing so: unguarded, a short blob still throws (the `DataView` `RangeError` the guard
