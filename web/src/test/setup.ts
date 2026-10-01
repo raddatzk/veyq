@@ -2,12 +2,18 @@
 // injects PrimeVue's toast service. Install `ToastService` into the @vue/test-utils global config so every
 // mounted component satisfies the `usePrimeToast()` injection without each test having to register it (tests
 // that stub the shared `useToast` composable are unaffected).
-import { config } from '@vue/test-utils'
+import { config, enableAutoUnmount } from '@vue/test-utils'
 import { beforeEach, afterEach } from 'vitest'
 import { installWireRecorder } from './wireRecorder'
 import ToastService from 'primevue/toastservice'
 
 config.global.plugins.push(ToastService)
+
+// Unmount every wrapper after each test. A component left mounted keeps its library timers alive past the file's
+// teardown, and one that lands after vitest has deleted the DOM globals throws an unhandled error that fails the
+// whole run while every test is green (PrimeVue TabList's ink-bar timer did, under load). Unmounting clears the
+// refs those timers read, so they return without touching the DOM. Proven by `autoUnmount.test.ts`.
+enableAutoUnmount(afterEach)
 
 // ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // The network net (inbox #149).

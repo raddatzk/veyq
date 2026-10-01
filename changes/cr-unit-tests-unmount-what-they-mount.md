@@ -1,7 +1,7 @@
 ---
 id: cr-unit-tests-unmount-what-they-mount
 title: Every mounted test component is unmounted before its file tears down — the PrimeVue TabList timer stops aborting `vitest run`
-status: planned
+status: done
 satisfies: []
 adrs: []
 invariants: []
@@ -106,7 +106,7 @@ cleared and returns without touching the DOM, and a permanent test proves the se
 
 Single phase (web only).
 
-- [ ] 1 web —
+- [x] 1 web —
   1. **Red first (live defect).** Add `web/src/test/autoUnmount.test.ts`, starting with the
      `// @vitest-environment happy-dom` docblock the component tests use, because `vite.config.ts` sets no default
      environment. The `setup.ts` hook itself also runs in node-environment files (the e2e suites), where it
@@ -143,4 +143,14 @@ Single phase (web only).
 
 ## Retrospective
 
-*(written at close)*
+- **Planning held, step for step.** The step-1 red landed exactly as predicted (exit 1, one unhandled
+  `ReferenceError: HTMLElement is not defined`, stack `Timeout._onTimeout` → `Proxy.updateInkBar` →
+  `@primeuix/utils`), the fix turned it green 3/3, the injection (the setup line commented out) reddened it the same
+  way, and three `npm run check` runs went 153 files / 1351 tests green with 0 `Unhandled` lines. What made the
+  difference was the refine's lever: it reproduced the teardown instead of waiting for contention, so the implement
+  needed no judgement call. Nothing to fault.
+- **One locator now answers differently, by design:** `grep -rln "primevue/tabs\|primevue/tablist" web/src` returns
+  `src/test/autoUnmount.test.ts` beside `MemoryDetail.vue`. Whoever re-runs it for "who mounts Tabs" reads the
+  test file as the fixture, not a second user.
+- **Next time:** a flake that needs load is refined the way this one finally was: rebuild the environment step
+  the flake races against, rather than adding runs under load.
