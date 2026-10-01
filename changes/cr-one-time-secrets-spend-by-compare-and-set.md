@@ -2,12 +2,49 @@
 id: cr-one-time-secrets-spend-by-compare-and-set
 title: A one-time secret is spent by a checked compare-and-set, first in its transaction, and nothing writes its status back
 status: planned
-satisfies: [uc.admin.create-tenant, uc.spaces.add-member, uc.spaces.manage-member-invites, uc.account.recover-access, uc.account.onboard-device]
-adrs: ["0054", "0059", "0020"]
+satisfies: [uc.admin.create-tenant, uc.spaces.add-member, uc.spaces.manage-member-invites, uc.account.recover-access, uc.account.onboard-device, uc.account.login, uc.account.sessions]
+adrs: ["0054", "0059", "0020", "0004"]
 invariants: [operator-blind E2EE everywhere]
 ---
 
 ## Open for the owner
+
+**Open, added 2026-10-01 by the third refine wave (inbox #222, #223, #224).** Phases 1–4 keep their go. Only
+Phase 5 waits on questions 5 and 6.
+
+5. **Fold #222 (the refresh chain) into this CR as Phase 5?** The refresh token is the fourth single-use secret:
+   ADR 0004 spends each one exactly once, by rotation. Measured (Inventory 11–14), the chain forks when an
+   orphaned and the current token are presented together, and a refresh racing a revoke writes the family back
+   to `ACTIVE`. It is the same rule (the decision is made under the serializing write, first in the
+   transaction), and the resurrection is the same full-row flush as Inventory 5, on the entity Question 3
+   already named. **Recommendation: fold, as its own phase.** It shares no code with Phases 1–3 and can land in
+   any order. Phase 4's styleguide bullet then has a lock-first example next to the CAS examples, and ADR 0004
+   gets one paragraph.
+6. **Phase 5's lever: lock the family row first, or compare-and-set the token rows?** A CAS on the `CURRENT` row
+   (`status = SUPERSEDED where id = ? and status = CURRENT`, branching on the count) stops the fork. It leaves
+   the family's `status` written by an unlocked managed flush, though, so the revoke race needs a second lever (a
+   column-scoped `lastUsedAt` update). **Recommendation: one lever, the family row lock (D6).** Every rotation
+   and every revoke of a family already write that row, so locking it first serializes the whole chain on one
+   row. ADR 0004's distance is then decided against committed state by construction. Measured on H2: the lock
+   alone closes both (Inventory 14).
+7. **Where #223 and #224 go: two sibling CRs, not this one.**
+   - **#223 → [`cr-create-race-losers-answer-their-conflict`](cr-create-race-losers-answer-their-conflict.md).**
+     Its sites create a row that does not exist yet, so there is no live row to compare-and-set. Their arbiter
+     is the unique index, and the fix is the insert half of this CR's rule: the loser re-asks the replay question
+     after its failed commit. Its inventory is also eleven sites wide, not three.
+   - **#224 → [`cr-managed-writes-flush-only-what-they-change`](cr-managed-writes-flush-only-what-they-change.md).**
+     The sweep found the full-row flush on eight entities, four of them measured. The lever is
+     `@DynamicUpdate` on every entity, which is a different kind of change from a per-site CAS.
+
+   **Recommendation: yes, siblings.** Folding them would turn a four-site CR into one that touches every entity
+   and every client-minted-id create. Both siblings cite this CR's rule rather than restating it.
+
+   **This corrects Question 3's reasoning, but not its decision.** Question 3 said `@DynamicUpdate` "would only
+   narrow the window". Measured on 2026-10-01, it does more: it closes the write-back of every column a writer
+   did not change (four entities, 5/5 each, `cr-managed-writes-flush-only-what-they-change` Inventory). What it
+   does not close is a race between two writers of the **same** column, and D1/D2 are about exactly that. D3
+   stays as decided. With the sibling landed it becomes belt and braces, and its `and status = ACTIVE` still
+   keeps a spent invite from being re-tagged.
 
 **Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
 
@@ -35,7 +72,8 @@ invariants: [operator-blind E2EE everywhere]
 ## Goal
 
 The docs call three server-held secrets **single-use**: the tenant invite (owner and member), the account
-recovery token, and the device-pairing channel's delegation. The code spends none of them atomically. Each
+recovery token, and the device-pairing channel's delegation. A fourth one, the rotating refresh token (ADR 0004),
+was added on 2026-10-01 (Open question 5). The code spends none of the first three atomically. Each
 decides "still live?" with an unlocked read, then writes the spent state with an unconditional `UPDATE … where
 id = ?` whose row count nobody reads. Two concurrent redeems therefore both pass the check.
 
@@ -52,15 +90,23 @@ places and milder in one:
   constraint does not catch is the invite being written by **another writer**: a revoke that lost to a
   concurrent accept is overwritten to `CONSUMED`, and a tenant rotation's full-row flush writes a revoked or
   consumed invite back to `ACTIVE`.
+- **Refresh tokens** (Phase 5): the rotation serializes only presentations of the **same** token. An orphaned
+  token and the current one, presented together, both answer `200` and leave the family with two live chains.
+  ADR 0004's distance-zero detector then never fires for either holder. A refresh racing a revoke writes the
+  family back to `ACTIVE` after the revoke answered `204`.
 
 The fix is one rule, applied at each site: **spend the secret with a compare-and-set on its live state, as the
 first write of the transaction, and branch on the row count.** The loser then gets exactly the answer a replay
 gets, before it has written anything that a constraint would have to undo. This is already the shape of
 `PairingStore.markCollected`, `TasksStore.claim` and `TenantStore.suspend`, so no new mechanism is needed.
+Where the decision reads more than one row, as the refresh distance reads the presented and the `CURRENT`
+token, the serializing write is a row lock on the parent, taken first. That is `LoginHandler.verify`'s shape,
+and D4's and D6's.
 
 ## Inventory
 
-Substrate: worktree of `main` @ `64c1f65`, 2026-09-28. **Run** means a race test executed on the H2 test
+Substrate: worktree of `main` @ `64c1f65`, 2026-09-28 (rows 1–10), and `main` @ `7a34c57`, 2026-10-01 (rows
+11–14). **Run** means a race test executed on the H2 test
 datasource (`MODE=MariaDB`, READ COMMITTED). The probes were throwaway and are not in the tree; each DoD test
 below recreates one. **Read** means established by reading the code only.
 
@@ -76,6 +122,10 @@ below recreates one. **Read** means established by reading the code only.
 | 8 | Pairing delegate: `PairingHandler.delegate` → `sessions.issueDelegated` → `PairingStore.bindDelegation` | Unlocked `liveChannel` read, check `userId == null`, mint a family, then `update("userId = ?1, delegatedFamilyId = ?2 where id = ?3")`, count ignored | **Run, 5 rounds:** 5× `[200, 200]` with two different refresh tokens. The account's ACTIVE families rose by one orphan per round (3, 4, 5, 6, 7) | `grep -n 'userId = ?1, delegatedFamilyId = ?2 where id = ?3' backend/src/main/kotlin/com/veyq/app/features/account/pairing/PairingStore.kt` |
 | 9 | **The lever works on the test datasource** | A guarded `update … where id = ? and status = ACTIVE` in two concurrent transactions, each holding its lock 300 ms | **Run, 5 rounds:** `[1, 0]` or `[0, 1]` every round. H2 in `MODE=MariaDB` blocks the second UPDATE on the row lock and re-evaluates its `WHERE` after the first commits, so every red-first test below can go green on H2 | the probe ran `TenantInviteEntity.update(…)` in two `requiringNew` blocks behind a barrier |
 | 10 | Every loser answer already exists on the wire | `/api/tenants/accept` and `/accept/register` declare `410` (`invite_no_longer_valid`). The member-invite `DELETE` declares `404`. `/api/recovery/complete` declares `404`. `/api/pairing/delegate` declares `404` | No contracts phase and no web phase. The web surfaces the 410 through `mapError` (`TenantJoinView.vue`) | `grep -n '^  /api/tenants/accept\|^  /api/pairing/delegate\|^  /api/recovery/complete' contracts/api/*.yaml`, then read each path's responses |
+| 11 | Refresh with an orphaned and the current token at once: `SessionService.rotate` | `rotate` locks only the presented token's row. It reads the family and the `CURRENT` row unlocked. The orphan (distance 1, the grace path) and the current token lock **different** rows, so nothing orders the two | **Run** (2026-10-01): with a barrier only, 10 rounds, the race forked 3 times: `[200, 200]`, **two `CURRENT` rows**, family `ACTIVE`, and both new tokens rotated again (`[200, 200]`). The other 7 rounds gave one `200`, one `401` and family `REVOKED`, which is the serial outcome. With a test transaction holding the family row 300 ms while both rotations start, 5 rounds forked 3 times. Either serial order revokes (distance 0 or 2), so the fork exists only through the race. It defeats ADR 0004's detector: neither holder ever lands at distance zero, so a stolen orphan presented alongside the victim's refresh is never caught | `grep -n 'PESSIMISTIC_WRITE' backend/src/main/kotlin/com/veyq/app/features/account/login/SessionService.kt` → one hit, the token row |
+| 12 | Refresh racing a revoke: `rotate` vs `revokeFamilyForUser`, `revokeOtherFamilies`, `revokeAllForUser` | `rotate` sets `family.lastUsedAt` on a family it read unlocked. The managed flush writes every column, `status` included. This is the Inventory 5 trap on `SessionFamilyEntity` | **Run** (2026-10-01), deterministic, 5 rounds: the real `revokeFamilyForUser` ran in a transaction whose commit the test delayed 300 ms, and a refresh started inside that window. Every round answered `200` with family **`ACTIVE`**, and the new refresh token rotated again (`200`). With a barrier only, 30 rounds, 6 families came back `ACTIVE` after a `204` revoke. **Read:** recovery's `revokeAllForUser` is the same statement. A reset that must end every session can leave the one that was refreshing alive | `grep -n 'family.lastUsedAt = now' backend/src/main/kotlin/com/veyq/app/features/account/login/SessionService.kt` |
+| 13 | Reuse-detection revoke racing a rotation of the same family | The revoking `rotate` sets `family.status = REVOKED` through a managed flush. A concurrent rotation of the current token flushes the family too | **Read, not run:** the later commit wins, so a rotation that commits after the clone verdict writes `ACTIVE` back | `grep -n 'family.status = SessionFamilyEntity.REVOKED' backend/src/main/kotlin/com/veyq/app/features/account/login/SessionService.kt` |
+| 14 | **The family lock is the lever, on H2** | Throwaway: read the family id with a scalar query, take `SessionFamilyEntity.findById(id, PESSIMISTIC_WRITE)`, then lock the token row as today | **Run** (2026-10-01): #11 forked 0 of 10 rounds (barrier) and 0 of 5 (held lock). In every round one rotation won and the other read its commit and revoked. #12 resurrected 0 of 5 (held revoke) and 0 of 30 (barrier). In the held rounds the refresh waited for the revoke and answered `401`. In the barrier rounds every family ended `REVOKED`, whichever request ran first. `LoginSliceTest` (24 tests, `concurrentRefreshOfOneTokenKeepsTheFamily` included) and `SessionManagerSliceTest` (13) stayed green with the lever in | the probe is not in the tree. The DoD tests for #11 and #12 recreate it |
 
 **Already sound, and the template to copy** (read; the first two are also covered by existing race tests):
 - `PairingStore.markCollected`, a checked CAS (`PairingSliceTest.concurrentCollectsHandOverTheGrantOnce`).
@@ -83,10 +133,17 @@ below recreates one. **Read** means established by reading the code only.
 - `TasksStore` claim, a checked CAS (`docs/crosscutting/background-tasks.md` § claim).
 - `TenantStore.suspend`, `reactivate` and `changeDomain`, guarded updates with a KDoc that states the rule.
 
-**Out of this CR**, measured by reading and proposed as separate inbox rows (see the refine report):
-- the session refresh chain can fork under an orphan-and-current race, and a refresh can write a revoked family back to `ACTIVE` (the same full-row flush as #5, on `SessionFamilyEntity`);
-- `TasksStore` completes a job with an unguarded `DONE`;
-- the setup, share-create and upload-complete losers answer 500 from a PK instead of their named conflict.
+**Out of this CR:**
+- `TasksStore` completes a job with an unguarded `DONE` (read, 2026-09-28). It has no inbox row yet; the
+  2026-10-01 refine report proposes one.
+- The setup, share-create and upload-complete losers answer 500 (inbox #223) →
+  [`cr-create-race-losers-answer-their-conflict`](cr-create-race-losers-answer-their-conflict.md) (Open
+  question 7).
+- Every other entity with the full-row flush of Inventory 5 (inbox #224) →
+  [`cr-managed-writes-flush-only-what-they-change`](cr-managed-writes-flush-only-what-they-change.md) (Open
+  question 7).
+
+The refresh chain (inbox #222) was on this list until 2026-10-01. It is now Inventory 11–14 and Phase 5.
 
 ## Decisions
 
@@ -115,6 +172,25 @@ below recreates one. **Read** means established by reading the code only.
 - **D5: pairing claims before it mints.** `delegate` first CAS-claims the channel for the account, then calls
   `issueDelegated`, then records `delegatedFamilyId` (a plain update on a row this transaction now owns). A lost
   claim mints nothing, so correctness never rests on a rollback of an already-minted family.
+- **D6: a rotation takes its family's row lock first** (Open question 6). `SessionService.rotate` resolves the
+  family id with a scalar query (`select r.familyId from RefreshTokenEntity r where r.tokenHash = ?1`), takes
+  `SessionFamilyEntity.findById(familyId, PESSIMISTIC_WRITE)`, and only then locks and reads the token rows.
+  Every rotation and every revoke of one family write that row, so they all serialize on it. The distance is
+  then computed against committed state, and a revoke either commits before the rotation reads the family (the
+  rotation answers `401`) or waits for the rotation and lands after it (the family ends `REVOKED`). The lock
+  order is family first, token second, on every path. Nothing locks a token row and then its family.
+  - **Trap: the family id must not come from loading the token entity before the lock.** A later locked query
+    for the same row would hand back the instance already in the persistence context, with the status it had
+    before the lock. This is Hibernate's identity map, remembered and not measured. The probe used the scalar
+    form, which is the measured one.
+  - **`withDeadlockRetry` stays.** Its measured deadlock is two refreshes of one token meeting on
+    `ux_refresh_token_hash`. With the family lock first they queue on the family's primary key before either
+    touches that index, so the cycle should no longer form. That is reasoned about InnoDB and not measured,
+    since there is no MariaDB here. The KDoc gets one sentence that says exactly that, and nothing is removed on
+    a reasoned claim.
+  - **Coordinate with [`cr-session-purge-cost-on-mariadb`](cr-session-purge-cost-on-mariadb.md).** That CR
+    measures the purge's lock footprint against a concurrent login or refresh. This lock is new on the
+    refresh side, so whichever of the two lands second re-runs that measurement with both in place.
 - **No new error codes, no migration, no contract change** (Inventory 10). Every loser answers exactly what a
   replay of the same secret answers today.
 
@@ -139,10 +215,27 @@ below recreates one. **Read** means established by reading the code only.
   - `docs/crosscutting/developer-styleguide.md` §12 gains one pattern bullet: **a single-use transition is a
     checked compare-and-set, first in its transaction**. The bullet also says that a managed-entity write
     flushes every column, so a row other writers transition by status is re-tagged by a bulk update. It
-    points at `PairingStore.markCollected` and `TenantStore.consumeLiveInvite` as the two examples.
-  - No use-case or ADR changes. Each already says "single-use", and the code now matches them.
+    points at `PairingStore.markCollected` and `TenantStore.consumeLiveInvite` as the two examples. When a
+    decision reads more than one row, the serializing write is a lock on their parent, taken first.
+    `SessionService.rotate` (D6) is that example, once Phase 5 has landed. If Phase 4 lands first, Phase 5
+    adds the example itself.
+  - ADR 0004 § the one-generation grace gains one paragraph: the distance is decided under the family's row
+    lock. Without that lock, two presentations both measure against a stale `CURRENT` row and the chain forks,
+    as measured on 2026-10-01 (Inventory 11). The paragraph lands with Phase 5, not before it.
+  - No use-case changes. Each already says "single-use", and the code now matches them.
 
   · Done when: the trust-chain glob is green.
+- [ ] 5 backend, sessions (D6). Inbox #222. Independent of Phases 1–3.
+  - `SessionService.rotate` takes the family lock first, as D6 says. The grace path's
+    `current.status = SUPERSEDED` and the reuse verdict's `family.status = REVOKED` stay managed writes. Under
+    the lock no other writer can interleave with them, so their full-row flush is safe.
+  - The ADR 0004 paragraph from Phase 4 lands here, if Phase 4 is already in.
+  - `SessionRotationRetry.kt`'s KDoc gets D6's sentence about the deadlock it was written for.
+  - Tests go in `LoginSliceTest` (the fork, beside the existing grace block) and `SessionManagerSliceTest` (the
+    revoke race, which already has the second session that revokes).
+
+  · Done when: the DoD tests for #11 and #12 are green, the existing grace tests in `LoginSliceTest` are green
+  unchanged, `./gradlew check` is green in `backend/`, and the trust-chain glob is green.
 
 ## Definition of done
 
@@ -157,6 +250,18 @@ below recreates one. **Read** means established by reading the code only.
     `TokenNotLive`, and the surviving floor is the `Applied` one's. Today: `[Applied, Applied]`.
   - **#8, pairing.** Two delegates on one channel give exactly one `200` and one `404 invalid`, and the
     account's ACTIVE family count grows by exactly one. Today: `[200, 200]` and one orphan per round.
+  - **#11, refresh fork.** Set up r1 → r2 (r1 is then one generation behind). A test transaction holds the
+    family row with `PESSIMISTIC_WRITE` for 300 ms. Both refreshes, r1 and r2, start inside that window. After
+    it closes, the round asserts at most one `200`, at most one `CURRENT` row, and no two new tokens that both
+    rotate again. This runs **10 rounds**, not 5, because the held lock made the fork 3 of 5 in the probe, not
+    5 of 5. Today some round forks. The barrier-only form measured 3 of 10, which is too weak to be the
+    red-first signal on its own.
+- **Red first, deterministic, through the real paths.**
+  - **#12, refresh vs. revoke.** The real `SessionService.revokeFamilyForUser` runs in a
+    `QuarkusTransaction.requiringNew()` whose commit the test delays 300 ms, and the refresh starts inside that
+    window. Assert family `REVOKED` and that a token from the refresh, if it got one, answers `401`. 5 rounds.
+    Today, 5 of 5 rounds give family `ACTIVE` and a token that rotates. No test seam enters production code:
+    the delay lives in the test's own transaction.
 - **Red first, deterministic, store level.**
   - **#4.** `revokeInvite` then `consumeLiveInvite` returns `false` and leaves `SUPERSEDED`. `consumeLiveInvite`
     then `revokeInvite` returns `false` and leaves `CONSUMED`. Today the second write always wins.
@@ -173,10 +278,21 @@ below recreates one. **Read** means established by reading the code only.
   - drop the scope lock in D4: nothing is expected to go red (#6 was read, not run), and the phase says so
     rather than claiming a bite it does not have;
   - swap D5's order back to mint-then-bind: the pairing test still goes green, because the CAS alone stops the
-    double 200. The family-count assertion is what pins D5, and it goes red.
+    double 200. The family-count assertion is what pins D5, and it goes red;
+  - drop D6's family lock: #11 and #12 both go red (measured with the probe: 3 of 5 and 5 of 5);
+  - take D6's family lock **after** the token-row lock: the orphan and the current token then each hold one
+    token row while waiting for the family. The phase records what H2 does with that (a deadlock, a lock
+    timeout, or a pass) instead of predicting it;
+  - load the token entity before the lock instead of the scalar query: the phase records whether #11 goes
+    red. This is D6's remembered trap, and the bite is what turns it into a measured one.
+- **The full-row-flush bites depend on what has landed.** If
+  [`cr-managed-writes-flush-only-what-they-change`](cr-managed-writes-flush-only-what-they-change.md) is in
+  first, `@DynamicUpdate` already stops the write-back, so restoring `inv.persist()` alone does not redden #5.
+  The bite then also removes `@DynamicUpdate` from `TenantInviteEntity` for its run, and #12's lock bite is run
+  the same way on `SessionFamilyEntity`. The phase records which order it found.
 - **Controls.** Each race test ends with a fresh secret redeemed once, successfully, so a site that refuses
   everything cannot pass.
-- `./gradlew check` is green in `backend/`, and the trust-chain glob is green. Inbox #199's status cell points
-  here.
+- `./gradlew check` is green in `backend/`, and the trust-chain glob is green. Inbox #199's and #222's status
+  cells point here.
 
 ## Retrospective
