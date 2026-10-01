@@ -197,3 +197,4 @@ Sollte es seinen Schlüssel je verlieren, fragt es dich nach deinem Passwort ode
   and whose E3 hosts the QR-sign-in entry),
   [remember-this-device](uc.account.remember-this-device.md) (the tier a linked device is born at),
   [unlock](uc.account.unlock.md) (the Secret-Key path this exists to avoid needing)
+- End-user view (wiki): [Adding another device](../../../../wiki/en/adding-another-device.md)

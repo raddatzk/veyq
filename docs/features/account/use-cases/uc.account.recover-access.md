@@ -129,3 +129,5 @@ Secret Key dort also noch einmal ein.
 - [ADR 0054](../../../decisions/0054-password-recovery-two-factor-release.md) — the two-factor release decision
 - [ADR 0049](../../../decisions/0049-email-delivery-boundary.md) — what a veyq mail may contain
 - [ADR 0003](../../../decisions/0003-operator-blind-password-auth.md) — why a new password means a new auth keypair
+- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)
+- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)

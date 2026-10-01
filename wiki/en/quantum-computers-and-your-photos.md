@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/crosscutting/security-model.md; pair: de/quantencomputer-und-deine-fotos.md -->
 # What happens to my photos when quantum computers arrive?
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). Short version: **your memories are

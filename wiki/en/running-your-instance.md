@@ -1,3 +1,4 @@
+<!-- speaks-for: infra/README.md, docs/features/admin/use-cases/uc.admin.back-up-and-restore-instance.md, docs/features/admin/use-cases/uc.admin.tenant-mail-settings.md, docs/crosscutting/security-model.md; pair: none — technical and English-only, for whoever operates a server -->
 # Running your own instance
 
 This page is for whoever **operates** a veyq instance. It is technical and English-only — the rest of this

@@ -131,9 +131,19 @@ published pages that speak for it.
       `validate_doc_links.py` with `wiki/` in `DOC_ROOTS`: `all relative links in 202 doc(s) resolve`. The
       guard-gap pins land in Phase 3: `validate_guard_gaps.py` refuses a case whose guard is red on the
       un-forged copy, so they can only be written once the headers exist.
-- [ ] 3 anchors: write the 11 headers and the missing backlinks. Read each page against its declared docs
+- [x] 3 anchors: write the 11 headers and the missing backlinks. Read each page against its declared docs
       while doing it. A claim that disagrees is recorded as a new inbox row, not fixed silently.
       · Done when: every `validate_*.py` is green.
+      **Measured:** `wiki sources OK: 11 page(s) …`; 14 backlinks added under `## Related`, plus two in
+      `security-model.md`'s header note (it already linked `is-my-data-safe`, as `en.account.key-model` did
+      its page). The table's candidates grew on reading: `is-my-data-safe` also restates `uc.memory.gallery`,
+      `uc.spaces.verify-identity`, `uc.spaces.enforce-verified-identities` and `uc.account.recover-access`;
+      `account-keys-and-recovery` restates five use-cases beside the key model; `who-gets-into-your-space`
+      speaks for `uc.spaces.manage-member-invites` and **not** `verify-identity` (it never mentions it);
+      `running-your-instance` adds `uc.admin.back-up-and-restore-instance`, `uc.admin.tenant-mail-settings` and
+      `security-model.md`. The read found **12 page-vs-doc disagreements on 6 of 6 pages**, all carried by the
+      DE pairs too, plus 5 doc-side staleness finds; they go to the wave's coordinator as proposed inbox rows,
+      because nine sessions appending rows to one table at once is a merge conflict per row.
 
 ## Definition of done
 
@@ -150,6 +160,12 @@ published pages that speak for it.
   - Break one relative link in a wiki page: `validate_doc_links.py` goes red.
 
   Each is red, naming the page.
+  **Measured** (`bite2.py`, snapshot-and-restore, porcelain identical before and after): (b) →
+  `… speaks for …/en.account.no-such-model.md, which does not exist`, both pages; (c) → `… speaks for a
+  different set than its pair …`, both sides; (d) → `wiki/de/sind-meine-daten-sicher.md: pair: none is allowed
+  only under wiki/en/`; (e) → `… en.account.key-model.md does not link back …` — the lever must unlink **both**
+  of that doc's links to the page, one left standing keeps it green; a broken wiki link →
+  `validate_doc_links.py`: `dead link → is-my-data-unsafe.md`. All exit 1.
 - **Pin** (c) and (e) as *rejected* cases in `scripts/validate_guard_gaps.py`. Also pin the limit as an
   *open* case: a page whose prose contradicts its declared doc stays green.
 - Inbox #120 → done. This file is deleted after harvest.

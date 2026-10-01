@@ -158,3 +158,4 @@ Kapitel, Karten und Playlists kommen in späteren Schritten.
   aggregate-only rule, and why the copy above says what it says)
 - Related use-cases: [uc.memory.browse](uc.memory.browse.md) (done — the shell this opens from);
   the journal / chapters / map — planned
+- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)

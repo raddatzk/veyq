@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/spaces/use-cases/uc.spaces.add-member.md, docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md; pair: de/wer-in-deinen-bereich-kommt.md -->
 # Who gets into your space
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). Your shared space starts as just yours.

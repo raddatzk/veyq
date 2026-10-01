@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/crosscutting/security-model.md; pair: en/quantum-computers-and-your-photos.md -->
 # Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Kurz gesagt:
