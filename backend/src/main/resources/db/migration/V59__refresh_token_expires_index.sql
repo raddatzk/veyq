@@ -1,0 +1,11 @@
+-- The hourly session purge deletes `expires_at < now` from veyq_refresh_token. Without an index that delete scans
+-- the whole table, and under MariaDB's REPEATABLE READ it next-key-locks every row it scans until commit: at
+-- ~4 M refresh rows (30 days of SUPERSEDED rows kept for ADR 0004 reuse detection) every refresh waited for it,
+-- measured 10–13 s (cr-session-purge-cost-on-mariadb). With this index the delete is a range scan that locks only
+-- the expired range and its boundary gap, and a new token's `expires_at` lies far beyond that boundary.
+--
+-- Deliberately NOT on veyq_access_token or veyq_login_challenge: their rows live minutes against an hourly purge,
+-- so most of them are expired when it runs, and MariaDB's optimizer full-scans anyway (measured: `ALL`, not
+-- `range`, with the index present). Those two tables stay small, so their deletes stay short: 0.05–0.25 s at the
+-- same scale, each in its own transaction (SessionPurge).
+CREATE INDEX ix_refresh_token_expires ON veyq_refresh_token (expires_at);
