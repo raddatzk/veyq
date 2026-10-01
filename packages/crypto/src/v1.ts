@@ -307,6 +307,34 @@ function macEquals(expected: Uint8Array, mac: Uint8Array): boolean {
   return expected.reduce((diff, byte, i) => diff | (byte ^ mac[i]), 0) === 0
 }
 
+// ── Item-mark self-tag (ADR 0068 §9) ────────────────────────────────────────────────────────────────────
+// An item mark is sealed under the scope key and bound to (scope, node) only — the read names no member — so which
+// entry is the caller's own is a claim of the server's (`self`). The tag inside the plaintext is what the caller's
+// client checks it against: `HMAC-SHA256(HKDF(masterKey, salt = "", info = "veyq/v1/item-mark-self"), statement)`,
+// the statement binding the scope, the node and the marked SET. The key is the marking member's alone — anything a
+// co-member also holds would let them compute every member's tag — and the set makes it content-bound: a copied tag
+// verifies for no other set, and two versions of one set carry unrelated tags. Conformance: v1.json#item_mark_self.
+
+/** What a self-tag binds: the slot the marks are stored at and the marked media ids (any order, repeats allowed). */
+export type ItemMarks = { scopeId: string; nodeId: string; ids: Iterable<string> }
+
+/** `HKDF-SHA256(masterKey, salt = "", info = "veyq/v1/item-mark-self", 32)` — the caller's self-tag key. */
+export const itemMarkSelfKey = (masterKey: Uint8Array): Uint8Array =>
+  hkdf(sha256, masterKey, new Uint8Array(0), utf8('veyq/v1/item-mark-self'), 32)
+
+/** SHA-256 over `lp(utf8(id))…` of the ids, de-duplicated and sorted — the set, independent of how it was listed.
+ *  The ids are canonical lowercase UUIDs, so the default sort's code-unit order is their byte order. */
+const marksDigest = (ids: Iterable<string>): Uint8Array =>
+  sha256(concat(...[...new Set(ids)].sort().map((id) => lp(utf8(id)))))
+
+/** The self-tag of `m` under the self-tag key `key` ({@link itemMarkSelfKey}). */
+export const itemMarkSelfTag = (key: Uint8Array, m: ItemMarks): Uint8Array =>
+  hmac(sha256, key, encodeStatement({ purpose: 'item-mark-self', scopeId: m.scopeId, nodeId: m.nodeId, marks: marksDigest(m.ids) }))
+
+/** Whether `tag` is the self-tag of `m` under `key`. Constant-time over the tag bytes. */
+export const itemMarkSelfTagVerifies = (key: Uint8Array, m: ItemMarks, tag: Uint8Array): boolean =>
+  macEquals(itemMarkSelfTag(key, m), tag)
+
 // ── Pairing channel (ADR 0059 §11) ──────────────────────────────────────────────────────────────────────
 // The pairing relay sees both halves of each binding step, so the QR carries a secret the relay never sees: 32
 // random bytes, from which both devices derive the routing handle (the ONLY value the server receives) and a

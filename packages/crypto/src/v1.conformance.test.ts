@@ -473,6 +473,84 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     })
   })
 
+  describe('item-mark self-tag (ADR 0068 §9)', () => {
+    const s = vectors.item_mark_self
+    type Case = { context: { scopeId: string; nodeId: string; ids: string[] }; marks: string; statement: string; tag: string }
+    const cases: [string, Case][] = [
+      ['one id', s.one],
+      ['several ids, unsorted, with a duplicate (pins the canonicalisation)', s.several_unsorted_with_duplicate],
+    ]
+    const masterKey = unhex(s.master_key)
+    const kSelf = unhex(s.k_self)
+
+    it('derives its key from the Master Key under its own info string', () => {
+      expect(hex(v1.itemMarkSelfKey(masterKey))).toBe(s.k_self)
+      expect(hex(v1.hkdfSha256(masterKey, new Uint8Array(0), v1.utf8('veyq/v1/item-mark-self'), 32))).toBe(s.k_self)
+    })
+
+    it.each(cases)('%s: statement bytes and tag', (_name, c) => {
+      const { scopeId, nodeId } = c.context
+      expect(hex(v1.encodeStatement({ purpose: 'item-mark-self', scopeId, nodeId, marks: unhex(c.marks) }))).toBe(c.statement)
+      expect(hex(v1.itemMarkSelfTag(kSelf, c.context))).toBe(c.tag)
+      expect(v1.itemMarkSelfTagVerifies(kSelf, c.context, unhex(c.tag))).toBe(true)
+    })
+
+    // The set, not the array: any order and any repetition of the same ids is the same tag. A reader re-derives the
+    // tag from the ids it parsed, so a canonicalisation that depended on how they happened to be serialised would
+    // turn an honest re-order into "not mine".
+    it('the tag is over the SET of ids — order and repetition do not move it', () => {
+      const c = s.several_unsorted_with_duplicate as Case
+      const distinct = [...new Set(c.context.ids)]
+      for (const ids of [distinct, [...distinct].reverse(), [...distinct, distinct[0]], new Set(distinct)]) {
+        expect(hex(v1.itemMarkSelfTag(kSelf, { ...c.context, ids }))).toBe(c.tag)
+      }
+    })
+
+    // Every bound value moved one step, and the key itself: each must stop the tag from verifying. The ids are what
+    // make the tag content-bound (a copied tag over a different set does not verify), and the Master-Key-derived key
+    // is what makes it the marking member's alone.
+    it.each(cases)('%s: a tag answers for nothing else', (_name, c) => {
+      const tag = unhex(c.tag)
+      for (const field of ['scopeId', 'nodeId'] as const) {
+        expect(v1.itemMarkSelfTagVerifies(kSelf, { ...c.context, [field]: otherValue(c.context[field]) }, tag), field).toBe(false)
+      }
+      expect(v1.itemMarkSelfTagVerifies(kSelf, { ...c.context, ids: [...c.context.ids, 'c0ffee00-0000-4000-8000-0000000000ff'] }, tag)).toBe(false)
+      expect(v1.itemMarkSelfTagVerifies(kSelf, { ...c.context, ids: c.context.ids.filter((i) => i !== c.context.ids[0]) }, tag)).toBe(false)
+      expect(v1.itemMarkSelfTagVerifies(kSelf, { ...c.context, ids: [] }, tag)).toBe(false)
+      expect(v1.itemMarkSelfTagVerifies(v1.itemMarkSelfKey(unhex('6e'.repeat(32))), c.context, tag)).toBe(false)
+      expect(v1.itemMarkSelfTagVerifies(masterKey, c.context, tag)).toBe(false) // the raw Master Key is not the tag key
+      expect(v1.itemMarkSelfTagVerifies(kSelf, c.context, tag.slice(0, 31))).toBe(false)
+      expect(v1.itemMarkSelfTagVerifies(kSelf, c.context, v1.concat(tag, Uint8Array.of(0)))).toBe(false)
+      const flipped = tag.slice()
+      flipped[0] ^= 1
+      expect(v1.itemMarkSelfTagVerifies(kSelf, c.context, flipped)).toBe(false)
+    })
+
+    // The two vectors are one object: the item-favorites seal vector's plaintext is case one's `{tag, ids}`, so the
+    // stored format and the tag cannot drift apart unseen.
+    it('the item-favorites seal vector carries case one as its {tag, ids} plaintext', () => {
+      const pt = JSON.parse(new TextDecoder().decode(unhex(vectors.seal.sym['item-favorites'].plaintext)))
+      expect(Object.keys(pt)).toEqual(['tag', 'ids'])
+      expect(hex(Uint8Array.from(Buffer.from(pt.tag, 'base64')))).toBe(s.one.tag)
+      expect(pt.ids).toEqual(s.one.context.ids)
+      expect(vectors.seal.sym['item-favorites'].context).toEqual({ scopeId: s.one.context.scopeId, nodeId: s.one.context.nodeId })
+    })
+
+    it('the statement\'s label domain-separates it from every seal purpose', () => {
+      const stmt = v1.encodeStatement({ purpose: 'item-mark-self', scopeId: s.one.context.scopeId, nodeId: s.one.context.nodeId, marks: unhex(s.one.marks) })
+      expect(new TextDecoder().decode(stmt.slice(4, 18))).toBe('item-mark-self')
+      expect(Object.keys(vectors.seal.sym)).not.toContain('item-mark-self')
+    })
+
+    it('refuses an id that is not a canonical UUID, and a marks field that is not a digest', () => {
+      const c = s.one as Case
+      expect(() => v1.itemMarkSelfTag(kSelf, { ...c.context, nodeId: 'not-a-uuid' })).toThrow(v1.SealContextInvalid)
+      expect(() =>
+        v1.encodeStatement({ purpose: 'item-mark-self', scopeId: c.context.scopeId, nodeId: c.context.nodeId, marks: new Uint8Array(31) }),
+      ).toThrow(v1.SealContextInvalid)
+    })
+  })
+
   describe('grant signature (ADR 0028 Decision 6)', () => {
     const g = vectors.grant_signature
     type Case = {

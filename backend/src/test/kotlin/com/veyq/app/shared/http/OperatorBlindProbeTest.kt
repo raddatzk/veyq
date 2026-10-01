@@ -247,6 +247,12 @@ class OperatorBlindProbeTest {
                 "own test in ScopeAccessSliceTest.",
             "claimTask", "listMyTenants",
         )
+        reason(
+            "a filter, not an answer, over the caller's OWN rows across every scope: it leaves out a row of a scope " +
+                "the gate would refuse (left, proposed-only, suspended tenant) by asking the gate's own READ answer — " +
+                "pinned by ItemFavoritesSliceTest.listOwnLeavesOutEveryScopeTheGateRefuses.",
+            "listOwnItemFavorites",
+        )
     }
 
     /** A POST that reads, and the one write whose `Deleting` is its precondition rather than a refusal. */

@@ -52,10 +52,11 @@ UUID would shrink it; the client mints that token instead.
 **Where the opener's address carries no id, the seal binds none.** Item favorites are read as every member's
 entry for one node, and the read deliberately names no member ([ADR 0068](0068-favorites-two-confidentiality-levels.md)
 §6 — the aggregate is anonymous in the data). So an `item-favorites` seal binds (scope, node) and not the marking
-member: an opener could not supply one. What that leaves the server is to relabel **which entry is the caller's
-own** (`self`) within one node's marks — an integrity gap, never a confidentiality one, since every member opens
-every entry anyway. It is accepted for V1; closing it needs a self-tag only the marking member can check, which
-is inbox #187. Likewise a version-carrying store (`identity-pins`, `device-register`) binds the version it is
+member: an opener could not supply one. *Whose* an entry is, is instead a self-tag inside the plaintext that only
+the marking member's own client can compute and check ([ADR 0068](0068-favorites-two-confidentiality-levels.md) §9),
+so the server cannot present another member's set as the caller's own. What binding does not give it, it does not
+give here either: the server still chooses which stored version of a set it serves (Decision 5) and may serve
+stored sets again as extra entries in the count (ADR 0068 §9). Likewise a version-carrying store (`identity-pins`, `device-register`) binds the version it is
 stored at — the write's `version + 1` — because that is the one the reader's address names.
 
 **4. Parents are not bound.** The tree's shape is server-visible metadata and stays that. Binding a node's

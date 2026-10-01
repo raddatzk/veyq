@@ -2,6 +2,7 @@ package com.veyq.app.features.content.itemfavorites
 
 import com.veyq.app.features.spaces.scope.ScopesStore
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
@@ -35,6 +36,9 @@ class ItemFavoritesSliceTest {
 
     @Inject
     lateinit var scopes: ScopesStore
+
+    @Inject
+    lateinit var store: ItemFavoritesStore
 
     private val mine = "bWluZS1jaXBoZXJ0ZXh0" // "mine-ciphertext"
     private val theirs = "dGhlaXJzLWNpcGhlcg==" // "theirs-cipher"
@@ -194,6 +198,80 @@ class ItemFavoritesSliceTest {
     fun unauthenticatedIs401() {
         given().`when`().get("/api/scopes/${UUID.randomUUID()}/nodes/${UUID.randomUUID()}/item-favorites")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
+        given().`when`().get("/api/item-favorites")
+            .then().statusCode(401).body("code", equalTo("authentication_failed"))
+    }
+
+    // --- the caller's own rows (listOwnItemFavorites, ADR 0068 §9: what a Master-Key rotation re-tags) ---
+
+    /**
+     * **The bite (B8).** The read is the caller's own rows, across scopes — and nothing else. Each caller is the
+     * other's control: alice gets her two rows and not bob's, bob gets his one and not alice's. Returning every row
+     * of the table (`ItemFavoritesEntity.listAll()`) reddens here on bob's blob reaching alice.
+     */
+    @Test
+    fun listOwnReturnsTheCallersRowsAcrossScopesAndNeverACoMembers() {
+        val (alice, shared) = seedMember()
+        val bob = seedAdditionalMember(shared)
+        val elsewhere = seedTenant(owner = alice)
+        val node = UUID.randomUUID().toString()
+        val other = UUID.randomUUID().toString()
+        val mineElsewhere = "bWluZS1lbHNld2hlcmU=" // "mine-elsewhere"
+        put(alice, shared, node, mine)
+        put(bob, shared, node, theirs)
+        put(alice, elsewhere, other, mineElsewhere)
+
+        assert(listOwn(alice) == setOf(Triple(shared, node, mine), Triple(elsewhere, other, mineElsewhere))) {
+            "alice must get exactly her own two rows, across both scopes — got ${listOwn(alice)}"
+        }
+        assert(listOwn(bob) == setOf(Triple(shared, node, theirs))) {
+            "bob must get exactly his own row — got ${listOwn(bob)}"
+        }
+        given().header("Authorization", bearer(seedUser()))
+            .`when`().get("/api/item-favorites")
+            .then().statusCode(200).body("$", hasSize<Any>(0))
+    }
+
+    /**
+     * **A filter, not an answer** (`OperatorBlindProbeTest` names this test as its classification). A row can
+     * outlive the membership it was written under — a delete that never ran is the operator's R3 (ADR 0068 §9) — so
+     * the read asks the scope-access gate per scope, and leaves out each scope it refuses: one the caller has left,
+     * one they were only proposed to, and one whose tenant is suspended. The live scope is the positive control on
+     * the same predicate. Dropping the gate filter reddens here with all four rows.
+     */
+    @Test
+    fun listOwnLeavesOutEveryScopeTheGateRefuses() {
+        val (alice, live) = seedMember()
+        val node = UUID.randomUUID().toString()
+        put(alice, live, node, mine)
+
+        val left = seedTenant(owner = alice)
+        put(alice, left, node, theirs)
+        QuarkusTransaction.requiringNew().run { MembershipEntity.delete("userId = ?1 and scopeId = ?2", alice, left) }
+
+        val proposed = seedTenant()
+        QuarkusTransaction.requiringNew().run {
+            membership(alice, proposed, proposed)
+            MembershipEntity.update("pendingConsent = true where userId = ?1 and scopeId = ?2", alice, proposed)
+        }
+        store.upsert(alice, proposed, node, theirs)
+
+        val suspended = seedTenant(status = TenantEntity.SUSPENDED, owner = alice)
+        store.upsert(alice, suspended, node, theirs)
+
+        assert(listOwn(alice) == setOf(Triple(live, node, mine))) {
+            "only the live scope's row may come back — got ${listOwn(alice)}"
+        }
+    }
+
+    /** The caller's own rows as (scopeId, nodeId, ciphertext), read through the endpoint. */
+    private fun listOwn(userId: String): Set<Triple<String, String, String>> {
+        val body = given().header("Authorization", bearer(userId))
+            .`when`().get("/api/item-favorites")
+            .then().statusCode(200).extract().jsonPath()
+        return (0 until body.getList<Any>("$").size)
+            .map { Triple(body.getString("[$it].scopeId"), body.getString("[$it].nodeId"), body.getString("[$it].ciphertext")) }
+            .toSet()
     }
 
     // --- helpers ---

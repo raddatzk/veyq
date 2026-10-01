@@ -28,6 +28,7 @@ import {
   ContentApi,
   FavoritesApi,
   ItemFavoritesApi,
+  OwnItemFavoritesApi,
   Configuration as ContentConfiguration,
 } from './generated/content'
 import { MediaApi, BucketsApi, Configuration as MediaConfiguration } from './generated/media'
@@ -133,6 +134,12 @@ export function favoritesApi(): FavoritesApi {
 // have different audiences, not because the paths differ.
 export function itemFavoritesApi(): ItemFavoritesApi {
   return new ItemFavoritesApi(new ContentConfiguration(bearerParams()))
+}
+
+// The caller's own item marks across every scope (ADR 0068 §9) — the `own-item-favorites` tag, read only by an
+// account-key rotation's re-tag.
+export function ownItemFavoritesApi(): OwnItemFavoritesApi {
+  return new OwnItemFavoritesApi(new ContentConfiguration(bearerParams()))
 }
 
 export function mediaApi(): MediaApi {

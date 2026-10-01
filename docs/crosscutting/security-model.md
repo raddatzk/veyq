@@ -392,9 +392,11 @@ operator lacks can.
 - a departing member who tagged a sockpuppet with the operator's help before the removal (ADR 0020);
 - an attacker who both reads a pairing QR and runs the relay (ADR 0059 §11);
 - item favorites, sealed under `E_0` by choice ([ADR 0068](../decisions/0068-favorites-two-confidentiality-levels.md)),
-  and bound to their node but not to the marking member — the read carries no member id by design — so the server
-  can relabel which entry of a node's marks is the caller's own ([ADR 0072](../decisions/0072-a-seal-binds-its-object.md)
-  § item favorites; a self-tag design is inbox #187);
+  so a former member can read a set written after their removal. Which entry is the caller's own is proven by a
+  self-tag only their client computes (ADR 0068 §9), but the operator can still serve the caller an older genuine
+  version of their own set (freshness), and it can inflate or deflate a node's mark count — withholding entries,
+  serving stored sets again as extra entries on its own, forging entries with any present or past member
+  (ADR 0068 §9);
 - a member removed from a group scope: every member can rebuild every link of a Memory, so they may hold every link
   that existed on the group's Memories while they belonged, and use one with no dump at all until it is
   **re-issued** — which cuts them off against an honest server; the removal can turn every link of the group off
