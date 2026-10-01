@@ -39,7 +39,12 @@ right checksum from a wrong one: that the pin, the wrapper sum and every metadat
 is what `generate:api`, the wrapper and Gradle each check when they run, and all three are trust-on-first-write
 (the pin file's header says how its value was obtained). It does not prove the metadata is COMPLETE — an artifact
 it lacks fails the build that resolves it, which is the intended failure, not one this guard foresees; so a new
-task, plugin or OS-specific artifact still owes a `--write-verification-metadata` run. It does not see a
+task, plugin or OS-specific artifact still owes a `--write-verification-metadata` run. Nor that it is MINIMAL: an
+entry no configuration resolves any more is green here, and has to be — whether one is used is a fact about the
+resolved graph (BOMs, transitive POMs, detached configurations such as PIT's and `quarkusDev`'s bootstrap
+resolver), which a buildless read of the build scripts cannot reconstruct (they spell ~24 coordinates; the file
+holds ~1000 components). Gradle says the same of itself and never prunes on a write, so the pruning step lives in
+the regeneration recipe in `backend/CLAUDE.md`, not here (inbox #236). It does not see a
 `--dependency-verification` flag or `-F` passed on a command line, and it does not verify signatures, only
 checksums. Check 5 proves the JAR is the pinned bytes, not that the pin is Gradle's: a swapped JAR plus a matching
 new pin line is green here, and only that one readable pin line in the diff (and CI's wrapper validation against

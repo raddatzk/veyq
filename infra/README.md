@@ -726,13 +726,20 @@ it, not from a rehearsal, and you are the one finding out where it is wrong. Rea
    destination of its own, never into the capture:
 
    ```sh
-   python3 scripts/instance_backup.py capture \
+   sudo -E python3 scripts/instance_backup.py capture \
        --compose-file infra/docker-compose.prod.yml \
        --docker-network veyq_edge \
        --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
        --key-into /media/usb-stick/veyq-<stamp>.key
-   python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
+   sudo python3 scripts/instance_backup.py verify infra/backups/<stamp> --key-from /media/usb-stick/veyq-<stamp>.key
    ```
+
+   **Both run as root.** The key is the application's — uid `10001`, mode `0600`, on a volume under Docker's data
+   root — so no other user can read it, and a capture without root cannot take leg (c). `-E` keeps the credential
+   variables, as in § Restore. What a root capture writes is root's, owner-only: the capture directory and the
+   key file. So `verify` runs as root too, and so does the encryption in § Capture — or hand both to yourself
+   first: `sudo chown -R "$(id -u):$(id -g)" infra/backups/<stamp> /media/usb-stick/veyq-<stamp>.key`.
+   **Derived, not rehearsed** — the e2e rehearsal captures a key file it owns, not the production volume.
 
    Do not skip `verify`. A capture that silently missed objects and one that is complete look identical until
    the day you need it, which is the day you find out. Encrypt it before it leaves this host (§ Capture).

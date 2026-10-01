@@ -7,10 +7,17 @@ code (`SKILL.md`), which is a *remembered* claim wearing a command's clothes: ti
 gap and the prose goes silently false. That is the repo's recurring "Trap 5" (a remembered claim drifting from
 reality), one level up — and it bought this guard.
 
-So each documented gap becomes an **executable** assertion instead of a sentence. For every case below the
-guard: copies the working tree into a throwaway dir (heavy dirs excluded), confirms the target validator is
-**green on the un-forged copy** (else an unrelated red would masquerade as "the gap holds"), injects one
-forgery, runs the real validator as a subprocess, and asserts its exit code is the documented one. The real
+So each documented gap becomes an **executable** assertion instead of a sentence. The guard snapshots the
+source tree once, confirms each target validator is **green on an un-forged copy** of it (else an unrelated red
+would masquerade as "the gap holds"), and then for every case below: copies the snapshot into a throwaway dir,
+injects one forgery, runs the real validator as a subprocess, and asserts its exit code is the documented one.
+The *source tree* is what git lists — every tracked file plus every untracked one it does not ignore — so
+dependencies, build output, run artefacts and nested worktrees stay out by the repository's own `.gitignore`,
+not by a list kept here. A name list (`node_modules`, `build`, …) was what this used to copy by, and it let
+through everything it did not name: in a main checkout carrying `.claude/worktrees/`, `.e2e-out/` and
+`graphify-out/` each copy was ~9.6k files where the sources are ~1.3k, and each of the per-case copies took
+15–20 s (inbox #244). It also keeps a validator that walks the filesystem on the tree CI sees, not on a
+sibling worktree's sources. The real
 tree is never touched — every guard resolves `ROOT` as `__file__.parent.parent`, so running the *copied*
 `scripts/<guard>.py` binds it to the copy; restoration is "delete the tempdir" (an abort leaves only an
 orphaned tempdir, never a dirty tree — the automated evolution of `changes/README.md` § bite-proof).
@@ -186,12 +193,6 @@ import tempfile
 import textwrap
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-
-# Heavy or irrelevant to the pure-file validators; skipping them turns a multi-GB copy into ~10 MB / <1 s.
-# `.git` matters twice: it is huge, and its absence is fine — none of the six target guards reads history.
-_IGNORE = shutil.ignore_patterns(
-    ".git", "node_modules", "build", ".gradle", ".venv", "dist", "target", "__pycache__",
-)
 
 # Anchors the forgeries edit. If one drifts (a coverage file relocated, a test class renamed), the forgery
 # fails to apply and the case reports red with a "could not forge" message — deliberately loud, because a
@@ -733,20 +734,63 @@ def run_guard(root: pathlib.Path, script: str) -> int:
     ).returncode
 
 
-def copy_tree() -> pathlib.Path:
-    tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_"))
-    shutil.copytree(ROOT, tmp / "repo", ignore=_IGNORE, symlinks=True)
+def source_files() -> list[str]:
+    """Every file git tracks, plus every untracked one it does not ignore — the tree the validators are about.
+
+    `.git` is not among them, and need not be: no target guard reads history. A directory entry (git lists an
+    untracked nested repository or worktree as `path/`) is not a file and is skipped, as is a tracked file
+    deleted in the working tree.
+    """
+    out = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                         cwd=ROOT, capture_output=True, text=True)
+    if out.returncode != 0:
+        raise SystemExit(f"GUARD-GAP VALIDATION FAILED: `git ls-files` failed, so there is no tree to copy and "
+                         f"no case was checked: {out.stderr.strip()}")
+    files = sorted({p for p in out.stdout.split("\0") if p and ((ROOT / p).is_file() or (ROOT / p).is_symlink())})
+    if not files:
+        raise SystemExit("GUARD-GAP VALIDATION FAILED: `git ls-files` listed no file, so no case was checked")
+    return files
+
+
+def snapshot() -> pathlib.Path:
+    """Copy the source tree once; every case copies this, so all of them see the same tree."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_snapshot_"))
+    made: set[pathlib.Path] = set()
+    for rel in source_files():
+        dst = tmp / rel
+        if dst.parent not in made:
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            made.add(dst.parent)
+        shutil.copy2(ROOT / rel, dst, follow_symlinks=False)
     return tmp
 
 
-def check_case(case_id: str, script: str, forge, expect_pass: bool) -> str | None:
+def copy_tree(snap: pathlib.Path) -> pathlib.Path:
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="guardgap_"))
+    shutil.copytree(snap, tmp / "repo", symlinks=True)
+    return tmp
+
+
+def green_unforged(snap: pathlib.Path, script: str, verdicts: dict[str, bool]) -> bool:
+    """Is `script` green on an un-forged copy? Asked once per guard: every copy of one snapshot is the same tree."""
+    if script not in verdicts:
+        tmp = copy_tree(snap)
+        try:
+            verdicts[script] = run_guard(tmp / "repo", script) == 0
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    return verdicts[script]
+
+
+def check_case(snap: pathlib.Path, verdicts: dict[str, bool],
+               case_id: str, script: str, forge, expect_pass: bool) -> str | None:
     """Return an error string if the documented pass/fail no longer holds, else None."""
-    tmp = copy_tree()
+    if not green_unforged(snap, script, verdicts):
+        return (f"case {case_id}: {script} is already RED on the un-forged copy — cannot trust the "
+                f"forgery result (fix the underlying red first)")
+    tmp = copy_tree(snap)
     try:
         root = tmp / "repo"
-        if run_guard(root, script) != 0:
-            return (f"case {case_id}: {script} is already RED on the un-forged copy — cannot trust the "
-                    f"forgery result (fix the underlying red first)")
         try:
             planted = forge(root)
         except ForgeError as e:
@@ -764,7 +808,12 @@ def check_case(case_id: str, script: str, forge, expect_pass: bool) -> str | Non
 
 
 def main() -> int:
-    errors = [e for c in CASES if (e := check_case(*c))]
+    snap = snapshot()
+    try:
+        verdicts: dict[str, bool] = {}
+        errors = [e for c in CASES if (e := check_case(snap, verdicts, *c))]
+    finally:
+        shutil.rmtree(snap, ignore_errors=True)
     if errors:
         print("GUARD-GAP VALIDATION FAILED:")
         for e in errors:

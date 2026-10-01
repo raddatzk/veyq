@@ -6,8 +6,10 @@ list of files or names (§ *a guard derives its anchor set from the code*, chang
 
   - in every tracked YAML file, every string under a key named `image` — compose services, chart values, any
     future manifest — except under a `matrix` key, where GitHub Actions keeps build variables, not images; a
-    YAML file that does not parse (a Helm template) is read line by line, and a value carrying `{{` is the
-    template's, whose source is the values file;
+    Helm template (a file under `<chart>/templates/` beside a tracked `Chart.yaml`) does not parse as YAML and is
+    read line by line, and a value carrying `{{` is the template's, whose source is the values file. Any OTHER
+    YAML file that does not parse is red, named: the line fallback is for templates, and for a broken workflow
+    or compose file it would be a silent pass;
   - in every tracked `Dockerfile`/`Containerfile`, every `FROM` and every `COPY --from=`;
   - in every tracked Python file, every module-level `<NAME>IMAGE = "<ref>"` constant — how the backup tool names
     the helper containers it starts.
@@ -103,7 +105,13 @@ def yaml_images(node, path: str = ""):
             yield from yaml_images(item, f"{path}[{index}]")
 
 
+def helm_template(rel: str, charts: set[str]) -> bool:
+    """A file under `<chart>/templates/`, where `<chart>/Chart.yaml` is tracked — derived, not listed."""
+    return any(rel.startswith(f"{chart}/templates/") for chart in charts)
+
+
 files = tracked()
+charts = {rel.rsplit("/", 1)[0] for rel in files if rel.endswith("/Chart.yaml")}
 for rel in files:
     name = rel.rsplit("/", 1)[-1]
     path = ROOT / rel
@@ -111,7 +119,13 @@ for rel in files:
         text = path.read_text()
         try:
             docs = list(yaml.safe_load_all(text))
-        except yaml.YAMLError:
+        except yaml.YAMLError as exc:
+            if not helm_template(rel, charts):
+                # The line fallback was written for Helm templates; for any other file it would be a silent pass
+                # over a broken one (inbox #239: a workflow that did not load at all went unremarked here).
+                fail(f"{rel} does not parse as YAML ({str(exc).splitlines()[0]}), and it is not a Helm template — "
+                     f"the only kind read line by line — so no image in it can be checked. Fix the file.")
+                continue
             for number, line in enumerate(text.splitlines(), 1):
                 match = YAML_LINE.match(line)
                 if match and "{{" not in line:

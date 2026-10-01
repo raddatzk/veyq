@@ -17,7 +17,17 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   tasks cover the Dockerfile's build too, but **not `quarkusDev`**: its `quarkusBootstrapResolverConfiguration` is
   resolved only when the task *executes*, so after a Quarkus bump also start `quarkusDev` once against the
   written metadata and add what it refuses (2026-09-28: two POMs were missing and the dev backend would not
-  start). Read the diff before committing it; its checksums are trusted on first write. The only trust rules are
+  start). Read the diff before committing it; its checksums are trusted on first write. **A write only adds — so
+  a removal or replacement also prunes.** Gradle never removes an entry ("there's no way for Gradle to know upfront
+  if a dependency will effectively be used", its dependency-verification docs), and no buildless check can know
+  either: the file holds ~1000 components against the ~24 coordinates the build scripts spell
+  (`grep -c '<component ' gradle/verification-metadata.xml`); the rest exist only in the resolved graph. So after
+  a dependency leaves: empty the `<components>` element (keep `<configuration>` — `verify-metadata` and the trust
+  rules), run the cold-home write above, start `quarkusDev` once and add what it refuses, and read the diff
+  against the committed file — every component that vanished must trace to the change. The proof is the same
+  cold-home `help check quarkusBuild pitest` **without** the write flag: green there means nothing pruned is
+  still fetched. Gradle's own `--dry-run` alternative misses configuration-time resolution, so it is not
+  enough here. The only trust rules are
   for what an IntelliJ sync fetches and nothing runs: the `-sources`/`-javadoc` jars and the Gradle
   distribution's `-src` zip. `scripts/validate_build_input_pins.py` holds all of this, plus the one generator
   version the three surfaces run.

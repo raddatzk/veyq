@@ -50,7 +50,9 @@ A backend ref must name a test some CI run EXECUTES (ADR 0040: a test no CI run 
   environment, of which the workflow files are only part (`CI`, `GITHUB_*` are runner presets); JRE,
   architecture and native-image gates are simply not decided. Any `@Enabled…`/`@Disabled…` name counts as a
   gate, so a new one is red until someone decides it here. With no qualifying run at all, no backend ref makes
-  a claim, and that is reported once.
+  a claim, and that is reported once. A workflow that does not parse as YAML is red, named — GitHub runs nothing
+  from it, so it adds no run, and skipping it in silence would hide a run that stopped existing (inbox #239:
+  `mutation.yml` once failed to load over an unquoted `: `, and this guard stepped around it without a word).
   The defect that bought it. `BlobBatchE2ETest.uploadThenDownloadRoundTripsBytes` — gated on `VEYQ_S3_E2E=1`,
   which no workflow sets — was cited under `uc.memory.gallery` / `download-original` until 6f19923 moved it to
   a gap. Every structural check passed: the file, the method and its body were all real. ADR 0040 Decision 3
@@ -600,8 +602,13 @@ def ci_backend_runs() -> list[CiRun]:
     for wf in sorted([*WORKFLOWS.glob("*.yml"), *WORKFLOWS.glob("*.yaml")]):
         try:
             data = yaml.safe_load(wf.read_text()) or {}
-        except yaml.YAMLError:
-            continue  # a workflow GitHub cannot parse runs nothing
+        except yaml.YAMLError as exc:
+            # A workflow GitHub cannot parse runs nothing — right for this question, so it adds no run. But it is
+            # never skipped in silence: a broken workflow is red here, named, because nothing else in this guard
+            # would notice that a run it was counting on has quietly stopped existing (inbox #239).
+            errors.append(f"{rel(wf)}: does not parse as YAML ({str(exc).splitlines()[0]}), so GitHub runs "
+                          f"nothing from it and no test run it declares can be counted — fix the file")
+            continue
         on = data.get("on", data.get(True))  # YAML 1.1 reads a bare `on:` key as the boolean True
         triggers = {on} if isinstance(on, str) else set(on or ())
         if not triggers & CI_TRIGGERS:
