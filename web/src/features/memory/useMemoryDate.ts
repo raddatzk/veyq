@@ -1,4 +1,4 @@
-// uc.memory.date-place (web) — the Memory-date reactive slice of MemoryDetail, extracted into a composable
+// uc.memory.date (web) — the Memory-date reactive slice of MemoryDetail, extracted into a composable
 // (cr-0145, audit #77/P4a). The effective range is sealed on the NODE under K_mem (operator-blind) and shown in
 // the header; an editor sets a manual mode or `auto`. `auto` is **materialized** from the Memory's own media and
 // self-heals on open + after an upload batch. Pure date maths live in `./memoryDate`; this composable owns only

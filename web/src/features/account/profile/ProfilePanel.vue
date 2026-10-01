@@ -1,5 +1,5 @@
 <script setup lang="ts">
-// uc.account.profile (web, cr-0083 / ADR 0023) — the "Your profile" rubric of the settings hub: edit your
+// en.spaces.member-identity (web, cr-0083 / ADR 0023) — the "Your profile" rubric of the settings hub: edit your
 // per-tenant `username` (plaintext handle) + your real name (first + last), which is **sealed under K_tenant**
 // on-device before it leaves the browser (operator-blind). The tenant key is opened on demand (openOwnNameKey)
 // so the panel works from any active space; a member without a tenant grant yet can still set their username.

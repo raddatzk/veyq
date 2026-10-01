@@ -172,3 +172,4 @@ kann.
   invite this member invite extends)
 - Concept: [Scopes & Tenancy](../../../crosscutting/scopes-and-tenancy.md), [Security Model → key-directory
   trust](../../../crosscutting/security-model.md)
+- End-user view (wiki): [Who gets into your space](../../../../wiki/en/who-gets-into-your-space.md)

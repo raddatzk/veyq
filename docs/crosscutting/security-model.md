@@ -5,7 +5,9 @@
 > operational metadata and a blind job queue, and never holds a key that opens content. Every other
 > concept — processing, search, sharing, recovery, deletion — is designed around this.
 >
-> Plain-language companion for end users: [wiki: Is my data safe?](../../wiki/en/is-my-data-safe.md).
+> Plain-language companions for end users (wiki): [Is my data safe?](../../wiki/en/is-my-data-safe.md) and
+> [What happens to my photos when quantum computers arrive?](../../wiki/en/quantum-computers-and-your-photos.md);
+> for operators, [Running your own instance](../../wiki/en/running-your-instance.md).
 > Sibling engineering docs: the [account & key model](../features/account/enablers/en.account.key-model.md), the
 > [scopes & tenancy model](scopes-and-tenancy.md); byte formats live in the conformance-pinned suite ([`packages/crypto/src/v1.ts`](../../packages/crypto/src/v1.ts)) and its vectors ([`contracts/crypto/vectors/v1.json`](../../contracts/crypto/vectors/v1.json)), and what every seal binds is [ADR 0072](../decisions/0072-a-seal-binds-its-object.md).
 

@@ -101,3 +101,4 @@ erforderlich" das Teilen mit noch nicht verifizierten Personen.
   model, §4 = strict mode), [ADR 0017](../../../decisions/0017-crypto-primitives-and-post-quantum-strategy.md)
   (the fingerprint / safety-number), [ADR 0026](../../../decisions/0026-client-trust-tiers.md) (the trust tier
   this rides on)
+- End-user view (wiki): [Is my data safe?](../../../../wiki/en/is-my-data-safe.md)

@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/account/use-cases/uc.account.onboard-device.md; pair: en/adding-another-device.md -->
 # Ein weiteres Gerät hinzufügen
 
 Eine verständliche Ergänzung zu [Konto-Schlüssel & Wiederherstellung](konto-schluessel-und-wiederherstellung.md).

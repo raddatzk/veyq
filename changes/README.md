@@ -485,6 +485,13 @@ goes back to the CR that caused it. So a CR refined for a wave **names those gua
 `cr-wrap-methods-survivor-whitelist` said "every `scripts/validate_*.py`", and its session duly ran a second
 `validate_guard_gaps.py` beside a neighbour's while a web test timed out under the load.
 
+**A rename in a wave reaches sibling CRs it must not edit.** `cr-doc-citations-resolve-from-code` renamed a
+guard that three CRs in flight in the same wave named in their done-when. Repointing them from its own branch
+would have turned each sibling's checkbox ticks on that very line into a text conflict, and the sibling's own
+close into a modify/delete. So the renaming CR still greps `changes/` (§ the locator), but it routes what it
+finds instead of editing it: it leaves live sibling CRs alone, names them in its hand-off, and the coordinating
+session repoints them after the merge.
+
 **And a clean merge of a wave is not a semantic merge where a CR CLASSIFIES what the server answers.** A
 predicate over statuses or error codes meets a neighbour's new code only in the merged tree, and no text conflict
 points there. `cr-one-sign-out-path` ended a session on any authoritative 4xx; `cr-scope-access-gate`, in the same

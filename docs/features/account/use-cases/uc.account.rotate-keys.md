@@ -163,3 +163,4 @@ vergleicht — bevor du wieder drin bist.
   [uc.account.onboard-device](uc.account.onboard-device.md) (E4 — the mistake this answers),
   [uc.spaces.verify-identity](../../spaces/use-cases/uc.spaces.verify-identity.md) (the re-admission review),
   [uc.account.recover-access](uc.account.recover-access.md) (the other cold path)
+- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)

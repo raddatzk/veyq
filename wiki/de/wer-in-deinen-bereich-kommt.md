@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/spaces/use-cases/uc.spaces.add-member.md, docs/features/spaces/use-cases/uc.spaces.manage-member-invites.md; pair: en/who-gets-into-your-space.md -->
 # Wer in deinen Bereich kommt
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Dein gemeinsamer Bereich

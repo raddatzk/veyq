@@ -147,3 +147,4 @@ auf, wo du es in einem Jahr noch findest.
 - [uc.admin.setup-server](uc.admin.setup-server.md) — how the empty instance a restore targets comes into being
 - [architecture §10](../../../architecture/README.md) — the durability bar this exists to make executable
 - [infra/README](../../../../infra/README.md) — the stack the procedure operates on
+- Operator view (wiki): [Running your own instance](../../../../wiki/en/running-your-instance.md)

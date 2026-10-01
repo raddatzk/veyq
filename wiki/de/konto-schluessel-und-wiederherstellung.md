@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: en/account-keys-and-recovery.md -->
 # Konto-Schlüssel & Wiederherstellung
 
 Eine verständliche Ergänzung zu [Sind meine Daten sicher?](sind-meine-daten-sicher.md). Weil veyq

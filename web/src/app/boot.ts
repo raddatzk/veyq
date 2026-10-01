@@ -1,4 +1,4 @@
-// App boot sequence (uc.platform.app-shell): before any content loads, discover the instance's state and
+// App boot sequence (uc.admin.setup-server step 1): before any content loads, discover the instance's state and
 // route accordingly. A fresh instance lands on first-run setup; an already-set-up instance on the (stubbed)
 // login; an unreachable instance surfaces a clear error state rather than a blank/broken screen.
 //

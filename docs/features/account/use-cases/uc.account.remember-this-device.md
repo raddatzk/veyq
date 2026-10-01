@@ -134,3 +134,4 @@ bleibt nichts zurück.
 - Related use-cases: [unlock](uc.account.unlock.md) (the floor — the first-sign-in path),
   [trust-device](uc.account.trust-device.md) (the DEVICE wrap),
   [sessions](uc.account.sessions.md) (removing this wrap for a device that is not in hand).
+- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)

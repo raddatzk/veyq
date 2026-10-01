@@ -208,3 +208,4 @@ Key.
 - Related use-cases: [unlock](uc.account.unlock.md) (the DEVICE wrap is one of its unlock paths; PASSWORD is
   the floor); passkey — planned (biometric / WebAuthn PRF); onboard device — planned (QR / push); manage
   sessions — planned
+- End-user view (wiki): [Account keys & recovery](../../../../wiki/en/account-keys-and-recovery.md)

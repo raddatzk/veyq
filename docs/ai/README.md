@@ -246,10 +246,10 @@ A refined CR nails **decisions, not keystrokes**:
 - **Internal** (`docs/`): precise, English, for devs + agents. The technical security model lives here.
 - **Published** (`wiki/`): plain language, **EN+DE**, for the **non-technical end user** who wants to
   know *what they can do* and *why their data is safe*.
-- **Single source, derive the wiki.** Each use-case carries a short plain-language
-  "What this means for you / Was das für dich bedeutet" section (EN+DE); the wiki is assembled from
-  those + the plain-language safety pages. Never maintain a parallel page tree by hand. (The Python
-  generator is deferred; the section is authored from day one so it's free later.)
+- **Hand-written pages that name their source.** Each use-case carries a short plain-language
+  "What this means for you / Was das für dich bedeutet" section (EN+DE), the material a wiki page draws on.
+  The pages are written by hand, one per topic, and each declares the docs it speaks for, which link it back
+  ([`../features/README.md`](../features/README.md) § use-case format).
 
 ## What counts as verified
 
@@ -359,7 +359,7 @@ this section only points at it (rule 2) — assembling this picture by hand each
 - **Reuse the existing UI — never invent new UI.** The built product is the design source: `web/` is whole, so
   the nearest built screen answers almost every question. The rule and its details live once, in
   [`../crosscutting/ui-web-styleguide.md`](../crosscutting/ui-web-styleguide.md) § Reuse first — not here.
-- **Start light.** Heavier machinery — validators, hooks, the wiki generator, the full `contracts/`
+- **Start light.** Heavier machinery — validators, hooks, the full `contracts/`
   tree, `.claude/` commands + subagents — is added when there is code/feature surface that justifies
   it, not up front.
 

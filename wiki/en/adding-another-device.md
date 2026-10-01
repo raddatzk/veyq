@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/account/use-cases/uc.account.onboard-device.md; pair: de/ein-weiteres-geraet-hinzufuegen.md -->
 # Adding another device
 
 A plain-language companion to [Account keys & recovery](account-keys-and-recovery.md). You can let a new

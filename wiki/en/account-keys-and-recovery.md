@@ -1,3 +1,4 @@
+<!-- speaks-for: docs/features/account/enablers/en.account.key-model.md, docs/features/account/use-cases/uc.account.remember-this-device.md, docs/features/account/use-cases/uc.account.trust-device.md, docs/features/account/use-cases/uc.account.sessions.md, docs/features/account/use-cases/uc.account.rotate-keys.md, docs/features/account/use-cases/uc.account.recover-access.md; pair: de/konto-schluessel-und-wiederherstellung.md -->
 # Account keys & recovery
 
 A plain-language companion to [Is my data safe?](is-my-data-safe.md). Because veyq is end-to-end

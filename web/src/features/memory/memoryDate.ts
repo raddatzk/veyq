@@ -1,5 +1,5 @@
-// en.memory.date (web) — a Memory's curated date, sealed on the NODE under its `K_mem` (uc.memory.date-place,
-// cr-0067). Operator-blind: the effective day range travels in one client-versioned JSON blob `wrappedMeta`
+// uc.memory.date (web) — a Memory's curated date, sealed on the NODE under its `K_mem` (cr-0067).
+// Operator-blind: the effective day range travels in one client-versioned JSON blob `wrappedMeta`
 // `{ v, date: { mode, from?, to? }, location? }` (the place slice rides the same blob — no contract change),
 // AEAD-sealed under `K_mem` (AAD context `node-meta`) so the server only ever holds ciphertext. The range is
 // **materialized** for every mode — the browse card grid shows + sorts by it WITHOUT loading a Memory's media.
