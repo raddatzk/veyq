@@ -110,6 +110,8 @@ def scanned_files():
         for p in sorted(root.rglob("*")):
             if p.suffix not in suffixes:
                 continue
+            # Relative, never `p.parts`: a checkout under a directory named `build` (or any other excluded name)
+            # would otherwise exclude every file, and the guard would report green over nothing.
             if EXCLUDE_PARTS & set(p.relative_to(ROOT).parts):
                 continue
             yield p
