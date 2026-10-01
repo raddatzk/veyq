@@ -18,12 +18,18 @@ the code*, changes/README.md):
      the `-sources`/`-javadoc` jars and the Gradle `-src` zip an IDE sync needs (none of them executes); and no
      tracked `gradle.properties`
      sets `org.gradle.dependency.verification`, which would turn it lenient or off for every run.
+  5. **The wrapper JAR is pinned.** Every tracked `gradle-wrapper.jar` hashes to a 64-hex line of
+     `scripts/gradle_wrapper_jar.sha256` (whose header names the services.gradle.org checksum it was cross-checked
+     against), and no tracked workflow turns `validate-wrappers` off — CI's own check of the same JAR against
+     Gradle's published list.
 
 **The defect that bought it.** Live when this guard was written (2026-09-27, cr-build-inputs-pinned): the npm
 wrapper downloaded the generator JAR with no checksum and ran any file already in its storage dir, the wrapper
 properties carried no distribution checksum, the backend had no verification metadata, and the backend
 generated with openapi-generator 7.21.0 while both clients used 7.23.0. Nothing noticed any of it, because a
-build that fetches an unchecked input is exactly as green as one that fetches a checked one.
+build that fetches an unchecked input is exactly as green as one that fetches a checked one. Check 5 was added
+2026-09-28 (inbox #189) with no incident behind it: the JAR that does the verifying was a tracked binary no review
+could read, and a swapped one passed every check above.
 
 **Its limits — what a green run does NOT prove.** It reads files and contacts no repository, so it cannot tell a
 right checksum from a wrong one: that the pin, the wrapper sum and every metadata entry are the published bytes
@@ -32,10 +38,13 @@ is what `generate:api`, the wrapper and Gradle each check when they run, and all
 it lacks fails the build that resolves it, which is the intended failure, not one this guard foresees; so a new
 task, plugin or OS-specific artifact still owes a `--write-verification-metadata` run. It does not see a
 `--dependency-verification` flag or `-F` passed on a command line, and it does not verify signatures, only
-checksums. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, and npm packages are the lockfile's.
+checksums. Check 5 proves the JAR is the pinned bytes, not that the pin is Gradle's: a swapped JAR plus a matching
+new pin line is green here, and only that one readable pin line in the diff (and CI's wrapper validation against
+Gradle's published list) shows it. The Dockerfile `FROM` lines are `validate_image_pins.py`'s, and npm packages are the lockfile's.
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
 
+import hashlib
 import json
 import pathlib
 import re
@@ -45,6 +54,8 @@ import xml.etree.ElementTree as ET
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PIN_FILE = ROOT / "scripts/openapi_generator_jar.sha256"
+WRAPPER_JAR_PIN_FILE = ROOT / "scripts/gradle_wrapper_jar.sha256"
+WORKFLOW_DIR = ".github/workflows/"
 VERIFIER = "scripts/verify_openapi_generator_jar.mjs"
 
 SKIP_PREFIXES = ("changes/", "docs/", "wiki/")
@@ -95,12 +106,12 @@ def generator_versions(files: list[str]) -> dict[str, str]:
     return found
 
 
-def pinned_versions() -> dict[str, str]:
-    if not PIN_FILE.is_file():
-        fail(f"{PIN_FILE.relative_to(ROOT)} is missing — generate:api has nothing to check the JAR against")
+def pinned_versions(pin_file: pathlib.Path = PIN_FILE) -> dict[str, str]:
+    if not pin_file.is_file():
+        fail(f"{pin_file.relative_to(ROOT)} is missing — there is nothing to check the JAR against")
         return {}
     pins: dict[str, str] = {}
-    for line in PIN_FILE.read_text().splitlines():
+    for line in pin_file.read_text().splitlines():
         line = line.strip()
         if line and not line.startswith("#"):
             parts = line.split()
@@ -152,6 +163,28 @@ def check_wrapper(files: list[str]) -> None:
                  f"(`./gradlew wrapper` drops it unless given --gradle-distribution-sha256-sum)")
 
 
+def check_wrapper_jar(files: list[str]) -> None:
+    jars = named(files, "gradle-wrapper.jar")
+    if not jars:
+        fail("no tracked gradle-wrapper.jar — re-anchor this guard")
+    pins = pinned_versions(WRAPPER_JAR_PIN_FILE)
+    for version, sha in pins.items():
+        if not HEX64.match(sha):
+            fail(f"{WRAPPER_JAR_PIN_FILE.relative_to(ROOT)}: the pin for {version} is not a 64-hex SHA-256: {sha!r}")
+    for rel in jars:
+        actual = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
+        if actual not in pins.values():
+            fail(f"{rel} hashes to {actual}, which no line of {WRAPPER_JAR_PIN_FILE.relative_to(ROOT)} pins — compare "
+                 f"it with services.gradle.org/distributions/gradle-<v>-wrapper.jar.sha256 before adding one")
+    workflows = [p for p in files if p.startswith(WORKFLOW_DIR) and p.endswith((".yml", ".yaml"))]
+    if not workflows:
+        fail(f"no tracked workflow under {WORKFLOW_DIR} — re-anchor this guard")
+    for rel in workflows:
+        for n, line in enumerate((ROOT / rel).read_text().splitlines(), 1):
+            if re.match(r"""^\s*validate-wrappers\s*:\s*["']?false["']?\s*(#.*)?$""", line):
+                fail(f"{rel}:{n}: `{line.strip()}` turns off CI's validation of the wrapper JAR")
+
+
 def check_verification(files: list[str]) -> None:
     roots = sorted({str(pathlib.PurePosixPath(p).parent) for p in named(files, "gradlew")})
     if not roots:
@@ -186,13 +219,14 @@ def main() -> int:
     if files:
         check_generator(files)
         check_wrapper(files)
+        check_wrapper_jar(files)
         check_verification(files)
     if errors:
         for e in errors:
             print(f"::error::build-input pins: {e}")
         return 1
     print("build-input pins: one generator version, pinned and verified on every generate:api; "
-          "wrapper distribution checksummed; Gradle dependency verification on")
+          "wrapper distribution checksummed, wrapper JAR pinned; Gradle dependency verification on")
     return 0
 
 

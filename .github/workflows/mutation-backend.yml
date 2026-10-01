@@ -87,7 +87,7 @@ jobs:
           java-version: "21"
 
       - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@48b5f213c81028ace310571dc5ec0fbbca0b2947 # v4
+        uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a # v4.4.3
 
       # The incremental history is the CI cache (ADR 0045 §4): PIT re-tests only mutants whose code or covering
       # tests changed since the cached run. Restored best-effort (restore-keys), a fresh copy saved each run so the

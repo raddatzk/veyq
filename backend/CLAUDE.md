@@ -8,7 +8,8 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   up -d` starts it; data survives restarts (Flyway migrates once, then "up to date"). `docker compose -f
   infra/docker-compose.yml down -v` wipes it for a fresh instance. The H2 fallback is only the test default now.
 - **Every dependency is checksum-verified** (`gradle/verification-metadata.xml`, ADR 0057 §6), and so is the
-  wrapper's distribution (`distributionSha256Sum`). A dependency, plugin or Quarkus bump therefore regenerates
+  wrapper's distribution (`distributionSha256Sum`) and the wrapper JAR itself (`scripts/gradle_wrapper_jar.sha256`
+  — a `./gradlew wrapper` that rewrites the JAR owes it a line, cross-checked as its header says). A dependency, plugin or Quarkus bump therefore regenerates
   the metadata by hand (Dependabot is remembered not to): `GRADLE_USER_HOME=$(mktemp -d) ./gradlew
   --write-verification-metadata sha256 help check quarkusBuild pitest`. **The empty Gradle home is the point** —
   a warm cache hides what a cold one fetches: the first write, from a warm cache, missed
