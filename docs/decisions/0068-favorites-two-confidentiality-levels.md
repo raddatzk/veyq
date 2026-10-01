@@ -53,7 +53,8 @@ constraint; raising the cap only buys a larger per-toggle upload.
 | surfaces | sidebar Favorites, heart on card/detail | gallery filter + per-tile aggregate |
 
 The typed single-envelope shape is **rejected**: one blob has one key, so it can serve only one audience.
-Both plaintexts stay **bare id arrays**; the versioning axis is the resource, not a `v` field inside the seal.
+The pin's plaintext is a **bare id array**; the mark's is `{"tag", "ids"}`, the ids beside the self-tag that says
+whose they are (§9). Neither carries a `v` field: the versioning axis is the resource.
 
 **2. "The member's own key" means the master key, not an asymmetric seal to the identity key.**
 [ADR 0014](0014-group-scopes-and-governance.md) §7 names the *property* (private to the member, on every device
@@ -69,8 +70,8 @@ where the fallback survives. One seal, every scope. That is what makes the guara
 *a member's Memory favorites must not open with `K_SC` in hand* — in **any** scope, with no case exempted.
 
 **4. Item favorites are partitioned per node — and the partition key is chosen for what it does not leak.**
-One blob per **(member, scope, node)**, not per (member, scope). The ceiling becomes 1 259 ids *per Memory*,
-which is beyond a Memory's practical media count, and a toggle re-uploads only that Memory's set. Nothing
+One blob per **(member, scope, node)**, not per (member, scope). The ceiling becomes 1 257 ids *per Memory* (the
+table's 1 259, less the self-tag's fixed 61 bytes, §9), which is beyond a Memory's practical media count, and a toggle re-uploads only that Memory's set. Nothing
 consumes item favorites outside a single gallery (§7), so nothing needs the scope-wide set.
 
 Three alternatives were rejected, and for the same reason each time — they pay for the fix in **metadata**:
@@ -92,9 +93,13 @@ smaller upload is the bonus, not the argument.
 
 - `GET` / `PUT /api/scopes/{scopeId}/favorites` — unchanged shape, one blob per (user, scope). It returns the
   **caller's** blob and never another member's. Only the seal changes (§1).
-- `GET /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` → `[{ memberId, ciphertext }]`, every member's blob
-  including the caller's. `PUT` writes **only the caller's**. Authorisation stays member-gated; a non-member
-  gets `404`, like the tree.
+- `GET /api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` → `[{ self, ciphertext }]`, every member's blob
+  including the caller's, which the server flags `self`. No member id: the array separates the members, and
+  `self` is the one fact the client cannot derive (§9 says what the client checks it against). `PUT` writes
+  **only the caller's**. Authorisation stays member-gated; a non-member gets `404`, like the tree.
+- `GET /api/item-favorites` → `[{ scopeId, nodeId, ciphertext }]`, the **caller's own** blobs across every scope
+  they are an accepted member of — what a Master-Key rotation re-tags (§9). The server already holds exactly these
+  rows under the caller's id, so it learns nothing, and the caller learns only its own.
 
 Operator visibility does not change in kind: the same opaque rows, sizes and coarse timestamps.
 
@@ -110,6 +115,57 @@ In a **personal** scope *"everyone's"* is degenerate: the filter is **hidden**, 
 `K_SC`-sealed node blob is not read, not converted, and not supported back-compatibly. A one-shot re-seal
 fallback was considered and rejected: it would keep the `symWrap`-under-`K_SC` *read* path for Memory favorites
 alive — the precise path §1 closes, and the one a regression would fall back into.
+
+**9. Which entry is mine is proven by my client, not told by the server.** A mark's seal binds (scope, node) and
+not the marking member, because the read names no member (§6, [ADR 0072](0072-a-seal-binds-its-object.md) §3). So
+the server's `self` flag alone would let it present another member's set as the caller's own — and the caller's
+next toggle would then write that set, plus the clicked item, into the caller's own row, erasing their real marks
+and doubling the other member's in every count. So the plaintext carries a **self-tag** and the client checks it:
+
+- `K_self = HKDF-SHA256(masterKey, salt = "", info = "veyq/v1/item-mark-self", 32)`. It must be a secret **only the
+  marking member** holds — from anything a co-member also holds (`K_SC`, a user id, the scope and node ids) they
+  could compute every member's tag by trying each member in turn, which is the attribution §6 forbids. The Master
+  Key is the one such secret every device of the member has, and the server cannot choose it.
+- `tag = HMAC-SHA256(K_self, statement)`, the statement being the canonical `item-mark-self` encoding of the scope,
+  the node and `marks` — SHA-256 over `lp(utf8(id))…` of the marked ids, de-duplicated and sorted. The tag binds the
+  **content**, so two versions of one member's set carry unrelated tags and nothing links across nodes: a co-member
+  learns nothing the unnamed set did not already tell them. Conformance: `contracts/crypto/vectors/v1.json#item_mark_self`.
+- An entry is **mine** only when the server flags it `self` **and** its tag verifies; if several do, the first is,
+  and the rest count as someone else's. Everything not provably mine — a failed tag, no tag, a verifying tag without
+  `self` — **counts as another member's set**, and the caller's own set is then empty: a degradation, never a
+  refusal, because each of these outcomes is one the operator can already cause by deleting the caller's row. What
+  this guarantees is the integrity direction: **another member's marks are never shown as mine, and a toggle never
+  writes another member's set into my row.** *"Only mine"* stays a filter, not a promise.
+- **A Master-Key rotation re-tags.** It reads the caller's own rows (§5), opens each with that scope's `E_0`, and
+  re-seals under the new `K_self` only those whose tag verifies under the **old** one — the listing is the server's,
+  a hint and not a proof, so a co-member's blob slipped into it stays not-mine. Best-effort like the other
+  Master-Key riders: a Memory whose re-tag does not land reads as degraded above until its next toggle.
+
+Rejected: **the tag alone, without `self`** — every co-member opens the caller's blob and can copy it, tag and all,
+into their own row; the honest server's `self` is what tells that copy from the original, so neither half is
+removable. **A static per-node tag** — it sits inside a plaintext every co-member reads, so it is a copyable
+credential: with the server's help, pasted onto a set of their choosing, it would show as the caller's own.
+Content-bound, the most a colluder can do is replay a set the caller really once had, which is freshness
+([ADR 0072](0072-a-seal-binds-its-object.md) §5), not forgery. **A MAC over the ciphertext as a wire field** —
+equally sound, but a contract field on two schemas, a column, a migration and one more opaque value per row for the
+operator; inside the seal it costs a fixed 61 bytes that carry no information. **Refusing** an unverifiable own
+entry — it adds a UI state and strands the one honest producer of one, a rotation whose re-tag did not land.
+
+**What the per-tile count is not: operator-proof.** The aggregate is exactly as honest as the operator. Over one
+node's marks it can, on its own, (R1) withhold any entry, down to a count of zero; (R2) serve an earlier version of
+a member's set in place of the current one; (R3) keep serving a removed member's set by skipping the delete; and
+(R5) serve stored sets again as **extra entries**, inflating the count without bound on any item some member ever
+marked there. With any member the scope ever had — they all hold `E_0` — it can also (R4) forge any number of
+entries with any content. The *everyone's* filter is a union, so extra entries do not move it beyond R2. None of
+this reaches confidentiality or, after the self-tag, the caller's own row. Two closings of R5 were weighed and
+rejected: **(B) de-duplicating equal tags** bounds a replay of one version only, since a member's distinct
+historical sets still each count, and it carries a trap — an own entry merged with a same-tag one would let a
+co-member who copies the caller's tag launder their ids into the caller's row; **(C) a per-(member, node)
+pseudonym inside the plaintext**, counting distinct pseudonyms, caps server-alone inflation at one count per member
+per Master-Key generation, but moves §6 from anonymous to pseudonymous per node (co-members could link every
+version of one member's set) and still leaves R1, R2 and R4 open. **Re-open (C)** once marks stop sealing under
+`E_0` (so a former member can no longer forge) **and** a freshness floor covers them: replay is then the last power
+over the count. The plaintext is JSON, so a later optional field is additive.
 
 ## Consequences
 
@@ -138,7 +194,9 @@ alive — the precise path §1 closes, and the one a regression would fall back 
   set is the **third** rider on that path, and omitting it means a rotation silently empties every user's
   Favorites — a degradation, not a lockout, since an unreadable blob decodes to the empty set, but a silent one.
   This is the cost of choosing the master key over `K_SC@E_0`, and it is stated here because no doc↔code delta
-  could find it: nothing is drifting, the rule simply would not have been written.
+  could find it: nothing is drifting, the rule simply would not have been written. The mark's self-tag (§9) is the
+  **fourth** rider: its key derives from the Master Key, so without a re-tag a rotation would empty *only mine* on
+  every Memory and the first toggle on each would replace the old set.
 - **Cross-feature lifecycle is now owed on a second table.** Scope purge must reclaim the item-favorite rows,
   node deletion must drop the rows under it, and a member whose grant is revoked leaves a blob that would keep
   counting into the aggregate. These are named here because the doc↔code delta cannot find them: nothing is
