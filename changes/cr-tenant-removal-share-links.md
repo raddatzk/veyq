@@ -1,7 +1,7 @@
 ---
 id: cr-tenant-removal-share-links
 title: A tenant-member removal marks every link a departed member could copy, and can turn the tenant's links off
-status: planned
+status: in-progress
 satisfies: [uc.sharing.share-shared-scope, uc.spaces.remove-tenant-member, uc.spaces.manage-group-members]
 adrs: ["0025", "0029", "0024", "0060", "0036"]
 invariants: [operator-blind E2EE, API-first]

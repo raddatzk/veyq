@@ -24,7 +24,12 @@ Who may hold a link is wider than "the people it was handed to":
   on.
 
 Shares exist in personal, group and tenant scopes (ADR 0029 §6). A group rotates on removal, the tenant does not,
-personal has no removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)).
+personal has no removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)). So the scope epoch is no removal
+signal on its own: a tenant's epoch never moves on a removal — it moves only when a member's account key rotation
+queues a rotation of every shared scope they belong to ([ADR 0060](0060-key-rotation-after-compromise.md) §5) — and a
+group a tenant removal cuts the member from has its rotation only *queued* to another key-holder, so until a device
+runs it that group's epoch has not moved either. A removed tenant member's reach is still a removed group member's:
+every enabled link on every tenant-scope Memory, rebuildable from its recovery copy.
 
 ## Decision
 
@@ -46,23 +51,51 @@ personal has no removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)).
    zero — no new power, since a member can already mint a fresh link.
 3. **The old link 404s, with no redirect.** It answers exactly as a revoked one. A redirect from the old id would
    hand the new id to the very person the re-issue is for; the curator hands out the new link.
-4. **Re-activation refuses a link a departed member may hold** — `409 reissue_required` when the share's owner is
-   no longer a member of its scope, **or** its recovery copy is sealed below the scope's current epoch. A share
-   with no recovery copy is judged by the first test alone: no member could have rebuilt its link. The UI offers a
-   re-issue there instead. This supersedes ADR 0029 §6's "any remaining member may re-activate it". The epoch half
-   has one false positive: a key rotation after a compromise
-   ([ADR 0060](0060-key-rotation-after-compromise.md) §5) moves the epoch of every scope the account is in, so the
-   panel's hint reads "made before the group's key last changed", not "before someone left".
-5. **A group removal can turn every link off.** The removal-rotation takes an opt-in `revokeLinks`, valid only with
-   `removesUserId` (`400` otherwise), unchecked by default in the removal confirmation. In the removal's own
-   transaction it turns off every enabled share of the scope; each share's owner then re-issues the ones they still
-   want. A forced switch-off on every removal was rejected — it breaks every guest's link even on an amicable
-   removal; offering only a re-issue was rejected because revoke is owner-gated, so the remover could not act on a
-   co-member's link. The group-owner power this adds is dominated by one they hold already: deleting the group
-   turns off every link in it.
-6. **Tenant scopes** are covered only by Decisions 1 and 4: re-issue works there, and a removed tenant member's own
-   links cannot be re-activated. A tenant removal does not rotate the scope (ADR 0025), so the epoch half never
-   fires on one; a tenant-side switch-off is a separate decision.
+4. **Re-activation refuses a link a departed member may hold** — `409 reissue_required` — when any one of these
+   holds, as one pure predicate (`ReissuePolicy`):
+   - the share was turned off by a **bulk switch-off** (point 5's `reissue_only` mark);
+   - its **owner** is no longer a member of its scope — they hold their own link;
+   - its recovery copy is sealed **below the scope's current epoch**, or the scope has lost an accepted member
+     **since the share was minted** — every member at that time could rebuild the link from the copy, one removed
+     since included.
+
+   The last test needs a removal signal that holds on every scope kind, so each scope carries a **removal counter**
+   (`member_removals`), bumped in the transaction of every removal of an accepted member — the group's
+   removal-rotation and the tenant cascade, for the TENANT scope and for each GROUP it cuts — and each share
+   stamps the counter it was minted under (`member_removals_at_mint`). Rotating the tenant on removal instead was
+   rejected by ADR 0025 (`O(N)` on the primary scope); comparing a share's `createdAt` with a scope's last removal
+   was rejected because two replicas stamp with their own clocks, misfiling a share made seconds around a removal.
+   The counter is exact and one integer, and it tells the operator nothing the membership deletes did not.
+   The epoch test stays beside it: its one "false positive", an account key rotation after a compromise, is a case
+   where a stolen device could list and rebuild every link as well as a departed member could.
+
+   A share with **no** recovery copy is judged by the first two tests alone: no other member could have rebuilt its
+   link. The server computes the predicate once per share for both readers — the refusal and the manage list's
+   `reissueRequired` flag — so the panel's mark and the refusal cannot disagree; the client no longer compares
+   epochs itself. The panel offers a re-issue where it is set, and its hint names both causes: *made before someone
+   left this space or replaced their keys*. This supersedes ADR 0029 §6's "any remaining member may re-activate it".
+5. **Turning off every link of a scope sticks.** Every bulk switch-off goes through one store body: it sets
+   `enabled = false` **and** the per-row mark `reissue_only` on every enabled share of the scope, and each such share
+   comes back only by re-issue (a re-issue mints a new row, so the mark never travels). A switch-off says *a link
+   may have leaked*, and a link with no recovery copy leaks like any other — without the mark, the removal counter
+   would let any member re-activate such a link with one click after a switch-off that removed nobody. A mark on
+   the rows it writes is exact and needs no event model; a share minted afterwards is untouched by construction.
+   Three paths reach it, each unchecked by default behind a confirmation that names the effect:
+   - a **group removal**: the removal-rotation's opt-in `revokeLinks`, valid only with `removesUserId` (`400`
+     otherwise), in the removal's own transaction;
+   - a **tenant removal**: the same `revokeLinks`, as a query flag on `removeTenantMember` (a `DELETE` carries no
+     body), in the cascade's transaction and nothing written if the removal refuses. It reaches the **TENANT scope's**
+     shares only: the tenant owner need not be a member of a co-shared group and cannot see its links; there the
+     removal counter marks every link at once and the group's owners re-issue;
+   - a **standalone switch-off** by any **owner of the scope** — group owners, tenant owners, the personal scope's
+     owner, one gate (`isScopeOwner`) — through `revokeScopeShares`, which answers how many links it turned off. The
+     web offers it in the group and tenant panels, not in the personal space, where no one else can revive a link
+     and a per-link revoke already does everything it would.
+
+   A forced switch-off on every removal was rejected — it breaks every guest's link even on an amicable removal;
+   offering only a re-issue was rejected because revoke is owner-gated, so the remover could not act on a
+   co-member's link. The scope-owner power this adds is dominated by one a group owner holds already: deleting the
+   group turns off every link in it.
 
 ## Consequences
 
@@ -70,7 +103,8 @@ personal has no removal ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)).
   id. Against a dump, a new `K_share` keeps only the *new* share's later password, label and note edits out of a
   departed member's reach; the Memory's content under `K_mem` stays the ADR 0012 class.
 - **The operator learns nothing new.** A re-issue is a create plus `enabled = false`, and `enabled` is already
-  plain.
+  plain; the removal counter counts membership deletes the operator already performs, and `reissue_only` records a
+  switch-off it already served.
 - **A re-issue breaks a link for its guests by design.** The product copy says so: the old link stops working,
   hand out the new one, guests keep their photos but give their name again.
 - That curators actually redistribute the new link is product copy, not something any test can prove.
