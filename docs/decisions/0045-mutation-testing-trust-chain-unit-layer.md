@@ -174,7 +174,9 @@ when CI runs it*; this one adds *a test that runs proves only as much as its ass
   (`expect(hex(frame)).toBe(f.frame)`): any change to `frameAad`/`wrapAad` alters the tag and fails there. So a
   wrong-index or wrong-context test only re-asserts what those two already give — which is why `openFrame`'s
   *"a dropped, reordered or appended frame fails to open"* comment **is** backed, indirectly, and needs no test
-  of its own. Measured, not argued: of 134 mutants in `v1.ts`, **zero** frame-, wrap- or AAD-survivors.
+  of its own. Measured, not argued: the package gate's `--force` run leaves **zero** frame-, wrap- or
+  AAD-survivors (the code now spans `v1.ts`, `primitives.ts` and `seal.ts`; the current mutant counts are stated
+  once, in `packages/crypto/stryker.config.mjs`, and not here, where a figure rotted from 134 to 186 unseen).
   The one rejection **veyq makes itself** — `decodeKdfParams`'s length guard, a plain `if` with no primitive
   behind it — was the gate's only gap, and its test is what took `v1.ts` to 100%. That test pins the error
   *message*, and must keep doing so: unguarded, a short blob still throws (the `DataView` `RangeError` the guard
