@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Fourth round answered by the owner, 2026-10-01: every recommendation added since the third answer is taken too** (incl. the granter-lock questions Q1–Q3 and the rotation CR's Q8/Q9).
+
 **Third round answered by the owner, 2026-10-01: every recommendation added since the second answer is taken too** (questions added by the third refine wave and by implementation hand-backs). Rows those questions proposed exist in `docs/inbox.md` (#233–#243).
 
 Nothing below is decided. Each question carries a recommendation; the CR is written for the recommendations.

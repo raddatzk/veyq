@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Fourth round answered by the owner, 2026-10-01: every recommendation added since the third answer is taken too** (incl. the granter-lock questions Q1–Q3 and the rotation CR's Q8/Q9).
+
 **Added 2026-10-01 by the #233–#235 refine: Q8 and Q9 are open.** They gate only D10 (#234) and D11 (#235).
 Everything decided below, D1–D9 included, keeps its go. Inbox #233, the granter lock, is **not** folded here: it is
 a different mechanism (which key a grant is verified under), it shares no decision with this CR, and it is now its
