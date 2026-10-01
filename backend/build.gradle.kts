@@ -43,7 +43,7 @@ dependencies {
     // fake control plane inside the test JVM is the only proof KubernetesIngressSink can ever offer.
     implementation("io.quarkus:quarkus-kubernetes-client")
 
-    testImplementation("io.quarkus:quarkus-junit5")
+    testImplementation("io.quarkus:quarkus-junit")
     testImplementation("io.quarkus:quarkus-test-kubernetes-client") // @WithKubernetesTestServer: a fabric8 mock API server in-JVM
     testImplementation("io.rest-assured:rest-assured")
     testImplementation(kotlin("test"))
