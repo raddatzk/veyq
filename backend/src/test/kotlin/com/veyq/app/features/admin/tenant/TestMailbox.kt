@@ -83,6 +83,10 @@ class TestMailbox(private val port: Int) : AutoCloseable {
     /** Whether anything at all was delivered to [recipient] — for the "must NOT send" assertions. */
     fun deliveredTo(recipient: String): Boolean = messageTo(recipient) != null
 
+    /** How many messages reached [recipient] — for a budget, where "some" and "one too many" differ. */
+    fun countTo(recipient: String): Int =
+        greenMail.receivedMessages.count { m -> m.allRecipients.any { it.toString().equals(recipient, ignoreCase = true) } }
+
     private fun messageTo(recipient: String): String? =
         greenMail.receivedMessages
             .firstOrNull { m -> m.allRecipients.any { it.toString().equals(recipient, ignoreCase = true) } }

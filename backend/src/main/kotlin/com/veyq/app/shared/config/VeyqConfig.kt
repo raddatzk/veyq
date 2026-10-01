@@ -29,6 +29,7 @@ interface VeyqConfig {
     fun tenant(): Tenant
     fun session(): Session
     fun recovery(): Recovery
+    fun emailConfirmation(): EmailConfirmation
     fun pairing(): Pairing
     fun scope(): Scope
     fun media(): Media
@@ -267,6 +268,22 @@ interface VeyqConfig {
             fun ttl(): Duration
 
             /** How long spent/expired rows are kept, so a replay reads as spent rather than unknown. */
+            @WithDefault("P7D")
+            fun retention(): Duration
+        }
+    }
+
+    /** `veyq.email-confirmation.*` — address-confirmation token lifetimes (ADR 0074 Decision 4). */
+    interface EmailConfirmation {
+        fun token(): Token
+        fun purge(): Interval
+
+        interface Token {
+            /** Long enough to reach a mailbox read once a day; short, because nothing waits on it. */
+            @WithDefault("PT24H")
+            fun ttl(): Duration
+
+            /** How long spent/superseded/expired rows are kept, so a replay reads as spent rather than unknown. */
             @WithDefault("P7D")
             fun retention(): Duration
         }
@@ -633,6 +650,19 @@ interface VeyqConfig {
          *  per-ADDRESS and per-INSTANCE. Deliberately not per-tenant like [invite]: an account is tenant-global,
          *  so a tenant key would bound neither one address nor the instance. Defaults deliberately set. */
         fun recovery(): Recovery
+
+        /** `veyq.ratelimit.email-confirmation.*` — the address-confirmation mail limiter (ADR 0074 Decision 4),
+         *  keyed per ACCOUNT only. Defaults deliberately set, not calibrated. */
+        fun emailConfirmation(): EmailConfirmation
+
+        interface EmailConfirmation {
+            /** Confirmation mails one account may trigger per window. */
+            @WithDefault("3")
+            fun perAccountMaxRequests(): Int
+
+            @WithDefault("3600")
+            fun windowSeconds(): Long
+        }
 
         interface Recovery {
             /** The anti-bombing guard: recovery mails one **address** may trigger per window. */

@@ -226,7 +226,7 @@ phases 1–3 write new prose:
   contract guards are green (`validate_contracts_common.py`, `validate_field_visibility.py`,
   `validate_request_bounds.py`, `validate_http_failure_projection.py`); and `./gradlew check` is **green**,
   because a new tag's `…Api` interface is implemented by nobody yet. Run it once to see that; do not add a stub.
-- [ ] **2 backend.** The migration (I11), the entity, store, handler, resource, mailer, limiter and purge
+- [x] **2 backend.** The migration (I11), the entity, store, handler, resource, mailer, limiter and purge
   (D2–D8), and the three stamp sites (D6). **Done when:** `./gradlew check` is green, with the new slice test
   carrying every bite below. The fixtures in I16 are re-run and green.
 - [ ] **3 web.** Generated client use, the settings card, the mail-settings offer, the `/confirm-email` route and

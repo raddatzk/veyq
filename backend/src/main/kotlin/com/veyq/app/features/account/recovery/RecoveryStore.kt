@@ -83,7 +83,8 @@ class RecoveryStore {
     fun proofKey(userId: String): String? = VeyqUser.findById(userId)?.secretKeyProofPublicKey
 
     /**
-     * Apply the reset. **One transaction, all four writes or none** (ADR 0054 § Decision 3).
+     * Apply the reset. **One transaction, all writes or none** (ADR 0054 § Decision 3). [mailedEmail] is the
+     * recovery row's address, the one the token was mailed to.
      *
      * Deleting every wrap but the survivors ([WrapMethod.SURVIVORS]) is the load-bearing part: a `DEVICE` wrap
      * mixes the old password and would merely fail, but a `DEVICE_KEY` wrap takes no password at all and would
@@ -94,7 +95,9 @@ class RecoveryStore {
      * second floor would be worse than one that refuses).
      */
     @Transactional
-    fun applyReset(userId: String, wrappedKey: String, kdfParams: String, authPublicKey: String, tokenId: String): Boolean {
+    fun applyReset(
+        userId: String, mailedEmail: String, wrappedKey: String, kdfParams: String, authPublicKey: String, tokenId: String,
+    ): Boolean {
         val user = VeyqUser.findById(userId) ?: return false
         val floor = MasterKeyWrapEntity
             .find("userId = ?1 and method = ?2", userId, WrapMethod.PASSWORD.name)
@@ -106,6 +109,10 @@ class RecoveryStore {
 
         MasterKeyWrapEntity.delete("userId = ?1 and method not in ?2", userId, WrapMethod.SURVIVORS)
         AccountRecoveryEntity.update("status = ?1 where id = ?2", AccountRecoveryEntity.CONSUMED, tokenId)
+        // The mailed token plus the Secret Key is the account holder reading the mailbox, so a completed reset
+        // confirms the address it was mailed to, iff the account still holds it (ADR 0074 Decision 2). The one thing
+        // recovery writes about confirmation; it reads none (Decision 3).
+        user.confirmAddress(mailedEmail)
         return true
     }
 

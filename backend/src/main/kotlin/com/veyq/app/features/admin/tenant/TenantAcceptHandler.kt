@@ -138,6 +138,9 @@ class TenantAcceptHandler(
                 store.joinAsMember(tenant.id, userId, invite)
                 profiles.create(userId, tenant.id, username, sealedName)
             }
+            // A member invite only ever travels by mail (ADR 0055 §2), so redeeming it proves the mailbox — keyed on
+            // the invite's ROLE, never on a delivery value (ADR 0074 Decision 2). Every MEMBER sub-branch above.
+            caller.confirmAddress(invite.ownerEmail)
             AcceptOutcome.Activated(tenant.id)
         } else {
             if (tenant.status != TenantEntity.PENDING) return AcceptOutcome.AlreadyActive
@@ -179,8 +182,14 @@ class TenantAcceptHandler(
             secretKeyProofPublicKey = account.secretKeyProofPublicKey,
             wraps = account.wraps,
         )
-        if (invite.role == TenantInviteEntity.MEMBER) store.joinAsMember(tenant.id, userId, invite)
-        else store.activate(tenant.id, userId, birth!!.grant, birth.admission, invite.id)
+        if (invite.role == TenantInviteEntity.MEMBER) {
+            store.joinAsMember(tenant.id, userId, invite)
+            // Mail-only by construction (ADR 0055 §2): the redeemed token is the mailbox proof (ADR 0074 Decision 2).
+            // The OWNER branch is the copy-link and stamps nothing.
+            VeyqUser.findById(userId)!!.confirmAddress(invite.ownerEmail)
+        } else {
+            store.activate(tenant.id, userId, birth!!.grant, birth.admission, invite.id)
+        }
         // The per-tenant identity: the plaintext handle, plus the optional sealed real name when the invitee
         // already holds K_tenant at accept (owner cold-birth / grant-sealed accept — ADR 0023); a grant-less
         // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).

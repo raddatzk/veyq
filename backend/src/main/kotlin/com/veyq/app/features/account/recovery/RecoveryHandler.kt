@@ -165,7 +165,7 @@ class RecoveryHandler(
 
         // One transaction: wrap, auth key, device wraps, sessions, token. A partial apply is a lockout.
         return QuarkusTransaction.requiringNew().call<ResetOutcome> {
-            if (!store.applyReset(row.userId, wrappedKey, kdfParams, authPublicKey, row.id)) {
+            if (!store.applyReset(row.userId, row.email, wrappedKey, kdfParams, authPublicKey, row.id)) {
                 return@call ResetOutcome.TokenNotLive
             }
             sessions.revokeAllForUser(row.userId)
