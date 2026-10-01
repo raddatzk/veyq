@@ -161,7 +161,7 @@ the code is typed wrong, that attempt is over: your phone says so, and you simpl
 the new device. Two honest details. Adding a device gives it **everything**, permanently: it can read every memory you have, and
 signing it out later stops it reaching the server but does not take the key back — so only ever add a device
 you are holding. And a device added this way has no password saved on it, so if it ever forgets its key it
-will ask you for your password or your Emergency Kit.
+will ask you for your password and your Emergency Kit — or you add it again.
 
 **DE —** Du kannst ein neues Handy oder einen neuen Laptop hereinlassen, ohne das Notfall-Kit herauszusuchen:
 ein Gerät, an dem du schon angemeldet bist, gibt dem anderen alles Nötige. Es gibt zwei Wege, und du nimmst
@@ -177,7 +177,8 @@ falsch eingetippt, ist dieser Versuch vorbei: dein Handy sagt es dir, und du fä
 an. Zwei ehrliche Hinweise: Ein hinzugefügtes Gerät bekommt **alles**, dauerhaft — es kann jede deiner Erinnerungen lesen, und
 späteres Abmelden hindert es nur daran, den Server zu erreichen, den Schlüssel nimmt es ihm nicht zurück. Füge
 also nur Geräte hinzu, die du in der Hand hältst. Und ein so hinzugefügtes Gerät hat kein Passwort gespeichert:
-Sollte es seinen Schlüssel je verlieren, fragt es dich nach deinem Passwort oder deinem Notfall-Kit.
+Sollte es seinen Schlüssel je verlieren, fragt es dich nach deinem Passwort und deinem Notfall-Kit — oder du
+fügst es erneut hinzu.
 
 ## Related
 
