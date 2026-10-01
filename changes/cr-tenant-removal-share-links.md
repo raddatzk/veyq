@@ -2,12 +2,35 @@
 id: cr-tenant-removal-share-links
 title: A tenant-member removal marks every link a departed member could copy, and can turn the tenant's links off
 status: planned
-satisfies: [uc.sharing.share-shared-scope, uc.spaces.remove-tenant-member]
+satisfies: [uc.sharing.share-shared-scope, uc.spaces.remove-tenant-member, uc.spaces.manage-group-members]
 adrs: ["0025", "0029", "0024", "0060", "0036"]
 invariants: [operator-blind E2EE, API-first]
 ---
 
 ## Open for the owner
+
+**Third refine wave, 2026-10-01 — open, not covered by the answer below.** Inbox #228 (*a standalone "turn off
+every link in this space" for scope owners*) is folded in here, because this CR already owns the predicate that
+decides whether a turned-off link may come back. Questions 6–8 and § *Folded: inbox #228* below carry it; the
+go on questions 1–5 stands for the rest of the CR whatever the answer.
+
+6. **Fold #228 into this CR?** **Recommendation: yes.** A standalone switch-off is `revokeLinks` without a removal,
+   and it is only worth building together with what makes it stick — which is this CR's `ReissuePolicy`. As its own
+   CR it would amend that function before it exists.
+7. **What makes a bulk switch-off stick?** The removal counter (question 1) does not: Decision 4 judges a share
+   **without** a recovery copy by its owner's membership alone, so after a switch-off with nobody removed, **any**
+   member re-activates every such link with one click (the planned re-activation adopts it). That argument —
+   *"no one else could have rebuilt it"* — is about a departed member; a switch-off says *"a link may have
+   leaked"*, and a link without a copy leaks like any other. Options: (a) a second, ungated counter; (b) **a per-row
+   mark `reissue_only`** set on every share a bulk switch-off turns off. **Recommendation: (b), set by all three bulk
+   paths** — the standalone switch-off, the group removal's `revokeLinks` (planned in `cr-reissue-share-link`
+   Decision 3) and the tenant removal's `revokeLinks` (Decision 6) — so "turn off every link" means one thing: they
+   come back only by re-issue. The bulk path writes each row anyway, so a mark is exact and needs no new event
+   model; shares minted afterwards are untouched by construction.
+8. **Who, and where?** **Recommendation: any owner of the scope** (`isScopeOwner` — group owners, tenant owners,
+   the personal scope's owner; one gate), through one operation; the web offers it in the group panel (beside
+   *delete group*) and in the tenant members panel, behind a confirm that names the effect. Not in the personal
+   space: no one else can revive a link there, so it adds nothing a per-link revoke lacks.
 
 **Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
 
@@ -183,3 +206,69 @@ on it: `grep -rn "SCOPE_ROTATION" backend/src/main/kotlin | grep -v "originate"`
 **Not proven:** anything against an active operator (layer 1, as in `cr-reissue-share-link`); that a tenant owner
 reads the hint. A dump holder still reads every tenant Memory under `K_SC` until an explicit re-key (ADR 0025's
 accepted residual).
+
+## Folded: inbox #228 — a standalone "turn off every link in this space" (third refine wave, 2026-10-01)
+
+Written for questions 6–8's recommendations. Until the owner answers them this section has **no go**; questions
+1–5 and everything above keep theirs. If the owner declines the fold, this section moves out unchanged into its own
+CR, landing after this one.
+
+### Inventory — measured on `main` @ `7a34c57`, 2026-10-01
+
+| # | Fact | Locator |
+|---|---|---|
+| F1 | The only bulk switch-off in the code is the removal cascade's, filtered by owner; nothing turns off every share of a scope. | `grep -rn "enabled = false where" backend/src/main/kotlin` |
+| F2 | One gate covers every scope owner: `isScopeOwner` reads the OWNER membership, and the tenant-owner check is the same call on the tenant scope id. | `grep -n "fun isScopeOwner\|fun isTenantOwner" -A1 backend/src/main/kotlin/com/veyq/app/shared/membership/MembershipStore.kt` |
+| F3 | The owner-only group actions (rename, delete) sit in the group panel; the backend pattern is access check, kind check, `isScopeOwner`. | `grep -n "deleteGroup\|renameGroup" web/src/features/spaces/GroupMembersPanel.vue`; `grep -n "fun deleteGroup" -A6 backend/src/main/kotlin/com/veyq/app/features/spaces/scope/ScopesHandler.kt` |
+| F4 | *Planned, not code:* Decision 4's predicate lets any member re-activate a share without a recovery copy whose owner is still a member — the gap question 7 names. | Decision 4 above; `cr-reissue-share-link` Decision 2 |
+| F5 | A count in a response body is the `measure` visibility class. | `grep -n '"measure"' scripts/validate_field_visibility.py` |
+
+### Decisions
+
+8. **Schema** — in this CR's migration: `veyq_share.reissue_only BOOLEAN NOT NULL DEFAULT FALSE`.
+9. **One store body for every bulk switch-off** — `SharingStore.turnOffAllInScope(scopeId): Int` sets `enabled =
+   false, reissue_only = true` on every enabled share of the scope and returns the count. The group removal's
+   `revokeLinks` (planned, `cr-reissue-share-link` Decision 3) and Decision 6's tenant flag call it instead of an
+   update of their own.
+10. **The predicate** — Decision 4 gains a first disjunct: `ReissuePolicy.required(reissueOnly, ownerIsMember,
+    copyEpoch, currentEpoch, removalsAtMint, removals) = reissueOnly || <Decision 4 as written>`. Re-activation and
+    `reissueRequired` follow; nothing else changes. A re-issue mints a new row, so the mark never travels.
+11. **`POST /api/scopes/{scopeId}/shares/revoke`** (`revokeScopeShares`, `sharing` tag, in
+    `sharing.openapi.yaml`) → `200 { revoked: <int> }` (`x-veyq-visibility: measure`). Gate: scope WRITE access,
+    then `isScopeOwner`, else `403 not_scope_owner`; unknown scope → `404`. Any scope kind. Idempotent: a second
+    call answers `revoked: 0`. No body.
+12. **Web** — `share.ts` gains `revokeScopeShares`; `GroupMembersPanel` and `TenantMembersPanel` offer *turn off
+    every link in this space* to owners, behind a confirm whose copy says the links come back only by re-issue; the
+    result names the count. i18n EN + DE. `ShareDialog` needs nothing new: the row shows the hint because
+    `reissueRequired` is true.
+
+### Phases (merged into the CR's phases above)
+
+- **Phase 0** adds: the ADR amendment names the mark and the standalone operation.
+- **Phase 1** adds: `revokeScopeShares` and its response schema.
+- **Phase 2** adds: Decisions 8–11.
+- **Phase 3** adds: Decision 12.
+- **Phase 4** adds: `uc.spaces.manage-group-members` and `uc.spaces.remove-tenant-member` — an alternative flow
+  *turn off every link in this space*, with the coverage YAML; inbox #228 → done.
+
+### Definition of done (added)
+
+- **B5 — a standalone switch-off sticks (red-first: the operation does not exist today, so the call is refused
+  before any share changes).** In `ShareSharedScopeSliceTest`:
+  - **Setup:** group G, owner O, member C. C's share S1 **without** a recovery copy and C's share S2 **with** one
+    at the current epoch, both enabled; nobody is removed.
+  - **Action:** O `POST /api/scopes/G/shares/revoke` → `200 { revoked: 2 }`; S1 and S2 resolve `404`. O
+    re-activates S1 → `409 reissue_required`; C re-activates their own S2 → `409` too.
+  - **Positive control:** C's share S3 minted after the switch-off, revoked and re-activated → `204`, then `200`.
+  - **Negative with its control:** C (not an owner) calls the operation → `403 not_scope_owner`, every share still
+    `200`; the same call by O → `200`.
+  - **Bite:** drop the `reissueOnly` disjunct → both re-activates answer `204` (red), S3 unchanged.
+- **B6 — the removal paths set the mark too.** After a tenant removal with `?revokeLinks=true`, a co-member's
+  null-copy tenant share → re-activate `409`. **Bite:** let Decision 6 keep an `enabled = false` update of its own →
+  red. The same case for the group removal's `revokeLinks`.
+- **B4** gains the `reissueOnly` disjunct as a case of its own.
+- **W3** — the group panel offers the action to an owner only, sends the request on confirm and shows the count;
+  **control:** a non-owner sees no action.
+
+**Not proven (added):** anything against an active operator (layer 1); that a switch-off reaches a link already
+saved on a guest's device (it stops the server serving it, nothing more).
