@@ -32,7 +32,7 @@ pinned by digest anywhere.
 index digest from a platform one, or a digest that exists from one that does not — the pins were resolved with
 `docker buildx imagetools inspect` and checked to be indexes carrying amd64 and arm64 when they were written,
 and a later bump owes the same check. It says nothing about what a pinned image installs at build time
-(`apt-get`/`microdnf`/`apk` inside a Dockerfile are not pinned by the `FROM` digest), and nothing about build
+(`apt-get`/`apk` inside a Dockerfile are not pinned by the `FROM` digest), and nothing about build
 inputs that are not images (`validate_build_input_pins.py`). An image named anywhere else — a `docker run` string built
 at run time, a Markdown example, a shell script — is out of reach; the three keys above are where this
 repository names the images it runs, and a fourth shape would be a site nobody asserted. That the tag and the

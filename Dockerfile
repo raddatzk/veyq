@@ -61,51 +61,9 @@ COPY --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
 # and fast-jar is the default anyway — ci.yml builds the same artifact with a bare `quarkusBuild`.
 RUN ./gradlew --no-daemon quarkusBuild -x test
 
-# --- backend (native) ------------------------------------------------------------------------------------
-FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-21@sha256:b9bb34595c74910a5d9faa712abf17786c56073bc443064dd64d4f43c51e44e6 AS backend-build-native-base
-WORKDIR /code/backend
-COPY --chown=quarkus:quarkus backend/gradlew backend/gradlew.bat backend/build.gradle.kts backend/settings.gradle.kts backend/gradle.properties backend/pitest.scope.json ./
-COPY --chown=quarkus:quarkus backend/gradle ./gradle
-USER quarkus
-RUN ./gradlew --no-daemon help
-
-FROM backend-build-native-base AS backend-build-native
-COPY --chown=quarkus:quarkus contracts/api ../contracts/api
-COPY --chown=quarkus:quarkus backend/src ./src
-COPY --chown=quarkus:quarkus --from=frontend-build /src/web/dist ./src/main/resources/META-INF/resources
-RUN ./gradlew --no-daemon quarkusBuild -Dquarkus.native.enabled=true -Dquarkus.package.jar.enabled=false -x test
-
-# --- runtime (native) ---------------------------------------------------------------------------------------
-FROM registry.access.redhat.com/ubi9/ubi-minimal:9.5@sha256:a50731d3397a4ee28583f1699842183d4d24fadcc565c4688487af9ee4e13a44 AS runtime-native
-ARG VEYQ_VERSION=""
-ARG VEYQ_REVISION=""
-ENV VEYQ_VERSION="${VEYQ_VERSION}"
-ENV VEYQ_REVISION="${VEYQ_REVISION}"
-WORKDIR /work/
-# curl: the compose healthcheck's (`curl -fsS`), and the base already ships it — ubi-minimal's `curl-minimal`
-# installs as /usr/bin/curl, speaks HTTP, and `Conflicts: curl`, so a `microdnf install curl` here FAILS the
-# build (inbox #191, measured on aarch64 at this digest). Installing nothing also drops a package fetch the
-# `FROM` digest never pinned. The Helm chart probes with `httpGet` and needs no binary. No ffmpeg (see
-# runtime-jvm — no server-side transcode in an operator-blind core).
-# /var/lib/veyq (config secret) and /etc/traefik/dynamic (the ADR 0063 ingress projection): the two mount
-# points, for the reasons spelled out on runtime-jvm below. Both targets carry both because a guard anchored
-# on one of them passes a Dockerfile whose other target drifted.
-COPY --from=backend-build-native --chown=10001:10001 /code/backend/build/*-runner /work/application
-RUN chmod 0755 /work/application \
-    && mkdir -p /var/lib/veyq /etc/traefik/dynamic \
-    && chmod 0700 /var/lib/veyq \
-    && chmod 0755 /etc/traefik/dynamic \
-    && chown -R 10001:10001 /work /var/lib/veyq /etc/traefik/dynamic
-# The deployment recipe, at the same path as runtime-jvm and for the same reasons (ADR 0057 §3). Both targets
-# carry it — a tool extracting it from a published image cannot say which target that image was built from.
-COPY infra/docker-compose.prod.yml /opt/veyq/deploy/docker-compose.prod.yml
-COPY infra/.env.example /opt/veyq/deploy/.env.example
-USER 10001
-# The public port only. The admin listener (veyq.admin-channel.port, 8090 — ADR 0065) is deliberately NOT
-# exposed: `docker run -P` publishes every EXPOSEd port, and that one must only ever be reached by the admin
-# container, which compose and the chart point at it by name.
-EXPOSE 8080
-ENTRYPOINT ["./application", "-Dquarkus.http.host=0.0.0.0"]
+# Removed: a native build (Mandrel) and its `runtime-native` stage, 2026-10-01 (inbox #200). No ADR
+# chose it, it was never seen to build (it OOMs an 8 GB Docker VM), nothing tested it, and the release never
+# published it. A native image returns only as a decision with its own CI build and e2e run (inbox #243).
 
 # --- runtime (JVM) — the target container.yml builds --------------------------------------------------------
 # The LAST stage on purpose: a bare `docker build .` builds the last stage, so it builds what the release
