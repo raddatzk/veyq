@@ -53,9 +53,13 @@ ausdrückliche Handlung:
   entsperrt, steckt **im Link selbst** und erreicht unseren Server nie — eine öffentliche Freigabe ist
   also „lesbar für alle mit dem Link, weiterhin nicht für uns".
 
-Zwei ehrliche Grenzen:
+Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
   er kann nicht zurückgreifen und löschen, was jemand bereits gespeichert hat.
+- **Links, die entstanden sind, bevor jemand gegangen ist, funktionieren weiter, bis du sie erneuerst.**
+  Alle in einer Gruppe können jeden ihrer öffentlichen Links kopieren — wer geht, hat also vielleicht
+  noch einen. Erneuern gibt dem Link eine neue Adresse und schaltet die alte endgültig ab; gib dann die
+  neue weiter. Entfernst du jemanden, kannst du im selben Schritt alle Links der Gruppe abschalten.
 - **Geteilt ist geteilt.** Hast du anderen einen Schlüssel gegeben, ist die Vertraulichkeit *vor
   ihnen* per Design vorbei — nur die Vertraulichkeit *vor uns* bleibt.
 

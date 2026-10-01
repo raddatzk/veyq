@@ -49,9 +49,13 @@ Sharing is the one moment you **choose** to lower the wall — always by your ex
   **in the link itself** and never reaches our server — so a public share is "readable by
   link-holders, still not by us."
 
-Two honest limits:
+Three honest limits:
 - **Un-sharing doesn't un-download.** Revoking access stops *future* access; it can't reach back and
   erase what someone already saved.
+- **Links made before someone left keep working until you renew them.** Everyone in a group can copy
+  every public link of it, so someone who leaves may still have one. Renewing a link gives it a new
+  address and switches the old one off for good — hand out the new one. When you remove someone you
+  can also switch off every link of the group in the same step.
 - **Shared means shared.** Once you hand a key to others, privacy *from them* is gone by design — only
   privacy *from us* still holds.
 

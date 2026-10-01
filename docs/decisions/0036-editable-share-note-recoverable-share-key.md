@@ -88,8 +88,8 @@ parts.
      Folding the password into the key (the crypto-gate [ADR 0037](0037-password-protected-shares.md) defers)
      answers a different threat and needs a new link format.
 
-**Roles + scope.** All three roles (VIEWER / CONTRIBUTOR / UPLOADER) carry a note. **v1 = personal-scope shares**
-(the current share cut); the note rides the group/tenant lift with no extra work.
+**Roles + scope.** All three roles (VIEWER / CONTRIBUTOR / UPLOADER) carry a note, in every scope a share can
+live in — personal, group or tenant ([ADR 0029](0029-public-viewer-share.md) §6).
 
 ## Operator-blindness
 

@@ -1,7 +1,7 @@
 useCase: uc.sharing.share-public-viewer
 feature: sharing
 title: Share a Memory as a public viewer link (web)
-# Built (web vertical, cr-0100 + ADR 0029): a public VIEWER share of one personal-scope Memory —
+# Built (web vertical, cr-0100 + ADR 0029): a public VIEWER share of one Memory (any scope, ADR 0029 §6) —
 # symWrap(K_share, K_mem), the key in the URL fragment, an unguessable 256-bit shareId, an unauthenticated
 # resolve + gated presigned blob reads, soft (L1) revoke/expiry, and the operator-served-viewer trust-tier
 # honesty carried by a footer link. The six criteria are covered by the backend slice (create -> anonymous
