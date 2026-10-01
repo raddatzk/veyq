@@ -190,9 +190,11 @@ The refresh chain (inbox #222) was on this list until 2026-10-01. It is now Inve
     touches that index, so the cycle should no longer form. That is reasoned about InnoDB and not measured,
     since there is no MariaDB here. The KDoc gets one sentence that says exactly that, and nothing is removed on
     a reasoned claim.
-  - **Coordinate with [`cr-session-purge-cost-on-mariadb`](cr-session-purge-cost-on-mariadb.md).** That CR
-    measures the purge's lock footprint against a concurrent login or refresh. This lock is new on the
-    refresh side, so whichever of the two lands second re-runs that measurement with both in place.
+  - **Coordinate with `cr-session-purge-cost-on-mariadb` (landed 2026-10-01, CR deleted).** It measured the
+    purge's lock footprint against a concurrent login or refresh on a throwaway MariaDB and split `SessionPurge.run()`
+    into short per-step transactions with primary-key family batches (the why: the comment in `SessionPurge.run()`
+    and the V59 header; the harness and numbers: that CR's retrospective, `git log -- changes/cr-session-purge-cost-on-mariadb.md`). This lock is new on the
+    refresh side and this CR lands second, so it re-runs that measurement with both in place.
 - **No new error codes, no migration, no contract change** (Inventory 10). Every loser answers exactly what a
   replay of the same secret answers today.
 

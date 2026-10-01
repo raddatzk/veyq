@@ -275,13 +275,18 @@ class SessionService : AccessTokenResolver {
     @Transactional
     fun purgeExpiredChallenges(now: Instant): Long = LoginChallengeEntity.delete("expiresAt < ?1", now)
 
-    /** Delete session families with no remaining tokens — cleans REVOKED (logout / reuse-revoked) and
-     *  abandoned-but-ACTIVE families whose tokens have all been purged. Run AFTER the token purges (FK). */
+    /** Up to [limit] ids of session families with no remaining tokens — REVOKED (logout / reuse-revoked) and
+     *  abandoned-but-ACTIVE families whose tokens have all been purged. A plain read, so it locks nothing; run it
+     *  AFTER the token purges, and hand the ids to [purgeEmptyFamilies]. */
     @Transactional
-    fun purgeEmptyFamilies(): Long = SessionFamilyEntity.delete(
-        "id not in (select a.familyId from AccessTokenEntity a) " +
-            "and id not in (select r.familyId from RefreshTokenEntity r)",
-    )
+    fun emptyFamilyIds(limit: Int): List<String> =
+        SessionFamilyEntity.find("from SessionFamilyEntity f where $NO_TOKEN").page(0, limit).list().map { it.id }
+
+    /** Delete those of [ids] that still have no token. The predicate is checked again here, by primary key, so a
+     *  family that gained a token since [emptyFamilyIds] read it survives instead of failing the FK. */
+    @Transactional
+    fun purgeEmptyFamilies(ids: List<String>): Long =
+        if (ids.isEmpty()) 0L else SessionFamilyEntity.delete("from SessionFamilyEntity f where f.id in ?1 and $NO_TOKEN", ids)
 
     private fun mint(familyId: String, generation: Int, now: Instant): Pair<String, String> {
         val access = Tokens.random()
@@ -310,5 +315,13 @@ class SessionService : AccessTokenResolver {
     companion object {
         const val ACCESS_TTL_MINUTES = 15L
         const val REFRESH_TTL_DAYS = 30L
+
+        /** "This family holds no token". `NOT EXISTS`, not `NOT IN (subquery)`: a `NOT IN` whose subquery ever
+         *  yields a NULL deletes nothing, silently, and on H2 it pays for every token row — 16 000 families against
+         *  ~150 000 access tokens ran into the 60 s transaction timeout, where this form took 11–18 ms
+         *  (cr-session-purge-cost-on-mariadb). MariaDB plans both as the same per-family FK probe. */
+        private const val NO_TOKEN =
+            "not exists (select 1 from AccessTokenEntity a where a.familyId = f.id) " +
+                "and not exists (select 1 from RefreshTokenEntity r where r.familyId = f.id)"
     }
 }

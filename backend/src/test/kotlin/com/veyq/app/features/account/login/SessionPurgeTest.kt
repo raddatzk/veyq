@@ -13,9 +13,15 @@ import java.time.temporal.ChronoUnit
  * cr-0011 — the scheduled session purge deletes expired access/refresh tokens, stale login challenges and
  * token-less families, while keeping live tokens and (crucially) **unexpired SUPERSEDED** refresh tokens so
  * reuse-detection survives. Uses distinct ids/emails so the JVM-lived H2 mem DB does not bleed across tests.
+ *
+ * Drives `SessionPurge.run()`, the scheduled entry: the suite's scheduler is halted (`ScheduledJobsHaltedInTestTest`),
+ * so this test is the only place it executes.
  */
 @QuarkusTest
 class SessionPurgeTest {
+
+    @Inject
+    lateinit var purge: SessionPurge
 
     @Inject
     lateinit var sessions: SessionService
@@ -27,9 +33,7 @@ class SessionPurgeTest {
         val future = now.plus(1, ChronoUnit.DAYS)
 
         QuarkusTransaction.requiringNew().run {
-            if (VeyqUser.findById(PURGE_USER) == null) {
-                newUser(id = PURGE_USER, email = "purge-user@example.com").persist()
-            }
+            ensurePurgeUser()
             // A live session: unexpired access + refresh → kept, family kept.
             family(FAM_LIVE)
             access("$FAM_LIVE-a", FAM_LIVE, future)
@@ -46,10 +50,9 @@ class SessionPurgeTest {
             challenge(CHALLENGE_LIVE, future)
         }
 
-        sessions.purgeExpiredAccessTokens(now)
-        sessions.purgeExpiredRefreshTokens(now)
-        sessions.purgeExpiredChallenges(now)
-        sessions.purgeEmptyFamilies()
+        // The real entry, so its call order is under test too: the token deletes must run before the family
+        // delete, or the expired session's family is still holding tokens when it is looked at ("empty family kept").
+        purge.run()
 
         QuarkusTransaction.requiringNew().run {
             // Live session intact.
@@ -67,6 +70,47 @@ class SessionPurgeTest {
             assert(LoginChallengeEntity.count("email", CHALLENGE_EXPIRED) == 0L) { "expired challenge kept" }
             assert(LoginChallengeEntity.count("email", CHALLENGE_LIVE) == 1L) { "live challenge deleted" }
         }
+    }
+
+    @Test
+    fun tokenlessFamiliesBeyondOneBatchAreAllPurgedInOneRun() {
+        QuarkusTransaction.requiringNew().run {
+            ensurePurgeUser()
+            repeat(SessionPurge.FAMILY_BATCH + 5) { family("$FAM_BATCH-$it") }
+        }
+
+        purge.run()
+
+        QuarkusTransaction.requiringNew().run {
+            // Asserted over the whole table, not only this test's rows: other tests leave token-less families too,
+            // and a run that stopped after one batch might have happened to take all of ours.
+            assert(sessions.emptyFamilyIds(1).isEmpty()) { "a token-less family outlived the run" }
+            assert(SessionFamilyEntity.count("id like ?1", "$FAM_BATCH-%") == 0L) { "one of this test's families was kept" }
+        }
+    }
+
+    @Test
+    fun theBatchDeleteChecksAgainSoAFamilyThatGainedATokenSurvives() {
+        // The batch's ids come from an earlier read; a family can gain a token before the delete runs. Handed such
+        // an id, the delete must skip it rather than fail the FK and take the rest of the batch down with it.
+        QuarkusTransaction.requiringNew().run {
+            ensurePurgeUser()
+            family(FAM_RECHECK_EMPTY)
+            family(FAM_RECHECK_HELD)
+            refresh("$FAM_RECHECK_HELD-r", FAM_RECHECK_HELD, RefreshTokenEntity.CURRENT, Instant.now().plus(1, ChronoUnit.DAYS))
+        }
+
+        val deleted = sessions.purgeEmptyFamilies(listOf(FAM_RECHECK_EMPTY, FAM_RECHECK_HELD))
+
+        QuarkusTransaction.requiringNew().run {
+            assert(SessionFamilyEntity.findById(FAM_RECHECK_HELD) != null) { "a family holding a token was deleted" }
+            assert(SessionFamilyEntity.findById(FAM_RECHECK_EMPTY) == null) { "the token-less family in the batch was kept" }
+        }
+        assert(deleted == 1L) { "deleted $deleted, expected 1" }
+    }
+
+    private fun ensurePurgeUser() {
+        if (VeyqUser.findById(PURGE_USER) == null) newUser(id = PURGE_USER, email = "purge-user@example.com").persist()
     }
 
     private fun family(id: String) {
@@ -116,5 +160,8 @@ class SessionPurgeTest {
         private const val FAM_SUPERSEDED = "purge-fam-superseded"
         private const val CHALLENGE_EXPIRED = "purge-expired@example.com"
         private const val CHALLENGE_LIVE = "purge-live@example.com"
+        private const val FAM_BATCH = "purge-batch"
+        private const val FAM_RECHECK_EMPTY = "purge-recheck-empty"
+        private const val FAM_RECHECK_HELD = "purge-recheck-held"
     }
 }

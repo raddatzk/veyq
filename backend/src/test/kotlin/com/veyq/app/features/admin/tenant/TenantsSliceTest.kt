@@ -39,6 +39,9 @@ class TenantsSliceTest {
     @Inject
     lateinit var store: TenantStore
 
+    @Inject
+    lateinit var purge: TenantInvitePurge
+
     @BeforeEach
     fun seed() {
         ensureUser(OWNER_ID, "owner@example.com", "SERVER_OWNER")
@@ -211,6 +214,15 @@ class TenantsSliceTest {
         assert(deleted >= 2L) // the seeded SUPERSEDED + the just-EXPIRED overdue one
         assert(inviteCount(id, TenantInviteEntity.SUPERSEDED) == 0L)
         assert(inviteCount(id, TenantInviteEntity.EXPIRED) == 0L)
+
+        // The scheduled entry, run(), which the halted %test scheduler never fires: an ACTIVE invite whose TTL
+        // passed before the retention cutoff is deleted in ONE run only if it is expired first and purged second.
+        // The other order purges nothing (it is not terminal yet) and leaves it behind as EXPIRED.
+        QuarkusTransaction.requiringNew().run {
+            insertInvite(id, "overdue-run@example.com", TenantInviteEntity.ACTIVE, expiresAt = past)
+        }
+        purge.run()
+        assert(inviteCountByEmail(id, "overdue-run@example.com") == 0L) { "run() expires, then purges, an invite past retention" }
     }
 
     // --- helpers ---
@@ -248,6 +260,11 @@ class TenantsSliceTest {
     private fun inviteCount(tenantId: String, status: String): Long =
         QuarkusTransaction.requiringNew().call {
             TenantInviteEntity.count("tenantId = ?1 and status = ?2", tenantId, status)
+        }
+
+    private fun inviteCountByEmail(tenantId: String, email: String): Long =
+        QuarkusTransaction.requiringNew().call {
+            TenantInviteEntity.count("tenantId = ?1 and ownerEmail = ?2", tenantId, email)
         }
 
     private fun insertInvite(tenantId: String, email: String, status: String, expiresAt: Instant) {

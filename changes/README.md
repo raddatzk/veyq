@@ -954,6 +954,12 @@ looks right, the guard stays green, and the conclusion drawn is *"the guard does
 injection did not land"*. Check what the **loader** sees, not what the file says: one line
 (`python3 -c "import yaml; print(yaml.safe_load(open(f))[...])"`) before believing a green.
 
+**A lever that removes one operand of a union needs a witness only THAT operand selects.** The grant-delivery
+backstop picks scopes as *grant-less ∪ rotated*, and the planned fixture put its stale member M4 in a rotated
+scope that also held a grant-less member — so the scope was selected through `grantless` anyway, and dropping
+`+ rotated` would have left M4 green. Moving the grant-less member out of that scope made the lever bite. When a
+CR names such a lever, it names the row that only the removed operand reaches, and says why no other operand does.
+
 ### A control's LEVER must itself be bitten — a harness can make one inert and still print green
 
 **A lever you never watched redden is not a control, and it fails in the one direction nobody checks.** The
@@ -1282,6 +1288,13 @@ the locator revealed it. This is the same instinct as "run the locator, don't tr
 pointed at the justification instead of the inventory: **a parenthetical that makes a decision look free is a
 claim, and claims get re-measured.** A CR that already knows to re-run its own grep should also re-run the
 "this costs nothing" check.
+
+**The same holds for a planned index: EXPLAIN it against the data shape the statement meets.** The session-purge
+CR planned `expires_at` indexes on three tables so that "the three deletes take a range scan". With the index
+present, MariaDB range-scanned only the refresh tokens; access tokens and challenges live minutes against an hourly
+purge, so most rows are expired when it runs and the optimizer full-scans regardless. Two of the three indexes
+would have cost every login a write for nothing. An index is a claim about selectivity, and selectivity is a
+property of the data at the moment the statement runs.
 
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 

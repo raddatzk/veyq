@@ -55,14 +55,16 @@ class RecordingBlobStore(
 
     private val delegate: BlobStore = producer.blobStore()
 
-    /** Every key handed to [delete] since the last [reset], in call order. Synchronized: a `@Scheduled` sweep
-     *  can in principle fire from a scheduler thread while a test reads this. */
+    /** Every key handed to [delete] since the last [reset], in call order. Synchronized for a test that resumes
+     *  the scheduler: then a `@Scheduled` sweep can fire from a scheduler thread while a test reads this. `%test`
+     *  starts the scheduler halted (`ScheduledJobsHaltedInTestTest`), so otherwise only the test thread writes. */
     val deletedKeys: MutableList<String> = Collections.synchronizedList(mutableListOf())
 
     /** When set, [delete] **refuses** every key containing this marker: it returns them as undeleted and
      *  records none of them, because a store that refuses deleted nothing. It refuses only those keys — the rest
-     *  of the batch goes through, which is what makes a partial-failure tick assertable at all. `@Volatile`: a
-     *  `@Scheduled` sweep can read it from a scheduler thread while the test that armed it wrote from its own. */
+     *  of the batch goes through, which is what makes a partial-failure tick assertable at all. `@Volatile` for a
+     *  test that resumes the halted `%test` scheduler: a `@Scheduled` sweep can then read it from a scheduler
+     *  thread while the test that armed it wrote from its own. */
     @Volatile
     var failOnKeyMarker: String? = null
 
