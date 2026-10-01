@@ -1,7 +1,7 @@
 ---
 id: cr-wire-assertion-server-logs
 title: The wire sweep reaches the logs the operator reads
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0053", "0044", "0040"]
 invariants:
@@ -164,7 +164,7 @@ variant. Re-derive it at implement time rather than trusting the numbers above: 
 
 ## Phases
 
-- [ ] **1 · The needle function, the boot-log sweep, the encoding pin** · Done when: `python3
+- [x] **1 · The needle function, the boot-log sweep, the encoding pin** · Done when: `python3
       scripts/validate_wire_log_matcher.py` green; one `scripts/run_web_e2e.py` run (at least `media.e2e` and
       the `restore` group — a group is what exercises D1's union) green, printing per boot log the canary count
       swept and the three controls met; B1, B2, B3 red first.

@@ -83,6 +83,7 @@ from __future__ import annotations
 
 import base64
 import binascii
+import bisect
 import json
 import os
 import re
@@ -91,9 +92,11 @@ import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Callable, Iterable, Iterator, NamedTuple
 
 import yaml
 
@@ -150,6 +153,21 @@ TEST_MS = os.environ.get("VEYQ_TEST_MS", "120000")
 # on the `veyq` database ONLY, so each e2e database is created as root and then granted to it.
 DB_ROOT_PASSWORD = os.environ.get("VEYQ_DB_ROOT_PASSWORD", "change-me-root")
 DB_APP_USER = "veyq"
+
+# Every database a boot of this run is pointed at, named in ONE place: the boots use these, and [sweep_logs]
+# derives from a boot log's file name which of them that boot's log must name (its armed-sensor control).
+STORE_INIT_DATABASE = "veyq_e2e_store_init"
+
+
+def suite_database(index: int) -> str:
+    """A group's first instance — the database its first member runs against."""
+    return f"veyq_e2e_{index}"
+
+
+def restore_database(index: int) -> str:
+    """The instance a group's hook restores onto — every later member of the group runs against it."""
+    return f"veyq_e2e_restore_{index}"
+
 
 # The bundled store's ADMIN plane (a different port from the S3 one), published local-only by
 # infra/docker-compose.yml. This script READS it to confirm the backend provisioned the store; it never writes
@@ -346,7 +364,7 @@ def provision_store(workdir: Path, timeout: int = 120) -> None:
     # runs that prove anything are the ones nobody does twice — and it would also stop proving per-step
     # idempotence, which is what a second run against a provisioned store IS.
     log("booting a throwaway backend to provision the store")
-    database = "veyq_e2e_store_init"
+    database = STORE_INIT_DATABASE
     secret_file = workdir / "config-secret-store-init.key"
     boot_log = workdir / "backend-store-init.log"
     fresh_database(database)
@@ -453,8 +471,11 @@ def boot(database: str, secret_file: Path, log_path: Path, bucket: str | None = 
     if bucket:
         env["VEYQ_BLOB_STORE_BUCKET"] = bucket
     handle = log_path.open("w")
+    # The log is a sweep surface ([sweep_logs]), so the bytes it holds must not depend on the host: with stdout a
+    # FILE, Java 21 encodes it in the host locale's charset, and a non-UTF-8 locale writes a non-ASCII canary as
+    # `?` — which the raw needle then silently misses. Pinned here; [sweep_logs] reads the file as UTF-8.
     return subprocess.Popen(
-        ["java", "-Dquarkus.profile=e2e", "-jar", str(JAR)],
+        ["java", "-Dquarkus.profile=e2e", "-Dstdout.encoding=UTF-8", "-Dstderr.encoding=UTF-8", "-jar", str(JAR)],
         cwd=str(REPO), env=env, stdout=handle, stderr=subprocess.STDOUT,
     )
 
@@ -804,6 +825,239 @@ def sweep_store(bucket: str, database: str, canary_file: Path, rel: str, workdir
     return None
 
 
+# ----------------------------------------------------------------------------------------------------------
+# The log surface — what an operator of this stack reads without opening anything
+# ----------------------------------------------------------------------------------------------------------
+
+# The two encoders a URL in this stack is built with, as `quote` safe-sets. Every URL a suite sends is built by the
+# JavaScript client: `encodeURIComponent` leaves `A-Za-z0-9` and `-_.!~*'()` alone, and the form serializer behind
+# `URLSearchParams` leaves only `A-Za-z0-9` and `*-._`, writing a space as `+`. Both write upper-case hex, as
+# `quote` does. A store logs the URI as it was SENT (Garage: `<addr> <method> <uri>`, measured on a refused request),
+# so a canary crossing a URL is found only in the spelling its encoder chose — which is what these model.
+URI_COMPONENT_SAFE = "-_.!~*'()"
+FORM_SAFE = "-_.*"
+
+
+def canary_needles(canary: str) -> list[tuple[str, str]]:
+    """Every spelling in which a canary can reach a text surface, as `(variant, needle)`, de-duplicated.
+
+    **One definition of "how a canary can appear", shared by every text surface** — the boot logs, the container
+    logs and the HTTP recording. The database keeps [dump_escape] (it models the dump, not a transport) and the
+    store keeps raw bytes; everything that is TEXT someone else encoded uses this.
+
+    - `raw` — written as-is (a log line interpolating a value, a body).
+    - `json` / `json-ascii` — inside a JSON string, in both of Python's `ensure_ascii` spellings: the escaped
+      quote/backslash/control characters, with non-ASCII left as UTF-8 or written as lower-case `\\uXXXX`.
+    - `pct` / `pct-plus` — inside a URL, a space as `%20` (`encodeURIComponent`) or as `+` (a form).
+
+    **No base64 variant**: base64 of a plaintext reaches the server only when a client sends an unsealed value in
+    a base64 field, which is the HTTP opacity oracle's case ([opacity_failure]); the server never base64-encodes
+    plaintext it does not have. A variant equal to an earlier one is dropped — an ASCII canary with no space or
+    quote yields `raw` alone, which is what lets a token-shaped value reuse this unchanged.
+    """
+    forms = (
+        ("raw", canary),
+        ("json", json.dumps(canary, ensure_ascii=False)[1:-1]),
+        ("json-ascii", json.dumps(canary)[1:-1]),
+        ("pct", urllib.parse.quote(canary, safe=URI_COMPONENT_SAFE)),
+        ("pct-plus", urllib.parse.quote_plus(canary, safe=FORM_SAFE)),
+    )
+    needles: list[tuple[str, str]] = []
+    for variant, needle in forms:
+        if needle and all(needle != seen for _, seen in needles):
+            needles.append((variant, needle))
+    return needles
+
+
+class Hit(NamedTuple):
+    """One canary found on one line of one log — everything a reader needs to act on it, from the job log alone."""
+    source: str
+    line_no: int
+    variant: str
+    canary: str
+    line: str
+
+
+def occurrences(text: str, needle: str) -> Iterator[int]:
+    """Every offset of `needle` in `text`: a plain, case-sensitive substring — the one matcher of the log surface.
+
+    Over the WHOLE text rather than per line, so a needle holding a newline is still found; its line is computed
+    from the offset. No word boundary and no length floor: the canary set holds envelope vocabulary (`auto`,
+    `range`) that a boundary rule would be the obvious guard against, and a threshold added against false positives
+    is where the false negatives hide (changes/README). A collision is explained, never excluded.
+    """
+    at = text.find(needle)
+    while at != -1:
+        yield at
+        at = text.find(needle, at + 1)
+
+
+def needle_hits(source: str, text: str, canaries: Iterable[str],
+                needles_of: Callable[[str], list[tuple[str, str]]] = canary_needles) -> list[Hit]:
+    """Every (line, canary) of `text` some variant of a canary lands on, first variant winning; in line order."""
+    starts = [0] + [m.end() for m in re.finditer("\n", text)]
+    hits: dict[tuple[int, str], Hit] = {}
+    for canary in canaries:
+        for variant, needle in needles_of(canary):
+            for at in occurrences(text, needle):
+                line_no = bisect.bisect_right(starts, at)
+                if (line_no, canary) in hits:
+                    continue
+                begin = starts[line_no - 1]
+                end = text.find("\n", begin)
+                hits[(line_no, canary)] = Hit(source, line_no, variant, canary,
+                                              text[begin:end if end != -1 else len(text)])
+    return sorted(hits.values(), key=lambda h: (h.line_no, h.canary))
+
+
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def report_hits(hits: list[Hit], carriers: dict[str, list[str]]) -> None:
+    """Print each hit in full. CI uploads nothing, so the job log is the only evidence of a hit that survives."""
+    for hit in hits:
+        shown_line = ANSI.sub("", hit.line).strip()
+        log(f"    {hit.source}:{hit.line_no}  [{hit.variant}]  {hit.canary!r}  "
+            f"(carried by {', '.join(carriers.get(hit.canary) or ['?'])})")
+        log(f"        | {shown_line[:240]}")
+
+
+def load_canaries(canary_files: Iterable[Path]) -> tuple[dict[str, list[str]], list[str]]:
+    """The UNION of a run's canary files — canary → the files that carry it — and why any file could not be read.
+
+    A union, because the run-level surfaces have no per-suite owner: a restored instance's boot log owes the
+    previous member's canaries, and every container is shared by every suite. Attribution is per canary instead.
+    """
+    carriers: dict[str, list[str]] = {}
+    problems: list[str] = []
+    for path in sorted(canary_files):
+        try:
+            values = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as e:
+            problems.append(f"{path.name} is unreadable ({e}) — its canaries are not swept for")
+            continue
+        for canary in values:
+            carriers.setdefault(canary, []).append(path.name)
+    return carriers, problems
+
+
+# `backend-<n>.log` — a group's first member; `backend-<n>-<p>.log` — a later member, after the hook restored;
+# `backend-install-<n>.log` — the restore target's install boot; `backend-store-init.log` — the provisioning boot.
+BOOT_LOG = re.compile(r"^backend-(?:(?P<suite>\d+)(?:-(?P<member>\d+))?|install-(?P<install>\d+)|store-init)\.log$")
+
+# Quarkus' own shutdown line (`veyq-backend stopped in 0.018s`). A framework string, anchored on knowingly: an
+# upgrade that rewords it fails this control LOUD, which is the direction this sensor fails in.
+SHUTDOWN_NEEDLE = "stopped in"
+
+
+def booted_database(log_path: Path) -> str | None:
+    """Which database the boot that wrote this log was pointed at — derived from its name, never listed."""
+    match = BOOT_LOG.match(log_path.name)
+    if not match:
+        return None
+    if match.group("install"):
+        return restore_database(int(match.group("install")))
+    if match.group("member"):
+        return restore_database(int(match.group("suite")))
+    if match.group("suite"):
+        return suite_database(int(match.group("suite")))
+    return STORE_INIT_DATABASE
+
+
+def names_database(text: str, database: str) -> bool:
+    """The armed-sensor control: the JDBC URL Flyway prints at boot (`Database: jdbc:mariadb://…/veyq_e2e_1?…`).
+
+    Matched as `/<name>` followed by a non-identifier character — so `veyq_e2e_1` is not satisfied by a log that
+    only names `veyq_e2e_10`, and the schema-qualified lines (`` `veyq_e2e_1` ``) that a restored member also
+    prints cannot stand in for the URL. Same matcher as the canaries ([occurrences]).
+    """
+    needle = f"/{database}"
+    for at in occurrences(text, needle):
+        after = text[at + len(needle):at + len(needle) + 1]
+        if not (after.isalnum() or after == "_"):
+            return True
+    return False
+
+
+def read_log(path: Path) -> tuple[str, str | None]:
+    """The log as UTF-8 — the encoding [boot] pins — and, if it is not, a reason: a broken pin is never silent."""
+    raw = path.read_bytes()
+    try:
+        return raw.decode("utf-8"), None
+    except UnicodeDecodeError as e:
+        return raw.decode("utf-8", errors="replace"), f"{shown(path)} is not UTF-8 ({e}) — the encoding pin did not hold"
+
+
+def sweep_logs(workdir: Path, canary_files: Iterable[Path]) -> str | None:
+    """Prove no canary of the run is readable in any boot log the run retains. Returns None, else why not.
+
+    **What it asserts** (cc.security.wire-assertion, ADR 0053). Run-level, after every group: every
+    `backend-*.log` under the run directory (derived by a recursive glob, never listed) is searched for every
+    canary of the run's canary files (their union), in every spelling [canary_needles] models. And each log
+    must PROVE the sensor was armed, by three positive controls on the same matcher: it is non-empty, it names the
+    database its boot was pointed at ([booted_database], [names_database]), and it carries Quarkus' shutdown line
+    — so it was read complete, after its JVM exited, which a per-suite sweep inside `run_member` could not be.
+    A count of zero hits is never read as success on its own; zero logs is a failure.
+
+    **The defect that bought it.** No incident: until this ran, the log was the one surface ADR 0053 names that
+    nothing read. A log is written server-side, where a value is DECODED (a percent-encoded path segment, a
+    JSON-escaped string) and then written raw — so a leak there crosses no sensor the other three own.
+
+    **Its limit.** A log records only what the process chose to write, at the level it shipped with (INFO); no
+    veyq statement echoes request input today, so a green here is mostly the proof that none started to. The
+    attribution of a hit is per canary file, not per log: a restored instance's log owes the previous member's
+    values too. And the encoding pin is the e2e boot's — an operator's own locale is theirs.
+    """
+    carriers, problems = load_canaries(canary_files)
+    logs = sorted(workdir.rglob("backend-*.log"))
+    if not logs:
+        return (f"no boot log under {shown(workdir)} — the log sweep would have proved the absence of nothing "
+                f"(0 logs, 0 hits is not a pass)")
+    if not carriers:
+        return "the run's canary files hold no canary — a green log sweep would mean nothing"
+
+    hits: list[Hit] = []
+    unmet: list[str] = list(problems)
+    for path in logs:
+        text, not_utf8 = read_log(path)
+        if not_utf8:
+            unmet.append(not_utf8)
+        database = booted_database(path)
+        controls = []
+        if not text:
+            unmet.append(f"{shown(path)} is EMPTY — nothing was written, so nothing could be found")
+        else:
+            controls.append("non-empty")
+        if database is None:
+            unmet.append(f"{shown(path)}: no rule derives which database this boot log belongs to — a new boot "
+                         f"log name needs its rule in BOOT_LOG")
+        elif names_database(text, database):
+            controls.append(f"database {database}")
+        else:
+            unmet.append(f"{shown(path)} never names its database {database} — not the log of the boot it is "
+                         f"swept as, or not the whole of it")
+        if any(True for _ in occurrences(text, SHUTDOWN_NEEDLE)):
+            controls.append(f"shutdown line {SHUTDOWN_NEEDLE!r}")
+        else:
+            unmet.append(f"{shown(path)} has no shutdown line ({SHUTDOWN_NEEDLE!r}) — it was read before its JVM "
+                         f"stopped, or the JVM was killed, so it may be incomplete")
+        found = needle_hits(shown(path).as_posix(), text, carriers)
+        hits.extend(found)
+        log(f"log sweep: {shown(path)} — {text.count(chr(10))} line(s), {len(carriers)} canary/canaries, "
+            f"{len(found)} hit(s); armed: {', '.join(controls) or 'NOTHING'}")
+
+    if hits or unmet:
+        log(f"WIRE ASSERTION FAILED on the server log — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
+        report_hits(hits, carriers)
+        for reason in unmet:
+            log(f"    control: {reason}")
+        return (f"the wire assertion failed on the server log: {len(hits)} canary hit(s), {len(unmet)} unmet "
+                f"control(s) across {len(logs)} boot log(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(logs)} boot log(s), "
+        f"each armed")
+    return None
+
+
 class Instance:
     """The three things a boot is pointed at, and the one thing a group's hook replaces wholesale."""
 
@@ -965,7 +1219,7 @@ def restore_hook(index: int, source: Instance, group_dir: Path, with_key: bool) 
 
     destroy(source)
 
-    target = Instance(f"veyq_e2e_restore_{index}", group_dir / "restored-config-secret.key",
+    target = Instance(restore_database(index), group_dir / "restored-config-secret.key",
                       f"veyq-e2e-dst-{index}")
     fresh_database(target.database)
     fresh_bucket(target.bucket)
@@ -1227,7 +1481,7 @@ def run_group(index: int, members: list[Path], workdir: Path, stamp: str) -> lis
     A group of ONE takes exactly the old path: one fresh database, no bucket override, no hook.
     """
     name = group_of(members[0])
-    inst = Instance(f"veyq_e2e_{index}", workdir / f"config-secret-{index}.key",
+    inst = Instance(suite_database(index), workdir / f"config-secret-{index}.key",
                     f"veyq-e2e-src-{index}" if len(members) > 1 else None)
     group_dir = workdir / f"group-{index}-{name}"
 
@@ -1361,12 +1615,21 @@ def main(argv: list[str]) -> int:
         # Never short-circuit across groups: one broken suite must not hide the state of the others.
         failures.extend(run_group(index, members, workdir, stamp))
 
+    # The run-level sweeps: after EVERY group, so each log is complete (its JVM has exited) and a restored
+    # instance's log is swept for the member before it too. They run even when suites failed — a failed suite's log
+    # is the one most likely to hold a stack trace, and a hit there only adds to a run that is already red.
+    canary_files = sorted(workdir.rglob("canaries-*.json"))
+    run_failures = [(name, reason) for name, reason in (
+        ("(run) server-log sweep", sweep_logs(workdir, canary_files)),
+    ) if reason]
+
     print("", flush=True)
     log("==================== summary ====================")
-    log(f"total: {len(files)}  passed: {len(files) - len(failures)}  failed: {len(failures)}")
-    for name, reason in failures:
+    log(f"total: {len(files)}  passed: {len(files) - len(failures)}  failed: {len(failures)}  "
+        f"run-level sweeps failed: {len(run_failures)}")
+    for name, reason in failures + run_failures:
         log(f"  FAILED  {name}: {reason}")
-    return 1 if failures else 0
+    return 1 if failures or run_failures else 0
 
 
 if __name__ == "__main__":
