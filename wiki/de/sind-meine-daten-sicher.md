@@ -29,16 +29,15 @@ stehlen — nur unverständlicher Datenmüll:
 
 ## Was wir trotzdem sehen — und warum
 
-Wir tun nicht so, als wäre es Zauberei. Um den Dienst zu betreiben — deine Zeitleiste zu sortieren,
-eine Seite anzuzeigen, zu regeln, wer reindarf — sieht der Server ein paar **wenig sensible,
-betriebliche** Fakten:
+Wir tun nicht so, als wäre es Zauberei. Um den Dienst zu betreiben — dir deine Inhalte Seite für Seite
+zu liefern, zu regeln, wer reindarf — sieht der Server ein paar **wenig sensible, betriebliche** Fakten:
 
 | Wir sehen | Wir sehen nicht |
 |---|---|
 | dass eine Erinnerung / ein Foto / eine Freigabe **existiert**, und ihre ID | was **darin** ist |
-| **wie groß** eine Datei ist und ihren groben Typ (z. B. „ein Video") | die Datei selbst |
+| **wie groß** eine Datei ist | die Datei selbst — nicht einmal, ob es ein Foto oder ein Video ist; allerdings kann die Art, wie ein Video beim Anschauen nachgeladen wird, das verraten |
 | **wer in welcher** Gruppe oder welchem Bereich ist | was sie geschrieben oder hochgeladen haben |
-| grobe **Zeitstempel** zum Sortieren deiner Zeitleiste | die Inhalte dahinter |
+| **wann** etwas hochgeladen oder zuletzt geändert wurde | wann ein Foto **aufgenommen** wurde — nach diesem Datum sortiert dein Gerät die Zeitleiste, und es bleibt verschlossen |
 
 Es ist, als sähe man **beschriftete Kisten im Regal und wer einen Schlüssel hat** — nie den Inhalt.
 Genau diese wenigen Fakten machen den Server nutzbar, ohne jemals zu entschlüsseln.
@@ -52,7 +51,7 @@ ausdrückliche Handlung:
   gegeben — nicht uns; wir können ihn weiterhin nicht lesen.
 - Einen **öffentlichen Link** kann **jede Person öffnen, die den Link hat**. Der Schlüssel, der ihn
   entsperrt, steckt **im Link selbst** und erreicht unseren Server nie — eine öffentliche Freigabe ist
-  also „lesbar für Link-Inhaber, weiterhin nicht für uns".
+  also „lesbar für alle mit dem Link, weiterhin nicht für uns".
 
 Zwei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
@@ -63,39 +62,45 @@ Zwei ehrliche Grenzen:
 ## Illegale Inhalte & Missbrauch
 
 Weil private Inhalte für uns unsichtbar sind, **können** wir deine privaten Erinnerungen nicht scannen
-— das ist der Sinn der Sache. Dort, wo Inhalte tatsächlich **verbreitet** werden — bei einer
-**öffentlichen Freigabe** — enthält eine Missbrauchsmeldung den Link und damit den Schlüssel, sie kann
-also geöffnet und beurteilt werden. Melden und Entfernen funktioniert genau da, wo es soll: beim
-Öffentlichen.
+— das ist der Sinn der Sache. Bei einer **öffentlichen Freigabe** ist das anders: Wer sie meldet, gibt
+den Link weiter und damit auch den Schlüssel — sie lässt sich also öffnen und beurteilen. Einen
+Melde-Knopf gibt es in veyq nicht; melden heißt, der Person zu schreiben, die deine Instanz betreibt.
 
-Wer darauf reagiert, ist die Person, die deine Instanz betreibt. Eine zentrale Moderationsstelle gibt
-es nicht, weil es keinen zentralen Dienst gibt — und eingebaute Moderationswerkzeuge bringt veyq
-heute nicht mit. Was der Betrieb sehr wohl in der Hand hat, ist die **Erreichbarkeit**: eine Freigabe
-lässt sich offline nehmen. Private Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
+Reagieren kann dann nur diese Person. Eine zentrale Moderationsstelle gibt es nicht, weil es keinen
+zentralen Dienst gibt — und Moderationswerkzeuge bringt veyq heute nicht mit. **Eine einzelne Freigabe
+abschalten kann der Betrieb nicht**; das kann nur, wer sie erstellt hat. Was der Betrieb kann: einen
+**ganzen Bereich** auf seinem Server offline nehmen — für dessen Mitglieder und mit jeder Freigabe darin.
+Private Inhalte bleiben trotzdem unlesbar — genau das ist der Entwurf.
 
 ## Gebaut, um zu bleiben
 
 Erinnerungen sind für Jahrzehnte, deshalb sind die Schlösser so gewählt, dass sie **selbst künftigen
 Quantencomputern standhalten** — eine reale Sorge, denn jemand könnte verschlüsselte Daten heute
-kopieren und hoffen, sie später zu knacken. Dieser Schutz ist ein eingebautes Ziel, und das System ist
-so entworfen, dass die Schlösser **mit der Zeit erneuert werden können, ohne alles neu zu verschließen,
-was du schon hast.**
+kopieren und hoffen, sie später zu knacken. Der Entwurf lässt Raum, später stärkere Schlösser für Neues
+einzuführen, während alles, was du schon hast, lesbar bleibt, wie es ist. Das heißt aber auch: Deine
+vorhandenen Erinnerungen **wechseln nicht von selbst auf neue Schlösser** — heute gibt es nur einen Satz
+Schlösser, nötig war das also noch nie.
 
 Mehr: [Was passiert mit meinen Fotos, wenn die Quantencomputer kommen?](quantencomputer-und-deine-fotos.md)
 
 ## Ist es wirklich *ihr* Schlüssel — und eine ehrliche Lücke
 
 Wenn du mit einer anderen Person teilst, braucht deine App ihren Schlüssel, den sie von unserem Server holt.
-Wer den Server unehrlich betreibt, könnte deiner App theoretisch den *falschen* Schlüssel unterschieben. Um das
-zu erkennen, hat jede Person einen **Fingerabdruck** (eine kurze „Sicherheitsnummer"). Du und die
-andere Person könnt sie **über einen zweiten Kanal** vergleichen — vorlesen oder einen QR-Code scannen — und
-stimmt sie überein, gehört der Schlüssel wirklich dieser Person.
+Wer den Server unehrlich betreibt, könnte deiner App theoretisch den *falschen* Schlüssel unterschieben.
 
-**Der ehrliche Teil:** diese Prüfung ist **manuell** — sie schützt dich nur, wenn du tatsächlich
-vergleichst. veyq merkt sich den Schlüssel eines Kontakts **noch nicht** automatisch und warnt dich
-nicht, wenn er sich später ändert; das stärkere System („der Server kann über Schlüssel gar nicht
-lügen") ist **noch geplant**. Das Werkzeug zum Prüfen gibt es; das automatische Sicherheitsnetz noch
-nicht — und das sagen wir lieber, als es vorzutäuschen.
+**Deine App merkt sich den Schlüssel, den sie zuerst gesehen hat.** Liefert der Server später einen anderen,
+wird die Person mit **„Schlüssel geändert"** markiert, und deine App gibt ihr keine Schlüssel mehr, bis du
+dir das angesehen hast. **„Schlüssel prüfen"** zeigt die Nummer, der du vertraut hast, neben der jetzt
+gezeigten — jeder Schlüssel hat eine kurze **Sicherheitsnummer** —, damit ihr beide sie am Telefon
+vergleichen könnt. Danach nimmst du den neuen Schlüssel an oder lehnst ihn ab. Oft ist so eine Änderung
+harmlos (die Person hat ihre Schlüssel ersetzt), sie kann aber auch heißen, dass sich jemand als sie ausgibt.
+
+**Der ehrliche Teil:** Ob ihr wirklich vergleicht, liegt bei dir. Annehmen ist ein einziger Klick, und die
+App kann nicht erkennen, ob ihr verglichen habt. Eine Nummer *vorab* prüfen, bevor sich etwas geändert hat,
+geht noch nicht — kein QR-Code zum Scannen, keine Markierung „verifiziert". Und das Merken schützt erst ab
+dem ersten Schlüssel, den deine App gesehen hat: Hat der Server dir von Anfang an einen falschen geliefert,
+sieht nichts verdächtig aus. Das stärkere System, bei dem der Server über Schlüssel gar nicht lügen kann,
+ist **geplant, aber nicht gebaut** — und das sagen wir lieber, als es vorzutäuschen.
 
 ## Wenn etwas schiefgeht
 

@@ -26,15 +26,15 @@ database:
 
 ## What we *can* still see — and why
 
-We won't pretend it's magic. To run the service — sort your timeline, show a page, enforce who's
+We won't pretend it's magic. To run the service — hand you your things page by page, enforce who's
 allowed in — the server sees a few **low-sensitivity, operational** facts:
 
 | We can see | We cannot see |
 |---|---|
 | that a memory / photo / share **exists**, and its ID | what's **inside** it |
-| **how big** a file is, and its rough type (e.g. "a video") | the file itself |
+| **how big** a file is | the file itself — not even whether it's a photo or a video, though the way a video streams while someone watches it can give that away |
 | **who is in which** group or space | what they wrote or uploaded |
-| coarse **timestamps** used to order your timeline | the content behind them |
+| **when** something was uploaded or last changed | when a photo was **taken** — your device sorts your timeline by that date, and it stays locked |
 
 It's like seeing **labelled boxes on a shelf and who holds a key** — never the contents. Those few
 facts are what let the server be useful without ever decrypting.
@@ -58,35 +58,41 @@ Two honest limits:
 ## Illegal content & abuse
 
 Because private content is invisible to us, we **can't** scan your private memories — that's the
-point. Where content is actually **distributed** — a **public share** — an abuse report includes the
-link, and therefore the key, so it can be opened and judged. Notice-and-takedown works exactly where
-it should: on the public stuff.
+point. A **public share** is different: whoever reports one hands over the link, and with it the key, so
+it can be opened and judged. There is no report button in veyq — reporting means writing to whoever runs
+your instance.
 
-Who acts on it is whoever runs your instance. There is no central moderation team, because there is
-no central service — and veyq ships no built-in moderation tooling today. What the operator does have
-is control over **reachability**: they can take a share offline. They still cannot read anything
-private, which is the whole design.
+Who acts on it is that person. There is no central moderation team, because there is no central service —
+and veyq ships no moderation tooling today. The operator **cannot switch off a single share**: only the
+person who created it can. What the operator can do is take a **whole space** on their server offline — for
+its members and for every share in it. They still cannot read anything private, which is the whole design.
 
 ## Built to last
 
 Memories are for decades, so the locks are chosen to **resist even future quantum computers** — a real
-concern, because someone could copy encrypted data today and hope to crack it later. That protection is
-a built-in goal, and the system is designed so the locks can be **upgraded over time without
-re-locking everything you already have.**
+concern, because someone could copy encrypted data today and hope to crack it later. The design leaves
+room to add stronger locks later for new things you save, while what you already have stays readable as it
+is. That also means your existing memories **don't move to new locks by themselves** — today there is only
+one set of locks, so nothing has needed to.
 
 More: [What happens to my photos when quantum computers arrive?](quantum-computers-and-your-photos.md)
 
 ## Making sure it's really *their* key — and an honest gap
 
 When you share with a friend, your app needs your friend's key, which it gets from our server. A
-dishonest operator could, in theory, hand your app the *wrong* key. To catch that, every person has a
-**fingerprint** (a short "safety number"). You and your friend can compare it **out-of-band** — read
-it aloud or scan a QR code — and a match proves the key is genuinely theirs.
+dishonest operator could, in theory, hand your app the *wrong* key.
 
-**The honest part:** this check is **manual** — it only protects you if you actually compare. veyq does
-**not yet** automatically remember a contact's key and warn you if it later changes, and the stronger
-"the server can't lie about keys at all" system is **still planned**. The tool to verify exists; the
-automatic safety net doesn't yet — and we'd rather tell you than imply it does.
+**Your app remembers the key it first saw.** If the server later hands over a different one, that person is
+marked **"Key changed"**, and your app gives them no keys until you have looked at it. **"Review key"** shows
+the number you trusted next to the one shown now — every key has a short **safety number** — so the two of
+you can compare them over a call, and then you accept the new key or refuse it. A change is often harmless
+(your friend replaced their keys), but it can also be someone posing as them.
+
+**The honest part:** the comparing is up to you. Accepting is a single tap, and the app cannot tell whether
+you really compared. There is no way yet to check someone's number *before* anything has changed — no QR
+code to scan, no "verified" mark. And remembering only helps from the first key your app saw: if the server
+handed you a wrong key from the very start, nothing looks wrong. The stronger system, where the server can't
+lie about keys at all, is **planned, not built** — and we'd rather tell you than imply otherwise.
 
 ## If something goes wrong
 

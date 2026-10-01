@@ -79,16 +79,20 @@ sequenceDiagram
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** To be extra sure someone really is who they claim, you can **verify** them: hold your phones together
-and scan a QR code (or read a short number aloud). Match = a green "verified"; no match = a warning not to
-trust. You only do it once per person, and it works in every shared space with them. If you want it enforced,
-a "require verification" setting refuses to share with anyone you haven't verified yet.
+**EN —** **Planned — not in the app today.** The idea: to be extra sure someone really is who they claim, you
+would **verify** them ahead of time — scan a QR code on their phone, or read a short number aloud — and get a
+"verified" mark that holds in every shared space with them. A setting that refuses to share with anyone you
+haven't verified is wanted too, but how it could protect a space other members also share into is still open.
+Today you compare the number only when a key has **changed**: the app marks that person "Key changed" and shows
+both numbers for you to check before you accept.
 
-**DE —** Um ganz sicher zu sein, dass jemand wirklich ist, wer er vorgibt zu sein, kannst du ihn **verifizieren**:
-Handys aneinanderhalten und einen QR-Code scannen (oder eine kurze Zahl vorlesen). Passt = ein grünes
-„verifiziert"; passt nicht = eine Warnung, nicht zu vertrauen. Du machst es nur einmal pro Person, und es gilt
-in jedem geteilten Raum mit ihr. Willst du es erzwingen, verweigert eine Einstellung „Verifizierung
-erforderlich" das Teilen mit noch nicht verifizierten Personen.
+**DE —** **Geplant — heute noch nicht in der App.** Die Idee: Um ganz sicher zu sein, dass jemand wirklich die
+Person ist, die sie vorgibt zu sein, würdest du sie vorab **verifizieren** — einen QR-Code auf ihrem Handy
+scannen oder eine kurze Zahl vorlesen — und bekämst eine Markierung „verifiziert", die in jedem geteilten Raum
+mit ihr gilt. Eine Einstellung, die das Teilen mit nicht verifizierten Personen verweigert, ist ebenfalls
+gewünscht; wie sie einen Raum schützen soll, in den auch andere Mitglieder teilen, ist aber noch offen. Heute
+vergleichst du die Nummer nur, wenn sich ein Schlüssel **geändert** hat: Die App markiert die Person mit
+„Schlüssel geändert" und zeigt dir beide Nummern, bevor du annimmst.
 
 ## Related
 
