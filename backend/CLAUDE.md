@@ -40,6 +40,11 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   So a spec edit that changes only `description:` / `summary:` text produces **no backend delta at all** and
   needs no backend phase: the contracts guards are its whole check. A shape change — a property, a type, a
   `format:`, an enum, a required flag — is the opposite, and always does.
+  **One tag is one generated interface with ONE root `@Path`** — the longest prefix its operations share. An
+  operation whose path leaves that prefix widens the root (`/api/item-favorites` beside
+  `/api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` made it `/api`), and RESTEasy then matches the per-node
+  routes to the more specific `/api/scopes` resources first and never falls back: every existing route of the tag
+  answers 404/405. Give such an operation a tag of its own (`own-item-favorites`).
 - **Feature-slice + two axes ([ADR 0001](../docs/decisions/0001-backend-http-adapter-vs-application-slicing.md)):**
   `features/<area>/<usecase>/…`. A `…Resource` implements the generated `…Api` (thin adapter), delegates to
   a `…Handler`; persistence in a `…Store` (Panache). Resources are resource-shaped, not per-use-case.
