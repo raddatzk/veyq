@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Every runtime image this repository ships runs as a non-root user and binds no privileged port.
+"""Every runtime image this repository ships runs as a non-root user and binds no privileged port — and is what a
+bare `docker build` of its Dockerfile builds.
 
 **What it asserts.** For every tracked `Dockerfile` (found by name through `git ls-files`, never listed), every
 `runtime-*` stage — the stages `.github/workflows/container.yml` publishes — (a) ends on a `USER` instruction
@@ -35,6 +36,14 @@ The stage set is `runtime-*` by name, the same convention `validate_app_volume_o
 `validate_release_identity.py` anchor on; a published stage named otherwise is out of reach, and that is a
 limit of the convention rather than of this file.
 
+**Second assertion — a bare build builds what ships.** Every `(dockerfile, target)` pair in the build job's matrix
+of `.github/workflows/container.yml` (read out of the workflow, never listed) names that file's **last** stage,
+because `docker build .` with no `--target` builds the last stage. Bought on 2026-09-28 (inbox #191): the app
+`Dockerfile` ended on `runtime-native` while the release publishes `runtime-jvm`, so a bare build built the
+unshipped target — and that target did not even build (its `microdnf install curl` conflicted with the base's
+`curl-minimal`), which is how a plain `docker build .` met a failure no released image had. Limit: it proves the
+order, not that either target builds; and a target published from some other workflow is out of its reach.
+
 Buildless and diff-free, so it belongs in the trust-chain glob.
 """
 from __future__ import annotations  # `str | None` below — the repo's guards run on Python 3.9
@@ -44,7 +53,17 @@ import re
 import subprocess
 import sys
 
+try:
+    import yaml
+except ModuleNotFoundError:  # pragma: no cover - same shape as the other guards
+    print("PyYAML is required (pip install pyyaml)", file=sys.stderr)
+    sys.exit(2)
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+WORKFLOW = ROOT / ".github" / "workflows" / "container.yml"
+BUILD_JOB = "build"
+# Any `FROM`, named or not — the last one is the stage a build without `--target` produces.
+ANY_FROM = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*(?:\s+AS\s+(\S+))?\s*$", re.IGNORECASE | re.MULTILINE)
 
 # `FROM <image> AS <stage>` — the stage name is what container.yml's build matrix targets.
 STAGE = re.compile(r"^\s*FROM\s+\S+(?:\s+--\S+)*\s+AS\s+(\S+)\s*$", re.IGNORECASE | re.MULTILINE)
@@ -131,6 +150,36 @@ for dockerfile in sorted(tracked_dockerfiles()):
                 f"unprivileged port and let the deployment map it."
             )
 
+def published_targets() -> list[tuple[str, str]]:
+    """Every `(dockerfile, target)` the build matrix publishes, from its `include` entries."""
+    try:
+        doc = yaml.safe_load(WORKFLOW.read_text()) or {}
+    except (OSError, yaml.YAMLError) as e:
+        errors.append(f"{WORKFLOW.relative_to(ROOT)} does not load ({e}) — no published target could be checked")
+        return []
+    matrix = ((doc.get("jobs") or {}).get(BUILD_JOB) or {}).get("strategy", {}).get("matrix", {})
+    return [(str(i["dockerfile"]), str(i["target"])) for i in (matrix.get("include") or [])
+            if isinstance(i, dict) and "dockerfile" in i and "target" in i]
+
+
+targets = published_targets()
+if not targets:
+    errors.append(f"{WORKFLOW.relative_to(ROOT)}'s `{BUILD_JOB}` matrix names no (dockerfile, target) pair — "
+                  f"re-anchor this guard; it checked no published target")
+for rel, target in targets:
+    path = ROOT / rel
+    if not path.is_file():
+        errors.append(f"{WORKFLOW.relative_to(ROOT)} publishes `{target}` from `{rel}`, which does not exist")
+        continue
+    froms = list(ANY_FROM.finditer(path.read_text()))
+    last = froms[-1].group(1) if froms else None
+    if last != target:
+        errors.append(
+            f"{rel}: the release publishes `{target}`, but the file's last stage is `{last}` — a bare "
+            f"`docker build` builds the last stage, so it would build something the release never ships. "
+            f"Move `{target}` to the end of the file."
+        )
+
 if checked == 0:
     # A guard that inspected nothing must not report success: no tracked Dockerfile, or a convention drift that
     # renamed every runtime stage, both land here and both are findings.
@@ -142,4 +191,5 @@ if errors:
         print("  -", e)
     sys.exit(1)
 
-print(f"images run unprivileged OK: {checked} runtime stage(s) end on a non-root USER and EXPOSE only ports >= {UNPRIVILEGED_PORT}")
+print(f"images run unprivileged OK: {checked} runtime stage(s) end on a non-root USER and EXPOSE only ports >= {UNPRIVILEGED_PORT}; "
+      f"{len(targets)} published target(s) are their file's last stage")
