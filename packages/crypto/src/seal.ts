@@ -57,9 +57,8 @@ export const SEAL_PURPOSES = {
   // inside node-meta, so a date or location edit never carries it.
   'drop-private-key': [['scopeId', 'id'], ['nodeId', 'id']],
   // No member id: a reader addresses every member's entry by scope + node only, because the read deliberately
-  // carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA). Binding the marking member would
-  // need that id on the wire; so the server can still relabel which entry is the caller's own (`self`), an
-  // integrity gap within one Memory's marks, never a confidentiality one (every member can open every entry).
+  // carries no member id (ADR 0068 §6 — the aggregate is anonymous in the DATA), so an opener could not supply one.
+  // WHOSE an entry is rides inside the plaintext instead, as the `item-mark-self` statement's tag below (ADR 0068 §9).
   'item-favorites': [['scopeId', 'id'], ['nodeId', 'id']],
   favorites: [['scopeId', 'id']],
   'member-name': [['scopeId', 'id'], ['userId', 'id']],
@@ -232,13 +231,17 @@ export const encodeSealToContext = (context: SealToContext): Uint8Array => encod
 
 /**
  * Statements a key MACs or signs rather than seals — in the same canonical encoding, so their label domain-separates
- * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json#admission`.
+ * them from each other and from every seal purpose. Pinned by `contracts/crypto/vectors/v1.json` (`#admission_tag`,
+ * `#grant_signature`, `#item_mark_self`, `#pairing_channel`).
  *   - `admission-tag` (ADR 0020 move 6): what the scope's current epoch key MACs to admit a membership. `userId` is
  *     the target's account for a group add and absent (`null`, the empty field) for a tenant invite, whose invitee
  *     has no account yet. It binds neither the role nor the identity key, on purpose (ADR 0020 move 6).
  *   - `grant` (ADR 0028 Decision 6): what a granter's identity key signs over a grant it posts. The scope KIND is
  *     signed so a group's genuine grant cannot be presented as the recipient's personal scope; the two digests are
  *     SHA-256 over the DECODED recipient identity public bundle and the DECODED grant ciphertext.
+ *   - `item-mark-self` (ADR 0068 §9): what a member's Master-Key-derived key MACs over their marks on one node, so
+ *     their own client can tell their entry from a co-member's without the read naming anyone. `marks` is SHA-256
+ *     over the marked ids, de-duplicated and sorted — the SET, bound whole, so a copied tag answers for no other set.
  *   - `pairing-answer`, `pairing-sign-in-answer`, `pairing-envelope` (ADR 0059 §11): what the pairing channel key
  *     MACs over the two values the relay carries — the new device's serialized transport public bundle (and, when
  *     signing in with a QR code, the transcribed code), and the sealed grant's DECODED ciphertext. Two answer labels
@@ -254,6 +257,7 @@ export const STATEMENT_PURPOSES = {
     ['recipientIdentityDigest', 'digest'],
     ['wrappedGrantDigest', 'digest'],
   ],
+  'item-mark-self': [['scopeId', 'id'], ['nodeId', 'id'], ['marks', 'digest']],
   'pairing-answer': [['transportKey', 'bytes']],
   'pairing-sign-in-answer': [['transportKey', 'bytes'], ['code', 'pairingCode']],
   'pairing-envelope': [['envelope', 'bytes']],
