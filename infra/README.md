@@ -500,6 +500,33 @@ release, and only one of a mismatched pair migrated the schema. With a digest se
 `repository:tag@digest`, and the node pulls by the digest. Rollback is the backup plus the previous tags and
 digests, exactly as under compose.
 
+#### Restore under Helm
+
+The mirror of the capture above: the tool reaches MariaDB and Garage through port-forwards and cannot reach the
+app's claim, so it writes leg (c) to a local file of your own, and `kubectl cp` puts it in the pod. `kubectl cp`
+unpacks as the container's user, uid 10001, so the key is born the app's — the property the compose restore gets
+from running as root. Onto a **freshly installed** release, exactly as § Restore requires:
+
+```sh
+kubectl -n veyq scale deploy/veyq-app --replicas=0      # 1. stop the application
+# 2. port-forward MariaDB and Garage as for the capture; then § Restore's command, with
+#    --config-secret-file ./veyq-config-secret.key --key-from /media/usb-stick/veyq-<stamp>.key
+#    (a file you own, so the tool writes it 0600 as you)
+kubectl -n veyq scale deploy/veyq-app --replicas=1      # 3. the pod mounts the claim again
+kubectl -n veyq rollout status deploy/veyq-app
+kubectl -n veyq cp ./veyq-config-secret.key "$(kubectl -n veyq get pod -l app.kubernetes.io/component=app \
+  -o jsonpath='{.items[0].metadata.name}')":/var/lib/veyq/config-secret.key   # 4. leg (c) in
+rm ./veyq-config-secret.key
+kubectl -n veyq rollout restart deploy/veyq-app         # 5. NOT optional — see below
+# 6. verify as § Restore says: configSecretState: OK, then a person opens a Memory with media
+```
+
+The restart is part of the procedure: anything that touched the seal between step 3 and step 4 holds the fresh
+install's key in memory, and the instance would report `MISMATCH` until it restarts. `kubectl cp` needs `tar` in
+the container — the JVM image (`runtime-jvm`, the one the release publishes) has it; the native target's
+`ubi-minimal` base does not (both measured 2026-10-01), so neither this nor the capture's `kubectl cp` works
+against a native image. **Derived, not rehearsed**: no cluster has run it.
+
 ## Backup & restore
 
 The use-case owns the goal and the failure modes
@@ -611,6 +638,29 @@ python3 scripts/instance_backup.py restore infra/backups/<stamp> \
 The restore takes the key from where the capture's manifest says it went. A capture that kept it apart is
 **refused** without `--key-from`, before anything is written: restoring without leg (c) is A2 — an instance that
 boots and refuses invites and password resets — and it happens only when you pass `--without-key` on purpose.
+
+**The key must end up readable by the application, which runs as uid 10001** (the image's `USER`). The tool gives
+the key the owner of the directory it lands in, and refuses — before anything is written — a run that cannot: a
+key born `root:root 0600` in the app's volume is one the app cannot read, so it reports `ABSENT` and refuses
+invites and resets with the key right there. On the **production recipe** leg (c) lives on the
+`veyq-config-secret` volume, which Docker created owned by `10001`, so the restore runs as root, addressed the way
+the capture addresses it (§ An upgrade, step by step, step 2), with the same `veyq_edge` network:
+
+```sh
+sudo -E python3 scripts/instance_backup.py restore infra/backups/<stamp> \
+    --domain <your domain> \
+    --compose-file infra/docker-compose.prod.yml \
+    --docker-network veyq_edge \
+    --config-secret-file "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key" \
+    --key-from /media/usb-stick/veyq-<stamp>.key
+sudo stat -c '%u:%g %a' "$(docker volume inspect -f '{{.Mountpoint}}' veyq_veyq-config-secret)/config-secret.key"
+#    → 10001:10001 600
+```
+
+`-E` keeps the `VEYQ_BACKUP_DB_PASSWORD` / `VEYQ_BLOB_STORE_*` variables the tool reads (a `sudoers` that resets
+the environment needs them passed explicitly). Run without root against that path, the tool refuses and says
+why. **This production command is derived, not rehearsed** — no production stack has been restored onto yet;
+the tool's owner rule is held by `scripts/instance_backup_selftest.py`, without Docker or root.
 
 The store's **configuration** is not restored because it was never state: bucket, access key and single-node
 layout are recreated idempotently by the app itself, on every start. This has no "fresh node only" limit — the

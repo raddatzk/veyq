@@ -29,6 +29,13 @@ acceptanceCriteria:
       # MISMATCH plus a 503 `mail_unavailable` invite while the Memory still opens, with a pre-capture `OK` as its
       # positive control. `restore.b-reopen` is the other remedy's half: with the key file restored, the state
       # reads `OK`.
+      # A precondition of that `OK`, not a criterion of its own: the restored key must be READABLE by the app
+      # (uid 10001 on both deployment targets), or it reads ABSENT with the key present (inbox #188). The
+      # rehearsal cannot see it — it restores as the same user that runs the backend. The tool's owner rule is
+      # proven docker-free by `scripts/instance_backup_selftest.py` (every plan branch, and a refusal before the
+      # first write), which `ci.yml`'s `web-e2e` job runs; a Python operator tool is no coverage surface, so it is
+      # named here rather than cited. The production recipe's live run (root over the 10001-owned volume →
+      # `10001:10001 600` and `configSecretState: OK`) has NOT been recorded: it needs a production stack and root.
       web:
         e2e:
           - src/features/instanceBackup/legthree.a-capture.e2e.test.ts
