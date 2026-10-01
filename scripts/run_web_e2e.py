@@ -179,6 +179,11 @@ GARAGE_ADMIN_TOKEN = os.environ.get("VEYQ_GARAGE_ADMIN_TOKEN", "veyq-dev-admin-t
 # exact alias, so the name is a contract between this file and that class.
 STORE_BUCKET = "blobs"
 STORE_KEY_ALIAS = "veyq-app"
+# The store's compose service, and its S3 API as `infra/docker-compose.yml` publishes it to this host (`19000:3900`)
+# — the endpoint `%e2e` hands the jar, so every presigned URL of a run goes through it. [plant_store_sentinel]
+# sends the run's log control there.
+STORE_SERVICE = "garage"
+STORE_S3 = "http://127.0.0.1:19000"
 
 # The throwaway mailbox, published by `infra/docker-compose.yml`'s `mail` profile. It is EXPORTED to each suite as
 # `VEYQ_MAILPIT` rather than left to the suite's own default: mail is no longer one feature's substrate — a member
@@ -1058,6 +1063,120 @@ def sweep_logs(workdir: Path, canary_files: Iterable[Path]) -> str | None:
     return None
 
 
+def plant_store_sentinel(stamp: str) -> str:
+    """Send the store one unsigned request for a run-unique key; its log must then carry it, percent-encoded.
+
+    The container sweep's positive control ([sweep_containers]): a sensor that cannot find the value it was handed
+    cannot be trusted to find one it was not. The sentinel holds a space and a non-ASCII character so the store
+    logs it ENCODED — measured on Garage v2.0.0, which logs `<addr> <method> <uri>` at INFO for a request it then
+    refuses (`403 AccessDenied`, anonymous access unsupported) — and the sweep can only find it through the `pct`
+    needle. Unsigned on purpose: refused, it reads and writes nothing. Planted at the START of the run, so finding
+    it also proves the log window reaches back to where the run began.
+    """
+    sentinel = f"veyq wire-log sentinel {stamp} Größe"
+    url = f"{STORE_S3}/{STORE_BUCKET}/{urllib.parse.quote(sentinel, safe=URI_COMPONENT_SAFE)}"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as r:
+            status = r.status
+    except urllib.error.HTTPError as e:
+        status = e.code
+    except (urllib.error.URLError, OSError) as e:
+        raise SystemExit(f"[e2e] STORE UNREACHABLE at {STORE_S3}: the log sweep's control could not be planted "
+                         f"({e}) — and every presigned URL of the run goes to the same address") from e
+    log(f"planted the store-log sentinel {sentinel!r}: one unsigned GET, answered {status}")
+    return sentinel
+
+
+def compose_services() -> list[str]:
+    """Every service of the compose project the run brought up — derived from Compose, never listed."""
+    proc = subprocess.run(COMPOSE + ["ps", "--all", "--services"], capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise SweepError(f"`docker compose ps` failed ({proc.returncode}): {proc.stderr.strip()[-300:]}")
+    services = sorted(line.strip() for line in proc.stdout.splitlines() if line.strip())
+    if not services:
+        raise SweepError("`docker compose ps` reported no service — there is no container log to sweep")
+    return services
+
+
+def container_log(service: str, since: str) -> str:
+    """One service's log from `since` (the run's start, a unix time) to now. A non-zero exit is an error, never ''."""
+    proc = subprocess.run(
+        COMPOSE + ["logs", "--no-color", "--no-log-prefix", "--timestamps", "--since", since, service],
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise SweepError(f"`docker compose logs {service}` failed ({proc.returncode}): "
+                         f"{proc.stderr.decode('utf-8', errors='replace').strip()[-300:]}")
+    return proc.stdout.decode("utf-8", errors="replace")
+
+
+def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, sentinel: str) -> str | None:
+    """Prove no canary of the run is readable in any container log of the stack, over the run's window.
+
+    **What it asserts.** Every service `docker compose ps` reports (MariaDB, Garage, Traefik, Mailpit today) has its
+    log read from the run's start to now, retained as `container-<service>.log`, and searched for the union of the
+    run's canaries through [canary_needles]. The store is the container that matters — Garage logs every request
+    URI, query string included, so its log is the only surviving record of an object key whose object was deleted
+    or never completed — and it is armed by the sentinel [plant_store_sentinel] sent, which must be found through
+    the `pct` needle.
+
+    **The defect that bought it.** No incident; the same gap as the boot log's — nothing read these logs at all.
+
+    **Its limit.** Only the store carries a control. Traefik carries no e2e traffic (the suites call the backend
+    and the store directly) and has no access log; MariaDB's general log is off and Mailpit logs deliveries, not
+    bodies — those three are swept because the rule that includes them is derived, not because anything proves
+    they could show a leak. The logs are shared by every suite of the run and by a developer's own traffic in the
+    same window, so a hit's suite is inferred from the canary, not from the log.
+    """
+    carriers, problems = load_canaries(canary_files)
+    if not carriers:
+        return "the run's canary files hold no canary — a green container-log sweep would mean nothing"
+    try:
+        services = compose_services()
+    except SweepError as e:
+        return str(e)
+
+    hits: list[Hit] = []
+    unmet: list[str] = list(problems)
+    if STORE_SERVICE not in services:
+        unmet.append(f"the store's service `{STORE_SERVICE}` is not among {services} — its control cannot be met")
+    for service in services:
+        try:
+            text = container_log(service, since)
+        except SweepError as e:
+            unmet.append(str(e))
+            continue
+        (workdir / f"container-{service}.log").write_text(text, encoding="utf-8")
+        found = needle_hits(f"container {service}", text, carriers)
+        hits.extend(found)
+        armed = "no control (see the concern's § What a green sweep does not prove)"
+        if service == STORE_SERVICE:
+            planted = needle_hits(f"container {service}", text, [sentinel])
+            if not planted:
+                unmet.append(f"the planted sentinel {sentinel!r} is NOT in the `{service}` log — the window, the "
+                             f"log level or the matcher is wrong, and this sweep proves nothing about the store")
+                armed = "planted sentinel NOT found"
+            elif planted[0].variant != "pct":
+                unmet.append(f"the planted sentinel was found through `{planted[0].variant}`, not `pct` — the store "
+                             f"no longer logs the URI as sent, so the percent-encoded needle is unproven this run")
+                armed = f"planted sentinel found only through {planted[0].variant}"
+            else:
+                armed = f"planted sentinel found through pct (line {planted[0].line_no})"
+        log(f"container log sweep: {service} — {text.count(chr(10))} line(s) since {since}, {len(found)} hit(s); "
+            f"{armed}")
+
+    if hits or unmet:
+        log(f"WIRE ASSERTION FAILED on the container logs — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
+        report_hits(hits, carriers)
+        for reason in unmet:
+            log(f"    control: {reason}")
+        return (f"the wire assertion failed on the container logs: {len(hits)} canary hit(s), {len(unmet)} unmet "
+                f"control(s) across {len(services)} service(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(services)} container "
+        f"log(s); the store's armed by its planted sentinel")
+    return None
+
+
 class Instance:
     """The three things a boot is pointed at, and the one thing a group's hook replaces wholesale."""
 
@@ -1091,7 +1210,7 @@ def into_groups(files: list[Path]) -> list[list[Path]]:
 
 def garage(*args: str) -> subprocess.CompletedProcess:
     """Drive the store's CLI. Its image is shell-less, so this execs the binary directly, never through `sh`."""
-    return subprocess.run(COMPOSE + ["exec", "-T", "garage", "/garage", *args], capture_output=True, text=True)
+    return subprocess.run(COMPOSE + ["exec", "-T", STORE_SERVICE, "/garage", *args], capture_output=True, text=True)
 
 
 def fresh_bucket(name: str) -> None:
@@ -1605,6 +1724,8 @@ def main(argv: list[str]) -> int:
     log(f"run artifacts (boot logs, canary files) land in {workdir.relative_to(REPO)}/")
 
     compose_up(workdir)
+    # The container sweep's control, planted first so that finding it proves the log window reaches the run's start.
+    sentinel = plant_store_sentinel(stamp)
 
     # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
     # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
@@ -1621,6 +1742,9 @@ def main(argv: list[str]) -> int:
     canary_files = sorted(workdir.rglob("canaries-*.json"))
     run_failures = [(name, reason) for name, reason in (
         ("(run) server-log sweep", sweep_logs(workdir, canary_files)),
+        # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
+        # long-lived containers is not this run's to answer for.
+        ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel)),
     ) if reason]
 
     print("", flush=True)

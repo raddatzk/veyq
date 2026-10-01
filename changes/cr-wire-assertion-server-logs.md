@@ -173,7 +173,7 @@ variant. Re-derive it at implement time rather than trusting the numbers above: 
   - D6's two flags in `boot()`.
   - Worktree note for the implementer: run the **worktree's** orchestrator with `VEYQ_INFRA_DIR=<main
     checkout>/infra` (the `compose_up` docstring owns why).
-- [ ] **2 · Container logs + the Garage plant** · Done when: a run green, printing per container the line count
+- [x] **2 · Container logs + the Garage plant** · Done when: a run green, printing per container the line count
       swept and, for Garage, the sentinel found and through which variant; B4 red first.
   - The plant is one plain HTTP request from the orchestrator to the store's published S3 port for
     `/<bucket>/<sentinel>` — unsigned, refused, and logged. **Confirm at implement time that the refused request
