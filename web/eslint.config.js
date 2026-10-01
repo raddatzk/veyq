@@ -1,6 +1,16 @@
 import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 
+// `veyq/one-settings-door` below: every static spelling of a navigation to the settings hub, as AST selectors.
+// Shared by the script rule and its template twin, because a template expression parses into the same node types.
+const SETTINGS_DOOR_MESSAGE =
+  "The shell has one door into the settings hub: ProfileMenu. Navigate through it, or add this file to the block's ignores with its reason."
+const SETTINGS_DOOR = [
+  'Literal[value=/^\\/settings(\\/|$)/]', // '/settings', '/settings/devices'
+  'TemplateElement[value.raw=/^\\/settings(\\/|$)/]', // `/settings/${id}`
+  "Property[key.name='name'][value.value='settings']", // { name: 'settings' }
+].map((selector) => ({ selector, message: SETTINGS_DOOR_MESSAGE }))
+
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
 // covered by tsconfig (`noUnusedLocals`/`noUnusedParameters`); ESLint adds the Vue-template
@@ -69,6 +79,29 @@ export default defineConfigWithVueTs(
             },
           ],
         },
+      ],
+    },
+  },
+  {
+    // The shell offers exactly one door into the settings hub: ProfileMenu's settings item (ADR 0022 §5). A second
+    // door is how the hub drifts back into scattered preference screens, so every STATIC spelling of a navigation
+    // to it is refused outside the files that legitimately hold one: the path and its deep links (`'/settings'`,
+    // `` `/settings/${id}` ``), the named route (`{ name: 'settings' }`), and a static or bound `to`/`href`. It
+    // matches AST nodes, so a comment naming the route is not a door. Ignored: `router.ts` declares the route,
+    // `ProfileMenu.vue` IS the door, and `SettingsHubView.vue` navigates INSIDE the hub (a door from the hub to the
+    // hub has nothing to catch). A second legitimate door is one more `ignores` entry. LIMIT: a path assembled at
+    // runtime is not a literal and is not seen (`'/' + 'settings'`, a variable passed as `path`,
+    // `window.location`). And flat config resolves a rule by name, last block wins: a later block that sets
+    // `no-restricted-syntax` for these files replaces these selectors rather than adding to them.
+    name: 'veyq/one-settings-door',
+    files: ['src/**/*.{ts,vue}'],
+    ignores: ['src/**/*.test.ts', 'src/router.ts', 'src/components/app/ProfileMenu.vue', 'src/views/SettingsHubView.vue'],
+    rules: {
+      'no-restricted-syntax': ['error', ...SETTINGS_DOOR],
+      'vue/no-restricted-syntax': ['error', ...SETTINGS_DOOR],
+      'vue/no-restricted-static-attribute': [
+        'error',
+        ...['to', 'href'].map((key) => ({ key, value: '/^\\/settings(\\/|$)/', message: SETTINGS_DOOR_MESSAGE })),
       ],
     },
   },

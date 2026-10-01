@@ -1,7 +1,7 @@
 ---
 id: cr-one-settings-door-in-lint
 title: The one door into the settings hub is a lint rule over every spelling, not a regex over .vue files
-status: planned
+status: done
 satisfies: []
 adrs: []
 invariants: []
@@ -83,7 +83,7 @@ mount test keeps the one real door honest.
 
 ## Phases
 
-- [ ] 1 web: Decisions 1–3. · Done when: `npm run check` in `web/` is green, and the bites below are recorded.
+- [x] 1 web: Decisions 1–3. · Done when: `npm run check` in `web/` is green, and the bites below are recorded.
 
 ## Definition of done
 
@@ -101,4 +101,14 @@ mount test keeps the one real door honest.
 
 ## Retrospective
 
-_(filled at implement)_
+- **Planning held.** The prototype's selectors went in unchanged and behaved as measured at refine: green on the
+  untouched tree, 8 errors on the 8 injected spellings (4 `no-restricted-syntax` in the `.ts`, 2
+  `vue/no-restricted-syntax` + 2 `vue/no-restricted-static-attribute` in the `.vue`), none on the three comments.
+  The positive control reddened on the injected `push('/')` and the full `npm run check` stayed green.
+- **One bite was coarser than the CR said.** The DoD expected the `src/features/**` lever to drop "the `.ts`
+  errors"; it dropped all 8, because the CR also put the `Probe*.vue` under `src/features/<x>/`. The lever is still
+  shown to gate scope, but it does not separate the script rule from the template rules. Next time a scope bite
+  that should drop only part of a set puts the probes in different directories.
+- **A trap the CR did not name, now in the block's comment:** flat config resolves a rule by name, last block
+  wins, so a later block setting `no-restricted-syntax` for the same files would silently replace these
+  selectors. Today the only other user is the test-file block, which this one ignores.
