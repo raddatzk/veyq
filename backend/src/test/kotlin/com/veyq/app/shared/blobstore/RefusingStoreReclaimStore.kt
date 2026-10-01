@@ -36,8 +36,9 @@ import jakarta.transaction.Transactional
 class RefusingStoreReclaimStore : StoreReclaimStore() {
 
     /** When set, [record] throws for any batch holding a storage key that contains this marker, writing nothing
-     *  for the whole batch — a rejected insert is rejected, not partially applied. `@Volatile`: a `@Scheduled`
-     *  purge can read it from a scheduler thread while the test that armed it wrote from its own. */
+     *  for the whole batch — a rejected insert is rejected, not partially applied. `@Volatile` for a test
+     *  that resumes the scheduler, which `%test` starts halted (`ScheduledJobsHaltedInTestTest`): a `@Scheduled`
+     *  purge can then read it from a scheduler thread while the test that armed it wrote from its own. */
     @Volatile
     var failOnKeyMarker: String? = null
 

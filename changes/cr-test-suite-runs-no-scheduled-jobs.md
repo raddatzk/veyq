@@ -1,7 +1,7 @@
 ---
 id: cr-test-suite-runs-no-scheduled-jobs
 title: The backend test suite runs no scheduled job on its own — every job body runs only when a test calls it
-status: planned
+status: in-progress
 satisfies: []
 adrs: []
 invariants: []
@@ -228,7 +228,7 @@ the way the six covered jobs' tests already do. None of them adds a production c
 Backend only (no contract, no web). Phase 1 is the approved change. Phase 2 exists only if owner question 4 is
 answered "fold". The two phases are independent, so Phase 1 lands first and alone.
 
-- [ ] 1 backend —
+- [x] 1 backend —
   1. **Red first (live defect).** Write D2's test against the unchanged `application-test.properties` and run
      `./gradlew test --tests '*ScheduledJobsHaltedInTestTest'`. **Expected: red on assertion 3 (`isRunning()`),
      with 1 and 2 green.** Record which assertion fired (§ *read which assertion reddened*).
