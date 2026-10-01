@@ -523,9 +523,8 @@ kubectl -n veyq rollout restart deploy/veyq-app         # 5. NOT optional — se
 
 The restart is part of the procedure: anything that touched the seal between step 3 and step 4 holds the fresh
 install's key in memory, and the instance would report `MISMATCH` until it restarts. `kubectl cp` needs `tar` in
-the container — the JVM image (`runtime-jvm`, the one the release publishes) has it; the native target's
-`ubi-minimal` base does not (both measured 2026-10-01), so neither this nor the capture's `kubectl cp` works
-against a native image. **Derived, not rehearsed**: no cluster has run it.
+the container — the app image (`runtime-jvm`, the Dockerfile's only runtime target) has it (measured
+2026-10-01). **Derived, not rehearsed**: no cluster has run it.
 
 ## Backup & restore
 
