@@ -15,6 +15,8 @@ invariants:
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 Each question carries a recommendation; the CR below is written as if every recommendation is taken.
 
 1. **Is #203 a live defect?** **No — measured.** Every one of the six kinds the row names is hashed (hex SHA-256,

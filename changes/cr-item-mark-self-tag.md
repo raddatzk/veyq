@@ -14,6 +14,8 @@ that re-runs it) or `remembered`.
 
 ## Open for the owner
 
+**Second round answered by the owner, 2026-10-01: every recommendation added since the first answer is taken too** (questions added by the 2026-09-28 second refine wave). Rows those questions proposed exist as #222–#232.
+
 **Answered by the owner, 2026-09-28: every recommendation in Q1 and Q2 is taken, and implementation has the go.** Read each of those recommendations as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
 
 **Q3 is new and still open** — added by the refine of inbox #209 (the row Q2 split off), after that go. Its

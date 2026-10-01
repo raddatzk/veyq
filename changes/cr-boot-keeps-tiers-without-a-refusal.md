@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 **Question 1 was answered by the owner on 2026-09-28: its recommendation is taken, and implementation has the go.**
 Read its recommendation as the decision. Where it proposed a separate inbox row, that row exists (#197–#221,
 `docs/inbox.md`). **Question 2 is new and still open.** The inbox #208 refine added it on 2026-09-28, after the

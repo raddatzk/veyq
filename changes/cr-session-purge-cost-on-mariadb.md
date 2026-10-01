@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 1. **What counts as "production scale"?** Nothing in the repo defines it, and the measurement needs two seeded
    sizes. **Recommendation:** derive the sizes from the token lifecycle rather than picking round numbers.
    `SessionService.kt:311-312` sets access tokens to 15 min and refresh tokens to 30 d. Every rotation keeps the

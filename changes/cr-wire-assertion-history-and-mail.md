@@ -17,6 +17,8 @@ invariants:
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 Each question carries a recommendation; the CR below is written as if every recommendation is taken, and names
 what changes where one is not. This CR builds on
 [`cr-wire-assertion-server-logs`](cr-wire-assertion-server-logs.md) (approved, not yet built): it reuses that

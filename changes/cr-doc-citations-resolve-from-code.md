@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Second round answered by the owner, 2026-10-01: every recommendation added since the first answer is taken too** (questions added by the 2026-09-28 second refine wave). Rows those questions proposed exist as #222–#232.
+
 **Answered by the owner, 2026-09-28: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists (#197–#221, `docs/inbox.md`).
 
 1. **A guard at all?** The row weighed it both ways against `docs/ai/README.md` rule 3 (*"no guard unless a

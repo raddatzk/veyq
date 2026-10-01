@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE, API-first]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 Nothing below is decided. Each question carries a recommendation; the CR is written for the recommendations.
 **Order:** this CR lands **after** `cr-reissue-share-link` (planned, owner-approved) and changes what its re-issue
 does to the old row (question 3). Every claim about that CR is *planned in `cr-reissue-share-link`*; the implementer

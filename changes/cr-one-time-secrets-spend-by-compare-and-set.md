@@ -9,6 +9,8 @@ invariants: [operator-blind E2EE everywhere]
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 1. **One CR or three?** The three sites (tenant invites, recovery token, pairing delegation) share no code, only
    the rule. **Recommendation: one CR, one phase per site.** Each phase is green on its own, so they can land in
    any order, but the rule lands once in the docs phase. Splitting would produce three CRs that each state the

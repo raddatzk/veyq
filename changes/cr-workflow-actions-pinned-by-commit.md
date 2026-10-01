@@ -9,6 +9,8 @@ invariants: []
 
 ## Open for the owner
 
+**Answered by the owner, 2026-10-01: every recommendation below is taken, and implementation has the go.** Read each question's recommendation as its decision. Where a question proposed a separate inbox row, that row exists in `docs/inbox.md`.
+
 1. **What replaces `gradle/actions/setup-gradle`?** Its pinned v4.4.3 runs on `node20`, which GitHub removed from
    its runners on 2026-09-23. Its live successor, v6, ships a proprietary caching component and uses it **by
    default**. The MIT path is an opt-in (`cache-provider: basic`, from v6.3.0). v5 is MIT and runs on `node24`,
