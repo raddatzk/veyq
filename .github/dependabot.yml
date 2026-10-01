@@ -69,6 +69,12 @@ updates:
   # shares a `repo:tag` with the compose files, so a bump there turns validate_image_pins.py red until the constant
   # follows by hand; its rclone pin appears nowhere else and is bumped by hand, deliberately, at a release.
 
+  # Every action is pinned `owner/repo@<commit sha> # v<major>.<minor>.<patch>` (scripts/validate_action_pins.py).
+  # The comment must be the FULL version: when bumping a SHA, Dependabot rewrites the comment only if it ends with
+  # a tag that still points at the OLD SHA (github_actions/.../workflow_updater/version_commenter.rb,
+  # `previous_version_from_comment`, via git_commit_checker.rb `local_tags_matching_sha`); otherwise it keeps the
+  # comment verbatim. A floating major (`# v4`) has moved off the pinned SHA by the time a bump arrives, so it would
+  # stay standing beside a v7 SHA; a full-version tag never moves, so it is always rewritten.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
