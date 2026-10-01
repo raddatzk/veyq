@@ -14,7 +14,6 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import { session } from '../../../app/session'
 import { login } from '../login/login'
 import { accountApi } from '../../../api/client'
 import { birthInstance, HOST, stamp, type BirthedInstance } from '../../../test/e2eBootstrap'
@@ -74,7 +73,6 @@ describe.runIf(live)('recovery — live', () => {
       expect(body).toContain(HOST)
 
       // 3. Release. This is the wrap the ordinary key-material read refuses to serve.
-      session.apiBase = `http://${HOST}:8080`
       const material = await releaseRecoveryMaterial(token)
       expect(material.wrappedKey).toBeTruthy()
       // The release names the account, so the person never re-types an address they already proved they read.

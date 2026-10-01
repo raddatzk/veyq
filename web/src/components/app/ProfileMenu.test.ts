@@ -1,9 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi } from 'vitest'
-import { readdirSync, readFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
 
-vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+// One shared `push`, so a test can see where the menu navigated.
+const { push } = vi.hoisted(() => ({ push: vi.fn() }))
+vi.mock('vue-router', () => ({ useRouter: () => ({ push }) }))
 vi.mock('../../features/account/login/signOut', () => ({ signOut: vi.fn() }))
 
 import { mount } from '@vue/test-utils'
@@ -89,35 +89,17 @@ describe('ProfileMenu language quick-picker', () => {
   })
 })
 
-// The property this CR exists for, and the one that rots first — the next surface that wants a gear adds a
-// second door. Asserted over the source tree rather than a mounted shell, because the predicate is about the
-// SET of navigations, which no single component can see. SettingsHubView is excluded by hand: its `back()` is
-// navigation INSIDE the hub, not a door into it. That one legitimate exception is why this is a test and not a
-// scripts/ guard; a second exception is the signal to promote it.
+// The ONE door into the settings hub. That no other file opens one is the lint rule `veyq/one-settings-door`
+// (eslint.config.js); a lint rule can only assert absence elsewhere, so this asserts the door itself exists.
 describe('the shell offers exactly one door into the settings hub', () => {
-  const SRC = join(__dirname, '..', '..')
-  const DOOR = /push\(['"]\/settings['"]\)|to=["']\/settings["']/
-  // The typescript-fetch output of `npm run generate:api`: ~40 directories, and a generator that emits no .vue,
-  // so walking it is half the scan's readdirs for nothing.
-  const GENERATED_CLIENT = join(SRC, 'api', 'generated')
+  it('the settings item navigates to the hub', async () => {
+    push.mockClear()
+    const w = mountMenu()
+    const item = w.findAll('.menu-item').find((b) => b.text() === t('shell.settings'))!
 
-  const vueFilesUnder = (dir: string): string[] =>
-    readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
-      const full = join(dir, e.name)
-      if (e.isDirectory()) return full === GENERATED_CLIENT ? [] : vueFilesUnder(full)
-      return e.isFile() && e.name.endsWith('.vue') ? [full] : []
-    })
+    await item.trigger('click')
 
-  // Why a timeout of its own: the scan is synchronous disk I/O over every .vue in src/ — ~15 ms warm, but on a
-  // cold page cache under heavy load a single run measured 3 s of readdir + 8 s of reads, past vitest's 5 s
-  // default. Nothing is lost by raising it: vitest can only judge a synchronous body AFTER it returns, so the
-  // default never caught a hang here — it only turned a slow correct run red.
-  it('only ProfileMenu navigates to /settings', { timeout: 30_000 }, () => {
-    const doors = vueFilesUnder(SRC)
-      .filter((f) => !f.endsWith('SettingsHubView.vue'))
-      .filter((f) => DOOR.test(readFileSync(f, 'utf8')))
-      .map((f) => relative(SRC, f))
-    expect(doors).toEqual(['components/app/ProfileMenu.vue'])
+    expect(push).toHaveBeenCalledExactlyOnceWith('/settings')
   })
 })
 
