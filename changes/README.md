@@ -954,6 +954,12 @@ looks right, the guard stays green, and the conclusion drawn is *"the guard does
 injection did not land"*. Check what the **loader** sees, not what the file says: one line
 (`python3 -c "import yaml; print(yaml.safe_load(open(f))[...])"`) before believing a green.
 
+**A lever that removes one operand of a union needs a witness only THAT operand selects.** The grant-delivery
+backstop picks scopes as *grant-less ∪ rotated*, and the planned fixture put its stale member M4 in a rotated
+scope that also held a grant-less member — so the scope was selected through `grantless` anyway, and dropping
+`+ rotated` would have left M4 green. Moving the grant-less member out of that scope made the lever bite. When a
+CR names such a lever, it names the row that only the removed operand reaches, and says why no other operand does.
+
 ### A control's LEVER must itself be bitten — a harness can make one inert and still print green
 
 **A lever you never watched redden is not a control, and it fails in the one direction nobody checks.** The
