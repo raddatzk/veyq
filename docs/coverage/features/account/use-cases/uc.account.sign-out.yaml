@@ -63,5 +63,13 @@ acceptanceCriteria:
         unit:
           - src/app/sessionEnd.test.ts
           - src/app/sessionRefresh.test.ts
+  - id: boot-keeps-tiers-without-a-refusal
+    text: At boot only a refusal of the session drops the device's local convenience tiers; a boot refresh that
+      gets no answer about the session (a network failure, a 5xx, a 408/429) keeps both tiers and shows the
+      instance as unreachable, and a `403 tenant_suspended` keeps them and shows the suspension notice.
+    coverage:
+      # The tiers are seeded as real stored state (fake IndexedDB + the session vault) and read back; the refresh
+      # is stubbed at the client, so the real `isSessionRefusal` decides. Refusal controls (401/400/403/404) drop.
+      web: { unit: [src/app/boot.test.ts] }
 gaps:
   backend: "No backend work: the server half (revoking the family) is uc.account.login's logout-revokes-family, already covered there."

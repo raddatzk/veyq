@@ -35,6 +35,13 @@ acceptanceCriteria:
         unit:
           - src/features/account/rememberMe/deviceKeyWrap.test.ts
           - src/app/sessionRefresh.test.ts
+  - id: served-wrap-that-does-not-open-keeps-the-key
+    text: A remember-me wrap the instance serves under this device's id that does not open under the local key
+      falls back to the first-sign-in screen and keeps the local key; one server answer never deletes local key
+      material.
+    coverage:
+      web:
+        unit: [src/features/account/rememberMe/deviceKeyWrap.test.ts]
   - id: secret-key-once-per-device
     text: The Secret Key is read only on the first unlock per device (to create the wrap) and never stored.
     coverage:

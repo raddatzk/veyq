@@ -61,7 +61,8 @@ This is a property with several triggers, so it lives here and not under any one
 - **E2 — the tab holds no session.** The sign-in page at boot, a public share, a device waiting in a pairing
   ceremony: such a tab ignores the other-tab message, and a refresh rejected at boot is the ordinary *not
   signed in* path, not an ending. Without this, an ending on the sign-in page would load the sign-in page
-  again, forever.
+  again, forever. At boot the same line decides the local convenience tiers: a refusal drops them, and a boot
+  that got no answer keeps them and shows the instance as unreachable.
 - **E3 — another tab ended the session.** This tab runs the ending and asks the server nothing. Its tabs share
   one family through the refresh cookie, so that family is already revoked or dead.
 - **E4 — the revoke did not reach the server** (offline, 5xx). The ending still runs, and the sign-in page says

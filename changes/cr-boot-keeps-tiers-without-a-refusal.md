@@ -197,7 +197,7 @@ instance again keeps a key that opens nothing without the server-held wrap.
         wrap is gone server-side"* stays green unchanged.
 
       · Done when: `npm run check` (web) green, and every bite above was seen red where stated.
-- [ ] 2 docs + coverage:
+- [x] 2 docs + coverage:
       - uc.account.sign-out E2 gains: *"At boot the same line decides the local convenience tiers: a refusal
         drops them, and a boot that got no answer keeps them and shows the instance as unreachable."*
       - uc.account.remember-this-device E2 gains the transport half: *"An instance that does not answer at start-up
