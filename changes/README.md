@@ -1289,6 +1289,13 @@ pointed at the justification instead of the inventory: **a parenthetical that ma
 claim, and claims get re-measured.** A CR that already knows to re-run its own grep should also re-run the
 "this costs nothing" check.
 
+**The same holds for a planned index: EXPLAIN it against the data shape the statement meets.** The session-purge
+CR planned `expires_at` indexes on three tables so that "the three deletes take a range scan". With the index
+present, MariaDB range-scanned only the refresh tokens; access tokens and challenges live minutes against an hourly
+purge, so most rows are expired when it runs and the optimizer full-scans regardless. Two of the three indexes
+would have cost every login a write for nothing. An index is a claim about selectivity, and selectivity is a
+property of the data at the moment the statement runs.
+
 ### A phase's entry condition is phrased against what the phase would CHANGE, not against the problem
 
 **"Measure first, and stop if it is no longer the felt cost" sounds rigorous and can still answer neither
