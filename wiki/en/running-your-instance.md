@@ -11,13 +11,14 @@ If you are here to find out whether your memories are safe, you want
 
 **There is no supported production deployment yet.** veyq is pre-V1. There are now two Compose files — a
 *development* stack (database, an S3-compatible object store, a throwaway mailbox, the latter two opt-in
-*profiles*) and a *production* one that adds the application itself and terminates TLS in front of it. Do not
-read "optional profile" as "optional in a real instance": without a store there is no media, and without
-working email nobody can be invited and nobody can reset a password.
+*profiles*) and a *production* one that adds the application itself, the separate administration surface
+(reachable from the host only, by default), and terminates TLS in front of them — plus a Helm chart for Kubernetes. Do not
+read "optional profile" as "optional in a real instance": without a store there is no media, and a space whose
+owner has not set up email can invite nobody and none of its members can reset a password.
 
 A **backup-and-restore procedure is written down and tested**, and there is now an **upgrade runbook** beside
 it — but the two are not equally proven, and the difference matters more than either heading. The backup is
-rehearsed automatically: every build captures a real instance, destroys it, restores it, and checks that what
+rehearsed automatically: every CI run captures a real instance, destroys it, restores it, and checks that what
 came back works. The upgrade runbook has been **performed by nobody**, because no version of veyq has been
 published yet, so there is no second release to move between. It is a careful procedure derived from how the
 system is built, not a path anyone has walked.
@@ -39,10 +40,14 @@ So the things you own are:
 
 - **Availability.** Whether the service is up, whether backups exist, whether an upgrade breaks. All of this is
   yours, and none of it is veyq's to promise.
-- **A working mailer.** Two of the things veyq mails have no substitute at all: an invitation to join a space,
-  and a password-reset link. Both are addressed to the person concerned, so there is no link for
-  you to hand over instead — an instance with no email set up simply refuses those actions, and says so out
-  loud. Configuring SMTP is not a nice-to-have; it is part of what makes an instance usable at all.
+- **The key that keeps mail working — not the mail itself.** You do not configure SMTP: there is no
+  instance-wide mailer. Each space's owner sets up that space's own relay in the app (Settings → Email), and
+  two of the things veyq mails have no substitute at all — an invitation to join that space, and a
+  password-reset link. Both are addressed to the person concerned, so there is no link for you to hand over
+  instead; a space with no email set up refuses those actions and says so out loud. What *is* yours is the
+  server's key file that seals those owners' SMTP passwords (below): lose it, and every space whose relay needs
+  a password stops sending. The one mail you trigger yourself, the invitation of a new space's first owner,
+  falls back to a link you copy and pass on, because that space has no relay yet.
 - **Nothing else.** Not the content, not the keys, not who verified whom. Read
   [Is my data safe?](is-my-data-safe.md) — the "what we can see" table there is what *you* can see.
 
@@ -52,10 +57,10 @@ A veyq backup has **two halves**, and the server only holds one of them.
 
 1. **The server's half** — and it is *three* things, not two. The database, the object store's contents, and a
    small **key file** the server manages for itself. The third is the one that gets forgotten, and its absence
-   is the one that hides: an instance restored without it starts up, serves every page, and then refuses to
-   invite anybody or send a password-reset link. Nothing in it lets anyone read your members' memories. But
-   the database plus the key file do unlock the SMTP passwords you configured, and the database alone holds your
-   members' email addresses. So the backup tool keeps the key file apart from the rest, and you should too:
+   is the one that hides: an instance restored without it starts up, serves every page, and then, in every
+   space whose mail relay needs a password, refuses to invite anybody or send a password-reset link. Nothing in
+   it lets anyone read your members' memories. But the database plus the key file do unlock the SMTP passwords
+   your spaces' owners entered, and the database alone holds your members' email addresses. So the backup tool keeps the key file apart from the rest, and you should too:
    encrypt the backup before it leaves the server, and keep the key file on a different stick or disk.
 2. **The users' half** — their passwords and Emergency Kits. You do not have these and cannot back them up.
 
@@ -72,9 +77,9 @@ before every upgrade.
 
 These are the real sources:
 
-- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — both stacks: the dev
-  profiles, the object store, the mail setup (including the throwaway mailbox to test it against), running in
-  production, and the backup-and-restore runbook.
+- **[`infra/README.md`](https://github.com/raddatzk/veyq/blob/main/infra/README.md)** — both stacks and the Helm
+  chart: the dev profiles, the object store, a mail smoke test against the throwaway mailbox, running in
+  production and on Kubernetes, and the backup-and-restore runbook.
 - **[`README.md`](https://github.com/raddatzk/veyq/blob/main/README.md)** — repository shape and what is built.
 - **[`docs/architecture/README.md`](https://github.com/raddatzk/veyq/blob/main/docs/architecture/README.md)** —
   deployment topology and the runtime view.
@@ -84,5 +89,8 @@ These are the real sources:
 
 There is no central moderation service, because there is no central service. If someone reports an abusive
 public share on your instance, the report includes the link — and therefore the key — so you can open it and
-judge it. veyq ships no moderation tooling today; what you have is control over reachability. You still cannot
-read anything private, which is the design working as intended.
+judge it. veyq ships no moderation tooling today, and you cannot switch off a single share — only its creator
+can revoke it. What you have is the whole tenant: **Take offline** in the administration surface (or
+`tenant suspend` in its CLI) makes the tenant unreachable for everyone, its members and every share included,
+until you bring it back; nothing inside is changed or deleted. You still cannot read anything private, which is
+the design working as intended.
