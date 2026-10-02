@@ -42,7 +42,9 @@ direct-append, personal scope.**
    **share identity**: the server stores a `veyq_share_identity` row — an opaque `identityId`, the shared
    `shareId`, the **`K_mem`-sealed display name** (ciphertext), and the hash of an unguessable **contributor
    token** returned to the client. The server **never** sees the name, and serves it back only to the Memory's
-   members (point 8). This is the **anonymous share identity**
+   members (point 8). Naming yourself proves the visitor holds the link's key — a token derived from `K_share`,
+   checked against a stored hash ([ADR 0076](0076-a-guest-write-proves-it-holds-the-links-key.md)) — so the share
+   id alone names no guest. This is the **anonymous share identity**
    ADR 0029 named, and the **buckets hook**: name → sealed identity → (later) the per-contributor primary bucket.
 
 3. **A share-scoped, unauthenticated upload path (the presign mirror + blind capability).** Three endpoints mirror
