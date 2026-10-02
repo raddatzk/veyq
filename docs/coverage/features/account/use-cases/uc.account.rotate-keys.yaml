@@ -115,7 +115,14 @@ acceptanceCriteria:
       re-arms rotateScope's refusal (409 rotation_not_failed otherwise, 404 rotation_not_found on a scope their
       rotation never queued). The security panel reads it on every visit and offers the re-queue on failed only.
     coverage:
-      backend: { integration: [RotationSliceTest.theRotatorReadsEachQueuedRotationsStateFromTheServer, RotationSliceTest.fromFailedTheRotatorRequeuesAndTheExclusionIsBack] }
+      backend:
+        # The rule order is the safety property, so the pure derivation is in the PIT scope (inbox #279).
+        unit:
+          - CompromiseRotationPolicyTest.aGrantBehindTheScopeIsSecuredWhateverTheJobSays
+          - CompromiseRotationPolicyTest.aGrantAtTheCurrentEpochIsNeverSecuredByTheGrantRule
+          - CompromiseRotationPolicyTest.aLeasedJobIsDeadOnlyWhenEveryConditionHolds
+          - CompromiseRotationPolicyTest.anOwnerSeesFailedOverStalledAndNothingForStatesThatNeedNobody
+        integration: [RotationSliceTest.theRotatorReadsEachQueuedRotationsStateFromTheServer, RotationSliceTest.fromFailedTheRotatorRequeuesAndTheExclusionIsBack]
       web: { unit: [src/features/account/rotation/KeyRotationPanel.test.ts, src/features/account/rotation/rotateKeys.test.ts] }
   - id: outside-until-readmitted
     text: After rotating, the holder is outside every shared scope until a human there accepts the new key through the changed-key review — the worker declines delivery to a changed key and the re-grant loop skips them while the rotation proceeds. The result surface reports this per scope rather than as a success state — the self-served scopes by the client's own outcome, the queued ones by the server's re-readable state (queued-rotation-state-readable).

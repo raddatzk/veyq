@@ -198,6 +198,8 @@ const en = {
       failed:
         'Fitting the new lock kept failing, so this space still has its old one — the old key can still read what’s new here. Start it again, and another owner takes it on.',
     },
+    groupNameUnavailable: 'Group (name unavailable until you’re re-admitted)',
+    groupNameLastSeen: 'Name as this device last saw it — it may have changed.',
     requeue: 'Start again',
     requeueFailed: 'That didn’t work. Please try again.',
     errorTrustState:
@@ -1264,6 +1266,8 @@ const de: typeof en = {
       failed:
         'Das neue Schloss ließ sich wiederholt nicht einbauen, deshalb hat dieser Raum noch sein altes — der alte Schlüssel kann Neues hier noch lesen. Stoß es neu an, dann übernimmt eine andere besitzende Person.',
     },
+    groupNameUnavailable: 'Gruppe (Name nicht verfügbar, bis du wieder aufgenommen bist)',
+    groupNameLastSeen: 'Name, wie ihn dieses Gerät zuletzt gesehen hat — er kann sich geändert haben.',
     requeue: 'Neu anstoßen',
     requeueFailed: 'Das hat nicht geklappt. Bitte versuche es erneut.',
     errorTrustState:

@@ -104,9 +104,13 @@ object RotationPolicy {
         var open = openAdmissions
         if (removes != null) {
             val removed = members.firstOrNull { it.userId == removes } ?: return RotationDecision.MemberNotFound
-            val owners = members.count { it.role == MembershipEntity.OWNER }.toLong()
+            // `filter { … }.size` and `firstOrNull { … } != null`, not `count { … }` / `any { … }`: those two inline
+            // stdlib bodies into this method — an `is Collection && isEmpty()` shortcut and count's overflow check —
+            // and PIT (no Kotlin plugin) mutates them into four equivalent mutants no test can kill, which overran the
+            // mutation gate's per-class budget of one (inbox #279). Same decision, no unkillable branches.
+            val owners = members.filter { it.role == MembershipEntity.OWNER }.size.toLong()
             if (MembershipPolicy.isLastOwnerRemoval(removed.role, owners)) return RotationDecision.LastOwner
-            if (grants.any { it.userId == removes }) return RotationDecision.RemovedMemberGranted
+            if (grants.firstOrNull { it.userId == removes } != null) return RotationDecision.RemovedMemberGranted
             remaining = members - removed
             open = removed.admissionId?.let { openAdmissions - it } ?: openAdmissions
         }

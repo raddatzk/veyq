@@ -33,6 +33,7 @@ import { identityPrivate, masterKey } from '../../app/vault'
 import { epochLinkContext } from './epochs'
 import { deriveGroupNameKey, sealGroupName, openGroupNameWith } from './inviteName'
 import { deriveSpaceIconKey, sealIcon } from './spaceIcon'
+import { forgetGroupNamesSeen, groupNameSeen } from './groupNamesSeen'
 import { grantSignatureVerifies, signGrant, tagAdmission, admissionVerifies } from './grant'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -209,6 +210,22 @@ describe('listMyGroups', () => {
     expect(await listMyGroups()).toEqual([
       { scopeId: G1, tenantId: 't', name: 'Reise-Crew', icon: null, deletedAt: null, purgeAfter: null, compromiseRotation: null },
     ])
+  })
+
+  it('remembers each opened name for this page, and a later read that cannot open the group keeps it (inbox #280)', async () => {
+    forgetGroupNamesSeen()
+    const key = v1.randomBytes(32)
+    const encryptedName = sealGroupName(deriveGroupNameKey(key), G1, 0, 'Reise-Crew')
+    const row = (wrappedGrant: string) => signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant, encryptedName, nameEpoch: 0, grantedEpoch: 0 })
+    mockScopes(vi.fn().mockResolvedValue([row(ownGrant(G1, key, 0))]), vi.fn())
+    await listMyGroups()
+    expect(groupNameSeen(G1)).toBe('Reise-Crew')
+
+    // After a compromise rotation the grant is wrapped to the identity this account replaced: the group drops out
+    // of the list, and the name this page opened before is still the label the security panel shows.
+    mockScopes(vi.fn().mockResolvedValue([row('AQ==')]), vi.fn())
+    expect(await listMyGroups()).toEqual([])
+    expect(groupNameSeen(G1)).toBe('Reise-Crew')
   })
 
   it('opens a group icon sealed under an OLDER epoch by peeling the chain (a rotated group: iconEpoch < currentEpoch)', async () => {
