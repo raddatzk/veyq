@@ -17,6 +17,8 @@ vi.mock('../../spaces/scopes', () => ({ listMyTenants: vi.fn().mockResolvedValue
 
 import KeyRotationPanel from './KeyRotationPanel.vue'
 import { listQueuedRotations, requeueQueuedRotation } from './rotateKeys'
+import { listMyTenants } from '../../spaces/scopes'
+import { forgetGroupNamesSeen, rememberGroupName } from '../../spaces/groupNamesSeen'
 import { realI18n, t } from '../../../test/i18n'
 
 const stubs = {
@@ -70,5 +72,43 @@ describe('KeyRotationPanel — the queued rotations, as the server reads them', 
     expect(requeueQueuedRotation).toHaveBeenCalledWith(scopeOf('failed'))
     expect(row(w, scopeOf('failed')).text()).toContain(t('rotation.status.waiting'))
     expect(requeueIn(w, scopeOf('failed'))).toBeUndefined()
+  })
+})
+
+// inbox #280: a queued group's name is sealed under a key the rotator cannot open until re-admitted. The row shows
+// the name this device last opened (held in memory only — nothing new is persisted), marked as possibly stale, or
+// a neutral label; never the raw scope id.
+describe('KeyRotationPanel — a queued group is labelled, never shown by id', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    forgetGroupNamesSeen()
+  })
+
+  it('shows a neutral label for a group this device never opened', async () => {
+    const w = await mountPanel()
+    const r = row(w, scopeOf('waiting'))
+    expect(r.text()).not.toContain(scopeOf('waiting'))
+    expect(r.text()).toContain(t('rotation.groupNameUnavailable'))
+  })
+
+  it('shows the name this device last opened, marked as possibly out of date', async () => {
+    rememberGroupName(scopeOf('stalled'), 'Familie')
+    const w = await mountPanel()
+    const r = row(w, scopeOf('stalled'))
+    expect(r.text()).toContain('Familie')
+    expect(r.text()).toContain(t('rotation.groupNameLastSeen'))
+    expect(r.text()).not.toContain(scopeOf('stalled'))
+    expect(r.text()).not.toContain(t('rotation.groupNameUnavailable'))
+    // The control on the same render: a row the device never opened still reads neutral, not 'Familie'.
+    expect(row(w, scopeOf('waiting')).text()).not.toContain('Familie')
+  })
+
+  it('a tenant root keeps its plaintext name, unmarked', async () => {
+    vi.mocked(listMyTenants).mockResolvedValueOnce([{ tenantId: scopeOf('secured'), name: 'Raddatz' }] as never)
+    const w = await mountPanel()
+    const r = row(w, scopeOf('secured'))
+    expect(r.text()).toContain('Raddatz')
+    expect(r.text()).not.toContain(t('rotation.groupNameLastSeen'))
+    expect(r.text()).not.toContain(t('rotation.groupNameUnavailable'))
   })
 })

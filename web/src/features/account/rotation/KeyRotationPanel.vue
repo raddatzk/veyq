@@ -31,6 +31,7 @@ import Password from 'primevue/password'
 import Message from 'primevue/message'
 import { listQueuedRotations, requeueQueuedRotation, rotateKeys, RotationRefused, type RotationResult } from './rotateKeys'
 import { listMyTenants } from '../../spaces/scopes'
+import { groupNameSeen } from '../../spaces/groupNamesSeen'
 import type { RotationScopeState } from '../../../api/generated/account'
 import { unlockOrigin } from '../../../app/vault'
 import { useAsyncAction } from '../../../shared/state/useAsyncAction'
@@ -53,8 +54,9 @@ const result = ref<RotationResult | null>(null)
  * render on, and a rotation that dead-lettered reads `failed` instead of a `waiting` nothing would ever update.
  */
 const queued = ref<RotationScopeState[]>([])
-/** A tenant root's plaintext name by scope id (scopeId == tenantId); a group's name is sealed under a key this
- *  account cannot open until it is re-admitted, so it shows by id. */
+/** A tenant root's plaintext name by scope id (scopeId == tenantId). A group's name is sealed under a key this
+ *  account cannot open until it is re-admitted, so its row shows the name this page last opened, marked as
+ *  possibly out of date ({@link groupNameSeen}, memory only), or a neutral label — never the raw id (inbox #280). */
 const tenantNames = ref<Record<string, string>>({})
 const requeueing = ref<string | null>(null)
 const requeueError = ref('')
@@ -209,7 +211,11 @@ async function confirm() {
         <ul class="rotation-results">
           <li v-for="q in queued" :key="q.scopeId" class="veyq-list-row" :data-queued-scope="q.scopeId">
             <span v-if="tenantNames[q.scopeId]">{{ tenantNames[q.scopeId] }}</span>
-            <span v-else class="rotation-scope-id">{{ q.scopeId }}</span>
+            <span v-else-if="groupNameSeen(q.scopeId)">
+              {{ groupNameSeen(q.scopeId) }}
+              <small class="rotation-name-stale">{{ t('rotation.groupNameLastSeen') }}</small>
+            </span>
+            <span v-else class="rotation-name-stale">{{ t('rotation.groupNameUnavailable') }}</span>
             <span class="veyq-badge" :class="`is-${q.state}`">{{ t(`rotation.status.${q.state}`) }}</span>
             <small>{{ t(`rotation.queuedHint.${q.state}`) }}</small>
             <Button
@@ -299,6 +305,9 @@ async function confirm() {
 .rotation-scope-id {
   font-family: var(--app-font-mono, monospace);
   font-size: 0.85em;
+  color: var(--app-muted);
+}
+.rotation-name-stale {
   color: var(--app-muted);
 }
 .dialog-copy {
