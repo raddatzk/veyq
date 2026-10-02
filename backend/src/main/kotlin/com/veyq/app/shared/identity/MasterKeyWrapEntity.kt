@@ -6,11 +6,13 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.DynamicUpdate
 
 /** One wrap of a user's Master Key, openable by a single unlock method. The wrapped key is opaque
  *  ciphertext the server cannot open. */
 @Entity
 @Table(name = "veyq_master_key_wrap")
+@DynamicUpdate
 class MasterKeyWrapEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

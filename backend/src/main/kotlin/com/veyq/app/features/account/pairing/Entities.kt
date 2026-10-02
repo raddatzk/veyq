@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * One device-pairing channel (ADR 0059 §8) — the relay two devices run a single linking ceremony over.
@@ -27,6 +28,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_device_pairing")
+@DynamicUpdate
 class DevicePairingEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

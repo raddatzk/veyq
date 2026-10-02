@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * One epoch-chain link of a scope (ADR 0024, cr-0088). For epoch `n ≥ 1`, `wrappedPrev = symWrap(E_n, E_{n-1})` —
@@ -15,6 +16,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_scope_epoch")
+@DynamicUpdate
 class ScopeEpochEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

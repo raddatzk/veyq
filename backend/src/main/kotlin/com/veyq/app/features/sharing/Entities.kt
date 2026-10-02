@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A public share (uc.sharing.share-public-viewer, ADR 0029): one Memory of a personal, group or tenant scope
@@ -20,6 +21,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_share")
+@DynamicUpdate
 class ShareEntity : PanacheEntityBase {
     /** The opaque 256-bit share id (base64url, unguessable) — half the capability; the other half is the fragment key. */
     @Id
@@ -149,6 +151,7 @@ class ShareEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_share_identity")
+@DynamicUpdate
 class ShareIdentityEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -183,6 +186,7 @@ class ShareIdentityEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_share_retired_id")
+@DynamicUpdate
 class ShareRetiredIdEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 64)

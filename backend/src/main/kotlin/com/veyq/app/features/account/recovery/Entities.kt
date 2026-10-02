@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A one-time password-recovery token (cr-account-recovery, ADR 0054).
@@ -22,6 +23,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_account_recovery")
+@DynamicUpdate
 class AccountRecoveryEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

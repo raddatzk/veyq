@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A tenant: a domain-scoped container resolved by Host. Operational metadata only — name, domain and the
@@ -22,6 +23,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_tenant")
+@DynamicUpdate
 class TenantEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

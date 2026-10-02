@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * The caller's operator-blind device register (en.account.device-register, ADR 0004): one blob sealed under the
@@ -22,6 +23,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_device_register")
+@DynamicUpdate
 class DeviceRegisterEntity : PanacheEntityBase {
     @Id
     @Column(name = "account_id", length = 36)

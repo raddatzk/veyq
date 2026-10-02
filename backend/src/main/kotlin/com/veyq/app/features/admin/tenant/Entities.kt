@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A member's acceptance of a tenant's terms (cr-0114, ADR 0035). Keyed logically by (user_id, tenant_id) — a
@@ -16,6 +17,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_tenant_terms_acceptance")
+@DynamicUpdate
 class TenantTermsAcceptanceEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -48,6 +50,7 @@ class TenantTermsAcceptanceEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_tenant_mail_settings")
+@DynamicUpdate
 class TenantMailSettingsEntity : PanacheEntityBase {
     @Id
     @Column(name = "tenant_id", length = 36)
@@ -93,14 +96,15 @@ class TenantMailSettingsEntity : PanacheEntityBase {
  * token (ADR 0004 model). status: ACTIVE → SUPERSEDED on resend/reassign, → CONSUMED on acceptance
  * (Slice B), → EXPIRED past its TTL. Soft transitions; a scheduled purge removes terminal rows later.
  *
- * **Never save one of these as a managed entity after reading it.** Several writers transition `status` (accept,
- * revoke, reissue, the expiry sweep), each by a guarded bulk update, and without `@DynamicUpdate` a managed save
- * flushes every column — so a writer that changed only the admission writes back the `status` it read, and a
- * revoked or spent secret is live again. A rotation's re-tag is a column-scoped bulk update for exactly that
- * reason (`TenantStore.carryInvites`).
+ * Several writers transition `status` (accept, revoke, reissue, the expiry sweep), each by a guarded bulk update
+ * whose row count decides (developer-styleguide §12); a new writer of `status` joins them rather than saving the
+ * entity. Like every entity this one is `@DynamicUpdate`, so a managed write of other columns cannot write back the
+ * `status` it read — before that, a rotation's re-tag brought a revoked invite back to `ACTIVE`. The re-tag is a
+ * column-scoped bulk update all the same (`TenantStore.carryInvites`).
  */
 @Entity
 @Table(name = "veyq_tenant_invite")
+@DynamicUpdate
 class TenantInviteEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

@@ -3,6 +3,7 @@ package com.veyq.app.features.sharing
 import com.veyq.app.shared.TestIds
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.features.content.NodeEntity
+import com.veyq.app.features.content.NodesStore
 import com.veyq.app.features.media.BlobEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.StorageQuota
@@ -16,6 +17,8 @@ import com.veyq.app.testing.TestFixtures.identityKeyJson
 import com.veyq.app.testing.TestFixtures.shareKeysJson
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -49,6 +52,12 @@ class ShareUploaderSliceTest {
 
     @Inject
     lateinit var quota: StorageQuota
+
+    @Inject
+    lateinit var sharing: SharingStore
+
+    @Inject
+    lateinit var nodes: NodesStore
 
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
@@ -132,6 +141,36 @@ class ShareUploaderSliceTest {
         QuarkusTransaction.requiringNew().run { assertEquals(DROP_PRIVATE_KEY, NodeEntity.findById(memory)!!.sealedDropPrivateKey) }
         // control: a later UPLOADER share seals to the Memory's existing key and brings none
         postShare(userId, memory, "UPLOADER", public).then().statusCode(201)
+    }
+
+    @Test
+    fun aRenameOverlappingTheFirstUploaderLinkKeepsItsDropKey() {
+        // The rename reads the Memory before the first UPLOADER link's drop-key write commits and flushes after it.
+        // A full-row UPDATE wrote the `null` drop key it had read back: the link answered CREATED, and every upload
+        // sealed to it could no longer be opened by the Memory's members (inbox #224).
+        repeat(RACE_ROUNDS) { round ->
+            val (userId, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, parentId = scopeId, wrappedContentKey = CONTENT_KEY)
+            val renamed = "cmVuYW1lZA==" // "renamed"
+            whileUncommitted(
+                change = {
+                    val shareId = TestIds.shareId()
+                    val created = sharing.create(
+                        shareId, userId, scopeId, memory, ShareEntity.UPLOADER,
+                        ShareKeys.Drop(DROP_PUBLIC_KEY, DROP_PRIVATE_KEY), sealedName, null, null, null, null, null,
+                        false, null, null, null, ShareWriteProof.verifier(shareId),
+                    )
+                    assertEquals(SharingStore.CreateResult.CREATED, created, "round $round")
+                },
+                overlapping = { nodes.applyUpdate(memory, renamed, null, null, null, null) },
+            )
+            QuarkusTransaction.requiringNew().run {
+                val node = NodeEntity.findById(memory)!!
+                assertEquals(DROP_PRIVATE_KEY, node.sealedDropPrivateKey, "round $round: the rename wiped the drop key")
+                // Control: the rename itself landed.
+                assertEquals(renamed, node.encryptedName, "round $round")
+            }
+        }
     }
 
     @Test

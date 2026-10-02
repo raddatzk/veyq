@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A background job — the operator-blind, scope-bound envelope (ADR 0021, cr-0076). The server sees only the
@@ -19,6 +20,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_job")
+@DynamicUpdate
 class JobEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -92,6 +94,7 @@ class JobEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_job_decline")
+@DynamicUpdate
 class JobDeclineEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

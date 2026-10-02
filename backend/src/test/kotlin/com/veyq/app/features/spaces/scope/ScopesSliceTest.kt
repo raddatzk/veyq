@@ -5,6 +5,7 @@ import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.TestIds
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.membership.MembershipEntity
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
@@ -27,6 +28,8 @@ import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -67,6 +70,12 @@ class ScopesSliceTest {
 
     @Inject
     lateinit var mediaStore: MediaStore
+
+    @Inject
+    lateinit var scopes: ScopesStore
+
+    @Inject
+    lateinit var handler: ScopesHandler
 
     private val personalGrant = "cGVyc29uYWwtc2NvcGUtZ3JhbnQ=" // "personal-scope-grant"
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
@@ -609,6 +618,37 @@ class ScopesSliceTest {
             .then().statusCode(200)
             .body("find { it.id == '$groupId' }.encryptedName", equalTo(renamedName))
             .body("find { it.id == '$groupId' }.nameEpoch", equalTo(1))
+    }
+
+    /** The real rotation commit (ADR 0024 §4) of a group whose only member is its owner, from epoch 0 to 1. */
+    private fun rotateToEpochOne(owner: String, scopeId: String, round: Int) {
+        val decision = scopes.rotate(
+            scopeId, 1, rotPrev, owner, listOf(RotationGrant(owner, SignedGrant(newGrant, TestAdmission.SIGNATURE))),
+            emptyList(), emptySet(),
+        )
+        assertTrue(decision is RotationDecision.Commit, "round $round: $decision")
+    }
+
+    @Test
+    fun anIconClearOverlappingARotationKeepsTheNewEpoch() {
+        // A managed write of the scope row that read it before a rotation committed must not write the old
+        // `currentEpoch` back: the counter would step backwards and the next rotation would issue an epoch number
+        // already in use (inbox #224). The clear stays a managed write, so it is this race's writer — the rename and
+        // the icon set are epoch-gated updates of their own columns.
+        repeat(RACE_ROUNDS) { round ->
+            val (owner, scopeId) = seedMemberScope(ScopeEntity.GROUP)
+            QuarkusTransaction.requiringNew().run { ScopeEntity.findById(scopeId)!!.sealedIcon = sealedIcon }
+            whileUncommitted(
+                change = { rotateToEpochOne(owner, scopeId, round) },
+                overlapping = { scopes.clearIcon(scopeId) },
+            )
+            QuarkusTransaction.requiringNew().run {
+                val scope = ScopeEntity.findById(scopeId)!!
+                assertEquals(1, scope.currentEpoch, "round $round: the icon clear rolled the epoch back")
+                // Control: the clear itself landed.
+                assertNull(scope.sealedIcon, "round $round")
+            }
+        }
     }
 
     @Test

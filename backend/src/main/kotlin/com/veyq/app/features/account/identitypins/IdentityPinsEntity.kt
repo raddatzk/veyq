@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * The caller's operator-blind identity-pin store (en.account.identity-pinning, cr-0098, ADR 0028): one blob
@@ -17,6 +18,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_identity_pins")
+@DynamicUpdate
 class IdentityPinsEntity : PanacheEntityBase {
     @Id
     @Column(name = "account_id", length = 36)

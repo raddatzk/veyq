@@ -7,9 +7,13 @@ title: Suspend & reactivate a tenant
 # and the app shell on the tenant's own domain, which is all these refs ever exercised.
 acceptanceCriteria:
   - id: suspend-active-tenant
-    text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED.
+    text: A Server Owner suspends an ACTIVE tenant; its status flips to SUSPENDED, and a write of the tenant's other settings that overlaps the suspension (its terms, its storage quota) does not flip it back.
     coverage:
-      backend: { integration: [TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack] }
+      backend:
+        integration:
+          - TenantSuspendSliceTest.suspendFlipsToSuspendedAndReactivateFlipsBack
+          - TenantSuspendSliceTest.aTermsEditOverlappingASuspensionLeavesTheTenantSuspended
+          - TenantSuspendSliceTest.aQuotaChangeOverlappingASuspensionLeavesTheTenantSuspended
   - id: reactivate-suspended-tenant
     text: A Server Owner reactivates a SUSPENDED tenant back to ACTIVE.
     coverage:

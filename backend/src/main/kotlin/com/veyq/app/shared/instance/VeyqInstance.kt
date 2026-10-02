@@ -6,11 +6,13 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.DynamicUpdate
 
 /** Instance-wide constants that exist from first boot. Exactly one row (id = 1). Holds the public instance salt
  *  (ADR 0003) and the config-secret KEK fingerprint (ADR 0050). */
 @Entity
 @Table(name = "veyq_instance")
+@DynamicUpdate
 class VeyqInstance : PanacheEntityBase {
     @Id
     @Column(name = "id")

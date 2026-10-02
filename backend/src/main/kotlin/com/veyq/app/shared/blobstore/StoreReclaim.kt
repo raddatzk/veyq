@@ -13,6 +13,7 @@ import jakarta.transaction.Transactional
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * One store-object prefix to reclaim: the chunk objects `storageKey/0` … `storageKey/(chunkCount - 1)`.
@@ -53,6 +54,7 @@ data class StoreObjectRef(val storageKey: String, val chunkCount: Int)
  */
 @Entity
 @Table(name = "veyq_store_reclaim")
+@DynamicUpdate
 class StoreReclaimEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

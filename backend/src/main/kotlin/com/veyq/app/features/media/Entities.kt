@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * An OPEN upload session (cr-0028): opened by `start` (which presigns the first window of PUTs under
@@ -28,6 +29,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_upload_session")
+@DynamicUpdate
 class UploadSessionEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -85,6 +87,7 @@ class UploadSessionEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_blob")
+@DynamicUpdate
 class BlobEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -121,6 +124,7 @@ class BlobEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_media")
+@DynamicUpdate
 class MediaEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -195,6 +199,7 @@ class MediaEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_media_derivative")
+@DynamicUpdate
 class MediaDerivativeEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -225,6 +230,7 @@ class MediaDerivativeEntity : PanacheEntityBase {
  */
 @Entity
 @Table(name = "veyq_bucket")
+@DynamicUpdate
 class BucketEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
