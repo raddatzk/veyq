@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('../../api/client', () => ({
   sharesApi: vi.fn(),
+  scopesApi: vi.fn(),
   publicSharesApi: vi.fn(),
   contentApi: vi.fn(),
   tokenApi: vi.fn(),
@@ -14,11 +15,11 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, reissueShare, mintedBeforeKeyChange, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
+import { createShare, reissueShare, revokeScopeShares, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
-import { sharesApi, publicSharesApi, contentApi } from '../../api/client'
+import { sharesApi, scopesApi, publicSharesApi, contentApi } from '../../api/client'
 import { isStaleEpoch, openScopeById } from '../spaces/scopes'
 import { isCodedError, HttpStatus } from '../../shared/httpError'
 import type { EpochKeys } from '../spaces/epochs'
@@ -274,10 +275,10 @@ describe('createContributorIdentity (cr-0101)', () => {
 })
 
 describe('shared-scope management (cr-0104)', () => {
-  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine` flag', async () => {
+  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine` and `reissueRequired` flags', async () => {
     const list = vi.fn().mockResolvedValue([
-      { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: true, mine: true, createdAt: '2026-07-07T12:00:00Z', expiresAt: null },
-      { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: false, mine: false, createdAt: '2026-07-06T12:00:00Z', expiresAt: null },
+      { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, createdAt: '2026-07-07T12:00:00Z', expiresAt: null },
+      { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, createdAt: '2026-07-06T12:00:00Z', expiresAt: null },
     ])
     vi.mocked(sharesApi).mockReturnValue({ listShares: list } as unknown as ReturnType<typeof sharesApi>)
 
@@ -285,11 +286,19 @@ describe('shared-scope management (cr-0104)', () => {
 
     expect(list).toHaveBeenCalledWith({ nodeId: NODE_ID }) // server-scoped to the Memory, not a client filter
     // co-members' shares come back too (mine=false), disabled ones included — newest first
-    expect(rows.map((r) => [r.shareId, r.mine, r.enabled])).toEqual([
-      ['s1', true, true],
-      ['s2', false, false],
+    expect(rows.map((r) => [r.shareId, r.mine, r.enabled, r.reissueRequired])).toEqual([
+      ['s1', true, true, false],
+      ['s2', false, false, true], // the server's ADR 0075 verdict, carried as it came — never re-derived here
     ])
     expect(rows.every((r) => r.scopeId === SCOPE_ID)).toBe(true) // the recovery copy binds it — carried per row
+  })
+
+  it('revokeScopeShares turns off every link of the scope and resolves how many it turned off', async () => {
+    const revoke = vi.fn().mockResolvedValue({ revoked: 3 })
+    vi.mocked(scopesApi).mockReturnValue({ revokeScopeShares: revoke } as unknown as ReturnType<typeof scopesApi>)
+
+    await expect(revokeScopeShares(SCOPE_ID)).resolves.toBe(3)
+    expect(revoke).toHaveBeenCalledWith({ scopeId: SCOPE_ID })
   })
 
   it('reactivateShare adopts a disabled share via the member-gated endpoint', async () => {
@@ -627,11 +636,6 @@ describe('reissueShare (ADR 0075, W1)', () => {
     expect(reissue).not.toHaveBeenCalled()
   })
 
-  it('mintedBeforeKeyChange marks a copy below the current epoch, never one at it or none', () => {
-    expect(mintedBeforeKeyChange({ sealedShareKey: 'k', sealedShareKeyEpoch: 1 }, EPOCHS)).toBe(true)
-    expect(mintedBeforeKeyChange({ sealedShareKey: 'k', sealedShareKeyEpoch: 2 }, EPOCHS)).toBe(false)
-    expect(mintedBeforeKeyChange(NO_COPY, EPOCHS)).toBe(false)
-  })
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 
 describe('shareChunkProvider (Slice 2 SW range seam for the anonymous viewer, ADR 0047)', () => {

@@ -57,9 +57,10 @@ Drei ehrliche Grenzen:
 - **Entteilen macht das Heruntergeladene nicht rückgängig.** Ein Entzug stoppt den *künftigen* Zugriff;
   er kann nicht zurückgreifen und löschen, was jemand bereits gespeichert hat.
 - **Links, die entstanden sind, bevor jemand gegangen ist, funktionieren weiter, bis du sie erneuerst.**
-  Alle in einer Gruppe können jeden ihrer öffentlichen Links kopieren — wer geht, hat also vielleicht
-  noch einen. Erneuern gibt dem Link eine neue Adresse und schaltet die alte endgültig ab; gib dann die
-  neue weiter. Entfernst du jemanden, kannst du im selben Schritt alle Links der Gruppe abschalten.
+  Alle in einer Gruppe oder einem geteilten Bereich können jeden seiner öffentlichen Links kopieren — wer
+  geht, hat also vielleicht noch einen. Erneuern gibt dem Link eine neue Adresse und schaltet die alte
+  endgültig ab; gib dann die neue weiter. Entfernst du jemanden, kannst du im selben Schritt — oder
+  jederzeit — alle Links des Bereichs abschalten.
 - **Geteilt ist geteilt.** Hast du anderen einen Schlüssel gegeben, ist die Vertraulichkeit *vor
   ihnen* per Design vorbei — nur die Vertraulichkeit *vor uns* bleibt.
 

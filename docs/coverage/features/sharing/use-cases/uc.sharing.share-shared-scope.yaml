@@ -6,7 +6,8 @@ title: Public-share a Memory in a shared scope (group / tenant)
 # role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal soft-revokes
 # (enabled=false) every share the removed member created in that scope (or, opted in, every share of the group); any
 # remaining member may re-activate a deactivated share, which transfers its owner_account — unless a departed member
-# may hold its link, which then comes back only as a re-issue (a new id + key, the old one off, one transaction). K_mem is stable across rotation (ADR 0024), so the share
+# may hold its link, which then comes back only as a re-issue (a new id + key, the old one off, one transaction) — the
+# removal count marks that on a tenant, and a bulk switch-off's mark makes it stick. K_mem is stable across rotation (ADR 0024), so the share
 # follows new content and cannot be rotated away — the server-side deactivation IS the honest-server revocation
 # (the only forward layer for a tenant, which is ACL-revoke).
 acceptanceCriteria:
@@ -42,12 +43,20 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/share.test.ts]
   - id: reactivation-refuses-a-departed-members-link
-    text: Re-activation is refused 409 reissue_required, nothing written, when the share's owner is no longer a member of its scope (a removed group member, or a removed tenant member's own tenant-scope share) or its recovery copy is sealed below the scope's current epoch; a share without a copy is judged by its owner alone. The manage panel marks the epoch case and offers renew instead of re-activate (ADR 0075).
+    text: >
+      Re-activation is refused 409 reissue_required, nothing written, when a bulk switch-off marked the share, when its
+      owner is no longer a member of its scope (a removed group member, or a removed tenant member's own tenant-scope
+      share), or when it carries a recovery copy sealed below the scope's current epoch or minted before the scope's
+      last member removal — the removal count marks a co-member's tenant link, and a co-shared group's link while its
+      queued rotation has not run; a share without a copy is judged by the switch-off and its owner alone. The manage
+      list serves the same predicate per row (reissueRequired), and the panel marks such a link and offers renew
+      instead of re-activate (ADR 0075 point 4).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.reactivatingARemovedMembersShareIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingAShareSealedBeforeTheKeyChangedIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingOwnShareSealedAtTheCurrentEpochResolves, ShareSharedScopeSliceTest.reactivatingARemovedTenantMembersTenantShareIs409ReissueRequired]
+        unit: [ReissuePolicyTest.aBulkSwitchOffAloneRequiresAReissue, ReissuePolicyTest.aDepartedOwnerAloneRequiresAReissue, ReissuePolicyTest.aCopyBelowTheCurrentEpochAloneRequiresAReissue, ReissuePolicyTest.aCopyMintedBeforeARemovalAloneRequiresAReissue, ReissuePolicyTest.aShareWithoutACopyIsJudgedByTheSwitchOffAndItsOwnerAlone]
+        integration: [ShareSharedScopeSliceTest.reactivatingARemovedMembersShareIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingAShareSealedBeforeTheKeyChangedIs409ReissueRequired, ShareSharedScopeSliceTest.reactivatingOwnShareSealedAtTheCurrentEpochResolves, ShareSharedScopeSliceTest.reactivatingARemovedTenantMembersTenantShareIs409ReissueRequired, ShareSharedScopeSliceTest.aCoMembersTenantLinkMintedBeforeARemovalIsNotRevived, ShareSharedScopeSliceTest.aCoMembersTenantLinkWithoutACopyIsRevivedAfterARemoval, ShareSharedScopeSliceTest.aCoSharedGroupLinkIsMarkedBeforeItsQueuedRotationRuns]
       web:
-        unit: [src/features/memory/components/ShareDialog.test.ts]
+        unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
   - id: reissue-replaces-a-link-in-one-request
     text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, an UPLOADER keeping the Memory's drop key) and turns the old one off in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
     coverage:
@@ -62,3 +71,8 @@ acceptanceCriteria:
         integration: [ShareSharedScopeSliceTest.aRemovalWithRevokeLinksTurnsOffEveryLinkOfTheGroup, ShareSharedScopeSliceTest.removingGroupMemberDeactivatesOnlyTheirShares, ShareSharedScopeSliceTest.revokeLinksWithoutARemovalIs400AndStoresNothing]
       web:
         unit: [src/features/spaces/GroupMembersPanel.test.ts]
+  - id: a-switch-off-sticks
+    text: Every bulk switch-off — a group removal's or a tenant removal's revokeLinks, and a scope owner's revokeScopeShares — marks each share it turns off, so even one with no recovery copy whose owner is still a member comes back only by re-issue; a share minted afterwards is untouched (A5, ADR 0075 point 5).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.aRemovalsSwitchOffMarksEveryLinkItTurnsOff, ShareSharedScopeSliceTest.aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks]

@@ -14,7 +14,7 @@
 // seals under an identity key of its own, wrapped to that drop key; `./mediaKey.ts` owns that chain.
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
-import { contentApi, sharesApi, publicSharesApi } from '../../api/client'
+import { contentApi, scopesApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
 import { isCodedError, isHttpStatus, HttpStatus } from '../../shared/httpError'
 import { dropKeysForShare, mediaKey, mintUploaderKey, openDropPublicKey, uploaderOriginOf } from './mediaKey'
@@ -446,6 +446,11 @@ export type ManagedShare = {
    *  plaintext password (management-only), read via `readSharePassword`. */
   passwordRequired: boolean
   sealedPassword: string | null
+  /** True when a departed member may hold this link, so it comes back only by {@link reissueShare}: a bulk
+   *  switch-off turned it off, its owner left, or its copy predates the scope's last key change or member removal.
+   *  The server computes it with the predicate its re-activation refusal runs (ADR 0075 point 4) — the client has
+   *  no removal count to compare, so it reads this rather than deriving it. */
+  reissueRequired: boolean
 }
 
 /** List every share on one Memory visible to a scope member (cr-0104) — the manage-shares panel. Scoped by
@@ -468,6 +473,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       sealedShareKeyEpoch: r.sealedShareKeyEpoch ?? null,
       passwordRequired: r.passwordRequired ?? false,
       sealedPassword: r.sealedPassword ?? null,
+      reissueRequired: r.reissueRequired,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
@@ -491,13 +497,12 @@ export async function isReissueRequired(e: unknown): Promise<boolean> {
 }
 
 /**
- * Whether the manage panel marks a share "made before the group's key last changed": its recovery copy is sealed
- * below the scope's current epoch, so every member of that older epoch — one removed since included — could rebuild
- * its link. The same predicate as the epoch half of the server's re-activation refusal (ADR 0075 Decision 4), so a
- * share this marks is one re-activation refuses. A share without a copy is never marked.
+ * Turn off every link of a scope (ADR 0075 point 5) — a scope owner's switch-off: every enabled share, whoever made
+ * it, goes off and is marked, so each comes back only by {@link reissueShare}. Resolves how many it turned off.
  */
-export function mintedBeforeKeyChange(share: RecoveryCopy, epochs: EpochKeys): boolean {
-  return share.sealedShareKeyEpoch != null && share.sealedShareKeyEpoch < epochs.current
+export async function revokeScopeShares(scopeId: string): Promise<number> {
+  const { revoked } = await withRefresh(() => scopesApi().revokeScopeShares({ scopeId }))
+  return revoked
 }
 
 // --- contributor / uploader (anonymous, no session; cr-0101, cr-0102) --------

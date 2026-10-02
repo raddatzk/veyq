@@ -46,12 +46,15 @@ create-gate (scope) and a member-removal hook are new.
   **remaining member** may re-enable a deactivated share; doing so **transfers its ownership** (`owner_account`) to
   the re-activating member, and the **same** link works again. So re-activation is refused (`409
   reissue_required`, nothing written) for a link a departed member may hold
-  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)): the share's owner is no
-  longer a member of the scope (in a tenant too: a removed tenant member's own links), or its recovery copy is
-  sealed below the scope's current epoch — every member could rebuild every link from its copy, one since removed
-  included. A share with no copy is judged by its owner alone. The manage panel marks the epoch case *"made before
-  the group's key last changed"* (a key rotation after a compromise moves the epoch too) and offers **renew** (A4)
-  in place of re-activate. Re-activating is a publication like creating, so it
+  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): a bulk
+  switch-off turned it off (A5); the share's owner is no longer a member of the scope (in a tenant too: a removed
+  tenant member's own links); or it carries a recovery copy that predates the scope's current epoch **or its last
+  member removal** — every member could rebuild every link from its copy, one since removed included. The removal
+  count is what carries this on a tenant, whose epoch never moves on a removal, and on a group whose rotation a
+  tenant removal only queued. A share with no copy is judged by the switch-off and its owner alone. The server
+  serves its verdict on every row of the manage list (`reissueRequired`), from the same predicate the refusal runs;
+  the panel marks such a link — *"made before someone left this space or replaced their keys"*, since a key
+  rotation after a compromise moves the epoch too — and offers **renew** (A4) in place of re-activate. Re-activating is a publication like creating, so it
   passes the same checks: a current member (not an unaccepted invitee, not during the group's deletion grace,
   [uc.spaces.scope-access](../../spaces/use-cases/uc.spaces.scope-access.md)) **and** the instance's sharing
   capability for the share's role — `422 capability_disabled` when the operator has switched that kind of link
@@ -68,11 +71,14 @@ create-gate (scope) and a member-removal hook are new.
   off — and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
   again on the new link and can no longer delete their earlier uploads (a guest's session is per link), and the new
   link's storage budget starts at zero.
-- **A5 — a removal can turn off every link of the group.** The group owner's removal confirmation carries an
-  unchecked box, *"also turn off every link on this group"*; ticked, the removal-rotation (`revokeLinks`) turns off
-  every enabled share of the group — whoever made it — in the removal's own transaction, and each share's owner
-  renews (A4) the ones still wanted. Forcing it on every removal would break every guest's link even when someone
-  leaves on good terms; the group owner already holds the stronger power of deleting the group.
+- **A5 — turning off every link of a space sticks.** Three paths turn off every enabled share of a space — whoever
+  made it — and **mark** each one so it comes back only by renew (A4), never re-activate: a group removal's opt-in
+  ([uc.spaces.manage-group-members](../../spaces/use-cases/uc.spaces.manage-group-members.md)), a tenant removal's
+  ([uc.spaces.remove-tenant-member](../../spaces/use-cases/uc.spaces.remove-tenant-member.md) A5), and a scope
+  owner's switch-off with no removal (A6 there, and in the group panel). Each share's owner renews the ones still
+  wanted. The mark is what makes it stick: without it, a link with no recovery copy whose owner is still a member
+  would come back with one click from any member. Forcing a switch-off on every removal would break every guest's
+  link even when someone leaves on good terms; a group owner already holds the stronger power of deleting the group.
 - **E1 — non-member / lost grant:** a caller who is not a member of the scope (or cannot open `K_mem`) cannot
   create a share there — the same 404/authorization path as any non-member scope access (no reveal).
 
@@ -96,14 +102,14 @@ create-gate (scope) and a member-removal hook are new.
 
 **EN —** Shared spaces get the same public links your personal memories already have: anyone in the group or
 household can turn a shared memory into a browser link for people outside. And it stays honest when someone leaves —
-the moment a member is removed, the links *they* made stop working, and you can switch off every link of the group in
-the same step. A link made before someone left keeps working until you **renew** it: renewing gives it a new address
+the moment a member is removed, the links *they* made stop working, and you can switch off every link of the space in
+the same step — or at any time. A link made before someone left keeps working until you **renew** it: renewing gives it a new address
 and switches the old one off for good, so hand the new one out — your guests keep their photos.
 
 **DE —** Geteilte Bereiche bekommen dieselben öffentlichen Links wie deine persönlichen Erinnerungen: jede:r in der
 Gruppe oder im Haushalt kann eine geteilte Erinnerung in einen Browser-Link für Außenstehende verwandeln. Und es
 bleibt ehrlich, wenn jemand geht — sobald ein Mitglied entfernt wird, hören die Links auf zu funktionieren, die diese
-Person erstellt hat, und im selben Schritt lassen sich alle Links der Gruppe abschalten. Ein Link, der entstanden ist,
+Person erstellt hat, und im selben Schritt — oder jederzeit — lassen sich alle Links des Bereichs abschalten. Ein Link, der entstanden ist,
 bevor jemand gegangen ist, funktioniert weiter, bis du ihn **erneuerst**: Dann bekommt er eine neue Adresse, und die
 alte wird endgültig abgeschaltet — gib die neue weiter; deine Gäste behalten ihre Fotos.
 

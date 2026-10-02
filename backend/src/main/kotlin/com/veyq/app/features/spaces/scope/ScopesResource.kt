@@ -16,6 +16,7 @@ import com.veyq.app.generated.model.ScopeEpochLink
 import com.veyq.app.generated.model.ScopeKind
 import com.veyq.app.generated.model.ScopeMember
 import com.veyq.app.generated.model.ScopeRotated
+import com.veyq.app.generated.model.ScopeSharesRevoked
 import com.veyq.app.generated.model.ScopeSummary
 import com.veyq.app.generated.model.SetMemberRoleRequest
 import com.veyq.app.generated.model.SetScopeIconRequest
@@ -244,4 +245,10 @@ class ScopesResource(
      *  `TenantSuspensionFilter` also uses: a gate that normalized the Host differently from the handlers it guards
      *  would guard a different tenant than it thinks (ADR 0066). */
     private fun activeTenantId(): String? = tenant.resolve()?.id
+    // ADR 0075 point 5: a scope owner turns off every link of the scope; each comes back only by re-issue.
+    override fun revokeScopeShares(scopeId: UUID): Response =
+        when (val o = handler.revokeScopeShares(identity.principal.name, scopeId.toString())) {
+            is RevokeScopeSharesOutcome.Ok -> Response.ok(ScopeSharesRevoked(revoked = o.revoked)).build()
+            is HttpFailure -> httpError(o)
+        }
 }

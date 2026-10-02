@@ -12,8 +12,10 @@ vi.mock('./members', () => ({
   listMemberInvites: vi.fn(),
   reissueMemberInvite: vi.fn(),
   revokeMemberInvite: vi.fn(),
+  removeTenantMember: vi.fn(),
   memberError: vi.fn().mockResolvedValue({ status: 0, code: null }),
 }))
+vi.mock('../memory/share', () => ({ revokeScopeShares: vi.fn() }))
 vi.mock('./scopes', () => ({
   listMyTenants: vi.fn(),
   setSpaceIcon: vi.fn(),
@@ -22,11 +24,12 @@ vi.mock('./scopes', () => ({
 }))
 // Confirmation is the app's own dialog (cr-web-own-confirm-dialog): the panel awaits `ask()`, so the answer is
 // given here. Stubbing `window.confirm` would now confirm nothing and pass anyway.
-const { confirmAsk } = vi.hoisted(() => ({ confirmAsk: vi.fn() }))
-vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk }) }))
+const { confirmAsk, confirmAskWithOption } = vi.hoisted(() => ({ confirmAsk: vi.fn(), confirmAskWithOption: vi.fn() }))
+vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: confirmAsk, askWithOption: confirmAskWithOption }) }))
 
 import TenantMembersPanel from './TenantMembersPanel.vue'
-import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite } from './members'
+import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberInvite, removeTenantMember } from './members'
+import { revokeScopeShares } from '../memory/share'
 import { listMyTenants } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { ScopeKind } from '../../api/generated/scopes'
@@ -144,5 +147,60 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
     await wrapper.find(`[aria-label="${t('members.revoke')}"]`).trigger('click')
     await flushPromises()
     expect(revokeMemberInvite).not.toHaveBeenCalled()
+  })
+})
+
+// W2 (ADR 0075 point 5): the removal confirmation offers "also turn off every link", and its answer rides on the one
+// removal request. That the unticked request carries no parameter at all is asserted on the wire in members.test.ts.
+describe('TenantMembersPanel — removal and the links of the space (ADR 0075)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    clearActiveSpace()
+    activeSpace.kind = ScopeKind.Tenant
+    activeSpace.scopeId = 't-1'
+    activeSpace.tenantId = 't-1'
+    vi.mocked(removeTenantMember).mockResolvedValue(undefined)
+  })
+
+  const removePartner = async () => {
+    const wrapper = await mountPanel('OWNER')
+    await wrapper.find(`[aria-label="${t('members.remove')}"]`).trigger('click')
+    await flushPromises()
+    return wrapper
+  }
+
+  it('asks with the opt-in and sends it ticked when ticked', async () => {
+    confirmAskWithOption.mockResolvedValue({ option: true })
+    await removePartner()
+    expect(confirmAskWithOption).toHaveBeenCalledWith(expect.objectContaining({ option: expect.objectContaining({ label: t('members.removeRevokeLinks') }) }))
+    expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', true)
+  })
+
+  it('control: unticked, the same removal turns off no link', async () => {
+    confirmAskWithOption.mockResolvedValue({ option: false })
+    await removePartner()
+    expect(removeTenantMember).toHaveBeenCalledWith('t-1', 'u-pend', false)
+  })
+
+  it('a declined confirmation removes no one', async () => {
+    confirmAskWithOption.mockResolvedValue(null)
+    await removePartner()
+    expect(removeTenantMember).not.toHaveBeenCalled()
+  })
+
+  it('offers the owner "turn off every link" and sends it for the tenant space on confirm', async () => {
+    confirmAsk.mockResolvedValue(true)
+    vi.mocked(revokeScopeShares).mockResolvedValue(2)
+    const wrapper = await mountPanel('OWNER')
+    const action = wrapper.findAll('button').find((b) => b.text() === t('spaceLinks.revokeAll'))
+    expect(action).toBeDefined()
+    await action!.trigger('click')
+    await flushPromises()
+    expect(revokeScopeShares).toHaveBeenCalledWith('t-1')
+  })
+
+  it('control: a member who does not own the space is not offered it', async () => {
+    const wrapper = await mountPanel('MEMBER')
+    expect(wrapper.findAll('button').some((b) => b.text() === t('spaceLinks.revokeAll'))).toBe(false)
   })
 })

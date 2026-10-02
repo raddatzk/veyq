@@ -24,6 +24,7 @@ import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { bumpSpaceIcon } from './spaceIconSignal'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
+import { revokeScopeShares } from '../memory/share'
 import SpaceIconDialog from './SpaceIconDialog.vue'
 import TenantAvatar from '../../shared/ui/TenantAvatar.vue'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
@@ -242,6 +243,32 @@ async function removeMember(m: ScopeMember) {
   } finally {
     removing.value = false
     pendingRemove.value = null
+  }
+}
+
+// Turn off every link of the group (ADR 0075 point 5) — owner-only, behind the confirmation dialog. Each link then
+// comes back only as a new one its owner renews; the toast names how many went off. The tenant panel offers the same.
+const revokingLinks = ref(false)
+async function revokeAllLinks() {
+  const accepted = await ask({
+    header: t('spaceLinks.revokeAll'),
+    message: t('spaceLinks.revokeAllConfirm'),
+    acceptLabel: t('spaceLinks.revokeAll'),
+    acceptIcon: 'pi pi-link',
+  })
+  if (!accepted) return
+  lifecycleError.value = ''
+  revokingLinks.value = true
+  try {
+    const revoked = await revokeScopeShares(props.scopeId)
+    toast.success(t('spaceLinks.revokedAll', { count: revoked }, revoked))
+  } catch (e) {
+    on401(e)
+    if (isUnauthorized(e)) return
+    const { code } = await memberError(e)
+    lifecycleError.value = code === 'not_scope_owner' ? t('members.notOwner') : t('spaceLinks.revokeAllFailed')
+  } finally {
+    revokingLinks.value = false
   }
 }
 
@@ -551,6 +578,27 @@ async function onRestore() {
           </div>
         </div>
       </div>
+
+      <!-- Every public link of the group at once (ADR 0075 point 5), beside the danger zone — owner-only, and not while
+           the group is being deleted (it is read-only then): each link comes back only by renewal. -->
+      <section v-if="isOwner && !loading && loadError === '' && !isPending" class="settings-form space-links">
+        <div class="settings-section-header">
+          <div>
+            <h2>{{ t('spaceLinks.title') }}</h2>
+            <p class="settings-muted">{{ t('spaceLinks.sub') }}</p>
+          </div>
+        </div>
+        <div class="danger-row">
+          <Button
+            :label="t('spaceLinks.revokeAll')"
+            icon="pi pi-link"
+            severity="danger"
+            outlined
+            :loading="revokingLinks"
+            @click="revokeAllLinks"
+          />
+        </div>
+      </section>
 
       <!-- Danger zone (cr-0090): owner-only group lifecycle. Active → delete (30-day grace, inline confirm);
            pending-deletion → a countdown + restore. Deletion is soft + reversible in-window, so it's not a hard

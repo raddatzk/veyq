@@ -6,6 +6,7 @@ import jakarta.persistence.Column
 import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
+import org.hibernate.annotations.DynamicUpdate
 import java.time.Instant
 
 /**
@@ -18,9 +19,15 @@ import java.time.Instant
  * A shared, **query-only** entity (ADR 0007 — the `MembershipEntity` precedent): it lives in `shared/` so the
  * scope-access gate (`shared/membership/ScopeAccess`) can read a scope's tenant and `deletedAt` without a
  * `shared → features` import. Every mutation stays in the spaces feature's stores.
+ *
+ * `@DynamicUpdate`: an UPDATE writes only the columns its transaction changed. The stores mutate this row by
+ * read-modify-write (a rename, an icon, a soft-delete), and a full-row UPDATE would write back the [memberRemovals]
+ * it read — undoing a removal counted in between, which would silently un-mark every link that removal exposed
+ * (ADR 0075 point 4).
  */
 @Entity
 @Table(name = "veyq_scope")
+@DynamicUpdate
 class ScopeEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -62,6 +69,13 @@ class ScopeEntity : PanacheEntityBase {
 
     /** When a GROUP was **soft-deleted** (uc.spaces.delete-group, cr-0090); null = active. While set, the group is
      *  in a grace period — readable but read-only, and the scheduled purge hard-erases it after the retention. */
+    /** How many accepted members this scope has lost (ADR 0075 point 4) — bumped in the transaction of every removal
+     *  (`ScopesStore.recordRemoval`); never decremented. A share stamps it at mint, so a share minted before a
+     *  removal is one the removed member could have rebuilt from its recovery copy. Operational metadata: it counts
+     *  membership deletes the operator performs anyway. */
+    @Column(name = "member_removals", nullable = false)
+    var memberRemovals: Int = 0
+
     @Column(name = "deleted_at")
     var deletedAt: Instant? = null
 

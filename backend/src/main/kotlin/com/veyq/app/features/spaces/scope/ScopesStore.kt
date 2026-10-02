@@ -294,6 +294,27 @@ class ScopesStore(
         ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", userId, scopeId)
     }
 
+    /**
+     * Count one removal of an accepted member (ADR 0075 point 4) — called in the transaction of **every** path that
+     * removes one: the group's removal-rotation ([rotate]) and the tenant cascade, for each scope it cuts. A share
+     * minted before it is then one the removed member could have rebuilt from its recovery copy, so it comes back only
+     * by re-issue. A pending proposal's delete is no removal: it was never keyed and holds no grant to open a copy.
+     * One atomic `+ 1` in the database, never a read-modify-write of a loaded row: the caller may already hold that row
+     * in its persistence context (the gate read it; [rotate] locked it), and a stale in-memory count plus one would
+     * lose a removal racing this one. The loaded row is not refreshed — `ScopeEntity` is `@DynamicUpdate`, so its
+     * later flush writes only the columns its transaction changed and never this count back.
+     */
+    @Transactional
+    fun recordRemoval(scopeId: String) {
+        ScopeEntity.update("memberRemovals = memberRemovals + 1 where id = ?1", scopeId)
+    }
+
+    /** The scope row, or null — read-only: its epoch and removal count for the sharing feature's re-issue rule. */
+    fun find(scopeId: String): ScopeEntity? = ScopeEntity.findById(scopeId)
+
+    /** Turn off and mark every share of the scope (ADR 0075 point 5) — a scope owner's standalone switch-off. */
+    fun turnOffAllShares(scopeId: String): Int = shares.turnOffAllInScope(scopeId)
+
     /** The scope's current content-key epoch, or null if there's no such scope. */
     fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch
 
@@ -341,8 +362,9 @@ class ScopesStore(
             all.filter { it.userId == removed }.forEach { it.delete() }
             ItemFavoritesEntity.delete("userId = ?1 and scopeId = ?2", removed, scopeId)
             shares.deactivateSharesByOwnerInScope(removed, scopeId) // cr-0104: their public links 404 from now on
+            recordRemoval(scopeId) // ADR 0075: every link minted before now is one the removed member could rebuild
             // ADR 0075: and, opted into, every other link of the group — any of them the removed member could copy
-            if (revokeLinks) shares.deactivateSharesInScope(scopeId)
+            if (revokeLinks) shares.turnOffAllInScope(scopeId)
             all.filter { it.userId != removed }
         } ?: all
         scope.currentEpoch = plan.newEpoch

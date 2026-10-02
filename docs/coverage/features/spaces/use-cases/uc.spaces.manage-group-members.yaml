@@ -103,3 +103,8 @@ acceptanceCriteria:
     coverage:
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/account/trustMarks.test.ts, src/features/account/rotation/rotateKeys.test.ts]
+  - id: owner-turns-off-every-link
+    text: A group owner turns off every enabled public share of the group with no removal (revokeScopeShares), each marked so it comes back only by re-issue, the answer counting them and a second call answering 0; a member who does not own the group is refused 403 not_scope_owner and nothing moves; a link minted afterwards is untouched (A5, ADR 0075 point 5).
+    coverage:
+      backend: { integration: [ShareSharedScopeSliceTest.aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks] }
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/shared/ui/ConfirmDialog.test.ts] }

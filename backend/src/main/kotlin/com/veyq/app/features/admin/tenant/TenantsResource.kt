@@ -184,8 +184,8 @@ class TenantsResource(
     // Remove a member (cr-0091): the ACL-revoke cascade + orphan rule. @Authenticated (not Server-Owner); the
     // owner-gate + last-owner guard live in the handler (403 not_tenant_owner / 409 last_owner).
     @Authenticated
-    override fun removeTenantMember(tenantId: UUID, userId: UUID): Response =
-        when (val o = handler.removeMember(identity.principal.name, tenantId.toString(), userId.toString())) {
+    override fun removeTenantMember(tenantId: UUID, userId: UUID, revokeLinks: Boolean?): Response =
+        when (val o = handler.removeMember(identity.principal.name, tenantId.toString(), userId.toString(), revokeLinks == true)) {
             RemoveTenantMemberOutcome.Ok -> Response.noContent().build()
             is HttpFailure -> httpError(o)
         }

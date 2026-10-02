@@ -30,11 +30,12 @@ import { useMemberDirectory } from './useMemberDirectory'
 import { useObjectUrl } from '../../shared/state/useObjectUrls'
 import { useToast } from '../../shared/state/useToast'
 import { useConfirm } from '../../shared/state/useConfirm'
+import { revokeScopeShares } from '../memory/share'
 import ChangedKeyReviewDialog from './ChangedKeyReviewDialog.vue'
 
 const { t } = useI18n()
 const toast = useToast()
-const { ask } = useConfirm()
+const { ask, askWithOption } = useConfirm()
 
 // Locally-decrypted real names (first+last) keyed by userId — the sealed blob opened with K_tenant on-device.
 const names = ref<Record<string, MemberName | null>>({})
@@ -168,26 +169,52 @@ async function reissue(invite: PendingMemberInvite) {
   }
 }
 
-// Remove a member from the tenant (uc.spaces.remove-tenant-member, cr-0091) — owner-only, inline confirm. The
-// server runs the whole cascade; here we just fire it and refresh the directory (the ex-member drops out). Not
-// offered on OWNER rows (owners are managed via co-ownership, not removed from the roster here).
+// Remove a member from the tenant (uc.spaces.remove-tenant-member, cr-0091) — owner-only, behind the confirmation
+// dialog. The server runs the whole cascade; here we just fire it and refresh the directory (the ex-member drops
+// out). Not offered on OWNER rows (owners are managed via co-ownership, not removed from the roster here). The
+// dialog's opt-in (ADR 0075 point 5), unchecked by default, also turns off every link of the space in the same act.
 async function remove(member: ScopeMember) {
-  const accepted = await ask({
+  const answer = await askWithOption({
     header: t('members.removeConfirmTitle'),
     message: t('members.removeConfirm'),
     acceptLabel: t('members.remove'),
     acceptIcon: 'pi pi-user-minus',
+    option: { label: t('members.removeRevokeLinks'), hint: t('members.removeRevokeLinksHint') },
   })
-  if (!accepted) return
+  if (!answer) return
   actionError.value = ''
   reissuedTo.value = ''
   try {
-    await removeTenantMember(activeSpace.tenantId!, member.userId)
+    await removeTenantMember(activeSpace.tenantId!, member.userId, answer.option)
     toast.success(t('members.removed'))
     await reload()
   } catch (e) {
     on401(e)
     if (!isUnauthorized(e)) actionError.value = t('members.actionFailed')
+  }
+}
+
+// Turn off every link of the space (ADR 0075 point 5) — owner-only, behind the confirmation dialog. Each link then
+// comes back only as a new one its owner renews; the toast names how many went off.
+const revokingLinks = ref(false)
+async function revokeAllLinks() {
+  const accepted = await ask({
+    header: t('spaceLinks.revokeAll'),
+    message: t('spaceLinks.revokeAllConfirm'),
+    acceptLabel: t('spaceLinks.revokeAll'),
+    acceptIcon: 'pi pi-link',
+  })
+  if (!accepted || !activeSpace.scopeId) return
+  actionError.value = ''
+  revokingLinks.value = true
+  try {
+    const revoked = await revokeScopeShares(activeSpace.scopeId)
+    toast.success(t('spaceLinks.revokedAll', { count: revoked }, revoked))
+  } catch (e) {
+    on401(e)
+    if (!isUnauthorized(e)) actionError.value = t('spaceLinks.revokeAllFailed')
+  } finally {
+    revokingLinks.value = false
   }
 }
 
@@ -381,6 +408,25 @@ async function revoke(invite: PendingMemberInvite) {
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+    <!-- Every public link of the space at once (ADR 0075 point 5) — owner-only: each comes back only by renewal. -->
+    <section v-if="isOwner && !loading" class="settings-form space-links">
+      <div class="settings-section-header">
+        <div>
+          <h2>{{ t('spaceLinks.title') }}</h2>
+          <p>{{ t('spaceLinks.sub') }}</p>
+        </div>
+        <Button
+          :label="t('spaceLinks.revokeAll')"
+          icon="pi pi-link"
+          severity="danger"
+          outlined
+          size="small"
+          :loading="revokingLinks"
+          @click="revokeAllLinks"
+        />
       </div>
     </section>
 

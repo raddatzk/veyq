@@ -61,6 +61,19 @@ const en = {
       'Remove this member? They lose access to everything shared right away. Their own memories stay readable to them for 30 days, then are erased. This can’t be undone.',
     removed: 'Member removed.',
     actionFailed: 'That action failed. Please try again.',
+    // ADR 0075: the removal confirmation's opt-in — also turn off every link of the tenant space
+    removeRevokeLinks: 'Also turn off every link in this space',
+    removeRevokeLinksHint: 'They may have copied any of its links. Each link’s owner can renew the ones still needed.',
+  },
+  // ADR 0075 point 5: a scope owner's switch-off of every public link in the space — the group and tenant panels
+  spaceLinks: {
+    title: 'Links',
+    sub: 'Public links to Memories in this space. If one may have reached the wrong hands, turn them all off at once.',
+    revokeAll: 'Turn off every link',
+    revokeAllConfirm:
+      'Turn off every public link to a Memory in this space? They stop working at once and come back only as new links — each link’s owner renews the ones still needed. Guests keep the photos they added.',
+    revokedAll: 'No link was on. | One link turned off. | {count} links turned off.',
+    revokeAllFailed: 'The links could not be turned off. Please try again.',
   },
   spaceIcon: {
     change: 'Change icon',
@@ -943,8 +956,9 @@ const en = {
     reissueSubmit: 'Renew link',
     reissuing: 'Renewing…',
     reissueFailed: 'The link could not be renewed.',
-    keyChangedBadge: 'Made before the key changed',
-    keyChangedHint: 'Made before the group’s key last changed — someone who has left may still have this link. Renew it to cut them off.',
+    // ADR 0075: the server's verdict — made before someone left or replaced their keys, or switched off with every link
+    reissueRequiredBadge: 'Needs renewing',
+    reissueRequiredHint: 'Made before someone left this space or replaced their keys, or switched off with every link here — it may be in the wrong hands. Renew it to cut that off.',
     disabled: 'Switched off',
     byMember: 'By another member',
     loadFailed: 'Your links could not be loaded.',
@@ -1050,6 +1064,17 @@ const de: typeof en = {
       'Dieses Mitglied entfernen? Es verliert sofort den Zugriff auf alles Geteilte. Die eigenen Erinnerungen dieser Person bleiben 30 Tage lang lesbar und werden dann gelöscht. Das lässt sich nicht rückgängig machen.',
     removed: 'Mitglied entfernt.',
     actionFailed: 'Die Aktion ist fehlgeschlagen. Bitte erneut versuchen.',
+    removeRevokeLinks: 'Auch alle Links dieses Bereichs abschalten',
+    removeRevokeLinksHint: 'Die entfernte Person kann jeden Link dieses Bereichs kopiert haben. Wem ein Link gehört, kann die noch benötigten erneuern.',
+  },
+  spaceLinks: {
+    title: 'Links',
+    sub: 'Öffentliche Links zu Erinnerungen in diesem Bereich. Wenn einer in falsche Hände geraten sein könnte, schalte alle auf einmal ab.',
+    revokeAll: 'Alle Links abschalten',
+    revokeAllConfirm:
+      'Alle öffentlichen Links zu Erinnerungen in diesem Bereich abschalten? Sie funktionieren sofort nicht mehr und kommen nur als neue Links zurück — wem ein Link gehört, erneuert die noch benötigten. Gäste behalten die Fotos, die sie hinzugefügt haben.',
+    revokedAll: 'Es war kein Link aktiv. | Ein Link abgeschaltet. | {count} Links abgeschaltet.',
+    revokeAllFailed: 'Die Links konnten nicht abgeschaltet werden. Bitte erneut versuchen.',
   },
   spaceIcon: {
     change: 'Icon ändern',
@@ -1904,8 +1929,8 @@ const de: typeof en = {
     reissueSubmit: 'Link erneuern',
     reissuing: 'Wird erneuert…',
     reissueFailed: 'Der Link konnte nicht erneuert werden.',
-    keyChangedBadge: 'Vor dem Schlüsselwechsel erstellt',
-    keyChangedHint: 'Erstellt, bevor sich der Schlüssel der Gruppe zuletzt geändert hat — wer die Gruppe verlassen hat, könnte diesen Link noch haben. Erneuere ihn, um diesen Zugang zu beenden.',
+    reissueRequiredBadge: 'Muss erneuert werden',
+    reissueRequiredHint: 'Erstellt, bevor jemand diesen Bereich verlassen hat oder Schlüssel ersetzt wurden, oder mit allen Links hier abgeschaltet — er könnte in falschen Händen sein. Erneuere ihn, um diesen Zugang zu beenden.',
     disabled: 'Abgeschaltet',
     byMember: 'Von einem anderen Mitglied',
     loadFailed: 'Deine Links konnten nicht geladen werden.',

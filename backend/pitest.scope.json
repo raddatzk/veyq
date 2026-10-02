@@ -5,13 +5,15 @@
     "com.veyq.app.features.admin.tenant.RemovalPolicy*",
     "com.veyq.app.shared.ratelimit.TokenBucket",
     "com.veyq.app.features.sharing.ShareAccessPolicy*",
-    "com.veyq.app.features.spaces.scope.MembershipPolicy*"
+    "com.veyq.app.features.spaces.scope.MembershipPolicy*",
+    "com.veyq.app.features.sharing.ReissuePolicy*"
   ],
   "targetTests": [
     "com.veyq.app.features.spaces.scope.RotationPolicyTest",
     "com.veyq.app.features.admin.tenant.RemovalPolicyTest",
     "com.veyq.app.shared.ratelimit.TokenBucketTest",
     "com.veyq.app.features.sharing.ShareAccessPolicyTest",
-    "com.veyq.app.features.spaces.scope.MembershipPolicyTest"
+    "com.veyq.app.features.spaces.scope.MembershipPolicyTest",
+    "com.veyq.app.features.sharing.ReissuePolicyTest"
   ]
 }

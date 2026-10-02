@@ -57,7 +57,7 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
      that member created** in that scope (`enabled = false`, §7). The share is **not** deleted, but it is **not
      revived either**: a link its removed creator holds is re-issued — a new id and a new `K_share`, the old one
      off — never re-activated ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md), which also
-     lets the removal turn off every link of the group). Re-activation, which transfers ownership to the
+     lets the removal, or any owner of the scope on its own, turn off every link of the scope). Re-activation, which transfers ownership to the
      re-activating member, stays for a share no departed member could hold, and is gated like creation: the
      instance capability for the share's role still applies. This deactivation is
      the **honest-server forward-secrecy layer for a public link**: because `K_mem` is stable and never re-keyed
@@ -65,7 +65,9 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
      server-side soft-revoke *is* the revocation. It composes with, and is independent of, the scope-key rotation
      that member-removal also triggers for a **group** ([ADR 0024](0024-scope-key-rotation.md)); the **tenant**,
      which revokes by ACL rather than rotation ([ADR 0025](0025-forward-secrecy-policy-per-scope.md)), relies on
-     this deactivation as its **only** forward layer for a public link.
+     this deactivation as its **only** forward layer for a public link — and because its epoch never moves on a
+     removal, a co-member's link the removed member could copy is marked by ADR 0075's **removal counter**
+     instead, never re-activated, and can be turned off in the removal itself.
 
    A **personal** scope has no member removal, so only the first slice's crypto/access-path (§1–§5, §7–§8) applies
    there; the governance above is inert for it.

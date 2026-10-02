@@ -75,6 +75,12 @@ vault") is an explicit, rare action. This is the established practice for per-us
   `TenantHandler`) — O(1), no rotation, as decided here. The rare explicit **re-key** rides the generic
   `rotateScope` endpoint (live for groups); a dedicated tenant re-key flow is not separately wired. The group
   path is already live.
+- **No rotation means no epoch signal for a public link.** A link a removed tenant member could copy cannot be
+  "rotated away" (`K_mem` never re-keys), and the tenant's epoch does not move on a removal, so the scope instead
+  counts its removals and each share stamps the count it was minted under; a link minted before a removal is
+  re-issued, never re-activated, and the removal can turn every tenant link off in the same act
+  ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md) points 4–5). A counter, not a key event —
+  the `O(1)` removal stands.
 - **Edits in place:** [ADR 0024](0024-scope-key-rotation.md)'s "scope-generic, group-first" consequence and the
   [security-model](../crosscutting/security-model.md) revocation section point here for the per-scope policy.
 - **Rejected — apply the group policy uniformly (always-rotate the tenant):** puts an `O(N)` burst on *every*

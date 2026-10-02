@@ -16,6 +16,7 @@ import {
   SetMemberRoleRequestRoleEnum,
 } from './members'
 import { scopesApi, tenantsApi } from '../../api/client'
+import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
 import { admissionFor } from './scopes'
 
 const ADMISSION = { admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 2, admissionTag: 'dGFn' }
@@ -75,6 +76,23 @@ describe('removeTenantMember (cr-0091)', () => {
     await removeTenantMember('t1', 'u1')
 
     expect(removeFn).toHaveBeenCalledWith({ tenantId: 't1', userId: 'u1' })
+  })
+
+  // W2 (ADR 0075 point 5), asserted on the request the generated client actually sends — a `toHaveBeenCalledWith`
+  // treats an `undefined` key as absent, so only the URL proves "no parameter".
+  it('sends revokeLinks=true only when asked, and no parameter at all otherwise', async () => {
+    const urls: string[] = []
+    const fetchApi = vi.fn(async (url: RequestInfo | URL) => {
+      urls.push(String(url))
+      return new Response(null, { status: 204 })
+    })
+    const real = new TenantsApi(new TenantsConfiguration({ basePath: 'http://x', fetchApi }))
+    vi.mocked(tenantsApi).mockReturnValue(real)
+
+    await removeTenantMember('t1', 'u1', true)
+    await removeTenantMember('t1', 'u2')
+
+    expect(urls).toEqual(['http://x/api/tenants/t1/members/u1?revokeLinks=true', 'http://x/api/tenants/t1/members/u2'])
   })
 })
 

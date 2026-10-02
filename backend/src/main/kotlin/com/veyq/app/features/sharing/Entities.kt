@@ -82,6 +82,17 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "sealed_share_key_epoch")
     var sealedShareKeyEpoch: Int? = null
 
+    /** The scope's removal counter when this share was minted (ADR 0075 point 4): below the scope's current count, a
+     *  member has left since — one who could have rebuilt this link from its recovery copy. Stamped in the mint's
+     *  transaction (`SharingStore.persistShare`), never changed. */
+    @Column(name = "member_removals_at_mint", nullable = false)
+    var memberRemovalsAtMint: Int = 0
+
+    /** Set by a bulk switch-off (ADR 0075 point 5, `SharingStore.turnOffAllInScope`): this share comes back only by
+     *  re-issue, which mints a new row — so the mark never travels. */
+    @Column(name = "reissue_only", nullable = false)
+    var reissueOnly: Boolean = false
+
     /** cr-0118 (ADR 0037): true when the share is password-protected — the guest resolve + blob GET then require a
      *  valid `X-Share-Password` token. An access-control gate, not a crypto one (content stays E2EE via `K_share`). */
     @Column(name = "password_required", nullable = false)

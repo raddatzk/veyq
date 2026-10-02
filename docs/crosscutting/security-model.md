@@ -251,12 +251,14 @@ server-blind tokens make this work without the server ever seeing content:
   point 4.
 - **A link a departed member could copy is re-issued, never revived**
   ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). Every member can rebuild
-  **every** link of a Memory from its recovery copy, so a member removed from a group may hold every link that
-  existed on the group's Memories while they belonged — and using one needs **no dump**: against an honest server
+  **every** link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
+  link that existed on its Memories while they belonged — and using one needs **no dump**: against an honest server
   the link is a bearer capability, and `K_mem` never re-keys. A **re-issue** (one request, one transaction: a new
   id and a fresh `K_share` carrying the old settings, the old link off) is what cuts them off. Re-activation is
-  refused (`reissue_required`) for a share whose owner has left or whose copy predates the scope's current epoch,
-  and a group removal can opt to turn off every link of the group in the same transaction. This is the
+  refused (`reissue_required`) for a share whose owner has left, whose copy predates the scope's current epoch or
+  its last member removal (a scope counts its removals, because the tenant never rotates on one), or that a bulk
+  switch-off turned off; a group or tenant removal can opt to turn off every link of its space in the same
+  transaction, and any owner of a space can do so at any time. This is the
   **honest-server** cut: with a dump the departed member already holds `K_mem` and reads the Memory whatever the
   link does — the ADR 0012 class.
 - **An optional share password** is an **operator-blind access-control gate**, *not* a cryptographic one
@@ -397,10 +399,10 @@ operator lacks can.
   version of their own set (freshness), and it can inflate or deflate a node's mark count — withholding entries,
   serving stored sets again as extra entries on its own, forging entries with any present or past member
   (ADR 0068 §9);
-- a member removed from a group scope: every member can rebuild every link of a Memory, so they may hold every link
-  that existed on the group's Memories while they belonged, and use one with no dump at all until it is
-  **re-issued** — which cuts them off against an honest server; the removal can turn every link of the group off
-  at once ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). With a dump they also
+- a member removed from a group or the tenant: every member can rebuild every link of a Memory, so they may hold
+  every link that existed on its Memories while they belonged, and use one with no dump at all until it is
+  **re-issued** — which cuts them off against an honest server; the removal, or any owner of the space later, can
+  turn every link of it off at once ([ADR 0075](../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). With a dump they also
   read the old share's later password, label or note edits, and the Memory's content under `K_mem` stays readable
   whatever the link does (the ADR 0012 class);
 - the names a Memory's guests gave, to an operator holding a viewer or contributor link of it. No link is served

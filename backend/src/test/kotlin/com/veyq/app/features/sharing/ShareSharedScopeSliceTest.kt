@@ -349,6 +349,192 @@ class ShareSharedScopeSliceTest {
         assertEquals(0, TestAdmission.epochOf(tenantId)) // the tenant epoch never moved
     }
 
+    // --- a tenant removal marks every link the removed member could copy (ADR 0075 point 4, the removal counter) ---
+
+    /** The co-member's link the removed member could have rebuilt from its recovery copy: the tenant's epoch never
+     *  moves on a removal, so only the removal counter can refuse it. The positive control on the same predicate is a
+     *  link minted after the removal; the list carries the very predicate the refusal runs. */
+    @Test
+    fun aCoMembersTenantLinkMintedBeforeARemovalIsNotRevived() {
+        val (tenantId, owner) = seedActiveTenant("t-comember.example.com")
+        val member = seedTenantMember(tenantId, "m@t-comember.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-comember.example.com")
+        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val before = createShare(coMember, memory, copyEpoch = 0)
+        removeFromTenant(owner, tenantId, member).then().statusCode(204)
+        assertEquals(0, TestAdmission.epochOf(tenantId)) // no epoch signal: the counter carries it alone
+        val after = createShare(coMember, memory, copyEpoch = 0)
+        revoke(coMember, before)
+        revoke(coMember, after)
+
+        reactivate(coMember, before).then().statusCode(409).body("code", equalTo("reissue_required"))
+        resolves(before, 404)
+        given().header("Authorization", bearer(coMember)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200)
+            .body("find { it.shareId == '$before' }.reissueRequired", equalTo(true))
+            .body("find { it.shareId == '$after' }.reissueRequired", equalTo(false))
+        reactivate(coMember, after).then().statusCode(204)
+        resolves(after, 200)
+    }
+
+    /** The null-copy control: a link with no recovery copy, minted before the removal, was never rebuildable by
+     *  anyone but its owner — who is still here — so the removal says nothing about it. */
+    @Test
+    fun aCoMembersTenantLinkWithoutACopyIsRevivedAfterARemoval() {
+        val (tenantId, owner) = seedActiveTenant("t-nocopy.example.com")
+        val member = seedTenantMember(tenantId, "m@t-nocopy.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-nocopy.example.com")
+        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val noCopy = createShare(coMember, memory)
+        removeFromTenant(owner, tenantId, member).then().statusCode(204)
+        revoke(coMember, noCopy)
+
+        given().header("Authorization", bearer(coMember)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200).body("find { it.shareId == '$noCopy' }.reissueRequired", equalTo(false))
+        reactivate(coMember, noCopy).then().statusCode(204)
+        resolves(noCopy, 200)
+    }
+
+    /** A tenant removal cuts the member from a co-shared group too, but only QUEUES that group's rotation — until a
+     *  device runs it the group's epoch has not moved, and the counter is what marks the group's links meanwhile. */
+    @Test
+    fun aCoSharedGroupLinkIsMarkedBeforeItsQueuedRotationRuns() {
+        val (tenantId, owner) = seedActiveTenant("t-cogroup.example.com")
+        val member = seedTenantMember(tenantId, "m@t-cogroup.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-cogroup.example.com")
+        val group = seedGroup(tenantId, coMember)
+        addMember(tenantId, group, member)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val before = createShare(coMember, memory, copyEpoch = 0)
+        removeFromTenant(owner, tenantId, member).then().statusCode(204)
+        assertEquals(0, TestAdmission.epochOf(group)) // the queued rotation has not run: asserted, not assumed
+        val after = createShare(coMember, memory, copyEpoch = 0)
+        revoke(coMember, before)
+        revoke(coMember, after)
+
+        reactivate(coMember, before).then().statusCode(409).body("code", equalTo("reissue_required"))
+        resolves(before, 404)
+        reactivate(coMember, after).then().statusCode(204) // control: minted after the removal
+        resolves(after, 200)
+    }
+
+    /** `revokeLinks` on a tenant removal turns off every TENANT-scope link in the removal's transaction — and only
+     *  those: a co-shared group's links are the group owners' to re-issue. A refused removal writes nothing. */
+    @Test
+    fun aTenantRemovalWithRevokeLinksTurnsOffEveryTenantLinkAndNoGroupLink() {
+        val (tenantId, owner) = seedActiveTenant("t-revoke-links.example.com")
+        val member = seedTenantMember(tenantId, "m@t-revoke-links.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-revoke-links.example.com")
+        val memory = seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY)
+        val coMemberShare = createShare(coMember, memory, copyEpoch = 0)
+        val ownerShare = createShare(owner, memory)
+        val group = seedGroup(tenantId, coMember)
+        addMember(tenantId, group, member)
+        val groupShare = createShare(coMember, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+
+        // the last owner cannot be removed — and the flag riding on that refusal turns nothing off
+        removeFromTenant(owner, tenantId, owner, revokeLinks = true).then().statusCode(409).body("code", equalTo("last_owner"))
+        listOf(coMemberShare, ownerShare, groupShare).forEach { resolves(it, 200) }
+
+        removeFromTenant(owner, tenantId, member, revokeLinks = true).then().statusCode(204)
+        resolves(coMemberShare, 404)
+        resolves(ownerShare, 404)
+        resolves(groupShare, 200) // TENANT only
+    }
+
+    /** The removal's switch-off marks what it turns off, so even a link with no recovery copy — which the removal
+     *  counter alone would let any member revive — comes back only by re-issue. Both removal paths. */
+    @Test
+    fun aRemovalsSwitchOffMarksEveryLinkItTurnsOff() {
+        val (tenantId, owner) = seedActiveTenant("t-mark.example.com")
+        val member = seedTenantMember(tenantId, "m@t-mark.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-mark.example.com")
+        val tenantNoCopy = createShare(coMember, seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
+        val group = seedGroup(tenantId, owner)
+        addMember(tenantId, group, member)
+        addMember(tenantId, group, coMember)
+        val groupNoCopy = createShare(coMember, seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY))
+
+        removeByRotation(owner, group, member, revokeLinks = true).then().statusCode(201)
+        reactivate(coMember, groupNoCopy).then().statusCode(409).body("code", equalTo("reissue_required"))
+        resolves(groupNoCopy, 404)
+
+        val other = seedTenantMember(tenantId, "o@t-mark.example.com")
+        removeFromTenant(owner, tenantId, other, revokeLinks = true).then().statusCode(204)
+        reactivate(coMember, tenantNoCopy).then().statusCode(409).body("code", equalTo("reissue_required"))
+        resolves(tenantNoCopy, 404)
+    }
+
+    /** Both removal paths count on every scope they cut, and a rotation that removes no one does not. The group
+     *  path is the one where the count can be lost: the rotation also writes the scope row it locked, and only
+     *  `ScopeEntity`'s `@DynamicUpdate` keeps that write from putting the count it read back. */
+    @Test
+    fun everyRemovalPathCountsOnTheScopesItCuts() {
+        val (tenantId, owner) = seedActiveTenant("t-count.example.com")
+        val member = seedTenantMember(tenantId, "m@t-count.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-count.example.com")
+        val group = seedGroup(tenantId, owner)
+        addMember(tenantId, group, member)
+        addMember(tenantId, group, coMember)
+
+        removeByRotation(owner, group, member = null).then().statusCode(201)
+        assertEquals(0, memberRemovalsOf(group)) // a plain rotation removes no one
+        removeByRotation(owner, group, member).then().statusCode(201)
+        assertEquals(1, memberRemovalsOf(group))
+
+        removeFromTenant(owner, tenantId, coMember).then().statusCode(204)
+        assertEquals(1, memberRemovalsOf(tenantId))
+        assertEquals(2, memberRemovalsOf(group)) // the co-shared group the cascade cut
+    }
+
+    // --- a standalone switch-off by a scope owner (ADR 0075 point 5) ---
+
+    @Test
+    fun aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks() {
+        val (tenantId, owner) = seedActiveTenant("g-switch-off.example.com")
+        val coMember = seedTenantMember(tenantId, "c@g-switch-off.example.com")
+        val group = seedGroup(tenantId, owner)
+        addMember(tenantId, group, coMember)
+        val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+        val noCopy = createShare(coMember, memory)
+        val withCopy = createShare(coMember, memory, copyEpoch = 0)
+
+        // a member who owns nothing of the scope may not; nothing moves
+        revokeScopeShares(coMember, group).then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        resolves(noCopy, 200)
+        resolves(withCopy, 200)
+
+        revokeScopeShares(owner, group).then().statusCode(200).body("revoked", equalTo(2))
+        resolves(noCopy, 404)
+        resolves(withCopy, 404)
+        given().header("Authorization", bearer(owner)).`when`().get("/api/shares?nodeId=$memory")
+            .then().statusCode(200)
+            .body("find { it.shareId == '$noCopy' }.reissueRequired", equalTo(true))
+            .body("find { it.shareId == '$withCopy' }.reissueRequired", equalTo(true))
+        // nobody was removed and both owners are members: only the mark refuses these
+        reactivate(owner, noCopy).then().statusCode(409).body("code", equalTo("reissue_required"))
+        reactivate(coMember, withCopy).then().statusCode(409).body("code", equalTo("reissue_required"))
+        revokeScopeShares(owner, group).then().statusCode(200).body("revoked", equalTo(0)) // idempotent
+
+        // control: a link minted after the switch-off is untouched by it
+        val after = createShare(coMember, memory, copyEpoch = 0)
+        revoke(coMember, after)
+        reactivate(coMember, after).then().statusCode(204)
+        resolves(after, 200)
+    }
+
+    @Test
+    fun aTenantOwnerSwitchesOffTheTenantsLinks() {
+        val (tenantId, owner) = seedActiveTenant("t-switch-off.example.com")
+        val coMember = seedTenantMember(tenantId, "c@t-switch-off.example.com")
+        val share = createShare(coMember, seedNode(tenantId, NodeEntity.MEMORY, parentId = tenantId, wrappedContentKey = CONTENT_KEY))
+
+        revokeScopeShares(coMember, tenantId).then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        resolves(share, 200)
+        revokeScopeShares(owner, tenantId).then().statusCode(200).body("revoked", equalTo(1))
+        resolves(share, 404)
+    }
+
     // --- helpers ---
 
     /** A share of [role] carrying [keys]; with [copyEpoch], also a recovery copy sealed at that epoch (ADR 0036
@@ -371,6 +557,25 @@ class ShareSharedScopeSliceTest {
             .`when`().post("/api/shares/$shareId/reissue")
 
     private fun resolves(shareId: String, status: Int) = given().`when`().get("/api/shares/$shareId").then().statusCode(status)
+
+    private fun memberRemovalsOf(scopeId: String): Int =
+        QuarkusTransaction.requiringNew().call { ScopeEntity.findById(scopeId)!!.memberRemovals }
+
+    private fun revoke(userId: String, shareId: String) {
+        given().header("Authorization", bearer(userId)).`when`().post("/api/shares/$shareId/revoke").then().statusCode(204)
+    }
+
+    private fun reactivate(userId: String, shareId: String) =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/shares/$shareId/reactivate")
+
+    private fun revokeScopeShares(userId: String, scopeId: String) =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/$scopeId/shares/revoke")
+
+    /** The tenant owner removes [member] (the ACL-revoke cascade); [revokeLinks] is the ADR 0075 opt-in, omitted when null. */
+    private fun removeFromTenant(owner: String, tenantId: String, member: String, revokeLinks: Boolean? = null) =
+        given().header("Authorization", bearer(owner))
+            .apply { revokeLinks?.let { queryParam("revokeLinks", it) } }
+            .`when`().delete("/api/tenants/$tenantId/members/$member")
 
     /** The owner removes [member] from [group] — a removal-rotation to the next epoch, the one way a keyed member
      *  leaves (ADR 0024 Decision 4); [revokeLinks] is the ADR 0075 opt-in, omitted when null. */

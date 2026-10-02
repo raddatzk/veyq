@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useConfirm, confirmRequest, settleConfirm } from './useConfirm'
+import { useConfirm, confirmRequest, confirmOption, settleConfirm } from './useConfirm'
 
 const request = { header: 'Sign out?', message: 'This device signs out.', acceptLabel: 'Sign out' }
 
@@ -53,5 +53,24 @@ describe('useConfirm', () => {
     expect(confirmRequest.value?.header).toBe('Again')
     settleConfirm(false)
     await expect(second).resolves.toBe(false)
+  })
+
+  it('askWithOption answers null while another request is open, and leaves that one alone', async () => {
+    const { ask, askWithOption } = useConfirm()
+    const first = ask(request)
+    await expect(askWithOption({ ...request, option: { label: 'Also' } })).resolves.toBeNull()
+    expect(confirmRequest.value).toEqual(request)
+    settleConfirm(true)
+    await expect(first).resolves.toBe(true)
+  })
+
+  it('askWithOption carries the opt-in state set while it was open, and resets it for the next request', async () => {
+    const { askWithOption } = useConfirm()
+    const answer = askWithOption({ ...request, option: { label: 'Also' } })
+    expect(confirmOption.value).toBe(false)
+    confirmOption.value = true
+    settleConfirm(true)
+    await expect(answer).resolves.toEqual({ option: true })
+    expect(confirmOption.value).toBe(false)
   })
 })

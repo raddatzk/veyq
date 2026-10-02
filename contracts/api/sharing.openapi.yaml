@@ -170,12 +170,14 @@ paths:
         Re-enables a disabled share (`enabled = true`) and transfers `owner_account` to the caller. Any **current
         member** of the share's scope may adopt it, and the **same** link resolves again — which is why a link a
         departed member may hold is never re-activated
-        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)): when the share's
-        owner is no longer a member of its scope, or its recovery copy is sealed below the scope's current epoch
-        (every member then could rebuild the link, one since removed included), the answer is
-        `409 reissue_required`, nothing written, and the caller re-issues it (`reissueShare`) instead. A share with
-        no recovery copy is judged by its owner's membership alone. Idempotent for a share the caller may already
-        adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
+        ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 4): when a
+        bulk switch-off turned the share off (`revokeScopeShares`, or a removal's `revokeLinks`), when its owner is no
+        longer a member of its scope, or when it carries a recovery copy and either that copy is sealed below the
+        scope's current epoch or the scope has lost an accepted member since the share was minted (every member then
+        could rebuild the link, one since removed included), the answer is `409 reissue_required`, nothing written,
+        and the caller re-issues it (`reissueShare`) instead — the same predicate the list's `reissueRequired`
+        carries. A share with no recovery copy is judged by the switch-off and its owner's membership alone.
+        Idempotent for a share the caller may already adopt. Re-activating is a publication like creating, so it passes the same checks: a current member outside
         the space's deletion grace, and the instance's sharing capability for the share's role
         (uc.sharing.share-shared-scope A2).
       security:
@@ -196,9 +198,10 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
           description: >
-            A departed member may hold this link (`reissue_required`, nothing written — its owner is no longer a
-            member of the scope, or its recovery copy is sealed below the scope's current epoch; re-issue it, ADR
-            0075), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+            A departed member may hold this link (`reissue_required`, nothing written — a bulk switch-off turned it
+            off, its owner is no longer a member of the scope, or its recovery copy predates the scope's current
+            epoch or its last member removal; re-issue it, ADR 0075), or the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: reissue_required } }
         "422":
@@ -1072,7 +1075,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1154,6 +1157,16 @@ components:
             list also includes other members' shares (cr-0104); a disabled share by anyone can be re-activated by
             a member, which transfers ownership.
           example: true
+        reissueRequired:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when a departed member may hold this link, so it comes back only by `reissueShare`, never
+            `reactivateShare` — a bulk switch-off turned it off, its owner has left the scope, or its recovery copy
+            predates the scope's current epoch or its last member removal (ADR 0075 point 4). The server computes it
+            with the same predicate the re-activation refusal runs, so the manage panel's hint and the refusal cannot
+            disagree.
+          example: false
         expiresAt:
           x-veyq-visibility: time
           type: [string, "null"]
