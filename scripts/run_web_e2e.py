@@ -27,7 +27,8 @@ through `$VEYQ_GROUP_DIR`, a directory that outlives the boot.
 **The wire assertion (ADR 0053).** Each suite writes the plaintext it recovered by *unsealing the server's own
 responses* to `$VEYQ_CANARY_FILE`; this side then proves none of it is readable where an operator could read it —
 per suite in the database ([sweep]), the HTTP recording ([sweep_http]) and the object store ([sweep_store]), and
-once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]). The two
+once per run, after every group, in every boot log and container log ([sweep_logs], [sweep_containers]), in every
+statement the database received ([sweep_statements]) and in every mail the run sent ([sweep_mailbox]). The two
 halves are deliberately split by what each can reach: only the suite holds the keys, only this process holds
 Docker and the database root credential.
 
@@ -67,7 +68,8 @@ red that was measured against code the run never saw.
 
 **The run directory survives the run** (`.e2e-out/<stamp>/`, gitignored). It holds each boot's log, its
 per-boot config-secret file, its canary file and its HTTP recording, and — once the run-level sweep
-has read them — every container's log over the run's window (`container-<service>.log`). It used to be a `tempfile.TemporaryDirectory` discarded on
+has read them — every container's log over the run's window (`container-<service>.log`), the database's
+statement log (`mariadb-general.log`) and every mail of the run (`mailbox/<id>.eml`). It used to be a `tempfile.TemporaryDirectory` discarded on
 exit, which left the boot log — the surface where an error `message` or a stack trace would carry plaintext —
 not merely unswept but unavailable (ADR 0053 § Decision 4). Nothing prunes it; it is a developer artifact and
 CI throws the runner away.
@@ -1179,8 +1181,8 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
     **The defect that bought it.** No incident; the same gap as the boot log's — nothing read these logs at all.
 
     **Its limit.** Only the store carries a control. Traefik carries no e2e traffic (the suites call the backend
-    and the store directly) and has no access log; MariaDB's general log is off and Mailpit logs deliveries, not
-    bodies — those three are swept because the rule that includes them is derived, not because anything proves
+    and the store directly) and has no access log; MariaDB writes its general log to a file ([sweep_statements])
+    and Mailpit logs deliveries, not bodies ([sweep_mailbox]) — those three are swept because the rule that includes them is derived, not because anything proves
     they could show a leak. The logs are shared by every suite of the run and by a developer's own traffic in the
     same window, so a hit's suite is inferred from the canary, not from the log.
     """

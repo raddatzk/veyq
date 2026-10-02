@@ -618,6 +618,14 @@ run it once on the untouched tree, *then* write the sentence, *then* bite it. An
 reached for first, put it in the guard's docstring under its **limit** — the next reader will reach for the same
 easy shape, and "we tried that, here is why it cannot work" is the only thing that stops them.
 
+**A sensor that widens from a record's END STATE to its HISTORY must port the old sensor's scope, not only its
+needles.** `cr-wire-assertion-history-and-mail` reused the log sweep's needle set for MariaDB's statement log and
+marked the log's shape *remembered, measure first* — which was right, and still did not foresee the finding: the
+dump sweep was quiet only because it searched `INSERT` lines, and a statement log is mostly SQL the code wrote
+(`set autocommit=0` 380 times in one suite, migration comments carrying `range`), against canaries `auto` and
+`range`. Searched whole, it would have been red on arrival. The fix was the history's analogue of the old anchor
+— literals only. Before reusing a matcher on a wider record, ask what the old record's scope silently excluded.
+
 **A guard that parses its corpus refuses what does not parse — it never falls back to reading lines.** The first
 YAML-reading guard over every workflow (`validate_action_pins.py`) found on its first run that `mutation.yml`
 did not load at all — a step name holding an unquoted `: ` — so that workflow could not have run. Two guards
