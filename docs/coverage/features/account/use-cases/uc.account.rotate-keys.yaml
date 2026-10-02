@@ -107,6 +107,28 @@ acceptanceCriteria:
           - TasksSliceTest.acceptingAChangedKeyClearsTheDeclineAndMakesTheJobClaimableAgain
           - TasksSliceTest.clearingDeclinesNeverFreesARotationExclusion
       web: { unit: [src/features/account/identityPins.test.ts] }
+  - id: grants-outlive-their-granters-rotation
+    # Inbox #233. The reads served the granter's CURRENT key, so after this account rotated every grant it had signed
+    # failed `bad_signature` before the recipient's pin was read — and an owner holding one could not open the scope
+    # to complete the covering rotation. B1 was red on the untouched backend (served the new key); its lever is
+    # granterOf reading the current key again, which reddens it on each read. The web unit cases pin, with real
+    # signatures, what the client does with each served key (green on both trees — the client did not change);
+    # the dialog and panel cases were red on the untouched client (no worker pass), lever: the pass after the pin.
+    text: >
+      A grant is served with the identity key its granter held when the server wrote it, so this account's rotation
+      leaves every grant it signed verifiable under each recipient's existing pin, and an owner it granted can
+      complete the covering rotation (whose re-grant skips this account's changed key). A recipient who accepts the
+      new key before that rotation reached them refuses those grants — the retired key is never trusted again — so
+      accepting a changed key first runs one pass of the scope-rotation worker, and a failing pass never blocks the
+      accept.
+    coverage:
+      backend: { integration: [RotationSliceTest.aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt] }
+      web:
+        unit:
+          - src/features/spaces/scopes.test.ts
+          - src/features/spaces/ChangedKeyReviewDialog.test.ts
+          - src/features/spaces/GroupMembersPanel.test.ts
+        e2e: [src/features/tasks/scopeRotation.e2e.test.ts]
   - id: forward-secrecy-not-repair
     # No test can assert "no surface implies repair" — that is prose, and the coverage refs below reach only
     # the copy keys that carry it. What actually holds this is review of the four facts the panel states before
@@ -125,9 +147,9 @@ acceptanceCriteria:
 # the settings hub, the rotation data layer, the three-valued unlock-origin record on the vault, and the two
 # re-seal seams on the pin store + device register.
 #
-# What no green run here proves, stated so nobody quotes it as more: there is **no live-suite coverage**. The
-# flow's most expensive property — that a rotated account is genuinely excluded from a shared scope until a
-# second, real key-holder accepts and delivers — needs two accounts against a live backend and is not
-# exercised. The slice tests prove the exclusion and the clearing against a seeded queue; nothing yet drives
-# the whole re-admission across two clients. That is a gap in *depth*, not in surface, which is why it is a
-# note rather than a `gaps:` entry (both surfaces carry refs, and a covered area may not also be a gap).
+# What no green run here proves, stated so nobody quotes it as more: the live suite drives the rotation and its
+# covering rotation (scopeRotation.e2e's last leg: a co-owner whose grant the rotator signed completes it, and the
+# rotator is not re-granted), but not the re-admission — that a second, real key-holder accepts the new key and
+# delivers needs the accept surface live and is not exercised. The slice tests prove the exclusion and the
+# clearing against a seeded queue. That is a gap in *depth*, not in surface, which is why it is a note rather
+# than a `gaps:` entry (both surfaces carry refs, and a covered area may not also be a gap).

@@ -112,9 +112,9 @@ sequenceDiagram
   and there is no re-mint path, so the proposal is dead: it must be withdrawn and re-issued after
   re-admission.
 - **E6 — a contact accepts the new key but delivery never arrives.** A worker that declined `identity_changed`
-  is excluded from that job permanently, so the accept authorises a wrap that nothing performs
+  is excluded from that job permanently, so an accept alone would authorise a wrap that nothing performs
   ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 7). Accepting a changed key
-  must clear that exclusion; until it does, this is the failure mode that strands a rotated account.
+  therefore clears the accepting account's own declines against that contact, and the next claim delivers.
 - **E7 — the rotation is interrupted between steps 4 and 5.** The account holds `MK'` with an unpublished
   identity; the flow is resumable because every step is idempotent against the published state, and the client
   finishes rather than re-mints — re-minting would strand the wraps written in step 4.

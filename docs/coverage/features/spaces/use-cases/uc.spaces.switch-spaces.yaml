@@ -66,9 +66,17 @@ acceptanceCriteria:
     # path verifies before the key inside is used — PERSONAL only under the caller's own vault key (the kind is
     # signed, so a group's genuine grant cannot pose as it), a shared one under the granter's TOFU-pinned key. A
     # refused grant reads as awaiting access.
+    # The served key is the one that signed: every grant writer records its granter's key at the write (inbox #233),
+    # one leg per writer, and scripts/validate_grant_writer_arity.py pins that the writers are those five.
     text: A grant opens only if its granter's signature verifies — the personal scope's only under the caller's own key.
     coverage:
       backend:
-        integration: [ScopesSliceTest.aGrantIsServedWithItsGranterSignatureAndKey]
+        integration:
+          - ScopesSliceTest.aGrantIsServedWithItsGranterSignatureAndKey
+          - GrantWriterSnapshotSliceTest.aPersonalScopeBirthRecordsItsOwnersKey
+          - GrantWriterSnapshotSliceTest.aGroupBirthRecordsItsCreatorsKey
+          - GrantWriterSnapshotSliceTest.aTenantsColdBirthRecordsItsOwnersKey
+          - GrantWriterSnapshotSliceTest.aRotationRecordsTheRotatorsKeyOnEveryGrantItWrites
+          - GrantWriterSnapshotSliceTest.aGrantDeliveryRecordsTheWorkersKey
       web:
         unit: [src/features/spaces/scopes.test.ts, src/features/memory/sealBinding.test.ts]

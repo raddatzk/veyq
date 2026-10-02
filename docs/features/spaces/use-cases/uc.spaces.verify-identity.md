@@ -64,7 +64,9 @@ sequenceDiagram
 - **E1 — a legitimately rotated key (post-compromise recovery):** the target rotated their identity
   ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)), so their key legitimately
   changed → badge **changed**. The caller reviews and **accepts** — the same review path as an attack, decided by
-  the human, not the wire.
+  the human, not the wire. The accept first runs one pass of the scope-rotation worker, because grants the
+  contact signed before rotating open only while the caller's pin still holds the old key
+  ([uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md) E9).
 - **E2 — a substituted key (active operator MITM):** identical on-wire to E1 — the review surfaces it; the caller
   who compares out-of-band sees the mismatch and **refuses**. This is the whole point.
 - **E3 — this device refuses the pin store itself** (older than one it has held, missing after it held one, or

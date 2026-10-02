@@ -188,14 +188,13 @@ scope to perform the very rotation that replaces it. Two limits stay:
 
 Decision 7 is built for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each
 refusal is named (`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one
-rather than declining, and the nearest existing notice names it and links to the settings hub's one reset. Two further
-things remain:
+rather than declining, and the nearest existing notice names it and links to the settings hub's one reset.
+Accepting a changed key clears the accepting account's own grant-delivery declines against that contact, so
+Decision 2's *"the wrap then proceeds"* holds ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 7). One
+thing remains:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt
   ([uc.spaces.enforce-verified-identities](../features/spaces/use-cases/uc.spaces.enforce-verified-identities.md)
   is refined and its pin-store primitives ship; the entry point does not). It needs redesigning before it is wired: an
   *account-global* toggle cannot protect shared-scope content, because any co-member may key an unverified
   identity.
-- **Accepting a changed key does not clear the declining worker's exclusion**, so Decision 2's *"the wrap then
-  proceeds"* does not hold yet. Harmless while every changed key is an attack; on the critical path the moment
-  a legitimate rotation exists ([ADR 0060](0060-key-rotation-after-compromise.md) Decision 7).
