@@ -2,6 +2,7 @@
 // the password next time. Operator-blind: only the ciphertext wrap + opaque KDF params reach the server; the
 // password, the device key, the KEK and the Master Key never leave the device.
 import * as v1 from '@veyq/crypto/v1'
+import { deviceKekAsync } from '@veyq/crypto/argonWorker'
 import { b64std } from '@veyq/crypto/base64'
 import { accountWrapsApi } from '../../../api/client'
 import { AddWrapRequestMethodEnum } from '../../../api/generated/account'
@@ -38,7 +39,7 @@ export async function trustThisDevice(email: string, password: string, masterKey
   const cryptoKey = await device.generateDeviceKey()
   const deviceFactor = await device.deviceFactor(cryptoKey)
   const salt = v1.randomBytes(16)
-  const kek = v1.kekDevicePassword(deviceFactor, password, salt)
+  const kek = await deviceKekAsync(deviceFactor, password, salt)
   const wrap = v1.seal({ purpose: 'master-key' }, kek, masterKey)
   const kdfParams = b64std(v1.encodeKdfParams(v1.ARGON, salt))
 

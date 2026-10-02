@@ -140,7 +140,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
   const salt = fromB64std(setup.instanceSalt)
 
   const owner = mkActor('a')
-  owner.built = buildAccount(owner.email, owner.password, salt)
+  owner.built = await buildAccount(owner.email, owner.password, salt)
 
   await createServerOwner(owner.built.material, owner.email)
   await become(owner)
@@ -177,7 +177,7 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
  * a clean timeout instead of as an expired token three calls later.
  */
 export async function onboardMember(tenantId: string, actor: Actor, salt: Uint8Array): Promise<Actor> {
-  actor.built = buildAccount(actor.email, actor.password, salt)
+  actor.built = await buildAccount(actor.email, actor.password, salt)
   const cursor = await mailCursor(actor.email)
   await inviteMember(tenantId, actor.email)
   const body = await waitForMail(actor.email, { after: cursor })

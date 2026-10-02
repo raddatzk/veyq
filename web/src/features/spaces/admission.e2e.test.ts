@@ -50,7 +50,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('#159 — an owner session alone admits n
     const mail = await waitForMail(X.email, { after: cursor })
     const link = mail.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
     expect(link, 'the forged invite was mailed').toBeTruthy()
-    X.built = buildAccount(X.email, X.password, salt)
+    X.built = await buildAccount(X.email, X.password, salt)
     X.userId = (await registerAndAccept(link![1], crypto.randomUUID(), X.username, X.built.material)).userId
 
     // --- the control on the same predicate: A, unlocked, invites M the product's way (a real tag) ---

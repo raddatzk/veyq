@@ -10,7 +10,8 @@
     "./accountBirth": "./src/accountBirth.ts",
     "./emergencyKit": "./src/emergencyKit.ts",
     "./base64": "./src/base64.ts",
-    "./testArgon": "./src/testArgon.ts"
+    "./testArgon": "./src/testArgon.ts",
+    "./eslint-argon-door": "./eslint-argon-door.js"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

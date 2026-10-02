@@ -15,12 +15,12 @@ export type EmergencyKit = { secretKey: string }
 
 /** Build the request (keys born here via the shared cold account-birth). Returns the request + the Emergency
  *  Kit to show the user. */
-export function buildCreateServerOwnerRequest(
+export async function buildCreateServerOwnerRequest(
   email: string,
   password: string,
   instanceSalt: Uint8Array,
-): { request: CreateServerOwnerRequest; emergencyKit: EmergencyKit } {
-  const { material, emergencyKit } = buildAccount(email, password, instanceSalt)
+): Promise<{ request: CreateServerOwnerRequest; emergencyKit: EmergencyKit }> {
+  const { material, emergencyKit } = await buildAccount(email, password, instanceSalt)
   // The Server-Owner account carries no display name — identity is a per-tenant username (ADR 0023), and a
   // Server Owner who is not (yet) a tenant member is identified by email alone.
   const request: CreateServerOwnerRequest = {
@@ -46,7 +46,7 @@ export async function registerServerOwner(
   // The auth keypair is derived with the instance-wide salt the server serves on GET /api/setup, so setup
   // and login derive identically (ADR 0003).
   const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
-  const { request, emergencyKit } = buildCreateServerOwnerRequest(email, password, instanceSalt)
+  const { request, emergencyKit } = await buildCreateServerOwnerRequest(email, password, instanceSalt)
   const result = await setupApi().createServerOwner({ createServerOwnerRequest: request })
   return { userId: result.userId, emergencyKit }
 }

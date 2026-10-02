@@ -65,7 +65,7 @@ const { tenantId } = await json(created)
 const bootstrapSecret = await awaitInvite(inviteFile, tenantOwnerEmail)
 
 // 3 — cold-birth the tenant owner + seal the first scope grant to its own identity, then accept (public).
-const built = buildAccount(tenantOwnerEmail, tenantOwnerPassword, instanceSalt)
+const built = await buildAccount(tenantOwnerEmail, tenantOwnerPassword, instanceSalt)
 const scopeRootKey = v1.randomBytes(32)
 // Bound to the tenant scope (its id IS the tenant id) at the birth epoch 0 (ADR 0072); the account id is minted here.
 // The birth is signed by the owner's identity and self-tags the owner's admission (ADR 0028 D6, ADR 0020 move 6).

@@ -1,5 +1,6 @@
 import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
+import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
 
 // `veyq/one-settings-door` below: every static spelling of a navigation to the settings hub, as AST selectors.
 // Shared by the script rule and its template twin, because a template expression parses into the same node types.
@@ -74,6 +75,9 @@ export default defineConfigWithVueTs(
       ],
     },
   },
+  // Argon2id only through @veyq/crypto/argonWorker — the rule, its exemptions and its limit live with the crypto
+  // package (eslint-argon-door.js), written once for the three configs that include it.
+  argonThroughTheWorker,
   {
     // One sign-out (uc.account.sign-out, ADR 0070): a screen calls `features/account/login/signOut`, never the
     // ending in `app/sessionEnd` — a screen that could reach the ending could assemble its own sign-out, and a

@@ -579,6 +579,14 @@ silently regress. The tell that this was needed: an audit finding for a rule tha
 nothing enforced (e.g. the styleguide mandated `@ConfigMapping`, yet 28 sites drifted). If a one-shot check
 genuinely suffices, the CR says why.
 
+**A lint door names a rule, and in flat config a rule name is a slot, not a stack.** The last block that matches
+a file and sets a rule replaces every earlier block's options for it. cr-argon-worker-proven-in-the-build
+specified its door as `no-restricted-syntax` + `no-restricted-imports`, and `web/eslint.config.js` already spends
+both names (and `@typescript-eslint/no-restricted-imports`) on three other doors over the same files: as
+written, adding it would have silently switched one of them off. Before a CR names the rule a door runs under,
+`grep -n "<rule-name>" */eslint.config.js`; when the name is taken, the door gets a rule of its own
+(`packages/crypto/eslint-argon-door.js` is the worked example).
+
 ### A proof about WHERE a thing lives cannot be a grep for WHAT it says
 
 **The corollary of the section above, one step earlier: before a one-shot proof is promoted, check that it

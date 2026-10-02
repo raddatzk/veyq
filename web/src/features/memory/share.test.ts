@@ -491,9 +491,9 @@ describe('password protection (cr-0118)', () => {
     expect(JSON.stringify(req)).not.toContain('hunter2')
   })
 
-  it('derivePasswordToken is deterministic for the same password + salt', () => {
+  it('derivePasswordToken is deterministic for the same password + salt', async () => {
     const salt = b64std(v1.randomBytes(16))
-    expect(derivePasswordToken('pw', salt)).toBe(derivePasswordToken('pw', salt))
+    expect(await derivePasswordToken('pw', salt)).toBe(await derivePasswordToken('pw', salt))
   })
 
   it('readSharePassword reveals the plaintext via the K_SC(epoch)-recovered K_share', () => {

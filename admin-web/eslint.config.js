@@ -1,5 +1,6 @@
 import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
+import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
 
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
@@ -56,6 +57,9 @@ export default defineConfigWithVueTs(
       ],
     },
   },
+  // Argon2id only through @veyq/crypto/argonWorker — the rule, its exemptions and its limit live with the crypto
+  // package (eslint-argon-door.js), written once for the three configs that include it.
+  argonThroughTheWorker,
   {
     // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently

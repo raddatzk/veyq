@@ -13,6 +13,7 @@
 // exists to keep out, so it gets no `K_mem` at all — only the Memory's drop PUBLIC key under `K_share`. The guest
 // seals under an identity key of its own, wrapped to that drop key; `./mediaKey.ts` owns that chain.
 import * as v1 from '@veyq/crypto/v1'
+import { sharesPwTokenAsync } from '@veyq/crypto/argonWorker'
 import { b64std, b64url, fromB64std, fromB64url } from '@veyq/crypto/base64'
 import { contentApi, scopesApi, sharesApi, publicSharesApi } from '../../api/client'
 import { withRefresh } from '../../app/sessionRefresh'
@@ -129,11 +130,11 @@ export function recoverShareKey(epochs: EpochKeys, share: ShareAddress, copy: Re
 // salt + a K_share-sealed reveal copy — never the raw password.
 
 /** The password fields for a create/change: a fresh salt, the SHA-256 verifier, and the reveal copy under K_share. */
-function buildPasswordFields(kShare: Uint8Array, password: string): {
+async function buildPasswordFields(kShare: Uint8Array, password: string): Promise<{
   passwordRequired: true; pwSalt: string; pwVerifier: string; sealedPassword: string
-} {
+}> {
   const salt = v1.randomBytes(16)
-  const pwToken = v1.sharesPwToken(password, salt)
+  const pwToken = await sharesPwTokenAsync(password, salt)
   return {
     passwordRequired: true,
     pwSalt: b64std(salt),
@@ -143,9 +144,9 @@ function buildPasswordFields(kShare: Uint8Array, password: string): {
 }
 
 /** The base64 guest token `Argon2id(password, pwSalt)` a viewer presents in `X-Share-Password` (the salt comes from
- *  the locked resolve). Heavy (Argon2id) but a one-off per unlock. */
-export function derivePasswordToken(password: string, pwSalt: string): string {
-  return b64std(v1.sharesPwToken(password, fromB64std(pwSalt)))
+ *  the locked resolve). Heavy (Argon2id), so it runs in the Argon2 worker; a one-off per unlock. */
+export async function derivePasswordToken(password: string, pwSalt: string): Promise<string> {
+  return b64std(await sharesPwTokenAsync(password, fromB64std(pwSalt)))
 }
 
 /** Reveal a managed share's password (scope members only): recover `K_share` through the epoch keys, open the sealed
@@ -245,7 +246,7 @@ export async function createShare(
   const sealedNote = hasLocaleText(note) ? sealNoteMap(kShare, note) : undefined
   const sealedShareName = name.trim() ? sealShareName(kShare, name) : undefined
   // cr-0118 (ADR 0037): an optional operator-blind password gate (fields derived client-side; the raw password never leaves).
-  const pw = password.trim() ? buildPasswordFields(kShare, password) : undefined
+  const pw = password.trim() ? await buildPasswordFields(kShare, password) : undefined
   let recovery = recoveryCopy(epochs)
   const post = async () => {
     const drop = uploader
@@ -342,7 +343,7 @@ export async function reissueShare(
   const sealedName = b64std(v1.seal(SHARE_MEMORY_NAME, kShare, v1.utf8(memoryName)))
   const sealedNote = hasLocaleText(settings.note) ? sealNoteMap(kShare, settings.note) : undefined
   const sealedShareName = settings.name.trim() ? sealShareName(kShare, settings.name) : undefined
-  const pw = settings.password.trim() ? buildPasswordFields(kShare, settings.password) : undefined
+  const pw = settings.password.trim() ? await buildPasswordFields(kShare, settings.password) : undefined
   const recoveryCopy = recoveryCopyOf({ scopeId, nodeId, shareId }, kShare)
   let recovery = recoveryCopy(epochs)
   let sealedDropPublicKey: string | undefined
@@ -410,7 +411,7 @@ export async function updateShare(
   // cr-0118: the password tri-state. A `remove` sends only `passwordRequired: false` — the server clears the fields.
   const passwordPatch =
     passwordChange && 'set' in passwordChange
-      ? buildPasswordFields(kShare, passwordChange.set)
+      ? await buildPasswordFields(kShare, passwordChange.set)
       : passwordChange && 'remove' in passwordChange
         ? { passwordRequired: false }
         : {}
