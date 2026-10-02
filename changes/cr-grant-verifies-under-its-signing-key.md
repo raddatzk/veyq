@@ -182,7 +182,7 @@ After this CR:
         diagram's *"alt accepted out-of-band"* branch says the re-grant then follows by grant-delivery after the
         covering rotation, not inside it (§ Inventory 10 is why).
       · Done when: all `scripts/validate_*.py` green.
-- [ ] 1 contracts (descriptions only): `granterIdentityPublicKey` on `ScopeSummary` and `MyTenant`
+- [x] 1 contracts (descriptions only): `granterIdentityPublicKey` on `ScopeSummary` and `MyTenant`
       (§ Inventory 11) says *"the granter's identity public bundle as it was when the grant was written"*, and
       why: the TOFU gate decides whether it is trusted. No shape changes, so no backend or web delta.
       · Done when: the contract guards are green, and `npm run generate:api` then `npm run check` in `web/`.
