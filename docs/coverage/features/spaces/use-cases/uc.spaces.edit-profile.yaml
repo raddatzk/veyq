@@ -1,0 +1,31 @@
+useCase: uc.spaces.edit-profile
+feature: spaces
+title: Edit your profile in a space
+# The "Your profile" rubric of the settings hub (web/src/features/account/profile/ProfilePanel.vue). The panel's
+# mounted test mocks ./profile at its I/O functions and keeps the sealing real, so each name assertion unseals
+# what the panel sent at the member's own address.
+acceptanceCriteria:
+  - id: edit-username
+    text: A member changes their per-tenant username from the profile. The client sends it trimmed and lower-cased; the server re-checks it is free in this tenant and stores it. A taken handle is `409 username_taken`, the panel says so, and nothing is saved (not the handle, the name or the consent preference).
+    coverage:
+      backend:
+        integration: [MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName, MemberIdentitySliceTest.changingToATakenUsernameIs409]
+      web:
+        unit: [src/features/account/profile/ProfilePanel.test.ts]
+  - id: name-sealed-on-device-at-its-address
+    text: The real name is unsealed on the device on load and sealed on the device on save, under `K_tenant` at (tenant scope, the member's own user id); the server stores the blob verbatim and never opens it.
+    coverage:
+      backend:
+        integration: [MemberIdentitySliceTest.profileOpRoundTripsUsernameAndSealedName]
+      web:
+        unit: [src/features/account/profile/profile.test.ts, src/features/account/profile/ProfilePanel.test.ts]
+  - id: no-grant-username-only
+    text: A member without a tenant grant holds no `K_tenant`, so the name inputs are disabled with a hint saying why, and a save sends the username alone (no sealed name).
+    coverage:
+      web:
+        unit: [src/features/account/profile/ProfilePanel.test.ts]
+  - id: remove-real-name
+    text: Emptying both name fields and saving sends a sealed EMPTY name rather than omitting the field (which would keep the old name), so a set real name can be removed; the directory then shows only `@username`.
+    coverage:
+      web:
+        unit: [src/features/account/profile/ProfilePanel.test.ts]
