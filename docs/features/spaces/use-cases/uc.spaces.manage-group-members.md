@@ -49,6 +49,13 @@
   arrived): their client reads the scope as awaiting access and writes nothing into it until re-granted, and the
   server refuses a node create tagged with an older epoch (`409 stale_epoch`) — content under an old epoch would
   be readable by every member removed since ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 6).
+- **A5 — turn off every link of the group.** An owner may turn off every public link of the group at once — on a
+  removal, through the confirmation's unchecked *"also turn off every link"*
+  ([uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A5), or at any time
+  from the group panel, behind a confirmation that says they come back only as renewed links; the result names how
+  many went off. Either way each link is marked so it comes back only by renewal, never by re-activation
+  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5). A non-owner is
+  refused (`403 not_scope_owner`); a group in its deletion grace is read-only (`409 scope_deleting`).
 - **E1 — already-read content:** a removed member keeps whatever they already decrypted — **not retractable** by
   any design (the stated limit). Removal protects **future** content only.
 

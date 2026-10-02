@@ -51,3 +51,18 @@ acceptanceCriteria:
     text: The server only deletes/soft-deletes opaque rows + flips a lifecycle timestamp — never a key or a name; the tenant key is not rotated.
     coverage:
       backend: { integration: [MemberRemoveSliceTest.ownerRemovesMemberCutsSharedButKeepsOwnScopeReadable, MemberRemoveSliceTest.scopePurgeErasesTheGraceTombstonedOwnScope] }
+  - id: removal-counts-and-can-turn-off-tenant-links
+    text: >
+      Every scope a tenant removal cuts — the TENANT scope and each co-shared GROUP — counts the removal in its
+      transaction, so a link minted before it that carries a recovery copy is renewed, never re-activated (ADR 0075
+      point 4). With revokeLinks=true the removal also turns off and marks every enabled share of the TENANT scope,
+      whoever made it — not a co-shared group's; a refused removal turns nothing off. The confirmation's opt-in is
+      unchecked by default and, unticked, the request carries no parameter (A5).
+    coverage:
+      backend: { integration: [ShareSharedScopeSliceTest.everyRemovalPathCountsOnTheScopesItCuts, ShareSharedScopeSliceTest.aTenantRemovalWithRevokeLinksTurnsOffEveryTenantLinkAndNoGroupLink] }
+      web: { unit: [src/features/spaces/TenantMembersPanel.test.ts, src/features/spaces/members.test.ts] }
+  - id: owner-turns-off-every-link
+    text: A TenantOwner turns off every enabled public share of the tenant space with no removal (revokeScopeShares), each marked so it comes back only by re-issue; the answer counts them; a member who does not own the space is refused 403 not_scope_owner and nothing moves (A6).
+    coverage:
+      backend: { integration: [ShareSharedScopeSliceTest.aTenantOwnerSwitchesOffTheTenantsLinks] }
+      web: { unit: [src/features/spaces/TenantMembersPanel.test.ts] }

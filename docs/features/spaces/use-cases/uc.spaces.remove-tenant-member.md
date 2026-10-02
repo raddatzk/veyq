@@ -14,8 +14,12 @@
   shared content). Groups they **solely owned** are **transferred** to the oldest remaining member, else
   **grace-tombstoned**. The target's **own** scopes (their personal scope + any group they were the *only* member
   of) are **grace-tombstoned but still readable by them** until the scheduled purge erases them. The tenant scope
-  is **not** rotated ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) — ACL-revoke). The
-  server saw only membership deletions + a lifecycle timestamp — never a key.
+  is **not** rotated ([ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) — ACL-revoke). Every
+  scope the removal cut has **counted it**, so a public link on it that the removed member could have rebuilt — any
+  link minted before the removal that carries a recovery copy, a co-member's included — can no longer be
+  re-activated, only renewed: until a member renews it or a switch-off (A5) turns it off, such a link **keeps
+  working** for whoever holds it ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)
+  point 4). The server saw only membership deletions, a removal count and a lifecycle timestamp — never a key.
 
 ## Main flow
 
@@ -55,6 +59,17 @@
   per scope **coalesces** multiple removals; idempotent + first-online-wins. Not a hole: layer-1 already blocks new
   fetches; until rotation, the ex-member's old grant reads only pre-departure epochs (the "rotation queued until a
   key-holder is online" limit accepted for group removal, [en.spaces.scope-key-rotation](../enablers/en.spaces.scope-key-rotation.md) §E1).
+- **A5 — turn off every link of the space in the same act.** The removal confirmation carries an unchecked box,
+  *"also turn off every link in this space"*; ticked, the removal also turns off every enabled public link of the
+  **tenant** space — whoever made it — in its own transaction, and marks each so it comes back only as a renewed
+  link ([uc.sharing.share-shared-scope](../../sharing/use-cases/uc.sharing.share-shared-scope.md) A4). Not the
+  co-shared groups' links: the tenant owner need not be in those groups and cannot see them; there the removal count
+  marks every link and the group's owners renew. A refused removal (A1–A3) turns nothing off
+  ([ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) point 5).
+- **A6 — turn off every link of the space, with no removal.** A TenantOwner may turn off every public link of the
+  tenant space at any time, from the members panel, behind a confirmation that says they come back only as renewed
+  links; the result names how many went off. The same switch-off as A5, marked the same way; a non-owner is refused
+  (`403 not_scope_owner`).
 - **E1 — already-downloaded content:** the target keeps whatever they saved locally — **not retractable** by any
   design. Removal (and the grace purge) erase the **server** copy, not what already left it.
 
@@ -77,15 +92,20 @@
 
 ## What this means for you / Was das für dich bedeutet
 
-**EN —** Removing someone from your space cuts them off from everything shared straight away — the shared tenant
-space and every group they were in. A group they alone ran passes to its longest-standing member so it's never left
+**EN —** Removing someone from your space cuts their account off from everything shared straight away — the shared
+tenant space and every group they were in. Public links are different: they could have copied any link to a shared
+memory, and a link works for whoever holds it. Those links can't simply be switched back on any more, only renewed —
+and when you remove someone you can turn every link of the space off in the same step, or at any later time. A group they alone ran passes to its longest-standing member so it's never left
 leaderless; if they were its only person, it winds down on the same 30-day timer as a deleted group. Their **own**
 private memories aren't snatched away the instant they leave: they keep **read-only** access to look through and save
 them for 30 days, and only then are they erased. You never gain access to anyone's private group — the handover is
 automatic.
 
 **DE —** Jemanden aus deinem Bereich zu entfernen trennt sie sofort von allem Geteilten — dem gemeinsamen
-Tenant-Bereich und jeder Gruppe, in der sie waren. Eine Gruppe, die sie allein geführt haben, geht an ihr
+Tenant-Bereich und jeder Gruppe, in der sie waren. Bei öffentlichen Links ist es anders: Jeden Link zu einer geteilten
+Erinnerung können sie kopiert haben, und ein Link funktioniert für alle, die ihn haben. Solche Links lassen sich
+nicht mehr einfach wieder einschalten, nur erneuern — und beim Entfernen kannst du im selben Schritt alle Links des
+Bereichs abschalten, oder jederzeit später. Eine Gruppe, die sie allein geführt haben, geht an ihr
 langjährigstes Mitglied, damit sie nie führungslos zurückbleibt; waren sie die einzige Person, läuft sie auf
 demselben 30-Tage-Timer aus wie eine gelöschte Gruppe. Ihre **eigenen** privaten Erinnerungen werden ihnen nicht im
 Moment des Entfernens entrissen: sie behalten **30 Tage** lesenden Zugriff zum Durchsehen und Speichern, erst danach
@@ -96,7 +116,8 @@ werden sie gelöscht. Du bekommst nie Zugriff auf die private Gruppe von jemande
 - Feature: [Spaces (scopes)](../_index.md)
 - Decisions: [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) (§6 orphan rule + lifecycle),
   [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (tenant = ACL-revoke, no rotation; groups
-  rotate), [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (roles + last-owner),
+  rotate), [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) (the removal count,
+  turning every link off), [ADR 0007](../../../decisions/0007-membership-role-grant-relation.md) (roles + last-owner),
   [ADR 0008](../../../decisions/0008-centralized-http-auth.md) (owner-gating)
 - Sibling use-cases: [uc.spaces.delete-group](uc.spaces.delete-group.md) (the lifecycle reused),
   [uc.spaces.manage-group-members](uc.spaces.manage-group-members.md) (group removal + rotation),

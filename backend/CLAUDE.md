@@ -44,7 +44,9 @@ Operator-blind API service. Loaded in addition to the root `CLAUDE.md` when work
   operation whose path leaves that prefix widens the root (`/api/item-favorites` beside
   `/api/scopes/{scopeId}/nodes/{nodeId}/item-favorites` made it `/api`), and RESTEasy then matches the per-node
   routes to the more specific `/api/scopes` resources first and never falls back: every existing route of the tag
-  answers 404/405. Give such an operation a tag of its own (`own-item-favorites`).
+  answers 404/405. Give such an operation a tag of its own (`own-item-favorites`). `revokeScopeShares` under
+  `sharing` met it from the other side (ADR 0075): only its `/api/scopes/…` route answered 405 while the tag's
+  `/api/shares` routes kept working — so a green suite for the tag's other routes proves nothing; test that URL.
 - **Feature-slice + two axes ([ADR 0001](../docs/decisions/0001-backend-http-adapter-vs-application-slicing.md)):**
   `features/<area>/<usecase>/…`. A `…Resource` implements the generated `…Api` (thin adapter), delegates to
   a `…Handler`; persistence in a `…Store` (Panache). Resources are resource-shaped, not per-use-case.
