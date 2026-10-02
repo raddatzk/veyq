@@ -33,6 +33,7 @@ import com.veyq.app.shared.membership.refusal
 import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.transaction.Transactional
 import java.security.MessageDigest
 import java.time.Instant
 import java.util.Base64
@@ -376,9 +377,19 @@ class SharingHandler(
      *  it back on, which transfers ownership to them. A non-member / unknown share is a non-enumerable 404.
      *  Re-activating publishes the link again, so it passes what creating does (share-shared-scope A2): the gate
      *  (no adoption during the space's deletion grace) and the instance capability for the share's role. A link a
-     *  departed member may hold is refused `reissue_required` (ADR 0075) — re-activation revives the same link. */
+     *  departed member may hold is refused `reissue_required` (ADR 0075) — re-activation revives the same link.
+     *
+     *  Every check runs under the scope row's lock, taken first. Every removal holds that lock while it deletes the
+     *  membership, counts the removal and turns the removed member's links off (`ScopesStore.rotate`,
+     *  `TenantHandler.removeMember`), so a removal that committed before this is seen — the caller is no member, or
+     *  the link is marked for re-issue — and one that comes after finds this link on and turns it off with the rest.
+     *  Checked before the lock, a member being removed re-activated a link and kept it live in a group it had left.
+     *  The scope id comes from a scalar read, so the share's first load is the locked one, never a stale copy. */
+    @Transactional
     fun reactivate(userId: String, shareId: String): ReactivateShareOutcome {
-        val share = store.find(shareId) ?: return ReactivateShareOutcome.NotFound
+        val scopeId = store.liveScopeOf(shareId) ?: return ReactivateShareOutcome.NotFound
+        scopes.lockScope(scopeId)
+        val share = store.liveForUpdate(shareId) ?: return ReactivateShareOutcome.NotFound
         access.check(userId, share.scopeId, WRITE)
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }

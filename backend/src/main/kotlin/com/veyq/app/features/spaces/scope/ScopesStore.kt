@@ -198,27 +198,28 @@ class ScopesStore(
 
     /** Rename a GROUP (uc.spaces.rename-group, cr-0097): overwrite the scope's `encrypted_name` (re-sealed under
      *  `K_name` of the current epoch) + `name_epoch`. Name-only — no rotation, no re-grant. The caller (handler)
-     *  has already gated owner + active + `nameEpoch == currentEpoch`; this just persists the two opaque values. */
+     *  has already gated owner + active. Returns false, nothing written, when [nameEpoch] is not the scope's current
+     *  epoch.
+     *
+     *  The epoch gate is this update's own WHERE, not an earlier read: a rotation holds the scope row's lock while it
+     *  advances the epoch ([rotate]), so this update waits for it and then matches the epoch it committed. Checked in
+     *  a read before the write, a rotation committed in between and a name sealed under the pre-rotation epoch landed
+     *  — readable by the member that rotation removed (ADR 0024). */
     @Transactional
-    fun renameGroup(scopeId: String, encryptedName: String, nameEpoch: Int) {
-        ScopeEntity.findById(scopeId)?.let {
-            it.encryptedName = encryptedName
-            it.nameEpoch = nameEpoch
-            it.persist()
-        }
-    }
+    fun renameGroup(scopeId: String, encryptedName: String, nameEpoch: Int): Boolean =
+        ScopeEntity.update(
+            "encryptedName = ?1, nameEpoch = ?2 where id = ?3 and currentEpoch = ?2", encryptedName, nameEpoch, scopeId,
+        ) == 1
 
     /** Set/replace a scope's icon (uc.spaces.set-space-icon): overwrite `sealed_icon` (re-sealed under `K_icon` of
-     *  the current epoch) + `icon_epoch`. The caller (handler) has already gated owner + active + `iconEpoch ==
-     *  currentEpoch`; this just persists the two opaque values (blind overwrite, the [renameGroup] shape). */
+     *  the current epoch) + `icon_epoch`. The caller (handler) has already gated owner + active. Returns false,
+     *  nothing written, when [iconEpoch] is not the scope's current epoch — the [renameGroup] gate, for the same
+     *  reason. */
     @Transactional
-    fun setIcon(scopeId: String, sealedIcon: String, iconEpoch: Int) {
-        ScopeEntity.findById(scopeId)?.let {
-            it.sealedIcon = sealedIcon
-            it.iconEpoch = iconEpoch
-            it.persist()
-        }
-    }
+    fun setIcon(scopeId: String, sealedIcon: String, iconEpoch: Int): Boolean =
+        ScopeEntity.update(
+            "sealedIcon = ?1, iconEpoch = ?2 where id = ?3 and currentEpoch = ?2", sealedIcon, iconEpoch, scopeId,
+        ) == 1
 
     /** Clear a scope's icon (uc.spaces.set-space-icon A5): reset `sealed_icon` + `icon_epoch` so every member falls
      *  back to the initial. **No epoch** — a removal carries no ciphertext that could be stale; idempotent (clearing

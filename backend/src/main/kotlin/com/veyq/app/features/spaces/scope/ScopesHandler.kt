@@ -298,9 +298,9 @@ class ScopesHandler(
             .refusal(RenameGroupOutcome.ScopeNotFound, RenameGroupOutcome.Suspended, RenameGroupOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return RenameGroupOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return RenameGroupOutcome.NotOwner
+        // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != nameEpoch) return RenameGroupOutcome.StaleEpoch
-        store.renameGroup(scopeId, encryptedName, nameEpoch)
-        return RenameGroupOutcome.Ok
+        return if (store.renameGroup(scopeId, encryptedName, nameEpoch)) RenameGroupOutcome.Ok else RenameGroupOutcome.StaleEpoch
     }
 
     /**
@@ -321,9 +321,9 @@ class ScopesHandler(
             .refusal(SetScopeIconOutcome.ScopeNotFound, SetScopeIconOutcome.Suspended, SetScopeIconOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) == ScopeEntity.PERSONAL) return SetScopeIconOutcome.ScopeNotFound
         if (!store.isScopeOwner(callerId, scopeId)) return SetScopeIconOutcome.NotOwner
+        // The fast path; the store decides again in the write itself, where a concurrent rotation is seen.
         if (store.currentEpoch(scopeId) != iconEpoch) return SetScopeIconOutcome.StaleEpoch
-        store.setIcon(scopeId, sealedIcon, iconEpoch)
-        return SetScopeIconOutcome.Ok
+        return if (store.setIcon(scopeId, sealedIcon, iconEpoch)) SetScopeIconOutcome.Ok else SetScopeIconOutcome.StaleEpoch
     }
 
     /**

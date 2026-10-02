@@ -7,6 +7,8 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -14,6 +16,7 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
@@ -179,7 +182,43 @@ class TenantSuspendSliceTest {
         assertEquals(before, membershipFingerprint(tenantId))
     }
 
+    // --- a managed write of the tenant row cannot lift a suspension (inbox #224) ---
+
+    @Test
+    fun aTermsEditOverlappingASuspensionLeavesTheTenantSuspended() {
+        // The tenant owner's terms edit reads the row ACTIVE before the Server Owner's suspension commits and flushes
+        // after it. A full-row UPDATE wrote the `status` it had read back, and the suspension was undone.
+        repeat(RACE_ROUNDS) { round ->
+            val (tenantId, _) = seedActiveTenant()
+            val version = whileUncommitted(
+                change = { assertTrue(store.suspend(tenantId)) },
+                overlapping = { store.updateTerms(tenantId, "{\"en\":\"terms $round\"}") },
+            )
+            assertEquals(TenantEntity.SUSPENDED, statusOf(tenantId), "round $round: the terms edit lifted the suspension")
+            // Control: the edit itself landed.
+            assertEquals(1, version, "round $round")
+            assertEquals(1, termsVersionOf(tenantId), "round $round")
+        }
+    }
+
+    @Test
+    fun aQuotaChangeOverlappingASuspensionLeavesTheTenantSuspended() {
+        repeat(RACE_ROUNDS) { round ->
+            val (tenantId, _) = seedActiveTenant()
+            whileUncommitted(
+                change = { assertTrue(store.suspend(tenantId)) },
+                overlapping = { assertTrue(store.setStorageQuota(tenantId, 1_000_000L)) },
+            )
+            assertEquals(TenantEntity.SUSPENDED, statusOf(tenantId), "round $round: the quota change lifted the suspension")
+            // Control: the quota itself landed.
+            assertEquals(1_000_000L, QuarkusTransaction.requiringNew().call { store.findTenant(tenantId)!!.storageQuotaBytes }, "round $round")
+        }
+    }
+
     // --- helpers ---
+
+    private fun termsVersionOf(tenantId: String): Int =
+        QuarkusTransaction.requiringNew().call { store.findTenant(tenantId)!!.termsVersion }
 
     private fun ownerToken() = sessions.issue(seedUser(serverRole = "SERVER_OWNER")).accessToken
     private fun memberToken() = sessions.issue(seedUser()).accessToken

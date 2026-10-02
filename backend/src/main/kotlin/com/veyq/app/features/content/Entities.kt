@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A node in a scope's encrypted Memory tree (en.memory.tree, cr-0027). FOLDER organizes only; MEMORY is the
@@ -17,6 +18,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_node")
+@DynamicUpdate
 class NodeEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

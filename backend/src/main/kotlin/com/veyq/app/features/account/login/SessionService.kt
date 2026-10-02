@@ -117,8 +117,8 @@ class SessionService : AccessTokenResolver {
      * [withDeadlockRetry] retries it into a green run (measured 2026-10-02: the test log named a deadlock 24 times,
      * and no test failed; in this order it names none).
      *
-     * Under that lock the managed writes below (`family.status`, `family.lastUsedAt`, `current.status`) are safe
-     * although each flushes its whole row: no other writer of the family can interleave with them.
+     * Under that lock the managed writes below (`family.status`, `family.lastUsedAt`, `current.status`) are safe even
+     * where two writers change the same column: no other writer of the family can interleave with them.
      */
     private fun rotate(presented: String): RotatedTokens? {
         val hash = Tokens.hash(presented)

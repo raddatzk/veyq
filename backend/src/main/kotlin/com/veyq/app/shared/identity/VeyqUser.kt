@@ -7,11 +7,13 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /** A global user account. The server stores only public keys, wrapped (ciphertext) key material and
  *  low-sensitivity identity metadata — never the password, never content keys. */
 @Entity
 @Table(name = "veyq_user")
+@DynamicUpdate
 class VeyqUser : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

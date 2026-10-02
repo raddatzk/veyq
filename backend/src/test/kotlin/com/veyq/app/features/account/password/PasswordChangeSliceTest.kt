@@ -2,11 +2,17 @@ package com.veyq.app.features.account.password
 
 import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.features.account.login.SessionService
+import com.veyq.app.features.account.profile.AccountProfileHandler
+import com.veyq.app.features.account.profile.ProfileOutcome
 import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
+import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -14,6 +20,7 @@ import io.restassured.http.ContentType
 import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.security.KeyPair
 import java.security.KeyPairGenerator
@@ -47,6 +54,15 @@ class PasswordChangeSliceTest {
 
     @Inject
     lateinit var sessions: SessionService
+
+    @Inject
+    lateinit var changes: PasswordChangeStore
+
+    @Inject
+    lateinit var profiles: TenantProfileStore
+
+    @Inject
+    lateinit var profileHandler: AccountProfileHandler
 
     @Test
     fun deliberateChangeWithValidAttestationRewritesFloorDropsDeviceWrapsAndSparesTheCallersOwnSession() {
@@ -138,6 +154,27 @@ class PasswordChangeSliceTest {
             .then().statusCode(409).body("code", equalTo("password_change_unavailable"))
 
         assertEquals(OLD_AUTH_PUB, field(user) { it.authPublicKey }, "the directory value is untouched")
+    }
+
+    @Test
+    fun aConsentToggleOverlappingAPasswordChangeKeepsTheNewAuthKey() {
+        // The consent toggle reads the account before the change's new auth key commits and flushes after it. A
+        // full-row UPDATE wrote the old key back, while the change's new wraps stayed: the server then verified the
+        // next sign-in against a key the client no longer derives (inbox #224).
+        repeat(RACE_ROUNDS) { round ->
+            val user = seedAccount()
+            val tenantId = seedTenant()
+            profiles.create(user, tenantId, "u$round-${UUID.randomUUID().toString().take(8)}")
+            val outcome = whileUncommitted(
+                change = { assertTrue(changes.applyChange(user, NEW_PW_WRAP, KDF, NEW_AUTH_PUB), "round $round") },
+                overlapping = { profileHandler.update(user, tenantId, null, null, true) },
+            )
+            assertEquals(NEW_AUTH_PUB, field(user) { it.authPublicKey }, "round $round: the consent toggle rolled the auth key back")
+            assertEquals(NEW_PW_WRAP, wrapOf(user, "PASSWORD"), "round $round")
+            // Control: the toggle itself landed.
+            assertTrue((outcome as ProfileOutcome.Found).requireGroupAddConsent, "round $round")
+            assertEquals("true", field(user) { it.requireGroupAddConsent.toString() }, "round $round")
+        }
     }
 
     // --- helpers ---------------------------------------------------------------------------------------------

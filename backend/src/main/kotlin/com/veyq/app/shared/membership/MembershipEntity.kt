@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * Membership — the (user, scope, role, grant) relation (ADR 0007). A **shared, query-only primitive** (cr-0160):
@@ -19,6 +20,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_membership")
+@DynamicUpdate
 class MembershipEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

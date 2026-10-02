@@ -7,10 +7,12 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /** The single-owner setup lock. Exactly one row (id = 1) exists once setup is complete. */
 @Entity
 @Table(name = "veyq_server_setup")
+@DynamicUpdate
 class ServerSetup : PanacheEntityBase {
     @Id
     @Column(name = "id")

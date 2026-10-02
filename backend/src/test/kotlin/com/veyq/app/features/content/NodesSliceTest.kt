@@ -1,14 +1,22 @@
 package com.veyq.app.features.content
 
+import com.veyq.app.features.media.MediaStore
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.whileUncommitted
+import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItems
 import org.hamcrest.CoreMatchers.notNullValue
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.util.UUID
 
@@ -20,6 +28,34 @@ import java.util.UUID
  */
 @QuarkusTest
 class NodesSliceTest {
+
+    @Inject
+    lateinit var nodes: NodesStore
+
+    @Inject
+    lateinit var media: MediaStore
+
+    @Test
+    fun aRenameOverlappingAMediaAddKeepsTheMediaRevision() {
+        // The rename reads the Memory before a media add's revision bump commits and flushes after it. A full-row
+        // UPDATE wrote the older `mediaRevision` back: the live-updates signal stepped backwards, and a client whose
+        // last seen revision was the restored one missed the add (uc.memory.live-updates, inbox #224).
+        repeat(RACE_ROUNDS) { round ->
+            val (_, scopeId) = seedMemberScope()
+            val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+            val renamed = "cmVuYW1lZA==" // "renamed"
+            whileUncommitted(
+                change = { media.bumpMediaRevision(memory) },
+                overlapping = { nodes.applyUpdate(memory, renamed, null, null, null, null) },
+            )
+            QuarkusTransaction.requiringNew().run {
+                val node = NodeEntity.findById(memory)!!
+                assertEquals(1, node.mediaRevision, "round $round: the rename rolled the media revision back")
+                // Control: the rename itself landed.
+                assertEquals(renamed, node.encryptedName, "round $round")
+            }
+        }
+    }
 
     @Test
     fun createTreeThenList() {

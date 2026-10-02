@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * An outstanding login challenge (single-use, time-bounded), keyed by its opaque nonce. An email may hold
@@ -16,6 +17,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_login_challenge")
+@DynamicUpdate
 class LoginChallengeEntity : PanacheEntityBase {
     @Id
     @Column(name = "nonce", length = 64)
@@ -33,6 +35,7 @@ class LoginChallengeEntity : PanacheEntityBase {
 /** A session family = one login / device. */
 @Entity
 @Table(name = "veyq_session_family")
+@DynamicUpdate
 class SessionFamilyEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -59,6 +62,7 @@ class SessionFamilyEntity : PanacheEntityBase {
 /** A rotating refresh token (one chain per family). Only the SHA-256 hash is stored. */
 @Entity
 @Table(name = "veyq_refresh_token")
+@DynamicUpdate
 class RefreshTokenEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)
@@ -91,6 +95,7 @@ class RefreshTokenEntity : PanacheEntityBase {
 /** A short-lived access token. Only the SHA-256 hash is stored. */
 @Entity
 @Table(name = "veyq_access_token")
+@DynamicUpdate
 class AccessTokenEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

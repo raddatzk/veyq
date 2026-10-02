@@ -215,10 +215,6 @@ not documented; the code is the source of truth for that.
   (the account it births, a profile, a parent's status) run after the spend, and a refusal there rolls the spend
   back. Examples: `PairingStore.markCollected`, `TenantStore.consumeLiveInvite`. Two corollaries, both measured
   as real defects before they were rules (cr-one-time-secrets-spend-by-compare-and-set):
-  - **A row that other writers transition by status is never saved as a managed entity.** Without
-    `@DynamicUpdate` the flush writes every column, so a writer that changed only another column writes back the
-    status it read: a tenant rotation's re-tag brought a revoked invite back to `ACTIVE`. Such a writer updates its
-    own columns in a bulk update guarded on the live status (`TenantStore.carryInvites`).
   - **When the decision reads more than one row, the serializing write is a row lock on their parent, taken
     first.** `SessionService.rotate` locks the session family before it reads the presented and the `CURRENT`
     refresh token: their own row locks ordered only presentations of the same token, so an orphan and the current
@@ -235,6 +231,17 @@ not documented; the code is the source of truth for that.
     instead was rejected: it needs dialect-aware matching (H2 `23505`, MariaDB `1062`) and answers "taken" for any
     unique index. A create that also spends a single-use row spends it first, as above (`MediaStore.attach` deletes
     its upload sessions before it inserts the blobs).
+- **Every entity carries `@DynamicUpdate`, so a managed write flushes only the columns it changed.**
+  `DynamicUpdateEverywhereTest` reads Hibernate's mapping and names any entity without it. Without it a flush wrote
+  every column, so a write wrote back every value it had only read and undid what another transaction changed in
+  between. Each was measured: a terms edit lifted a tenant suspension, a Memory rename wiped an UPLOADER link's drop
+  key, a consent toggle rolled back a password change's new auth key, and a tenant rotation's re-tag revived a
+  revoked invite (cr-managed-writes-flush-only-what-they-change). **Two writers of the same column still need the
+  compare-and-set rule above, and a check that decides a write is read where the write happens.** A rename's epoch
+  gate is its update's own `and currentEpoch = ?` (`ScopesStore.renameGroup`): checked in an earlier read, a rotation
+  committed between the check and the write, and a name sealed under the old epoch landed. A re-activation reads
+  membership under the scope row's lock, which every removal holds (`SharingHandler.reactivate`): read before it, a
+  member being removed adopted a live link in a group it had left.
 - *(to decide)* Cross-context communication — direct call vs. domain events — settled when bounded
   contexts are cut.
 

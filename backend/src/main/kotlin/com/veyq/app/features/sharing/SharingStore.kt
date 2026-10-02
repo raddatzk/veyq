@@ -230,11 +230,18 @@ class SharingStore(
     fun findIncludingDeleted(shareId: String): ShareEntity? = ShareEntity.findById(shareId)
 
     /** [find] under a row lock, for every write to a share but [reissue], whose compare-and-set takes the same row
-     *  lock as its first write. A write loads the whole row and Hibernate writes every column back, so without the
-     *  lock an edit that read the row before a delete committed would put the deleted ciphertext back; locked, it
-     *  waits for the delete and then finds no share. */
-    private fun liveForUpdate(shareId: String): ShareEntity? =
+     *  lock as its first write. Without the lock an edit that read the row before a delete committed would write its
+     *  own ciphertext onto the tombstone, and a re-activation would turn it back on; locked, it waits for the delete
+     *  and then finds no share. */
+    fun liveForUpdate(shareId: String): ShareEntity? =
         ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
+
+    /** The scope of a live share, by a scalar read that loads no entity — for a caller that must lock the scope
+     *  before it loads the share ([liveForUpdate] on an entity already loaded would hand back that unrefreshed copy). */
+    fun liveScopeOf(shareId: String): String? =
+        ShareEntity.getEntityManager()
+            .createQuery("select s.scopeId from ShareEntity s where s.id = :id and s.deletedAt is null", String::class.java)
+            .setParameter("id", shareId).resultList.firstOrNull()
 
     fun listByOwner(ownerAccount: String): List<ShareEntity> =
         ShareEntity.find("ownerAccount = ?1 and deletedAt is null", ownerAccount).list()
@@ -253,8 +260,8 @@ class SharingStore(
     }
 
     /** Re-activate a soft-revoked share and adopt its ownership (cr-0104): flip `enabled` back on and take
-     *  `ownerAccount`. The handler has already let the caller through the scope-access gate. False when there is no
-     *  such share. */
+     *  `ownerAccount`. The handler has already let the caller through the scope-access gate, in this transaction and
+     *  under the scope's lock ([SharingHandler.reactivate]). False when there is no such share. */
     @Transactional
     fun reactivate(callerAccount: String, shareId: String): Boolean {
         val share = liveForUpdate(shareId) ?: return false

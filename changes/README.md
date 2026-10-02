@@ -1551,6 +1551,18 @@ an unreadable store honestly. So a CR that turns *degrade* into *refuse* greps f
 state (`grep -rn 'reseal\|best-effort' …`) and gives each one a way back — or an inbox row, in the CR, before the
 refusal ships.
 
+### A race the refine only read gets its symptom and its fix from the red, not from the read
+
+**A read predicts the interleaving; the schema and the neighbouring locks decide what it does.**
+cr-managed-writes-flush-only-what-they-change read three same-column races and prescribed a compare-and-set for
+each. Run, two of them were somewhere else. A move into a sub-bucket being deleted did not "leave the medium pointing
+at it": `fk_media_bucket` refused the commit, so the defect was a `500`, and the prescribed `and bucketId = ?old`
+guards the source column, which the race never touches. The fix is a lock on the target row that both writers
+take first. A re-activation's `enabled` was already row-locked by an earlier CR; what still raced was the membership
+check read before that lock. So for a race row marked *read, not run*, grep the foreign keys and the existing
+`PESSIMISTIC_WRITE` reads on both rows (`grep -n 'FOREIGN KEY' …/db/migration`, `grep -rn 'PESSIMISTIC_WRITE'`).
+Write the fix as a hypothesis, and re-derive it from the first red.
+
 ### Every CR closes with a short, honest retrospective
 
 A `## Retrospective` section: what went wrong

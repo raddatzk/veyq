@@ -53,13 +53,14 @@ acceptanceCriteria:
         unit:
           - src/features/spaces/spaceIcon.test.ts
   - id: icon-sealed-under-current-epoch
-    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch; the client refetches, re-seals and retries once. A plain rotation leaves sealed_icon and icon_epoch untouched, and a member holding a later epoch still reads the icon by peeling the chain down to iconEpoch. A member removed before a replacement cannot derive the new K_icon_e.
+    text: The icon is sealed under K_icon_e = HKDF(E_e, "veyq/v1/space-icon-key") for e = the scope's CURRENT epoch, and iconEpoch records e. A write whose iconEpoch is not the current epoch is refused with 409 stale_epoch, checked in the write itself so a rotation that commits after the server read the epoch refuses it too; the client refetches, re-seals and retries once. A plain rotation leaves sealed_icon and icon_epoch untouched, and a member holding a later epoch still reads the icon by peeling the chain down to iconEpoch. A member removed before a replacement cannot derive the new K_icon_e.
     coverage:
       backend:
         integration:
           - ScopesSliceTest.setScopeIconStaleEpochIs409AndLeavesTheIconUnset
           - ScopesSliceTest.setScopeIconUpdatesSealedIconAndIconEpochThenClearResets
           - ScopesSliceTest.setScopeIconOnAGroupAfterRotationIsStaleAtOldEpochThenSealsAtNew
+          - ScopesSliceTest.anIconSetWhoseGatePassedBeforeARotationCommittedIsStale
       web:
         unit:
           - src/features/spaces/spaceIcon.test.ts

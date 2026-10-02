@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A member's identity **within one tenant** (cr-0083, ADR 0023): a per-`(user, tenant)` row — one per person
@@ -16,6 +17,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_tenant_profile")
+@DynamicUpdate
 class TenantProfileEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

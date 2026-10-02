@@ -10,7 +10,10 @@ import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -38,6 +41,9 @@ class ConsentGroupAddSliceTest {
 
     @Inject
     lateinit var tasks: TasksStore
+
+    @Inject
+    lateinit var scopes: ScopesStore
 
     private val groupGrant = "Z3JvdXAtc2NvcGUtZ3JhbnQ=" // "group-scope-grant"
     private val groupName = "c2VhbGVkLWdyb3VwLW5hbWU=" // "sealed-group-name" — the scope's canonical encryptedName
@@ -256,6 +262,35 @@ class ConsentGroupAddSliceTest {
         given().contentType(ContentType.JSON).body("""{"username":"x","sealedNameKey":"$sealedNameKey",${TestAdmission.json()}}""")
             .`when`().post("/api/scopes/${UUID.randomUUID()}/members")
             .then().statusCode(401).body("code", equalTo("authentication_failed"))
+    }
+
+    @Test
+    fun aRoleChangeOverlappingAnAcceptKeepsTheAccept() {
+        // The role change reads the membership before the invitee's accept commits and flushes after it. A full-row
+        // UPDATE wrote `pendingConsent = true` back: the accepted member was a proposal again, and grant delivery
+        // skips proposals, so they never got the key (inbox #224).
+        repeat(RACE_ROUNDS) { round ->
+            val (owner, scopeId, tenantId) = seedMemberScope(ScopeEntity.GROUP)
+            val invitee = seedUser()
+            QuarkusTransaction.requiringNew().run {
+                MembershipEntity().apply {
+                    id = UUID.randomUUID().toString(); userId = invitee; this.tenantId = tenantId; this.scopeId = scopeId
+                    role = MembershipEntity.MEMBER; pendingConsent = true; sealedNameKey = "bmFtZS1rZXk="; addedBy = owner
+                    createdAt = Instant.now()
+                }.persist()
+            }
+            whileUncommitted(
+                change = { assertEquals(1, scopes.clearPendingConsent(invitee, scopeId), "round $round") },
+                overlapping = { scopes.setRole(invitee, scopeId, MembershipEntity.OWNER) },
+            )
+            QuarkusTransaction.requiringNew().run {
+                val row = MembershipEntity.find("userId = ?1 and scopeId = ?2", invitee, scopeId).firstResult()!!
+                assertEquals(false, row.pendingConsent, "round $round: the role change undid the accept")
+                assertNull(row.sealedNameKey, "round $round")
+                // Control: the role change itself landed.
+                assertEquals(MembershipEntity.OWNER, row.role, "round $round")
+            }
+        }
     }
 
     // --- helpers ---

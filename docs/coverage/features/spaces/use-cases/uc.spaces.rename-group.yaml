@@ -17,9 +17,12 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [ScopesSliceTest.renameAfterRotationSealsUnderTheNewEpoch] }
   - id: stale-epoch-rejected
-    text: The server rejects a rename whose nameEpoch != currentEpoch with 409 stale_epoch (a concurrent rotation advanced the epoch under the caller); the client refetches the current epoch, re-seals, and retries once (grant-delivery may have re-granted it). A single-owner group never races; the guard is for the multi-owner read-then-write TOCTOU.
+    text: The server rejects a rename whose nameEpoch != currentEpoch with 409 stale_epoch (a concurrent rotation advanced the epoch under the caller); the client refetches the current epoch, re-seals, and retries once (grant-delivery may have re-granted it). A single-owner group never races; the guard is for the multi-owner read-then-write TOCTOU. The check is part of the write itself, so a rotation that commits after the server has read the epoch still refuses the rename.
     coverage:
-      backend: { integration: [ScopesSliceTest.renameStaleEpochIs409AndLeavesTheNameUnchanged] }
+      backend:
+        integration:
+          - ScopesSliceTest.renameStaleEpochIs409AndLeavesTheNameUnchanged
+          - ScopesSliceTest.aRenameWhoseGatePassedBeforeARotationCommittedIsStale
       web: { unit: [src/features/spaces/scopes.test.ts] }
   - id: owner-gated-and-active
     text: Only a GROUP OWNER may rename (403 not_scope_owner for a MEMBER; ADR 0014 sec.4 — the owner is the name authority). A rename on a pending-deletion group is rejected (409 scope_pending_deletion, name-write blocked during the grace period, uc.spaces.delete-group A4). The unauthenticated boundary is 401 before the body.

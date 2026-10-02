@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * A one-time address-confirmation token (ADR 0074 Decision 4) — the recovery token's lifecycle
@@ -21,6 +22,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_email_confirmation")
+@DynamicUpdate
 class EmailConfirmationEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 36)

@@ -7,6 +7,7 @@ import jakarta.persistence.Entity
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import java.time.Instant
+import org.hibernate.annotations.DynamicUpdate
 
 /**
  * One member's per-node item-favorites blob (en.memory.favorites, ADR 0068). Operator-blind: `ciphertext` is
@@ -21,6 +22,7 @@ import java.time.Instant
  */
 @Entity
 @Table(name = "veyq_scope_item_favorites")
+@DynamicUpdate
 class ItemFavoritesEntity : PanacheEntityBase {
     @Id
     @Column(name = "id", length = 110)
