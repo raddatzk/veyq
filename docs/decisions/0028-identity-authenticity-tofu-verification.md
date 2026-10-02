@@ -168,14 +168,27 @@ Decisions 1–3 are built: the sealed pin store and its sync
 ([en.account.identity-pinning](../features/account/enablers/en.account.identity-pinning.md)), the TOFU gate at
 all three foreign-wrap surfaces, the grant-delivery **decline** seam, and the changed-key review. Decision 5 is
 settled by [ADR 0060](0060-key-rotation-after-compromise.md). Decision 6 is built: every grant producer signs,
-the grant rows store and serve the signature with the granter's current key, and the one unwrap path and the
-switcher's icon read verify before the key is used. Two consequences of verifying under the granter's *current*
-key are deliberate: a granter who rotates their account keys leaves the grants they signed unverifiable until
-the rotation's re-grant reaches the recipient, and the recipient's pin of them reads `changed` until a human
-accepts it — both are the Decision 1–2 behaviour for a changed key, not new failure modes. Decision 7 is built
-for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each refusal is named
-(`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one rather than
-declining, and the nearest existing notice names it and links to the settings hub's one reset. Two further
+each grant row stores the signature beside a copy of the granter's identity public bundle **as it was when the
+server wrote the grant**, the reads serve that copy, and the one unwrap path and the switcher's icon read verify
+before the key is used. The served key decides nothing on its own — the recipient's pin of it does, exactly as for
+any other key the server serves. What the copy buys is that a granter who rotates their account keys
+([ADR 0060](0060-key-rotation-after-compromise.md)) leaves the grants they signed verifiable under each
+recipient's existing pin until the covering rotation replaces them. Serving the granter's *current* key would fail
+every one of those grants as `bad_signature` before any pin is read, so an owner holding one could not open the
+scope to perform the very rotation that replaces it. Two limits stay:
+- **A recipient who accepts the granter's new key before the covering rotation reached them** refuses those grants
+  as `granter_key_changed`, because their pin no longer holds the key that signed them. The retired key is never
+  trusted again for them. Accepting a changed key therefore first runs one pass of the scope-rotation worker, so an
+  owner who is online covers the scope before their pin moves
+  ([uc.account.rotate-keys](../features/account/use-cases/uc.account.rotate-keys.md) E9). What that pass cannot
+  cover waits for another member to complete it.
+- **A grant whose granter had already rotated before the copy existed** was filled with the granter's key at that
+  time, which did not sign it. It stays refused until a rotation or a delivery replaces it. No history of retired
+  keys exists to do better.
+
+Decision 7 is built for the pin store and the device register (`web/src/features/account/trustMarks.ts`): each
+refusal is named (`trust_state_rolled_back`, `trust_state_unreadable`), the grant-delivery worker pauses on one
+rather than declining, and the nearest existing notice names it and links to the settings hub's one reset. Two further
 things remain:
 
 - **Decision 4, strict mode** — and with it the proactive verification ceremony's UI, deliberately unbuilt

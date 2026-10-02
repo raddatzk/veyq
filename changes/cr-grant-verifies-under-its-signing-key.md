@@ -1,7 +1,7 @@
 ---
 id: cr-grant-verifies-under-its-signing-key
 title: A grant is verified under the key its granter signed it with, so an account rotation does not lock out everyone the rotator granted
-status: planned
+status: in-progress
 satisfies: [uc.account.rotate-keys, uc.spaces.switch-spaces]
 adrs: ["0028", "0060", "0024"]
 invariants: [operator-blind E2EE, API-first]
@@ -173,7 +173,7 @@ After this CR:
 
 ## Phases
 
-- [ ] 0 decision (docs only, after the owner answers):
+- [x] 0 decision (docs only, after the owner answers):
       - **ADR 0028 § What is still open:** the *"granter's current key"* sentence and its two *"deliberate"*
         consequences become: the rows serve the key as of the grant; a granter's rotation leaves their grants
         verifiable under the recipient's existing pin until the covering rotation replaces them; accepting the new
