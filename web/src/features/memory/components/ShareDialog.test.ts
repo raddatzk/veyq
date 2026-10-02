@@ -22,6 +22,7 @@ vi.mock('../share', () => ({
 }))
 
 import ShareDialog from './ShareDialog.vue'
+import { confirmRequest, settleConfirm } from '../../../shared/state/useConfirm'
 import { ShareRole } from '../../../api/generated/sharing'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -145,14 +146,29 @@ describe('ShareDialog — delete a link (ADR 0029 §7, W1)', () => {
     await openOff(w)
 
     await button(w, t('share.delete')).trigger('click')
-    expect(deleteShare).not.toHaveBeenCalled() // the click opens the confirm, nothing more
-    expect(w.text()).toContain(t('share.deleteConfirm'))
-    await w.find('.share-delete-confirm').trigger('click')
+    expect(deleteShare).not.toHaveBeenCalled() // the click asks, nothing more
+    expect(confirmRequest.value?.message).toBe(t('share.deleteConfirm'))
+    settleConfirm(true)
     await flushPromises()
 
     expect(deleteShare).toHaveBeenCalledWith('off')
     expect(w.findAll('.share-list-item')).toHaveLength(1)
     expect(w.find('.share-fold-toggle').exists()).toBe(false) // nothing switched off is left to fold
+  })
+
+  it('a declined confirm deletes nothing', async () => {
+    deleteShare.mockReset().mockResolvedValue(undefined)
+    listSharesFor.mockResolvedValue([share({ shareId: 'off', enabled: false })])
+    const w = mountList()
+    await flushPromises()
+    await openOff(w)
+
+    await button(w, t('share.delete')).trigger('click')
+    settleConfirm(false)
+    await flushPromises()
+
+    expect(deleteShare).not.toHaveBeenCalled()
+    expect(w.findAll('.share-list-item')).toHaveLength(1)
   })
 
   it("control: a co-member's switched-off link whose owner is still here offers no delete", async () => {

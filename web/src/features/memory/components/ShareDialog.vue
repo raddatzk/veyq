@@ -17,6 +17,7 @@ import { useI18n } from 'vue-i18n'
 import Dialog from 'primevue/dialog'
 import Button from 'primevue/button'
 import ShareCreateDialog from './ShareCreateDialog.vue'
+import { useConfirm } from '../../../shared/state/useConfirm'
 import {
   listSharesFor,
   revokeShare,
@@ -46,15 +47,15 @@ const props = defineProps<{
 const emit = defineEmits<{ close: [] }>()
 
 const { t, locale } = useI18n()
+const { ask } = useConfirm()
 
 const shares = ref<ManagedShare[]>([])
 const loadError = ref(false)
 const revokingId = ref<string | null>(null)
 const reactivatingId = ref<string | null>(null)
-// The switched-off links, folded under a count until opened; the one awaiting the delete confirm.
+// The switched-off links, folded under a count until opened.
 const offOpen = ref(false)
-const deleteConfirm = ref<ManagedShare | null>(null)
-const deleting = ref(false)
+const deletingId = ref<string | null>(null)
 const actionError = ref(false)
 const copiedLinkId = ref<string | null>(null)
 
@@ -187,10 +188,16 @@ async function onReactivate(share: ManagedShare) {
   }
 }
 
-async function onDelete() {
-  const share = deleteConfirm.value
-  if (!share) return
-  deleting.value = true
+// Delete is irreversible (ADR 0029 §7): the link can never come back; its guests' photos stay.
+async function onDelete(share: ManagedShare) {
+  const confirmed = await ask({
+    header: t('share.deleteTitle'),
+    message: t('share.deleteConfirm'),
+    acceptLabel: t('share.delete'),
+    acceptIcon: 'pi pi-trash',
+  })
+  if (!confirmed) return
+  deletingId.value = share.shareId
   actionError.value = false
   try {
     await deleteShare(share.shareId)
@@ -199,8 +206,7 @@ async function onDelete() {
   } catch {
     actionError.value = true
   } finally {
-    deleting.value = false
-    deleteConfirm.value = null
+    deletingId.value = null
   }
 }
 
@@ -308,7 +314,8 @@ function fmtDate(d: Date): string {
                 :title="t('share.delete')"
                 severity="danger"
                 text
-                @click="deleteConfirm = share"
+                :disabled="deletingId === share.shareId"
+                @click="onDelete(share)"
               />
             </div>
           </li>
@@ -317,22 +324,6 @@ function fmtDate(d: Date): string {
     </ul>
     <p v-if="actionError" class="share-error">{{ t('share.actionFailed') }}</p>
 
-    <!-- Confirm the irreversible delete (ADR 0029 §7): the link can never come back; its guests' photos stay. -->
-    <Dialog
-      :visible="deleteConfirm !== null"
-      :header="t('share.deleteTitle')"
-      modal
-      class="share-delete-dialog"
-      :closable="!deleting"
-      :close-on-escape="!deleting"
-      @update:visible="deleteConfirm = null"
-    >
-      <p>{{ t('share.deleteConfirm') }}</p>
-      <div class="veyq-dialog-action-row">
-        <Button type="button" :label="t('common.cancel')" icon="pi pi-times" severity="secondary" outlined :disabled="deleting" @click="deleteConfirm = null" />
-        <Button type="button" class="share-delete-confirm" :label="t('share.delete')" icon="pi pi-trash" severity="danger" :loading="deleting" @click="onDelete" />
-      </div>
-    </Dialog>
 
     <ShareCreateDialog
       v-if="createOpen"
