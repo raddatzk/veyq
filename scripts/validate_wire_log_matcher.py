@@ -34,7 +34,8 @@ temporary directory — no Docker, no jar, nothing written into the repo:
      through `token_needles` against the REAL contracts, and each token must come back under its literal kind, the
      clearing cookie yielding none and only the mailed token marked mailed; a backend call no operation matches is
      reported. `canary_needles`, `dump_escape` and `sql_literal` leave a base64url and a hex token unchanged (so the
-     raw form is the only needle); a presigned URL's needle is its request target; and over a synthetic dump the hash control finds a token by its SHA-256
+     raw form is the only needle); a presigned URL's needle is its request target; a raw token planted in a boot log
+     is reported as `token:accessToken`; and over a synthetic dump the hash control finds a token by its SHA-256
      while a raw copy is a hit.
 
 **The defect that bought it.** No incident — built with cr-wire-assertion-server-logs because the real canaries
@@ -507,6 +508,15 @@ def check_tokens() -> int:
         if not any("/api/no-such-operation" in p for p in orchestrator.token_needles(record)[1]):
             errors.append("tokens: a backend call no operation matches was not reported — its tokens would be unseen")
 
+        run_tokens = orchestrator.run_tokens(run)
+        with (run / "backend-1.log").open("a", encoding="utf-8") as f:
+            f.write(f"2026-10-01 08:23:00,000 WARN  [com.veyq] (worker) refused bearer {ACCESS}\n")
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            verdict = orchestrator.sweep_logs(run, sorted(run.glob("canaries-*.json")), run_tokens)
+        if verdict is None or "token:accessToken" not in out.getvalue():
+            errors.append(f"tokens: a raw access token in a boot log was not reported as token:accessToken "
+                          f"({verdict!r})")
 
     digest = hashlib.sha256(ACCESS.encode()).hexdigest()
     dump = (f"INSERT INTO `veyq_access_token` VALUES ('a1','{digest}','2026-10-01');\n"
@@ -536,4 +546,4 @@ print(f"wire log matcher OK: {spellings} spelling(s) found under their variant; 
       f"synthetic run and red, by name, on {cases - 1} unarmed or leaking case(s); statement log: {literals} "
       f"literal check(s), sweep_statements green when clean and red, by name, on {statement_cases} case(s); mailbox: {mails} "
       f"canaries found by the decoded read; tokens: {token_rules} derivation rule(s) by marker, raw-only needles, "
-      f"and the hash control")
+      f"the hash control and a token: hit")

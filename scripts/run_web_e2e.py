@@ -1405,7 +1405,7 @@ def read_log(path: Path) -> tuple[str, str | None]:
         return raw.decode("utf-8", errors="replace"), f"{shown(path)} is not UTF-8 ({e}) — the encoding pin did not hold"
 
 
-def sweep_logs(workdir: Path, canary_files: Iterable[Path]) -> str | None:
+def sweep_logs(workdir: Path, canary_files: Iterable[Path], tokens: RunTokens = NO_TOKENS) -> str | None:
     """Prove no canary of the run is readable in any boot log the run retains. Returns None, else why not.
 
     **What it asserts** (cc.security.wire-assertion, ADR 0053). Run-level, after every group: every
@@ -1424,8 +1424,11 @@ def sweep_logs(workdir: Path, canary_files: Iterable[Path]) -> str | None:
     veyq statement echoes request input today, so a green here is mostly the proof that none started to. The
     attribution of a hit is per canary file, not per log: a restored instance's log owes the previous member's
     values too. And the encoding pin is the e2e boot's — an operator's own locale is theirs.
+
+    The run's capability tokens ([run_tokens]) are searched alongside the canaries, each hit led by `token:<kind>`.
     """
     carriers, problems = load_canaries(canary_files)
+    needles = with_tokens(carriers, tokens)
     logs = sorted(workdir.rglob("backend-*.log"))
     if not logs:
         return (f"no boot log under {shown(workdir)} — the log sweep would have proved the absence of nothing "
@@ -1458,20 +1461,20 @@ def sweep_logs(workdir: Path, canary_files: Iterable[Path]) -> str | None:
         else:
             unmet.append(f"{shown(path)} has no shutdown line ({SHUTDOWN_NEEDLE!r}) — it was read before its JVM "
                          f"stopped, or the JVM was killed, so it may be incomplete")
-        found = needle_hits(shown(path).as_posix(), text, carriers)
+        found = needle_hits(shown(path).as_posix(), text, needles)
         hits.extend(found)
         log(f"log sweep: {shown(path)} — {text.count(chr(10))} line(s), {len(carriers)} canary/canaries, "
-            f"{len(found)} hit(s); armed: {', '.join(controls) or 'NOTHING'}")
+            f"{len(tokens.by_needle)} token(s), {len(found)} hit(s); armed: {', '.join(controls) or 'NOTHING'}")
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the server log — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
-        report_hits(hits, carriers)
+        report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the server log: {len(hits)} canary hit(s), {len(unmet)} unmet "
+        return (f"the wire assertion failed on the server log: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
                 f"control(s) across {len(logs)} boot log(s) (listed above)")
-    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(logs)} boot log(s), "
-        f"each armed")
+    log(f"wire assertion: {len(carriers)} canary/canaries and {len(tokens.by_needle)} capability token(s) "
+        f"({kinds_of(tokens.by_needle.values())}) of the run appear in none of {len(logs)} boot log(s), each armed")
     return None
 
 
@@ -1522,7 +1525,8 @@ def container_log(service: str, since: str) -> str:
     return proc.stdout.decode("utf-8", errors="replace")
 
 
-def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, sentinel: str) -> str | None:
+def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, sentinel: str,
+                     tokens: RunTokens = NO_TOKENS) -> str | None:
     """Prove no canary of the run is readable in any container log of the stack, over the run's window.
 
     **What it asserts.** Every service `docker compose ps` reports (MariaDB, Garage, Traefik, Mailpit today) has its
@@ -1539,10 +1543,17 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
     and Mailpit logs deliveries, not bodies ([sweep_mailbox]) — those three are swept because the rule that includes them is derived, not because anything proves
     they could show a leak. The logs are shared by every suite of the run and by a developer's own traffic in the
     same window, so a hit's suite is inferred from the canary, not from the log.
+
+    **Tokens, with one exemption.** The run's capability tokens are searched too ([run_tokens]) — except a presigned
+    URL in the STORE's own log: the store is that URL's verifier and logs the request target it was handed, and the
+    capability expires with the presign TTL. Such hits are printed as exempted, never dropped; the same URL is a hit
+    in every other container's log.
     """
     carriers, problems = load_canaries(canary_files)
     if not carriers:
         return "the run's canary files hold no canary — a green container-log sweep would mean nothing"
+    needles = with_tokens(carriers, tokens)
+    exempted: list[Hit] = []
     try:
         services = compose_services()
     except SweepError as e:
@@ -1559,7 +1570,11 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
             unmet.append(str(e))
             continue
         (workdir / f"container-{service}.log").write_text(text, encoding="utf-8")
-        found = needle_hits(f"container {service}", text, carriers)
+        found = needle_hits(f"container {service}", text, needles)
+        if service == STORE_SERVICE:
+            verified = [h for h in found if h.canary in tokens.by_needle and tokens.by_needle[h.canary].url]
+            exempted.extend(verified)
+            found = [h for h in found if h not in verified]
         hits.extend(found)
         armed = "no control (see the concern's § What a green sweep does not prove)"
         if service == STORE_SERVICE:
@@ -1579,13 +1594,16 @@ def sweep_containers(workdir: Path, canary_files: Iterable[Path], since: str, se
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the container logs — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
-        report_hits(hits, carriers)
+        report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the container logs: {len(hits)} canary hit(s), {len(unmet)} unmet "
+        return (f"the wire assertion failed on the container logs: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
                 f"control(s) across {len(services)} service(s) (listed above)")
-    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(services)} container "
-        f"log(s); the store's armed by its planted sentinel")
+    exempt_urls = {h.canary for h in exempted}
+    log(f"container log sweep: {len(exempt_urls)} presigned-URL token(s) found in the `{STORE_SERVICE}` log, its own "
+        f"verifier, and exempted there ({len(exempted)} line(s)) — swept on every other surface")
+    log(f"wire assertion: {len(carriers)} canary/canaries and {len(tokens.by_needle)} capability token(s) of the run "
+        f"appear in none of {len(services)} container log(s); the store's armed by its planted sentinel")
     return None
 
 
@@ -1777,7 +1795,8 @@ def booted_databases(workdir: Path) -> set[str]:
 
 
 def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: Iterable[str],
-                     databases: Iterable[str], problems: Iterable[str] = ()) -> str | None:
+                     databases: Iterable[str], problems: Iterable[str] = (),
+                     tokens: RunTokens = NO_TOKENS) -> str | None:
     """Prove no canary of the run was ever SENT to the database — every statement of the run, not its end state.
 
     **What it asserts** (cc.security.wire-assertion, ADR 0053). MariaDB's general log, on for the run's window
@@ -1800,10 +1819,14 @@ def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: It
     not searched (nothing does today — every value is a bound parameter). A literal NUL-joined to its neighbour
     can produce a hit only for a canary that itself contains NUL. And the window is shared: it also holds the
     statements of anything else that reached the same MariaDB during the run, a developer's own backend included.
+
+    **Tokens.** The run's capability tokens are searched in the same literals ([run_tokens]). This is the one surface
+    that sees a lookup BY the raw token — a query whose `WHERE` carries it — which no end-state dump can show.
     """
     carriers, unreadable = load_canaries(canary_files)
     if not carriers:
         return "the run's canary files hold no canary — a green statement-log sweep would mean nothing"
+    needles = with_tokens(carriers, tokens)
     unmet: list[str] = list(unreadable) + list(problems)
     if retained.is_file():
         text = retained.read_bytes().decode("utf-8", errors="replace")
@@ -1811,7 +1834,7 @@ def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: It
         text = ""
         unmet.append(f"no statement log was retained at {shown(retained)}")
     source = shown(retained).as_posix()
-    hits, literals = literal_hits(source, text, carriers)
+    hits, literals = literal_hits(source, text, needles)
 
     controls: list[str] = []
     for sentinel in sentinels:
@@ -1833,18 +1856,20 @@ def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: It
     if required and all(db in connected for db in required):
         controls.append(f"a Connect for each of {len(required)} database(s)")
     log(f"statement-log sweep: {source} — {text.count(chr(10))} line(s), {len(STATEMENT_HEADER.findall(text))} "
-        f"entr(y/ies), {literals} literal(s), {len(carriers)} canary/canaries, {len(hits)} hit(s); armed: "
+        f"entr(y/ies), {literals} literal(s), {len(carriers)} canary/canaries, {len(tokens.by_needle)} token(s), "
+        f"{len(hits)} hit(s); armed: "
         f"{', '.join(controls) or 'NOTHING'}")
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the statement log — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
-        report_hits(hits, carriers)
+        report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the statement log: {len(hits)} canary hit(s), {len(unmet)} unmet "
+        return (f"the wire assertion failed on the statement log: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
                 f"control(s) (listed above)")
-    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {literals} literal(s) the "
-        f"database received during the run; armed by both sentinels and every database's Connect")
+    log(f"wire assertion: {len(carriers)} canary/canaries and {len(tokens.by_needle)} capability token(s) "
+        f"({kinds_of(tokens.by_needle.values())}) of the run appear in none of {literals} literal(s) the database "
+        f"received during the run; armed by both sentinels and every database's Connect")
     return None
 
 
@@ -1926,7 +1951,8 @@ def mail_texts(raw: bytes) -> list[tuple[str, str]]:
     return texts
 
 
-def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sentinel: str) -> str | None:
+def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sentinel: str,
+                  tokens: RunTokens = NO_TOKENS) -> str | None:
     """Prove no canary of the run is readable in any mail the run sent — read decoded, and raw.
 
     **What it asserts** (cc.security.wire-assertion, ADR 0053). Every message Mailpit received from the run's start
@@ -1945,10 +1971,17 @@ def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sen
     **Its limit.** It sees what reached Mailpit, not what a production relay adds or keeps. The mailbox is shared
     with a developer's own mail of the same window, and Mailpit prunes its oldest messages past its cap — a run
     that pushed its own plant out fails on the control, loud. Non-text parts are searched only raw.
+
+    **Tokens, with one exemption.** The run's capability tokens are searched too ([run_tokens]) — except a token the
+    recording shows the suite FIRST read out of a mail (`RunTokens.mailed`): mail is that token's channel
+    (member invite, recovery; ADR 0049/0054). Those hits are printed as exempted with the tokens they exempted;
+    every other token in a mail is a hit.
     """
     carriers, problems = load_canaries(canary_files)
     if not carriers:
         return "the run's canary files hold no canary — a green mailbox sweep would mean nothing"
+    needles = with_tokens(carriers, tokens)
+    exempted: list[Hit] = []
     unmet: list[str] = list(problems)
     try:
         ids = run_mail_ids(since)
@@ -1967,12 +2000,15 @@ def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sen
             unmet.append(f"mail {message_id} could not be read raw ({e}) — it was not swept")
             continue
         (retained / f"{message_id}.eml").write_bytes(raw)
+        found: list[Hit] = []
         for where, text in mail_texts(raw):
-            hits.extend(needle_hits(f"mail {message_id} {where}", text, carriers))
+            found.extend(needle_hits(f"mail {message_id} {where}", text, needles))
             if needle_hits(where, text, [sentinel]):
                 sentinel_decoded.append(where)
         source = raw.decode("utf-8", errors="replace")
-        hits.extend(needle_hits(f"mail {message_id} raw", source, carriers))
+        found.extend(needle_hits(f"mail {message_id} raw", source, needles))
+        exempted.extend(h for h in found if h.canary in tokens.mailed)
+        hits.extend(h for h in found if h.canary not in tokens.mailed)
         sentinel_raw = sentinel_raw or bool(needle_hits("raw", source, [sentinel]))
     if sentinel_decoded:
         armed = (f"planted sentinel found decoded in {', '.join(sentinel_decoded)}; in the raw source: "
@@ -1981,15 +2017,20 @@ def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sen
         armed = "planted sentinel NOT found"
         unmet.append(f"the planted mail's sentinel {sentinel!r} is NOT in any decoded mail of the run — the read "
                      f"missed it (window, paging, pruning) or the decoding is broken; this sweep proves nothing")
-    log(f"mailbox sweep: {len(ids)} mail(s) since {int(since)}, {len(carriers)} canary/canaries, {len(hits)} hit(s); "
-        f"{armed}")
+    log(f"mailbox sweep: {len(ids)} mail(s) since {int(since)}, {len(carriers)} canary/canaries, "
+        f"{len(tokens.by_needle)} token(s), {len(hits)} hit(s); {armed}")
+    exempt = sorted({h.canary for h in exempted})
+    log(f"mailbox sweep: {len(exempt)} token(s) exempted — first read out of a mail, which is their channel "
+        f"({kinds_of(tokens.by_needle[n] for n in exempt)}; {len(tokens.mailed)} such token(s) in the run):")
+    for needle in exempt:
+        log(f"    exempted {tokens.by_needle[needle].kind} {needle!r} ({', '.join(tokens.carriers.get(needle, []))})")
 
     if hits or unmet:
         log(f"WIRE ASSERTION FAILED on the mailbox — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
-        report_hits(hits, carriers)
+        report_hits(hits, needles)
         for reason in unmet:
             log(f"    control: {reason}")
-        return (f"the wire assertion failed on the mailbox: {len(hits)} canary hit(s), {len(unmet)} unmet "
+        return (f"the wire assertion failed on the mailbox: {len(hits)} canary or token hit(s), {len(unmet)} unmet "
                 f"control(s) across {len(ids)} mail(s) (listed above)")
     log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(ids)} mail(s), decoded "
         f"or raw; armed by the planted mail")
@@ -2581,19 +2622,23 @@ def main(argv: list[str]) -> int:
         # instance's log is swept for the member before it too. They run even when suites failed — a failed suite's
         # log is the one most likely to hold a stack trace, and a hit there only adds to a run that is already red.
         canary_files = sorted(workdir.rglob("canaries-*.json"))
+        # The second needle set, run-wide: every capability token any suite's recording shows it handled.
+        tokens = run_tokens(workdir)
+        log(f"capability tokens of the run: {len(tokens.by_needle)} ({kinds_of(tokens.by_needle.values())}), "
+            f"{len(tokens.mailed)} first read out of a mail")
         run_failures = [(name, reason) for name, reason in (
-            ("(run) server-log sweep", sweep_logs(workdir, canary_files)),
+            ("(run) server-log sweep", sweep_logs(workdir, canary_files, tokens)),
             # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
             # long-lived containers is not this run's to answer for.
-            ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel)),
-            ("(run) mailbox sweep", sweep_mailbox(workdir, canary_files, float(stamp), mail_sentinel)),
+            ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel, tokens)),
+            ("(run) mailbox sweep", sweep_mailbox(workdir, canary_files, float(stamp), mail_sentinel, tokens)),
         ) if reason]
         sentinels.append(statements.plant("end"))
     finally:
         statements.close()
     # After the window closed: the sweep reads the retained copy, and the shared database is already back to normal.
     statement_failure = sweep_statements(statements.retained, canary_files, sentinels, booted_databases(workdir),
-                                         statements.problems)
+                                         statements.problems, tokens)
     if statement_failure:
         run_failures.append(("(run) statement-log sweep", statement_failure))
 
