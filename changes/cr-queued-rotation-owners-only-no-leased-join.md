@@ -1184,4 +1184,22 @@ shape below and rejects the re-sign shape. The second is inbox #234, folded here
 
 ## Retrospective
 
-(filled when done)
+- **Planning — a fold built on a sibling's open defect went stale the day the sibling landed.** § Inventory for #225,
+  Q7's caveat, Q8's "the action waits on the lock" and phase 0's granter-lock exception all leaned on the lock
+  `cr-grant-verifies-under-its-signing-key` removed one commit earlier; the brief caught it, and phase 0 recorded the
+  re-read instead of writing the exception. Root cause: the dependency was spread over prose, not marked. *Next time:*
+  every sentence that holds only until a sibling lands carries the same marker ("until `cr-…` lands"), so the re-read
+  is one grep.
+- **Planning — one bite leg was unbuildable as written.** B10's `stalled` leg asked for "an owner without a grant"
+  to read `stalled` on their own row, but `listMine` skips a grant-less membership by design, so that owner has no row.
+  Built instead with a granted owner who declined the job (plus a grant-less owner beside them, to show grant-less
+  owners are not eligible). *Next time:* a bite on a read field names the persona's row in that read before it names
+  the value.
+- **Execution — combined levers hid one another, and the sandbox cost retries.** One lever run paired "derive from
+  the oldest job" with "drop the state gate"; the first reddened B9/B10 before the second was reached, so the gate was
+  re-bitten alone. Heredocs and globbed `--tests` arguments were refused as "too complex to verify", and 1Password
+  signing failed from phase 2 on (commits unsigned, as approved). Deviations kept: D9's pure derivation lives in
+  `features/tasks` (`CompromiseRotationPolicy`), not next to `RotationHandler`, so D10's scope reads add no
+  spaces → account import; the rotator's panel names tenant roots, but a group shows by id, since its name is sealed
+  under a key the new identity cannot open until re-admitted. *Next time:* combine levers only across disjoint code
+  paths and disjoint tests, and write multi-line edits as scratch scripts from the start.
