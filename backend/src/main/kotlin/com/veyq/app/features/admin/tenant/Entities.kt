@@ -92,6 +92,12 @@ class TenantMailSettingsEntity : PanacheEntityBase {
  * An owner invite (one tenant has a history of them). Only the SHA-256 token hash is stored — never the
  * token (ADR 0004 model). status: ACTIVE → SUPERSEDED on resend/reassign, → CONSUMED on acceptance
  * (Slice B), → EXPIRED past its TTL. Soft transitions; a scheduled purge removes terminal rows later.
+ *
+ * **Never save one of these as a managed entity after reading it.** Several writers transition `status` (accept,
+ * revoke, reissue, the expiry sweep), each by a guarded bulk update, and without `@DynamicUpdate` a managed save
+ * flushes every column — so a writer that changed only the admission writes back the `status` it read, and a
+ * revoked or spent secret is live again. A rotation's re-tag is a column-scoped bulk update for exactly that
+ * reason (`TenantStore.carryInvites`).
  */
 @Entity
 @Table(name = "veyq_tenant_invite")

@@ -91,13 +91,50 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
         TenantInviteEntity.find("tokenHash", tokenHash).firstResult()
 
     /**
-     * Activate a tenant on acceptance — **atomic**: record the owner's `OWNER` membership + grant, flip the
-     * tenant `ACTIVE`, and mark the invite `CONSUMED`. The grant is opaque ciphertext stored verbatim, with the
-     * owner's self-signature over it (ADR 0028 Decision 6) and the admission the owner self-tagged under `E_0`, so
-     * the tenant's first rotation has a tag to carry forward (ADR 0020 move 6).
+     * Spend a live invite — a **compare-and-set**, and the first write of the accept that calls it: only a row still
+     * `ACTIVE` and unexpired flips to `CONSUMED`, and the caller goes on only if exactly one did. Two accepts that
+     * both read the invite live cannot both win, and the loser has written nothing a constraint would have to undo,
+     * so it answers exactly as a replay of the spent secret does (developer-styleguide §12).
+     *
+     * The `and status = ACTIVE` in the WHERE is the transition's guard, not a re-read: the database decides it, so a
+     * revoke that landed between the caller's read and this write is not overwritten either. The caller's earlier
+     * read only tells a 404 from a 410 and supplies the tenant; it never authorizes the spend.
      */
     @Transactional
-    fun activate(tenantId: String, userId: String, grant: SignedGrant, admission: Admission, inviteId: String) {
+    fun consumeLiveInvite(inviteId: String): Boolean =
+        TenantInviteEntity.update(
+            "status = ?1 where id = ?2 and status = ?3 and expiresAt > ?4",
+            TenantInviteEntity.CONSUMED, inviteId, TenantInviteEntity.ACTIVE, Instant.now(),
+        ) == 1
+
+    /**
+     * Take the tenant scope's row lock — the lock a rotation, [mintMemberInvite] and every admission write take — so
+     * a MEMBER accept cannot copy an admission that a concurrent rotation is replacing (ADR 0020 move 6). Taken
+     * before the spend; the admission is then read with [currentAdmission].
+     */
+    @Transactional
+    fun lockTenantScope(tenantId: String) {
+        ScopeEntity.findById(tenantId, LockModeType.PESSIMISTIC_WRITE)
+    }
+
+    /**
+     * The invite's admission as committed **now** — after [lockTenantScope], so a rotation that re-tagged it is seen.
+     * A refresh, not a find: a find would hand back the copy this transaction read before the lock.
+     */
+    fun currentAdmission(invite: TenantInviteEntity): Admission? {
+        TenantInviteEntity.getEntityManager().refresh(invite)
+        return invite.admission()
+    }
+
+    /**
+     * Activate a tenant on acceptance — **atomic**: record the owner's `OWNER` membership + grant and flip the
+     * tenant `ACTIVE`. The invite was already spent by [consumeLiveInvite], first in the same transaction. The grant
+     * is opaque ciphertext stored verbatim, with the owner's self-signature over it (ADR 0028 Decision 6) and the
+     * admission the owner self-tagged under `E_0`, so the tenant's first rotation has a tag to carry forward
+     * (ADR 0020 move 6).
+     */
+    @Transactional
+    fun activate(tenantId: String, userId: String, grant: SignedGrant, admission: Admission) {
         // The TENANT root scope is born with the owner membership; keyed id == tenantId (cr-0026).
         ScopeEntity().apply {
             id = tenantId
@@ -118,18 +155,17 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             createdAt = Instant.now()
         }.persist()
         TenantEntity.update("status = ?1 where id = ?2", TenantEntity.ACTIVE, tenantId)
-        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, inviteId)
     }
 
     /**
      * Join an **already-active** tenant as a grant-less MEMBER (cr-0077): record a hollow membership (role, no
-     * grant) on the existing TENANT scope — **no** scope birth, **no** tenant status change — and consume the
-     * invite. Creating the grant-less membership is what cr-0076 reconciles into a `grant-delivery` job; a
-     * key-holder then wraps `K_SC` to this member — once the admission copied here from the invite verifies
-     * (ADR 0020 move 6). Idempotent-friendly: the caller checks membership first.
+     * grant) on the existing TENANT scope — **no** scope birth, **no** tenant status change. The invite was already
+     * spent by [consumeLiveInvite]. Creating the grant-less membership is what cr-0076 reconciles into a
+     * `grant-delivery` job; a key-holder then wraps `K_SC` to this member — once [admission], read from the invite by
+     * [currentAdmission], verifies (ADR 0020 move 6). Idempotent-friendly: the caller checks membership first.
      */
     @Transactional
-    fun joinAsMember(tenantId: String, userId: String, invite: TenantInviteEntity) {
+    fun joinAsMember(tenantId: String, userId: String, admission: Admission?) {
         MembershipEntity().apply {
             id = UUID.randomUUID().toString()
             this.userId = userId
@@ -137,16 +173,9 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             scopeId = tenantId // the TENANT root scope is keyed id == tenantId (cr-0026)
             role = MembershipEntity.MEMBER
             wrappedGrant = null // grant-less: delivered later by a key-holder (cr-0076)
-            admit(invite.admission())
+            admit(admission)
             createdAt = Instant.now()
         }.persist()
-        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, invite.id)
-    }
-
-    /** Mark an invite CONSUMED without side effects (the member was already in the tenant — idempotent accept). */
-    @Transactional
-    fun consumeInvite(inviteId: String) {
-        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.CONSUMED, inviteId)
     }
 
     /** Whether [userId] belongs to the tenant — an accepted root membership. A question about a *target* (an
@@ -197,10 +226,45 @@ class TenantStore(private val membership: MembershipStore, private val hosts: Te
             inviteId, tenantId, TenantInviteEntity.MEMBER, TenantInviteEntity.ACTIVE,
         ).firstResult()
 
-    /** Soft-revoke an invite (→ SUPERSEDED terminal) so its secret replays as no-longer-valid. */
+    /**
+     * Soft-revoke a live invite (→ SUPERSEDED terminal) so its secret replays as no-longer-valid. A compare-and-set
+     * like [consumeLiveInvite], so a revoke that lost to an accept does not re-tag the spent invite, and an accept
+     * that lost to it cannot join. Returns whether this call revoked it.
+     */
     @Transactional
-    fun revokeInvite(inviteId: String) {
-        TenantInviteEntity.update("status = ?1 where id = ?2", TenantInviteEntity.SUPERSEDED, inviteId)
+    fun revokeInvite(inviteId: String): Boolean =
+        TenantInviteEntity.update(
+            "status = ?1 where id = ?2 and status = ?3",
+            TenantInviteEntity.SUPERSEDED, inviteId, TenantInviteEntity.ACTIVE,
+        ) == 1
+
+    /**
+     * Carry the open invites a rotation was shown into its new epoch (ADR 0020 move 6): re-tag or drop each one's
+     * admission. A **bulk update of the admission columns only, guarded by `status = ACTIVE`**, never a save of the
+     * entities read: the rotation read [invites] under the scope lock, which neither a revoke nor a member accept's
+     * spend takes, and a managed save would write their stale `status` back — a revoked or spent secret live again.
+     * An invite spent or revoked meanwhile is left as it is: it has nothing left to carry, and the completeness check
+     * already ran on the list the rotator was shown. (Panache's positional parameters are non-null, hence the literal
+     * `null`s of a drop.)
+     */
+    @Transactional
+    fun carryInvites(invites: List<TenantInviteEntity>, newEpoch: Int, retags: Map<String, String>, dropped: Set<String>) {
+        invites.forEach { inv ->
+            val id = inv.admissionId ?: return@forEach
+            if (id in dropped) {
+                TenantInviteEntity.update(
+                    "admissionId = null, admissionEpoch = null, admissionTag = null where id = ?1 and status = ?2",
+                    inv.id, TenantInviteEntity.ACTIVE,
+                )
+            } else {
+                retags[id]?.let {
+                    TenantInviteEntity.update(
+                        "admissionEpoch = ?1, admissionTag = ?2 where id = ?3 and status = ?4",
+                        newEpoch, it, inv.id, TenantInviteEntity.ACTIVE,
+                    )
+                }
+            }
+        }
     }
 
     /** Create a PENDING tenant with its first ACTIVE invite. Returns the new tenant id + invite expiry. */

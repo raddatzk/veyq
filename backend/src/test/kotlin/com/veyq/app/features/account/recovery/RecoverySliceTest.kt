@@ -16,6 +16,7 @@ import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.ResolvedTenant
 import com.veyq.app.testing.TestFixtures.newUser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -262,6 +263,29 @@ class RecoverySliceTest {
         )
     }
 
+    @Test
+    fun concurrentCompletesSpendTheTokenOnce() {
+        // Two completes of one token with DIFFERENT new passwords — a double submit, or a second tab. Before the
+        // token was spent by a compare-and-set both answered Applied and the later commit's password won, so the
+        // person who saw "done" was locked out of the password they had just chosen.
+        repeat(ROUNDS) { round ->
+            resetAccount(USER, EMAIL)
+            val token = mintToken()
+            val outcomes = race(
+                { handler.complete(token, proofFor(token, NEW_WRAP, NEW_AUTH_KEY), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY) },
+                { handler.complete(token, proofFor(token, OTHER_WRAP, OTHER_AUTH_KEY), OTHER_WRAP, NEW_KDF, OTHER_AUTH_KEY) },
+            )
+            assertEquals(1, outcomes.count { it == ResetOutcome.Applied }, "round $round: exactly one reset may apply, got $outcomes")
+            assertEquals(1, outcomes.count { it == ResetOutcome.TokenNotLive }, "round $round: the loser answers as a replay, got $outcomes")
+            val (wrap, auth) = if (outcomes[0] == ResetOutcome.Applied) NEW_WRAP to NEW_AUTH_KEY else OTHER_WRAP to OTHER_AUTH_KEY
+            assertEquals(wrap, wrapOf("PASSWORD"), "round $round: the floor is the one whose reset answered Applied")
+            assertEquals(auth, authKeyOf(), "round $round: and so is the login key")
+        }
+        // Control: a fresh token completed once still applies, so a site that refuses everything cannot pass.
+        resetAccount(USER, EMAIL)
+        assertEquals(ResetOutcome.Applied, mintToken().let { handler.complete(it, proof(it), NEW_WRAP, NEW_KDF, NEW_AUTH_KEY) })
+    }
+
     // --- the reset itself ---
 
     @Test
@@ -404,6 +428,10 @@ class RecoverySliceTest {
 
     private fun proof(token: String) = PROOF_KEY.sign(statementFor(token))
 
+    /** A valid proof for completing [token] into a new password other than this fixture's default. */
+    private fun proofFor(token: String, wrap: String, authKey: String) =
+        PROOF_KEY.sign(SecretKeyProof.recoveryStatement(token, authKey, SecretKeyProof.Wrap(wrap, NEW_KDF)))
+
     private fun mintToken(expiresAt: Instant = Instant.now().plus(1, ChronoUnit.HOURS)): String {
         val token = Tokens.random()
         store.mint(USER, EMAIL, Tokens.hash(token), expiresAt)
@@ -472,6 +500,13 @@ class RecoverySliceTest {
         const val NEW_WRAP = "bmV3LXBhc3N3b3JkLXdyYXA="
         const val NEW_KDF = "bmV3LWtkZi1wYXJhbXM="
         const val NEW_AUTH_KEY = "bmV3LWF1dGgta2V5"
+
+        /** A second new password, for the racer that must lose. */
+        const val OTHER_WRAP = "b3RoZXItcGFzc3dvcmQtd3JhcA=="
+        const val OTHER_AUTH_KEY = "b3RoZXItYXV0aC1rZXk="
+
+        /** One round of a race can pass by luck; each round spends a fresh token. */
+        const val ROUNDS = 5
 
         /** `veyq.ratelimit.recovery.per-address-max-requests` — the bucket the ordering bite-test spends. */
         const val PER_ADDRESS_MAX = 3

@@ -5,6 +5,8 @@ import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.race
+import com.veyq.app.shared.membership.MembershipEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -15,10 +17,14 @@ import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
 
 /**
  * Slice tests for member-invite management (uc.spaces.manage-member-invites, cr-0082): the tenant **owner**
@@ -168,6 +174,85 @@ class MemberInviteManagementSliceTest {
             .then().statusCode(404).body("code", equalTo("invite_not_found"))
     }
 
+    // --- the invite is spent by a checked compare-and-set (developer-styleguide §12) ---
+
+    @Test
+    fun concurrentMemberAcceptsSpendTheInviteOnce() {
+        // The MEMBER role on the existing-account path: today the loser either dies on the membership's unique
+        // index (500) or reads the winner's membership and "consumes" the spent invite a second time (200).
+        repeat(ROUNDS) { round ->
+            val tag = "race-mbr-$round-${UUID.randomUUID()}"
+            val (tenantId, _) = seedActiveTenant("$tag.example.com", "owner@$tag.example.com")
+            seedMemberInvite(tenantId, "m@$tag.example.com", tag)
+            val member = seedUser(email = "m@$tag.example.com")
+            val auth = bearer(member)
+            val answers = race({ memberAccept(auth, tag) }, { memberAccept(auth, tag) })
+            assertEquals(1, answers.count { it.first == 200 }, "round $round: exactly one accept may win, got $answers")
+            assertEquals(1, answers.count { it == (410 to "invite_no_longer_valid") }, "round $round: the loser answers as a replay, got $answers")
+            assertEquals(1L, membershipsOf(member, tenantId), "round $round: one membership, got answers $answers")
+        }
+        val tag = "race-mbr-control-${UUID.randomUUID()}"
+        val (tenantId, _) = seedActiveTenant("$tag.example.com", "owner@$tag.example.com")
+        seedMemberInvite(tenantId, "m@$tag.example.com", tag)
+        assertEquals(200 to null, memberAccept(bearer(seedUser(email = "m@$tag.example.com")), tag))
+    }
+
+    @Test
+    fun aRevokeAndASpendOfOneInviteCannotBothWin() {
+        // Either order, the second transition finds nothing live and changes nothing: a revoke that lost to an
+        // accept must not re-tag the spent invite, and a spend that lost to a revoke must not join.
+        val (tenantId, _) = seedActiveTenant("revoke-spend.example.com", "owner@revoke-spend.example.com")
+        seedMemberInvite(tenantId, "first@revoke-spend.example.com", "revoke-spend-secret-1")
+        val revokedFirst = firstPendingInviteId(tenantId)
+        assertTrue(tx { store.revokeInvite(revokedFirst) }, "control: a live invite revokes")
+        assertFalse(tx { store.consumeLiveInvite(revokedFirst) }, "a revoked invite cannot be spent")
+        assertEquals(TenantInviteEntity.SUPERSEDED, statusOf(revokedFirst))
+
+        seedMemberInvite(tenantId, "second@revoke-spend.example.com", "revoke-spend-secret-2")
+        val spentFirst = firstPendingInviteId(tenantId)
+        assertTrue(tx { store.consumeLiveInvite(spentFirst) }, "control: a live invite spends")
+        assertFalse(tx { store.revokeInvite(spentFirst) }, "a spent invite cannot be revoked")
+        assertEquals(TenantInviteEntity.CONSUMED, statusOf(spentFirst))
+    }
+
+    @Test
+    fun aRotationDoesNotBringARevokedInviteBack() {
+        // A tenant rotation reads the open invites under the scope lock, which a revoke does not take. A revoke
+        // that commits between that read and the re-tag must stay a revoke: the re-tag writes only the admission.
+        val (tenantId, _) = seedActiveTenant("retag-revoke.example.com", "owner@retag-revoke.example.com")
+        seedMemberInvite(tenantId, "m@retag-revoke.example.com", "retag-revoke-secret")
+        val inviteId = firstPendingInviteId(tenantId)
+        val admissionId = tx { store.listPendingMemberInvites(tenantId).first().admission!!.id }
+        val read = CountDownLatch(1)
+        val revoked = CountDownLatch(1)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val rotation = pool.submit {
+                QuarkusTransaction.requiringNew().run {
+                    val invites = store.openMemberInvites(tenantId) // what the rotation was shown
+                    read.countDown()
+                    revoked.await()
+                    store.carryInvites(invites, newEpoch = 1, retags = mapOf(admissionId to RETAGGED), dropped = emptySet())
+                }
+            }
+            read.await()
+            assertTrue(tx { store.revokeInvite(inviteId) })
+            revoked.countDown()
+            rotation.get()
+        } finally {
+            pool.shutdownNow()
+        }
+        assertEquals(TenantInviteEntity.SUPERSEDED, statusOf(inviteId), "the revoked secret must stay revoked")
+        assertEquals(TestAdmission.TAG, tx { TenantInviteEntity.findById(inviteId)!!.admissionTag }, "a revoked invite has nothing left to carry")
+
+        // Control: an invite nobody revoked is carried — the re-tag is not simply inert.
+        seedMemberInvite(tenantId, "live@retag-revoke.example.com", "retag-live-secret")
+        val live = tx { store.openMemberInvites(tenantId).single() }
+        tx { store.carryInvites(store.openMemberInvites(tenantId), newEpoch = 1, retags = mapOf(live.admissionId!! to RETAGGED), dropped = emptySet()) }
+        val carried = tx { TenantInviteEntity.findById(live.id)!!.let { Triple(it.status, it.admissionEpoch, it.admissionTag) } }
+        assertEquals(Triple(TenantInviteEntity.ACTIVE, 1, RETAGGED), carried)
+    }
+
     @Test
     fun manageOnAnUnknownTenantIs404NotFound() {
         val owner = seedUser(email = "stray@nowhere-mi.example.com")
@@ -199,6 +284,19 @@ class MemberInviteManagementSliceTest {
     private fun firstPendingInviteId(tenantId: String): String =
         QuarkusTransaction.requiringNew().call { store.listPendingMemberInvites(tenantId).first().inviteId }
 
+    private fun <T> tx(body: () -> T): T = QuarkusTransaction.requiringNew().call(body)
+
+    private fun statusOf(inviteId: String): String = tx { TenantInviteEntity.findById(inviteId)!!.status }
+
+    private fun membershipsOf(userId: String, tenantId: String): Long =
+        tx { MembershipEntity.count("userId = ?1 and scopeId = ?2", userId, tenantId) }
+
+    /** An existing-account MEMBER accept (no grant), as (status, error code). */
+    private fun memberAccept(auth: String, secret: String): Pair<Int, String?> =
+        given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"bootstrapSecret":"$secret","username":"racer"}""")
+            .`when`().post("/api/tenants/accept").then().extract().let { it.statusCode() to it.path<String?>("code") }
+
     /** A cold-birth register body with NO grant (a MEMBER joins grant-less). */
     private fun memberRegisterBody(secret: String) = """
         {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newmember",
@@ -215,5 +313,11 @@ class MemberInviteManagementSliceTest {
         // MemberAddSliceTest 13930-13933.
         const val REISSUE_SMTP_PORT = 13934
         const val REISSUE_FLOOD_SMTP_PORT = 13935
+
+        /** One round of a race can pass by luck; each round spends a fresh secret. */
+        const val ROUNDS = 5
+
+        /** 32 bytes of base64, distinct from [TestAdmission.TAG] — what a rotation re-tags an invite to. */
+        const val RETAGGED = "cmV0YWdnZWQtcmV0YWdnZWQtcmV0YWdnZWQtcmV0YWc="
     }
 }

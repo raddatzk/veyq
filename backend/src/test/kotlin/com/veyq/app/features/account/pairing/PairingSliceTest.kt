@@ -6,6 +6,7 @@ import com.veyq.app.features.account.login.SessionFamilyEntity
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.identity.VeyqUser
 import com.veyq.app.testing.TestFixtures.newUser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -285,6 +286,33 @@ class PairingSliceTest {
     }
 
     @Test
+    fun concurrentDelegationsClaimTheChannelOnceAndMintOneFamily() {
+        // The same rule raced: two delegations that both read the channel unclaimed. Before the claim was a
+        // compare-and-set both answered 200 with different refresh tokens, and the overwritten family was a live
+        // 30-day token no channel recorded and no sweep could find. The family count is what pins the ORDER —
+        // claim, then mint: a loser that minted first would orphan a family even though it answered 404.
+        repeat(ROUNDS) { round ->
+            seedAccountsAndClearChannels()
+            val trusted = login()
+            val handle = handle()
+            open(handle).then().statusCode(204)
+            answer(handle, EPHEMERAL_KEY).then().statusCode(204)
+            val answers = race({ delegateAnswer(trusted.accessToken, handle) }, { delegateAnswer(trusted.accessToken, handle) })
+            assertEquals(1, answers.count { it.first == 200 }, "round $round: exactly one delegation may win, got $answers")
+            assertEquals(1, answers.count { it == (404 to INVALID) }, "round $round: the loser answers as a spent channel, got $answers")
+            assertEquals(2L, activeFamilies(), "round $round: the login family plus exactly one delegated, got $answers")
+            refresh(answers.single { it.first == 200 }.second!!).then().statusCode(200)
+        }
+        // Control: a fresh channel delegated once still answers with a working token.
+        seedAccountsAndClearChannels()
+        val trusted = login()
+        val handle = handle()
+        open(handle).then().statusCode(204)
+        answer(handle, EPHEMERAL_KEY).then().statusCode(204)
+        refresh(delegate(trusted.accessToken, handle).then().statusCode(200).extract().path("refreshToken")).then().statusCode(200)
+    }
+
+    @Test
     fun delegatingSupersedesTheAccountsOtherPairingAndRevokesTheFamilyItLeftBehind() {
         val stranger = loginOther()
         val trusted = login()
@@ -412,6 +440,17 @@ class PairingSliceTest {
         .body("""{"handle":"$handle"}""")
         .`when`().post("/api/pairing/delegate")
 
+    /** A delegation as (status, refresh token on success / error code on failure). */
+    private fun delegateAnswer(accessToken: String, handle: String): Pair<Int, String?> =
+        delegate(accessToken, handle).then().extract().let {
+            it.statusCode() to (if (it.statusCode() == 200) it.path<String>("refreshToken") else it.path<String?>("code"))
+        }
+
+    /** The test account's session families that can still refresh — a delegated family counts from its mint. */
+    private fun activeFamilies(): Long = QuarkusTransaction.requiringNew().call<Long> {
+        SessionFamilyEntity.count("userId = ?1 and status = ?2", USER_ID, SessionFamilyEntity.ACTIVE)
+    }
+
     private fun seal(accessToken: String, handle: String, envelope: String): Response = given()
         .header("Authorization", "Bearer $accessToken")
         .contentType(ContentType.JSON)
@@ -461,6 +500,9 @@ class PairingSliceTest {
 
         /** The sealed grant: Master Key + delegated refresh token + label, wrapped to the answering key. */
         private const val ENVELOPE = "c2VhbGVkLWdyYW50LWNpcGhlcnRleHQ="
+
+        /** One round of a race can pass by luck; each round races a fresh channel. */
+        private const val ROUNDS = 5
 
         private val RNG = SecureRandom()
         private val KEYPAIR: KeyPair = KeyPairGenerator.getInstance("Ed25519").generateKeyPair()

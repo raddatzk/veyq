@@ -50,8 +50,8 @@ class EmailConfirmationStore {
 
     /**
      * Spend the token — a **compare-and-set**: only a row still `PENDING` flips, and the caller confirms only if
-     * exactly one did. Two confirmations racing on one token cannot both win, which the invite's plain status
-     * update (`TenantStore.consumeInvite`) does not promise.
+     * exactly one did. Two confirmations racing on one token cannot both win (developer-styleguide §12; the invite's
+     * `TenantStore.consumeLiveInvite` is the same shape).
      */
     fun consume(id: String): Boolean = EmailConfirmationEntity.update(
         "status = ?1 where id = ?2 and status = ?3",

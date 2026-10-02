@@ -12,7 +12,9 @@
   `web/src/features/account/sessions/`. The **one-generation grace** below (refined 2026-09-21 from inbox
   #123) is **built** in `SessionService.rotate`: a `SUPERSEDED` token exactly one generation behind `CURRENT`
   re-mints under the orphan's own generation, any other distance revokes the family — pinned by
-  `LoginSliceTest` (the grace block, plus `replayedSupersededRefreshRevokesFamily` for distance two).
+  `LoginSliceTest` (the grace block, plus `replayedSupersededRefreshRevokesFamily` for distance two). The family
+  row lock that decides the distance is pinned by `LoginSliceTest.theOrphanAndTheCurrentTokenPresentedTogetherCannotForkTheChain`
+  and `SessionManagerSliceTest.aRefreshRacingARevokeCannotBringTheFamilyBack`.
 
 ## Context
 
@@ -156,6 +158,19 @@ the orphaned successor lands on zero.
 the family's `CURRENT` — and compares one integer. What *is* invariant is that there is exactly one `CURRENT`
 row per family: `mint` has two call sites (a new family at generation 1, and rotation), and rotation
 supersedes before it mints.
+
+**The distance is decided under the family's row lock.** The rule reads two rows, the presented token and the
+family's `CURRENT`, and the presented token's own row lock orders only presentations of that same token. An
+orphan (distance 1) and the current token lock different rows, so without a common lock both measured a
+`CURRENT` the other was replacing: both rotated, the family held two live chains, and neither holder ever landed
+on distance zero — the detector above silenced exactly when an attacker presents a stolen orphan alongside the
+victim's refresh. Measured on 2026-10-01 against H2: 3 of 10 rounds forked with a barrier alone, while either
+serial order revokes (distance 0 or 2). The same unlocked read let a refresh racing a revoke save the family back
+to `ACTIVE` after the revoke had answered `204`. So `SessionService.rotate` locks the family row **first**, then
+the token rows, on every path. Every rotation and every revoke of a family write that row, so they all queue on
+it: the distance is computed against committed state, and a revoke lands either before the rotation reads the
+family (the refresh answers `401`) or after it commits (the family ends `REVOKED`). The reverse order — token row,
+then family — deadlocks on H2 when the orphan and the current token arrive together.
 
 **No schema change.** The distance is `CURRENT.generation - presented.generation`, read via
 `family_id + status`, an index that already exists. This is also the first time `generation` is **read**:

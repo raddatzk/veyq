@@ -292,6 +292,15 @@ their remedies differ, so folding them is the defect — over a `HttpStatus` map
 precisely why it is worth writing down: the same miss over something that **cannot** be added additively is
 the expensive version of it.
 
+**And in a RACE measurement, every distinct loser answer is a locator for a read the fix must order.**
+`cr-one-time-secrets-spend-by-compare-and-set` measured two concurrent accepts as 4× `[200, 500]` and 1×
+`[200, 409 tenant_not_pending]`, then planned the compare-and-set "before any insert" and a DoD of exactly one
+`410`. The one `409` was the finding: a loser that reads the winner's commit in a *check* (the tenant's status,
+the taken email, the taken username) answers that check, so a spend placed after the checks cannot reach the DoD.
+It had to move ahead of them, and a refusal after it then had to roll the spend back — a design step the CR never
+named, found at implement time. Read the minority answer in a race's tally as a list of reads; the majority one
+only names the write.
+
 **A second tell: the claim was inherited.** A fact copied forward from an older doc, a recovered file, or a
 previous CR arrives *feeling* measured, because it is written down — and `[inferred]` markings do not catch it,
 since nobody marks what they never noticed was a claim. It is worst on **infrastructure boilerplate**: an

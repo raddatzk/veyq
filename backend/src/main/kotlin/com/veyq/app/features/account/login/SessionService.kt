@@ -104,13 +104,35 @@ class SessionService : AccessTokenResolver {
     fun refresh(presented: String): RotatedTokens? =
         withDeadlockRetry { QuarkusTransaction.requiringNew().call<RotatedTokens?> { rotate(presented) } }
 
+    /**
+     * One rotation attempt. **The family's row lock comes first**, before any token row is read (ADR 0004 § the
+     * one-generation grace). The distance below reads two rows — the presented token and the family's `CURRENT` —
+     * and a lock on the presented row alone serializes only presentations of that same token: an orphan and the
+     * current token lock different rows, so both measured a `CURRENT` the other was replacing and the chain forked.
+     * Every rotation and every revoke of one family write the family row, so locking it first queues them all on
+     * one row: the distance is decided against committed state, and a revoke lands either before this reads the
+     * family (→ 401) or after this commits (the family ends `REVOKED`), never under it. Family first, token second,
+     * on every path; nothing locks a token row and then its family. **No test guards that order**: reversed, the
+     * orphan and the current token each hold a token row while waiting for the family, H2 reports a deadlock, and
+     * [withDeadlockRetry] retries it into a green run (measured 2026-10-02: the test log named a deadlock 24 times,
+     * and no test failed; in this order it names none).
+     *
+     * Under that lock the managed writes below (`family.status`, `family.lastUsedAt`, `current.status`) are safe
+     * although each flushes its whole row: no other writer of the family can interleave with them.
+     */
     private fun rotate(presented: String): RotatedTokens? {
-        // Lock the row so two concurrent refreshes of the SAME token serialize: the second blocks until the
-        // first commits and then reads its status, rather than minting a second pair from one refresh.
-        val row = RefreshTokenEntity.find("tokenHash", Tokens.hash(presented))
-            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return null
-        val family = SessionFamilyEntity.findById(row.familyId) ?: return null
+        val hash = Tokens.hash(presented)
+        // The family id by a SCALAR query, not by loading the token entity: a token row loaded before the lock would
+        // stay in this persistence context, and the locked read below would hand back that copy with the status it
+        // had before the lock.
+        val familyId = RefreshTokenEntity.getEntityManager()
+            .createQuery("select r.familyId from RefreshTokenEntity r where r.tokenHash = ?1", String::class.java)
+            .setParameter(1, hash).resultList.firstOrNull() ?: return null
+        val family = SessionFamilyEntity.findById(familyId, LockModeType.PESSIMISTIC_WRITE) ?: return null
         if (family.status != SessionFamilyEntity.ACTIVE) return null
+        // The token row is still locked, second; the family lock already queues two refreshes of this same token.
+        val row = RefreshTokenEntity.find("tokenHash", hash)
+            .withLock(LockModeType.PESSIMISTIC_WRITE).firstResult() ?: return null
 
         val now = Instant.now()
         val generation: Int
