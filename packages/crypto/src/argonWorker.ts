@@ -57,6 +57,8 @@ function getWorker(): Worker | null {
       // A worker-level failure (load error, runtime crash, OOM) is treated as fatal: retire the worker so
       // every future call takes the sync path, and finish each outstanding request on the sync fallback
       // rather than leaving it to hang. The worker is an optimisation; failure degrades, never breaks.
+      // This listener, not the constructor's catch, is where a chunk that 404s or a URL the CSP refuses lands:
+      // measured in Chromium 152 (2026-10-02), both construct fine and fire `error`.
       workerUnavailable = true
       worker = null
       warnOnce()
