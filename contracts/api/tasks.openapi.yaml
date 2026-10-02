@@ -456,6 +456,7 @@ components:
 
   schemas:
     CapabilityTag:
+      x-veyq-visibility: id
       type: string
       description: >
         An **opaque** capability token from the public registry (`contracts/tasks/tags/`). A bare DB dump sees

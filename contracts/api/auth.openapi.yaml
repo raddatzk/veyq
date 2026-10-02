@@ -110,6 +110,7 @@ paths:
             no cookie.
           headers:
             Set-Cookie:
+              x-veyq-visibility: token
               description: >
                 Present only when `sessionScope` (or legacy `remember`) chose the cookie transport. The
                 refresh token as an httpOnly + SameSite=Strict cookie scoped to `/api/token/refresh` —
@@ -159,6 +160,7 @@ paths:
             presented it in the body gets the successor in the body and no cookie.
           headers:
             Set-Cookie:
+              x-veyq-visibility: token
               description: >
                 Present only when the request's refresh token arrived via cookie. The rotated refresh token
                 as an httpOnly + SameSite=Strict cookie scoped to `/api/token/refresh`, re-issued under the
@@ -218,6 +220,7 @@ paths:
             **omits** `refreshToken`.
           headers:
             Set-Cookie:
+              x-veyq-visibility: token
               description: >
                 The rotated refresh token as an httpOnly + SameSite=Strict cookie scoped to
                 `/api/token/refresh` — `veyq_refresh` for `PERSISTENT` (with `Max-Age`), `veyq_refresh_session`
@@ -261,6 +264,7 @@ paths:
             unconditionally — a no-op for a native caller that never held one.
           headers:
             Set-Cookie:
+              x-veyq-visibility: token
               description: >
                 Clearing cookies (`Max-Age=0`) for both `veyq_refresh` and `veyq_refresh_session`, scoped to
                 `/api/token/refresh` — sent on every call regardless of which, if either, the browser holds.
@@ -1060,15 +1064,17 @@ components:
       required: [handle]
       properties:
         handle:
+          x-veyq-visibility: token
           type: string
           description: >
-            The client-derived routing secret for this channel (opaque base64) — derived from the secret the
+            The client-derived routing secret for this channel (base64 text; a capability, so classified
+            `token` rather than opaque — ADR 0044) — derived from the secret the
             displayed code carries, which never reaches the server (ADR 0059 §11). Only its SHA-256 hash is
             stored, so the server recognises it at use and can never reproduce it — and it is sent in the
             body, never in a path or query, to keep it out of logs and referrers. It is deliberately neither the
             ephemeral transport key nor the channel key: those have a cryptographic job, this one a routing job.
-          contentEncoding: base64
           maxLength: 128
+          pattern: "^[A-Za-z0-9+/]*={0,2}$"
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
@@ -1077,10 +1083,11 @@ components:
       required: [handle, answer]
       properties:
         handle:
+          x-veyq-visibility: token
           type: string
           description: The channel's routing handle (opaque base64), as derived at open.
-          contentEncoding: base64
           maxLength: 128
+          pattern: "^[A-Za-z0-9+/]*={0,2}$"
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         answer:
@@ -1101,12 +1108,13 @@ components:
       required: [handle]
       properties:
         handle:
+          x-veyq-visibility: token
           type: string
           description: >
             The channel to bind to the caller's account and mint a family for. The account reaches the row
             here and nowhere earlier (ADR 0059 §3).
-          contentEncoding: base64
           maxLength: 128
+          pattern: "^[A-Za-z0-9+/]*={0,2}$"
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 
@@ -1132,10 +1140,11 @@ components:
       required: [handle, envelope]
       properties:
         handle:
+          x-veyq-visibility: token
           type: string
           description: The channel's routing handle (opaque base64); must be one this account delegated to.
-          contentEncoding: base64
           maxLength: 128
+          pattern: "^[A-Za-z0-9+/]*={0,2}$"
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
         envelope:
@@ -1157,12 +1166,13 @@ components:
       required: [handle]
       properties:
         handle:
+          x-veyq-visibility: token
           type: string
           description: >
             The channel to read. This is the whole request: it names no account and carries no credential, so
             there is nothing here to enumerate with.
-          contentEncoding: base64
           maxLength: 128
+          pattern: "^[A-Za-z0-9+/]*={0,2}$"
           example: cGFpcmluZy1oYW5kbGUtb3BhcXVl
           x-field-extra-annotation: '@field:jakarta.validation.constraints.NotBlank @field:jakarta.validation.constraints.Size(max = 128) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
 

@@ -486,6 +486,7 @@ components:
 
   schemas:
     NodeKind:
+      x-veyq-visibility: enum
       type: string
       description: FOLDER organizes only (no content key); MEMORY is the content unit (owns K_mem); CHAPTER is a nested Memory inside a Memory (owns its own K_mem, wrapped under the parent Memory's K_mem).
       enum: [FOLDER, MEMORY, CHAPTER]

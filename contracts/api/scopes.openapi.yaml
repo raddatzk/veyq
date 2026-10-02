@@ -883,6 +883,7 @@ components:
 
   schemas:
     ScopeKind:
+      x-veyq-visibility: enum
       type: string
       description: The kind of a scope — the tenant root, a collaborative group, or a member's private space.
       enum: [TENANT, GROUP, PERSONAL]
