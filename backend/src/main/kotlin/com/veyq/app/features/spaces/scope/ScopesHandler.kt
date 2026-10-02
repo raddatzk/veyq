@@ -17,6 +17,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -219,9 +220,23 @@ class ScopesHandler(
         access.check(userId, tenantId, WRITE)
             .refusal(CreatePersonalOutcome.NoTenant, CreatePersonalOutcome.Suspended)?.let { return it }
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
-        // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it.
-        if (!store.createPersonal(scopeId, userId, tenantId, grant)) return CreatePersonalOutcome.IdTaken
-        return CreatePersonalOutcome.Created(scopeId)
+        // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it. A concurrent create's loser
+        // answers as its replay does — the two checks above, in their order — whether it loses at the commit or at
+        // the store's own id check, which a winner that committed after the check above already trips.
+        val replay = {
+            when {
+                store.personalScopeExists(userId, tenantId) -> CreatePersonalOutcome.AlreadyExists
+                store.scopeIdTaken(scopeId) -> CreatePersonalOutcome.IdTaken
+                else -> null
+            }
+        }
+        return createOrConflict(conflict = replay) {
+            if (store.createPersonal(scopeId, userId, tenantId, grant)) {
+                CreatePersonalOutcome.Created(scopeId)
+            } else {
+                replay() ?: CreatePersonalOutcome.IdTaken
+            }
+        }
     }
 
     /**
@@ -239,8 +254,9 @@ class ScopesHandler(
         access.check(userId, tenantId, WRITE)
             .refusal(CreateGroupOutcome.NoTenant, CreateGroupOutcome.Suspended)?.let { return it }
         // The client-minted scope id (ADR 0072): the self-grant and the group name are sealed bound to it.
-        if (!store.createGroup(scopeId, userId, tenantId, encryptedName, grant, admission)) return CreateGroupOutcome.IdTaken
-        return CreateGroupOutcome.Created(scopeId)
+        return createOrConflict(conflict = { if (store.scopeIdTaken(scopeId)) CreateGroupOutcome.IdTaken else null }) {
+            if (store.createGroup(scopeId, userId, tenantId, encryptedName, grant, admission)) CreateGroupOutcome.Created(scopeId) else CreateGroupOutcome.IdTaken
+        }
     }
 
     fun listMine(userId: String, tenantId: String?): ListScopesOutcome {

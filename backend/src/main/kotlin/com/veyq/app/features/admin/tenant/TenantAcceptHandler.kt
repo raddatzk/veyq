@@ -13,6 +13,7 @@ import com.veyq.app.shared.identity.WrapData
 import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.SignedGrant
+import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.tenant.TenantEntity
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
@@ -115,8 +116,12 @@ class TenantAcceptHandler(
     /** Existing-user accept: the caller (resolved from the session) must be the invited person. Role-branched
      *  (cr-0077): an OWNER accept cold-activates the tenant (grant required); a MEMBER accept joins the ACTIVE
      *  tenant grant-less (no grant), the key delivered later by a key-holder (cr-0076). */
-    @Transactional
-    fun accept(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome {
+    fun accept(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome =
+        createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) AcceptOutcome.UsernameTaken else null }) {
+            acceptOnce(userId, bootstrapSecret, birth, username, sealedName)
+        }
+
+    private fun acceptOnce(userId: String, bootstrapSecret: String, birth: OwnerBirth?, username: String, sealedName: String?): AcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return AcceptOutcome.NotFound
         if (!isLive(invite)) return AcceptOutcome.NoLongerValid
         val tenant = store.findTenant(invite.tenantId) ?: return AcceptOutcome.NotFound
@@ -162,8 +167,14 @@ class TenantAcceptHandler(
 
     /** Register-and-accept: the invited email has no account yet — born cold here (email from the invite).
      *  Role-branched like [accept]: OWNER activates (grant required), MEMBER joins grant-less. */
-    @Transactional
     fun registerAndAccept(
+        bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
+    ): RegisterAcceptOutcome =
+        createOrConflict(conflict = { if (handleLost(userId, bootstrapSecret, username)) RegisterAcceptOutcome.UsernameTaken else null }) {
+            registerAndAcceptOnce(bootstrapSecret, userId, account, birth, username, sealedName)
+        }
+
+    private fun registerAndAcceptOnce(
         bootstrapSecret: String, userId: String, account: NewAccount, birth: OwnerBirth?, username: String, sealedName: String?,
     ): RegisterAcceptOutcome {
         val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return RegisterAcceptOutcome.NotFound
@@ -206,6 +217,17 @@ class TenantAcceptHandler(
         // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).
         profiles.create(userId, tenant.id, username, sealedName)
         return RegisterAcceptOutcome.Activated(tenant.id, userId)
+    }
+
+    /**
+     * The replay question of a join whose commit failed: does someone else now hold [username] in the invite's tenant,
+     * while [userId] has no profile there — the one branch that claims a handle? A profile edit takes no tenant lock,
+     * so it can claim the handle between this join's check and its commit; `ux_tp_tenant_username` then fails the
+     * join, which rolls back whole (the invite stays live), and its replay answers `username_taken`.
+     */
+    private fun handleLost(userId: String, bootstrapSecret: String, username: String): Boolean {
+        val invite = store.findInviteByTokenHash(Tokens.hash(bootstrapSecret)) ?: return false
+        return profiles.find(userId, invite.tenantId) == null && profiles.usernameTaken(invite.tenantId, username)
     }
 
     /**

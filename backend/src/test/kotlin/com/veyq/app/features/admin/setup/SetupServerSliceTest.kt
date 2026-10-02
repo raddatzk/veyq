@@ -2,6 +2,10 @@ package com.veyq.app.features.admin.setup
 
 import com.veyq.app.shared.adminchannel.givenAdminChannel
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.testing.RACE_ROUNDS
+import com.veyq.app.testing.answer
+import com.veyq.app.testing.assertWinnerAndLoser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -13,6 +17,7 @@ import org.junit.jupiter.api.MethodOrderer
 import org.junit.jupiter.api.Order
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestMethodOrder
+import java.util.UUID
 
 @QuarkusTest
 @TestMethodOrder(MethodOrderer.OrderAnnotation::class)
@@ -181,4 +186,55 @@ class SetupServerSliceTest {
             .`when`().post("/api/setup/owner")
             .then().statusCode(400)
     }
+
+    // --- a create's loser re-asks the replay question (developer-styleguide §12, the insert half) ---
+
+    /**
+     * A double-submitted setup: both requests read "not set up" before either commits, and the loser used to die on
+     * the setup row's primary key (or the owner email's unique index) with a 500. It must answer what a replay gets.
+     * The class's ordering has completed setup by now, so each round takes the setup row away and the last create
+     * puts it back.
+     */
+    @Test
+    @Order(16)
+    fun concurrentSetupsCreateOneOwnerAndTheLoserAnswersAsAReplay() {
+        repeat(RACE_ROUNDS) { round ->
+            clearSetupRow()
+            val email = "race-$round-${UUID.randomUUID()}@example.com"
+            val answers = race({ createOwner(email) }, { createOwner(email) })
+            assertWinnerAndLoser(201, 409 to "setup_already_complete", answers, "round $round")
+            assertEquals(1L, setupRows(), "round $round: one setup row, got answers $answers")
+        }
+        // Control: a fresh setup still succeeds, so a site that refuses everything cannot pass. It leaves the
+        // instance set up, as the class found it.
+        clearSetupRow()
+        assertEquals(201 to null, createOwner("race-control-${UUID.randomUUID()}@example.com"))
+    }
+
+    /**
+     * The re-ask answers "taken" only when the replay question says so: a commit that fails on a DIFFERENT unique
+     * index — here the owner email, taken by [createsOwner], while setup is not complete — stays a 500, the answer a
+     * bug should have, and writes nothing.
+     */
+    @Test
+    @Order(17)
+    fun aCommitFailureTheReplayQuestionDoesNotExplainStaysAServerError() {
+        clearSetupRow()
+        try {
+            assertEquals(500, createOwner("kevin@example.com").first)
+            assertEquals(0L, setupRows(), "the failed create wrote no setup row")
+        } finally {
+            assertEquals(201 to null, createOwner("restore-${UUID.randomUUID()}@example.com"))
+        }
+    }
+
+    private fun createOwner(email: String): Pair<Int, String?> =
+        givenAdminChannel().contentType(ContentType.JSON).body(ownerBody(email = email))
+            .`when`().post("/api/setup/owner").then().extract().answer()
+
+    private fun clearSetupRow() {
+        QuarkusTransaction.requiringNew().run { ServerSetup.deleteAll() }
+    }
+
+    private fun setupRows(): Long = QuarkusTransaction.requiringNew().call { ServerSetup.count() }
 }

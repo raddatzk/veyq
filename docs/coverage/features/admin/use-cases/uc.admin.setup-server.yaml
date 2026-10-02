@@ -11,9 +11,12 @@ acceptanceCriteria:
     coverage:
       backend: { integration: [SetupServerSliceTest.createsOwner, SetupServerSliceTest.setupNoLongerRequired] }
   - id: single-owner-lock
-    text: A second owner is rejected with 409 once setup is complete.
+    text: >-
+      A second owner is rejected with 409 once setup is complete — the loser of two concurrent setups included,
+      which answers that 409 rather than a 500 and leaves one setup row.
     coverage:
-      backend: { integration: [SetupServerSliceTest.rejectsSecondOwner] }
+      backend:
+        integration: [SetupServerSliceTest.rejectsSecondOwner, SetupServerSliceTest.concurrentSetupsCreateOneOwnerAndTheLoserAnswersAsAReplay]
   - id: reject-non-base64-key
     text: Non-base64 key material is rejected (400).
     coverage:

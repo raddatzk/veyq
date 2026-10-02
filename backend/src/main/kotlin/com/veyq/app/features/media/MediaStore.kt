@@ -5,6 +5,7 @@ import com.veyq.app.features.sharing.ShareIdentityEntity
 import com.veyq.app.shared.blobstore.StoreObjectRef
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.membership.MembershipEntity
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -126,6 +127,11 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     fun findSession(scopeId: String, uploadId: String, opener: UploadOpener): UploadSessionEntity? =
         UploadSessionEntity.findById(uploadId)?.takeIf { it.scopeId == scopeId && opener.opened(it) }
 
+    /** Is session [uploadId] gone — spent by a complete that committed since it was read? A count, not [findSession]:
+     *  outside a transaction the request's persistence context still holds the row it read, so a second `findById`
+     *  would answer from that cache and never see the delete. */
+    fun sessionSpent(uploadId: String): Boolean = UploadSessionEntity.count("id", uploadId) == 0L
+
     /** Mark session [uploadId] live now: a window was issued for it, which is the stale-session purge's clock. */
     @Transactional
     fun touchWindow(uploadId: String) {
@@ -136,7 +142,13 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * Promote a media's verified sessions to blobs + attach to the node, consuming every session. The original
      * session becomes `veyq_media.blob_id`; each derivative becomes its own blob + a `veyq_media_derivative`
      * row. One transaction — all blobs, the media, and the derivative rows commit together. Returns
-     * (originalBlobId, mediaId).
+     * (originalBlobId, mediaId), or null — nothing written — when a session was already spent.
+     *
+     * The sessions are single-use, so they are **spent first** (developer-styleguide §12): each delete is the
+     * transaction's first write and its row count decides. Two completes of one upload both found the session live;
+     * the loser's delete waits for the winner's and then hits no row, so it answers `upload_not_found` exactly as a
+     * replay does — instead of dying at the blob's primary key with a 500 that, in a batch, hid the items already
+     * attached.
      */
     @Transactional
     fun attach(
@@ -150,7 +162,12 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         shareIdentityId: String? = null, // cr-0101: the contributor identity, when attached via a CONTRIBUTOR share
         uploaderUserId: String? = null,  // cr-0113: the member uploader (member path); null on the contributor path
         targetBucketId: String? = null,  // cr-0113: an explicit target bucket; null = the uploader's primary
-    ): Pair<String, String> {
+    ): Pair<String, String>? {
+        val sessionIds = listOf(original.id) + derivatives.map { it.session.id }
+        if (sessionIds.sumOf { UploadSessionEntity.delete("id = ?1", it) } != sessionIds.size.toLong()) {
+            QuarkusTransaction.setRollbackOnly() // a session spent elsewhere: unspend the ones this call took
+            return null
+        }
         val scopeId = original.scopeId
         val ownerKey = ownerKeyFor(uploaderUserId, shareIdentityId)
         val bucket = resolveAttachBucket(scopeId, nodeId, ownerKey, targetBucketId)
@@ -179,8 +196,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
                 createdAt = Instant.now()
             }.persist()
         }
-        UploadSessionEntity.deleteById(original.id)
-        derivatives.forEach { UploadSessionEntity.deleteById(it.session.id) }
         bumpMediaRevision(nodeId) // cr-0107: an add moves media_revision (the live-updates change signal), not delete_revision
         return originalBlobId to mediaId
     }
@@ -536,11 +551,14 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         }
     }
 
+    /** Is the client-minted [bucketId] already a bucket, in any scope? */
+    fun bucketIdTaken(bucketId: String): Boolean = BucketEntity.findById(bucketId) != null
+
     /** Create a sub-bucket one level under `ownerKey`'s primary (materialized if needed) — the caller's own or,
      *  post-cr0123, a contributor root a member curates. */
     @Transactional
     fun createSubBucket(bucketId: String, scopeId: String, nodeId: String, ownerKey: String, sealedName: String): BucketRow? {
-        if (BucketEntity.findById(bucketId) != null) return null // taken anywhere → nothing written (ADR 0072)
+        if (bucketIdTaken(bucketId)) return null // taken anywhere → nothing written (ADR 0072)
         val primary = ensurePrimaryBucket(scopeId, nodeId, ownerKey, primarySealedNameFor(ownerKey))
         val sub = BucketEntity().apply {
             id = bucketId

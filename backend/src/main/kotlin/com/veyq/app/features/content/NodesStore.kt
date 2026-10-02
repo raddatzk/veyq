@@ -98,6 +98,9 @@ class NodesStore {
     /** The scope's current content-key epoch (ADR 0024), or null if there is no such scope. */
     fun currentEpoch(scopeId: String): Int? = ScopeEntity.findById(scopeId)?.currentEpoch
 
+    /** Does any node, live or trashed, in any scope, already hold the client-minted [id]? */
+    fun idTaken(id: String): Boolean = NodeEntity.findById(id) != null
+
     /** Persist a node under the client-minted [id]; false — nothing written — if any node, live or trashed, in
      *  any scope already holds it (ADR 0072: never overwrite, never substitute). */
     @Transactional
@@ -105,7 +108,7 @@ class NodesStore {
         id: String, scopeId: String, parentSlot: String, kind: String, encryptedName: String,
         slugToken: String, orderIndex: Int, epoch: Int, wrappedContentKey: String?, wrappedMeta: String?,
     ): Boolean {
-        if (NodeEntity.findById(id) != null) return false
+        if (idTaken(id)) return false
         NodeEntity().apply {
             this.id = id
             this.scopeId = scopeId

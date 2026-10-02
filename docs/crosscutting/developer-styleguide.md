@@ -223,6 +223,18 @@ not documented; the code is the source of truth for that.
     first.** `SessionService.rotate` locks the session family before it reads the presented and the `CURRENT`
     refresh token: their own row locks ordered only presentations of the same token, so an orphan and the current
     token both rotated and the chain forked ([ADR 0004](../decisions/0004-session-tokens.md)).
+  - **The insert half: a create's loser re-asks the replay question after its failed commit.** A row that must
+    exist at most once — a client-minted id, a slug under its parent, a username in a tenant, the setup singleton —
+    has no live row to compare-and-set; its unique index is the compare-and-set. Two creates that both read "free"
+    both insert, the loser's insert waits for the winner's row and fails once it commits, and unhandled that failure
+    was a `500` at ten sites (inbox #223). So the create runs through `shared/persistence/createOrConflict`, which
+    owns the transaction: on a persistence failure it re-runs the site's own "taken?" checks, in the handler's order,
+    in a fresh read, and answers the conflict a replay would get; when those checks say "free", the failure is
+    re-thrown and stays a `500` — a violation of some other index is a bug, and must look like one. The site's
+    pre-check stays as the fast path; it no longer has to be right under concurrency. Classifying the exception
+    instead was rejected: it needs dialect-aware matching (H2 `23505`, MariaDB `1062`) and answers "taken" for any
+    unique index. A create that also spends a single-use row spends it first, as above (`MediaStore.attach` deletes
+    its upload sessions before it inserts the blobs).
 - *(to decide)* Cross-context communication — direct call vs. domain events — settled when bounded
   contexts are cut.
 
