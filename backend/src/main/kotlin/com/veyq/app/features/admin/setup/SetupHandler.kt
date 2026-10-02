@@ -3,6 +3,7 @@ package com.veyq.app.features.admin.setup
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.instance.InstanceStore
+import com.veyq.app.shared.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 /** Current setup state for the status endpoint. */
@@ -62,6 +63,9 @@ class SetupHandler(
         // Field validation (non-blank, size, base64) is enforced at the boundary by @Valid on the
         // generated request model; here we only guard the single-owner invariant.
         if (store.isSetupComplete()) throw SetupAlreadyComplete()
-        return store.persistOwner(registration)
+        // Two setups that both read "not complete" both get here; the loser of the insert answers as a replay does.
+        return createOrConflict(
+            conflict = { if (store.isSetupComplete()) throw SetupAlreadyComplete() else null },
+        ) { store.persistOwner(registration) }
     }
 }
