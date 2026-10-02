@@ -243,7 +243,8 @@ class ScopesHandler(
         if (store.personalScopeExists(userId, tenantId)) return CreatePersonalOutcome.AlreadyExists
         // The client-minted scope id (ADR 0072): the self-grant is sealed bound to it. A concurrent create's loser
         // answers as its replay does — the two checks above, in their order — whether it loses at the commit or at
-        // the store's own id check, which a winner that committed after the check above already trips.
+        // the store's own id check, which a winner that committed after the check above already trips. At the commit
+        // it loses on the id or on `ux_scope_personal_owner`, which a create of this member under another id holds.
         val replay = {
             when {
                 store.personalScopeExists(userId, tenantId) -> CreatePersonalOutcome.AlreadyExists
@@ -432,18 +433,20 @@ class ScopesHandler(
 
     /**
      * Promote a member to co-owner or demote a co-owner (uc.spaces.manage-group-members, cr-0088). Owner-gated;
-     * the **last-owner guard** rejects demoting the last OWNER (ADR 0007). A pure role change — no key moves.
+     * the **last-owner guard** rejects demoting the last OWNER (ADR 0007). A pure role change — no key moves. The
+     * owner, member and last-owner checks run under the scope lock ([ScopesStore.changeRole]), so of two overlapping
+     * changes the second answers what its replay would.
      */
     fun setMemberRole(callerId: String, scopeId: String, targetId: String, role: String): SetRoleOutcome {
         access.check(callerId, scopeId, WRITE)
             .refusal(SetRoleOutcome.ScopeNotFound, SetRoleOutcome.Suspended, SetRoleOutcome.Deleting)?.let { return it }
         if (store.scopeKind(scopeId) != ScopeEntity.GROUP) return SetRoleOutcome.ScopeNotFound
-        if (!store.isScopeOwner(callerId, scopeId)) return SetRoleOutcome.NotOwner
-        val current = store.memberRole(targetId, scopeId) ?: return SetRoleOutcome.MemberNotFound
-        if (MembershipPolicy.isLastOwnerDemote(current, role, store.ownerCount(scopeId))) {
-            return SetRoleOutcome.LastOwner
+        when (store.changeRole(callerId, targetId, scopeId, role)) {
+            ScopesStore.RoleChange.NOT_OWNER -> return SetRoleOutcome.NotOwner
+            ScopesStore.RoleChange.MEMBER_NOT_FOUND -> return SetRoleOutcome.MemberNotFound
+            ScopesStore.RoleChange.LAST_OWNER -> return SetRoleOutcome.LastOwner
+            ScopesStore.RoleChange.CHANGED -> Unit
         }
-        store.setRole(targetId, scopeId, role)
         // Build the response from the role we just set — the same-request read-back can see a stale persistence
         // context (the DB is committed; the guard checks below run in fresh requests against committed data).
         val row = store.scopeMemberRow(scopeId, targetId) ?: return SetRoleOutcome.MemberNotFound

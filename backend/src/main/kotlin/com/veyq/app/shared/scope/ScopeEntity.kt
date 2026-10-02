@@ -40,6 +40,12 @@ class ScopeEntity : PanacheEntityBase {
     @Column(name = "kind", nullable = false, length = 16)
     lateinit var kind: String
 
+    /** A PERSONAL scope's owning account, null on every other kind: the key of `ux_scope_personal_owner
+     *  (tenant_id, personal_owner)`, which holds "one personal scope per member and tenant" (ADR 0002) against two
+     *  creates under two ids. Set once at birth and never changed. */
+    @Column(name = "personal_owner", length = 36)
+    var personalOwner: String? = null
+
     /** A GROUP scope's name, sealed under its **derived name-key `K_name`** (ciphertext base64, cr-0096/ADR 0027);
      *  null for TENANT/PERSONAL (ADR 0014). The server never opens it (no key); it only relays the ciphertext. */
     @Column(name = "encrypted_name")
