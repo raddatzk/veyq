@@ -422,10 +422,12 @@ class TenantHandler(
      *  - the target's **own** scopes — their **PERSONAL** scope + any **solo GROUP** (they are the only member) →
      *    **soft-delete** (cr-0090 grace + read-only + purge) but **keep** their membership, so they retain read-only
      *    access to read/export their own memories during grace before `ScopePurge` erases them.
+     * Every scope cut counts the removal ([ScopesStore.recordRemoval], ADR 0075 point 4); with [revokeLinks] every
+     * link of the TENANT scope is also turned off and marked (point 5). A refused removal writes neither.
      * Operator-blind: only membership deletions + a lifecycle timestamp — never a key.
      */
     @Transactional
-    fun removeMember(callerId: String, tenantId: String, targetId: String): RemoveTenantMemberOutcome {
+    fun removeMember(callerId: String, tenantId: String, targetId: String, revokeLinks: Boolean = false): RemoveTenantMemberOutcome {
         access.check(callerId, tenantId, WRITE)
             .refusal(RemoveTenantMemberOutcome.NotFound, RemoveTenantMemberOutcome.Suspended)?.let { return it }
         if (!store.isOwner(callerId, tenantId)) return RemoveTenantMemberOutcome.NotOwner
@@ -439,6 +441,9 @@ class TenantHandler(
             is RemovalPlan.Cascade -> {
                 val now = Instant.now()
                 plan.steps.forEach { execute(it, targetId, now) }
+                // ADR 0075 point 5: opted into, every link of the TENANT scope goes off in this same transaction —
+                // never a co-shared group's, which the tenant owner need not see (the removal count marks those)
+                if (revokeLinks) shares.turnOffAllInScope(tenantId)
                 RemoveTenantMemberOutcome.Ok
             }
         }
@@ -464,6 +469,9 @@ class TenantHandler(
      *  owner need not be a key-holder. The TENANT scope carries `rotateAfter = false` (ACL-revoke only, ADR 0025). */
     private fun cutSharedAccess(step: CascadeStep, targetId: String) {
         scopes.removeMembership(targetId, step.scopeId)
+        // ADR 0075: counted on EVERY scope cut — the tenant never rotates, and a co-shared group's rotation is only
+        // queued, so neither epoch marks the links the removed member could rebuild until this does
+        scopes.recordRemoval(step.scopeId)
         shares.deactivateSharesByOwnerInScope(targetId, step.scopeId)
         if (step.rotateAfter) tasks.originateScopeRotation(step.scopeId, maxAttempts)
     }

@@ -6,6 +6,7 @@ import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
 import com.veyq.app.shared.crypto.Tokens
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -160,6 +161,10 @@ class SharingStore(
             this.pwSalt = pwSalt
             this.pwVerifier = pwVerifier
             this.sealedPassword = sealedPassword
+            // ADR 0075 point 4: the removals this scope has seen so far — a later removal leaves the share below it.
+            // Read in this transaction: a removal that commits concurrently is either counted here or makes the
+            // share look older than it is, never younger.
+            this.memberRemovalsAtMint = ScopeEntity.findById(scopeId)?.memberRemovals ?: 0
             createdAt = Instant.now()
         }.persist()
     }
@@ -233,12 +238,14 @@ class SharingStore(
             ownerAccount, scopeId,
         )
 
-    /** Soft-revoke **every** enabled share of a scope, whoever created it — a group removal's `revokeLinks`
-     *  (ADR 0075 Decision 5): every member could rebuild every link, so a removed one may hold any of them. Each
-     *  owner re-issues what they still want. Runs inside the removal-rotation's transaction. */
+    /** Turn off **every** enabled share of a scope, whoever created it, and mark each `reissue_only` — the one body
+     *  of every bulk switch-off (ADR 0075 point 5): a group removal's and a tenant removal's `revokeLinks`, and a
+     *  scope owner's standalone switch-off. Every member could rebuild every link, so a link may have leaked
+     *  whoever made it; each owner re-issues what they still want, and the mark keeps re-activation from reviving
+     *  one. Returns how many it turned off. Runs inside its caller's transaction. */
     @Transactional
-    fun deactivateSharesInScope(scopeId: String): Int =
-        ShareEntity.update("enabled = false where scopeId = ?1 and enabled = true", scopeId)
+    fun turnOffAllInScope(scopeId: String): Int =
+        ShareEntity.update("enabled = false, reissueOnly = true where scopeId = ?1 and enabled = true", scopeId)
 
     // --- contributor identities (cr-0101) --------------------------------------
 

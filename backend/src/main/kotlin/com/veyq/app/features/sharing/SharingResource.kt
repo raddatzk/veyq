@@ -105,7 +105,7 @@ class SharingResource(
                 is HttpFailure -> return httpError(o)
             }
         }
-        return Response.ok(shares.map { s ->
+        return Response.ok(shares.map { (s, reissueRequired) ->
             ShareSummary(
                 shareId = s.id,
                 scopeId = UUID.fromString(s.scopeId), // the recovery wrap is bound to (scope, node, share), ADR 0072
@@ -114,6 +114,7 @@ class SharingResource(
                 sealedName = s.sealedName,
                 enabled = s.enabled,
                 mine = s.ownerAccount == me,
+                reissueRequired = reissueRequired, // ADR 0075: the predicate the re-activation refusal runs
                 createdAt = s.createdAt.atOffset(ZoneOffset.UTC),
                 expiresAt = s.expiresAt?.atOffset(ZoneOffset.UTC),
                 sealedNote = s.sealedNote, // cr-0115: the manage UI shows + edits it

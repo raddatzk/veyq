@@ -30,6 +30,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
 import java.time.Instant
@@ -195,9 +196,12 @@ sealed interface ReissueShareOutcome {
     object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
 }
 
+/** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4). */
+data class ListedShare(val share: ShareEntity, val reissueRequired: Boolean)
+
 /** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
 sealed interface NodeSharesOutcome {
-    data class Shares(val rows: List<ShareEntity>) : NodeSharesOutcome
+    data class Shares(val rows: List<ListedShare>) : NodeSharesOutcome
     object Suspended : NodeSharesOutcome, HttpFailure by Failures.tenantSuspended
 }
 
@@ -286,8 +290,8 @@ class SharingHandler(
      * the caller may no longer read (they left it, or its tenant is suspended) drops out, because every row carries
      * that space's sealed names (uc.spaces.scope-access).
      */
-    fun list(userId: String): List<ShareEntity> =
-        store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok }
+    fun list(userId: String): List<ListedShare> =
+        listed(store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok })
 
     /** Every public share on a Memory node, for the shared-scope manage panel (cr-0104): visible to any **member**
      *  of the node's scope, not only the shares' owners — so a member can see + adopt an orphaned (disabled) share.
@@ -296,7 +300,7 @@ class SharingHandler(
     fun listForNode(userId: String, nodeId: String): NodeSharesOutcome {
         val node = store.findNode(nodeId) ?: return NodeSharesOutcome.Shares(emptyList())
         return when (access.check(userId, node.scopeId, READ)) {
-            Access.Ok -> NodeSharesOutcome.Shares(store.listByNode(nodeId))
+            Access.Ok -> NodeSharesOutcome.Shares(listed(store.listByNode(nodeId)))
             Access.Suspended -> NodeSharesOutcome.Suspended
             else -> NodeSharesOutcome.Shares(emptyList())
         }
@@ -340,17 +344,35 @@ class SharingHandler(
             .refusal(ReactivateShareOutcome.NotFound, ReactivateShareOutcome.Suspended, ReactivateShareOutcome.Deleting)
             ?.let { return it }
         if (!capabilities.isActive(capabilityFor(share.role))) return ReactivateShareOutcome.CapabilityDisabled
-        // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead. "Still a
-        // member" is what the gate itself answers for a writer — the scope AND the tenant, so a member removed from
-        // the tenant, whose rows on other spaces linger through the grace window, counts as gone.
-        val ownerIsMember = access.check(share.ownerAccount, share.scopeId, WRITE) == Access.Ok
-        val currentEpoch = scopes.currentEpoch(share.scopeId) ?: return ReactivateShareOutcome.NotFound
-        if (ReissuePolicy.required(ownerIsMember, share.sealedShareKeyEpoch, currentEpoch)) {
-            return ReactivateShareOutcome.ReissueRequired
-        }
+        // ADR 0075: the same link comes back on, so a link a departed member may hold is re-issued instead.
+        val scope = scopes.find(share.scopeId) ?: return ReactivateShareOutcome.NotFound
+        if (reissueRequired(share, scope)) return ReactivateShareOutcome.ReissueRequired
         store.reactivate(userId, shareId)
         return ReactivateShareOutcome.Done
     }
+
+    /** The manage list's rows, each with [reissueRequired] — the scope read once per scope, not once per row. */
+    private fun listed(rows: List<ShareEntity>): List<ListedShare> {
+        val scopesById = rows.map { it.scopeId }.distinct().mapNotNull { scopes.find(it) }.associateBy { it.id }
+        return rows.map { s -> ListedShare(s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true) }
+    }
+
+    /**
+     * [ReissuePolicy] for one share from what the server holds (ADR 0075 point 4) — the ONE source of both the
+     * re-activation refusal and the list's `reissueRequired`, so the panel's mark and the refusal cannot disagree.
+     * "Still a member" is what the gate answers for a writer — the scope AND the tenant, so a member removed from the
+     * tenant, whose rows on other spaces linger through the grace window, counts as gone. Only membership counts
+     * here: a space in its deletion grace refuses every writer alike, which is the gate's answer, not the link's.
+     */
+    private fun reissueRequired(share: ShareEntity, scope: ScopeEntity): Boolean =
+        ReissuePolicy.required(
+            reissueOnly = share.reissueOnly,
+            ownerIsMember = access.check(share.ownerAccount, share.scopeId, WRITE) != Access.NotMember,
+            copyEpoch = share.sealedShareKeyEpoch,
+            currentEpoch = scope.currentEpoch,
+            removalsAtMint = share.memberRemovalsAtMint,
+            removals = scope.memberRemovals,
+        )
 
     /**
      * Re-issue a share (ADR 0075): a new share under the client-minted [newShareId] with a fresh `K_share`, and the

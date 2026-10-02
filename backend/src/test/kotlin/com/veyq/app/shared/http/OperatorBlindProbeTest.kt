@@ -143,6 +143,7 @@ class OperatorBlindProbeTest {
         "rotateScope" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/epochs", """{"epoch":1,"wrappedPrev":"$B64","grants":[],"admissions":[]}""") },
         "deleteGroup" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}") },
         "restoreGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/restore") },
+        "revokeScopeShares" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/shares/revoke") },
         "renameGroup" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/name", """{"encryptedName":"$B64","nameEpoch":0}""") },
         "setScopeIcon" to Probe(Address.SCOPE) { s -> Call("POST", "/api/scopes/${s.scopeId}/icon", """{"sealedIcon":"$B64","iconEpoch":0}""") },
         "clearScopeIcon" to Probe(Address.SCOPE) { s -> Call("DELETE", "/api/scopes/${s.scopeId}/icon") },

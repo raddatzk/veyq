@@ -173,6 +173,15 @@ sealed interface DeleteGroupOutcome {
     object NotOwner : DeleteGroupOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
 }
 
+/** Outcome of a scope owner's standalone switch-off of every link (ADR 0075 point 5). */
+sealed interface RevokeScopeSharesOutcome {
+    data class Ok(val revoked: Int) : RevokeScopeSharesOutcome
+    object Suspended : RevokeScopeSharesOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RevokeScopeSharesOutcome, HttpFailure by Failures.scopeDeleting
+    object ScopeNotFound : RevokeScopeSharesOutcome, HttpFailure by Failures.scopeNotFound
+    object NotOwner : RevokeScopeSharesOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
+}
+
 /** Outcome of restoring a soft-deleted group (cr-0090). */
 sealed interface RestoreGroupOutcome {
     object Ok : RestoreGroupOutcome
@@ -469,6 +478,20 @@ class ScopesHandler(
         if (!store.isScopeOwner(callerId, scopeId)) return DeleteGroupOutcome.NotOwner
         store.softDelete(scopeId, java.time.Instant.now())
         return DeleteGroupOutcome.Ok
+    }
+
+    /**
+     * Turn off every link of a scope (ADR 0075 point 5): every enabled share, whoever made it, goes off and is marked,
+     * so each comes back only by re-issue. Any owner of the scope — a group owner, a tenant owner, the personal scope's
+     * owner: one gate, any kind. Access first (a non-member's 404 is an unknown scope's), then ownership. Idempotent:
+     * a second call turns nothing off and answers 0.
+     */
+    fun revokeScopeShares(callerId: String, scopeId: String): RevokeScopeSharesOutcome {
+        access.check(callerId, scopeId, WRITE)
+            .refusal(RevokeScopeSharesOutcome.ScopeNotFound, RevokeScopeSharesOutcome.Suspended, RevokeScopeSharesOutcome.Deleting)
+            ?.let { return it }
+        if (!store.isScopeOwner(callerId, scopeId)) return RevokeScopeSharesOutcome.NotOwner
+        return RevokeScopeSharesOutcome.Ok(store.turnOffAllShares(scopeId))
     }
 
     /**
