@@ -64,6 +64,13 @@ acceptanceCriteria:
         integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.aReissuedLinkCannotComeBack, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]
       web:
         unit: [src/features/memory/share.test.ts]
+  - id: a-share-is-reissued-at-most-once
+    text: A share is re-issued at most once (inbox #252). The re-issue spends the old share by a checked compare-and-set — its deletion where it is not deleted yet, the transaction's first write — so of two concurrent re-issues exactly one mints a link and the other, like any later re-issue of a deleted share, is 409 share_deleted with nothing written; a non-member still gets the non-enumerable 404. The renew dialog never retries that conflict, says the link was already renewed or deleted and has the manage list re-read (A4, ADR 0075 point 1).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.twoConcurrentReissuesOfOneShareMintExactlyOneLink, ShareSharedScopeSliceTest.aReissuedShareRefusesASecondReissueWithAConflict, ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere]
+      web:
+        unit: [src/features/memory/share.test.ts, src/features/memory/components/ShareCreateDialog.test.ts]
   - id: removal-can-turn-off-every-link
     text: A removal-rotation with revokeLinks turns off every enabled share of the group, whoever created it, in the removal's transaction; without it only the removed member's own go off; revokeLinks without removesUserId is 400 with nothing stored. The removal confirmation carries the opt-in, unchecked by default (ADR 0075).
     coverage:
