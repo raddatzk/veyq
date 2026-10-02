@@ -2,6 +2,28 @@ import pluginVue from 'eslint-plugin-vue'
 import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
 import { argonThroughTheWorker } from '@veyq/crypto/eslint-argon-door'
 
+// `veyq-admin/api-mocks-typed-by-the-contract` below — the same selectors as web's block of that name.
+const API_MOCK_HELPER = 'Mock a generated …Api through stubApi()/fakeApi() from src/test/apiMock, which type each payload by its model.'
+const API_MOCKS_SYNTAX = [
+  // S1: the seam itself — handing a hand-built object to the code as a generated …Api.
+  {
+    selector:
+      "CallExpression[callee.property.name=/^mock(ReturnValue|Implementation)(Once)?$/][callee.object.callee.object.name='vi'][callee.object.callee.property.name='mocked'][callee.object.arguments.0.name=/Api$/]",
+    message: API_MOCK_HELPER,
+  },
+  // S2: the cast that lets a partial object pass as one, wherever it reaches the code (DI, a fake passed in).
+  {
+    selector: "TSAsExpression[typeAnnotation.typeName.name='ReturnType'][typeAnnotation.typeArguments.params.0.exprName.name=/Api$/]",
+    message: `No cast to a generated …Api. ${API_MOCK_HELPER}`,
+  },
+  // S3: an `api/client` mock factory that does more than export bare `vi.fn()`s.
+  {
+    selector:
+      "CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/api\\/client$/] > ArrowFunctionExpression > ObjectExpression > Property > .value:not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])",
+    message: 'Mock src/api/client with bare vi.fn() exports; set behaviour per test through stubApi()/fakeApi() from src/test/apiMock.',
+  },
+]
+
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
 // covered by tsconfig (`noUnusedLocals`/`noUnusedParameters`); ESLint adds the Vue-template
@@ -60,6 +82,19 @@ export default defineConfigWithVueTs(
   // Argon2id only through @veyq/crypto/argonWorker — the rule, its exemptions and its limit live with the crypto
   // package (eslint-argon-door.js), written once for the three configs that include it.
   argonThroughTheWorker,
+  {
+    // A mocked API response is typed by the generated model at the seam (cr-api-callers-typed-by-the-contract,
+    // inbox #195), exactly as in web/: a hand-built `…Api` object behind a cast checks its payloads against nothing.
+    // Every such mock goes through src/test/apiMock.ts (this package's own copy), which holds the one cast.
+    // LIMIT: a factory whose return is not an in-line object literal (a variable, a `...spread`) escapes S3, and a
+    // helper-built payload held in a variable loses its excess-property check (styleguide §10: a fixture builder
+    // annotates its return type with the model).
+    name: 'veyq-admin/api-mocks-typed-by-the-contract',
+    files: ['src/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...API_MOCKS_SYNTAX],
+    },
+  },
   {
     // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently
