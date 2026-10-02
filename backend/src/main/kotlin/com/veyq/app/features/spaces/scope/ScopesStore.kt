@@ -390,20 +390,7 @@ class ScopesStore(
             if (id in plan.dropped) m.admit(null) else plan.retags[id]?.let { m.admit(Admission(id, plan.newEpoch, it)) }
             m.persist()
         }
-        invites.forEach { inv ->
-            val id = inv.admissionId ?: return@forEach
-            if (id in plan.dropped) {
-                inv.admissionId = null
-                inv.admissionEpoch = null
-                inv.admissionTag = null
-            } else {
-                plan.retags[id]?.let {
-                    inv.admissionEpoch = plan.newEpoch
-                    inv.admissionTag = it
-                }
-            }
-            inv.persist()
-        }
+        tenants.carryInvites(invites, plan.newEpoch, plan.retags, plan.dropped)
         return decision
     }
 

@@ -8,6 +8,7 @@ import com.veyq.app.shared.membership.MembershipEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.testing.race
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
@@ -152,6 +153,59 @@ class TenantAcceptSliceTest {
             .then().statusCode(410).body("code", equalTo("invite_no_longer_valid"))
     }
 
+    // --- the invite is spent by a checked compare-and-set (developer-styleguide §12) ---
+
+    @Test
+    fun concurrentOwnerAcceptsSpendTheInviteOnce() {
+        // A double-click on the accept button. The loser must get exactly what a replay of the spent secret gets
+        // (410), not the 500 of a scope primary key it collided with after the winner had already inserted.
+        repeat(ROUNDS) { round ->
+            val tag = "race-acc-$round-${UUID.randomUUID()}"
+            val id = seedPendingTenant("$tag.example.com", "$tag@example.com", tag)
+            val auth = bearer(seedUser(email = "$tag@example.com"))
+            val answers = race({ ownerAccept(auth, tag) }, { ownerAccept(auth, tag) })
+            assertWinnerAndReplay(200, answers, "round $round")
+            assertEquals(1L, ownerMembershipCount(id), "round $round: one owner, got answers $answers")
+        }
+        // Control: a fresh invite accepted once still activates, so a site that refuses everything cannot pass.
+        val tag = "race-acc-control-${UUID.randomUUID()}"
+        seedPendingTenant("$tag.example.com", "$tag@example.com", tag)
+        assertEquals(200 to null, ownerAccept(bearer(seedUser(email = "$tag@example.com")), tag))
+    }
+
+    @Test
+    fun concurrentRegisterAcceptsSpendTheInviteOnce() {
+        // Two cold births for one invite: today the loser dies on the account email's unique index (500).
+        repeat(ROUNDS) { round ->
+            val tag = "race-reg-$round-${UUID.randomUUID()}"
+            val id = seedPendingTenant("$tag.example.com", "$tag@example.com", tag)
+            val answers = race({ register(tag) }, { register(tag) })
+            assertWinnerAndReplay(201, answers, "round $round")
+            assertEquals(1L, ownerMembershipCount(id), "round $round: one owner, got answers $answers")
+        }
+        val tag = "race-reg-control-${UUID.randomUUID()}"
+        seedPendingTenant("$tag.example.com", "$tag@example.com", tag)
+        assertEquals(201 to null, register(tag))
+    }
+
+    @Test
+    fun aRefusalAfterTheSpendLeavesTheInviteLive() {
+        // The spend runs before the checks that read what a concurrent accept writes, so a refusal after it must
+        // roll the spend back: a taken username is the holder's to correct, not a reason to burn their invite.
+        val tag = "refuse-after-spend-${UUID.randomUUID()}"
+        val tenantId = seedPendingTenant("$tag.example.com", "$tag@example.com", tag)
+        val auth = bearer(seedUser(email = "$tag@example.com"))
+        val holder = seedUser()
+        QuarkusTransaction.requiringNew().run {
+            TenantProfileEntity().apply {
+                id = UUID.randomUUID().toString(); userId = holder; this.tenantId = tenantId
+                username = "accowner"; createdAt = Instant.now()
+            }.persist()
+        }
+        assertEquals(409 to "username_taken", ownerAccept(auth, tag))
+        assertEquals(200 to null, ownerAccept(auth, tag, username = "another"))
+    }
+
     @Test
     fun unauthenticatedAcceptIs401() {
         given().contentType(ContentType.JSON).body("""{"bootstrapSecret":"x","username":"anyone","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
@@ -179,6 +233,23 @@ class TenantAcceptSliceTest {
             TenantProfileEntity.find("tenantId = ?1 and userId = ?2", tenantId, userId).firstResult()?.sealedName
         }
 
+    /** An existing-account OWNER accept, as (status, error code). */
+    private fun ownerAccept(auth: String, secret: String, username: String = "accowner"): Pair<Int, String?> =
+        given().header("Authorization", auth).contentType(ContentType.JSON)
+            .body("""{"bootstrapSecret":"$secret","username":"$username","grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}""")
+            .`when`().post("/api/tenants/accept").then().extract().let { it.statusCode() to it.path<String?>("code") }
+
+    /** A register-and-accept, each call with its own client-minted account id, as (status, error code). */
+    private fun register(secret: String): Pair<Int, String?> =
+        given().contentType(ContentType.JSON).body(registerBody(secret))
+            .`when`().post("/api/tenants/accept/register").then().extract().let { it.statusCode() to it.path<String?>("code") }
+
+    /** One racer won with [winner]; the other got exactly what a replay of the spent secret gets. */
+    private fun assertWinnerAndReplay(winner: Int, answers: List<Pair<Int, String?>>, round: String) {
+        assertEquals(1, answers.count { it.first == winner }, "$round: exactly one accept may win, got $answers")
+        assertEquals(1, answers.count { it == (410 to "invite_no_longer_valid") }, "$round: the loser answers as a replay, got $answers")
+    }
+
     private fun registerBody(secret: String) = """
         {"bootstrapSecret":"$secret","userId":"${UUID.randomUUID()}","username":"newowner",
          "account":{"suiteId":"v1",
@@ -189,4 +260,9 @@ class TenantAcceptSliceTest {
            "secretKeyProofPublicKey":"c2VjcmV0LWtleS1wcm9vZi1wdWJsaWMta2V5"},
          "grant":"AQ==",${TestAdmission.SIGNATURE_JSON},${TestAdmission.json()}}
     """.trimIndent()
+
+    private companion object {
+        /** One round of a race can pass by luck; each round spends a fresh secret. */
+        const val ROUNDS = 5
+    }
 }

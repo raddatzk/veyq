@@ -354,8 +354,13 @@ class TenantHandler(
      * `delivery != SENT` covers FAILED and FALLBACK_COPYLINK alike. The latter must be unreachable here — the
      * `canSend` gate above is what makes it so — but treating it as a failure means a hole in that gate loses an
      * invite loudly instead of minting a secret with no channel.
+     *
+     * Whether the revoke changed anything is not asked: this invite was never handed out, so nobody can have
+     * spent it in between.
      */
-    private fun revokeUndelivered(inviteId: String) = store.revokeInvite(inviteId)
+    private fun revokeUndelivered(inviteId: String) {
+        store.revokeInvite(inviteId)
+    }
 
     /** List a tenant's pending member invites — owner-gated (cr-0082). */
     @Transactional
@@ -404,7 +409,9 @@ class TenantHandler(
         store.findTenant(tenantId) ?: return RevokeMemberInviteOutcome.NotFound
         if (!store.isOwner(callerId, tenantId)) return RevokeMemberInviteOutcome.NotOwner
         val invite = store.findPendingMemberInvite(tenantId, inviteId) ?: return RevokeMemberInviteOutcome.InviteNotFound
-        store.revokeInvite(invite.id)
+        // The read above only tells an unknown invite from a live one. An accept that spent it since wins, and the
+        // owner hears what a spent invite always answers — never "revoked" for a person who has already joined.
+        if (!store.revokeInvite(invite.id)) return RevokeMemberInviteOutcome.InviteNotFound
         return RevokeMemberInviteOutcome.Done
     }
 

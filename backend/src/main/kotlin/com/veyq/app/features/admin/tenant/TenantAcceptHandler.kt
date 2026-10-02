@@ -14,6 +14,7 @@ import com.veyq.app.shared.membership.Admission
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.shared.tenant.TenantEntity
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.time.Instant
@@ -125,17 +126,21 @@ class TenantAcceptHandler(
 
         return if (invite.role == TenantInviteEntity.MEMBER) {
             if (!access.isTenantLive(tenant.id)) return AcceptOutcome.NoLongerValid
-            // A member joins an ACTIVE tenant grant-less; if already a member, just consume the invite (their
-            // tenant profile already exists — the username is only chosen on a fresh join).
+            // The rotation's lock first, so the admission copied below is one no in-flight rotation is replacing.
+            store.lockTenantScope(tenant.id)
+            if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
+            val admission = store.currentAdmission(invite)
+            // A member joins an ACTIVE tenant grant-less; if already a member, spending the invite is all there is
+            // (their tenant profile already exists — the username is only chosen on a fresh join).
             if (store.belongsToTenant(userId, tenant.id)) {
-                store.consumeInvite(invite.id)
+                // nothing to join
             } else if (profiles.find(userId, tenant.id) != null) {
                 // A member removed from the tenant and invited back: the profile outlived the removal, so they
                 // rejoin under the username they had rather than being handed a second one.
-                store.joinAsMember(tenant.id, userId, invite)
+                store.joinAsMember(tenant.id, userId, admission)
             } else {
-                if (profiles.usernameTaken(tenant.id, username)) return AcceptOutcome.UsernameTaken
-                store.joinAsMember(tenant.id, userId, invite)
+                if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
+                store.joinAsMember(tenant.id, userId, admission)
                 profiles.create(userId, tenant.id, username, sealedName)
             }
             // A member invite only ever travels by mail (ADR 0055 §2), so redeeming it proves the mailbox — keyed on
@@ -143,10 +148,12 @@ class TenantAcceptHandler(
             caller.confirmAddress(invite.ownerEmail)
             AcceptOutcome.Activated(tenant.id)
         } else {
-            if (tenant.status != TenantEntity.PENDING) return AcceptOutcome.AlreadyActive
             val b = birth ?: return AcceptOutcome.MissingGrant
-            if (profiles.usernameTaken(tenant.id, username)) return AcceptOutcome.UsernameTaken
-            store.activate(tenant.id, userId, b.grant, b.admission, invite.id)
+            // An OWNER accept has no scope to lock yet: the spend alone serializes it.
+            if (!store.consumeLiveInvite(invite.id)) return AcceptOutcome.NoLongerValid
+            if (tenant.status != TenantEntity.PENDING) return unspend(AcceptOutcome.AlreadyActive)
+            if (profiles.usernameTaken(tenant.id, username)) return unspend(AcceptOutcome.UsernameTaken)
+            store.activate(tenant.id, userId, b.grant, b.admission)
             // Owner cold-birth: the caller holds K_tenant here, so an optional sealed name may ride the accept (cr-0106).
             profiles.create(userId, tenant.id, username, sealedName)
             AcceptOutcome.Activated(tenant.id)
@@ -164,12 +171,16 @@ class TenantAcceptHandler(
         val tenant = store.findTenant(invite.tenantId) ?: return RegisterAcceptOutcome.NotFound
         if (!access.isTenantLive(tenant.id)) return RegisterAcceptOutcome.NoLongerValid
 
+        val member = invite.role == TenantInviteEntity.MEMBER
+        if (!member && birth == null) return RegisterAcceptOutcome.MissingGrant
+        // A MEMBER takes the rotation's lock first, as in [accept]; then the spend, before anything is born.
+        if (member) store.lockTenantScope(tenant.id)
+        if (!store.consumeLiveInvite(invite.id)) return RegisterAcceptOutcome.NoLongerValid
         // The account is born for the INVITED email (a MEMBER invite's email differs from the tenant owner's).
-        if (accounts.findByEmail(invite.ownerEmail) != null) return RegisterAcceptOutcome.EmailTaken
-        if (invite.role != TenantInviteEntity.MEMBER && birth == null) return RegisterAcceptOutcome.MissingGrant
-        if (profiles.usernameTaken(tenant.id, username)) return RegisterAcceptOutcome.UsernameTaken
+        if (accounts.findByEmail(invite.ownerEmail) != null) return unspend(RegisterAcceptOutcome.EmailTaken)
+        if (profiles.usernameTaken(tenant.id, username)) return unspend(RegisterAcceptOutcome.UsernameTaken)
         // The client-minted account id (ADR 0072): the optional sealed real name is bound to (tenant scope, it).
-        if (VeyqUser.findById(userId) != null) return RegisterAcceptOutcome.IdTaken
+        if (VeyqUser.findById(userId) != null) return unspend(RegisterAcceptOutcome.IdTaken)
 
         accounts.createAccount(
             userId = userId,
@@ -182,19 +193,31 @@ class TenantAcceptHandler(
             secretKeyProofPublicKey = account.secretKeyProofPublicKey,
             wraps = account.wraps,
         )
-        if (invite.role == TenantInviteEntity.MEMBER) {
-            store.joinAsMember(tenant.id, userId, invite)
+        if (member) {
+            store.joinAsMember(tenant.id, userId, store.currentAdmission(invite))
             // Mail-only by construction (ADR 0055 §2): the redeemed token is the mailbox proof (ADR 0074 Decision 2).
             // The OWNER branch is the copy-link and stamps nothing.
             VeyqUser.findById(userId)!!.confirmAddress(invite.ownerEmail)
         } else {
-            store.activate(tenant.id, userId, birth!!.grant, birth.admission, invite.id)
+            store.activate(tenant.id, userId, birth!!.grant, birth.admission)
         }
         // The per-tenant identity: the plaintext handle, plus the optional sealed real name when the invitee
         // already holds K_tenant at accept (owner cold-birth / grant-sealed accept — ADR 0023); a grant-less
         // member passes null and seals later via the profile op. The server stores the blob verbatim (blind).
         profiles.create(userId, tenant.id, username, sealedName)
         return RegisterAcceptOutcome.Activated(tenant.id, userId)
+    }
+
+    /**
+     * A refusal that comes **after** the spend. The spend runs before every check that reads what a concurrent
+     * accept of the same invite writes (the account, the profile, the tenant's status), so the loser of a race
+     * answers as a replay and never as that check (developer-styleguide §12). A refusal that follows the spend is
+     * the holder's to correct — a taken username, say — and must not cost them the invite, so the transaction is
+     * rolled back, spend included. A racer blocked on the spend then re-reads the invite as still live.
+     */
+    private fun <T> unspend(refusal: T): T {
+        QuarkusTransaction.setRollbackOnly()
+        return refusal
     }
 
     /** A live invite is ACTIVE and unexpired. A presented non-ACTIVE/expired invite is a replay → logged. */
