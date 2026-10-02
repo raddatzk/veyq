@@ -397,7 +397,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * no open gallery re-fetches a media that did not change.
      *
      * The compare-and-set is a bulk UPDATE that runs before this transaction loads the entity — the order
-     * `NodesStore.applyUpdate` explains: a managed copy loaded first would hold the pre-update values.
+     * `NodesStore.applyUpdate` explains: the entity read afterwards holds the row as it now is.
      */
     @Transactional
     fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedVersion: Long): SetMetaResult {

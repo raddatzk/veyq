@@ -147,10 +147,10 @@ class NodesStore {
      * (ADR 0077); on a miss **nothing** is written — a rename in the same request included — and the current blob
      * and version come back for the `409`.
      *
-     * The compare-and-set runs FIRST, as a bulk UPDATE, before this transaction loads the entity. Loading first and
-     * then running it would leave the managed copy holding the pre-update `wrappedMeta`/`metaVersion`, and the
-     * flush of a rename (every column, without `@DynamicUpdate`) would write those stale values straight back over
-     * the compare-and-set's result. Loaded after it, the entity reads the row as it now is.
+     * The compare-and-set runs FIRST, as a bulk UPDATE, before this transaction loads the entity. Loaded first, the
+     * managed copy would hold the pre-update `wrappedMeta`/`metaVersion`; today `@DynamicUpdate` keeps a rename's
+     * flush off those columns, but this order does not lean on that — loaded after it, the entity reads the row as
+     * it now is, so no flush can write a stale meta back over the compare-and-set's result.
      */
     @Transactional
     fun applyUpdate(
