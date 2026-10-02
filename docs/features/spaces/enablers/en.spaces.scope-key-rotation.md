@@ -10,8 +10,10 @@
   content — against a malicious operator as far as [ADR 0024](../../../decisions/0024-scope-key-rotation.md)
   § Guarantee states — and **without re-encrypting anything**.
 - **Serves (use-cases/enablers):** [uc.spaces.manage-group-members](../use-cases/uc.spaces.manage-group-members.md)
-  (member removal triggers a rotation) and [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
-  (a compromise re-keys **every** scope the holder is in). The two are different triggers on one mechanism, and
+  (member removal triggers a rotation), [uc.account.rotate-keys](../../account/use-cases/uc.account.rotate-keys.md)
+  (a compromise re-keys **every** scope the holder is in) and
+  [uc.spaces.complete-queued-rotation](../use-cases/uc.spaces.complete-queued-rotation.md) (an owner completes a
+  rotation either trigger had to queue). The two are different triggers on one mechanism, and
   the *scope-type policy* in [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) governs only
   the first: on **removal** a tenant is ACL-revoked and a personal scope has nobody to rotate away from, but on
   **compromise** both rotate — the tenant by ADR 0025 §2's explicit owner-triggered re-key, the personal scope
@@ -39,7 +41,10 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 
 1. A remaining owner's device **mints** a fresh `E_{n+1}` and posts the chain-link `symWrap(E_{n+1}, E_n)`, stating
    the epoch `n+1` it creates. `E_n` is the device's own grant, so the server commits only if that is the scope's
-   current epoch + 1 (E3).
+   current epoch + 1 (E3). The server does not take the client's word for that grant: an owner whose own grant is
+   behind the scope's epoch, or absent, is refused `409 stale_epoch` with nothing stored, and an owner who rotated
+   their account keys is refused `403 rotation_excluded` while a live rotation job of the scope carries their
+   exclusion ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md) Decision 4).
 2. It carries each remaining membership's **admission tag** forward — verified under `E_n`, re-tagged under
    `E_{n+1}` ([ADR 0020](../../../decisions/0020-grant-distribution-invite-wrap.md) move 6); for a tenant scope its
    open member invites too. A tag that fails is **dropped** on purpose and its member is not re-granted. The server
@@ -71,12 +76,18 @@ sequenceDiagram
 
 ## Alternate / exception flows
 
-- **E1 — no key-holder online:** rotation is *queued* as a `SCOPE_ROTATION` job on the operator-blind task queue
-  ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md), cr-0092) — the removed membership is
-  already deleted → layer-1 403 blocks their fetches meanwhile; the next online key-holder claims it, completes the
-  mint + re-grant on-device, and closes the job. One live job per scope coalesces multiple removals; idempotent +
-  first-online-wins. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
-  co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4). When the
+- **E1 — the remover cannot rotate:** rotation is *queued* as a `SCOPE_ROTATION` job on the operator-blind task
+  queue ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)) — the removed membership is
+  already deleted → layer-1 403 blocks their fetches meanwhile. The job is offered only to an **owner** of the
+  scope, the only member who may commit a rotation; the next online owner claims it, completes the mint + re-grant
+  on-device, and closes the job, first-online-wins. Events **join** a job only while it is unclaimed, so many
+  removals before anyone is online still cost one rotation; an event that arrives after a job was claimed gets a
+  job of its own, because the claimed job's worker may already have read the directory the event changed — one
+  rotation more, in a window of seconds. A job is `done` only once its lease holder committed an epoch while
+  holding its lease. This is the async fallback when the remover isn't a key-holder (e.g. a tenant owner cutting a
+  co-shared group, [uc.spaces.remove-tenant-member](../use-cases/uc.spaces.remove-tenant-member.md) A4); its
+  whole lifecycle, failure modes included, is
+  [uc.spaces.complete-queued-rotation](../use-cases/uc.spaces.complete-queued-rotation.md). When the
   remover *is* a key-holder (a group owner), the removal and its rotation are **one request**
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) Decision 4): the server deletes the membership and
   commits the epoch in one transaction, so a failed rotation leaves the member in place and no job is needed; the
@@ -104,7 +115,7 @@ sequenceDiagram
   no grant. The device re-opens its grant and rebuilds the rotation **once**, from a fresh key
   ([ADR 0024](../../../decisions/0024-scope-key-rotation.md) §4 says why the key must be fresh). After a race the
   re-opened grant is current, because the winner re-granted it. If it still lags, the rotation fails: the
-  synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it waits for a key-holder
+  synchronous remove reports it and the member stays, and a queued job is **declined** rather than failed, so it waits for an owner
   who is current instead of burning its attempts.
 
 ## Quality notes

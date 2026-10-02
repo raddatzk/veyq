@@ -1,0 +1,12 @@
+useCase: uc.spaces.complete-queued-rotation
+feature: spaces
+title: Complete a queued rotation of a space
+acceptanceCriteria:
+  - id: completed-by-an-owner
+    text: >
+      A queued SCOPE_ROTATION job is claimed by a remaining key-holder of the scope, who mints the next epoch,
+      re-grants the members the server lists after the event, and completes the job, which then no longer
+      claims.
+    coverage:
+      backend: { integration: [MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt] }
+      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }

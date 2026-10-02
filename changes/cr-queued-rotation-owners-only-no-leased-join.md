@@ -1,13 +1,23 @@
 ---
 id: cr-queued-rotation-owners-only-no-leased-join
 title: A queued scope rotation reaches only an owner, and never folds a later event into a job already being worked
-status: planned
-satisfies: [en.spaces.scope-key-rotation, uc.spaces.remove-tenant-member, uc.account.rotate-keys]
+status: in-progress
+satisfies: [en.spaces.scope-key-rotation, uc.spaces.remove-tenant-member, uc.account.rotate-keys, uc.spaces.complete-queued-rotation]
 adrs: ["0024", "0021", "0060", "0025", "0014"]
 invariants: [operator-blind E2EE, API-first]
 ---
 
 ## Open for the owner
+
+**Re-read at implementation (2026-10-02) against `cr-grant-verifies-under-its-signing-key`, landed at `a063d59`
+(V63).** A grant row now records its granter's identity key as of the write
+(`grep -n "granterIdentityPublicKey = granterKey" backend/src/main/kotlin/com/veyq/app/features/spaces/scope/ScopesStore.kt`),
+so a grant the rotator signed before rotating keeps verifying. **The granter lock this CR's § Inventory for #225
+measured is gone**, and with it every sentence that leaned on it: `failed` has no deterministic cause any more,
+the re-queue (D9, D10) is a real remedy rather than a truthful report, Q7's caveat (a co-owner the rotator granted
+fails their claim) no longer holds, and phase 0's *"a new exception names the granter lock as a known cause of
+`failed`"* is **not written** — uc.account.rotate-keys E9 (written by that CR) already states what remains. The
+inventory rows are kept as the record they were; nothing below is built on them.
 
 **Fourth round answered by the owner, 2026-10-01: every recommendation added since the third answer is taken too** (incl. the granter-lock questions Q1–Q3 and the rotation CR's Q8/Q9).
 
@@ -748,7 +758,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
 
 ## Phases
 
-- [ ] 0 decision (docs only, after the owner answers):
+- [x] 0 decision (docs only, after the owner answers):
       - **ADR 0021:** eligibility is holding the scope key, narrowed per capability tag, and `scope-rotation`
         narrows it to the scope's owners. Add this as a Decision amendment with a pointer here.
       - **[background-tasks](../docs/crosscutting/background-tasks.md):** the *"Eligibility = holding the scope

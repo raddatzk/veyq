@@ -107,6 +107,14 @@ sufficient: `rotateScope` is owner-gated, so a rotating plain member cannot driv
 could, an attacker holding the old identity would mint the new epoch, wrap it to their **own** new identity and
 exclude the legitimate owner — turning the exclusion mechanism into the takeover's final step. This is
 ADR 0028 Decision 5's *"the other members must rotate"* with its reason attached rather than asserted.
+For a rotator who **is** an owner the first reason does not apply, so the second is enforced where the commit
+lands, not only at the queue: `rotateScope` itself refuses the rotator while a live rotation job of the scope
+carries their exclusion (`403 rotation_excluded`), and refuses any caller whose own grant is behind the scope's
+epoch or absent (`409 stale_epoch`) — which, once the covering rotation has landed and skipped the rotator's
+changed key, is the rotator again. Neither refusal is about the client; a rotator running a client of their own
+meets both. The exclusion ends where it should: once a human there re-admits them, the rotator holds the current
+grant and neither clause applies. Its one bound: if the job carrying the exclusion **dead-letters**, the first
+clause lapses until the rotator, or another owner, queues the rotation again (Decision 6).
 
 **5. Every shared scope rotates, the tenant included — and this is not a new policy.**
 [ADR 0025](0025-forward-secrecy-policy-per-scope.md) §2 already reserves an **explicit, owner-triggered
@@ -121,7 +129,11 @@ is exactly that somebody.
 **outside every shared scope**: their new key is `changed` for every contact, the worker declines delivery to
 them, and the re-grant loop skips them while the rotation proceeds. That is not a defect to smooth over — it is
 the property that stops an attacker rotating their way back in, and the honest surface is a per-scope status,
-not a spinner.
+not a spinner. That status is the **server's**, derived from the job, decline and membership rows it already holds
+and re-readable at any time — `waiting`, `stalled` (no owner left who may complete it), `secured`, or `failed`
+(the job dead-lettered, and the old identity still holds the scope's current epoch). A `failed` one can be queued
+again, by the rotator (still excluded) or by any owner of the scope, whose own scope row shows them the `stalled`
+and `failed` states.
 
 **7. Accepting a changed key must clear that worker's decline.** A worker that declined `identity_changed` is
 excluded from the job **permanently** — no code deletes a decline row — so ADR 0028 (2)'s promise that on accept

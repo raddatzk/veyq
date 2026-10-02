@@ -37,7 +37,13 @@ result**.
    worker unseals the body to act.
 4. **Capability matching at pull time.** A worker's pull carries its **capability tags**; the server returns
    claimable jobs where `scope ∈ my memberships ∧ tag ∈ my tags`. No standing presence/advertisement table (added
-   only with the later push channel).
+   only with the later push channel). **Eligibility is per tag.** Holding the scope key is the floor; a tag whose
+   work only some key-holders may complete narrows it, because a job offered to a worker that can never complete it
+   spends an attempt on every claim and dead-letters before the right worker comes online. `scope-rotation` narrows
+   it to the scope's **owners**: only an owner may commit a rotation
+   ([ADR 0014](0014-group-scopes-and-governance.md) §4), and a non-owner could not build a complete one anyway,
+   since a pending consent proposal and a tenant's open member invites are hidden from it while the commit must
+   carry every open admission. One claim that names several tags still applies each tag's own eligible set.
 5. **Tags = a fixed, versioned, public registry** in `contracts/` (cross-surface, like the crypto vectors). This
    keeps the wire/DB free of plaintext semantic labels (a bare dump sees `0x9f3a`, not `face-recognition`). It
    does **not** hide the type from a *correlating* operator (see consequences) — keyed-per-scope tags
@@ -60,8 +66,12 @@ result**.
    **`sealedResult`** field (ciphertext, opaque). No generic plaintext result store.
 8. **Origination.** The server may originate only **structural, non-sensitive** jobs it already fully understands
    (a grant-less **or stale-epoch** membership → a `grant-delivery` job — the stale-epoch case is scope-key
-   rotation re-granting existing members, [ADR 0024](0024-scope-key-rotation.md)). **Content-processing jobs are
-   originated by a client/agent** and posted ready, so the server never *picks* a content-semantic task type.
+   rotation re-granting existing members, [ADR 0024](0024-scope-key-rotation.md)), and an **event** it witnessed
+   but cannot complete itself (a co-shared member cut, an account rotation → a `scope-rotation` job).
+   **Content-processing jobs are originated by a client/agent** and posted ready, so the server never *picks* a
+   content-semantic task type. The converse holds too: a tag the registry names as server-originated
+   (`server-structural`, `server-event`) is refused at a client's enqueue, so no client fabricates a delivery
+   target, or a rotation that no event asked for and that would carry none of the event's exclusions.
 9. **First consumer = member-add grant delivery** ([ADR 0020](0020-grant-distribution-invite-wrap.md)): a trivial,
    blind body, a universal tag, a short lease like every job (§6; its completion is idempotent, first-online-wins) —
    it validates the core loop
