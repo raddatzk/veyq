@@ -127,10 +127,13 @@ class ScopesStore(
             ScopeEntity.count("id in ?1 and kind = ?2", scopeIds, ScopeEntity.PERSONAL) > 0
     }
 
+    /** Does any scope, of any kind and tenant, already hold the client-minted [scopeId]? */
+    fun scopeIdTaken(scopeId: String): Boolean = ScopeEntity.findById(scopeId) != null
+
     /** Birth a PERSONAL scope for the caller in this tenant + the self-membership (grant = opaque ciphertext). */
     @Transactional
     fun createPersonal(scopeId: String, userId: String, tenantId: String, grant: SignedGrant): Boolean {
-        if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
+        if (scopeIdTaken(scopeId)) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
         ScopeEntity().apply {
             id = scopeId
@@ -160,7 +163,7 @@ class ScopesStore(
      *  rotation has a tag to carry forward. */
     @Transactional
     fun createGroup(scopeId: String, userId: String, tenantId: String, encryptedName: String, grant: SignedGrant, admission: Admission): Boolean {
-        if (ScopeEntity.findById(scopeId) != null) return false // the client-minted id is taken → nothing written
+        if (scopeIdTaken(scopeId)) return false // the client-minted id is taken → nothing written
         val now = Instant.now()
         ScopeEntity().apply {
             id = scopeId

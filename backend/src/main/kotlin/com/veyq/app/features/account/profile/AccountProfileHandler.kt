@@ -6,8 +6,8 @@ import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.identity.TenantProfileStore
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
-import jakarta.transaction.Transactional
 
 /** Result of a profile read/update (cr-0083). `requireGroupAddConsent` is the account-global consent preference
  *  (cr-0094) surfaced here — the caller's own settings surface. */
@@ -34,11 +34,25 @@ class AccountProfileHandler(private val profiles: TenantProfileStore) {
         return ProfileOutcome.Found(profile.username, profile.sealedName, consent)
     }
 
-    @Transactional
     fun update(
         userId: String, tenantId: String?, username: String?, sealedName: String?, requireGroupAddConsent: Boolean?,
     ): ProfileOutcome {
         tenantId ?: return ProfileOutcome.NoTenant
+        // `ux_tp_tenant_username` lets one of two concurrent claims to a handle through; the loser answers as its
+        // replay does — the handle is someone else's now.
+        return createOrConflict(conflict = { if (takenByAnother(userId, tenantId, username)) ProfileOutcome.UsernameTaken else null }) {
+            applyUpdate(userId, tenantId, username, sealedName, requireGroupAddConsent)
+        }
+    }
+
+    private fun takenByAnother(userId: String, tenantId: String, username: String?): Boolean {
+        val norm = username?.trim()?.lowercase() ?: return false
+        return profiles.find(userId, tenantId)?.username != norm && profiles.usernameTaken(tenantId, norm)
+    }
+
+    private fun applyUpdate(
+        userId: String, tenantId: String, username: String?, sealedName: String?, requireGroupAddConsent: Boolean?,
+    ): ProfileOutcome {
         val existing = profiles.find(userId, tenantId) ?: return ProfileOutcome.NoTenant
         // A username change to a handle another member already holds is rejected; keeping (or re-setting) your
         // own is fine.

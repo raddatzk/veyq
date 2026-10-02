@@ -6,6 +6,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.persistence.createOrConflict
 import jakarta.enterprise.context.ApplicationScoped
 
 sealed interface CreateNodeOutcome {
@@ -89,10 +90,20 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
         if (store.slugTaken(slot, slugToken)) return CreateNodeOutcome.SlugTaken
         // The client-minted id (ADR 0072): the name, K_mem wrap and meta are sealed bound to it, so it is stored
         // verbatim or not at all.
-        if (!store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)) {
-            return CreateNodeOutcome.IdTaken
+        // A node is unique twice — its id, and its slug under the parent (`ux_node_parent_slug`) — so a concurrent
+        // create's loser re-asks both, in the order above: what its replay answers.
+        return createOrConflict(
+            conflict = {
+                when {
+                    store.slugTaken(slot, slugToken) -> CreateNodeOutcome.SlugTaken
+                    store.idTaken(nodeId) -> CreateNodeOutcome.IdTaken
+                    else -> null
+                }
+            },
+        ) {
+            val created = store.create(nodeId, scopeId, slot, kind, encryptedName, slugToken, orderIndex, epoch, wrappedContentKey, wrappedMeta)
+            if (created) CreateNodeOutcome.Created(nodeId) else CreateNodeOutcome.IdTaken
         }
-        return CreateNodeOutcome.Created(nodeId)
     }
 
     fun list(userId: String, scopeId: String): ListNodesOutcome {
