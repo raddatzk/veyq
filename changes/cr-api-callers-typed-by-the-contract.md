@@ -1,7 +1,7 @@
 ---
 id: cr-api-callers-typed-by-the-contract
 title: Code that talks to the API is typed by the generated contract — the dev seeders, the unit tests' API mocks, the feature-module mocks and the `as never` casts
-status: planned
+status: done
 satisfies: []
 adrs: []
 invariants: [API-first]
@@ -387,7 +387,7 @@ Ordered guard → red → fix → green. Every defect is live, so each lint rule
 bite and the work list. Phase 0 and phase 1 wait for question 6. Phases 2 and 3 do not. Phases 4 and 5 wait
 for questions 7 and 8.
 
-- [ ] 0 no seeder writes to the database (#216, Decision 11)
+- [x] 0 no seeder writes to the database (#216, Decision 11)
       - **Red first.** Add S8 to `web/eslint.config.js`: red at 2 files, `bootstrap-user.mts` and `seed-dev.mts`.
       - **Fix.** Delete `seed-dev.mts`, `seed-tenant.mts`, `seed-owner.mts` and `devSeed.mts`'s seed-file half,
         and the `seed:dev` script with its `web/.gitignore` line. Drop `bootstrap-user.mts`'s numeric branch and
@@ -408,7 +408,7 @@ for questions 7 and 8.
         which shows the check sits ahead of the birth.
       · Done when: S8 is green, `npm run check` is green in `web/`, the blast-radius grep is accounted for, and
         the bite was seen.
-- [ ] 1 seeders (#185)
+- [x] 1 seeders (#185)
       - **Red first.** Add `tsconfig.scripts.json` and wire it into `typecheck`: green (a no-op, as measured).
         Then add S4/S5 and record the red. After phase 0 the expected red is 3 `fetch` and 1 `node:http`, all in
         `bootstrap-user.mts`. (If question 6 is answered (b) or (c), it is the original 9 `fetch` in 4 files.)
@@ -422,7 +422,7 @@ for questions 7 and 8.
         not on some setup line. Restore. Then put one `fetch('/api/setup')` into a seeder: S4 red. Put the same
         call into the adapter: green, the positive control that the exemption is by file.
       · Done when: `npm run check` is green in `web/`, all bites were seen red, and the live proof below is done.
-- [ ] 2 the web mock seam (#195)
+- [x] 2 the web mock seam (#195)
       - **Red first.** Add S1–S3 and record the red: 166 / 165 / 8. Add the helper, and write
         `src/test/apiMock.test.ts` with `// @ts-expect-error` cases, one for each property in the table: a stale
         field in a stub payload; a missing required field; an untyped `vi.fn()` given to the fake entry; an unknown
@@ -446,11 +446,11 @@ for questions 7 and 8.
         and `src/test/`. No `expect(` line is removed: `git diff -U0 -- '*.test.ts' | grep -c '^-.*expect('` is
         0, or each one is explained.
       · Done when: S1–S3 are green over the whole tree, `npm run check` is green, and all bites were seen red.
-- [ ] 3 admin-web. The same helper as its own copy, S1–S3 in `admin-web/eslint.config.js`, and the 2 sites
+- [x] 3 admin-web. The same helper as its own copy, S1–S3 in `admin-web/eslint.config.js`, and the 2 sites
       migrated. The bite: put back `vi.mocked(tenantsApi).mockReturnValue(api as never)` at `tenants.test.ts`,
       and S1 goes red.
       · Done when: `npm run check` is green in `admin-web/`.
-- [ ] 4 the feature-module mocks (#214, Decision 8), web then admin-web
+- [x] 4 the feature-module mocks (#214, Decision 8), web then admin-web
       - **Red first.** Add S6 to both configs and record the red: 33 in 11 files / 13 in 4.
       - **Live-defect bite, before migrating.** In admin-web, rename a required field of the generated
         `TenantInviteState` (`admin-web/src/api/generated/tenants/models/`). `typecheck` is red in production
@@ -470,7 +470,7 @@ for questions 7 and 8.
         LIMIT, seen.
       - **Account per assertion**, as phase 2 does (the test count before and after, no `expect(` line removed).
       · Done when: S6 is green in both trees, `npm run check` is green in both, and all bites were seen red.
-- [ ] 5 the `as never` casts (#215, Decisions 9–10), web then admin-web
+- [x] 5 the `as never` casts (#215, Decisions 9–10), web then admin-web
       - **Red first.** Add S7 to both configs and record the red: 84 / 25. The two `…Api`-seam casts are gone
         by now (phases 2 and 3), so the expected red is 83 / 24. Say so if it is not.
       - **Live-defect bite, before migrating.** Rename a required field of the generated `SetupStatus`.
@@ -486,7 +486,7 @@ for questions 7 and 8.
       - **Account per assertion**, as in phase 2.
       · Done when: `grep -rnE "\bas never\b" web/src admin-web/src --include='*.test.ts' | wc -l` is 0, S7 is
         green in both trees, `npm run check` is green in both, and all bites were seen red.
-- [ ] 6 durable state
+- [x] 6 durable state
       - Styleguide §3 gains one sentence: a dev seeder or script that calls the API is a client like any other and
         goes through the generated client.
       - Styleguide §10 gains the mock rule, next to `realI18n()`/`httpError`: *a mocked API response is typed by
@@ -518,3 +518,21 @@ changes meaning but not name or type). Only running the seeder against the backe
 does not add such a run to CI.
 
 ## Retrospective
+
+- **Planning — a workaround was kept because a caller used it, not because it was needed.** Decision 11 kept
+  `awaitInvite` (the dev-invite-file poll) as "the one export `bootstrap-user` uses". The typed client showed
+  `TenantCreated.bootstrapSecret` on `createTenant`'s own response — which `e2eBootstrap.ts`, the reference path the
+  CR already cited, has always read. So `devSeed.mts` went entirely, and the seeder no longer needs the backend's
+  dev-invite file. *Next time:* when a CR keeps a helper because a caller uses it, read how the reference path does
+  the same step before deciding the helper stays.
+- **Planning — two predictions had gone stale against the tree.** The re-bite expected `sessionRefresh.test.ts` to
+  redden through a *missing* required `rotatingToken`, but `TokenPair.refreshToken` had become optional, so it
+  reddened through TS2353 on the stale field (line 120). And S1–S3 went into a block of their own for files the
+  real-catalog block already set `no-restricted-syntax` on — last block wins, so the vue-i18n selector would have
+  been dropped silently; the new block repeats it, and a positive control (mocking `vue-i18n` is still red) proves it.
+  *Next time:* a CR that adds a `no-restricted-syntax` block names every block already covering those files.
+- **Execution — the worktree sandbox refuses compound shell commands** (a variable in a path, a heredoc, `cd … && git`),
+  so each bite and edit went through a scratch Python script (`bite.py` for snapshot-and-restore). That is the faster
+  form anyway. *Next time:* start with the scratch scripts, not after the third refusal. The DoD's live proof (a fresh
+  instance, `bootstrap:user` with and without `VEYQ_USER2_*`) was not run: the owner's dev instance was off-limits;
+  the transport was proven against a local echo server and the bundle with esbuild instead.

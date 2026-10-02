@@ -72,6 +72,10 @@
   holds it). A write that more than one account makes **and** that re-sends fields its writer did not edit is
   `version`; the client re-applies only its own change on the conflict body, and never seals a blob it could not
   open.
+- **A dev seeder or script that calls the API is a client like any other**: it goes through the generated client
+  and is typechecked with the app (`web/scripts/`, `tsconfig.scripts.json`), and it never reaches past the API into
+  the database. When `bootstrap:user` hand-wrote its bodies, login verify gained `nonce` and the seeder failed its
+  own login with 400 at its next run instead of at `typecheck`.
 
 ## 4. Input validation & sanitization
 
@@ -174,9 +178,21 @@ restating the code. Avoid `// loop over the items` and comments that drift from 
   only for data no other test needs. Measured cost of the copies it replaces: 50 `seedUser`s, so a new
   `NOT NULL` column on `veyq_user` touched 60 files. In `web/` a test mounts with the **real** i18n catalog
   (`realI18n()` from `src/test/i18n.ts`), where a key the catalog lacks fails the test, and fakes an HTTP failure
-  with the one shared `httpError` (`src/test/httpError.ts`); a lint rule keeps stub catalogs out. Hand-written
-  stub catalogs kept 13 keys the app no longer has passing green, and ten local `httpError`s came in four shapes,
-  two of which cannot carry an error code.
+  with the one shared `httpError` (`src/test/httpError.ts`; admin-web has its own copy), and stands in for the
+  `sessionStorage` node lacks with `memoryStorage()` (`src/test/memoryStorage.ts`); a lint rule keeps stub
+  catalogs out. Hand-written stub catalogs kept 13 keys the app no longer has passing green, and ten local
+  `httpError`s came in four shapes, two of which cannot carry an error code.
+- **A mocked API response is typed by the generated model at the seam.** A generated `…Api` is mocked only through
+  `stubApi()`/`fakeApi()` (`src/test/apiMock.ts`, one copy per package), which type each payload by its model and
+  refuse an untyped `vi.fn()`; a `features/` module mock exports bare `vi.fn()`s and sets behaviour through
+  `vi.mocked(fn)`, which is typed by the real function (a `use*` composable keeps its hand-written stub); and a test
+  never casts `as never` — a payload comes from a builder annotated with its model (`src/test/models.ts` for those
+  several files serve), and a cast that must stay names its target, `as unknown as <T>`. The lint block
+  `veyq/api-mocks-typed-by-the-contract` (admin-web: `veyq-admin/…`) keeps the three forms out. What bought it:
+  179 `as unknown as ReturnType<typeof xApi>` casts let `ShareIdentity.sealedDisplayName` be removed from the contract
+  while the fixture serving it stayed green; typed, the feature mocks named fields that did not exist (admin-web's
+  `{ state: 'ACTIVE' }` on `TenantInviteState`), and of 114 `as never` most hid nothing — the ones that did hid
+  fixtures that were not the model.
 - The **coverage validators** (Python; added with the first feature slice, per start-light) check the
   trust chain: every behavior maps to its use-case coverage.
 
