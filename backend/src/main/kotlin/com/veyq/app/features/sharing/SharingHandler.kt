@@ -30,6 +30,7 @@ import com.veyq.app.shared.membership.AccessMode.READ
 import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
+import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
 import java.security.MessageDigest
@@ -267,12 +268,15 @@ class SharingHandler(
         if (sealedShareKeyEpoch != null && sealedShareKeyEpoch != scopes.currentEpoch(node.scopeId)) {
             return CreateShareOutcome.StaleEpoch
         }
-        // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it.
-        val created = store.create(
-            shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
-            sealedShareKeyEpoch, sealedShareName,
-            passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
-        )
+        // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it. A
+        // double-submitted create's loser answers as its replay does.
+        val created = createOrConflict(conflict = { if (store.idTaken(shareId)) SharingStore.CreateResult.ID_TAKEN else null }) {
+            store.create(
+                shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
+                sealedShareKeyEpoch, sealedShareName,
+                passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
+            )
+        }
         return when (created) {
             SharingStore.CreateResult.CREATED -> CreateShareOutcome.Created(shareId)
             SharingStore.CreateResult.ID_TAKEN -> CreateShareOutcome.IdTaken
@@ -520,9 +524,10 @@ class SharingHandler(
         // `@RateLimit(key = SHARE)`), after the authorization gates so an unauthorized caller spends nothing.
         if (!rateLimiter.allowIdentity(shareId)) return CreateIdentityOutcome.RateLimited
         // The client-minted identity id (ADR 0072): the sealed display name is bound to it.
-        val token = store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
-            ?: return CreateIdentityOutcome.IdTaken
-        return CreateIdentityOutcome.Created(identityId, token)
+        return createOrConflict(conflict = { if (store.identityIdTaken(identityId)) CreateIdentityOutcome.IdTaken else null }) {
+            store.createIdentity(identityId, shareId, sealedDisplayName, wrappedIdentityKey)
+                ?.let { CreateIdentityOutcome.Created(identityId, it) } ?: CreateIdentityOutcome.IdTaken
+        }
     }
 
     /** Start a contributor upload — gated on the share (contributable + enabled) + a valid token, then presign. */

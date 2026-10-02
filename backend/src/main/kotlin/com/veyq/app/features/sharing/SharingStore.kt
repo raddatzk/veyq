@@ -120,7 +120,7 @@ class SharingStore(
 
     /** A share id is never minted twice (ADR 0029 §7): a row holds it — live or a tombstone — or the scope purge
      *  retired it when it erased the row. */
-    private fun idTaken(id: String): Boolean = ShareEntity.findById(id) != null || ShareRetiredIdEntity.findById(id) != null
+    fun idTaken(id: String): Boolean = ShareEntity.findById(id) != null || ShareRetiredIdEntity.findById(id) != null
 
     enum class ReissueResult { CREATED, ID_TAKEN, NOT_FOUND }
 
@@ -338,12 +338,15 @@ class SharingStore(
 
     // --- contributor identities (cr-0101) --------------------------------------
 
+    /** Does any guest identity already hold the client-minted [id]? */
+    fun identityIdTaken(id: String): Boolean = ShareIdentityEntity.findById(id) != null
+
     /** Create an anonymous share identity under the client-minted [id]: store the sealed name (+ an UPLOADER
      *  identity's wrapped key) + the token hash, return the token — or null, nothing written, if any identity
      *  already holds [id]. */
     @Transactional
     fun createIdentity(id: String, shareId: String, sealedDisplayName: String, wrappedIdentityKey: String?): String? {
-        if (ShareIdentityEntity.findById(id) != null) return null
+        if (identityIdTaken(id)) return null
         val token = Tokens.random() // the unguessable contributor capability token handed to the client
         ShareIdentityEntity().apply {
             this.id = id
