@@ -68,6 +68,25 @@ class MediaCreateRaceSliceTest {
         }
     }
 
+    /**
+     * Two commits of one cover upload: the session is spent first, as `attach` spends its own, so the loser answers
+     * what its replay — the same commit again, after both returned — answers: the upload is gone, a `404`. One
+     * Memory across the rounds, so from the second round on each commit also replaces the previous round's cover.
+     */
+    @Test
+    fun concurrentCoverCommitsOfOneUploadAttachItOnce() {
+        val (userId, scopeId) = seedMemberScope()
+        val memory = seedNode(scopeId, NodeEntity.MEMORY, wrappedContentKey = CONTENT_KEY)
+        repeat(RACE_ROUNDS) { round ->
+            val uploadId = startCover(userId, scopeId, memory)
+            val answers = race({ commitCover(userId, scopeId, memory, uploadId) }, { commitCover(userId, scopeId, memory, uploadId) })
+            val replay = commitCover(userId, scopeId, memory, uploadId)
+            assertEquals(404 to "node_not_found", replay, "round $round: the replay's answer")
+            assertWinnerAndLoser(200, replay, answers, "round $round")
+        }
+        assertEquals(200 to null, commitCover(userId, scopeId, memory, startCover(userId, scopeId, memory)))
+    }
+
     /** Two creates of one sub-bucket id: the loser answers `id_taken`, as a replay does. */
     @Test
     fun concurrentSubBucketCreatesOfOneIdCreateItOnce() {
@@ -145,6 +164,16 @@ class MediaCreateRaceSliceTest {
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"items":[$item]}""")
             .`when`().post("/api/scopes/$scopeId/blob-uploads-batch").then().extract()
             .let { r -> r.statusCode() to (runCatching { r.path<List<String?>>("results.error") }.getOrNull() ?: emptyList()) }
+
+    private fun startCover(userId: String, scopeId: String, nodeId: String): String =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body("""{"items":[${TestBlob.SMALL.declare("d3JhcA==", ownerId = nodeId, role = "COVER")}]}""")
+            .`when`().post("/api/scopes/$scopeId/blob-uploads-batch")
+            .then().statusCode(200).extract().path("results[0].uploadId")
+
+    private fun commitCover(userId: String, scopeId: String, nodeId: String, uploadId: String): Pair<Int, String?> =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("""{"uploadId":"$uploadId"}""")
+            .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/cover-blob").then().extract().answer()
 
     private fun createBucket(userId: String, scopeId: String, nodeId: String, bucketId: String): Pair<Int, String?> =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)

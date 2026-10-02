@@ -399,10 +399,16 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
      * Commit a verified session as the node's **standalone cover** blob (cr-0073): persist one `veyq_blob`
      * (NO `veyq_media` row, so it never lists in the gallery), point the node's `cover_blob_id` at it, and
      * **atomically reclaim** any prior cover blob (its row is deleted and its store objects go on the reclaim
-     * list, both in this transaction). Consumes the upload session. Returns the new ref.
+     * list, both in this transaction). Consumes the upload session. Returns the new ref, or null — nothing written —
+     * when the session was already spent.
+     *
+     * The session is single-use, so it is **spent first**, as [attach] spends its own (developer-styleguide §12): two
+     * commits of one upload both found it live, and the loser's delete waits for the winner's and then hits no row.
+     * It answers what a replay answers — the upload is gone — instead of dying at the blob's primary key with a 500.
      */
     @Transactional
-    fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): BlobRefData {
+    fun commitCover(nodeId: String, session: UploadSessionEntity, manifest: List<Long>?): BlobRefData? {
+        if (UploadSessionEntity.delete("id = ?1", session.id) != 1L) return null
         // No `deletedAt` predicate: the handler already resolved this node through the filtering [findNode]
         // gate before the verify step; this is the in-tx reload of that same row.
         val node = NodeEntity.findById(nodeId)!! // resolved by the handler before verify; reloaded in-tx
@@ -411,7 +417,6 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
         node.coverBlobId = blobId
         node.coverByteSize = session.byteSize
         node.persist()
-        UploadSessionEntity.deleteById(session.id)
         return BlobRefData(blobId, session.chunkCount, session.byteSize, session.wrappedBlobKey, manifest)
     }
 

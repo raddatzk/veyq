@@ -623,7 +623,8 @@ class MediaHandler(
                 return CoverCommitOutcome.Budget
             }
         }
-        return CoverCommitOutcome.Ok(store.commitCover(node.id, session, manifest))
+        // A concurrent commit of this upload spent the session first: answer as a replay of it does (the upload is gone).
+        return store.commitCover(node.id, session, manifest)?.let(CoverCommitOutcome::Ok) ?: CoverCommitOutcome.NoTarget
     }
 
     /** Detach + reclaim the node's standalone cover blob (cr-0073). Idempotent — a node with no cover → Done. */

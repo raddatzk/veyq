@@ -32,6 +32,7 @@ import com.veyq.app.shared.membership.ScopeAccess
 import com.veyq.app.shared.membership.refusal
 import com.veyq.app.shared.persistence.createOrConflict
 import com.veyq.app.shared.scope.ScopeEntity
+import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 import jakarta.transaction.Transactional
 import java.security.MessageDigest
@@ -274,12 +275,24 @@ class SharingHandler(
         }
         // The client-minted share id (ADR 0072): the recovery wrap and every contributor name are bound to it. A
         // double-submitted create's loser answers as its replay does.
-        val created = createOrConflict(conflict = { if (store.idTaken(shareId)) SharingStore.CreateResult.ID_TAKEN else null }) {
+        val replay = { if (store.idTaken(shareId)) SharingStore.CreateResult.ID_TAKEN else null }
+        val stored = createOrConflict(conflict = replay) {
             store.create(
                 shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
                 sealedShareKeyEpoch, sealedShareName,
                 passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
             )
+        }
+        // A double-submitted Memory's FIRST UPLOADER link loses at the guarded drop-key update, not at the commit: both
+        // carry the private key, and the loser's update waits for the winner's and finds the key set. Its replay meets
+        // the id check first and answers `id_taken` — `drop_key_exists` would send the client to re-seal and retry the
+        // id the winner holds. So that refusal re-asks the replay question, in a fresh transaction: under MariaDB's
+        // REPEATABLE READ the loser's own still reads the snapshot its first id check took, before the winner's share.
+        // Two DIFFERENT links racing for the first drop key keep `drop_key_exists`: their ids are free.
+        val created = if (stored == SharingStore.CreateResult.DROP_KEY_EXISTS) {
+            QuarkusTransaction.requiringNew().call(replay) ?: stored
+        } else {
+            stored
         }
         return when (created) {
             SharingStore.CreateResult.CREATED -> CreateShareOutcome.Created(shareId)
