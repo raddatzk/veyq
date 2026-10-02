@@ -334,9 +334,8 @@ async function submitPassword() {
   if (!pwInput.value || pwBusy.value) return
   pwBusy.value = true
   pwError.value = false
-  await new Promise((r) => setTimeout(r, 10)) // let the busy state paint before the (blocking) Argon2id
   try {
-    pwToken.value = derivePasswordToken(pwInput.value, pwSalt.value)
+    pwToken.value = await derivePasswordToken(pwInput.value, pwSalt.value)
     status.value = 'loading'
     await load()
   } finally {

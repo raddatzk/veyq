@@ -2,6 +2,7 @@
 // (there are no components here), same two rules that matter — the unused-import guardrail and no-explicit-any
 // on production source, relaxed for test fixtures.
 import tseslint from 'typescript-eslint'
+import { argonThroughTheWorker } from './eslint-argon-door.js'
 
 export default tseslint.config(
   { name: 'veyq-crypto/ignores', ignores: ['node_modules/**', 'reports/**', '.stryker-tmp/**'] },
@@ -22,6 +23,7 @@ export default tseslint.config(
       ],
     },
   },
+  argonThroughTheWorker,
   {
     name: 'veyq-crypto/tests',
     files: ['**/*.test.ts', 'vitest.config.ts', 'eslint.config.js', 'stryker.config.mjs'],

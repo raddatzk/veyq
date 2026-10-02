@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 
-import { deriveAuthKeypairAsync, unlockKekAsync } from './argonWorker'
+import { deriveAuthKeypairAsync, sharesPwTokenAsync, unlockKekAsync } from './argonWorker'
 import * as v1 from './v1'
 import { TEST_ARGON } from './testArgon'
 
@@ -36,6 +36,12 @@ describe('argonWorker sync fallback', () => {
     const salt = new Uint8Array(16).fill(7)
     const got = await unlockKekAsync(secretKey, 'pw', salt, TEST_ARGON)
     expect(got).toEqual(v1.kekPasswordSecret(secretKey, 'pw', salt, TEST_ARGON))
+  })
+
+  it('sharesPwTokenAsync matches v1.sharesPwToken', async () => {
+    const salt = new Uint8Array(16).fill(3)
+    const got = await sharesPwTokenAsync('hunter2', salt, TEST_ARGON)
+    expect(got).toEqual(v1.sharesPwToken('hunter2', salt, TEST_ARGON))
   })
 })
 

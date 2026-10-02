@@ -7,6 +7,7 @@
 import * as v1 from './v1'
 import type { Identity } from './v1'
 import { b64std } from './base64'
+import { deriveAuthKeypairAsync, recoveryKekAsync, unlockKekAsync } from './argonWorker'
 
 const ARGON = v1.ARGON
 
@@ -43,12 +44,12 @@ export type BuiltAccount = {
  * a Secret Key must be 32 bytes of fresh entropy per account, and reusing one links the accounts' PASSWORD
  * KEKs to a single kit — if it leaks, it opens all of them. Rejected unless it is exactly 32 bytes.
  */
-export function buildAccount(
+export async function buildAccount(
   email: string,
   password: string,
   instanceSalt: Uint8Array,
   opts?: { secretKey?: Uint8Array },
-): BuiltAccount {
+): Promise<BuiltAccount> {
   if (opts?.secretKey && opts.secretKey.length !== 32) throw new Error('buildAccount: secretKey must be 32 bytes')
   const id = v1.generateIdentity()
   const masterKey = v1.randomBytes(32)
@@ -56,12 +57,15 @@ export function buildAccount(
 
   const secretKey = opts?.secretKey ?? v1.randomBytes(32)
   const salt = v1.randomBytes(16)
-  const masterWrap = v1.seal({ purpose: 'master-key' }, v1.kekPasswordSecret(secretKey, password, salt, ARGON), masterKey)
+  // The three Argon2id derivations go through the worker door, one after another on the one worker (a pool to run
+  // them side by side is not worth it for a once-per-account birth). Where no Worker exists (node: the seed scripts,
+  // vitest) the door derives on the calling thread, byte-identically.
+  const masterWrap = v1.seal({ purpose: 'master-key' }, await unlockKekAsync(secretKey, password, salt, ARGON), masterKey)
 
   const recSalt = v1.randomBytes(16)
-  const recWrap = v1.seal({ purpose: 'master-key' }, v1.kekRecovery(secretKey, recSalt, ARGON), masterKey)
+  const recWrap = v1.seal({ purpose: 'master-key' }, await recoveryKekAsync(secretKey, recSalt, ARGON), masterKey)
 
-  const auth = v1.deriveAuthKeypair(password, v1.deriveAuthSalt(instanceSalt, email), ARGON)
+  const auth = await deriveAuthKeypairAsync(password, v1.deriveAuthSalt(instanceSalt, email), ARGON)
 
   return {
     identity: id,

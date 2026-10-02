@@ -122,7 +122,7 @@ async function prepareRegistration() {
   try {
     if (!(await breachCheckPasses())) return
     const instanceSalt = fromB64std((await setupApi().getSetupStatus()).instanceSalt)
-    built = buildAccount(ownerEmail.value, password.value, instanceSalt)
+    built = await buildAccount(ownerEmail.value, password.value, instanceSalt)
     secretKeyDisplay.value = built.emergencyKit.secretKey
     phase.value = 'kit'
   } catch {

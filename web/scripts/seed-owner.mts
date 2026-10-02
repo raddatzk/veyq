@@ -24,7 +24,7 @@ if (!status.setupRequired) {
 }
 const instanceSalt = fromB64std(status.instanceSalt)
 
-const built = buildAccount(email, password, instanceSalt)
+const built = await buildAccount(email, password, instanceSalt)
 const { material, emergencyKit } = built
 const body = {
   email,

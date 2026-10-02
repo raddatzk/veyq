@@ -57,8 +57,8 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
-  it('produces the exact operator-blind material — every wrap pinned with a hardcoded AAD literal', () => {
-    const built = buildAccount('owner@example.test', 'correct horse battery staple', new Uint8Array(16).fill(9))
+  it('produces the exact operator-blind material — every wrap pinned with a hardcoded AAD literal', async () => {
+    const built = await buildAccount('owner@example.test', 'correct horse battery staple', new Uint8Array(16).fill(9))
 
     // The seeded material buildAccount consumed (reconstructed independently).
     const masterKey = seededBytes(0, 32)
@@ -92,8 +92,8 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     expect(built.identity).toBe(FIXED_IDENTITY)
   })
 
-  it('binds each master-key wrap to the AAD literal "master-key" — a mutated context refuses to open', () => {
-    const built = buildAccount('a@b.test', 'pw', new Uint8Array(16))
+  it('binds each master-key wrap to the AAD literal "master-key" — a mutated context refuses to open', async () => {
+    const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16))
     const masterKey = seededBytes(0, 32)
     const [pw, rec] = built.material.masterKeyWraps
 
@@ -103,8 +103,8 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
     expect(b64std(raw.symUnwrap(KEK_REC, fromB64std(rec.wrappedKey), MASTER_KEY_CTX))).toBe(b64std(masterKey))
   })
 
-  it('binds the identity-private wrap to the AAD literal "identity-priv"', () => {
-    const built = buildAccount('a@b.test', 'pw', new Uint8Array(16))
+  it('binds the identity-private wrap to the AAD literal "identity-priv"', async () => {
+    const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16))
     const masterKey = seededBytes(0, 32)
     const opened = raw.symUnwrap(masterKey, fromB64std(built.material.wrappedIdentityPrivateKey), IDENTITY_PRIV_CTX)
     expect(b64std(opened)).toBe(b64std(v1.serializeIdentityPrivate(FIXED_IDENTITY)))
@@ -117,8 +117,8 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
   describe('opts.secretKey — re-use an existing Emergency Kit (dev re-seed only)', () => {
     const MINE = new Uint8Array(32).fill(0x5e)
 
-    it('uses the supplied Secret Key for the kit and for BOTH KEK derivations', () => {
-      const built = buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
+    it('uses the supplied Secret Key for the kit and for BOTH KEK derivations', async () => {
+      const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
 
       expect(built.emergencyKit).toEqual({ secretKey: b64std(MINE) })
       // One fewer randomBytes call than the default path, so the salts shift down by one: #2 pw salt, #4 rec salt.
@@ -128,24 +128,24 @@ describe('buildAccount — cold master-key birth (cr-0177, ADR 0045)', () => {
       expect(built.material.secretKeyProofPublicKey).toBe(b64std(v1.deriveSecretKeyProofKeypair(MINE).publicKey))
     })
 
-    it('still births everything else fresh — the Master Key is random, not derived from the kit', () => {
-      const built = buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
+    it('still births everything else fresh — the Master Key is random, not derived from the kit', async () => {
+      const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE })
       // The Master Key is randomBytes #0, untouched by the option (a wrap that opened to MINE would mean the
       // re-seed had collapsed the two into one secret).
       expect(b64std(raw.symUnwrap(KEK_PW, fromB64std(built.material.masterKeyWraps[0].wrappedKey), MASTER_KEY_CTX)))
         .toBe(b64std(seededBytes(0, 32)))
     })
 
-    it('rejects a Secret Key that is not 32 bytes, and mints a fresh one when the option is absent', () => {
-      expect(() => buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).toThrow(
+    it('rejects a Secret Key that is not 32 bytes, and mints a fresh one when the option is absent', async () => {
+      await expect(buildAccount('a@b.test', 'pw', new Uint8Array(16), { secretKey: MINE.slice(0, 31) })).rejects.toThrow(
         'buildAccount: secretKey must be 32 bytes',
       )
-      expect(buildAccount('a@b.test', 'pw', new Uint8Array(16)).emergencyKit.secretKey).toBe(b64std(seededBytes(2, 32)))
+      expect((await buildAccount('a@b.test', 'pw', new Uint8Array(16))).emergencyKit.secretKey).toBe(b64std(seededBytes(2, 32)))
     })
   })
 
-  it('feeds the two KEKs to the matching wrap — PASSWORD←kekPasswordSecret, RECOVERY←kekRecovery', () => {
-    const built = buildAccount('a@b.test', 'pw', new Uint8Array(16))
+  it('feeds the two KEKs to the matching wrap — PASSWORD←kekPasswordSecret, RECOVERY←kekRecovery', async () => {
+    const built = await buildAccount('a@b.test', 'pw', new Uint8Array(16))
     const masterKey = seededBytes(0, 32)
     const [pw, rec] = built.material.masterKeyWraps
     // The PASSWORD wrap opens under KEK_PW (not KEK_REC) and vice-versa — pins which KEK feeds which wrap.

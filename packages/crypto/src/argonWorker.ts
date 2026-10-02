@@ -2,9 +2,11 @@
 // main thread doesn't freeze during login/unlock, and falls back to the synchronous conformance-pinned
 // suite when no Worker is available (vitest/node, SSR, or worker construction failure). The crypto itself
 // (v1.ts) is untouched and still runs synchronously under the conformance test — this is execution
-// placement only, not a behaviour change.
+// placement only, not a behaviour change. It is the ONLY way production code reaches Argon2id: the
+// `veyq/argon-through-the-worker` lint door (../eslint-argon-door.js) refuses a direct call anywhere else.
 import * as v1 from './v1'
 import type { ArgonParams, AuthKeypair } from './v1'
+import type { ArgonOp } from './argonOps'
 
 // `fallback` is the synchronous derivation for this exact request, so a worker that dies mid-flight can be
 // finished on the main thread instead of failing the user — the worker is a pure optimisation.
@@ -38,6 +40,10 @@ function getWorker(): Worker | null {
     return null
   }
   try {
+    // ONE expression, on purpose: Vite emits the worker chunk only for `new Worker(new URL('…', import.meta.url))`
+    // spelled together. Hoist the URL into a variable and the build stays green, emits no chunk, and every
+    // derivation falls back to the page thread — `verify:argon-worker` (scripts/assert-argon-worker-in-dist.mjs)
+    // is what turns that red.
     worker = new Worker(new URL('./argon.worker.ts', import.meta.url), { type: 'module' })
     worker.addEventListener('message', (event: MessageEvent) => {
       const { id, ok, result, error } = event.data as { id: number; ok: boolean; result?: unknown; error?: string }
@@ -71,7 +77,7 @@ function getWorker(): Worker | null {
   }
 }
 
-function dispatch<T>(w: Worker, message: Record<string, unknown>, fallback: () => T): Promise<T> {
+function dispatch<T>(w: Worker, message: { op: ArgonOp } & Record<string, unknown>, fallback: () => T): Promise<T> {
   const id = (seq += 1)
   return new Promise<T>((resolve, reject) => {
     pending.set(id, { resolve: resolve as (v: unknown) => void, reject, fallback })
@@ -142,5 +148,17 @@ export async function deviceKekAsync(
   if (!w) return v1.kekDevicePassword(deviceFactor, password, salt, params)
   return dispatch<Uint8Array>(w, { op: 'deviceKek', deviceFactor, password, salt, params }, () =>
     v1.kekDevicePassword(deviceFactor, password, salt, params),
+  )
+}
+
+/**
+ * Derive the share-password guest token = Argon2id(password, pwSalt) (ADR 0037) — off the main thread when possible.
+ * Both the curator setting a link's password and the anonymous viewer opening it pay this.
+ */
+export async function sharesPwTokenAsync(password: string, salt: Uint8Array, params?: ArgonParams): Promise<Uint8Array> {
+  const w = getWorker()
+  if (!w) return v1.sharesPwToken(password, salt, params)
+  return dispatch<Uint8Array>(w, { op: 'sharesPwToken', password, salt, params }, () =>
+    v1.sharesPwToken(password, salt, params),
   )
 }

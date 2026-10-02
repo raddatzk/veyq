@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeAll } from 'vitest'
 
 // Mock the contracts client so registerServerOwner's network call is controllable. The build path
 // (buildCreateServerOwnerRequest) is pure and untouched by this mock.
@@ -15,11 +15,16 @@ const STD_B64 = /^[A-Za-z0-9+/]*={0,2}$/
 const INSTANCE_SALT = new Uint8Array(16).fill(7)
 
 describe('setupServer — Model B request (uc.admin.setup-server)', () => {
-  const { request, emergencyKit } = buildCreateServerOwnerRequest(
-    'Owner@Example.com ',
-    'correct horse battery',
-    INSTANCE_SALT,
-  )
+  let request: Awaited<ReturnType<typeof buildCreateServerOwnerRequest>>['request']
+  let emergencyKit: Awaited<ReturnType<typeof buildCreateServerOwnerRequest>>['emergencyKit']
+  // One birth for the whole block: three production-params Argon2id derivations, inherent to the code under test.
+  beforeAll(async () => {
+    ;({ request, emergencyKit } = await buildCreateServerOwnerRequest(
+      'Owner@Example.com ',
+      'correct horse battery',
+      INSTANCE_SALT,
+    ))
+  }, PRODUCTION_ARGON_TIMEOUT_MS)
 
   it('carries the contract metadata', () => {
     expect(request.email).toBe('Owner@Example.com ')

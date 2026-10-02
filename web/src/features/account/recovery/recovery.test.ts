@@ -25,18 +25,18 @@ const PASSWORD = 'correct horse battery staple'
 // Two accounts, born ONCE for the whole file. A real birth costs three production-params Argon2id derivations
 // (~2.5s), and minting one per test is what pushed this file to 48s. Nothing here mutates them — every case
 // only reads the wraps — so sharing is safe and the fixtures stay real rather than hand-built.
-type Born = ReturnType<typeof mintAccount>
+type Born = Awaited<ReturnType<typeof mintAccount>>
 let mine: Born
 let theirs: Born
 
-beforeAll(() => {
-  mine = mintAccount()
-  theirs = mintAccount()
+beforeAll(async () => {
+  mine = await mintAccount()
+  theirs = await mintAccount()
 }, PRODUCTION_ARGON_TIMEOUT_MS)
 
 /** Mint an account the way a real birth does, then hand back what the server would have stored. */
-function mintAccount() {
-  const built = buildAccount(EMAIL, PASSWORD, INSTANCE_SALT)
+async function mintAccount() {
+  const built = await buildAccount(EMAIL, PASSWORD, INSTANCE_SALT)
   const rec = built.material.masterKeyWraps.find((w) => w.method === 'RECOVERY')!
   const material: RecoveryMaterial = {
     email: EMAIL,

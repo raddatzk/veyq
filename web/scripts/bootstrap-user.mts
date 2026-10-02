@@ -135,7 +135,7 @@ const setup = await awaitBackend()
 if (!setup.setupRequired) fail('instance already set up — wipe it first (Bootstrap DB + Garage: `docker compose … down -v`), the Secret Key is random per birth')
 
 // 1 — cold-birth the Server Owner
-const built = buildAccount(email, password, fromB64std(setup.instanceSalt), {
+const built = await buildAccount(email, password, fromB64std(setup.instanceSalt), {
   secretKey: reusableSecretKey(env.VEYQ_SECRET_KEY, 'owner'),
 })
 const m = built.material
@@ -242,7 +242,7 @@ async function onboardUser2(): Promise<void> {
   const body = await waitForMail(u2Email)
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
   if (!link) throw new Error(`no invite link in the mail to ${u2Email}`)
-  const u2 = buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
+  const u2 = await buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
     secretKey: reusableSecretKey(env.VEYQ_USER2_SECRET_KEY, 'user2'),
   })
   const u2Accept = await post('/api/tenants/accept/register', {
