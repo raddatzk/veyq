@@ -10,16 +10,23 @@ import com.veyq.app.testing.TestFixtures.bearer
 import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedTenant
 import com.veyq.app.testing.TestFixtures.seedUser
+import com.veyq.app.features.spaces.scope.RotationDecision
+import com.veyq.app.features.spaces.scope.RotationGrant
+import com.veyq.app.features.spaces.scope.ScopesStore
+import com.veyq.app.shared.membership.SignedGrant
 import com.veyq.app.testing.race
+import com.veyq.app.testing.whileUncommitted
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
 import io.restassured.RestAssured.given
 import io.restassured.http.ContentType
+import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
 import org.hamcrest.CoreMatchers.notNullValue
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.util.UUID
@@ -36,6 +43,15 @@ import java.util.UUID
  */
 @QuarkusTest
 class ShareSharedScopeSliceTest {
+
+    @Inject
+    lateinit var sharing: SharingStore
+
+    @Inject
+    lateinit var handler: SharingHandler
+
+    @Inject
+    lateinit var scopes: ScopesStore
 
     private val wrap = "d3JhcC1rLW1lbS11bmRlci1zaGFyZQ=="
     private val sealedName = "c2VhbGVkLW5hbWU="
@@ -663,6 +679,37 @@ class ShareSharedScopeSliceTest {
         resolves(share, 200)
         revokeScopeShares(owner, tenantId).then().statusCode(200).body("revoked", equalTo(1))
         resolves(share, 404)
+    }
+
+    // --- a removal racing a write of the removed member's link (inbox #224) ---
+
+    @Test
+    fun anEditOverlappingTheOwnersRemovalLeavesTheLinkOff() {
+        // The edit of a link reads it before the owner's removal turns it off and writes after: a full-row UPDATE
+        // would write `enabled = true` back and keep the removed member's link live. The edit's row lock (the share
+        // write's `liveForUpdate`) and `@DynamicUpdate` each close it on their own.
+        repeat(ROUNDS) { round ->
+            val domain = "edit-${UUID.randomUUID()}.example.com"
+            val (tenantId, owner) = seedActiveTenant(domain)
+            val member = seedTenantMember(tenantId, "m@$domain")
+            val group = seedGroup(tenantId, owner)
+            addMember(tenantId, group, member)
+            val memory = seedNode(group, NodeEntity.MEMORY, parentId = group, wrappedContentKey = CONTENT_KEY)
+            val shareId = createShare(member, memory)
+            val note = "bm90ZQ==" // "note"
+            whileUncommitted(
+                change = { assertEquals(1, sharing.deactivateSharesByOwnerInScope(member, group), "round $round") },
+                overlapping = {
+                    sharing.updateShare(member, shareId, note, null, null, null, null, null, null, null)
+                },
+            )
+            QuarkusTransaction.requiringNew().run {
+                val share = ShareEntity.findById(shareId)!!
+                assertEquals(false, share.enabled, "round $round: the edit turned the removed member's link back on")
+                // Control: the edit itself landed.
+                assertEquals(note, share.sealedNote, "round $round")
+            }
+        }
     }
 
     // --- helpers ---

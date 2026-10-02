@@ -26,7 +26,7 @@ acceptanceCriteria:
     text: Sub-buckets sit one level under a primary (parent must be primary), owner inherited, K_mem-sealed name; the backend exposes create/rename/delete/move endpoints; delete reparents the sub-bucket's media to the owner's primary and never deletes media, primaries are neither renameable nor deletable. Curation authz (cr-0123) — a scope member may create a sub under any primary root, rename/delete any sub (own or a contributor's), and move media WITHIN one owner-root, but never a primary and never across owners (a single distinct source owner_key is required, else 403).
     coverage:
       backend:
-        integration: [MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName, MediaBucketsSliceTest.memberMayManageAnotherRootsSubBucket, MediaBucketsSliceTest.memberCreatesSubUnderAnotherRootInheritingItsOwner, MediaBucketsSliceTest.createSubRejectsNonPrimaryParent, MediaBucketsSliceTest.crossOwnerMoveIsRejected, MediaBucketsSliceTest.primaryBucketNotRenameableNorDeletable]
+        integration: [MediaBucketsSliceTest.createSubBucketMoveThenDeleteReparents, MediaBucketsSliceTest.renameSubBucketUpdatesSealedName, MediaBucketsSliceTest.memberMayManageAnotherRootsSubBucket, MediaBucketsSliceTest.memberCreatesSubUnderAnotherRootInheritingItsOwner, MediaBucketsSliceTest.createSubRejectsNonPrimaryParent, MediaBucketsSliceTest.crossOwnerMoveIsRejected, MediaBucketsSliceTest.primaryBucketNotRenameableNorDeletable, MediaBucketsSliceTest.aMetaEditOverlappingASubBucketDeleteKeepsTheReparent]
       web:
         unit: [src/features/memory/media.buckets.test.ts, src/features/memory/components/MemoryBuckets.test.ts]
   - id: contributions-tab-primary-grouping
