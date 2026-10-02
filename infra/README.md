@@ -797,8 +797,7 @@ on the new schema cannot be handed to the old image.
 
 ```sh
 docker compose -f infra/docker-compose.yml down -v && docker compose -f infra/docker-compose.yml up -d
-# start the backend writing the dev-invite file (so the seeder reads the bootstrap secret deterministically):
-VEYQ_TENANT_INVITE_DEV_FILE=$PWD/backend/build/dev-invites.jsonl ./gradlew -p backend quarkusDev
+# start the backend (IntelliJ: Run Backend), then:
 cd web && npm run bootstrap:user
 ```
 
@@ -806,6 +805,7 @@ It talks to two bases: `VEYQ_BASE` (the public port, default `http://localhost:8
 does, and `VEYQ_ADMIN_BASE` (the admin listener, default `http://127.0.0.1:8090`) for setup and tenant creation —
 which the public port 404s.
 
-`veyq.tenant.invite.dev-file` (dev/test only, never written in production) is the second sink of the invite line
-the logging mailer already emits — no console-log scraping. The tenant's domain is a `*.localhost` name, never an
-IP literal: the contract's hostname pattern refuses one, and no seeder writes to the database to get around it.
+It reads the owner invite's secret from `createTenant`'s own response, so it needs neither a mailbox nor the
+backend's dev-invite file for the owner; the second user's invite comes from Mailpit. The tenant's domain is a
+`*.localhost` name, never an IP literal: the contract's hostname pattern refuses one, and no seeder writes to the
+database to get around it.

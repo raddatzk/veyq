@@ -25,6 +25,14 @@ const SET_MARK_IMPORT = {
   message: 'setMark lowers a trust mark; only the user-confirmed reset (trustReset/trustReset.ts) may call it.',
 }
 
+// `veyq/seeders-use-the-generated-client` below.
+const SEEDER_NO_SHELL = ['node:child_process', 'child_process'].map((name) => ({
+  name,
+  message: 'A seeder talks to the API only — no shelling out (and so no `docker exec` into the DB).',
+}))
+const SEEDER_FETCH_MESSAGE = 'A seeder calls the generated …Api client; only scripts/apiTransport.mts speaks HTTP by hand.'
+const SEEDER_NO_RAW_HTTP = ['node:http', 'http', 'node:https', 'https'].map((name) => ({ name, message: SEEDER_FETCH_MESSAGE }))
+
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
 // covered by tsconfig (`noUnusedLocals`/`noUnusedParameters`); ESLint adds the Vue-template
@@ -201,30 +209,36 @@ export default defineConfigWithVueTs(
     // past the API into the database. The one seeder that did gave a tenant the domain `127.0.0.1`, which the
     // contract's hostname pattern refuses and which the ingress projector re-checks precisely because a row can
     // arrive "by any path that skips" the boundary; the dev tenant is a `*.localhost` domain instead.
-    // LIMIT: a dynamic `import('node:child_process')` or a `require` is not seen.
+    // And it never hand-writes a request: `fetch` and `node:http` are refused everywhere under scripts/ except the
+    // one transport module, which hands the generated client a Host-pinned `fetchApi`. A hand-written body is what
+    // let login verify gain `nonce` while `bootstrap:user` kept posting the old shape and failed its own login.
+    // LIMIT: a dynamic `import('node:child_process')` or a `require` is not seen; a seeder that reached the API
+    // through some third module's `fetch` (src/test/mailpit.ts holds the Mailpit calls) is not seen either.
     name: 'veyq/seeders-use-the-generated-client',
     files: ['scripts/**/*.mts'],
     rules: {
-      'no-restricted-imports': [
-        'error',
-        {
-          paths: [
-            { name: 'node:child_process', message: 'A seeder talks to the API only — no shelling out (and so no `docker exec` into the DB).' },
-            { name: 'child_process', message: 'A seeder talks to the API only — no shelling out (and so no `docker exec` into the DB).' },
-          ],
-        },
-      ],
+      'no-restricted-globals': ['error', { name: 'fetch', message: SEEDER_FETCH_MESSAGE }],
+      'no-restricted-imports': ['error', { paths: [...SEEDER_NO_SHELL, ...SEEDER_NO_RAW_HTTP] }],
     },
   },
   {
-    // Test files, test kits, dev seeders and build config may use `any` for terse fixtures /
+    // The transport itself: the one file that may speak HTTP by hand — still never shell out.
+    name: 'veyq/seeders-use-the-generated-client-transport',
+    files: ['scripts/apiTransport.mts'],
+    rules: {
+      'no-restricted-globals': 'off',
+      'no-restricted-imports': ['error', { paths: SEEDER_NO_SHELL }],
+    },
+  },
+  {
+    // Test files, test kits, the i18n extractor and build config may use `any` for terse fixtures /
     // untyped tooling boundaries. Production `src` code stays held to no-explicit-any (currently
     // zero violations — the guard exists to keep it that way).
     name: 'veyq/tests-and-tooling',
     files: [
       '**/*.test.ts',
       '**/*.spec.ts',
-      'scripts/**/*.mts',
+      'scripts/extract-admin-i18n.mts', // untyped i18n tooling; the seeders are typed by the generated client
       'src/features/memory/components/galleryFakeStore.ts', // documented gallery test kit (imports vitest)
       'vite.config.ts',
       'eslint.config.js',

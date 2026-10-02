@@ -1,0 +1,10 @@
+{
+  // The dev seeders under scripts/ are API clients like any other (cr-api-callers-typed-by-the-contract): a
+  // contract change must turn them red here, not at their first run against a backend. They import each other by
+  // their `.mts` name, which the app config does not allow; nothing else differs.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true
+  },
+  "include": ["scripts/**/*.mts"]
+}

@@ -40,11 +40,15 @@ here; the server is blind.
     `veyq.localhost`, points the tenant at Mailpit so member invites can actually be sent, and rewrites
     `WRAPPED_MASTERKEY` — then browse `veyq.localhost:<viteport>`. **`SECRET_KEY` is re-used, not re-minted**,
     when `.run/.env` already holds a usable one, so the kit you copied into a browser survives a re-seed
-    (`buildAccount(..., { secretKey })` — dev bootstrap only; every real birth mints fresh entropy). It reads the
-    owner's bootstrap invite out of the backend's dev-invite file (`awaitInvite`, `scripts/devSeed.mts`), so the
-    backend must run with `VEYQ_TENANT_INVITE_DEV_FILE` set, as `.run/Run Backend.run.xml` does; without it the
-    seeder throws after 15 s. Against a stale or wrong DB, `POST /api/login/verify` answers **401**
-    (password-derived auth doesn't match the registered identity) — not a crypto bug; re-seed a fresh instance.
+    (`buildAccount(..., { secretKey })` — dev bootstrap only; every real birth mints fresh entropy). Against a stale
+    or wrong DB, `POST /api/login/verify` answers **401** (password-derived auth doesn't match the registered
+    identity) — not a crypto bug; re-seed a fresh instance.
+    - **It is an API client like any other** and calls the backend through the generated `…Api` clients, built in
+      `scripts/apiTransport.mts` — the one file under `scripts/` that may use `fetch` or `node:http` (lint:
+      `veyq/seeders-use-the-generated-client`), and `npm run typecheck` covers `scripts/` (`tsconfig.scripts.json`).
+      When it hand-wrote its bodies, login verify gained `nonce`, the seeder kept the old shape and failed its own
+      login with 400. Tenant-scoped calls go over `node:http` as the client's `fetchApi`, because the backend
+      resolves the tenant from `Host` and fetch drops a hand-set one; that works for any domain, resolvable or not.
     - **It writes the owner's material as soon as the owner is complete**, before the optional second user — a
       failure in an optional step warns and leaves a usable owner behind. It used to write last, so a failing
       user2 threw away the Secret Key of an owner that already existed in the DB (irrecoverable: a wipe + re-seed
