@@ -716,6 +716,23 @@ def walk_opaque(value, names: set[str], found: list[tuple[str, str]]) -> None:
             walk_opaque(entry, names, found)
 
 
+def set_cookie_values(entry: dict) -> list[str]:
+    """Every NON-EMPTY cookie value a recorded response set: each `Set-Cookie` cut at the first `;`, then at the first `=`.
+
+    A clearing cookie (`veyq_refresh=; Max-Age=0`) yields nothing. The recorder writes `set-cookie` as the array
+    `getSetCookie()` returns (`web/src/test/wireRecorder.ts`), because a flattened header keeps only the last one.
+    """
+    cookies = (entry.get("responseHeaders") or {}).get("set-cookie") or []
+    if isinstance(cookies, str):
+        cookies = [cookies]
+    values = []
+    for cookie in cookies:
+        _, sep, value = cookie.split(";", 1)[0].partition("=")
+        if sep and value.strip():
+            values.append(value.strip())
+    return values
+
+
 def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
     """Prove that what the suite SENT and RECEIVED carries no plaintext. Returns None, else why not.
 
@@ -745,6 +762,14 @@ def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
     if not entries:
         return f"{record_file.name} is empty — {rel} made no request, so a green HTTP sweep here means nothing."
 
+    # A recorder that stopped recording response headers would hide every refresh token (it travels only as a
+    # `Set-Cookie`) and every header-borne canary, while every other check here stayed green — so it is a failure.
+    headerless = sum(1 for entry in entries if "responseHeaders" not in entry)
+    if headerless:
+        return (f"{headerless} of {len(entries)} entr(y/ies) in {record_file.name} carry no `responseHeaders` — the "
+                f"recorder lost its response-header half, and no Set-Cookie token or header canary can be swept")
+    cookies = sum(len(set_cookie_values(entry)) for entry in entries)
+
     canaries = json.loads(canary_file.read_text()) if canary_file.is_file() else []
     names = opaque_property_names()
     opacity: list[tuple[str, str, str]] = []
@@ -764,7 +789,8 @@ def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
                 opacity.append((where, prop, why))
         haystack = "\n".join(filter(None, [
             entry["url"], json.dumps(entry.get("requestHeaders") or {}),
-            entry.get("requestBody") or "", entry.get("responseBody") or "",
+            entry.get("requestBody") or "", json.dumps(entry.get("responseHeaders") or {}),
+            entry.get("responseBody") or "",
         ]))
         for canary in canaries:
             for variant, needle in canary_needles(canary):
@@ -781,7 +807,8 @@ def sweep_http(record_file: Path, canary_file: Path, rel: str) -> str | None:
         return (f"the wire assertion failed on HTTP: {len(opacity)} declared-opaque field(s) were not opaque, "
                 f"{len(leaks)} canary hit(s) (listed above)")
 
-    log(f"wire assertion: {len(entries)} request(s) from {rel} carry no readable opaque field and no canary")
+    log(f"wire assertion: {len(entries)} request(s) from {rel} carry no readable opaque field and no canary "
+        f"(response headers included; {cookies} non-empty Set-Cookie value(s) recorded)")
     return None
 
 
