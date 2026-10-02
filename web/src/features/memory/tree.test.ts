@@ -97,9 +97,9 @@ describe('nodeContentKey — resolve a chapter key down the chain', () => {
     const CHAP = '5c09e000-0000-4000-8000-000000000c01'
     const wrap = (kek: Uint8Array, nodeId: string, k: Uint8Array) => b64std(v1.seal(kmemCtx(nodeId), kek, k))
     const tree: TreeNode[] = [
-      { id: FOLD, parentId: null, kind: 'FOLDER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Trips', wrappedContentKey: null, wrappedMeta: null },
-      { id: MEM, parentId: FOLD, kind: 'MEMORY' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Italy', wrappedContentKey: wrap(scopeKey, MEM, memKey), wrappedMeta: null },
-      { id: CHAP, parentId: MEM, kind: 'CHAPTER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Day 1', wrappedContentKey: wrap(memKey, CHAP, chapKey), wrappedMeta: null },
+      { id: FOLD, parentId: null, kind: 'FOLDER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Trips', wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
+      { id: MEM, parentId: FOLD, kind: 'MEMORY' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Italy', wrappedContentKey: wrap(scopeKey, MEM, memKey), wrappedMeta: null, metaVersion: 0 },
+      { id: CHAP, parentId: MEM, kind: 'CHAPTER' as TreeNode['kind'], orderIndex: 0, epoch: 0, name: 'Day 1', wrappedContentKey: wrap(memKey, CHAP, chapKey), wrappedMeta: null, metaVersion: 0 },
     ]
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, CHAP)!)).toEqual(Array.from(chapKey))
     expect(Array.from(nodeContentKey(SCOPE_ID, epochsOf(scopeKey), tree, MEM)!)).toEqual(Array.from(memKey))

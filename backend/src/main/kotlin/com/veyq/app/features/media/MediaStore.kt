@@ -32,6 +32,8 @@ data class MediaRow(
     val ownerKey: String? = null,
     /** cr-0113: the bucket this media lives in, or null = the uploader's primary. */
     val bucketId: String? = null,
+    /** How many times [wrappedMeta] was replaced — the version a meta write states (ADR 0077). */
+    val metaVersion: Long = 0,
 )
 
 /** The gallery's keyset cursor (cr-0107, ADR 0033): the newest `(updatedAt, mediaId)` the client has already seen. */
@@ -374,6 +376,7 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
             derivatives, m.wrappedMeta, m.updatedAt ?: m.createdAt, // cr-0107: coalesce for pre-backfill safety
             m.deletedAt, m.deletedBy, // cr-0110: null for live media, populated in the trashed listing
             m.createdBy ?: m.shareIdentityId?.let { OwnerKey.Share(it).format() }, m.bucketId, // cr-0113
+            m.metaVersion,
         )
     }
 
@@ -381,15 +384,39 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     fun findMedia(scopeId: String, mediaId: String): MediaEntity? =
         MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId }
 
-    /** Overwrite a media's sealed `wrappedMeta` verbatim (opaque; e.g. a re-sealed corrected date). */
+    /** What [setMeta] did: wrote (the stored blob), found no such media, or refused a stale write (current value). */
+    sealed interface SetMetaResult {
+        data class Written(val wrappedMeta: String?) : SetMetaResult
+        object Missing : SetMetaResult
+        data class Stale(val wrappedMeta: String?, val metaVersion: Long) : SetMetaResult
+    }
+
+    /**
+     * Overwrite a media's sealed `wrappedMeta` verbatim (opaque; e.g. a re-sealed corrected date) — only if
+     * [expectedVersion] is still the stored `metaVersion` (ADR 0077). A miss writes nothing and moves no counter, so
+     * no open gallery re-fetches a media that did not change.
+     *
+     * The compare-and-set is a bulk UPDATE that runs before this transaction loads the entity — the order
+     * `NodesStore.applyUpdate` explains: the entity read afterwards holds the row as it now is.
+     */
     @Transactional
-    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?): MediaEntity? {
-        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return null
-        media.wrappedMeta = wrappedMeta
-        media.updatedAt = Instant.now() // cr-0107: the edit advances the keyset cursor, so the live poll re-fetches it
-        media.persist()
+    fun setMeta(scopeId: String, mediaId: String, wrappedMeta: String?, expectedVersion: Long): SetMetaResult {
+        // cr-0107: the edit advances updatedAt (the keyset cursor), so the live poll re-fetches it. Panache binds no
+        // null parameter, so a cleared tier (null) is spelled into the statement rather than bound.
+        val guard = "metaVersion = ?1, updatedAt = ?2 where id = ?3 and scopeId = ?4 and metaVersion = ?5"
+        val bound = arrayOf<Any>(expectedVersion + 1, Instant.now(), mediaId, scopeId, expectedVersion)
+        val rows = if (wrappedMeta == null) {
+            MediaEntity.update("wrappedMeta = null, $guard", *bound)
+        } else {
+            MediaEntity.update(
+                "wrappedMeta = ?6, $guard",
+                *bound, wrappedMeta,
+            )
+        }
+        val media = MediaEntity.findById(mediaId)?.takeIf { it.scopeId == scopeId } ?: return SetMetaResult.Missing
+        if (rows == 0) return SetMetaResult.Stale(media.wrappedMeta, media.metaVersion)
         bumpMediaRevision(media.nodeId) // a meta edit moves media_revision, not delete_revision
-        return media
+        return SetMetaResult.Written(media.wrappedMeta)
     }
 
     fun findBlob(scopeId: String, blobId: String): BlobEntity? =

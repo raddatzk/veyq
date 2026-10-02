@@ -142,6 +142,8 @@ sealed interface MetaOutcome {
     object Deleting : MetaOutcome, HttpFailure by Failures.scopeDeleting
     data class Found(val wrappedMeta: String?) : MetaOutcome
     object NoMedia : MetaOutcome, HttpFailure by httpFailure("media_not_found", NOT_FOUND)
+    /** The tier moved past the stated version; nothing was written (ADR 0077). Carries the current tier + version. */
+    data class Stale(val wrappedMeta: String?, val metaVersion: Long) : MetaOutcome, HttpFailure by Failures.staleVersion
 }
 
 sealed interface CoverCommitOutcome {
@@ -563,12 +565,15 @@ class MediaHandler(
         return MediaExifOutcome.Found(media.wrappedExif)
     }
 
-    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date). */
-    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?): MetaOutcome {
+    /** Overwrite the media's sealed listed-metadata blob (opaque re-seal, e.g. a corrected date), version-checked. */
+    fun updateMeta(userId: String, scopeId: String, mediaId: String, wrappedMeta: String?, metaVersion: Long): MetaOutcome {
         access.check(userId, scopeId, WRITE)
             .refusal(MetaOutcome.NoMedia, MetaOutcome.Suspended, MetaOutcome.Deleting)?.let { return it }
-        val media = store.setMeta(scopeId, mediaId, wrappedMeta) ?: return MetaOutcome.NoMedia
-        return MetaOutcome.Found(media.wrappedMeta)
+        return when (val r = store.setMeta(scopeId, mediaId, wrappedMeta, metaVersion)) {
+            is MediaStore.SetMetaResult.Written -> MetaOutcome.Found(r.wrappedMeta)
+            MediaStore.SetMetaResult.Missing -> MetaOutcome.NoMedia
+            is MediaStore.SetMetaResult.Stale -> MetaOutcome.Stale(r.wrappedMeta, r.metaVersion)
+        }
     }
 
     /**

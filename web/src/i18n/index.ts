@@ -770,6 +770,10 @@ const en = {
     deleteFolderCopy: 'Delete “{name}” and everything inside it? This can’t be undone.',
     deleteMemoryCopy: 'Delete “{name}”? This can’t be undone.',
     deleteFailed: 'Could not delete it. Please try again.',
+    meta: {
+      conflict: 'Someone else changed this meanwhile. It now shows their version — save again to replace it.',
+      unreadable: 'This Memory’s details could not be read, so nothing was saved.',
+    },
     date: {
       title: 'Date',
       edit: 'Edit date',
@@ -945,6 +949,8 @@ const en = {
     resetCapturedAt: 'Reset to original',
     capturedAtCorrected: 'Corrected',
     capturedAtSaveFailed: 'Could not save the capture time.',
+    capturedAtConflict: 'Someone else changed the capture time meanwhile. It now shows theirs — save again to replace it.',
+    metaUnreadable: 'This photo’s details could not be read, so nothing was saved.',
     sortNewest: 'Newest first',
     sortOldest: 'Oldest first',
     // Item marks (ADR 0068). Every string here is written against one rule: a mark is SHARED with the space,
@@ -1813,6 +1819,10 @@ const de: typeof en = {
     deleteFolderCopy: '„{name}" und alles darin löschen? Das lässt sich nicht rückgängig machen.',
     deleteMemoryCopy: '„{name}" löschen? Das lässt sich nicht rückgängig machen.',
     deleteFailed: 'Konnte nicht gelöscht werden. Bitte versuche es erneut.',
+    meta: {
+      conflict: 'Jemand anderes hat das inzwischen geändert. Jetzt steht dort diese Version — speichere erneut, um sie zu ersetzen.',
+      unreadable: 'Die Angaben dieser Erinnerung ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
+    },
     date: {
       title: 'Datum',
       edit: 'Datum bearbeiten',
@@ -1988,6 +1998,8 @@ const de: typeof en = {
     resetCapturedAt: 'Auf Original zurücksetzen',
     capturedAtCorrected: 'Korrigiert',
     capturedAtSaveFailed: 'Aufnahmezeit konnte nicht gespeichert werden.',
+    capturedAtConflict: 'Jemand anderes hat die Aufnahmezeit inzwischen geändert. Jetzt steht dort diese Änderung — speichere erneut, um sie zu ersetzen.',
+    metaUnreadable: 'Die Angaben zu diesem Foto ließen sich nicht lesen, deshalb wurde nichts gespeichert.',
     sortNewest: 'Neueste zuerst',
     sortOldest: 'Älteste zuerst',
     marks: {

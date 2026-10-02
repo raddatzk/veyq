@@ -162,7 +162,7 @@ class ShareUploaderSliceTest {
                     )
                     assertEquals(SharingStore.CreateResult.CREATED, created, "round $round")
                 },
-                overlapping = { nodes.applyUpdate(memory, renamed, null, null, null, null) },
+                overlapping = { nodes.applyUpdate(memory, renamed, null, null, null, null, null) },
             )
             QuarkusTransaction.requiringNew().run {
                 val node = NodeEntity.findById(memory)!!

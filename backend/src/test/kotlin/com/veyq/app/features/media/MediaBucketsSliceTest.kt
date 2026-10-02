@@ -20,7 +20,6 @@ import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.notNullValue
 import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -237,7 +236,7 @@ class MediaBucketsSliceTest {
             val meta = "bWV0YQ==" // "meta"
             whileUncommitted(
                 change = { store.deleteBucketReparent(sub) },
-                overlapping = { assertNotNull(store.setMeta(scopeId, media, meta)) },
+                overlapping = { assertTrue(store.setMeta(scopeId, media, meta, 0L) is MediaStore.SetMetaResult.Written) },
             )
             QuarkusTransaction.requiringNew().run {
                 val row = MediaEntity.findById(media)!!

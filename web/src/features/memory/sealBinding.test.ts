@@ -45,7 +45,7 @@ const epochsOf = (key: Uint8Array) => ({ current: 0, keys: new Map([[0, key]]) }
 const kmemWrap = (scopeKey: Uint8Array, nodeId: string, kMem: Uint8Array) =>
   b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE, nodeId, epoch: 0 }, scopeKey, kMem))
 const memoryRow = (id: string, wrappedContentKey: string): TreeNode => ({
-  id, parentId: null, kind: NodeKind.Memory, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null,
+  id, parentId: null, kind: NodeKind.Memory, orderIndex: 0, epoch: 0, name: id, wrappedContentKey, wrappedMeta: null, metaVersion: 0,
 })
 
 describe('the upload chain: a Memory key wrap served on another Memory\'s row', () => {

@@ -54,12 +54,12 @@ function content(
   const metaNode = { scopeId: SCOPE_ID, nodeId: opts.metaFor ? uid(opts.metaFor) : id }
   const wrappedMeta = opts.location ? sealNodeMeta(key, metaNode, { v: 1, location: opts.location }) : null
   const parentId = parentLabel === null ? null : uid(parentLabel)
-  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta }, key }
+  return { node: { id, kind, parentId, orderIndex: 0, epoch: 0, name: label, wrappedContentKey, wrappedMeta, metaVersion: 0 }, key }
 }
 
 const folder = (label: string, parentLabel: string | null = null): TreeNode => ({
   id: uid(label), kind: NodeKind.Folder, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0,
-  epoch: 0, name: label, wrappedContentKey: null, wrappedMeta: null,
+  epoch: 0, name: label, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
 })
 
 const ids = (pins: ReturnType<typeof collectLocatedPins>) => pins.map((p) => p.node.name).sort()
@@ -119,7 +119,7 @@ describe('clusterPins', () => {
   // A trivial linear projection: 1 degree = 1 pixel, so pixel distance == degree distance (Leaflet-free).
   const project = (lat: number, lng: number) => ({ x: lng, y: lat })
   const pin = (id: string, lat: number, lng: number): LocatedPin => ({
-    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null },
+    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat, lng } },
     date: null,
   })
@@ -151,7 +151,7 @@ describe('clusterPins', () => {
 
 describe('sortPinsByStartDate', () => {
   const dated = (id: string, from?: string): LocatedPin => ({
-    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null },
+    node: { id, kind: NodeKind.Memory, name: id, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 },
     location: { name: id, nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 0, lng: 0 } },
     date: from ? ({ mode: 'single', from, to: from } as MemoryDate) : null,
   })

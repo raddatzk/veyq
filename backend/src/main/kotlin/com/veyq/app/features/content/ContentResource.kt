@@ -11,6 +11,7 @@ import com.veyq.app.generated.model.UpdateNodeRequest
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpError
+import com.veyq.app.shared.http.httpStaleSealedMeta
 import io.quarkus.security.Authenticated
 import io.quarkus.security.identity.SecurityIdentity
 import jakarta.ws.rs.core.Response
@@ -70,8 +71,10 @@ class ContentResource(
             identity.principal.name, scopeId.toString(), nodeId.toString(),
             updateNodeRequest.encryptedName, updateNodeRequest.slugToken,
             updateNodeRequest.parentId?.toString(), updateNodeRequest.orderIndex, updateNodeRequest.wrappedMeta,
+            updateNodeRequest.metaVersion,
         )) {
             UpdateNodeOutcome.Updated -> Response.noContent().build()
+            is UpdateNodeOutcome.StaleMeta -> httpStaleSealedMeta(o, o.wrappedMeta, o.metaVersion)
             is HttpFailure -> httpError(o)
         }
 
@@ -120,5 +123,6 @@ class ContentResource(
         wrappedContentKey = wrappedContentKey,
         wrappedMeta = wrappedMeta,
         sealedDropPrivateKey = sealedDropPrivateKey,
+        metaVersion = metaVersion,
     )
 }

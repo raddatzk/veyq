@@ -17,10 +17,10 @@
 // This module owns the model +
 // seal + display math + the on-device cover-thumbnail load (`loadNodeCover`); the media picker and the 16:9
 // pan/zoom crop editor live in the UI layer (cr-0072 phase 3).
-import { contentApi } from '../../api/client'
-import { withRefresh } from '../../app/sessionRefresh'
 import { hasDerivatives, listMedia, openBlob, openGrid, type BlobRef } from './media'
-import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { editField, unsealNodeMeta } from './nodeMeta'
+import { writeNodeMeta } from './nodeMetaWrite'
+import type { SealedMetaState } from './sealedMetaWrite'
 
 /**
  * A crop rectangle in the source image's **normalized `0..1`** coordinates (the pre-E2EE design source's
@@ -136,25 +136,26 @@ export function unsealMemoryCover(
 }
 
 /**
- * **Read-modify-write** the node-meta blob: unseal the current `{ v, date?, location?, cover? }` under `nodeKey`
- * (`K_mem`), set (or, for `null`, **remove**) only the `cover`, re-seal, and PATCH via the partial `updateNode`
- * (cr-0072). **Preserves the sibling `date`/`location`** in every case. `currentMeta` is the node's live
- * `wrappedMeta` (or null). Returns the sealed blob so the caller can update its local `node.wrappedMeta`
- * (and re-render the card/header) without a re-list.
+ * The cover EDITOR's save: **read-modify-write** the node-meta blob — set (or, for `null`, **remove**) only the
+ * `cover`, re-seal, PATCH with the `metaVersion` it was built from (cr-0072, ADR 0077). **Preserves the sibling
+ * `date`/`location`** in every case, including ones a peer wrote meanwhile. A peer's change to the COVER itself
+ * throws `MetaConflictError` — unless `surfaceConflict` is false: once the save has moved the node's one cover
+ * blob (an upload, or a switch away from an uploaded cover), its own cover is re-applied instead, because the
+ * peer's cover may point at the blob it just replaced. Returns the state the server confirmed.
  */
 export async function setMemoryCover(
   scopeId: string,
   nodeId: string,
   nodeKey: Uint8Array,
   cover: MemoryCover | null,
-  currentMeta: string | null,
-): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
-  if (cover) meta.cover = cover
-  else delete meta.cover
-  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
-  await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
-  return wrappedMeta
+  current: SealedMetaState,
+  surfaceConflict = true,
+): Promise<SealedMetaState> {
+  const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).cover
+  const { state } = await writeNodeMeta(
+    scopeId, nodeId, nodeKey, current, editField('cover', cover, openedWith, surfaceConflict),
+  )
+  return state
 }
 
 /** Whether two covers are equal (same source + all four crop fields) — the editor re-seals only when this is false. */

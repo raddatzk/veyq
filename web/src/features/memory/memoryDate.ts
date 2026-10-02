@@ -6,13 +6,14 @@
 //
 // The seal is **read-modify-write** (cr-0069): `setMemoryDate` unseals the current `{ v, date?, location? }`,
 // swaps in only the `date`, and re-seals — so writing a date never clobbers a sibling `location` (and vice-versa,
-// via `setMemoryLocation`). The shared envelope lives in `nodeMeta.ts`.
-import { contentApi } from '../../api/client'
-import { withRefresh } from '../../app/sessionRefresh'
+// via `setMemoryLocation`). It is version-checked, so the sibling a PEER wrote since our tree loaded survives too
+// (ADR 0077). The shared envelope and the write loop live in `nodeMeta.ts`.
 import { epochMsToIsoDate } from '../../shared/isoDate'
 import { effectiveCapturedAt, unsealMeta, type MediaItem } from './media'
 import { openContentKey, type TreeNode } from './tree'
-import { sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
+import { editField, sealNodeMeta, unsealNodeMeta, type NodeMetaAddress } from './nodeMeta'
+import { writeNodeMeta } from './nodeMetaWrite'
+import type { SealedMetaState } from './sealedMetaWrite'
 
 /** The four date modes: derive from media (`auto`), a single day, a `from..to` span, or an open-ended `since`. */
 export type MemoryDateMode = 'auto' | 'single' | 'range' | 'ongoing'
@@ -53,24 +54,47 @@ export function unsealMemoryDate(
 }
 
 /**
- * **Read-modify-write** the node-meta blob: unseal the current `{ v, date?, location? }` under `nodeKey`
- * (`K_mem`), swap in only the `date`, re-seal, and PATCH via the partial `updateNode` (cr-0067 / cr-0069). This
- * **preserves a sibling `location`** — writing a date never clobbers the place. `currentMeta` is the node's live
- * `wrappedMeta` (or null for a node with none). Returns the sealed blob so the caller can update its local
- * `node.wrappedMeta` (and re-render the card/header) without a re-list.
+ * The date EDITOR's save: **read-modify-write** the node-meta blob — swap in only the `date`, re-seal, PATCH with
+ * the `metaVersion` it was built from (cr-0067 / cr-0069, ADR 0077). A sibling `location`/`cover` is preserved,
+ * including one a peer wrote meanwhile (the `409` re-run). If the peer changed the DATE itself, the save throws
+ * `MetaConflictError` carrying the current state, and the editor re-opens on it; a blob that does not open throws
+ * `MetaUnreadableError`. Returns the state the server confirmed, for the caller's tree.
  */
 export async function setMemoryDate(
   scopeId: string,
   nodeId: string,
   nodeKey: Uint8Array,
   date: MemoryDate,
-  currentMeta: string | null,
-): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
-  meta.date = date
-  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
-  await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
-  return wrappedMeta
+  current: SealedMetaState,
+): Promise<SealedMetaState> {
+  const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).date
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('date', date, openedWith))
+  return state
+}
+
+/**
+ * The `auto`-range SELF-HEAL: materialize the range from the Memory's own `items` and re-seal it only when it
+ * changed. The whole decision runs on the blob being written — on a `409` again on the fresh one — so a manual date
+ * a peer set meanwhile is never overwritten, and a range already right is never re-sent (ADR 0077 point 3).
+ * Returns the newest state the server confirmed or handed back, and whether this call wrote.
+ */
+export async function reconcileMemoryDate(
+  scopeId: string,
+  nodeId: string,
+  nodeKey: Uint8Array,
+  items: MediaItem[],
+  current: SealedMetaState,
+): Promise<{ state: SealedMetaState; wrote: boolean }> {
+  const next = computeAutoRange(scopeId, items, nodeKey)
+  const { state, wrote } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, (meta) => {
+    const stored = normalizeDate(meta.date)
+    if (stored && stored.mode !== 'auto') return null // a manual date is the user's — never overwritten
+    if (sameMemoryDate(stored ?? { mode: 'auto' }, next)) return null
+    if (!stored && next.from === undefined) return null // absent meta already == the empty `auto` state
+    meta.date = next
+    return meta
+  })
+  return { state, wrote }
 }
 
 /**

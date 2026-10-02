@@ -427,6 +427,11 @@ paths:
     patch:
       tags: [scopes]
       operationId: setMemberRole
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the role the owner chose for one member; nothing the editor did not see is
+          re-sent. (The last-owner count-then-write race is a separate defect, inbox #272.)
       summary: Promote a member to co-owner or demote a co-owner (group roles).
       description: >
         Sets a group member's role (`OWNER` / `MEMBER`) — the GroupOwner's promote/demote (uc.spaces.manage-group-members,
@@ -698,6 +703,11 @@ paths:
     post:
       tags: [scopes]
       operationId: renameGroup
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the name the owner typed, sealed fresh; nameEpoch is a rotation guard, not an
+          edit guard.
       summary: Rename a group — re-seal the name under the current epoch (forward-secret).
       description: >
         Renames a GROUP scope (uc.spaces.rename-group, cr-0097, ADR 0027). The client re-seals the new name under
@@ -732,6 +742,11 @@ paths:
     post:
       tags: [scopes]
       operationId: setScopeIcon
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the icon the owner chose, sealed fresh; iconEpoch is a rotation guard, not an
+          edit guard.
       summary: Set or replace a space icon — seal it under the current epoch (operator-blind, constant length).
       description: >
         Sets or replaces a space's icon (uc.spaces.set-space-icon). The client bakes the crop, re-encodes to a

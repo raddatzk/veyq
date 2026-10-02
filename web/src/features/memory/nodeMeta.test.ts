@@ -2,7 +2,8 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 import * as base64 from '@veyq/crypto/base64'
-import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { editField, nodeMetaState, openNodeMetaForWrite, sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 
 // Assertion-strength KAT for the wrappedMeta envelope (cr-0177, ADR 0045). nodeMeta was untested: the seal
 // context 'node-meta' was unpinned, and unsealNodeMeta's best-effort (E3) fall-throughs to { v: 1 } had no oracle.
@@ -74,5 +75,72 @@ describe('nodeMeta seal/unseal envelope (cr-0177, ADR 0045)', () => {
     // A JSON string (not `42`): spreading a string yields indexed props, so `{ ...parsed, v: 1 }` would differ
     // from `{ v: 1 }` — which is what kills a mutant that drops the `typeof === 'object'` guard.
     expect(unsealNodeMeta(KEY, NODE, seal('just a string'))).toEqual({ v: 1 })
+  })
+})
+
+// --- the WRITE side (ADR 0077): never rebuild a present blob from empty, and an editor's own-field conflict ---
+
+describe('openNodeMetaForWrite — only an ABSENT blob is fresh (ADR 0077 point 4, inbox #273)', () => {
+  it('an absent blob is a fresh { v: 1 }', () => {
+    expect(openNodeMetaForWrite(KEY, NODE, null)).toEqual({ v: 1 })
+    expect(openNodeMetaForWrite(KEY, NODE, '')).toEqual({ v: 1 })
+  })
+
+  it('a blob that opens comes back whole — unknown siblings kept, v forced to 1', () => {
+    expect(openNodeMetaForWrite(KEY, NODE, seal({ v: 99, date: 'd', future: { x: 1 } }))).toEqual({ v: 1, date: 'd', future: { x: 1 } })
+  })
+
+  it('a present blob that does not open, or does not parse into an object, is REFUSED — never { v: 1 }', () => {
+    const refused = (wrappedMeta: string) => () => openNodeMetaForWrite(KEY, NODE, wrappedMeta)
+    expect(refused(sealNodeMeta(new Uint8Array(32).fill(6), NODE, { v: 1, date: 'x' }))).toThrow(MetaUnreadableError) // wrong key
+    expect(refused(sealNodeMeta(KEY, OTHER_NODE, { v: 1, date: 'x' }))).toThrow(MetaUnreadableError) // another node's
+    expect(refused('@@not-base64@@')).toThrow(MetaUnreadableError) // malformed
+    expect(refused(seal('just a string'))).toThrow(MetaUnreadableError) // not an object
+    expect(refused(seal(null))).toThrow(MetaUnreadableError) // JSON null — typeof null is 'object'
+    expect(refused(seal(['a', 'b']))).toThrow(MetaUnreadableError) // an array is an object too
+  })
+})
+
+describe('nodeMetaState', () => {
+  it('is the blob and the version the tree holds, nothing else', () => {
+    expect(nodeMetaState({ wrappedMeta: 'YQ==', metaVersion: 7, id: 'n' } as never)).toEqual({ wrappedMeta: 'YQ==', metaVersion: 7 })
+  })
+})
+
+describe('editField — an editor re-applies only its own field, and refuses when THAT field moved (ADR 0077 point 3)', () => {
+  const state = { wrappedMeta: 'c3RhdGU=', metaVersion: 3 }
+  const first = { retry: false, state }
+  const again = { retry: true, state }
+
+  it('sets the field, keeping every sibling', () => {
+    expect(editField('date', 'new', 'old')({ v: 1, date: 'old', location: 'L' }, first)).toEqual({ v: 1, date: 'new', location: 'L' })
+  })
+
+  it('drops the field for null and for undefined — the KEY goes, not only its value', () => {
+    // `toEqual` treats `{ cover: undefined }` as `{}`, so the undefined case asserts on the keys: a field set to
+    // undefined instead of deleted is the mutant this pins.
+    expect(Object.keys(editField('cover', null, 'c')({ v: 1, cover: 'c', date: 'D' }, first))).toEqual(['v', 'date'])
+    expect(Object.keys(editField('cover', undefined, 'c')({ v: 1, cover: 'c', date: 'D' }, first))).toEqual(['v', 'date'])
+  })
+
+  it('on the first attempt never checks — the base IS what the editor opened', () => {
+    expect(editField('date', 'new', 'opened')({ v: 1, date: 'something else' }, first)).toEqual({ v: 1, date: 'new' })
+  })
+
+  it('on a re-run, a sibling moved → merges; its OWN field moved → MetaConflictError carrying the state', () => {
+    expect(editField('date', 'new', { a: 1, b: 2 })({ v: 1, date: { b: 2, a: 1 }, location: 'peer' }, again))
+      .toEqual({ v: 1, date: 'new', location: 'peer' }) // same field, other key order: no conflict
+    let thrown: unknown
+    try {
+      editField('date', 'new', 'opened')({ v: 1, date: 'peer' }, again)
+    } catch (e) {
+      thrown = e
+    }
+    expect(thrown).toBeInstanceOf(MetaConflictError)
+    expect((thrown as MetaConflictError).current).toEqual(state)
+  })
+
+  it('surface = false re-applies even over its own moved field (the cover after a blob operation, D9)', () => {
+    expect(editField('cover', 'mine', 'opened', false)({ v: 1, cover: 'peer' }, again)).toEqual({ v: 1, cover: 'mine' })
   })
 })

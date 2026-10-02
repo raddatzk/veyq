@@ -17,7 +17,7 @@ vi.mock('../api/client', () => ({ favoritesApi: vi.fn() }))
 vi.mock('./sessionRefresh', () => ({ withRefresh: (fn: () => unknown) => fn() }))
 vi.mock('./vault', () => ({ masterKey: vi.fn() }))
 
-import { toggleFavorite, clearFavorites } from './favoritesStore'
+import { toggleFavorite, clearFavorites, loadFavoritesFor } from './favoritesStore'
 import { favoritesApi } from '../api/client'
 import { masterKey } from './vault'
 import * as v1 from '@veyq/crypto/v1'
@@ -50,6 +50,7 @@ beforeEach(() => {
 
 describe("a member's Memory pins are private to them", () => {
   it('does not open with the scope key a co-member holds', async () => {
+    await loadFavoritesFor(SCOPE) // a toggle waits for the set it replaces (ADR 0077 point 5)
     await toggleFavorite('memory-1', SCOPE)
     expect(stored).toBeTruthy()
     const blob = fromB64std(stored!)
@@ -66,6 +67,7 @@ describe("a member's Memory pins are private to them", () => {
     // A scope-conditional seal (K_SC when personal, master key when group) would be defensible on paper and is
     // exactly where a fallback survives untested. There is no personal/group argument anywhere on this path,
     // so this asserts the absence of that branch the only way it can be observed: identically sealed output.
+    await loadFavoritesFor(SCOPE_PERSONAL)
     await toggleFavorite('memory-2', SCOPE_PERSONAL)
     const blob = fromB64std(stored!)
     expect(() => v1.open(favs(SCOPE_PERSONAL), K_SC, blob)).toThrow(new v1.OpenRefused('favorites'))

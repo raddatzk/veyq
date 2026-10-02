@@ -47,6 +47,7 @@ import {
 import exifr from 'exifr'
 import { mediaApi } from '../../api/client'
 import { ResponseError } from '../../api/generated/media'
+import { MetaConflictError, MetaUnreadableError } from './sealedMetaWrite'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -56,6 +57,16 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // A media's two metadata tiers are sealed bound to (scope, media) — ADR 0072 — so a reader names the media it opens.
 const metaCtx = (mediaId: string) => ({ purpose: 'media-meta', scopeId: SCOPE_ID, mediaId }) as const
 const exifCtx = (mediaId: string) => ({ purpose: 'media-exif', scopeId: SCOPE_ID, mediaId }) as const
+/** A listed tier sealed as the upload would — the base a meta write re-reads (ADR 0077). */
+const sealTier = (mediaId: string, key: Uint8Array, tier: object) =>
+  b64std(v1.seal(metaCtx(mediaId), key, new TextEncoder().encode(JSON.stringify(tier))))
+/** A media a write targets: its listed tier (or none) at a version. */
+const target = (mediaId: string, key: Uint8Array, tier: object | null, metaVersion = 0) =>
+  ({ mediaId, wrappedMeta: tier ? sealTier(mediaId, key, tier) : undefined, metaVersion })
+/** A thrown generated-client failure carrying `409 stale_version` with the server's current tier. */
+const staleTier = (wrappedMeta: string | null, metaVersion: number) => ({
+  response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+})
 const openJson = (ctx: v1.SealContext, key: Uint8Array, sealed: string) =>
   JSON.parse(new TextDecoder().decode(v1.open(ctx, key, fromB64std(sealed))))
 
@@ -539,16 +550,16 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const meta = unsealMeta(SCOPE_ID, memoryKey, item)!
     const withOverride = { ...meta, capturedAtOverride: Date.UTC(2019, 7, 15) }
 
-    // B2.3 — the spread is what keeps the date and the GPS. Lever: seal `{ v: 1, placeName }` instead.
-    const saved = await backfillPlaceName(SCOPE_ID, item, memoryKey, withOverride, 'München', 'city')
+    // B2.3 — re-sealing the raw tier is what keeps the date and the GPS. Lever: seal `{ v: 1, placeName }` instead.
+    const saved = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, withOverride), memoryKey, 'München', 'city')
     expect(saved.tier).toMatchObject({
       placeName: 'München', placeLevel: 'city',
       capturedAtOverride: Date.UTC(2019, 7, 15), gpsLat: 48.137, gpsLng: 11.575, w: 4032,
     })
 
     // B2.4 — a tier whose ONLY content is a name must not seal to null, or the name is resolved again on every
-    // open. Lever: remove the `placeName` clause from `metaHasContent`.
-    const nameOnly = await backfillPlaceName(SCOPE_ID, item, memoryKey, { v: 1 }, 'Formentera', 'island')
+    // open. Lever: make `metaHasContent` ignore `placeName`.
+    const nameOnly = await backfillPlaceName(SCOPE_ID, target(item.mediaId, memoryKey, null), memoryKey, 'Formentera', 'island')
     expect(nameOnly.wrappedMeta).not.toBeNull()
     expect(nameOnly.tier).toMatchObject({ placeName: 'Formentera' })
 
@@ -556,8 +567,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     // an overflowing name breaks that write too. Worst case: every field populated plus a maximal name.
     // Lever: remove the clamp in `backfillPlaceName`.
     const maximal = await backfillPlaceName(
-      SCOPE_ID, item, memoryKey,
-      { ...withOverride, mediaType: 'image/jpeg', capturedAtSource: 'exif' },
+      SCOPE_ID, target(item.mediaId, memoryKey, { ...withOverride, mediaType: 'image/jpeg', capturedAtSource: 'exif' }), memoryKey,
       'Sant Francesc de Formentera i les Illes Balears de la Mediterrània Occidental'.repeat(4),
       'country',
     )
@@ -743,8 +753,10 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     // a full listed tier: geometry + date + GPS. Only the date is user-editable; the rest rides along unchanged.
     const captured: MediaMeta = { v: 1, w: 800, h: 600, capturedAt: ORIG, gpsLat: 48.1, gpsLng: 11.5 }
 
-    const updated = await setMediaMeta(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, captured, CORRECTED)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured, 3), memoryKey, CORRECTED)
 
+    expect(store.api.updateMediaMeta.mock.calls[0][0].mediaMetaUpdate.metaVersion).toBe(3) // the version it read
+    expect(updated.metaVersion).toBe(4)
     // the wire carries only opaque ciphertext — never the plaintext date
     const sealed = store.captured.updatedMeta
     expect(typeof sealed).toBe('string')
@@ -763,7 +775,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAt: ORIG, capturedAtOverride: CORRECTED }
 
-    const updated = await setMediaMeta(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, captured, null)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, null)
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta)).toEqual({ v: 1, capturedAt: ORIG })
     expect(effectiveCapturedAt(updated.tier)).toBe(ORIG) // falls back to the derived original
@@ -775,7 +787,7 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     const memoryKey = v1.randomBytes(32)
     const captured: MediaMeta = { v: 1, capturedAtOverride: CORRECTED } // only ever had a manual date, no geometry/GPS
 
-    const updated = await setMediaMeta(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, captured, null)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, captured), memoryKey, null)
 
     expect(store.captured.updatedMeta).toBeNull() // nothing left to seal → the tier is cleared
     expect(updated.tier).toBeNull()
@@ -786,10 +798,54 @@ describe('setMediaMeta — sealed capturedAt override in the listed-metadata tie
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     const memoryKey = v1.randomBytes(32)
 
-    const updated = await setMediaMeta(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, null, CORRECTED)
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, CORRECTED)
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta)).toEqual({ v: 1, capturedAtOverride: CORRECTED })
     expect(effectiveCapturedAt(updated.tier)).toBe(CORRECTED)
+  })
+
+  /**
+   * W8 (live defect, ADR 0077 point 4): a date correction re-seals the RAW tier, so a resolved place name — and any
+   * field a newer client wrote — survives. Before, the writers spread `unsealMeta`'s projection, which carried
+   * neither, and every correction erased the name. `unsealMeta` now reads the name back too.
+   */
+  it('W8: a correction keeps the resolved place name and any unknown field; unsealMeta reads the name', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    const memoryKey = v1.randomBytes(32)
+    const tier = { v: 1, capturedAt: ORIG, gpsLat: 38.7, gpsLng: -9.1, placeName: 'Lisboa', placeLevel: 'city', future: 'kept' }
+    const media = target(MEDIA_ID, memoryKey, tier)
+    expect(unsealMeta(SCOPE_ID, memoryKey, { ...media, original: {} as never, derivatives: [] })?.placeName).toBe('Lisboa')
+
+    await setMediaMeta(SCOPE_ID, media, memoryKey, CORRECTED)
+
+    expect(decodeMeta(memoryKey, store.captured.updatedMeta)).toEqual({ ...tier, capturedAtOverride: CORRECTED })
+  })
+
+  /**
+   * W4-shaped, for the editor (ADR 0077): the correction meets a 409 whose tier holds a peer's place name — the
+   * retry re-applies only the override on it. A peer's OWN correction meanwhile is a same-field conflict instead:
+   * no retry, the lightbox re-opens on it.
+   */
+  it('re-applies the override on the conflict tier; a peer\'s own correction surfaces as a conflict', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const peers = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG, placeName: 'Lisboa' })
+    const updateMediaMeta = vi.fn().mockRejectedValueOnce(staleTier(peers, 2)).mockResolvedValue({})
+    vi.mocked(mediaApi).mockReturnValue({ updateMediaMeta } as unknown as ReturnType<typeof mediaApi>)
+
+    const updated = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, CORRECTED)
+    expect(updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.metaVersion).toBe(2)
+    expect(decodeMeta(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta)).toEqual({
+      v: 1, capturedAt: ORIG, placeName: 'Lisboa', capturedAtOverride: CORRECTED,
+    })
+    expect(updated).toMatchObject({ metaVersion: 3, wrote: true })
+
+    const corrected = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG, capturedAtOverride: 1 })
+    const conflicting = vi.fn().mockRejectedValueOnce(staleTier(corrected, 2)).mockResolvedValue({})
+    vi.mocked(mediaApi).mockReturnValue({ updateMediaMeta: conflicting } as unknown as ReturnType<typeof mediaApi>)
+    const err = await setMediaMeta(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: ORIG }, 1), memoryKey, CORRECTED).catch((e) => e)
+    expect(err).toBeInstanceOf(MetaConflictError)
+    expect(conflicting).toHaveBeenCalledTimes(1)
   })
 })
 
@@ -863,7 +919,7 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     // a pre-field media that already carries geometry + a capture date, but no sealed type
     const existing: MediaMeta = { v: 1, w: 1920, h: 1080, capturedAt: Date.UTC(2020, 0, 1) }
 
-    const updated = await backfillMediaType(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, existing, 'video/webm')
+    const updated = await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, existing), memoryKey, 'video/webm')
 
     // the re-sealed tier carries the new type AND the untouched originals — operator-blind (opaque on the wire)
     expect(store.captured.updatedMeta).not.toContain('video/webm')
@@ -876,10 +932,50 @@ describe('mediaType — the persisted video signal (cr-inline-video-playback, #1
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     const memoryKey = v1.randomBytes(32)
 
-    const updated = await backfillMediaType(SCOPE_ID, { mediaId: MEDIA_ID }, memoryKey, null, 'video/quicktime')
+    const updated = await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, null), memoryKey, 'video/quicktime')
 
     expect(decodeMeta(memoryKey, store.captured.updatedMeta)).toEqual({ v: 1, mediaType: 'video/quicktime' })
     expect(updated.tier?.mediaType).toBe('video/quicktime')
+  })
+
+  /** W7 (#273, live defect): a backfill over a tier that does not open makes no PUT. Before, it PUT a tier holding
+   *  only the sniffed type, and the capture time and GPS sealed in the unopenable one were gone. */
+  it('W7: a backfill over a tier that does not open makes no PUT, for the type and for the place name', async () => {
+    const store = fakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    const memoryKey = v1.randomBytes(32)
+    const elsewhere = target(MEDIA_ID, v1.randomBytes(32), { v: 1, capturedAt: 1, gpsLat: 1, gpsLng: 2 })
+
+    await expect(backfillMediaType(SCOPE_ID, elsewhere, memoryKey, 'video/mp4')).rejects.toBeInstanceOf(MetaUnreadableError)
+    await expect(backfillPlaceName(SCOPE_ID, elsewhere, memoryKey, 'Lisboa')).rejects.toBeInstanceOf(MetaUnreadableError)
+    expect(store.api.updateMediaMeta).not.toHaveBeenCalled()
+    // control: the same backfill over a tier that opens does PUT
+    await backfillMediaType(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 1 }), memoryKey, 'video/mp4')
+    expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * W4 (ADR 0077): the place-name backfill starts from a tier without a correction, meets a 409 whose tier has a
+   * peer's `capturedAtOverride` — the retry keeps the override. And a backfill the fresh tier no longer needs (a
+   * peer resolved the name meanwhile) writes nothing.
+   */
+  it('W4: the backfill re-bases on the conflict tier and keeps a peer\'s correction; a filled field is not re-sent', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const corrected = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, capturedAtOverride: 20, gpsLat: 1, gpsLng: 2 })
+    const updateMediaMeta = vi.fn().mockRejectedValueOnce(staleTier(corrected, 4)).mockResolvedValue({})
+    vi.mocked(mediaApi).mockReturnValue({ updateMediaMeta } as unknown as ReturnType<typeof mediaApi>)
+
+    await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, gpsLat: 1, gpsLng: 2 }, 3), memoryKey, 'Lisboa', 'city')
+    expect(decodeMeta(memoryKey, updateMediaMeta.mock.calls[1][0].mediaMetaUpdate.wrappedMeta)).toMatchObject({
+      capturedAtOverride: 20, placeName: 'Lisboa',
+    })
+
+    const named = sealTier(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10, placeName: 'Lisbon' })
+    const late = vi.fn().mockRejectedValueOnce(staleTier(named, 5)).mockResolvedValue({})
+    vi.mocked(mediaApi).mockReturnValue({ updateMediaMeta: late } as unknown as ReturnType<typeof mediaApi>)
+    const result = await backfillPlaceName(SCOPE_ID, target(MEDIA_ID, memoryKey, { v: 1, capturedAt: 10 }, 4), memoryKey, 'Lisboa')
+    expect(late).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ wrote: false, metaVersion: 5, wrappedMeta: named })
   })
 })
 

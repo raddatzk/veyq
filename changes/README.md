@@ -59,7 +59,10 @@ excess-property error at every call site that builds the request, so after `npm 
 phase that reshapes a request is red in `web/` and `admin-web/` until the client phase lands.
 `cr-cold-credential-proves-the-secret-key` wrote "`npm run check` (web and admin-web) green" into exactly such a
 phase; the Done-when for it is `generate:api` plus the contracts guards. **A removed *response* field is the
-other way round: it reddens only code that reads it and fixtures typed against the model.**
+other way round: it reddens only code that reads it and fixtures typed against the model.** **An added *required*
+response field reddens the server that builds it**: `cr-meta-writes-carry-the-version-they-read` predicted "backend
+green" for a contracts phase that added `metaVersion` to `NodeSummary`, and `ContentResource`'s
+`NodeSummary(...)` construction stopped compiling.
 `cr-guest-names-for-members-only` predicted a red at the fixture that served the removed field and got a green,
 because that fixture reached the code cast `as unknown as` (165 such casts, inbox #195). So a phase that predicts
 a client red names the typed line it expects to fail — and runs `npm run check` once to see it.
@@ -569,6 +572,12 @@ the sibling the reshape breaks. #103 nearly re-homed the role enum into a shared
 the *drift* guard (`validate_contracts_common.py`) was named; `validate_scope_model_vocabulary.py` silently
 anchors on `SetMemberRoleRequest.role.enum`, and a `$ref` would have broken it. Enumerate the guards on the
 symbol first, then choose the shape — the shape that keeps every anchor green is a constraint, not an afterthought.
+
+**The mutation manifests anchor on FILES, and a green gate does not say you broke one.** `web/stryker.mutate.json`,
+`packages/crypto/stryker.mutate.json` and `backend/pitest.scope.json` admit a file only while it is pure.
+`cr-meta-writes-carry-the-version-they-read` put a PATCH into `nodeMeta.ts`, which is in the web scope; the gate
+(break 95) stayed green at 98.7 % while that file fell from 100 % to 96 %. So the inventory greps the three manifests for
+every file a CR edits, and a file in one keeps its I/O next door.
 
 ### Promote one-shot proofs to permanent guards
 

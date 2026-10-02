@@ -42,7 +42,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
     // --- a Memory with a date, then a location set on it ---
     const { nodeId, memoryKey } = await createMemory(scopeId, epochsOf(scopeKey), `E2E place ${Date.now()}`)
     const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
-    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, null)
+    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaVersion: 0 })
 
     const medoid = computeMedoid([TENERIFE_A, TENERIFE_B])!
     // real reverse geocode (optional leg) — returns the address hierarchy; we pick the city level
@@ -79,7 +79,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory location e2e (live, operator-blin
     expect(plain).not.toContain('2026-05-01') // no date either
 
     // --- remove the location: place gone, date intact ---
-    const removed = await setMemoryLocation(scopeId, nodeId, memoryKey, null, meta)
+    const { wrappedMeta: removed } = await setMemoryLocation(scopeId, nodeId, memoryKey, null, meta)
     expect(unsealMemoryLocation(scopeId, memoryKey, { id: nodeId, wrappedMeta: removed })).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, { id: nodeId, wrappedMeta: removed })).toEqual(date)
 

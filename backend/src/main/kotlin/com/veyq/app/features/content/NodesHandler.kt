@@ -34,6 +34,11 @@ sealed interface UpdateNodeOutcome {
     object ScopeDeleting : UpdateNodeOutcome, HttpFailure by Failures.scopeDeleting
     object IllegalStructure : UpdateNodeOutcome, HttpFailure by Failures.illegalStructure
     object SlugTaken : UpdateNodeOutcome, HttpFailure by Failures.slugTaken
+    /** `wrappedMeta` sent without the `metaVersion` it was built from — an old client cannot skip the check. */
+    object MissingMetaVersion : UpdateNodeOutcome, HttpFailure by Failures.invalidRequest
+    /** The node's `wrappedMeta` moved past the stated version; nothing was written (ADR 0077). Carries the current
+     *  blob and version for the loser to re-apply its own change on. */
+    data class StaleMeta(val wrappedMeta: String?, val metaVersion: Long) : UpdateNodeOutcome, HttpFailure by Failures.staleVersion
 }
 
 sealed interface DeleteNodeOutcome {
@@ -114,7 +119,10 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
     fun update(
         userId: String, scopeId: String, nodeId: String,
         encryptedName: String?, slugToken: String?, newParentSlotId: String?, orderIndex: Int?, wrappedMeta: String?,
+        metaVersion: Long?,
     ): UpdateNodeOutcome {
+        // The request's own shape first, as the boundary's validation is: a malformed body is a 400 for anyone.
+        if (wrappedMeta != null && metaVersion == null) return UpdateNodeOutcome.MissingMetaVersion
         access.check(userId, scopeId, WRITE)
             .refusal(UpdateNodeOutcome.NotFound, UpdateNodeOutcome.Suspended, UpdateNodeOutcome.ScopeDeleting)?.let { return it }
         val node = store.findInScope(scopeId, nodeId) ?: return UpdateNodeOutcome.NotFound
@@ -133,8 +141,11 @@ class NodesHandler(private val store: NodesStore, private val access: ScopeAcces
         if (slugToken != null && store.slugTaken(targetSlot, slugToken, exceptNodeId = nodeId)) {
             return UpdateNodeOutcome.SlugTaken
         }
-        store.applyUpdate(nodeId, encryptedName, slugToken, moveSlot, orderIndex, wrappedMeta)
-        return UpdateNodeOutcome.Updated
+        return when (val r = store.applyUpdate(nodeId, encryptedName, slugToken, moveSlot, orderIndex, wrappedMeta, metaVersion)) {
+            NodesStore.ApplyResult.Applied -> UpdateNodeOutcome.Updated
+            NodesStore.ApplyResult.Missing -> UpdateNodeOutcome.NotFound
+            is NodesStore.ApplyResult.StaleMeta -> UpdateNodeOutcome.StaleMeta(r.wrappedMeta, r.metaVersion)
+        }
     }
 
     fun delete(userId: String, scopeId: String, nodeId: String): DeleteNodeOutcome {

@@ -50,8 +50,12 @@ items. The invariant therefore forces a favorite to be **ciphertext**:
 
 - Each set is AEAD-sealed on device and stored as **one opaque blob**. The server sees only the ciphertext + its
   size — never the subset that is favorited.
-- **Last-write-wins.** Toggling re-seals the *whole* affected set and `PUT`s it. The UI updates optimistically
-  and reverts on a failed write.
+- **Last-write-wins, recorded as such** ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)
+  point 6): each set has exactly one writer — its member — so the only loss is one toggle between that member's
+  own two devices. Toggling re-seals the *whole* affected set and `PUT`s it. The UI updates optimistically and
+  reverts on a failed write. **A toggle never starts from a set it has not loaded** (ADR 0077 point 5): until the
+  member's own set has loaded for that scope or Memory, a toggle does nothing — otherwise it would write a
+  one-element set over the stored one.
 - Access is **member-grant gated** (a non-member gets `404`, like the tree). The ids inside reference nodes and
   media the server already knows opaquely; sealing the **set** is what hides which of them are favorited.
 

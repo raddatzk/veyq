@@ -1,0 +1,70 @@
+useCase: uc.memory.concurrent-curation
+feature: memory
+title: Two members curate one Memory at once — every sealed meta write carries the version it read
+# Built by cr-meta-writes-carry-the-version-they-read (inbox #271, #273, #274), ADR 0077. Each backend criterion
+# was red first against the tree before the compare-and-set (the stale write answered 204/200 and replaced the
+# blob); each web criterion was red against the loop with no retry, and the #273/#274 ones against the untouched
+# client (a write over an unopenable blob, a toggle before load).
+acceptanceCriteria:
+  - id: node-meta-compare-and-set
+    text: An updateNode carrying wrappedMeta must carry the metaVersion it was built from (else 400). The server compare-and-sets it and stores metaVersion + 1, or writes nothing — a rename in the same request included — and answers 409 stale_version with the current blob and version. A rename alone needs no version and leaves it unmoved.
+    coverage:
+      backend:
+        integration:
+          - NodesSliceTest.staleMetaWriteIs409WithTheCurrentBlobAndWritesNothing
+          - NodesSliceTest.metaWithoutVersionIs400AndARenameLeavesTheVersionUnmoved
+          - NodesSliceTest.staleMetaWriteThatAlsoRenamesLeavesTheNameUnchanged
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+  - id: media-meta-compare-and-set
+    text: updateMediaMeta carries a required metaVersion and is compare-and-set the same way; media_revision moves on the success and not on the 409.
+    coverage:
+      backend:
+        integration:
+          - MediaSliceTest.staleMediaMetaWriteIs409AndMovesNoRevision
+          - MediaSliceTest.mediaMetaWithoutVersionIs400
+      web:
+        unit:
+          - src/features/memory/media.test.ts
+  - id: loser-reapplies-only-its-own-change
+    text: A writer that meets 409 stale_version re-runs its own change on the conflict body's blob and retries (at most five times), so a peer's field written meanwhile survives — for the date, place and cover editors and for the media backfills.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/memoryLocation.test.ts
+          - src/features/memory/memoryCover.test.ts
+          - src/features/memory/media.test.ts
+  - id: same-field-conflict-surfaces
+    text: An editor whose own field changed underneath it does not retry; it re-opens on the current value with a one-line notice. A cover save that already moved the cover blob re-applies its own cover instead.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/nodeMeta.test.ts
+          - src/features/memory/memoryCover.test.ts
+          - src/features/memory/useMemoryCover.test.ts
+          - src/features/memory/components/MediaLightbox.test.ts
+  - id: self-heal-recomputes-on-fresh
+    text: The auto date and auto place self-heals re-run their whole decision on the fresh blob — a peer's manual date or fixed place meanwhile means no write.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/components/MemoryDetail.test.ts
+  - id: never-rebuild-an-unopenable-blob
+    text: A present node or media blob that does not open is never rebuilt from empty — a self-heal or backfill stops, an editor saves nothing and says so; writers keep every field of the raw opened blob, including the resolved place name.
+    coverage:
+      web:
+        unit:
+          - src/features/memory/nodeMeta.test.ts
+          - src/features/memory/memoryDate.test.ts
+          - src/features/memory/media.test.ts
+  - id: toggle-waits-for-its-set
+    text: An item-mark or Memory-pin toggle does nothing until the member's own set has loaded for that Memory or scope, so it never writes a one-element set over the stored one.
+    coverage:
+      web:
+        unit:
+          - src/app/itemFavoritesStore.test.ts
+          - src/app/favoritesStore.test.ts

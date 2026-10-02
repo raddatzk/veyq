@@ -184,7 +184,7 @@ describe('an UPLOADER guest never holds K_mem (ADR 0031 point 7)', () => {
     expect(meta).not.toBeNull()
 
     // a member edits its capture time: the re-seal is under the guest's key, never K_mem — no media changes path
-    const edited = await setMediaMeta(SCOPE_ID, item, kMem, meta, 1_700_000_000_000)
+    const edited = await setMediaMeta(SCOPE_ID, item, kMem, 1_700_000_000_000)
     const metaCtx = { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: item.mediaId } as const
     expect(() => v1.open(metaCtx, kMem, fromB64std(edited.wrappedMeta!))).toThrow(new v1.OpenRefused('media-meta'))
     expect(unsealMeta(SCOPE_ID, kMem, { ...item, wrappedMeta: edited.wrappedMeta! })?.capturedAtOverride).toBe(1_700_000_000_000)

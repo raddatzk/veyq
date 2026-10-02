@@ -19,6 +19,7 @@ import { withRefresh } from '../../app/sessionRefresh'
 import { type MediaListPage, type MediaSummary, type PresignedUrl, type MediaDerivativeKind } from '../../api/generated/media'
 import { expectMintedId } from './mintedId'
 import { mediaKey, uploaderOriginOf, type UploaderOrigin } from './mediaKey'
+import { MetaConflictError, MetaUnreadableError, writeSealedMeta, type MetaEditContext } from './sealedMetaWrite'
 import { createBrowserDeriver, deriveTiers, type MediaDeriver, type AddMediaSource, type Dimensions } from './mediaDeriver'
 
 // The on-device pixel stage lives in `./mediaDeriver` (cr-0143). Re-exported here so existing importers of
@@ -169,6 +170,9 @@ export type MediaItem = {
   derivatives: MediaDerivative[]
   /** The original's listed-metadata tier sealed under `K_mem` (opaque base64); unwrap with [unsealMeta]. Absent when none. */
   wrappedMeta?: string
+  /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). Absent in the
+   *  public-share viewer, which never writes; a write that lacks it states 0 and re-bases on the `409`. */
+  metaVersion?: number
   /** When this media last changed (cr-0107) — the `(updatedAt, mediaId)` pair is the live-updates keyset cursor.
    *  Present for the authenticated gallery (`listMedia`/`listMediaPage`); absent for the public-share snapshot
    *  viewer, which doesn't poll (the sharing resolve carries no per-media timestamp). */
@@ -207,6 +211,7 @@ export function summaryToItem(s: MediaSummary, uploader?: UploaderOrigin): Media
       },
     })),
     wrappedMeta: s.wrappedMeta ?? undefined,
+    metaVersion: s.metaVersion,
     updatedAt: s.updatedAt,
     deletedAt: s.deletedAt ?? undefined,
     deletedBy: s.deletedBy ?? undefined,
@@ -235,28 +240,53 @@ export function unsealMeta(scopeId: string, memoryKey: Uint8Array, item: MediaIt
     const key = mediaKey(scopeId, memoryKey, item)
     const json = new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, item.mediaId), key, fromB64std(item.wrappedMeta)))
     const parsed = JSON.parse(json) as unknown
-    if (parsed && typeof parsed === 'object') {
-      const m = parsed as MediaMeta
-      const w = finiteNum(m.w)
-      const h = finiteNum(m.h)
-      const geo = w !== undefined && h !== undefined && w > 0 && h > 0
-      const source = m.capturedAtSource === 'exif' || m.capturedAtSource === 'file' ? m.capturedAtSource : undefined
-      return {
-        v: finiteNum(m.v) ?? 1,
-        w: geo ? w : undefined,
-        h: geo ? h : undefined,
-        capturedAt: finiteNum(m.capturedAt),
-        capturedAtOverride: finiteNum(m.capturedAtOverride),
-        capturedAtSource: source,
-        gpsLat: finiteNum(m.gpsLat),
-        gpsLng: finiteNum(m.gpsLng),
-        mediaType: cleanStr(m.mediaType),
-      }
-    }
+    if (parsed && typeof parsed === 'object') return normalizeMediaMeta(parsed as RawMediaMeta)
   } catch {
     /* not openable / malformed → treated as no metadata */
   }
   return null
+}
+
+/**
+ * A listed tier exactly as it was sealed — every field, known or not. Writers start from THIS, never from
+ * [unsealMeta]'s normalized copy: that copy is a display projection, and re-sealing a projection drops whatever it
+ * does not carry. It once left out the resolved place name, so every date correction erased it (ADR 0077 point 4).
+ */
+type RawMediaMeta = { v: number } & Record<string, unknown>
+
+/** The display projection of a raw tier: numbers coerced, geometry validated, unknown fields left out. */
+function normalizeMediaMeta(m: RawMediaMeta): MediaMeta {
+  const w = finiteNum(m.w)
+  const h = finiteNum(m.h)
+  const geo = w !== undefined && h !== undefined && w > 0 && h > 0
+  const source = m.capturedAtSource === 'exif' || m.capturedAtSource === 'file' ? m.capturedAtSource : undefined
+  return {
+    v: finiteNum(m.v) ?? 1,
+    w: geo ? w : undefined,
+    h: geo ? h : undefined,
+    capturedAt: finiteNum(m.capturedAt),
+    capturedAtOverride: finiteNum(m.capturedAtOverride),
+    capturedAtSource: source,
+    gpsLat: finiteNum(m.gpsLat),
+    gpsLng: finiteNum(m.gpsLng),
+    mediaType: cleanStr(m.mediaType),
+    placeName: cleanStr(m.placeName),
+    placeLevel: cleanStr(m.placeLevel),
+  }
+}
+
+/** The listed tier for a WRITE: absent → a fresh `{ v: 1 }`; present but unopenable or unparseable → refused. */
+function openMediaMetaForWrite(scopeId: string, memoryKey: Uint8Array, media: MediaRef, wrappedMeta: string | null): RawMediaMeta {
+  if (!wrappedMeta) return { v: 1 }
+  let parsed: unknown
+  try {
+    const key = mediaKey(scopeId, memoryKey, media)
+    parsed = JSON.parse(new TextDecoder().decode(v1.open(mediaMetaContext(scopeId, media.mediaId), key, fromB64std(wrappedMeta))))
+  } catch {
+    throw new MetaUnreadableError()
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new MetaUnreadableError()
+  return { ...(parsed as Record<string, unknown>), v: finiteNum((parsed as { v?: unknown }).v) ?? 1 }
 }
 
 /**
@@ -972,21 +1002,35 @@ export async function loadMediaExif(scopeId: string, media: MediaRef, memoryKey:
   }
 }
 
+/** A media a meta write targets: its id + origin (which key seals it) and the tier + version it was listed at. */
+export type MediaMetaTarget = MediaRef & Pick<MediaItem, 'wrappedMeta' | 'metaVersion'>
+
+/** The outcome of a media meta write: the display tier, the state the server confirmed or handed back, and
+ *  whether this call wrote (a backfill the fresh tier no longer needs does not). */
+export type MediaMetaWrite = { tier: MediaMeta | null; wrappedMeta: string | null; metaVersion: number; wrote: boolean }
+
 /**
  * Set (or clear, with `null`) a media's **capturedAt override** (cr-0065/0066/0068) — a corrected capture time.
  * Operator-blind: the whole listed-metadata tier is re-sealed under `K_mem` with the override added/removed and
- * PUT verbatim (geometry + GPS ride along unchanged — only the date is user-editable). `meta` is the tier already
- * unsealed by the lightbox (or null for a media with none — a fresh tier is sealed). Clearing the last field
- * drops the tier to null. Returns the new tier so the caller can update local state (and the grid can re-sort).
+ * PUT verbatim (geometry, GPS and the place name ride along unchanged — only the date is user-editable). The base
+ * is the tier the media was listed with, at its `metaVersion` (ADR 0077); a peer's correction written meanwhile
+ * throws `MetaConflictError` so the lightbox re-opens on it, while a peer's backfill merges silently. Clearing the
+ * last field drops the tier to null. Returns the new tier so the caller can update local state (and the grid can
+ * re-sort).
  */
 export async function setMediaMeta(
   scopeId: string,
-  media: MediaRef,
+  media: MediaMetaTarget,
   memoryKey: Uint8Array,
-  meta: MediaMeta | null,
   overrideMs: number | null,
-): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, media, memoryKey, { ...(meta ?? { v: 1 }), capturedAtOverride: overrideMs ?? undefined })
+): Promise<MediaMetaWrite> {
+  const openedWith = unsealMeta(scopeId, memoryKey, media as MediaItem)?.capturedAtOverride
+  return persistMeta(scopeId, media, memoryKey, (raw, { retry, state }) => {
+    if (retry && finiteNum(raw.capturedAtOverride) !== openedWith) throw new MetaConflictError(state)
+    if (overrideMs === null) delete raw.capturedAtOverride
+    else raw.capturedAtOverride = overrideMs
+    return raw
+  })
 }
 
 /**
@@ -1016,23 +1060,24 @@ function clampUtf8(s: string, maxBytes: number): string {
 }
 
 /**
- * Seal a media's resolved **place name** into the listed tier (read-modify-write, exactly as the capture-time
- * override and the mediaType back-fill do — the spread is what keeps the date and the GPS from being clobbered).
- * Operator-blind: the name is resolved client-direct from a bare coordinate and the server only ever sees the
- * re-sealed ciphertext.
+ * Seal a media's resolved **place name** into the listed tier (read-modify-write from the RAW tier, exactly as the
+ * capture-time override and the mediaType back-fill do — every other field rides along verbatim). A backfill: if
+ * the tier it re-bases on after a `409` already carries a name, nothing is written. Operator-blind: the name is
+ * resolved client-direct from a bare coordinate and the server only ever sees the re-sealed ciphertext.
  */
 export async function backfillPlaceName(
   scopeId: string,
-  media: MediaRef,
+  media: MediaMetaTarget,
   memoryKey: Uint8Array,
-  meta: MediaMeta | null,
   placeName: string,
   placeLevel?: string,
-): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, media, memoryKey, {
-    ...(meta ?? { v: 1 }),
-    placeName: clampPlaceName(placeName),
-    placeLevel,
+): Promise<MediaMetaWrite> {
+  return persistMeta(scopeId, media, memoryKey, (raw) => {
+    if (cleanStr(raw.placeName) !== undefined) return null // the fresh tier already has one — nothing to fill
+    raw.placeName = clampPlaceName(placeName)
+    if (placeLevel === undefined) delete raw.placeLevel
+    else raw.placeLevel = placeLevel
+    return raw
   })
 }
 
@@ -1040,51 +1085,62 @@ export async function backfillPlaceName(
  * Lazily back-fill a pre-field media's sealed **`mediaType`** (cr-inline-video-playback, #104/#105). Called on the
  * first original-fetch (download or play) of an item that carries no sealed type: re-seal the listed tier with the
  * sniffed MIME merged in — every other field untouched — and PUT it, so the **next** listing carries the video
- * signal (the tile play badge + the lightbox `<video>` branch). Operator-blind: the MIME is sniffed on device from
- * plaintext the client already holds ([sniffMediaType]); the server only ever sees the re-sealed ciphertext. The
- * accepted boundary (ADR 0047 / #105): a pre-field video that is never fetched stays without a signal — there is
- * **no** eager original-fetch just to back-fill.
+ * signal (the tile play badge + the lightbox `<video>` branch). Nothing is written when the tier it re-bases on
+ * already has a type. Operator-blind: the MIME is sniffed on device from plaintext the client already holds
+ * ([sniffMediaType]); the server only ever sees the re-sealed ciphertext. The accepted boundary (ADR 0047 / #105):
+ * a pre-field video that is never fetched stays without a signal — there is **no** eager original-fetch just to
+ * back-fill.
  */
 export async function backfillMediaType(
   scopeId: string,
-  media: MediaRef,
+  media: MediaMetaTarget,
   memoryKey: Uint8Array,
-  meta: MediaMeta | null,
   mediaType: string,
-): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
-  return persistMeta(scopeId, media, memoryKey, { ...(meta ?? { v: 1 }), mediaType })
+): Promise<MediaMetaWrite> {
+  return persistMeta(scopeId, media, memoryKey, (raw) => {
+    if (cleanStr(raw.mediaType) !== undefined) return null
+    raw.mediaType = mediaType
+    return raw
+  })
 }
 
-/** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). */
-function metaHasContent(m: MediaMeta): boolean {
-  return (
-    m.w !== undefined || m.capturedAt !== undefined || m.capturedAtOverride !== undefined ||
-    m.gpsLat !== undefined || m.gpsLng !== undefined || m.mediaType !== undefined ||
-    // A tier whose only content is a resolved name is still content. Forgetting this clause is not a cosmetic
-    // miss: `persistMeta` would seal `null` and the name would be resolved again on every single open.
-    m.placeName !== undefined
-  )
+/** Whether a metadata tier carries anything worth sealing (else it drops to null on a re-seal). Any field but `v`
+ *  counts — a known one (a tier whose only content is a resolved name is still content: sealing `null` would have
+ *  the name resolved again on every open) or one a newer client wrote that this one does not know. */
+function metaHasContent(m: RawMediaMeta): boolean {
+  return Object.entries(m).some(([k, v]) => k !== 'v' && v !== undefined)
 }
 
 /**
- * Re-seal a metadata tier under the media's key and PUT it verbatim (`updateMediaMeta`) — the shared write path
- * behind the capturedAt edit ([setMediaMeta]) and the mediaType backfill ([backfillMediaType]). The key is the one
+ * Re-seal a metadata tier under the media's key and PUT it with the `metaVersion` it was built from
+ * (`updateMediaMeta`, ADR 0077) — the one write path behind the capturedAt edit ([setMediaMeta]) and the two
+ * backfills. `edit` gets the RAW tier (every field verbatim, never [unsealMeta]'s projection) and returns the next
+ * one, or null for no write; on a `409 stale_version` it re-runs on the tier the conflict handed back. A present
+ * tier that does not open is refused (`MetaUnreadableError`), never rebuilt from empty (#273). The key is the one
  * the media's origin fixes ([mediaKey]): a member editing what an UPLOADER guest added re-seals under that guest's
  * key, never under `K_mem`, so the media never changes path (ADR 0031 point 7). Drops to null when nothing is
- * left worth sealing. Returns both the unsealed tier (for local state) and the sealed blob (so the grid item stays
- * consistent).
+ * left worth sealing.
  */
 async function persistMeta(
   scopeId: string,
-  media: MediaRef,
+  media: MediaMetaTarget,
   memoryKey: Uint8Array,
-  next: MediaMeta,
-): Promise<{ tier: MediaMeta | null; wrappedMeta: string | null }> {
+  edit: (raw: RawMediaMeta, ctx: MetaEditContext) => RawMediaMeta | null,
+): Promise<MediaMetaWrite> {
   const { mediaId } = media
-  const key = mediaKey(scopeId, memoryKey, media)
-  const wrappedMeta = metaHasContent(next) ? sealJson(key, prune(next), mediaMetaContext(scopeId, mediaId)) : null
-  await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta } }))
-  return { tier: wrappedMeta ? (prune(next) as MediaMeta) : null, wrappedMeta }
+  const { state, meta, wrote } = await writeSealedMeta<RawMediaMeta>(
+    { wrappedMeta: media.wrappedMeta ?? null, metaVersion: media.metaVersion ?? 0 },
+    {
+      open: (wrappedMeta) => openMediaMetaForWrite(scopeId, memoryKey, media, wrappedMeta),
+      seal: (raw) =>
+        metaHasContent(raw) ? sealJson(mediaKey(scopeId, memoryKey, media), prune(raw), mediaMetaContext(scopeId, mediaId)) : null,
+      send: async (wrappedMeta, metaVersion) => {
+        await withRefresh(() => mediaApi().updateMediaMeta({ scopeId, mediaId, mediaMetaUpdate: { wrappedMeta, metaVersion } }))
+      },
+    },
+    edit,
+  )
+  return { tier: state.wrappedMeta ? normalizeMediaMeta(meta) : null, wrappedMeta: state.wrappedMeta, metaVersion: state.metaVersion, wrote }
 }
 
 function tierRef(item: MediaItem, kind: MediaDerivativeKind): BlobRef | undefined {

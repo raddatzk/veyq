@@ -43,6 +43,7 @@ import exifr from 'exifr'
 import { mediaApi } from '../../../api/client'
 import { registerPlayback, revokePlayback } from '../../../sw/register'
 import * as v1 from '@veyq/crypto/v1'
+import { b64std } from '@veyq/crypto/base64'
 import { galleryFakeStore } from './galleryFakeStore'
 import { resetPlaceNameCache } from '../placeName'
 import { realI18n, t } from '../../../test/i18n'
@@ -696,5 +697,36 @@ describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
     const sent = store.api.updateMediaMeta.mock.calls.at(-1)![0].mediaMetaUpdate.wrappedMeta
     expect(typeof sent).toBe('string') // a fresh sealed tier
     expect(wrapper.text()).toContain(t('media.capturedAtCorrected'))
+  })
+
+  /**
+   * uc.memory.concurrent-curation E1 (ADR 0077): a peer corrected the time meanwhile. The save does not overwrite
+   * it — the editor stays open on the PEER's time, says so, and the grid learns the peer's tier. Control: the
+   * first save was sent (and refused), so the notice is about a real conflict, not a write never attempted.
+   */
+  it('a peer\'s correction written meanwhile re-opens the editor on theirs, with the conflict notice', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const { store, items } = await seedOne(memoryKey, { DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
+    const PEER = Date.UTC(2020, 1, 2, 3, 4, 0)
+    const peers = b64std(v1.seal(
+      { purpose: 'media-meta', scopeId: SCOPE_ID, mediaId: items[0].mediaId }, memoryKey,
+      new TextEncoder().encode(JSON.stringify({ v: 1, capturedAt: Date.UTC(2021, 4, 1, 10, 0, 0), capturedAtOverride: PEER })),
+    ))
+    store.api.updateMediaMeta.mockRejectedValueOnce({
+      response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta: peers, metaVersion: 1 }), { status: 409 }),
+    })
+
+    const wrapper = mountLightbox(memoryKey, items, 0)
+    await flushPromises()
+    await wrapper.find(`[aria-label="${t('media.editCapturedAt')}"]`).trigger('click')
+    await wrapper.find('#captured-at-input').setValue('2019-08-15T08:30')
+    await wrapper.find('.media-lightbox-date-form').trigger('submit')
+    await flushPromises()
+
+    expect(store.api.updateMediaMeta).toHaveBeenCalledTimes(1) // no retry over the peer's own field
+    expect(wrapper.text()).toContain(t('media.capturedAtConflict'))
+    expect(wrapper.find('#captured-at-input').exists()).toBe(true) // the editor is still open…
+    expect(new Date((wrapper.find('#captured-at-input').element as HTMLInputElement).value).getTime()).toBe(PEER) // …on theirs
+    expect(wrapper.emitted('updated')?.at(-1)?.[0]).toEqual({ mediaId: items[0].mediaId, wrappedMeta: peers, metaVersion: 1 })
   })
 })

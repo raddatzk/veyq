@@ -1,6 +1,7 @@
 package com.veyq.app.shared.http
 
 import com.veyq.app.generated.model.ErrorResponse
+import com.veyq.app.generated.model.StaleSealedMeta
 import jakarta.ws.rs.core.Response
 
 /**
@@ -58,4 +59,15 @@ private data class Failure(override val code: String, override val status: Failu
 fun httpError(failure: HttpFailure): Response =
     Response.status(failure.status.httpStatus)
         .entity(ErrorResponse(code = failure.code))
+        .build()
+
+/**
+ * The one failure body that carries more than its code (ADR 0077): a stale sealed-meta write answers with the
+ * blob's current value and version, because neither the node nor the media has a single-item read the loser could
+ * re-GET — the body IS the re-read. Ciphertext the caller can already list, so nothing new crosses. The status
+ * still comes from the failure's bucket, never from the call site.
+ */
+fun httpStaleSealedMeta(failure: HttpFailure, wrappedMeta: String?, metaVersion: Long): Response =
+    Response.status(failure.status.httpStatus)
+        .entity(StaleSealedMeta(code = failure.code, wrappedMeta = wrappedMeta, metaVersion = metaVersion))
         .build()

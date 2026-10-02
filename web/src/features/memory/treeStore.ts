@@ -25,12 +25,15 @@ export async function loadTree(): Promise<void> {
 }
 
 /**
- * Patch a node's sealed `wrappedMeta` in place after a date/meta edit (cr-0067) — keeps the browse card + detail
- * header reactive without a full re-list. No-op if the node isn't loaded.
+ * Patch a node's sealed `wrappedMeta` and the `metaVersion` it is at, in place, after a meta write or a conflict
+ * that handed back the current value (cr-0067, ADR 0077) — keeps the browse card + detail header reactive without
+ * a full re-list, and the next write's version current. No-op if the node isn't loaded.
  */
-export function patchNodeMeta(nodeId: string, wrappedMeta: string): void {
+export function patchNodeMeta(nodeId: string, wrappedMeta: string | null, metaVersion: number): void {
   const node = treeStore.nodes.find((n) => n.id === nodeId)
-  if (node) node.wrappedMeta = wrappedMeta
+  if (!node) return
+  node.wrappedMeta = wrappedMeta
+  node.metaVersion = metaVersion
 }
 
 /** Forget the loaded tree (logout / space switch). */

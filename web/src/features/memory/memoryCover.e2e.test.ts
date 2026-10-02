@@ -41,13 +41,13 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
       return node!
     }
 
-    // Build up the shared blob one sub-object at a time (each is a real updateNode; each chains the prior blob
-    // as currentMeta, exactly as the UI's read-modify-write does).
+    // Build up the shared blob one sub-object at a time (each is a real updateNode; each chains the prior blob AND
+    // the version it is at, exactly as the UI's read-modify-write does — ADR 0077).
     const date = { mode: 'range' as const, from: '2026-05-01', to: '2026-05-09' }
     const location = { name: 'Teneriffa', nameSource: 'manual' as const, derivedMode: 'fixed' as const }
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'smoke-media-id' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28125 } }
 
-    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, null)
+    let meta = await setMemoryDate(scopeId, nodeId, memoryKey, date, { wrappedMeta: null, metaVersion: 0 })
     meta = await setMemoryLocation(scopeId, nodeId, memoryKey, location, meta)
     await setMemoryCover(scopeId, nodeId, memoryKey, cover, meta)
 
@@ -75,7 +75,9 @@ describe.skipIf(!process.env.VEYQ_E2E)('memory cover e2e (live, operator-blind r
     expect(unsealMemoryCover(scopeId, memoryKey, withCover)).toEqual(cover)
 
     // Remove the cover (read-modify-write against the live blob) — only the cover drops; date + location remain.
-    await setMemoryCover(scopeId, nodeId, memoryKey, null, withCover.wrappedMeta)
+    // The live blob is at version 3 (three meta writes), and the server says so on the listing.
+    expect(withCover.metaVersion).toBe(3)
+    await setMemoryCover(scopeId, nodeId, memoryKey, null, { wrappedMeta: withCover.wrappedMeta, metaVersion: withCover.metaVersion })
     const withoutCover = await readBack()
     expect(unsealMemoryCover(scopeId, memoryKey, withoutCover)).toBeNull()
     expect(unsealMemoryDate(scopeId, memoryKey, withoutCover)).toEqual(date)
