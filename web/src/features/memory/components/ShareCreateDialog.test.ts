@@ -10,6 +10,10 @@ import { mount, flushPromises } from '@vue/test-utils'
 // The dialog decrypts an editShare on mount; stub the share data layer so it mounts crypto/network-free.
 const createShare = vi.fn().mockResolvedValue({ shareId: 's1', kShare: new Uint8Array(32) })
 const updateShare = vi.fn().mockResolvedValue(undefined)
+const reissueShare = vi.fn()
+// The real predicate is share.test.ts's; here it answers for the error the stubbed reissue throws.
+const isShareDeleted = vi.fn(async (e: unknown) => e === SHARE_DELETED)
+const SHARE_DELETED = new Error('409 share_deleted')
 // The dialog assembles the link itself now (the origin is a UI concern), so `shareLink` is its own stub.
 vi.mock('../shareLink', () => ({
   buildShareLink: vi.fn((shareId: string) => `https://x/s/${shareId}#k=abc`),
@@ -17,6 +21,8 @@ vi.mock('../shareLink', () => ({
 vi.mock('../share', () => ({
   createShare: (...a: unknown[]) => createShare(...a),
   updateShare: (...a: unknown[]) => updateShare(...a),
+  reissueShare: (...a: unknown[]) => reissueShare(...a),
+  isShareDeleted: (e: unknown) => isShareDeleted(e),
   readShareName: vi.fn(() => ''),
   readShareNoteMap: vi.fn(() => ({})),
   readSharePassword: vi.fn(() => ''),
@@ -130,5 +136,42 @@ describe('ShareCreateDialog (cr-0116)', () => {
     await w.find(`[aria-label="${t('share.expirySection')}"]`).trigger('click') // toggle the pre-filled expiry OFF
     await w.findAll('button').find((b) => b.text() === t('share.noteSave'))!.trigger('click')
     expect(updateShare.mock.calls[0][5]).toBeNull()
+  })
+})
+
+// Inbox #252 (ADR 0075 point 1): a share is re-issued at most once. A renew that lost to another renew — or to a
+// delete — mints nothing; the dialog says so, has the list re-read, and offers no retry that could only fail again.
+describe('ShareCreateDialog — a renew that lost (#252)', () => {
+  const submit = (w: ReturnType<typeof mountDialog>) =>
+    w.findAll('button').find((b) => b.text() === t('share.reissueSubmit'))!
+
+  it('on 409 share_deleted: re-reads the list, names what happened, shows no link and blocks a retry', async () => {
+    reissueShare.mockReset().mockRejectedValueOnce(SHARE_DELETED)
+    const w = mountDialog({ reissueFrom: editShareWith({ enabled: false }) })
+    await submit(w).trigger('click')
+    await flushPromises()
+
+    expect(w.emitted('saved')).toHaveLength(1)
+    expect(w.text()).toContain(t('share.reissueAlreadyReplaced'))
+    expect(w.text()).not.toContain(t('share.reissueFailed'))
+    expect(w.text()).not.toContain('https://x/s/')
+    await submit(w).trigger('click')
+    await flushPromises()
+    expect(reissueShare).toHaveBeenCalledTimes(1)
+  })
+
+  it('control: any other refusal is the plain failure, the list is not re-read, and a retry is allowed', async () => {
+    reissueShare.mockReset().mockRejectedValueOnce(new Error('500')).mockResolvedValueOnce({ shareId: 's2', kShare: new Uint8Array(32) })
+    const w = mountDialog({ reissueFrom: editShareWith({ enabled: false }) })
+    await submit(w).trigger('click')
+    await flushPromises()
+
+    expect(w.emitted('saved')).toBeUndefined()
+    expect(w.text()).toContain(t('share.reissueFailed'))
+    expect(w.text()).not.toContain(t('share.reissueAlreadyReplaced'))
+    await submit(w).trigger('click')
+    await flushPromises()
+    expect(reissueShare).toHaveBeenCalledTimes(2)
+    expect(w.emitted('saved')).toHaveLength(1)
   })
 })

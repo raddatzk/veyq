@@ -15,7 +15,7 @@ vi.mock('../spaces/scopes', async (importOriginal) => ({
   openScopeById: vi.fn(),
 }))
 
-import { createShare, reissueShare, revokeScopeShares, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
+import { createShare, reissueShare, isShareDeleted, revokeScopeShares, type ReissuableShare, resolveShare, createContributorIdentity, addSharePhoto, deleteSharePhoto, listSharesFor, reactivateShare, updateShare, readShareNoteMap, readShareName, pickLocaleText, derivePasswordToken, readSharePassword, shareChunkProvider, ShareUnavailableError, SharePasswordRequiredError } from './share'
 // The link builders live in `shareLink.ts` (the UI edge, the only part that needs `window`) — see its header.
 import { buildShareLink, recoverShareLink } from './shareLink'
 import { unsealMeta, CHUNK_SIZE, type MediaDeriver } from './media'
@@ -659,6 +659,21 @@ describe('reissueShare (ADR 0075, W1)', () => {
     const { old, reissue } = await oldShare(kMem)
     await expect(reissueShare({ ...old, sealedPassword: null }, kMem, EPOCHS, 'Rom')).rejects.toThrow('share_password_not_recoverable')
     expect(reissue).not.toHaveBeenCalled()
+  })
+
+  // Inbox #252: a share is re-issued at most once. The loser of two renews — or a renew after a delete — is
+  // `409 share_deleted`, and it is never retried: a retry under a fresh id would be refused the same way.
+  it('a 409 share_deleted is thrown as is and never retried; another 409 is not it', async () => {
+    const kMem = v1.randomBytes(32)
+    const { old, reissue } = await oldShare(kMem)
+    reissue.mockReset().mockRejectedValue(httpError(409, 'share_deleted'))
+    const lost = await reissueShare(old, kMem, EPOCHS, 'Rom').catch((e: unknown) => e)
+    expect(await isShareDeleted(lost)).toBe(true)
+    expect(reissue).toHaveBeenCalledTimes(1)
+    expect(openScopeById).not.toHaveBeenCalled()
+
+    expect(await isShareDeleted(httpError(409, 'id_taken'))).toBe(false)
+    expect(await isShareDeleted(httpError(404, 'share_deleted'))).toBe(false)
   })
 
 }, PRODUCTION_ARGON_TIMEOUT_MS)
