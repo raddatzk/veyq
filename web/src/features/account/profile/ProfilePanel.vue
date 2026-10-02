@@ -46,12 +46,12 @@ const loadError = computed(() => loadErrorKind(loadErr.value) !== null)
 
 const { run: runSave, pending: saving } = useAsyncAction(
   async () => {
-    // Seal the real name under K_tenant when we hold it; otherwise update only the username (the name can be
-    // added once the member's grant lands and they re-open this panel).
-    const sealedName =
-      nameKey && (firstName.value.trim() || lastName.value.trim())
-        ? sealName(nameKey.key, nameKey.address, { firstName: firstName.value, lastName: lastName.value })
-        : undefined
+    // Seal whatever the fields hold whenever we hold K_tenant — an EMPTY name included: that is how a member
+    // removes their real name (an omitted field would leave the old one on the server, per the contract). Without
+    // the key only the username is updated; the name inputs are disabled then, so nothing typed is dropped.
+    const sealedName = nameKey
+      ? sealName(nameKey.key, nameKey.address, { firstName: firstName.value, lastName: lastName.value })
+      : undefined
     await updateMyProfile({
       username: username.value.trim().toLowerCase(),
       sealedName,
@@ -95,8 +95,8 @@ async function save() {
           <small class="field-hint">{{ t('profile.usernameHint') }}</small>
         </label>
         <div class="name-row">
-          <label>{{ t('profile.firstName') }}<InputText v-model="firstName" autocomplete="given-name" /></label>
-          <label>{{ t('profile.lastName') }}<InputText v-model="lastName" autocomplete="family-name" /></label>
+          <label>{{ t('profile.firstName') }}<InputText v-model="firstName" autocomplete="given-name" :disabled="!nameKey" /></label>
+          <label>{{ t('profile.lastName') }}<InputText v-model="lastName" autocomplete="family-name" :disabled="!nameKey" /></label>
         </div>
         <small v-if="!nameKey" class="field-hint">{{ t('profile.noNameYet') }}</small>
 
