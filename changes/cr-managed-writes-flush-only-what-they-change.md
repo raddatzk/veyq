@@ -1,7 +1,7 @@
 ---
 id: cr-managed-writes-flush-only-what-they-change
 title: A managed-entity write flushes only the columns it changed, so it cannot undo another writer's transition
-status: planned
+status: done
 satisfies: [uc.admin.suspend-tenant, uc.admin.tenant-terms, uc.sharing.share-uploader, uc.spaces.rename-group, uc.spaces.set-space-icon, uc.account.change-password, uc.account.recover-access, uc.memory.buckets, uc.memory.live-updates]
 adrs: ["0024", "0031"]
 invariants: [operator-blind E2EE everywhere]
@@ -103,15 +103,15 @@ overlap found. The annotation reaches them anyway (Open question 1).
 
 ## Phases
 
-- [ ] 1 backend, the default (E1, E2). Annotate all 33 entities and add the metamodel test. The four measured
+- [x] 1 backend, the default (E1, E2). Annotate all 33 entities and add the metamodel test. The four measured
   races (Inventory 1–4) get their red-first tests in the slice tests of their features.
   · Done when: DoD #1–#4 and E2's test are green, and `./gradlew check` is green in `backend/`.
-- [ ] 2 backend, the read-only pairs (Inventory 5–8). Red-first tests only. Phase 1's annotation is expected to
+- [x] 2 backend, the read-only pairs (Inventory 5–8). Red-first tests only. Phase 1's annotation is expected to
   turn them green. A test that cannot be made red **before** Phase 1 is recorded as such, not claimed.
   · Done when: DoD #5–#8 are green (or recorded), and `./gradlew check` is green.
-- [ ] 3 backend, same-column races (E3), one bullet per race, each red first.
+- [x] 3 backend, same-column races (E3), one bullet per race, each red first.
   · Done when: DoD #10a–c are green, and `./gradlew check` is green.
-- [ ] 4 docs. `docs/crosscutting/developer-styleguide.md` §12: the single-use bullet from
+- [x] 4 docs. `docs/crosscutting/developer-styleguide.md` §12: the single-use bullet from
   `cr-one-time-secrets-spend-by-compare-and-set` Phase 4 says a managed write flushes every column. Once this
   CR has landed, that is no longer true. The bullet becomes: **every entity carries `@DynamicUpdate` (E2 holds
   it), so a managed write flushes only what it changed. Two writers of the same column still need the
@@ -146,3 +146,22 @@ Phase 1 must come before Phase 2. Phase 3 does not depend on either.
   here.
 
 ## Retrospective
+
+- **Planning: the refine prescribed fixes for races it had only read, and two were wrong.** (b)'s
+  `and bucketId = ?old` guards a column the race never touches; run, the move into a bucket being deleted was a
+  `500` from `fk_media_bucket`, fixed by a lock on the target bucket that both writers take first. (a)'s "guarded
+  update of `enabled`" was already done by `cr-share-link-delete`'s row lock; the live race was the membership
+  check read before it, fixed by taking the scope lock every removal holds. Root cause: "read, not run" rows
+  carried a fix shape, and the read did not include the schema's foreign keys or the locks already in place.
+  Harvested into `changes/README.md` (*a race the refine only read …*).
+- **Planning: DoD #3 levered on a writer Phase 3 removes.** It named `renameGroup` as the managed writer that rolls
+  the epoch back, and Phase 3 turns that into a guarded bulk update. Its bite would have stopped biting, which is
+  exactly § *a bite's lever must survive the CR's own later phases*. The test uses `clearIcon`, which stays a
+  managed write. Also, two of the four "measured" reverts were closed before implementation: the epoch one by
+  `ScopeEntity`'s annotation (`cr-tenant-removal-share-links`) and the share edit by its row lock. The brief said
+  to re-run every locator first, and that caught both. The CR had not been re-read when those landed.
+- **Execution: the worktree sandbox refuses compound shell commands** (variables, globbed `--tests` filters, `cd &&`
+  chains). Filtered test runs went through a small Python runner in the scratchpad. The first `cp` restore also
+  hit the interactive alias; the restore used `command cp` and a byte compare, per the rule. **Next time:** start a
+  bite-heavy session by writing the runner and the snapshot/restore helper first, before the first red.
+
