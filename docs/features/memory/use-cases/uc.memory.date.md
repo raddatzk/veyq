@@ -50,15 +50,16 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 - **E1 — no dated media in `auto`:** the header shows a neutral "no date yet" state; adding dated media fills it.
 - **E2 — vault locked / Memory not open:** without the node's `K_mem` the `wrappedMeta` can't be unsealed → the
   date is unavailable until unlock + open.
-- **E3 — malformed / wrong-key `wrappedMeta`:** best-effort — treated as no manual date (falls back to `auto`),
-  never a broken header.
+- **E3 — malformed / wrong-key `wrappedMeta`:** best-effort for display — treated as no manual date (falls back
+  to `auto`), never a broken header. It is never *written* over: the self-heal stops and a date save is refused
+  ([uc.memory.concurrent-curation](uc.memory.concurrent-curation.md) E5).
 - **E4 — invalid manual range (`to` < `from`):** rejected in the editor before sealing.
-- **E5 — concurrent members change media (groups/tenant):** the materialized `auto` range is a **derived,
-  self-healing** aggregate. Two members adding media to the same Memory at once can leave a card's range
-  transiently too narrow (a blind last-write-wins on `wrappedMeta`); the **self-heal reconcile on the next open**
-  (E-flow above) recomputes from the now-complete media list and corrects it. No data loss — the media stays
-  correctly sealed; only the cached display range lags. (A later live-update/poll feature will surface others'
-  new media into open grids and shrink the window further.)
+- **E5 — concurrent members (groups/tenant):** another member may write the same `wrappedMeta` meanwhile — a
+  date, a place, a cover, or the `auto` range from their own open. Every write states the `metaVersion` it was
+  built from and re-applies only its own change on a conflict; the self-heal re-checks *"a manual date is never
+  overwritten"* on the fresh blob, and a date editor whose date changed underneath it re-opens on the current
+  value. The property and its failure modes are
+  [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md).
 
 ## Quality notes
 
@@ -68,11 +69,11 @@ use-case adds is the **`auto`** behaviour — the other three modes just carry t
 - **`auto` reuses the capture-time tier** the gallery already lists (cr-0064/0066); it is materialized into
   `wrappedMeta` by a full-list reconcile at settle points (a small extra `updateNode` PATCH) so the browse grid
   can show + sort by the range without ever loading a Memory's media.
-- **Eventual consistency over locking (deliberate).** The `auto` range is a derived, self-healing display value.
-  Rather than add per-write optimistic concurrency (a blind server `media_rev` + compare-and-set), we accept that
-  a concurrent-member add can briefly narrow a card's range and let the **open-time self-heal** correct it — no
-  data loss, no operator-blindness impact. Materialize the range only **after an upload finishes**, never
-  mid-upload. (If strict consistency is ever needed, the `media_rev` CAS is the blind-safe upgrade.)
+- **Version-checked, not last-writer-wins.** The blob also holds the place and the cover, which never self-heal,
+  so a stale re-seal of the derived range would erase them; every write is a compare-and-set on the node's own
+  `metaVersion` ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md),
+  [uc.memory.concurrent-curation](uc.memory.concurrent-curation.md)). Materialize the range only **after an
+  upload finishes**, never mid-upload.
 - **Reuse the existing UI/UX — never invent.** The date picker + ISO formatting are existing components
   (`IsoDateField` / `memoryDateRange`); the 4-mode switch realizes the approved
   mockup (the pre-E2EE design carried only a flat start/end range).

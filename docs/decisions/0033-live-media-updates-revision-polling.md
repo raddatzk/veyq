@@ -118,9 +118,11 @@ add/edit never carries the O(N) id-set, and nothing does per idle tick.
   (the id-set, gated by `delete_revision`), and it stays operator-blind** — two counters + opaque ids + coarse
   timestamps, no content, no new operator-visible signal beyond the poll access-pattern the operator already sees
   on reads.
-- **`media_revision` is exactly the blind-safe `media_rev` CAS that [uc.memory.date](../features/memory/use-cases/uc.memory.date.md)
-  foreshadowed** — a live poll surfacing others' new media into an open grid also **tightens the cr-0067 `auto`-date
-  self-heal window** (the reconcile sees new media sooner). One counter, two payoffs.
+- **A live poll also tightens the `auto`-date self-heal window** ([uc.memory.date](../features/memory/use-cases/uc.memory.date.md)):
+  the reconcile sees others' new media sooner. **`media_revision` is a read-cache validator, never a write
+  precondition** — it moves on every attach, trash, restore, move and meta change, so a compare-and-set on it would
+  turn every concurrent upload into a date-edit conflict. The sealed meta blobs carry their own `metaVersion` for
+  that ([ADR 0077](0077-a-write-carries-the-version-it-read.md)).
 - **New server state:** a `media_revision INT` + a `delete_revision INT` column on `veyq_node`, an `updated_at
   TIMESTAMP` on `veyq_media` (backfilled `= created_at`); `listNodeMedia` gains a conditional GET (`If-None-Match`
   → `304`), a `since` cursor (keyset delta), and the current-id-set on a `200` **only when the client's

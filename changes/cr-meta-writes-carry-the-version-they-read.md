@@ -1,9 +1,9 @@
 ---
 id: cr-meta-writes-carry-the-version-they-read
 title: A sealed-meta write carries the version it was built from, and a stale one answers 409 stale_version
-status: planned
-satisfies: [uc.memory.date, uc.memory.place, uc.memory.cover, en.memory.node-meta, en.memory.media]
-adrs: ["0072", "0033", "0068", "0036"]
+status: in-progress
+satisfies: [uc.memory.concurrent-curation, uc.memory.date, uc.memory.place, uc.memory.cover, en.memory.node-meta, en.memory.media]
+adrs: ["0077", "0072", "0033", "0068", "0036"]
 invariants: [operator-blind E2EE everywhere]
 ---
 

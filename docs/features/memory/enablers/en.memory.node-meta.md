@@ -11,7 +11,9 @@
   node-level metadata (its **date**, and next its **place**). Materialized so a browse card / a tenant map can
   show + sort by it **without loading the Memory's media**.
 - **Serves (use-cases):** [uc.memory.date](../use-cases/uc.memory.date.md) (the `date` sub-object),
-  [uc.memory.place](../use-cases/uc.memory.place.md) (the `location` sub-object).
+  [uc.memory.place](../use-cases/uc.memory.place.md) (the `location` sub-object),
+  [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md) (every writer of the blob,
+  version-checked).
 - **Depends on:** [en.memory.tree](en.memory.tree.md) — the node model + `K_mem` birth/open this seals under;
   through it `uc.account.unlock` (identity → `K_SC` → `K_mem`). Applies
   [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) ("capture time, location" as `K_mem` content) at
@@ -60,7 +62,13 @@
   `updateNode` (`PATCH …/nodes/{nodeId}`) with **partial semantics** — a non-null `wrappedMeta` replaces it, an
   omitted/null one leaves it unchanged (so a rename/move that omits it is safe); returned (small) on `listNodes`.
   The blind server threads the ciphertext verbatim through `NodeEntity` / store / handler / resource.
-- **Migration** `V17__node_meta.sql` (`veyq_node.wrapped_meta TEXT NULL`).
+- **Version-checked** ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)). `listNodes`
+  returns each node's `metaVersion` (born 0). An `updateNode` that carries `wrappedMeta` must also carry the
+  `metaVersion` it was built from (else `400`); the server compare-and-sets it and stores `metaVersion + 1`, or
+  writes nothing — a rename in the same request included — and answers `409 stale_version` with the current blob
+  and version. Only this write moves the counter.
+- **Migrations** `V17__node_meta.sql` (`veyq_node.wrapped_meta TEXT NULL`) and `V66__meta_version.sql`
+  (`veyq_node.meta_version`, and the same counter on `veyq_media`).
 
 ## Materialize, don't recompute — the reason it lives on the node
 
@@ -80,14 +88,17 @@ open).
 
 - **One extensible blob, not many fields.** Date now, place next, future metadata later — all in the same
   client-versioned `wrappedMeta`, so the contract + DB schema don't churn per addition.
-- **Best-effort unseal.** A malformed or wrong-key blob is treated as absent (no metadata), never a broken
-  header/card/pin — each use-case degrades gracefully.
+- **Best-effort unseal for display, never for a write.** A malformed or wrong-key blob *displays* as absent (no
+  metadata), never a broken header/card/pin. A **writer** treats only an absent blob as empty: a present one that
+  does not open is refused, because rebuilding it from empty would re-seal one field and drop every sibling
+  ([ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md) point 4).
 - **Operator-blind at the node level** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)): the server
   sees the node shape + coarse timestamps + this opaque blob; never its contents.
 
 ## Related
 
-- Use-cases: [uc.memory.date](../use-cases/uc.memory.date.md), [uc.memory.place](../use-cases/uc.memory.place.md)
+- Use-cases: [uc.memory.date](../use-cases/uc.memory.date.md), [uc.memory.place](../use-cases/uc.memory.place.md),
+  [uc.memory.concurrent-curation](../use-cases/uc.memory.concurrent-curation.md)
 - Enablers: [en.memory.tree](en.memory.tree.md) (the node + `K_mem` substrate this builds on)
 - Decisions: [ADR 0012](../../../decisions/0012-content-key-hierarchy.md) (content-key hierarchy; `K_mem` seals
   "capture time, location")

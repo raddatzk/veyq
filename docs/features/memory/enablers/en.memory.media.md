@@ -40,7 +40,9 @@
 - **blob** — the unit of stored bytes: an id, `chunkCount`, `byteSize`, the chunk manifest (per-chunk size),
   and the `K_blob` wrap. Lives in a scope.
 - **media** — the link record attaching a blob to a **node** (a Memory or a Chapter), carrying any per-use
-  metadata under `K_mem` — capture time, GPS and the resolved place name in the listed tier, and the original
+  metadata under `K_mem` — capture time, GPS and the resolved place name in the listed tier (written whole by
+  any member, so every write carries the tier's `metaVersion` and a stale one answers `409 stale_version` —
+  [ADR 0077](../../../decisions/0077-a-write-carries-the-version-it-read.md)), and the original
   **filename** in the lazy panel bundle. **The filename slice has landed:** the name is sealed at upload and
   shown in the detail panel, and it is never sent — the server's view of a media is still no pixel and no name. One blob can be
   attached by more than one media record (e.g. cover + in-body) **within the owner circle** — that is a
