@@ -29,7 +29,7 @@ import { buildAccount } from '@veyq/crypto/accountBirth'
 import { sealName } from '../src/features/account/profile/memberName'
 import { admissionVerifies, sealGrant, tagAdmission } from '../src/features/spaces/grant'
 import { awaitInvite } from './devSeed.mts'
-import { MAILPIT, MAILPIT_SMTP_PORT, clearMailbox, waitForMail } from '../src/test/mailpit'
+import { MAILPIT, MAILPIT_SMTP_PORT, mailCursor, waitForMail } from '../src/test/mailpit'
 
 const ENV_FILE = fileURLToPath(new URL('../../.run/.env', import.meta.url))
 const BASE = process.env.VEYQ_BASE ?? 'http://localhost:8080'
@@ -234,12 +234,13 @@ const mailReady = await configureMail()
 // failure here to a warning, because the owner above is already usable and already persisted.
 async function onboardUser2(): Promise<void> {
   if (!mailReady) throw new Error('no sendable mail settings — a MEMBER invite has no other channel (ADR 0055)')
-  await clearMailbox(u2Email)
+  // A cursor, not a cleared mailbox: the e2e sweep reads the whole mailbox afterwards (cr-wire-assertion-history-and-mail).
+  const cursor = await mailCursor(u2Email)
   // The invite carries our admission tag under K_tenant (ADR 0020 move 6) — without it no worker delivers to user2.
   const invite = tagAdmission(tenantScopeKey, { scopeId: tenantId, kind: 'TENANT' }, 0, null)
   const inv = await tenant('POST', `/api/tenants/${tenantId}/member-invites`, token, domain, { email: u2Email, ...invite })
   if (inv.status >= 300) throw new Error(`inviteTenantMember failed: ${inv.status} ${JSON.stringify(inv.body)}`)
-  const body = await waitForMail(u2Email)
+  const body = await waitForMail(u2Email, { after: cursor })
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
   if (!link) throw new Error(`no invite link in the mail to ${u2Email}`)
   const u2 = await buildAccount(u2Email, u2Password, fromB64std(setup.instanceSalt), {
