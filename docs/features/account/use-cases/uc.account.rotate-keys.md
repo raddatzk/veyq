@@ -17,7 +17,7 @@
   `RECOVERY` wraps are rewritten under the **same** KEKs, so the **Emergency Kit stays valid**. Every
   Master-Key-sealed blob is re-sealed and the caller's item marks are re-tagged; the Secret-Key proof key is
   unchanged. Self-served scopes sit at a new
-  epoch granted to the new identity; every shared scope carries a queued rotation for another key-holder to
+  epoch granted to the new identity; every shared scope carries a queued rotation for another owner of it to
   complete. Every other session is revoked. **What the old identity already read is not retracted.**
 
 ## Main flow

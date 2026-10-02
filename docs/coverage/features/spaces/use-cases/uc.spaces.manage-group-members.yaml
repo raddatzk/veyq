@@ -59,18 +59,20 @@ acceptanceCriteria:
     text: >
       A2 (the remover holds no key): when a tenant owner's removal cuts a co-shared group they do not hold
       (uc.spaces.remove-tenant-member A4), the rotation is queued as a SCOPE_ROTATION job on the operator-blind task
-      queue and the next online remaining key-holder completes it on-device (mint E_{n+1} + re-grant survivors),
-      idempotent + coalescing + first-online-wins — cr-0092. It re-grants the directory the server returns, so it
-      holds against an honest operator only (ADR 0024 § Guarantee).
+      queue — cr-0092. Its origination is this criterion: one job per co-shared group the cut reaches, none for an
+      own or soft-deleted scope, and a second removal joins the still-unclaimed job. Who completes it, and what a
+      completion must prove, is uc.spaces.complete-queued-rotation's (an owner, on its own commit during the
+      lease); it re-grants the directory the server returns, so it holds against an honest operator only (ADR 0024
+      § Guarantee).
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
-      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+      backend: { integration: [MemberRemoveSliceTest.removalQueuesRotationOnlyForCoSharedGroupsNotOwnScopesOrTenant, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
+      web: { e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
   - id: rotation-commits-only-the-next-epoch
     text: >
       A rotation states the epoch it creates and commits only as the scope's current epoch + 1; anything else (it
       lost a race, or rode a grant a previous rotation skipped) is refused as 409 stale_epoch with nothing stored,
       so no chain-link can name a key that is not its predecessor. The device re-opens its grant and retries once
-      from a fresh key; a queued rotation job that stays stale is declined for a current key-holder (ADR 0024 §4).
+      from a fresh key; a queued rotation job that stays stale is declined for a current owner (ADR 0024 §4).
     coverage:
       backend:
         unit: [RotationPolicyTest.commitsTheStatedEpochWhenItIsTheNextOne, RotationPolicyTest.refusesARotationBuiltOnASupersededEpoch, RotationPolicyTest.refusesARotationThatSkipsAnEpoch]

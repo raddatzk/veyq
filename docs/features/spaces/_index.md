@@ -57,7 +57,7 @@ the **ciphertext grant** (the scope key sealed to a member's identity); it never
   cuts a member's access to shared + group content immediately, applies the **group orphan rule** (hand over or
   wind down the groups they leave), and gives them a grace window to read their own memories before erase;
   co-shared groups rotate `K_SC` via a remaining owner; [ADR 0014](../../decisions/0014-group-scopes-and-governance.md) §4)
-- [Complete a queued rotation of a space](use-cases/uc.spaces.complete-queued-rotation.md) — **planned**
+- [Complete a queued rotation of a space](use-cases/uc.spaces.complete-queued-rotation.md) — **web done**
   (an owner's worker completes a rotation a tenant removal or an account rotation had to queue; owners only, an
   event joins only an unclaimed job, `done` only on the holder's own commit; owners see `stalled` / `failed` on the
   space and re-queue a failed one)

@@ -15,7 +15,7 @@ it was itself exposed, and the other members must rotate every shared `K_SC` to 
 
 **What forces the decision now is that only the account-side operation is missing.** Everything it drives is
 built: the epoch chain and `POST /api/scopes/{scopeId}/epochs` (owner-gated), the grant-delivery *stale-epoch*
-reconcile, the `SCOPE_ROTATION` job for when no key-holder is online, the TOFU pin check at all three
+reconcile, the `SCOPE_ROTATION` job for when no owner is online to rotate, the TOFU pin check at all three
 foreign-wrap surfaces, the worker's decline seam, and the changed-key review with its accept path. So this is a
 trigger and a ceremony, not a mechanism — and the design questions it has to settle are about **who may do it**
 and **what it honestly buys**, not about crypto.

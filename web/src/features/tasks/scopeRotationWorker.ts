@@ -59,6 +59,9 @@ export async function runScopeRotationWorker(): Promise<number> {
       //  - still stale after the rotation's own retry: this worker's grant lags the scope (ADR 0024 §4);
       //  - not_scope_owner: demoted between claim and commit (the claim offers rotations to owners only);
       //  - rotation_excluded: this account rotated its keys while holding the lease (ADR 0060 Decision 4).
+      // Not a refused OWN grant (`cannot open scope to rotate`): that fails, on purpose. A decline is permanent for
+      // this job, so an owner whose grant opens again later could never take it; a job that fails out dead-letters,
+      // reads `failed`, and is re-queued as a fresh job with no declines (uc.spaces.complete-queued-rotation E8).
       const refusal = await workerRefusal(e)
       if (refusal) await declineJob(job.jobId, refusal)
       else await failJob(job.jobId, 'rotate-failed')

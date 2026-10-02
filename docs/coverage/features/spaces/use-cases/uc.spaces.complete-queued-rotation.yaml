@@ -4,9 +4,56 @@ title: Complete a queued rotation of a space
 acceptanceCriteria:
   - id: completed-by-an-owner
     text: >
-      A queued SCOPE_ROTATION job is claimed by a remaining key-holder of the scope, who mints the next epoch,
-      re-grants the members the server lists after the event, and completes the job, which then no longer
-      claims.
+      A queued SCOPE_ROTATION job is offered only to an OWNER of its scope who holds its grant — never to a plain
+      member, also not in a claim that names several tags, where they still get the jobs they may work. The owner's
+      worker reads the directory after its claim, commits the next epoch re-granting the survivors, and completes
+      the job, which then no longer claims (D1, #180).
     coverage:
-      backend: { integration: [MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt] }
+      backend: { integration: [QueuedRotationSliceTest.aNonOwnerIsNeverOfferedARotationJob, MemberRemoveSliceTest.queuedRotationClaimableByRemainingKeyHolderOnlyThenCompletionClearsIt] }
+      web: { unit: [src/features/tasks/scopeRotationWorker.test.ts], e2e: [src/features/tasks/scopeRotation.e2e.test.ts] }
+  - id: joins-only-an-unclaimed-job
+    text: >
+      An event joins a rotation job only while it is PENDING, read under a row lock on the scope row's lock: a removal
+      or an account rotation that arrives once an owner claimed the job gets a fresh job of its own, and a claim
+      racing a join waits for the event to commit, so it holds the job the event joined (D3/D4, #178 (2)). Many
+      removals before anyone claims still cost one rotation.
+    coverage:
+      backend: { integration: [QueuedRotationSliceTest.aRemovalDuringALeaseGetsItsOwnJob, QueuedRotationSliceTest.aClaimRacingAJoinLandsAfterTheEvent, RotationSliceTest.anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth, MemberRemoveSliceTest.secondRemovalCoalescesIntoTheOneLiveRotationJob] }
+  - id: done-only-on-the-holders-commit
+    text: >
+      A scope-rotation job completes only once its lease holder committed an epoch of its scope while holding the
+      lease: no commit, somebody else's commit, or a commit before the lease is 409 rotation_not_committed with the
+      lease kept; a holder's commit survives a reclaim (D8, #207).
+    coverage:
+      backend: { integration: [QueuedRotationSliceTest.aRotationCompletionWithoutTheHoldersCommitIsRefused, QueuedRotationSliceTest.aCommitBeforeTheLeaseDoesNotCompleteTheJob, QueuedRotationSliceTest.aReclaimedJobKeepsTheCommitItsEarlierHolderMade] }
+  - id: a-lost-completion-writes-nothing
+    text: >
+      A completion lands only for the worker that holds the lease when it lands, for every tag: a holder whose
+      expired lease another worker reclaimed meanwhile gets 409 not_lease_holder, the reclaimer keeps the job, and a
+      grant-delivery's grant is not written (D11, #235).
+    coverage:
+      backend: { integration: [QueuedRotationSliceTest.aDeliveryCompletionThatLostItsLeaseWritesNothing, QueuedRotationSliceTest.aRotationCompletionThatLostItsLeaseWritesNothing] }
+  - id: refusals-about-the-worker-decline
+    text: >
+      A worker whose commit is refused for a reason about itself — stale_epoch, not_scope_owner (demoted between
+      claim and commit) or rotation_excluded (it rotated its own account while holding the lease) — declines the
+      job, releasing it to the other owners without spending an attempt; any other error fails it (D2).
+    coverage:
       web: { unit: [src/features/tasks/scopeRotationWorker.test.ts] }
+  - id: server-originated-tags-refused-at-enqueue
+    text: >
+      A client's enqueue of any tag the registry names as server-originated (server-structural, server-event) —
+      today grant-delivery and scope-rotation, derived from contracts/tasks/tags/v1.json — is 400 invalid_request
+      with no job written; a content tag still enqueues (D6).
+    coverage:
+      backend: { integration: [QueuedRotationSliceTest.everyServerOriginatedTagIsRefusedAtEnqueue, TasksSliceTest.enqueueRejectsStructuralGrantDeliveryTag] }
+  - id: owners-see-a-stuck-compromise-rotation
+    text: >
+      E2/E8: an OWNER's own scope row (ScopeSummary, and MyTenant for a tenant root) carries compromiseRotation
+      stalled (no owner both holds a grant and has not declined the job) or failed (it dead-lettered); a plain
+      member's row never does. The member panel shows it — failed with the re-queue, stalled with the promote hint —
+      and the sidebar marks the space. An owner's re-queue excludes every failed rotator again and not the caller;
+      anything but failed is 409 rotation_not_failed, a non-owner 403 not_scope_owner, nothing written (D10, #234).
+    coverage:
+      backend: { integration: [RotationSliceTest.anOwnerSeesAStuckCompromiseRotationOnTheirOwnRowAndRequeuesIt] }
+      web: { unit: [src/features/spaces/GroupMembersPanel.test.ts, src/components/app/AppSidebar.test.ts] }

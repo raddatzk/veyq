@@ -888,7 +888,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
       as B, who owns G, and no phase here changes an existing request shape. D9's endpoints are new, and B8/B9 bite
       them at the HTTP layer. If the implementer changes one anyway,
       `python3 scripts/run_web_e2e.py` runs from the **main checkout**.
-- [ ] 4 docs + coverage:
+- [x] 4 docs + coverage:
       - Re-run both prose locators in § Inventory; phases 1–3 wrote new prose.
       - Fix every hit that says *any / next / remaining key-holder completes* a queued rotation, or *one live job
         per scope*: en.spaces.scope-key-rotation E1, uc.spaces.remove-tenant-member (flow and A4),

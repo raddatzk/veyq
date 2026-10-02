@@ -23,8 +23,8 @@
   **grant-delivery** with a *stale-epoch* trigger ([ADR 0021](../../../decisions/0021-operator-blind-background-tasks.md)),
   the **content-key hierarchy** ([ADR 0012](../../../decisions/0012-content-key-hierarchy.md)). **No new crypto
   primitive** — the epoch chain composes the existing `symWrap` / `asymWrap`.
-- **Preconditions:** A group with ≥1 remaining key-holder online to perform the rotation (mint + wrap are
-  client-side; the blind server cannot).
+- **Preconditions:** A group with ≥1 remaining owner online who holds its current grant, to perform the rotation
+  (mint + wrap are client-side; the blind server cannot).
 - **Postconditions (success):** The scope carries a new **current epoch**; the new epoch is `symWrap`'d over the
   previous (the backward chain) and `asymWrap`'d to each remaining member; new content seals under it; the removed
   member's membership is gone (403). The server saw only opaque epoch-chain links, opaque grants, and per-node
@@ -61,7 +61,7 @@ guarantees, and the rotating-vs-stable (dedup) split: [ADR 0024](../../../decisi
 title: Scope-key rotation on removal (client-driven, operator-blind)
 ---
 sequenceDiagram
-  actor O as Owner<br>(remaining key-holder)
+  actor O as Owner<br>(remaining, holds the current grant)
   participant S as Server<br>(blind)
   actor X as Removed<br>member
   O->>O: E_{n+1} = random(32)
