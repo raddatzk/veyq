@@ -19,6 +19,7 @@ vi.mock('./devAutoUnlock', () => ({ maybeDevAutoUnlock: vi.fn() }))
 import { boot } from './boot'
 import { getSetupStatus } from '../features/account/instance/instance'
 import { tokenApi } from '../api/client'
+import { fakeApi } from '../test/apiMock'
 import { serverState } from '../shared/state/serverState'
 import { EXPECTED_MAJOR } from '../shared/state/capabilities'
 import { idbRun } from '../shared/idb'
@@ -57,9 +58,7 @@ function refreshAnswers(failure: unknown) {
     capabilities: [],
     version: { major: EXPECTED_MAJOR, build: 'test' },
   } as never)
-  vi.mocked(tokenApi).mockReturnValue({
-    refreshSession: () => Promise.reject(failure),
-  } as unknown as ReturnType<typeof tokenApi>)
+  fakeApi(tokenApi, { refreshSession: () => Promise.reject(failure) })
 }
 
 /** A minimal in-memory `Storage`, fresh per call. */

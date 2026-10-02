@@ -2,6 +2,15 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
+import { fakeApi } from '../../../test/apiMock'
+import type {
+  AccountDeviceRegisterApi,
+  AccountIdentityPinsApi,
+  DeviceRegister,
+  DeviceRegisterUpdate,
+  IdentityPins,
+  IdentityPinsUpdate,
+} from '../../../api/generated/account'
 
 // Starting a refused trust document over (ADR 0028 Decision 7's way back, inbox #192). The endpoints and the vault
 // are faked; the two document modules, the marks and the crypto are REAL — so "the reset wrote the empty store"
@@ -42,38 +51,39 @@ const sealed = (doc: Doc, version: number) =>
 const opened = (doc: Doc, blob: string, version: number) =>
   JSON.parse(dec.decode(v1.open(contextOf(doc, version), MK, fromB64std(blob))))
 
+/** What each document's endpoint stores and serves. */
+type Stored = { pins: IdentityPins; register: DeviceRegister }
+
 /** Both documents' endpoints, with the stores' real compare-and-set. `stale` answers that many PUTs 409 first,
  *  as if another device had written — which moves the served copy to `onStale()`'s. */
 function fakeServer(
-  served: Partial<Record<Doc, { blob: string | null; version: number }>>,
-  opts: { stale?: number; onStale?: (doc: Doc) => { blob: string | null; version: number } } = {},
+  served: Partial<Stored>,
+  opts: { stale?: number; onStale?: (doc: Doc) => IdentityPins & DeviceRegister } = {},
 ) {
-  const state: Record<Doc, { blob: string | null; version: number }> = {
+  const state: Stored = {
     pins: { ...(served.pins ?? { blob: null, version: 0 }) },
     register: { ...(served.register ?? { blob: null, version: 0 }) },
   }
   let staleLeft = opts.stale ?? 0
-  const put = (doc: Doc) =>
-    vi.fn(async (body: Record<string, { blob: string; version: number }>) => {
-      const update = Object.values(body)[0]
-      if (staleLeft > 0) {
-        staleLeft -= 1
-        if (opts.onStale) state[doc] = opts.onStale(doc)
-        throw httpError(409, 'stale_version')
-      }
-      if (update.version !== state[doc].version) throw httpError(409, 'stale_version')
-      state[doc] = { blob: update.blob, version: state[doc].version + 1 }
-    })
-  const putIdentityPins = put('pins')
-  const putDeviceRegister = put('register')
-  vi.mocked(accountIdentityPinsApi).mockReturnValue({
-    getIdentityPins: vi.fn(async () => ({ ...state.pins })),
-    putIdentityPins,
-  } as unknown as ReturnType<typeof accountIdentityPinsApi>)
-  vi.mocked(accountDeviceRegisterApi).mockReturnValue({
-    getDeviceRegister: vi.fn(async () => ({ ...state.register })),
-    putDeviceRegister,
-  } as unknown as ReturnType<typeof accountDeviceRegisterApi>)
+  /** The compare-and-set; a landed write answers with the stored document, as the endpoint does. */
+  const land = <D extends Doc>(doc: D, update: IdentityPinsUpdate | DeviceRegisterUpdate): Stored[D] => {
+    if (staleLeft > 0) {
+      staleLeft -= 1
+      if (opts.onStale) state[doc] = opts.onStale(doc)
+      throw httpError(409, 'stale_version')
+    }
+    if (update.version !== state[doc].version) throw httpError(409, 'stale_version')
+    state[doc] = { blob: update.blob, version: state[doc].version + 1 }
+    return { ...state[doc] }
+  }
+  const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) =>
+    land('pins', identityPinsUpdate),
+  )
+  const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async ({ deviceRegisterUpdate }) =>
+    land('register', deviceRegisterUpdate),
+  )
+  fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ ...state.pins }), putIdentityPins })
+  fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...state.register }), putDeviceRegister })
   return { state, puts: { pins: putIdentityPins, register: putDeviceRegister } }
 }
 
@@ -191,11 +201,11 @@ describe('refusedDocuments — the read the hub offers the reset on', () => {
     fakeServer({ pins: { blob: sealed('pins', 2), version: 2 } })
     expect(await refusedDocuments()).toEqual([])
 
-    vi.mocked(accountIdentityPinsApi).mockReturnValue({
-      getIdentityPins: vi.fn(async () => {
+    fakeApi(accountIdentityPinsApi, {
+      getIdentityPins: async () => {
         throw httpError(503)
-      }),
-    } as unknown as ReturnType<typeof accountIdentityPinsApi>)
+      },
+    })
     expect(await refusedDocuments()).toEqual([])
   })
 })

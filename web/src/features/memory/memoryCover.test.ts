@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { stubApi } from '../../test/apiMock'
 
 vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
@@ -156,8 +157,7 @@ describe('unsealMemoryCover', () => {
 
 describe('setMemoryCover', () => {
   it('re-seals under K_mem and PATCHes wrappedMeta via updateNode', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const { updateNode } = stubApi(contentApi, { updateNode: undefined })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
     const { wrappedMeta: sealed } = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 0 })
@@ -170,8 +170,7 @@ describe('setMemoryCover', () => {
   })
 
   it('read-modify-write: setting a cover preserves a sibling date + location', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    stubApi(contentApi, { updateNode: undefined })
 
     const date = { mode: 'single', from: '2026-05-01', to: '2026-05-01' }
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
@@ -187,8 +186,7 @@ describe('setMemoryCover', () => {
   })
 
   it('read-modify-write: removing a cover (null) drops it but keeps the date + location', async () => {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    stubApi(contentApi, { updateNode: undefined })
 
     const date = { mode: 'single', from: '2026-05-01', to: '2026-05-01' }
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }

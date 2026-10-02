@@ -18,6 +18,8 @@ vi.mock('../trustDevice/deviceKey', () => ({
 
 import { unlockWithDevice } from './unlock'
 import { accountApi } from '../../../api/client'
+import type { AccountKeyMaterial } from '../../../api/generated/account'
+import { stubApi } from '../../../test/apiMock'
 import * as device from '../trustDevice/deviceKey'
 import { isUnlocked, masterKey, clearVault } from '../../../app/vault'
 import * as v1 from '@veyq/crypto/v1'
@@ -41,7 +43,8 @@ function buildDeviceMaterial(password: string, deviceFactor: Uint8Array) {
   const kek = v1.kekDevicePassword(deviceFactor, password, salt, v1.ARGON)
   const deviceWrap = v1.seal({ purpose: 'master-key' }, kek, mk)
   const kdfParams = b64std(v1.encodeKdfParams(v1.ARGON, salt))
-  const material = {
+  const material: AccountKeyMaterial = {
+    userId: 'user-1',
     suiteId: 'v1',
     wraps: [{ id: WRAP_ID, method: 'DEVICE', wrappedKey: b64std(deviceWrap), kdfParams }],
     wrappedIdentityPrivateKey: b64std(wrappedPriv),
@@ -49,10 +52,8 @@ function buildDeviceMaterial(password: string, deviceFactor: Uint8Array) {
   return { material, mk }
 }
 
-function mockMaterial(material: unknown) {
-  vi.mocked(accountApi).mockReturnValue({
-    getAccountKeyMaterial: () => Promise.resolve(material),
-  } as unknown as ReturnType<typeof accountApi>)
+function mockMaterial(material: AccountKeyMaterial) {
+  stubApi(accountApi, { getAccountKeyMaterial: material })
 }
 
 let built: ReturnType<typeof buildDeviceMaterial>

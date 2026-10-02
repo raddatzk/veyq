@@ -6,17 +6,19 @@ vi.mock('../../api/client', () => ({ tenantsApi: vi.fn() }))
 
 import { acceptInvite, registerAndAccept, tenantError } from './tenantInvite'
 import { tenantsApi } from '../../api/client'
+import { stubApi } from '../../test/apiMock'
 import { ResponseError } from '../../api/generated/tenants'
 
 describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => {
-  const api = {
-    acceptTenantInvite: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'ACTIVE' }),
-    registerAndAcceptTenantInvite: vi.fn().mockResolvedValue({ tenantId: 't1', status: 'ACTIVE', userId: 'u1' }),
-  }
+  const stubInvite = () =>
+    stubApi(tenantsApi, {
+      acceptTenantInvite: { tenantId: 't1', status: 'ACTIVE' },
+      registerAndAcceptTenantInvite: { tenantId: 't1', status: 'ACTIVE', userId: 'u1' },
+    })
+  let api: ReturnType<typeof stubInvite>
 
   beforeEach(() => {
-    vi.mocked(tenantsApi).mockReturnValue(api as never)
-    Object.values(api).forEach((m) => m.mockClear())
+    api = stubInvite()
   })
 
   const BIRTH = { grant: 'AQ==', grantSignature: 'c2ln', admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 0, admissionTag: 'dGFn' }

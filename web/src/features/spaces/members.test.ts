@@ -18,6 +18,8 @@ import {
 import { scopesApi, tenantsApi } from '../../api/client'
 import { TenantsApi, Configuration as TenantsConfiguration } from '../../api/generated/tenants'
 import { admissionFor } from './scopes'
+import { stubApi, fakeApi } from '../../test/apiMock'
+import type { ScopeMember } from '../../api/generated/scopes'
 
 const ADMISSION = { admissionId: 'ad000000-0000-4000-8000-000000000001', admissionEpoch: 2, admissionTag: 'dGFn' }
 beforeEach(() => {
@@ -28,9 +30,8 @@ beforeEach(() => {
 describe('addGroupMember (cr-0086)', () => {
   it('posts the username to the scope members endpoint and returns the grant-less directory row', async () => {
     // The added member comes back awaiting access — the key is delivered later by grant-delivery, not here.
-    const row = { userId: 'u1', username: 'partner', role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false }
-    const addGroupMemberFn = vi.fn().mockResolvedValue(row)
-    vi.mocked(scopesApi).mockReturnValue({ addGroupMember: addGroupMemberFn } as unknown as ReturnType<typeof scopesApi>)
+    const row: ScopeMember = { userId: 'u1', username: 'partner', role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false }
+    const { addGroupMember: addGroupMemberFn } = stubApi(scopesApi, { addGroupMember: row })
 
     const result = await addGroupMember('g1', 'partner', 'u1')
 
@@ -44,9 +45,9 @@ describe('addGroupMember (cr-0086)', () => {
 
 describe('setMemberRole (cr-0088)', () => {
   it('promotes a member by patching the member endpoint with the role', async () => {
-    const row = { userId: 'u1', username: 'partner', role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true }
-    const setRole = vi.fn().mockResolvedValue(row)
-    vi.mocked(scopesApi).mockReturnValue({ setMemberRole: setRole } as unknown as ReturnType<typeof scopesApi>)
+    const { setMemberRole: setRole } = stubApi(scopesApi, {
+      setMemberRole: { userId: 'u1', username: 'partner', role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
+    })
 
     const result = await setMemberRole('g1', 'u1', SetMemberRoleRequestRoleEnum.Owner)
 
@@ -57,8 +58,7 @@ describe('setMemberRole (cr-0088)', () => {
 
 describe('removeGroupMember — the consent rescind (cr-0094)', () => {
   it('deletes a pending proposal via the member endpoint (a keyed member is removed by the removal-rotation instead)', async () => {
-    const removeFn = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(scopesApi).mockReturnValue({ removeMember: removeFn } as unknown as ReturnType<typeof scopesApi>)
+    const { removeMember: removeFn } = stubApi(scopesApi, { removeMember: undefined })
 
     await removeGroupMember('g1', 'u1')
 
@@ -70,8 +70,7 @@ describe('removeTenantMember (cr-0091)', () => {
   it('deletes the member via the tenant members endpoint (the server runs the whole cascade)', async () => {
     // A tenant-level cascade (cut shared, orphan rule, own-scope grace) — distinct from removeGroupMember. No
     // key crosses the wire; the tenant key is not rotated (ADR 0025). The client just fires it by (tenant, user).
-    const removeFn = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(tenantsApi).mockReturnValue({ removeTenantMember: removeFn } as unknown as ReturnType<typeof tenantsApi>)
+    const { removeTenantMember: removeFn } = stubApi(tenantsApi, { removeTenantMember: undefined })
 
     await removeTenantMember('t1', 'u1')
 
@@ -87,7 +86,8 @@ describe('removeTenantMember (cr-0091)', () => {
       return new Response(null, { status: 204 })
     })
     const real = new TenantsApi(new TenantsConfiguration({ basePath: 'http://x', fetchApi }))
-    vi.mocked(tenantsApi).mockReturnValue(real)
+    // The real generated method, so the URL it builds is what is asserted.
+    fakeApi(tenantsApi, { removeTenantMember: real.removeTenantMember.bind(real) })
 
     await removeTenantMember('t1', 'u1', true)
     await removeTenantMember('t1', 'u2')
@@ -98,12 +98,11 @@ describe('removeTenantMember (cr-0091)', () => {
 
 describe('listScopeMembers', () => {
   it('reads a scope’s member directory by id (operator-blind operational metadata only)', async () => {
-    const rows = [
+    const rows: ScopeMember[] = [
       { userId: 'o', username: 'owner', role: 'OWNER', identityPublicKey: 'cGs=', hasGrant: true },
       { userId: 'u1', username: 'partner', role: 'MEMBER', identityPublicKey: 'cGs=', hasGrant: false },
     ]
-    const listFn = vi.fn().mockResolvedValue(rows)
-    vi.mocked(scopesApi).mockReturnValue({ listScopeMembers: listFn } as unknown as ReturnType<typeof scopesApi>)
+    const { listScopeMembers: listFn } = stubApi(scopesApi, { listScopeMembers: rows })
 
     expect(await listScopeMembers('g1')).toEqual(rows)
     expect(listFn).toHaveBeenCalledWith({ scopeId: 'g1' })

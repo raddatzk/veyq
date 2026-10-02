@@ -1,18 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
-import type { ItemFavoritesEntry } from '../../api/generated/content'
+import type { ItemFavoritesApi, ItemFavoritesEntry, OwnItemFavoritesApi } from '../../api/generated/content'
+import { fakeApi } from '../../test/apiMock'
 
 // The seal/open path of item marks (ADR 0068 §9) against the REAL crypto: only the wire and the vault are faked.
 // Every blob below is produced by this module's own `saveItemFavorites`, run as the member it belongs to (their
 // Master Key in the vault) and captured from the PUT — so a fixture is a genuine blob of whatever format the tree
 // under test writes, never a hand-built one that could drift from it.
-const api = vi.hoisted(() => ({ get: vi.fn(), put: vi.fn(), listOwn: vi.fn() }))
+const api = {
+  get: vi.fn<ItemFavoritesApi['getItemFavorites']>(),
+  put: vi.fn<ItemFavoritesApi['putItemFavorites']>(),
+  listOwn: vi.fn<OwnItemFavoritesApi['listOwnItemFavorites']>(),
+}
 const vault = vi.hoisted(() => ({ mk: null as Uint8Array | null }))
-vi.mock('../../api/client', () => ({
-  itemFavoritesApi: () => ({ getItemFavorites: api.get, putItemFavorites: api.put }),
-  ownItemFavoritesApi: () => ({ listOwnItemFavorites: api.listOwn }),
-}))
+vi.mock('../../api/client', () => ({ itemFavoritesApi: vi.fn(), ownItemFavoritesApi: vi.fn() }))
 vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (f: () => unknown) => f() }))
 vi.mock('../../app/vault', () => ({ masterKey: () => (vault.mk ? vault.mk.slice() : null) }))
 // The rider opens each scope's E_0 through the caller's own grant; here every scope opens to a COPY of K_SC (the
@@ -26,6 +28,7 @@ vi.mock('../spaces/scopes', () => ({
 
 import { loadItemFavorites, saveItemFavorites, retagItemMarksUnderNewMasterKey } from './itemFavorites'
 import { itemFavoritesStore, loadItemFavoritesFor, toggleItemFavorite, clearItemFavorites, markCount } from '../../app/itemFavoritesStore'
+import { itemFavoritesApi, ownItemFavoritesApi } from '../../api/client'
 
 const SCOPE = 'c0ffee00-0000-4000-8000-0000000000a1'
 const NODE = 'c0ffee00-0000-4000-8000-0000000000b1'
@@ -42,7 +45,7 @@ async function blobAs(mk: Uint8Array, ids: string[], nodeId = NODE): Promise<str
   vault.mk = mk
   api.put.mockClear()
   await saveItemFavorites(SCOPE, nodeId, K_SC, new Set(ids))
-  return api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext as string
+  return api.put.mock.calls[0][0].putItemFavoritesRequest.ciphertext
 }
 
 /** The ids a written blob holds, whichever plaintext form the tree writes (a bare array, or `{tag, ids}`). */
@@ -60,6 +63,8 @@ const ownSets = (marks: { own: boolean; ids: Set<string> }[]) => marks.filter((m
 
 beforeEach(() => {
   vi.clearAllMocks()
+  fakeApi(itemFavoritesApi, { getItemFavorites: api.get, putItemFavorites: api.put })
+  fakeApi(ownItemFavoritesApi, { listOwnItemFavorites: api.listOwn })
   api.put.mockResolvedValue(undefined)
   clearItemFavorites()
   vault.mk = null
@@ -218,7 +223,7 @@ describe('everything not provably mine counts as someone else’s (ADR 0068 §9)
 describe('a Master-Key rotation re-tags the caller’s own marks (ADR 0068 §9)', () => {
   const MK_NEW = v1.randomBytes(32)
   const NODE2 = 'c0ffee00-0000-4000-8000-0000000000b2'
-  const putsByNode = () => new Map(api.put.mock.calls.map((c) => [c[0].nodeId as string, c[0].putItemFavoritesRequest.ciphertext as string]))
+  const putsByNode = () => new Map(api.put.mock.calls.map((c) => [c[0].nodeId, c[0].putItemFavoritesRequest.ciphertext]))
 
   /**
    * **B6.** After the rider, a set tagged under the OLD Master Key reads as mine under the NEW one — and before it,

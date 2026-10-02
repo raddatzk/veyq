@@ -9,7 +9,8 @@ vi.mock('../../../api/client', () => ({
 
 import { unlockMasterKey } from './unlock'
 import { accountApi, tokenApi } from '../../../api/client'
-import { ResponseError } from '../../../api/generated/account'
+import { ResponseError, type AccountKeyMaterial } from '../../../api/generated/account'
+import { fakeApi, stubApi } from '../../../test/apiMock'
 import { isUnlocked, masterKey, identityPrivate, clearVault } from '../../../app/vault'
 import { session } from '../../../app/session'
 import * as v1 from '@veyq/crypto/v1'
@@ -34,7 +35,8 @@ function buildMaterial(password: string) {
   const kek = v1.kekPasswordSecret(secretKey, password, salt, v1.ARGON)
   const masterWrap = v1.seal({ purpose: 'master-key' }, kek, masterKey)
 
-  const material = {
+  const material: AccountKeyMaterial = {
+    userId: 'user-1',
     suiteId: 'v1',
     wraps: [
       { method: 'PASSWORD', wrappedKey: b64std(masterWrap), kdfParams: b64std(v1.encodeKdfParams(v1.ARGON, salt)) },
@@ -45,10 +47,8 @@ function buildMaterial(password: string) {
   return { material, id, masterKey, secretKey }
 }
 
-function mockMaterial(material: unknown) {
-  vi.mocked(accountApi).mockReturnValue({
-    getAccountKeyMaterial: () => Promise.resolve(material),
-  } as unknown as ReturnType<typeof accountApi>)
+function mockMaterial(material: AccountKeyMaterial) {
+  stubApi(accountApi, { getAccountKeyMaterial: material })
 }
 
 let built: ReturnType<typeof buildMaterial>
@@ -115,17 +115,15 @@ describe('unlockMasterKey (uc.account.unlock)', () => {
     const { material, masterKey: expectedMaster, secretKey } = built
     session.refreshToken = 'r1'
     let calls = 0
-    vi.mocked(accountApi).mockReturnValue({
+    fakeApi(accountApi, {
       getAccountKeyMaterial: () => {
         calls += 1
         return calls === 1
           ? Promise.reject(new ResponseError({ status: 401 } as unknown as Response, 'unauthorized'))
           : Promise.resolve(material)
       },
-    } as unknown as ReturnType<typeof accountApi>)
-    vi.mocked(tokenApi).mockReturnValue({
-      refreshSession: () => Promise.resolve({ accessToken: 'a2', refreshToken: 'r2' }),
-    } as unknown as ReturnType<typeof tokenApi>)
+    })
+    stubApi(tokenApi, { refreshSession: { accessToken: 'a2', refreshToken: 'r2' } })
 
     await unlockMasterKey(PASSWORD, b64std(secretKey))
 

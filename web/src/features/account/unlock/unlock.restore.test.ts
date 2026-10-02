@@ -15,6 +15,8 @@ vi.mock('../../../api/client', () => ({
 
 import { restoreVaultFromCache } from './unlock'
 import { accountApi } from '../../../api/client'
+import type { AccountKeyMaterial } from '../../../api/generated/account'
+import { stubApi } from '../../../test/apiMock'
 import { cacheSessionVault, loadSessionVault } from '../rememberMe/sessionVault'
 import { isUnlocked, clearVault } from '../../../app/vault'
 import * as v1 from '@veyq/crypto/v1'
@@ -34,10 +36,11 @@ globalThis.sessionStorage = {
 } as Storage
 
 /** Server key material whose identity key is wrapped under [masterKey] (a PASSWORD wrap rounds out minItems). */
-function materialFor(masterKey: Uint8Array) {
+function materialFor(masterKey: Uint8Array): AccountKeyMaterial {
   const id = v1.generateIdentity()
   const wrappedPriv = v1.seal({ purpose: 'identity-priv' }, masterKey, v1.serializeIdentityPrivate(id))
   return {
+    userId: 'user-1',
     suiteId: 'v1',
     wraps: [
       { method: 'PASSWORD', wrappedKey: b64std(v1.randomBytes(60)), kdfParams: b64std(v1.randomBytes(40)) },
@@ -46,10 +49,8 @@ function materialFor(masterKey: Uint8Array) {
   }
 }
 
-function serve(material: unknown) {
-  vi.mocked(accountApi).mockReturnValue({
-    getAccountKeyMaterial: () => Promise.resolve(material),
-  } as unknown as ReturnType<typeof accountApi>)
+function serve(material: AccountKeyMaterial) {
+  stubApi(accountApi, { getAccountKeyMaterial: material })
 }
 
 describe('restoreVaultFromCache — session vault (cr-0055)', () => {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
@@ -19,12 +19,19 @@ vi.mock('../../app/activeSpace', () => ({ activeSpace, refreshActiveScope: vi.fn
 import { runScopeRotationWorker } from './scopeRotationWorker'
 import { SCOPE_ROTATION, GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
+import { fakeApi } from '../../test/apiMock'
+import type { TasksApi } from '../../api/generated/tasks'
 import { commitRotation } from '../spaces/scopes'
 import { listScopeMembers } from '../spaces/members'
 import { refreshActiveScope } from '../../app/activeSpace'
 
-function mockTasks(claimTask: ReturnType<typeof vi.fn>, completeTask = vi.fn(), failTask = vi.fn(), declineTask = vi.fn()) {
-  vi.mocked(tasksApi).mockReturnValue({ claimTask, completeTask, failTask, declineTask } as unknown as ReturnType<typeof tasksApi>)
+function mockTasks(
+  claimTask: Mock<TasksApi['claimTask']>,
+  completeTask = vi.fn<TasksApi['completeTask']>(),
+  failTask = vi.fn<TasksApi['failTask']>(),
+  declineTask = vi.fn<TasksApi['declineTask']>(),
+) {
+  fakeApi(tasksApi, { claimTask, completeTask, failTask, declineTask })
 }
 
 beforeEach(() => {
@@ -35,10 +42,10 @@ beforeEach(() => {
 describe('runScopeRotationWorker', () => {
   it('claims a rotation across all held scopes, re-grants the survivors forward, and completes', async () => {
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null) // drained → stop
-    const completeTask = vi.fn().mockResolvedValue(undefined)
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined)
     mockTasks(claimTask, completeTask)
 
     const rotated = await runScopeRotationWorker()
@@ -53,7 +60,7 @@ describe('runScopeRotationWorker', () => {
   })
 
   it('is a no-op when nothing is claimable (first-online-wins / coalesced away)', async () => {
-    const claimTask = vi.fn().mockResolvedValue(null)
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(null)
     mockTasks(claimTask)
 
     expect(await runScopeRotationWorker()).toBe(0)
@@ -63,10 +70,10 @@ describe('runScopeRotationWorker', () => {
   it('refreshes the active scope when the rotated group is the one being viewed', async () => {
     activeSpace.scopeId = 'g1'
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null)
-    mockTasks(claimTask, vi.fn().mockResolvedValue(undefined))
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined))
 
     await runScopeRotationWorker()
     expect(refreshActiveScope).toHaveBeenCalledTimes(1)
@@ -75,10 +82,10 @@ describe('runScopeRotationWorker', () => {
   it('does not refresh when a different scope is active', async () => {
     activeSpace.scopeId = 'other'
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null)
-    mockTasks(claimTask, vi.fn().mockResolvedValue(undefined))
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined))
 
     await runScopeRotationWorker()
     expect(refreshActiveScope).not.toHaveBeenCalled()
@@ -86,11 +93,11 @@ describe('runScopeRotationWorker', () => {
 
   it('fails a mis-tagged claim back for the right worker instead of rotating', async () => {
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j9', scopeId: 'g1', capabilityTag: GRANT_DELIVERY, attempts: 1 })
       .mockResolvedValueOnce(null)
-    const failTask = vi.fn().mockResolvedValue(undefined)
-    mockTasks(claimTask, vi.fn(), failTask)
+    const failTask = vi.fn<TasksApi['failTask']>().mockResolvedValue({ status: 'pending', attempts: 2 })
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>(), failTask)
 
     expect(await runScopeRotationWorker()).toBe(0)
     expect(commitRotation).not.toHaveBeenCalled()
@@ -99,11 +106,11 @@ describe('runScopeRotationWorker', () => {
 
   it('fails the job (not left leased) when the rotation throws mid-flight', async () => {
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null)
-    const failTask = vi.fn().mockResolvedValue(undefined)
-    mockTasks(claimTask, vi.fn(), failTask)
+    const failTask = vi.fn<TasksApi['failTask']>().mockResolvedValue({ status: 'pending', attempts: 2 })
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>(), failTask)
     vi.mocked(commitRotation).mockRejectedValueOnce(new Error('cannot open scope to rotate'))
 
     expect(await runScopeRotationWorker()).toBe(0)
@@ -115,12 +122,12 @@ describe('runScopeRotationWorker', () => {
     // it at all. Declining releases it for a current key-holder without spending an attempt (the control is the
     // `rotate-failed` case above: any other error still fails).
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null)
-    const failTask = vi.fn().mockResolvedValue(undefined)
-    const declineTask = vi.fn().mockResolvedValue(undefined)
-    mockTasks(claimTask, vi.fn(), failTask, declineTask)
+    const failTask = vi.fn<TasksApi['failTask']>().mockResolvedValue({ status: 'pending', attempts: 2 })
+    const declineTask = vi.fn<TasksApi['declineTask']>().mockResolvedValue({ status: 'pending', attempts: 1 })
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>(), failTask, declineTask)
     vi.mocked(commitRotation).mockRejectedValueOnce(httpError(409, 'stale_epoch'))
 
     expect(await runScopeRotationWorker()).toBe(0)
@@ -138,12 +145,12 @@ describe('runScopeRotationWorker', () => {
     // owners without spending an attempt, where failing would burn attempts until the job dead-letters. The
     // control is the `rotate-failed` case above: any other error still fails.
     const claimTask = vi
-      .fn()
+      .fn<TasksApi['claimTask']>()
       .mockResolvedValueOnce({ jobId: 'j1', scopeId: 'g1', capabilityTag: SCOPE_ROTATION, attempts: 1 })
       .mockResolvedValueOnce(null)
-    const failTask = vi.fn().mockResolvedValue(undefined)
-    const declineTask = vi.fn().mockResolvedValue(undefined)
-    mockTasks(claimTask, vi.fn(), failTask, declineTask)
+    const failTask = vi.fn<TasksApi['failTask']>().mockResolvedValue({ status: 'pending', attempts: 2 })
+    const declineTask = vi.fn<TasksApi['declineTask']>().mockResolvedValue({ status: 'pending', attempts: 1 })
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>(), failTask, declineTask)
     vi.mocked(commitRotation).mockRejectedValueOnce(httpError(status, code))
 
     expect(await runScopeRotationWorker()).toBe(0)

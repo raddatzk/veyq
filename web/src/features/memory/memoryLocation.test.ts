@@ -21,6 +21,7 @@ import { unsealMemoryDate, type MemoryDate } from './memoryDate'
 import { sealNodeMeta } from './nodeMeta'
 import type { MediaItem, MediaMeta } from './media'
 import { contentApi } from '../../api/client'
+import { stubApi } from '../../test/apiMock'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
 
@@ -166,9 +167,7 @@ describe('setMemoryLocation — read-modify-write (preserves the date)', () => {
   const loc: MemoryLocation = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 28.27, lng: -16.61 } }
 
   function mockUpdate() {
-    const updateNode = vi.fn().mockResolvedValue(undefined)
-    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
-    return updateNode
+    return stubApi(contentApi, { updateNode: undefined }).updateNode
   }
 
   it('setting a location keeps the existing date', async () => {

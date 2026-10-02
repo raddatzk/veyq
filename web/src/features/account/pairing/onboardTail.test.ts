@@ -12,9 +12,12 @@
 // of the spy is that it will fire the day somebody adds it (ADR 0005 §22: this device has no password to key a
 // `DEVICE` wrap with, so that call must never appear on this path).
 import 'fake-indexeddb/auto'
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../../test/httpError'
+import { fakeApi } from '../../../test/apiMock'
+import type { TokenApi } from '../../../api/generated/auth'
+import type { AccountApi, AccountIdentityPinsApi, AccountKeyMaterial } from '../../../api/generated/account'
 
 vi.mock('../../../api/client', () => ({
   accountApi: vi.fn(),
@@ -72,7 +75,8 @@ const EMAIL = 'kevin@example.com'
 function fixture(label: string = LABEL) {
   const id = v1.generateIdentity()
   const mk = v1.randomBytes(32)
-  const material = {
+  const material: AccountKeyMaterial = {
+    userId: 'user-1',
     suiteId: 'v1',
     wraps: [],
     wrappedIdentityPrivateKey: b64std(
@@ -83,20 +87,20 @@ function fixture(label: string = LABEL) {
   return { grant, material, id, mk }
 }
 
-let adoptSession: ReturnType<typeof vi.fn>
-let refreshSession: ReturnType<typeof vi.fn>
-let getAccountKeyMaterial: ReturnType<typeof vi.fn>
+let adoptSession: Mock<TokenApi['adoptSession']>
+let refreshSession: Mock<TokenApi['refreshSession']>
+let getAccountKeyMaterial: Mock<AccountApi['getAccountKeyMaterial']>
 /** What the session looked like at the moment each later step ran — the only way to assert an ORDER rather
  *  than a SET, since a wrong-order implementation also calls every one of these. */
 let sessionAtFetch: { accessToken: string | null; familyId: string | null }
 let sessionAtRegister: { accessToken: string | null; familyId: string | null }
 
-function useMaterial(material: unknown) {
-  getAccountKeyMaterial = vi.fn(() => {
+function useMaterial(material: AccountKeyMaterial) {
+  getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>(() => {
     sessionAtFetch = { accessToken: session.accessToken, familyId: session.familyId }
     return Promise.resolve(material)
   })
-  vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial } as unknown as ReturnType<typeof accountApi>)
+  fakeApi(accountApi, { getAccountKeyMaterial })
 }
 
 beforeEach(() => {
@@ -108,9 +112,12 @@ beforeEach(() => {
   sessionAtFetch = { accessToken: 'NEVER-RAN', familyId: 'NEVER-RAN' }
   sessionAtRegister = { accessToken: 'NEVER-RAN', familyId: 'NEVER-RAN' }
 
-  adoptSession = vi.fn(() => Promise.resolve({ accessToken: 'access-1', family: { id: 'family-1' } }))
-  refreshSession = vi.fn(() => Promise.resolve({ accessToken: 'access-2', refreshToken: null }))
-  vi.mocked(tokenApi).mockReturnValue({ adoptSession, refreshSession } as unknown as ReturnType<typeof tokenApi>)
+  adoptSession = vi.fn<TokenApi['adoptSession']>(() =>
+    Promise.resolve({ accessToken: 'access-1', family: { id: 'family-1' } }),
+  )
+  // No refresh token in the answer: a cookie-carried session's refresh rotates only the cookie.
+  refreshSession = vi.fn<TokenApi['refreshSession']>(() => Promise.resolve({ accessToken: 'access-2' }))
+  fakeApi(tokenApi, { adoptSession, refreshSession })
 
   vi.mocked(localWrapId).mockResolvedValue(null)
   vi.mocked(rememberThisDevice).mockImplementation(() => {
@@ -253,7 +260,7 @@ describe('the shared tail — the tier the device is born at (D15, ADR 0005 §22
       vi.mocked(enrolDeviceKey).mockResolvedValue('wrap-new')
       const { grant, material } = fixture()
       useMaterial(material)
-      vi.mocked(tokenApi).mockReturnValue({ adoptSession, refreshSession } as unknown as ReturnType<typeof tokenApi>)
+      fakeApi(tokenApi, { adoptSession, refreshSession })
 
       await runOnboardTail(grant, stay)
 
@@ -308,11 +315,11 @@ describe('the shared tail — every terminal state, and the call that may never 
     // would go on passing after the protection it describes became irrelevant.
     const { grant, material } = fixture()
     let fetches = 0
-    getAccountKeyMaterial = vi.fn(() => {
+    getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>(() => {
       fetches += 1
       return fetches === 1 ? Promise.reject(httpError(401)) : Promise.resolve(material)
     })
-    vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial } as unknown as ReturnType<typeof accountApi>)
+    fakeApi(accountApi, { getAccountKeyMaterial })
 
     await runOnboardTail(grant, true)
 
@@ -343,8 +350,8 @@ describe('the shared tail — every terminal state, and the call that may never 
 
   it('a failure AFTER the adoption is terminal too, and still presents adopt only once', async () => {
     const { grant } = fixture()
-    getAccountKeyMaterial = vi.fn(() => Promise.reject(httpError(500)))
-    vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial } as unknown as ReturnType<typeof accountApi>)
+    getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>(() => Promise.reject(httpError(500)))
+    fakeApi(accountApi, { getAccountKeyMaterial })
 
     await expect(runOnboardTail(grant, true)).rejects.toThrow()
 
@@ -372,10 +379,8 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
   /** The pin store as the server serves it on this device's first read: a valid seal at `version`. */
   function servePins(mk: Uint8Array, version: number) {
     const blob = b64std(v1.seal({ purpose: 'identity-pins', version }, mk, new TextEncoder().encode(JSON.stringify({ pins: {} }))))
-    const putIdentityPins = vi.fn()
-    vi.mocked(accountIdentityPinsApi).mockReturnValue(
-      { getIdentityPins: vi.fn(async () => ({ blob, version })), putIdentityPins } as unknown as ReturnType<typeof accountIdentityPinsApi>,
-    )
+    const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>()
+    fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ blob, version }), putIdentityPins })
     return putIdentityPins
   }
 
@@ -389,7 +394,11 @@ describe('the shared tail — a linked device starts from its linker\u2019s trus
   it('control: served v5, the store is accepted', async () => {
     const mk = await linkedBy(5)
     const put = servePins(mk, 5)
-    put.mockResolvedValue({})
+    // The write lands, and the store answers with what it now holds.
+    put.mockImplementation(async ({ identityPinsUpdate }) => ({
+      blob: identityPinsUpdate.blob,
+      version: identityPinsUpdate.version + 1,
+    }))
     expect(await checkAndPin('u1', 'a2V5LW9uZQ==')).toBe('firstUse')
   })
 })

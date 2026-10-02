@@ -2,6 +2,8 @@ import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
+import { fakeApi } from '../../test/apiMock'
+import type { AccountDeviceRegisterApi as RegisterApi, DeviceRegister } from '../../api/generated/account'
 
 // The register's API + vault are mocked; the crypto (seal/unseal under the Master Key) is REAL, so these tests
 // prove a genuine round-trip and the version-guarded merge, not a stub.
@@ -49,19 +51,17 @@ const namesOf = (liveFamilyIds: ReadonlyArray<string>, thisDeviceId = 'nobody') 
   readRegisterView(liveFamilyIds, null, thisDeviceId).then((v) => v.names)
 
 /** A fake server with REAL optimistic concurrency: a PUT whose version != the stored version is a 409. */
-function fakeServer(initial: { blob: string | null; version: number } = { blob: null, version: 0 }) {
-  const state = { ...initial }
+function fakeServer(initial: DeviceRegister = { blob: null, version: 0 }) {
+  const state: DeviceRegister = { ...initial }
   const stale = () => httpError(409, 'stale_version')
-  const getDeviceRegister = vi.fn(async () => ({ blob: state.blob, version: state.version }))
-  const putDeviceRegister = vi.fn(async ({ deviceRegisterUpdate }: { deviceRegisterUpdate: { blob: string; version: number } }) => {
+  const getDeviceRegister = vi.fn<RegisterApi['getDeviceRegister']>(async () => ({ blob: state.blob, version: state.version }))
+  const putDeviceRegister = vi.fn<RegisterApi['putDeviceRegister']>(async ({ deviceRegisterUpdate }) => {
     if (deviceRegisterUpdate.version !== state.version) throw stale()
     state.blob = deviceRegisterUpdate.blob
     state.version += 1
     return { blob: state.blob, version: state.version }
   })
-  vi.mocked(accountDeviceRegisterApi).mockReturnValue(
-    { getDeviceRegister, putDeviceRegister } as unknown as ReturnType<typeof accountDeviceRegisterApi>,
-  )
+  fakeApi(accountDeviceRegisterApi, { getDeviceRegister, putDeviceRegister })
   return { state, getDeviceRegister, putDeviceRegister }
 }
 

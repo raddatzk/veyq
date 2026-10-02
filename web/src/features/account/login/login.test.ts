@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { fakeApi } from '../../../test/apiMock'
 
 vi.mock('../../../api/client', () => ({ loginApi: vi.fn() }))
 
@@ -22,15 +23,15 @@ describe('login (uc.account.login)', () => {
   it('signs the nonce so the server can verify, and stores the issued session', async () => {
     let captured = ''
     let capturedNonce = ''
-    vi.mocked(loginApi).mockReturnValue({
+    fakeApi(loginApi, {
       requestLoginChallenge: () =>
         Promise.resolve({ nonce: b64std(NONCE), instanceSalt: b64std(INSTANCE_SALT) }),
-      verifyLogin: (req: { loginVerifyRequest: { nonce: string; signature: string } }) => {
+      verifyLogin: (req) => {
         captured = req.loginVerifyRequest.signature
         capturedNonce = req.loginVerifyRequest.nonce
         return Promise.resolve({ accessToken: 'access', refreshToken: 'refresh', family: { id: 'fam-1' } })
       },
-    } as unknown as ReturnType<typeof loginApi>)
+    })
 
     await login('User@Example.com', 'correct horse battery')
 

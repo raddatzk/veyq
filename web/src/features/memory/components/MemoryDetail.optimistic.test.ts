@@ -41,6 +41,7 @@ import * as v1 from '@veyq/crypto/v1'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
 import { galleryFakeStore } from './galleryFakeStore'
+import { fakeApi, stubApi } from '../../../test/apiMock'
 import { realI18n, t } from '../../../test/i18n'
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
@@ -103,7 +104,7 @@ function mountDetail(memoryKey: Uint8Array) {
 beforeEach(() => {
   vi.clearAllMocks()
   hoisted.ref.batches.length = 0
-  vi.mocked(contentApi).mockReturnValue({ updateNode: vi.fn().mockResolvedValue(undefined) } as unknown as ReturnType<typeof contentApi>)
+  stubApi(contentApi, { updateNode: undefined })
   vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960, height: 0, top: 0, left: 0, right: 960, bottom: 0, x: 0, y: 0, toJSON: () => ({}) })
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} })
 })
@@ -115,7 +116,7 @@ afterEach(() => {
 describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
   it('renders an in-flight upload as a preview tile with a progress ring, at its capture-time place', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     // the listed media is the NEWER one, so "the tile appeared" and "the tile is first" are different claims
@@ -151,7 +152,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
   // what this CR changed, the position is what it changed it FOR.
   it('a settling upload hands its grid slot to the real tile — the position does not move', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     // one listed media, captured OLD; an upload of that same moment is what will settle onto it
@@ -184,7 +185,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
   // reader saying "Uploading" over a file that has not started.
   it('a queued tile says queued — neither label claims it is uploading', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
@@ -200,7 +201,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
   it('a preparing tile says preparing — the stage where the device is busy and the wire is not', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
@@ -215,7 +216,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
   it('a failed upload shows an inline retry that re-runs it', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
@@ -232,7 +233,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
   it('reconciles by mediaId: a done upload already listed shows only the real tile — no duplicate', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/png' }, stubDeriver())
@@ -251,7 +252,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
   it('keeps the optimistic tile while a done upload’s media is not yet listed (no gap before reconcile)', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()
@@ -263,7 +264,7 @@ describe('MemoryDetail — optimistic in-grid upload tiles (cr-0074)', () => {
 
   it('revokes the preview objectURL on unmount', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const revoke = vi.spyOn(URL, 'revokeObjectURL')
     const wrapper = mountDetail(v1.randomBytes(32))
@@ -291,7 +292,7 @@ describe('MemoryDetail — the picker does not make everyone wait for Safari', (
   // second half: a picker that simply stopped merging would pass the first assertion and fail the rest.
   it('enqueues what it already has before any re-read, and still catches a late arrival as its own batch', async () => {
     const store = galleryFakeStore()
-    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const wrapper = mountDetail(v1.randomBytes(32))
     await flushPromises()

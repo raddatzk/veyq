@@ -1,6 +1,17 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
+import { fakeApi } from '../../../test/apiMock'
+import type {
+  AccountApi,
+  AccountDeviceRegisterApi,
+  AccountIdentityPinsApi,
+  AccountRotationApi,
+  DeviceRegister,
+  IdentityPins,
+  MasterKeyWrap,
+} from '../../../api/generated/account'
+import type { ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 
 // The APIs and the vault are mocked; the scope layer and **the crypto are real** — both wraps, the identity mint
 // and the KEK derivation all run for real (the last at a light Argon cost, see the worker mock below), so
@@ -87,10 +98,10 @@ const ME = '0e000000-0000-4000-8000-0000000000e9'
 const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028
  *  Decision 6), since the caller birthed it. */
-const heldAt0 = (id: string, e0: Uint8Array) => {
+const heldAt0 = (id: string, e0: Uint8Array): ScopeSummary => {
   const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: id, epoch: 0 }, v1.hybridPublic(oldPriv()), e0))
   return {
-    id, kind: 'PERSONAL', tenantId: 't', grantedEpoch: 0, wrappedGrant,
+    id, kind: 'PERSONAL', role: 'OWNER', tenantId: 't', nameEpoch: 0, iconEpoch: 0, currentEpoch: 0, grantedEpoch: 0, wrappedGrant,
     granterUserId: ME, granterIdentityPublicKey: OLD_PUB,
     grantSignature: signGrant(OLD_ID.priv.sign, { scopeId: id, kind: 'PERSONAL', epoch: 0 }, { userId: ME, identityPublicKeyB64: OLD_PUB }, wrappedGrant),
   }
@@ -101,7 +112,7 @@ const heldAt0 = (id: string, e0: Uint8Array) => {
 const KDF = { t: 1, m: 64, p: 1, dkLen: 32 }
 
 /** The stored PASSWORD wrap, produced exactly as account birth produces it. */
-function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWORD) {
+function storedFloor(masterKeyBytes = MK, secret = SECRET_KEY, password = PASSWORD): MasterKeyWrap {
   const salt = v1.randomBytes(16)
   const kek = v1.kekPasswordSecret(secret, password, salt, KDF)
   return {
@@ -124,63 +135,43 @@ const REGISTERED = { devices: { d1: { label: 'Work laptop', lastSeenAt: 1 } }, f
 const sealedRegister = (version: number, reg: Record<string, unknown> = REGISTERED, mk = MK) =>
   ({ blob: b64std(v1.seal(registerAt(version), mk, enc.encode(JSON.stringify(reg)))), version })
 
-type Served = { blob: string | null; version: number }
-
 function fakeServer(
   opts: {
-    wraps?: unknown[]
+    wraps?: MasterKeyWrap[]
     sole?: string[]
     queued?: string[]
-    held?: unknown[]
-    pins?: Served
-    register?: Served
+    held?: ScopeSummary[]
+    pins?: IdentityPins
+    register?: DeviceRegister
     /** How many rotate calls answer `409 stale_version` first — each as if another device had just written the
      *  pin store (its version moves one up, still sealed under the current key). */
     staleRotations?: number
   } = {},
 ) {
-  const getAccountKeyMaterial = vi.fn(async () => ({
+  const getAccountKeyMaterial = vi.fn<AccountApi['getAccountKeyMaterial']>(async () => ({
     userId: ME,
     suiteId: 'v1',
     wraps: opts.wraps ?? [storedFloor()],
     wrappedIdentityPrivateKey: 'aWdub3JlZA==',
   }))
-  vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial } as unknown as ReturnType<typeof accountApi>)
-
-  type RotateBody = {
-    rotateAccountKeysRequest: {
-      identityPublicKey: string
-      wrappedIdentityPrivateKey: string
-      passwordWrap: { wrappedKey: string; kdfParams: string }
-      recoveryWrap: { wrappedKey: string; kdfParams: string }
-      secretKeyProofSignature: string
-      identityPins: { blob: string; version: number }
-      deviceRegister: { blob: string; version: number }
-    }
-  }
+  fakeApi(accountApi, { getAccountKeyMaterial })
 
   // The two documents as the server holds them, with the stores' real compare-and-set: a write whose version is
   // not the stored one is `409 stale_version`. Their own PUTs answer 500 — the outage a re-seal after the publish
   // used to swallow — so a rotation that still wrote them on their own would leave them under the retired key.
-  const pins: Served = { ...(opts.pins ?? { blob: null, version: 0 }) }
-  const register: Served = { ...(opts.register ?? { blob: null, version: 0 }) }
-  const getIdentityPins = vi.fn(async () => ({ ...pins }))
-  const putIdentityPins = vi.fn(async () => {
+  const pins: IdentityPins = { ...(opts.pins ?? { blob: null, version: 0 }) }
+  const register: DeviceRegister = { ...(opts.register ?? { blob: null, version: 0 }) }
+  const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async () => {
     throw httpError(500)
   })
-  vi.mocked(accountIdentityPinsApi).mockReturnValue(
-    { getIdentityPins, putIdentityPins } as unknown as ReturnType<typeof accountIdentityPinsApi>,
-  )
-  const getDeviceRegister = vi.fn(async () => ({ ...register }))
-  const putDeviceRegister = vi.fn(async () => {
+  fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ ...pins }), putIdentityPins })
+  const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async () => {
     throw httpError(500)
   })
-  vi.mocked(accountDeviceRegisterApi).mockReturnValue(
-    { getDeviceRegister, putDeviceRegister } as unknown as ReturnType<typeof accountDeviceRegisterApi>,
-  )
+  fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...register }), putDeviceRegister })
 
   let staleLeft = opts.staleRotations ?? 0
-  const rotateAccountKeys = vi.fn(async (body: RotateBody) => {
+  const rotateAccountKeys = vi.fn<AccountRotationApi['rotateAccountKeys']>(async (body) => {
     const req = body.rotateAccountKeysRequest
     if (staleLeft > 0) {
       staleLeft -= 1
@@ -196,23 +187,11 @@ function fakeServer(
     if (req.deviceRegister) Object.assign(register, { blob: req.deviceRegister.blob, version: register.version + 1 })
     return { soleMemberScopeIds: opts.sole ?? [], queuedScopeIds: opts.queued ?? [] }
   })
-  vi.mocked(accountRotationApi).mockReturnValue(
-    { rotateAccountKeys } as unknown as ReturnType<typeof accountRotationApi>,
-  )
+  fakeApi(accountRotationApi, { rotateAccountKeys })
 
-  type RotateScopeBody = {
-    scopeId: string
-    rotateScopeRequest: {
-      epoch: number
-      wrappedPrev: string
-      grants: { userId: string; wrappedGrant: string; grantSignature: string }[]
-      admissions: { admissionId: string; admissionTag: string }[]
-    }
-  }
-  const rotateScope = vi.fn(async (body: RotateScopeBody) => ({ epoch: body.rotateScopeRequest.epoch }))
+  const rotateScope = vi.fn<ScopesApi['rotateScope']>(async (body) => ({ epoch: body.rotateScopeRequest.epoch }))
   // The caller's own grants, wrapped to the OLD identity the vault still holds while the sole scopes re-key.
-  const listMyScopes = vi.fn(async () => opts.held ?? [])
-  vi.mocked(scopesApi).mockReturnValue({ rotateScope, listMyScopes } as unknown as ReturnType<typeof scopesApi>)
+  fakeApi(scopesApi, { rotateScope, listMyScopes: async () => opts.held ?? [] })
 
   return { getAccountKeyMaterial, rotateAccountKeys, rotateScope, pins, register, putIdentityPins, putDeviceRegister }
 }

@@ -2,6 +2,7 @@
 // Web data-layer tests for uploader buckets (uc.memory.buckets, en.memory.buckets, cr-0113): the K_mem name
 // unseal (operator-blind — a wrong AAD context can never open a name) + the bucket wrappers' request shaping.
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { stubApi } from '../../test/apiMock'
 
 vi.mock('../../api/client', () => ({
   mediaApi: vi.fn(),
@@ -64,13 +65,14 @@ describe('media buckets (cr-0113)', () => {
 
   describe('listBuckets', () => {
     it('maps the response to BucketItem[] (nulls → undefined)', async () => {
-      const listNodeBuckets = vi.fn().mockResolvedValue({
-        buckets: [
-          { bucketId: 'b1', ownerKey: 'user:u1', isPrimary: true, mediaCount: 3, parentBucketId: null, sealedName: null },
-          { bucketId: 'b2', ownerKey: 'share:s1', isPrimary: true, mediaCount: 1, parentBucketId: null, sealedName: 'YQ==', shareId: SHARE },
-        ],
+      const { listNodeBuckets } = stubApi(bucketsApi, {
+        listNodeBuckets: {
+          buckets: [
+            { bucketId: 'b1', ownerKey: 'user:u1', isPrimary: true, mediaCount: 3, parentBucketId: null, sealedName: null },
+            { bucketId: 'b2', ownerKey: 'share:s1', isPrimary: true, mediaCount: 1, parentBucketId: null, sealedName: 'YQ==', shareId: SHARE },
+          ],
+        },
       })
-      vi.mocked(bucketsApi).mockReturnValue({ listNodeBuckets } as unknown as ReturnType<typeof bucketsApi>)
       const out = await listBuckets(SCOPE, NODE)
       expect(listNodeBuckets).toHaveBeenCalledWith({ scopeId: SCOPE, nodeId: NODE })
       expect(out).toEqual([
@@ -83,8 +85,9 @@ describe('media buckets (cr-0113)', () => {
   describe('createBucket', () => {
     it('seals the folder name under K_mem before sending — the server never sees the cleartext', async () => {
       const key = v1.randomBytes(32)
-      const createBucketFn = vi.fn().mockResolvedValue({ bucketId: 'b3', ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, parentBucketId: 'b1', sealedName: 'x' })
-      vi.mocked(bucketsApi).mockReturnValue({ createBucket: createBucketFn } as unknown as ReturnType<typeof bucketsApi>)
+      const { createBucket: createBucketFn } = stubApi(bucketsApi, {
+        createBucket: { bucketId: 'b3', ownerKey: 'user:u1', isPrimary: false, mediaCount: 0, parentBucketId: 'b1', sealedName: 'x' },
+      })
       await createBucket(SCOPE, NODE, key, 'Urlaub 2026')
       const req = createBucketFn.mock.calls[0][0].createBucketRequest
       expect(req.sealedName).not.toContain('Urlaub') // ciphertext, never the cleartext name
@@ -97,8 +100,7 @@ describe('media buckets (cr-0113)', () => {
 
   describe('moveBucketMedia', () => {
     it('passes the media ids + target (null = the caller primary)', async () => {
-      const move = vi.fn().mockResolvedValue(undefined)
-      vi.mocked(bucketsApi).mockReturnValue({ moveBucketMedia: move } as unknown as ReturnType<typeof bucketsApi>)
+      const { moveBucketMedia: move } = stubApi(bucketsApi, { moveBucketMedia: undefined })
       await moveBucketMedia(SCOPE, NODE, ['m1', 'm2'], null)
       expect(move).toHaveBeenCalledWith({ scopeId: SCOPE, nodeId: NODE, moveMediaRequest: { mediaIds: ['m1', 'm2'], targetBucketId: null } })
     })
@@ -106,12 +108,11 @@ describe('media buckets (cr-0113)', () => {
     // The contract caps one request at `MoveMediaRequest.mediaIds.maxItems` (256), and the server enforces it —
     // so a larger selection must still move every id, in slices that each stay inside the bound.
     it('moves a selection larger than one request carries in slices of at most 256, every id exactly once', async () => {
-      const move = vi.fn().mockResolvedValue(undefined)
-      vi.mocked(bucketsApi).mockReturnValue({ moveBucketMedia: move } as unknown as ReturnType<typeof bucketsApi>)
+      const { moveBucketMedia: move } = stubApi(bucketsApi, { moveBucketMedia: undefined })
       const ids = Array.from({ length: 300 }, (_, i) => `m${i}`)
       await moveBucketMedia(SCOPE, NODE, ids, 'b1')
       expect(move).toHaveBeenCalledTimes(2)
-      const sent = move.mock.calls.map(([req]) => (req as { moveMediaRequest: { mediaIds: string[]; targetBucketId: string } }).moveMediaRequest)
+      const sent = move.mock.calls.map(([req]) => req.moveMediaRequest)
       expect(sent.map((r) => r.mediaIds.length)).toEqual([256, 44])
       expect(sent.flatMap((r) => r.mediaIds)).toEqual(ids)
       expect(sent.every((r) => r.targetBucketId === 'b1')).toBe(true)

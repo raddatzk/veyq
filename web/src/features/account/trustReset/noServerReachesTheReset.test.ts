@@ -1,6 +1,16 @@
 import 'fake-indexeddb/auto'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
+import { fakeApi } from '../../../test/apiMock'
+import type {
+  AccountDeviceRegisterApi,
+  AccountIdentityPinsApi,
+  DeviceRegister,
+  DeviceRegisterUpdate,
+  IdentityPins,
+  IdentityPinsUpdate,
+} from '../../../api/generated/account'
+import type { ClaimedJob, TasksApi } from '../../../api/generated/tasks'
 
 // ADR 0028 Decision 7's way back has exactly one trigger: the person, through the confirm dialog. The server can
 // cause the REFUSAL whenever it likes — an old copy reads as rolled back, garbage as unreadable — so the property
@@ -60,39 +70,36 @@ const sealedAt = (doc: Doc, version: number) => {
 
 /** The two documents' endpoints, recording every PUT; the PUT itself always lands (and is then what is served),
  *  so a write is never masked by a conflict. */
-function fakeServer(served: Record<Doc, { blob: string | null; version: number }>) {
-  const land = (doc: Doc) => async (body: Record<string, { blob: string; version: number }>) => {
-    const update = Object.values(body)[0]
+function fakeServer(served: { pins: IdentityPins; register: DeviceRegister }) {
+  const land = <D extends Doc>(doc: D, update: IdentityPinsUpdate | DeviceRegisterUpdate): (typeof served)[D] => {
     served[doc] = { blob: update.blob, version: update.version + 1 }
     return { ...served[doc] }
   }
-  const putIdentityPins = vi.fn(land('pins'))
-  const putDeviceRegister = vi.fn(land('register'))
-  vi.mocked(accountIdentityPinsApi).mockReturnValue({
-    getIdentityPins: vi.fn(async () => ({ ...served.pins })),
-    putIdentityPins,
-  } as unknown as ReturnType<typeof accountIdentityPinsApi>)
-  vi.mocked(accountDeviceRegisterApi).mockReturnValue({
-    getDeviceRegister: vi.fn(async () => ({ ...served.register })),
-    putDeviceRegister,
-  } as unknown as ReturnType<typeof accountDeviceRegisterApi>)
+  const putIdentityPins = vi.fn<AccountIdentityPinsApi['putIdentityPins']>(async ({ identityPinsUpdate }) =>
+    land('pins', identityPinsUpdate),
+  )
+  const putDeviceRegister = vi.fn<AccountDeviceRegisterApi['putDeviceRegister']>(async ({ deviceRegisterUpdate }) =>
+    land('register', deviceRegisterUpdate),
+  )
+  fakeApi(accountIdentityPinsApi, { getIdentityPins: async () => ({ ...served.pins }), putIdentityPins })
+  fakeApi(accountDeviceRegisterApi, { getDeviceRegister: async () => ({ ...served.register }), putDeviceRegister })
   // The worker's claim: one grant-delivery job to a genuinely admitted target, then drained.
   const K_SC = v1.randomBytes(32)
-  const job = {
+  const job: ClaimedJob = {
     jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
     grantDelivery: {
       targetUserId: TARGET_ID, targetMembershipId: 'm1', identityPublicKey: TARGET_PUB,
       ...tagAdmission(K_SC, { scopeId: S1, kind: 'GROUP' }, 0, TARGET_ID),
     },
   }
-  const completeTask = vi.fn(async () => undefined)
-  vi.mocked(tasksApi).mockReturnValue({
-    claimTask: vi.fn().mockResolvedValueOnce(job).mockResolvedValueOnce(null),
+  const completeTask = vi.fn<TasksApi['completeTask']>(async () => undefined)
+  fakeApi(tasksApi, {
+    claimTask: vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce(job).mockResolvedValueOnce(null),
     completeTask,
-    failTask: vi.fn(),
-    declineTask: vi.fn(),
-    clearDeclinesForAcceptedKey: vi.fn(async () => ({ cleared: 0 })),
-  } as unknown as ReturnType<typeof tasksApi>)
+    failTask: vi.fn<TasksApi['failTask']>(),
+    declineTask: vi.fn<TasksApi['declineTask']>(),
+    clearDeclinesForAcceptedKey: async () => ({ cleared: 0 }),
+  })
   return { putIdentityPins, putDeviceRegister, completeTask, K_SC }
 }
 

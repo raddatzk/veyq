@@ -27,9 +27,7 @@ vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
   default: { template: '<div class="stub-kit" />' },
 }))
 vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
-vi.mock('../api/client', () => ({
-  setupApi: () => ({ getSetupStatus: vi.fn().mockResolvedValue({ instanceSalt: 'AAAA' }) }),
-}))
+vi.mock('../api/client', () => ({ setupApi: vi.fn() }))
 // Only the file/QR decode is faked; `parseKit`/`kitPayload` stay real, so the pasted token this test hands the
 // field is the one the kit generator actually emits.
 vi.mock('../features/account/emergencyKit/emergencyKit', async (orig) => ({
@@ -42,6 +40,8 @@ vi.mock('vue-router', () => ({
 }))
 
 import TenantJoinView from './TenantJoinView.vue'
+import { setupApi } from '../api/client'
+import { stubApi } from '../test/apiMock'
 import { previewInvite } from '../features/tenant/tenantInvite'
 import { unlockMasterKey } from '../features/account/unlock/unlock'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
@@ -104,6 +104,9 @@ async function acceptWith(w: VueWrapper) {
 describe('TenantJoinView — importing the Emergency Kit on the invite-accept screen', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    stubApi(setupApi, {
+      getSetupStatus: { setupRequired: false, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAA' },
+    })
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })
 

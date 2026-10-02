@@ -5,13 +5,15 @@ vi.mock('../../app/sessionRefresh', () => ({ withRefresh: (fn: () => unknown) =>
 
 import { loadFavorites, saveFavorites } from './favorites'
 import { favoritesApi } from '../../api/client'
+import { fakeApi } from '../../test/apiMock'
+import type { FavoritesApi } from '../../api/generated/content'
 import * as v1 from '@veyq/crypto/v1'
 import { fromB64std } from '@veyq/crypto/base64'
 
 const K = v1.randomBytes(32)
 
-function mockApi(get: ReturnType<typeof vi.fn>, put: ReturnType<typeof vi.fn>) {
-  vi.mocked(favoritesApi).mockReturnValue({ getFavorites: get, putFavorites: put } as unknown as ReturnType<typeof favoritesApi>)
+function mockApi(getFavorites: FavoritesApi['getFavorites'], putFavorites: FavoritesApi['putFavorites']) {
+  fakeApi(favoritesApi, { getFavorites, putFavorites })
 }
 
 beforeEach(() => vi.clearAllMocks())
@@ -22,9 +24,10 @@ const SCOPE = '5c09e000-0000-4000-8000-0000000000f3'
 describe('favorites data layer', () => {
   it('round-trips the pinned set through seal → store → load → decrypt', async () => {
     let stored: string | null = null
-    const put = vi.fn(({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext })
-    const get = vi.fn(() => Promise.resolve({ ciphertext: stored }))
-    mockApi(get, put)
+    mockApi(
+      async () => ({ ciphertext: stored }),
+      async ({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext },
+    )
 
     await saveFavorites(SCOPE, K, new Set(['m1', 'm2']))
     expect(stored).toBeTruthy()
@@ -42,14 +45,16 @@ describe('favorites data layer', () => {
   })
 
   it('returns an empty set when nothing is stored', async () => {
-    mockApi(vi.fn(() => Promise.resolve({ ciphertext: null })), vi.fn())
+    mockApi(async () => ({ ciphertext: null }), async () => {})
     expect((await loadFavorites(SCOPE, K)).size).toBe(0)
   })
 
   it('returns an empty set on an unreadable blob (wrong key) instead of throwing', async () => {
     let stored: string | null = null
-    const put = vi.fn(({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext })
-    mockApi(vi.fn(() => Promise.resolve({ ciphertext: stored })), put)
+    mockApi(
+      async () => ({ ciphertext: stored }),
+      async ({ putFavoritesRequest }) => { stored = putFavoritesRequest.ciphertext },
+    )
     await saveFavorites(SCOPE, v1.randomBytes(32), new Set(['x'])) // sealed under a DIFFERENT key
     expect((await loadFavorites(SCOPE, K)).size).toBe(0)
   })

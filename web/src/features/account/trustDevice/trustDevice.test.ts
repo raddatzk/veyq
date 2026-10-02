@@ -1,4 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
+import { fakeApi } from '../../../test/apiMock'
+import type { AccountWrapsApi } from '../../../api/generated/account'
 
 vi.mock('../../../api/client', () => ({
   accountWrapsApi: vi.fn(),
@@ -23,11 +25,11 @@ import { PRODUCTION_ARGON_TIMEOUT_MS } from '@veyq/crypto/testArgon'
 
 const EMAIL = 'user@example.com'
 
-function mockWrapsApi(add: ReturnType<typeof vi.fn>, del: ReturnType<typeof vi.fn>) {
-  vi.mocked(accountWrapsApi).mockReturnValue({
-    addAccountWrap: add,
-    deleteAccountWrap: del,
-  } as unknown as ReturnType<typeof accountWrapsApi>)
+type AddWrap = AccountWrapsApi['addAccountWrap']
+type DeleteWrap = AccountWrapsApi['deleteAccountWrap']
+
+function mockWrapsApi(add: Mock<AddWrap>, del: Mock<DeleteWrap>) {
+  fakeApi(accountWrapsApi, { addAccountWrap: add, deleteAccountWrap: del })
 }
 
 beforeEach(() => {
@@ -43,8 +45,8 @@ beforeEach(() => {
 describe('trustThisDevice / untrustThisDevice', () => {
   it('enrols a DEVICE wrap and saves the local trust record', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue(null)
-    const add = vi.fn().mockResolvedValue({ id: 'wrap-123' })
-    mockWrapsApi(add, vi.fn())
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-123' })
+    mockWrapsApi(add, vi.fn<DeleteWrap>())
 
     // The returned id is the ONLY moment the new wrap id exists anywhere (every enrolment mints a fresh one,
     // ADR 0005 §9). Its caller records the device↔wrap join from it; this module stays ignorant of the register.
@@ -60,8 +62,8 @@ describe('trustThisDevice / untrustThisDevice', () => {
 
   it('re-trust replaces: deletes the existing wrap before adding the new one', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue({ cryptoKey: {} as CryptoKey, wrapId: 'old-1' })
-    const del = vi.fn().mockResolvedValue(undefined)
-    const add = vi.fn().mockResolvedValue({ id: 'new-1' })
+    const del = vi.fn<DeleteWrap>().mockResolvedValue(undefined)
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'new-1' })
     mockWrapsApi(add, del)
 
     expect(await trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))).toBe('new-1')
@@ -75,8 +77,8 @@ describe('trustThisDevice / untrustThisDevice', () => {
   it('rolls back the server wrap when the local save fails (no orphan)', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue(null)
     vi.mocked(device.saveTrust).mockRejectedValue(new Error('idb_write_failed'))
-    const add = vi.fn().mockResolvedValue({ id: 'wrap-x' })
-    const del = vi.fn().mockResolvedValue(undefined)
+    const add = vi.fn<AddWrap>().mockResolvedValue({ id: 'wrap-x' })
+    const del = vi.fn<DeleteWrap>().mockResolvedValue(undefined)
     mockWrapsApi(add, del)
 
     await expect(trustThisDevice(EMAIL, 'pw', new Uint8Array(32).fill(1))).rejects.toThrow()
@@ -85,8 +87,8 @@ describe('trustThisDevice / untrustThisDevice', () => {
 
   it('untrust removes the server wrap and the local key', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue({ cryptoKey: {} as CryptoKey, wrapId: 'w1' })
-    const del = vi.fn().mockResolvedValue(undefined)
-    mockWrapsApi(vi.fn(), del)
+    const del = vi.fn<DeleteWrap>().mockResolvedValue(undefined)
+    mockWrapsApi(vi.fn<AddWrap>(), del)
 
     await untrustThisDevice(EMAIL)
 
@@ -96,8 +98,8 @@ describe('trustThisDevice / untrustThisDevice', () => {
 
   it('untrust is a no-op when the device is not trusted', async () => {
     vi.mocked(device.loadTrust).mockResolvedValue(null)
-    const del = vi.fn()
-    mockWrapsApi(vi.fn(), del)
+    const del = vi.fn<DeleteWrap>()
+    mockWrapsApi(vi.fn<AddWrap>(), del)
 
     await untrustThisDevice(EMAIL)
 

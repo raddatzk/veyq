@@ -30,9 +30,7 @@ vi.mock('../features/account/emergencyKit/EmergencyKitSave.vue', () => ({
 }))
 vi.mock('@veyq/crypto/accountBirth', () => ({ buildAccount: vi.fn() }))
 vi.mock('../shared/pwned', () => ({ pwnedCount: vi.fn() }))
-vi.mock('../api/client', () => ({
-  setupApi: () => ({ getSetupStatus: vi.fn().mockResolvedValue({ instanceSalt: 'AAAA' }) }),
-}))
+vi.mock('../api/client', () => ({ setupApi: vi.fn() }))
 const push = vi.fn()
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
@@ -40,6 +38,8 @@ vi.mock('vue-router', () => ({
 }))
 
 import TenantJoinView from './TenantJoinView.vue'
+import { setupApi } from '../api/client'
+import { stubApi } from '../test/apiMock'
 import { previewInvite } from '../features/tenant/tenantInvite'
 import { login } from '../features/account/login/login'
 import { buildAccount } from '@veyq/crypto/accountBirth'
@@ -89,6 +89,9 @@ const submitDisabled = (w: ReturnType<typeof mount>) =>
 
 beforeEach(() => {
   vi.clearAllMocks()
+  stubApi(setupApi, {
+    getSetupStatus: { setupRequired: false, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAA' },
+  })
   vaultState.unlocked = false
 })
 

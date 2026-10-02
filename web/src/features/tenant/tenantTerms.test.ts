@@ -12,25 +12,24 @@ vi.mock('../../api/client', () => ({
 
 import { getTenantTerms, updateTenantTerms, acceptTenantTerms } from './tenantTerms'
 import { tenantsApi } from '../../api/client'
+import { stubApi } from '../../test/apiMock'
 import { activeSpace, termsStale, markTermsAccepted, clearActiveSpace } from '../../app/activeSpace'
 
 const TENANT = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
-function stubApi() {
-  const api = {
-    getTenantTerms: vi.fn().mockResolvedValue({ termsVersion: 2, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } }),
-    updateTenantTerms: vi.fn().mockResolvedValue({ termsVersion: 3, acceptedVersion: 1, terms: { de: 'DE2', en: 'EN2' } }),
-    acceptTenantTerms: vi.fn().mockResolvedValue({ termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE2', en: 'EN2' } }),
-  }
-  vi.mocked(tenantsApi).mockReturnValue(api as unknown as ReturnType<typeof tenantsApi>)
-  return api
+function stubTerms() {
+  return stubApi(tenantsApi, {
+    getTenantTerms: { termsVersion: 2, acceptedVersion: 1, terms: { de: 'DE', en: 'EN' } },
+    updateTenantTerms: { termsVersion: 3, acceptedVersion: 1, terms: { de: 'DE2', en: 'EN2' } },
+    acceptTenantTerms: { termsVersion: 3, acceptedVersion: 3, terms: { de: 'DE2', en: 'EN2' } },
+  })
 }
 
 describe('tenant terms facade (cr-0114)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('getTenantTerms addresses the tenant', async () => {
-    const api = stubApi()
+    const api = stubTerms()
     const t = await getTenantTerms(TENANT)
     expect(api.getTenantTerms).toHaveBeenCalledWith({ tenantId: TENANT })
     expect(t.termsVersion).toBe(2)
@@ -38,7 +37,7 @@ describe('tenant terms facade (cr-0114)', () => {
   })
 
   it('updateTenantTerms sends the per-locale markdown map', async () => {
-    const api = stubApi()
+    const api = stubTerms()
     await updateTenantTerms(TENANT, { de: 'DE2', en: 'EN2' })
     expect(api.updateTenantTerms).toHaveBeenCalledWith({
       tenantId: TENANT,
@@ -47,7 +46,7 @@ describe('tenant terms facade (cr-0114)', () => {
   })
 
   it('acceptTenantTerms sends the version being accepted', async () => {
-    const api = stubApi()
+    const api = stubTerms()
     await acceptTenantTerms(TENANT, 3)
     expect(api.acceptTenantTerms).toHaveBeenCalledWith({ tenantId: TENANT, acceptTermsRequest: { version: 3 } })
   })

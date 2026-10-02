@@ -33,6 +33,37 @@ const SEEDER_NO_SHELL = ['node:child_process', 'child_process'].map((name) => ({
 const SEEDER_FETCH_MESSAGE = 'A seeder calls the generated …Api client; only scripts/apiTransport.mts speaks HTTP by hand.'
 const SEEDER_NO_RAW_HTTP = ['node:http', 'http', 'node:https', 'https'].map((name) => ({ name, message: SEEDER_FETCH_MESSAGE }))
 
+// `veyq/tests-use-the-real-catalog` below. A constant because `veyq/api-mocks-typed-by-the-contract` must repeat it:
+// both set `no-restricted-syntax` for test files, and flat config resolves a rule by name, last block wins.
+const REAL_CATALOG_SYNTAX = [
+  {
+    selector: "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.value='vue-i18n']",
+    message: 'Do not mock vue-i18n; mount with realI18n() from src/test/i18n and assert through its t().',
+  },
+]
+
+// `veyq/api-mocks-typed-by-the-contract` below: the selectors, each with the count it was red at when it landed.
+const API_MOCK_HELPER = 'Mock a generated …Api through stubApi()/fakeApi() from src/test/apiMock, which type each payload by its model.'
+const API_MOCKS_SYNTAX = [
+  // S1: the seam itself — handing a hand-built object to the code as a generated …Api.
+  {
+    selector:
+      "CallExpression[callee.property.name=/^mock(ReturnValue|Implementation)(Once)?$/][callee.object.callee.object.name='vi'][callee.object.callee.property.name='mocked'][callee.object.arguments.0.name=/Api$/]",
+    message: API_MOCK_HELPER,
+  },
+  // S2: the cast that lets a partial object pass as one, wherever it reaches the code (DI, a fake passed in).
+  {
+    selector: "TSAsExpression[typeAnnotation.typeName.name='ReturnType'][typeAnnotation.typeArguments.params.0.exprName.name=/Api$/]",
+    message: `No cast to a generated …Api. ${API_MOCK_HELPER}`,
+  },
+  // S3: an `api/client` mock factory that does more than export bare `vi.fn()`s.
+  {
+    selector:
+      "CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/api\\/client$/] > ArrowFunctionExpression > ObjectExpression > Property > .value:not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])",
+    message: 'Mock src/api/client with bare vi.fn() exports; set behaviour per test through stubApi()/fakeApi() from src/test/apiMock.',
+  },
+]
+
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a
 // baseline guardrail (cr-0131 / audit P1a), not a strictness sweep. Unused-locals/params are
 // covered by tsconfig (`noUnusedLocals`/`noUnusedParameters`); ESLint adds the Vue-template
@@ -194,13 +225,23 @@ export default defineConfigWithVueTs(
           ],
         },
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.value='vue-i18n']",
-          message: 'Do not mock vue-i18n; mount with realI18n() from src/test/i18n and assert through its t().',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...REAL_CATALOG_SYNTAX],
+    },
+  },
+  {
+    // A mocked API response is typed by the generated model at the seam (cr-api-callers-typed-by-the-contract,
+    // inbox #195). A test that hands the code `{ m: vi.fn().mockResolvedValue(p) } as unknown as ReturnType<typeof
+    // xApi>` checks `p` against nothing — the untyped `vi.fn()` is the hole, the cast only lets it in — so when
+    // `ShareIdentity.sealedDisplayName` was removed, the fixture serving it stayed green. Every such mock goes
+    // through src/test/apiMock.ts, which holds the one cast and types each payload by its model.
+    // It repeats REAL_CATALOG_SYNTAX: both blocks set `no-restricted-syntax` for test files, and the last one wins.
+    // LIMIT: a factory whose return is not an in-line object literal (a variable, a `...spread`) escapes S3, and a
+    // helper-built payload held in a variable loses its excess-property check (styleguide §10: a fixture builder
+    // annotates its return type with the model).
+    name: 'veyq/api-mocks-typed-by-the-contract',
+    files: ['src/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', ...REAL_CATALOG_SYNTAX, ...API_MOCKS_SYNTAX],
     },
   },
   {
@@ -239,7 +280,6 @@ export default defineConfigWithVueTs(
       '**/*.test.ts',
       '**/*.spec.ts',
       'scripts/extract-admin-i18n.mts', // untyped i18n tooling; the seeders are typed by the generated client
-      'src/features/memory/components/galleryFakeStore.ts', // documented gallery test kit (imports vitest)
       'vite.config.ts',
       'eslint.config.js',
     ],

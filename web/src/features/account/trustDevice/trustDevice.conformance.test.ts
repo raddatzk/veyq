@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
+import { fakeApi } from '../../../test/apiMock'
+import type { AccountWrapsApi } from '../../../api/generated/account'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -67,11 +69,8 @@ describe('trustThisDevice derives the DEVICE-wrap KEK of the shared crypto vecto
     vi.mocked(v1.kekDevicePassword).mockImplementation((factor, password, salt) =>
       real.kekDevicePassword(factor, password, salt, K.params),
     )
-    const add = vi.fn().mockResolvedValue({ id: 'wrap-1' })
-    vi.mocked(accountWrapsApi).mockReturnValue({
-      addAccountWrap: add,
-      deleteAccountWrap: vi.fn(),
-    } as unknown as ReturnType<typeof accountWrapsApi>)
+    const add = vi.fn<AccountWrapsApi['addAccountWrap']>().mockResolvedValue({ id: 'wrap-1' })
+    fakeApi(accountWrapsApi, { addAccountWrap: add, deleteAccountWrap: vi.fn<AccountWrapsApi['deleteAccountWrap']>() })
     const masterKey = real.randomBytes(32)
 
     await trustThisDevice('user@example.com', K.password_utf8, masterKey)

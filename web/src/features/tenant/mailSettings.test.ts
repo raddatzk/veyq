@@ -12,28 +12,28 @@ vi.mock('../../api/client', () => ({
 
 import { getTenantMailSettings, updateTenantMailSettings } from './tenantMailSettings'
 import { tenantsApi } from '../../api/client'
+import { stubApi } from '../../test/apiMock'
+import type { TenantMailSettings } from '../../api/generated/tenants'
 
 const TENANT = '7c3f0e2a-9b1d-4a6e-8b2c-1f2d3e4a5b6c'
 
-const VIEW = {
+const VIEW: TenantMailSettings = {
   host: 'smtp.example.com', port: 587, from: 'noreply@x.z', username: 'fam',
   tls: true, enabled: true, passwordSet: true, subjectTemplate: null, bodyTemplate: null, configSecretState: 'OK',
 }
 
-function stubApi() {
-  const api = {
-    getTenantMailSettings: vi.fn().mockResolvedValue(VIEW),
-    updateTenantMailSettings: vi.fn().mockResolvedValue(VIEW),
-  }
-  vi.mocked(tenantsApi).mockReturnValue(api as unknown as ReturnType<typeof tenantsApi>)
-  return api
+function stubMail() {
+  return stubApi(tenantsApi, {
+    getTenantMailSettings: VIEW,
+    updateTenantMailSettings: VIEW,
+  })
 }
 
 describe('tenant mail settings facade (cr-email-tenant-mail-settings-web)', () => {
   beforeEach(() => vi.clearAllMocks())
 
   it('getTenantMailSettings addresses the tenant', async () => {
-    const api = stubApi()
+    const api = stubMail()
     const s = await getTenantMailSettings(TENANT)
     expect(api.getTenantMailSettings).toHaveBeenCalledWith({ tenantId: TENANT })
     expect(s.passwordSet).toBe(true)
@@ -42,7 +42,7 @@ describe('tenant mail settings facade (cr-email-tenant-mail-settings-web)', () =
   })
 
   it('updateTenantMailSettings wraps the update under tenantMailSettingsUpdate', async () => {
-    const api = stubApi()
+    const api = stubMail()
     await updateTenantMailSettings(TENANT, { host: 'smtp.example.com', port: 587, tls: true, enabled: true, password: 'hunter2' })
     expect(api.updateTenantMailSettings).toHaveBeenCalledWith({
       tenantId: TENANT,
@@ -51,7 +51,7 @@ describe('tenant mail settings facade (cr-email-tenant-mail-settings-web)', () =
   })
 
   it('passes an update with NO password through unchanged (leave-blank-keeps: the key stays absent)', async () => {
-    const api = stubApi()
+    const api = stubMail()
     await updateTenantMailSettings(TENANT, { host: 'smtp.example.com', tls: true, enabled: true })
     const sent = api.updateTenantMailSettings.mock.calls[0][0].tenantMailSettingsUpdate
     expect('password' in sent).toBe(false) // omitted, not null — the backend keeps the stored ciphertext

@@ -19,7 +19,8 @@ import { unsealNodeMeta, sealNodeMeta } from './nodeMeta'
 import { openScopeById } from '../spaces/scopes'
 import { NodeKind } from '../../api/generated/content'
 import { MediaDerivativeKind, type MediaSummary } from '../../api/generated/media'
-import { ScopeKind } from '../../api/generated/scopes'
+import { ScopeKind, type ScopeSummary } from '../../api/generated/scopes'
+import { stubApi } from '../../test/apiMock'
 
 const SCOPE = '5c09e000-0000-4000-8000-000000000001'
 const OTHER_SCOPE = '5c09e000-0000-4000-8000-000000000002'
@@ -96,17 +97,16 @@ describe('a scope grant served in another scope\'s row', () => {
   const PUB = b64std(v1.serializeIdentityPublic(ID.pub))
   // Each row carries a signature that VERIFIES for that row — the signature layer (ADR 0028 Decision 6) held off, so
   // what refuses the moved grant below is the seal's own binding (ADR 0072), the layer this block is about.
-  const row = (id: string, wrappedGrant: string) => ({
+  const row = (id: string, wrappedGrant: string): ScopeSummary => ({
     id, kind: ScopeKind.Group, tenantId: SCOPE, role: 'OWNER', wrappedGrant, grantedEpoch: 0, nameEpoch: 0, iconEpoch: 0, currentEpoch: 0,
     granterUserId: ME, granterIdentityPublicKey: PUB,
     grantSignature: signGrant(ID.priv.sign, { scopeId: id, kind: 'GROUP', epoch: 0 }, { userId: ME, identityPublicKeyB64: PUB }, wrappedGrant),
   })
   beforeEach(() => {
     vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
-    vi.mocked(accountApi).mockReturnValue({ getAccountKeyMaterial: vi.fn().mockResolvedValue({ userId: ME }) } as unknown as ReturnType<typeof accountApi>)
+    stubApi(accountApi, { getAccountKeyMaterial: { userId: ME, suiteId: 'v1', wraps: [], wrappedIdentityPrivateKey: 'AQ==' } })
   })
-  const serve = (rows: unknown[]) =>
-    vi.mocked(scopesApi).mockReturnValue({ listMyScopes: vi.fn().mockResolvedValue(rows) } as unknown as ReturnType<typeof scopesApi>)
+  const serve = (rows: ScopeSummary[]) => stubApi(scopesApi, { listMyScopes: rows })
 
   it('does not open', async () => {
     serve([row(SCOPE, grantOf(keyA)), row(OTHER_SCOPE, grantOf(keyA))])

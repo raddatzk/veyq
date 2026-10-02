@@ -19,6 +19,7 @@
 // `localStorage`, deliberately and documented (uc.sharing.share-accept is browser-only by design), so a future
 // headless caller of those is out of this guard's reach and needs its own decision.
 import { describe, it, expect, vi } from 'vitest'
+import { stubApi } from '../../test/apiMock'
 
 vi.mock('../../api/client', () => ({
   sharesApi: vi.fn(),
@@ -38,8 +39,7 @@ describe('share.ts is headless — the data layer never touches the DOM (see sha
     // Guard the guard: in a DOM environment the assertion below would prove nothing.
     expect(typeof window, 'this suite must run without a DOM or it asserts nothing').toBe('undefined')
 
-    const create = vi.fn().mockResolvedValue({ shareId: 'share-headless' })
-    vi.mocked(sharesApi).mockReturnValue({ createShare: create } as unknown as ReturnType<typeof sharesApi>)
+    const { createShare: create } = stubApi(sharesApi, { createShare: { shareId: 'share-headless' } })
 
     const kMem = v1.randomBytes(32)
     const epochs = { current: 0, keys: new Map([[0, v1.randomBytes(32)]]) }

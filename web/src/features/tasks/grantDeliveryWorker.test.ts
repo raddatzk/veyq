@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { httpError } from '../../test/httpError'
 
 vi.mock('../../api/client', () => ({ tasksApi: vi.fn() }))
@@ -13,6 +13,8 @@ vi.mock('../../app/vault', () => ({ identityPrivate: vi.fn() }))
 import { runGrantDeliveryWorker, wrapScopeKeyToMember, ADMISSION_UNVERIFIED } from './grantDeliveryWorker'
 import { GRANT_DELIVERY } from './capabilityTags'
 import { tasksApi } from '../../api/client'
+import { fakeApi } from '../../test/apiMock'
+import type { ClaimedJob, TasksApi } from '../../api/generated/tasks'
 import { checkAndPin } from '../account/identityPins'
 import { TrustStateRefused } from '../account/trustMarks'
 import { identityPrivate } from '../../app/vault'
@@ -36,28 +38,27 @@ const openAsTarget = (wrap: string, epoch: number) =>
 const admitted = (key: Uint8Array, epoch: number) => tagAdmission(key, { scopeId: S1, kind: 'GROUP' }, epoch, TARGET)
 
 /** A claimed grant-delivery job for the target, carrying `admission` (or none). */
-const job = (admission: Partial<ReturnType<typeof admitted>> = {}) => ({
+const job = (admission: Partial<ReturnType<typeof admitted>> = {}): ClaimedJob => ({
   jobId: 'j1', scopeId: S1, capabilityTag: GRANT_DELIVERY, attempts: 1,
   grantDelivery: { targetUserId: TARGET, targetMembershipId: 'm1', identityPublicKey: targetPubB64, ...admission },
 })
 
 function mockTasks(
-  claimTask: ReturnType<typeof vi.fn>,
-  completeTask: ReturnType<typeof vi.fn>,
-  failTask = vi.fn(),
-  declineTask = vi.fn(),
+  claimTask: Mock<TasksApi['claimTask']>,
+  completeTask: Mock<TasksApi['completeTask']>,
+  failTask = vi.fn<TasksApi['failTask']>(),
+  declineTask = vi.fn<TasksApi['declineTask']>(),
 ) {
-  vi.mocked(tasksApi).mockReturnValue(
-    { claimTask, completeTask, failTask, declineTask } as unknown as ReturnType<typeof tasksApi>,
-  )
+  fakeApi(tasksApi, { claimTask, completeTask, failTask, declineTask })
 }
 
-/** One job, then drained; returns the completion + decline mocks. */
-function oneJob(claimed: ReturnType<typeof job>) {
-  const completeTask = vi.fn().mockResolvedValue(undefined)
-  const declineTask = vi.fn().mockResolvedValue(undefined)
-  mockTasks(vi.fn().mockResolvedValueOnce(claimed).mockResolvedValueOnce(null), completeTask, vi.fn(), declineTask)
-  return { completeTask, declineTask }
+/** One job, then drained; returns the claim, completion + decline mocks. */
+function oneJob(claimed: ClaimedJob) {
+  const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValueOnce(claimed).mockResolvedValueOnce(null)
+  const completeTask = vi.fn<TasksApi['completeTask']>().mockResolvedValue(undefined)
+  const declineTask = vi.fn<TasksApi['declineTask']>().mockResolvedValue({ status: 'pending', attempts: 1 })
+  mockTasks(claimTask, completeTask, vi.fn<TasksApi['failTask']>(), declineTask)
+  return { claimTask, completeTask, declineTask }
 }
 
 beforeEach(() => {
@@ -72,8 +73,7 @@ beforeEach(() => {
 describe('runGrantDeliveryWorker', () => {
   it('claims for the opened scope, wraps K_SC to the foreign identity, signs it and completes; the wrap opens back to K_SC', async () => {
     const K_SC = v1.randomBytes(32)
-    const { completeTask } = oneJob(job(admitted(K_SC, 2)))
-    const claimTask = vi.mocked(tasksApi)().claimTask as ReturnType<typeof vi.fn>
+    const { claimTask, completeTask } = oneJob(job(admitted(K_SC, 2)))
 
     const delivered = await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 2 })
 
@@ -84,17 +84,18 @@ describe('runGrantDeliveryWorker', () => {
     expect(completeTask.mock.calls[0][0].jobId).toBe('j1')
 
     // The delivered grant is a REAL foreign wrap: only the target's identity private opens it, back to the same key.
-    const req = completeTask.mock.calls[0][0].completeRequest
-    expect(Array.from(openAsTarget(req.sealedResult, 2))).toEqual(Array.from(K_SC))
+    const { sealedResult, grantSignature, epoch } = completeTask.mock.calls[0][0].completeRequest ?? {}
+    if (typeof sealedResult !== 'string' || typeof grantSignature !== 'string') throw new Error('completion carries no grant')
+    expect(Array.from(openAsTarget(sealedResult, 2))).toEqual(Array.from(K_SC))
     // …and the completion STATES the epoch it sealed at (ADR 0072), so the server records exactly that one.
-    expect(req.epoch).toBe(2)
+    expect(epoch).toBe(2)
     // The grant is bound to that epoch: served as another epoch's grant it does not open.
-    expect(() => openAsTarget(req.sealedResult, 1)).toThrow(new v1.OpenRefused('scope-grant'))
+    expect(() => openAsTarget(sealedResult, 1)).toThrow(new v1.OpenRefused('scope-grant'))
     // It carries the worker's signature over exactly this grant, as the target will check it (ADR 0028 Decision 6).
     const scope = { scopeId: S1, kind: 'GROUP' as const, epoch: 2 }
     const to = { userId: TARGET, identityPublicKeyB64: targetPubB64 }
-    expect(grantSignatureVerifies(worker.pub.sign, scope, to, req.sealedResult, req.grantSignature)).toBe(true)
-    expect(grantSignatureVerifies(target.pub.sign, scope, to, req.sealedResult, req.grantSignature)).toBe(false)
+    expect(grantSignatureVerifies(worker.pub.sign, scope, to, sealedResult, grantSignature)).toBe(true)
+    expect(grantSignatureVerifies(target.pub.sign, scope, to, sealedResult, grantSignature)).toBe(false)
   })
 
   // --- the admission gate (ADR 0020 move 6) ---
@@ -108,7 +109,7 @@ describe('runGrantDeliveryWorker', () => {
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
     expect(completeTask).not.toHaveBeenCalled()
     expect(declineTask).toHaveBeenCalledTimes(1)
-    expect(declineTask.mock.calls[0][0].declineRequest.reason).toBe(ADMISSION_UNVERIFIED)
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
     expect(ADMISSION_UNVERIFIED).toBe('admission_unverified')
     expect(checkAndPin).not.toHaveBeenCalled() // an unadmitted target's key is never pinned either
   })
@@ -127,7 +128,7 @@ describe('runGrantDeliveryWorker', () => {
     const { completeTask, declineTask } = oneJob(job(admitted(E3, 3)))
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E4, epoch: 4 })).toBe(0)
     expect(completeTask).not.toHaveBeenCalled()
-    expect(declineTask.mock.calls[0][0].declineRequest.reason).toBe(ADMISSION_UNVERIFIED)
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
   })
 
   it('control: a tag made at n+1 reaching the worker at n+1 is delivered', async () => {
@@ -135,14 +136,14 @@ describe('runGrantDeliveryWorker', () => {
     const { completeTask, declineTask } = oneJob(job(admitted(E4, 4)))
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: E4, epoch: 4 })).toBe(1)
     expect(declineTask).not.toHaveBeenCalled()
-    expect(completeTask.mock.calls[0][0].completeRequest.epoch).toBe(4)
+    expect(completeTask.mock.calls[0][0].completeRequest?.epoch).toBe(4)
   })
 
   it('declines a target that carries no admission at all', async () => {
     const { completeTask, declineTask } = oneJob(job())
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(0)
     expect(completeTask).not.toHaveBeenCalled()
-    expect(declineTask.mock.calls[0][0].declineRequest.reason).toBe(ADMISSION_UNVERIFIED)
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe(ADMISSION_UNVERIFIED)
   })
 
   it('a tenant admission binds no account: a genuine tenant-invite tag admits whoever redeemed it', async () => {
@@ -168,7 +169,7 @@ describe('runGrantDeliveryWorker', () => {
     expect(completeTask).not.toHaveBeenCalled() // never wrapped to the changed key
     expect(declineTask).toHaveBeenCalledTimes(1)
     expect(declineTask.mock.calls[0][0].jobId).toBe('j1')
-    expect(declineTask.mock.calls[0][0].declineRequest.reason).toBe('identity_changed')
+    expect(declineTask.mock.calls[0][0].declineRequest?.reason).toBe('identity_changed')
   })
 
   it('pauses (neither wraps nor declines) when this device refuses its own pin store (ADR 0028 Decision 7)', async () => {
@@ -191,8 +192,8 @@ describe('runGrantDeliveryWorker', () => {
   })
 
   it('is a no-op when the member is already granted — nothing is claimable, no completion', async () => {
-    const claimTask = vi.fn().mockResolvedValue(null) // 204 → null: the backend already delivered / no pending member
-    const completeTask = vi.fn()
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(null) // 204 → null: the backend already delivered / no pending member
+    const completeTask = vi.fn<TasksApi['completeTask']>()
     mockTasks(claimTask, completeTask)
 
     const delivered = await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })
@@ -203,8 +204,8 @@ describe('runGrantDeliveryWorker', () => {
 
   it('does not run at all with a locked vault — it could not sign what it delivers', async () => {
     vi.mocked(identityPrivate).mockReturnValue(null)
-    const claimTask = vi.fn()
-    mockTasks(claimTask, vi.fn())
+    const claimTask = vi.fn<TasksApi['claimTask']>()
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>())
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: v1.randomBytes(32), epoch: 0 })).toBe(0)
     expect(claimTask).not.toHaveBeenCalled()
   })
@@ -221,9 +222,9 @@ describe('runGrantDeliveryWorker', () => {
 
   it('stops draining on a 409 stale_epoch — the server released the job for a key-holder at the current epoch', async () => {
     const K_SC = v1.randomBytes(32)
-    const claimTask = vi.fn().mockResolvedValue(job(admitted(K_SC, 0)))
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job(admitted(K_SC, 0)))
     const stale = httpError(409, 'stale_epoch')
-    const completeTask = vi.fn().mockRejectedValue(stale)
+    const completeTask = vi.fn<TasksApi['completeTask']>().mockRejectedValue(stale)
     mockTasks(claimTask, completeTask)
 
     expect(await runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).toBe(0)
@@ -233,9 +234,9 @@ describe('runGrantDeliveryWorker', () => {
 
   it('a non-stale completion failure still propagates', async () => {
     const K_SC = v1.randomBytes(32)
-    const claimTask = vi.fn().mockResolvedValue(job(admitted(K_SC, 0)))
+    const claimTask = vi.fn<TasksApi['claimTask']>().mockResolvedValue(job(admitted(K_SC, 0)))
     const forbidden = httpError(409, 'not_lease_holder')
-    mockTasks(claimTask, vi.fn().mockRejectedValue(forbidden))
+    mockTasks(claimTask, vi.fn<TasksApi['completeTask']>().mockRejectedValue(forbidden))
     await expect(runGrantDeliveryWorker({ scopeId: S1, kind: 'GROUP', key: K_SC, epoch: 0 })).rejects.toBe(forbidden)
   })
 })

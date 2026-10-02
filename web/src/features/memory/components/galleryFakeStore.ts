@@ -8,12 +8,22 @@
 // with, each media under the `mediaId` it was completed for — every K_blob wrap and metadata tier is sealed bound to
 // them, so a fake that invented its own ids would serve seals that (rightly) refuse to open.
 import { vi } from 'vitest'
+import type {
+  BlobDownloadResultItem,
+  BlobUploadResultItem,
+  MediaApi,
+  MediaDerivativeSummary,
+  MediaDerivativeUpload,
+  MediaResultItem,
+  MediaSummary,
+  PresignedUrl,
+} from '../../../api/generated/media'
 
 type Session = { wrappedBlobKey: string; chunkCount: number; blobId: string }
 type MediaRecord = {
   mediaId: string
   originalUploadId: string
-  derivatives: { kind: string; uploadId: string }[]
+  derivatives: MediaDerivativeUpload[]
   wrappedMeta: string | null
   wrappedExif: string | null
 }
@@ -26,18 +36,19 @@ export function galleryFakeStore() {
   const uploadOfBlob = new Map<string, string>()
   let upCounter = 0
 
-  const blobOf = (uploadId: string) => {
+  /** The blob fields a listed media (and each of its derivatives) carries. */
+  const blobOf = (uploadId: string): Pick<MediaSummary, 'blobId' | 'chunkCount' | 'byteSize' | 'wrappedBlobKey'> => {
     const s = sessions.get(uploadId)!
     return { blobId: s.blobId, chunkCount: s.chunkCount, byteSize: 0, wrappedBlobKey: s.wrappedBlobKey }
   }
-  const getsFor = (blobId: string) => {
+  const getsFor = (blobId: string): PresignedUrl[] => {
     const uploadId = uploadOfBlob.get(blobId)!
     return Array.from({ length: sessions.get(uploadId)!.chunkCount }, (_, i) => ({ index: i, url: `mem://${uploadId}/${i}` }))
   }
 
   const api = {
-    startBlobUploads: vi.fn(async ({ blobUploadsBatchRequest }: any) => ({
-      results: blobUploadsBatchRequest.items.map((item: any) => {
+    startBlobUploads: vi.fn<MediaApi['startBlobUploads']>(async ({ blobUploadsBatchRequest }) => ({
+      results: blobUploadsBatchRequest.items.map((item): BlobUploadResultItem => {
         const uploadId = `up-${upCounter++}`
         sessions.set(uploadId, { wrappedBlobKey: item.wrappedBlobKey, chunkCount: item.chunkCount, blobId: item.blobId })
         uploadOfBlob.set(item.blobId, uploadId)
@@ -48,9 +59,9 @@ export function galleryFakeStore() {
         }
       }),
     })),
-    completeMedia: vi.fn(async ({ mediaBatchRequest }: any) => ({
-      results: mediaBatchRequest.items.map((item: any) => {
-        const mediaId: string = item.mediaId // the client-minted id every tier is sealed bound to
+    completeMedia: vi.fn<MediaApi['completeMedia']>(async ({ mediaBatchRequest }) => ({
+      results: mediaBatchRequest.items.map((item): MediaResultItem => {
+        const mediaId = item.mediaId // the client-minted id every tier is sealed bound to
         media.push({
           mediaId,
           originalUploadId: item.originalUploadId,
@@ -64,11 +75,11 @@ export function galleryFakeStore() {
     // cr-0107: the MediaListPage envelope (delta rows + both revisions + optional id-set). This fake always
     // returns the full list with a revision = the media count (so a poll after an add sees a higher revision);
     // it doesn't emulate the 304 / since-cursor filtering — the component tests exercise the initial render.
-    listNodeMedia: vi.fn(async () => ({
-      media: media.map((m, i) => ({
+    listNodeMedia: vi.fn<MediaApi['listNodeMedia']>(async () => ({
+      media: media.map((m, i): MediaSummary => ({
         mediaId: m.mediaId,
         ...blobOf(m.originalUploadId),
-        derivatives: m.derivatives.map((d) => ({ kind: d.kind, ...blobOf(d.uploadId) })),
+        derivatives: m.derivatives.map((d): MediaDerivativeSummary => ({ kind: d.kind, ...blobOf(d.uploadId) })),
         wrappedMeta: m.wrappedMeta, // the listed-metadata tier is listed, for grid layout + date sorting (cr-0068)
         updatedAt: new Date(1_700_000_000_000 + i * 1000), // distinct per media → a valid keyset cursor (cr-0107)
         // wrappedExif is deliberately NOT listed — it is lazy via getMediaExif (cr-0064)
@@ -78,17 +89,17 @@ export function galleryFakeStore() {
       mediaIds: null,
     })),
     // The panel bundle, echoed only through the exif endpoint (kept out of the list) — operator-blind ciphertext.
-    getMediaExif: vi.fn(async ({ mediaId }: any) => ({
+    getMediaExif: vi.fn<MediaApi['getMediaExif']>(async ({ mediaId }) => ({
       wrappedExif: media.find((m) => m.mediaId === mediaId)?.wrappedExif ?? null,
     })),
     // Overwrite a media's sealed listed-metadata tier verbatim (cr-0068) — e.g. a corrected date.
-    updateMediaMeta: vi.fn(async ({ mediaId, mediaMetaUpdate }: any) => {
+    updateMediaMeta: vi.fn<MediaApi['updateMediaMeta']>(async ({ mediaId, mediaMetaUpdate }) => {
       const rec = media.find((m) => m.mediaId === mediaId)
       if (rec) rec.wrappedMeta = mediaMetaUpdate.wrappedMeta ?? null
       return { wrappedMeta: mediaMetaUpdate.wrappedMeta ?? null }
     }),
-    presignBlobDownloads: vi.fn(async ({ blobDownloadsBatchRequest }: any) => ({
-      results: blobDownloadsBatchRequest.items.map((it: any) => ({ presignedGets: getsFor(it.blobId), error: null })),
+    presignBlobDownloads: vi.fn<MediaApi['presignBlobDownloads']>(async ({ blobDownloadsBatchRequest }) => ({
+      results: blobDownloadsBatchRequest.items.map((it): BlobDownloadResultItem => ({ presignedGets: getsFor(it.blobId), error: null })),
     })),
   }
 
