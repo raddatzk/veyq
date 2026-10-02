@@ -87,11 +87,16 @@ from __future__ import annotations
 import base64
 import binascii
 import bisect
+import calendar
+import email
+import email.message
+import email.policy
 import json
 import os
 import re
 import shutil
 import signal
+import smtplib
 import subprocess
 import sys
 import time
@@ -194,6 +199,9 @@ STORE_S3 = "http://127.0.0.1:19000"
 # invite's token travels by mail only (ADR 0055 §2) — and the thing that starts a substrate is the thing that
 # should name its address.
 MAILPIT = "http://127.0.0.1:18025"
+# Its SMTP port as the same compose file publishes it (`11025 -> 1025`) — where every suite's tenant sends, and where
+# [plant_mail_sentinel] delivers the mailbox sweep's control.
+MAILPIT_SMTP = ("127.0.0.1", 11025)
 
 # Readiness is probed on `GET /api/setup`, NOT on `/q/health/ready`. This backend has no `smallrye-health`
 # extension — grep the repo for `q/health` and you get nothing — so the health endpoint the recovered skeleton
@@ -1484,6 +1492,154 @@ def sweep_statements(retained: Path, canary_files: Iterable[Path], sentinels: It
     return None
 
 
+# ----------------------------------------------------------------------------------------------------------
+# The mailbox — every mail the run sent, the one surface a third party (the tenant's SMTP provider) reads
+# ----------------------------------------------------------------------------------------------------------
+
+# The page size the mailbox is read with — explicit, because a default page is exactly the number that truncates a
+# read silently.
+MAILBOX_PAGE = 100
+
+
+def plant_mail_sentinel(stamp: str) -> str:
+    """Deliver one mail of the orchestrator's own whose subject and body carry a run-unique sentinel.
+
+    [sweep_mailbox]'s positive control. The sentinel holds a space and a non-ASCII character, and travels the way
+    the product's own mail does (measured on a recovery mail: Vert.x writes the subject as a `Q` encoded-word and
+    the body quoted-printable, soft line breaks included) — so a raw substring search over the message source
+    cannot find it, and only the DECODED read can. Delivered at the start, so finding it also proves the read
+    reaches back to where the run began.
+    """
+    sentinel = f"veyq mailbox sentinel {stamp} Größe"
+    message = email.message.EmailMessage()
+    message["From"] = "e2e-orchestrator@veyq.localhost"
+    message["To"] = f"mailbox-sentinel-{stamp}@veyq.localhost"
+    message["Subject"] = sentinel
+    message.set_content(f"The e2e run's mailbox control.\n{sentinel}\n", cte="quoted-printable")
+    try:
+        with smtplib.SMTP(*MAILPIT_SMTP, timeout=10) as smtp:
+            smtp.send_message(message)
+    except (OSError, smtplib.SMTPException) as e:
+        raise SystemExit(f"[e2e] MAILBOX SMTP UNREACHABLE at {MAILPIT_SMTP[0]}:{MAILPIT_SMTP[1]}: the mailbox "
+                         f"sweep's control could not be planted ({e})") from e
+    log(f"planted the mailbox sentinel {sentinel!r}: one mail over SMTP, subject encoded-word, body quoted-printable")
+    return sentinel
+
+
+def mailpit_json(path: str) -> dict:
+    with urllib.request.urlopen(f"{MAILPIT}{path}", timeout=10) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+
+def run_mail_ids(since: float) -> list[str]:
+    """Every message Mailpit received from `since` (a unix time) on — paged with an explicit size, newest first.
+
+    Mailpit lists newest first, so paging stops at the first message older than the run; a page that comes back
+    short is the end of the mailbox.
+    """
+    ids: list[str] = []
+    start = 0
+    while True:
+        page = mailpit_json(f"/api/v1/messages?start={start}&limit={MAILBOX_PAGE}").get("messages") or []
+        for message in page:
+            # `Created` is UTC (`2026-10-01T18:09:34.732Z`); seconds are the grain the run's stamp has anyway.
+            created = calendar.timegm(time.strptime(message["Created"][:19], "%Y-%m-%dT%H:%M:%S"))
+            if created < since:
+                return ids
+            ids.append(message["ID"])
+        if len(page) < MAILBOX_PAGE:
+            return ids
+        start += MAILBOX_PAGE
+
+
+def mail_texts(raw: bytes) -> list[tuple[str, str]]:
+    """A message's DECODED text, as `(where, text)`: each header, then each text part — what a reader would see.
+
+    Parsed by the standard library (`email`, `policy.default`), so an encoded-word is decoded, a quoted-printable or
+    base64 part is decoded, and a soft line break is joined back up; no hand-written MIME parser to be wrong in.
+    """
+    message = email.message_from_bytes(raw, policy=email.policy.default)
+    texts = [(f"header {name}", str(value)) for name, value in message.items()]
+    for number, part in enumerate(message.walk(), start=1):
+        if part.get_content_maintype() == "text":
+            try:
+                texts.append((f"part {number} {part.get_content_type()}", part.get_content()))
+            except (LookupError, ValueError) as e:
+                texts.append((f"part {number} {part.get_content_type()} (undecodable: {e})",
+                              part.get_payload(decode=True).decode("utf-8", errors="replace")))
+    return texts
+
+
+def sweep_mailbox(workdir: Path, canary_files: Iterable[Path], since: float, sentinel: str) -> str | None:
+    """Prove no canary of the run is readable in any mail the run sent — read decoded, and raw.
+
+    **What it asserts** (cc.security.wire-assertion, ADR 0053). Every message Mailpit received from the run's start
+    ([run_mail_ids]) is fetched raw, retained under `mailbox/`, and searched for the union of the run's canaries
+    through [canary_needles] — in each decoded header and text part ([mail_texts]) and in the raw source. Armed by
+    a mail the run plants itself ([plant_mail_sentinel]) whose sentinel must be found in the DECODED text; that it
+    is absent from the raw source is printed, because that absence is what makes the decoded read load-bearing.
+    Nothing in a run deletes mail (the suites take a cursor, `web/src/test/mailpit.ts`), so the read is complete.
+
+    **The defect that bought it.** No incident. Mail is closed by construction — both kinds interpolate only
+    `MailContext(link, domain, expiry)` (ADR 0049) — and the HTTP sweep already searches every mail a suite reads
+    back. What this closes is the rest: mail no suite reads, and the one surface ADR 0049's boundary has no
+    traffic-level sensor for — the one a third party, the tenant's SMTP provider, reads. A future mail kind is
+    where a sealed name would slip in.
+
+    **Its limit.** It sees what reached Mailpit, not what a production relay adds or keeps. The mailbox is shared
+    with a developer's own mail of the same window, and Mailpit prunes its oldest messages past its cap — a run
+    that pushed its own plant out fails on the control, loud. Non-text parts are searched only raw.
+    """
+    carriers, problems = load_canaries(canary_files)
+    if not carriers:
+        return "the run's canary files hold no canary — a green mailbox sweep would mean nothing"
+    unmet: list[str] = list(problems)
+    try:
+        ids = run_mail_ids(since)
+    except (urllib.error.URLError, OSError, KeyError, ValueError) as e:
+        return f"the mailbox could not be listed at {MAILPIT} ({e}) — the mailbox sweep proved nothing"
+    retained = workdir / "mailbox"
+    retained.mkdir(exist_ok=True)
+    hits: list[Hit] = []
+    sentinel_decoded: list[str] = []
+    sentinel_raw = False
+    for message_id in ids:
+        try:
+            with urllib.request.urlopen(f"{MAILPIT}/api/v1/message/{message_id}/raw", timeout=10) as r:
+                raw = r.read()
+        except (urllib.error.URLError, OSError) as e:
+            unmet.append(f"mail {message_id} could not be read raw ({e}) — it was not swept")
+            continue
+        (retained / f"{message_id}.eml").write_bytes(raw)
+        for where, text in mail_texts(raw):
+            hits.extend(needle_hits(f"mail {message_id} {where}", text, carriers))
+            if needle_hits(where, text, [sentinel]):
+                sentinel_decoded.append(where)
+        source = raw.decode("utf-8", errors="replace")
+        hits.extend(needle_hits(f"mail {message_id} raw", source, carriers))
+        sentinel_raw = sentinel_raw or bool(needle_hits("raw", source, [sentinel]))
+    if sentinel_decoded:
+        armed = (f"planted sentinel found decoded in {', '.join(sentinel_decoded)}; in the raw source: "
+                 f"{'FOUND — the transport did not encode it' if sentinel_raw else 'not found (the decoding is load-bearing)'}")
+    else:
+        armed = "planted sentinel NOT found"
+        unmet.append(f"the planted mail's sentinel {sentinel!r} is NOT in any decoded mail of the run — the read "
+                     f"missed it (window, paging, pruning) or the decoding is broken; this sweep proves nothing")
+    log(f"mailbox sweep: {len(ids)} mail(s) since {int(since)}, {len(carriers)} canary/canaries, {len(hits)} hit(s); "
+        f"{armed}")
+
+    if hits or unmet:
+        log(f"WIRE ASSERTION FAILED on the mailbox — {len(hits)} hit(s), {len(unmet)} unmet control(s):")
+        report_hits(hits, carriers)
+        for reason in unmet:
+            log(f"    control: {reason}")
+        return (f"the wire assertion failed on the mailbox: {len(hits)} canary hit(s), {len(unmet)} unmet "
+                f"control(s) across {len(ids)} mail(s) (listed above)")
+    log(f"wire assertion: {len(carriers)} canary/canaries of the run appear in none of {len(ids)} mail(s), decoded "
+        f"or raw; armed by the planted mail")
+    return None
+
+
 class Instance:
     """The three things a boot is pointed at, and the one thing a group's hook replaces wholesale."""
 
@@ -2043,6 +2199,7 @@ def main(argv: list[str]) -> int:
         provision_store(workdir)
         # The container sweep's control, planted first so that finding it proves the log window reaches the run's start.
         sentinel = plant_store_sentinel(stamp)
+        mail_sentinel = plant_mail_sentinel(stamp)
 
         # Before any suite: the operator procedure the suites later rehearse is only worth rehearsing if it can be
         # aimed. This one needs no jar and no instance — it runs here, on the stack `compose_up()` just brought up.
@@ -2062,6 +2219,7 @@ def main(argv: list[str]) -> int:
             # Bounded below by the run's own start (the stamp is a unix time): a developer's earlier traffic on these
             # long-lived containers is not this run's to answer for.
             ("(run) container-log sweep", sweep_containers(workdir, canary_files, stamp, sentinel)),
+            ("(run) mailbox sweep", sweep_mailbox(workdir, canary_files, float(stamp), mail_sentinel)),
         ) if reason]
         sentinels.append(statements.plant("end"))
     finally:

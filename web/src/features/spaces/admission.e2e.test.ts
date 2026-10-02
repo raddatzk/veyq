@@ -24,7 +24,7 @@ import { openScope } from './scopes'
 import { createMemory, listTree } from '../memory/tree'
 import { ADMISSION_UNVERIFIED, runGrantDeliveryWorker } from '../tasks/grantDeliveryWorker'
 import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
-import { clearMailbox, waitForMail } from '../../test/mailpit'
+import { mailCursor, waitForMail } from '../../test/mailpit'
 import { recordCanaries } from '../../test/canaries'
 import { ScopeKind } from '../../api/generated/scopes'
 
@@ -39,7 +39,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('#159 — an owner session alone admits n
     const X = mkActor('x')
     await expect(inviteMember(tenant.tenantId, X.email), 'the client cannot admit from a locked vault').rejects.toThrow()
     // So the session goes to the endpoint directly, with the only tag it can make: any bytes.
-    await clearMailbox(X.email)
+    const cursor = await mailCursor(X.email)
     await tenantsApi().inviteTenantMember({
       tenantId: tenant.tenantId,
       memberInviteRequest: {
@@ -47,7 +47,7 @@ describe.skipIf(!process.env.VEYQ_E2E)('#159 — an owner session alone admits n
       },
     })
     // The attacker redeems it with an account of their own — a genuine registration, keys born on their device.
-    const mail = await waitForMail(X.email)
+    const mail = await waitForMail(X.email, { after: cursor })
     const link = mail.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
     expect(link, 'the forged invite was mailed').toBeTruthy()
     X.built = buildAccount(X.email, X.password, salt)

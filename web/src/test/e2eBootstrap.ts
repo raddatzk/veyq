@@ -27,7 +27,7 @@ import { updateTenantMailSettings } from '../features/tenant/tenantMailSettings'
 import { acceptInvite, registerAndAccept, scopeGrant } from '../features/tenant/tenantInvite'
 import { inviteMember } from '../features/spaces/members'
 import { myUserId } from '../features/account/profile/profile'
-import { clearMailbox, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
+import { mailCursor, MAILPIT_SMTP_PORT, waitForMail } from './mailpit'
 
 /** Tenant domain and API base — see the module header for why this exact host. */
 export const HOST = process.env.VEYQ_HOST ?? 'veyq.localhost'
@@ -172,15 +172,15 @@ export async function birthInstance(tenantName: string): Promise<BirthedInstance
  *
  * The regex anchors on the accept path + **fragment** (`SmtpTenantInviteMailer`: `https://$domain/tenant/accept#…`),
  * never on a base URL — the mail's link is `https` with no port, while the suite talks to `http://…:8080`, so a
- * pattern built from the suite's own base would match nothing. The mailbox is cleared for this recipient first,
+ * pattern built from the suite's own base would match nothing. A mail cursor is taken for this recipient first,
  * so a leftover from an earlier hand run (which shares the default `VEYQ_STAMP`, hence the same address) fails as
  * a clean timeout instead of as an expired token three calls later.
  */
 export async function onboardMember(tenantId: string, actor: Actor, salt: Uint8Array): Promise<Actor> {
   actor.built = buildAccount(actor.email, actor.password, salt)
-  await clearMailbox(actor.email)
+  const cursor = await mailCursor(actor.email)
   await inviteMember(tenantId, actor.email)
-  const body = await waitForMail(actor.email)
+  const body = await waitForMail(actor.email, { after: cursor })
   const link = body.match(/\/tenant\/accept#([A-Za-z0-9_-]+)/)
   expect(link, `no invite link in the mail to ${actor.email}:\n${body}`).toBeTruthy()
   const accepted = await registerAndAccept(link![1], crypto.randomUUID(), actor.username, actor.built.material)

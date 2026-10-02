@@ -98,7 +98,7 @@ failing the run naming the line.
 | M2 | Every suite's tenant is pointed at Mailpit (`127.0.0.1:18025` API, `11025` SMTP); Mailpit has no volume and `restart: unless-stopped`, so it is one long-lived mailbox shared by every run and by the developer | `grep -n 'MAILPIT\b\|VEYQ_MAILPIT' scripts/run_web_e2e.py`; `grep -n -A12 '^  mailpit:' infra/docker-compose.yml` | measured |
 | M3 | The wire recorder wraps the suite's global `fetch`, so a suite's reads of Mailpit are recorded and `sweep_http` (no host filter) already searches them: 7 `GET /api/v1/message/{id}` across 3 recordings, against 8 mail-sending requests (6 member invites, 2 recovery requests) | `grep -c ':18025' .e2e-out/<run>/http-*.jsonl`; the probe `mail_probe.py`; `grep -n 'def sweep_http' -A50 scripts/run_web_e2e.py` | measured (one run) |
 | M4 | `clearMailbox` **deletes** a recipient's messages; it is called at 4 sites (`e2eBootstrap.ts`, `admission.e2e`, `recovery.e2e` ×2); the latest run issued 1 such `DELETE` | `grep -rn 'clearMailbox(' web/src --include='*.ts'` | measured |
-| M5 | A mail on the wire is MIME: a non-ASCII subject becomes an RFC 2047 encoded-word, a non-ASCII body a quoted-printable or base64 part — so a raw substring search over the message source misses a canary a decoded read would find. The shipped default subject and body already carry non-ASCII (`Einladung`, `Öffne`) | `grep -n 'DEFAULT_SUBJECT\|Öffne' backend/src/main/kotlin/com/veyq/app/features/admin/tenant/InviteMailRenderer.kt` | measured (the source); the encoding Vert.x mail picks is **remembered** |
+| M5 | **Measured 2026-10-01 on a recovery mail's raw source:** Vert.x mail writes the subject as a `Q` encoded-word (`=?UTF-8?Q?…zur?=` folded onto `=C3=BCcksetzen?=`) and the body quoted-printable, with **soft line breaks that split even an ASCII token** (`…#llucEdM1bZn5oid-=` / `CKOmV3…`) — so a raw search misses ASCII values too, not only non-ASCII ones | `curl -s http://127.0.0.1:18025/api/v1/message/<id>/raw` | measured |
 | M6 | Mailpit prunes the oldest messages beyond a default cap (500) | Mailpit documentation | **remembered** — the planted control (D6) is what makes a pruned mailbox fail loud instead of green |
 
 The probes are the refine's scratch scripts, not shipped; re-derive them at implement time over the newest run.
@@ -153,7 +153,7 @@ The probes are the refine's scratch scripts, not shipped; re-derive them at impl
       and written into this CR's Inventory (replacing *remembered*); `python3 scripts/validate_wire_log_matcher.py`
       green; one `scripts/run_web_e2e.py` run green printing the statement log's line count, both sentinels
       found, and every suite database's `Connect` found; B1, B2, B3 red first.
-- [ ] **2 · The mailbox sweep + the cursor** · Done when: a run green printing the message count swept and the
+- [x] **2 · The mailbox sweep + the cursor** · Done when: a run green printing the message count swept and the
       planted mail found through the decoded read; `grep -rn 'clearMailbox' web/src` empty; `npm run check` in
       `web/` green; B4, B5 red first.
 - [ ] **3 · State and harvest** · Done when: `python3 scripts/validate_doc_links.py`,
