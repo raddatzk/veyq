@@ -450,7 +450,7 @@ class MediaHandler(
         if (store.mediaIdTaken(item.mediaId)) {
             // Taken by a concurrent complete of this very upload that committed after the session read above? Then
             // the session is spent too, and a replay answers by the session first: `upload_not_found`.
-            val spent = store.findSession(scopeId, item.originalUploadId, opener) == null
+            val spent = store.sessionSpent(original.id)
             return CompleteItemResult(null, null, if (spent) "upload_not_found" else "id_taken")
         }
 

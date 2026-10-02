@@ -127,6 +127,11 @@ class MediaStore(private val reclaim: StoreReclaimStore) {
     fun findSession(scopeId: String, uploadId: String, opener: UploadOpener): UploadSessionEntity? =
         UploadSessionEntity.findById(uploadId)?.takeIf { it.scopeId == scopeId && opener.opened(it) }
 
+    /** Is session [uploadId] gone — spent by a complete that committed since it was read? A count, not [findSession]:
+     *  outside a transaction the request's persistence context still holds the row it read, so a second `findById`
+     *  would answer from that cache and never see the delete. */
+    fun sessionSpent(uploadId: String): Boolean = UploadSessionEntity.count("id", uploadId) == 0L
+
     /** Mark session [uploadId] live now: a window was issued for it, which is the stale-session purge's clock. */
     @Transactional
     fun touchWindow(uploadId: String) {
