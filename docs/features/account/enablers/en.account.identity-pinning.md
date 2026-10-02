@@ -100,6 +100,15 @@ or a blob that does not open is refused — on read and before every write — n
 device starts from its linker's marks, and an account-key rotation carries them to the new Master Key; the
 marks, their slot and what refuses live in `web/src/features/account/trustMarks.ts`.
 
+**A refused store has one way back, and it is the user's.** The rotation cannot produce one any more — it
+re-seals the store inside its own request and transaction ([ADR 0060](../../../decisions/0060-key-rotation-after-compromise.md)
+§ Consequences) — but a backup restore or corruption at rest still can. Then the settings hub offers *Start a
+list over* (`web/src/features/account/trustReset/`): after a confirmation naming the cost, it writes the empty
+store one version above the served one — never over a copy that opens — and sets this device's mark to that
+version, the only write that lowers a mark. Only the confirm dialog may import it (`veyq/trust-reset-one-door`
+in `web/eslint.config.js`), so no server response reaches it. A device whose mark sat at or below the served
+version reads the new store with no action; one whose mark sat above it is offered the same reset.
+
 ## Quality notes
 
 - **Operator-blind.** One Master-Key-sealed ciphertext; the server never learns whom you pinned or verified, nor

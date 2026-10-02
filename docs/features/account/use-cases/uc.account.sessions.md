@@ -204,7 +204,10 @@ Key again.
   blocked, and nothing is silently hidden — a session the register cannot name must still be visible and still
   be revocable, or a lost device could hide from the very screen that exists to find it. A register this device
   **refuses** — older than one it has held, missing after it held one, or unopenable — renders the same way, and
-  the view says why ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7).
+  the view says why ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7)
+  and links to the settings hub's *Start a list over*. A refused register does not repair itself: only the user,
+  on a device, after a confirmation that names the cost — every device unnamed until it next signs in, and no
+  saved-key removal offered until then — starts it over, empty. No server response reaches that write.
 - **E5 — the escalation half-succeeds.** The session is revoked and the wrap deletion fails (offline, a server
   error). The user is told exactly that: signed out, saved key **not** removed. The register keeps the join row —
   it is pruned only from a later read of the server's wrap list, never from a delete this client merely
@@ -267,7 +270,9 @@ Removing its saved key means whoever has it needs your password *and* your Secre
 devices you have actually lost, because it is your own device that will ask you for the Emergency Kit next
 time. Two honest details: the server never learns your device names — those are stored scrambled and only your
 unlocked app can read them. And none of this reaches into the lost device itself; what it takes away is what
-the server was keeping for it.
+the server was keeping for it. If this device ever can't read that list of names, every session still shows and
+can still be ended — just unnamed. You can start the list over in the settings; only you can, and until each
+device signs in again it stays unnamed.
 
 **DE —** Du siehst hier jede Stelle, an der du gerade angemeldet bist, und kannst jede davon von hier aus
 abmelden — praktisch, wenn ein Laptop weg ist oder du dich auf einem fremden Rechner angemeldet und das
@@ -286,7 +291,10 @@ gespeicherten Schlüssel braucht es dein Passwort *und* deinen Secret Key. Heb d
 verlorene Geräte auf, denn beim nächsten Mal fragt dich dein eigenes Gerät nach dem Notfall-Kit. Zwei ehrliche
 Hinweise: Die Gerätenamen erfährt der Server nie — sie liegen verschlüsselt, und lesen kann sie nur deine
 entsperrte App. Und nichts davon greift auf das
-verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewahrt hat.
+verlorene Gerät selbst durch; entzogen wird ihm, was der Server für es aufbewahrt hat. Kann dieses Gerät die
+Liste der Namen einmal nicht lesen, wird trotzdem jede Sitzung angezeigt und lässt sich beenden — nur ohne Namen.
+Du kannst die Liste in den Einstellungen neu beginnen; nur du kannst das, und bis sich jedes Gerät wieder anmeldet,
+bleibt es unbenannt.
 
 ## Related
 

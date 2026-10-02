@@ -244,7 +244,10 @@ by design rather than by accident.
   permission, no revoke and no key. **Degrading the view is not reading it as empty:** a register served older
   than one this device has held, missing after it held one, or one that does not open is refused
   ([ADR 0028](../../../decisions/0028-identity-authenticity-tofu-verification.md) Decision 7) — no write re-seals
-  over it, so it does not repair itself on the next unlock, and the sessions view names the refusal. In particular **no unlock path reads it**: a device finds its own wrap by
+  over it, so it does not repair itself on the next unlock, and the sessions view names the refusal and links
+  to the way back: the user starts it over, empty, through the settings hub's confirmed *Start a list over* —
+  the pin store's mechanism ([en.account.identity-pinning](en.account.identity-pinning.md) § Sync & merge), which no
+  server response reaches. In particular **no unlock path reads it**: a device finds its own wrap by
   the id in its local record, so the register can never be what stands between someone and their vault — which
   it could not be anyway, since reading it requires the vault to be open already.
 - **What the wrap join still cannot reach: a wrap orphaned before it shipped.** Those have no register entry,
