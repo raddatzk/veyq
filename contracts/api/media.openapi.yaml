@@ -374,6 +374,11 @@ paths:
     patch:
       tags: [buckets]
       operationId: renameBucket
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the name the member typed, sealed fresh; nothing the editor did not see is
+          re-sent, so a concurrent rename loses only to another rename of the same bucket.
       summary: Rename a sub-bucket (uc.memory.buckets).
       description: >
         Re-store a **sub-bucket's** `K_mem`-sealed name. Any scope **member** may rename a sub-bucket (incl. a
@@ -451,6 +456,11 @@ paths:
     post:
       tags: [buckets]
       operationId: moveBucketMedia
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write carries only the media ids the member chose to move and their target; nothing the editor
+          did not see is re-sent.
       summary: Move media between buckets of one owner-root (uc.memory.buckets).
       description: >
         Bulk-move media into `targetBucketId` (null ⇒ the shared owner's **primary**). Every listed medium **and**
@@ -496,6 +506,11 @@ paths:
     post:
       tags: [media]
       operationId: commitCoverBlob
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          The write replaces the node's one cover-blob pointer with the blob this member just uploaded; which
+          image and crop the cover shows lives in the node's wrappedMeta, which is version-checked (ADR 0077).
       summary: Commit an uploaded blob as the node's standalone cover — no media row.
       description: >
         Promote one `startBlobUploads` session into a **standalone cover blob** attached to the node. The server
@@ -618,6 +633,9 @@ paths:
     put:
       tags: [media]
       operationId: updateMediaMeta
+      x-veyq-concurrency:
+        mode: version
+        field: metaVersion
       summary: Overwrite a media's sealed listed-metadata blob (e.g. a corrected date) — opaque.
       description: >
         Re-store the media's `wrappedMeta` verbatim: the client re-seals the listed blob
@@ -625,7 +643,8 @@ paths:
         added/removed) and PUTs the new opaque base64 (or null to clear it). The only user-editable field is the
         date correction; geometry and GPS are derived-only. Operator-blind — the server overwrites the ciphertext
         it holds and never inspects the fields inside. Guards: the caller holds a grant for the scope; a media
-        target must exist.
+        target must exist; and the `metaVersion` the blob was built from still matches — else nothing is
+        written and the answer is `409 stale_version` with the current blob and version (ADR 0077).
       security:
         - bearerAuth: []
       parameters:
@@ -638,6 +657,7 @@ paths:
             schema: { $ref: "#/components/schemas/MediaMetaUpdate" }
             example:
               wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0
+              metaVersion: 2
       responses:
         "200":
           description: The stored listed-metadata blob (echoed opaque base64, or null when cleared).
@@ -657,7 +677,13 @@ paths:
           description: No such scope/media, or the caller holds no grant for the scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: media_not_found } }
-        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
+        "409":
+          description: >
+            The media's `wrappedMeta` moved since the stated `metaVersion` (`stale_version`, with the current blob
+            and version — nothing was written, ADR 0077); or the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4).
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: bWV0YS1jaXBoZXJ0ZXh0, metaVersion: 2 } }
 
   /api/scopes/{scopeId}/media/{mediaId}:
     delete:
@@ -1225,6 +1251,15 @@ components:
             The bucket this media lives in, or **null = the uploader's primary** (resolved lazily). Set when the
             media was attached into an explicit sub-bucket or moved.
           example: null
+        metaVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            How many times `wrappedMeta` was replaced through `updateMediaMeta` (0 at attach). A meta write states
+            the value it was built from (ADR 0077); nothing else moves it.
+          minimum: 0
+          example: 2
 
     MediaListPage:
       type: object
@@ -1342,8 +1377,16 @@ components:
       type: object
       description: >
         Overwrite a media's sealed listed-metadata blob (re-sealed client-side under `K_mem`), e.g. to persist a
-        corrected date. Null clears it. Opaque to the server.
+        corrected date. Null clears it. Opaque to the server. `metaVersion` is the `MediaSummary.metaVersion` the
+        blob was built from (ADR 0077).
+      required: [metaVersion]
       properties:
+        metaVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: The version the re-sealed blob was built from; the write succeeds only if it still matches.
+          example: 2
         wrappedMeta:
           type: [string, "null"]
           description: The re-sealed listed-metadata blob (opaque base64), or null to clear the media's metadata.
@@ -1625,3 +1668,5 @@ components:
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+    StaleSealedMeta:
+      $ref: '_common.openapi.yaml#/components/schemas/StaleSealedMeta'

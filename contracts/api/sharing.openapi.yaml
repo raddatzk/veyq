@@ -330,6 +330,12 @@ paths:
     patch:
       tags: [sharing]
       operationId: updateShare
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: a share is edited only by its owner_account (uc.sharing.share-note), so two members
+          never collide; the loss is between that member's own devices, and the form shows every field it
+          sends.
       summary: Edit a share in place — note / name / role (owner-gated).
       description: >
         Edits an existing share **without minting a new link** (cr-0115/cr-0116/cr-0119, ADR 0036). Sets the

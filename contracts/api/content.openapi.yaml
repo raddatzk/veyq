@@ -143,11 +143,18 @@ paths:
     patch:
       tags: [content]
       operationId: updateNode
+      x-veyq-concurrency:
+        mode: version
+        field: metaVersion
+        requiredWith: wrappedMeta
       summary: Rename / move / reorder a node.
       description: >
         Partial update. **Rename** = new `encryptedName` + recomputed `slugToken`. **Move** = new `parentId`
         (null = scope root) + recomputed `slugToken` (cycle/containment checked; same scope only). **Reorder**
-        = `orderIndex`. Fields not sent are unchanged.
+        = `orderIndex`. **Meta** = a re-sealed `wrappedMeta` with the `metaVersion` it was built from — required
+        whenever `wrappedMeta` is sent (else `400 invalid_request`); the server compare-and-sets it and stores
+        `metaVersion + 1`, or writes **nothing** (a rename in the same request included) and answers `409
+        stale_version` carrying the current blob and version (ADR 0077). Fields not sent are unchanged.
       security:
         - bearerAuth: []
       parameters:
@@ -176,9 +183,12 @@ paths:
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
-          description: A sibling already has that slug (`slug_taken`), or the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4).
+          description: >
+            A sibling already has that slug (`slug_taken`); the space is being deleted and read-only
+            (`scope_deleting`, uc.spaces.delete-group A4); or the node's `wrappedMeta` moved since the stated
+            `metaVersion` (`stale_version`, with the current blob and version — nothing was written, ADR 0077).
           content:
-            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: slug_taken } }
+            application/json: { schema: { $ref: "#/components/schemas/StaleSealedMeta" }, example: { code: stale_version, wrappedMeta: d3JhcHBlZC1tZXRh, metaVersion: 4 } }
         "422":
           description: Illegal structure (folder into a Memory, or a move that would create a cycle).
           content:
@@ -333,6 +343,12 @@ paths:
     put:
       tags: [item-favorites]
       operationId: putItemFavorites
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the row is keyed by the caller, the scope and the node, so only the marking member
+          writes it; the loss is one toggle between that member's own devices (ADR 0068). A toggle never
+          starts from a set it has not loaded (ADR 0077 point 5).
       summary: Replace the caller's sealed item-mark blob for the node.
       description: >
         Upserts the **caller's own** item marks for this node (last-write-wins). The body carries no member id,
@@ -431,6 +447,11 @@ paths:
     put:
       tags: [favorites]
       operationId: putFavorites
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the pin set is the caller's own, per scope; the loss is one toggle between that member's
+          own devices (ADR 0068). A toggle never starts from a set it has not loaded (ADR 0077 point 5).
       summary: Replace the caller's sealed favorites blob for the scope.
       description: >
         Upserts the caller's pin ciphertext for the scope (last-write-wins). The client seals the whole pinned
@@ -592,6 +613,14 @@ components:
           maxLength: 8192
           example: d3JhcHBlZC1tZXRh
           x-field-extra-annotation: '@field:jakarta.validation.constraints.Size(max = 8192) @field:jakarta.validation.constraints.Pattern(regexp = "[A-Za-z0-9+/]*={0,2}")'
+        metaVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            The `NodeSummary.metaVersion` the sent `wrappedMeta` was built from. Required with `wrappedMeta`,
+            ignored without it — a rename, move or reorder needs no version (ADR 0077).
+          example: 3
 
     NodeCreated:
       type: object
@@ -605,7 +634,7 @@ components:
 
     NodeSummary:
       type: object
-      required: [id, kind, encryptedName, slugToken, orderIndex, epoch]
+      required: [id, kind, encryptedName, slugToken, orderIndex, epoch, metaVersion]
       properties:
         id: { type: string, format: uuid, example: 4a6e8b2c-1f2d-3e4a-5b6c-7c3f0e2a9b1d, x-veyq-visibility: id }
         epoch:
@@ -649,6 +678,15 @@ components:
           maxLength: 8192
           description: A MEMORY's or CHAPTER's curated metadata (date/place) — a client-versioned JSON blob sealed under this node's `K_mem` (AAD context `node-meta`); null when unset. Lets a browse card show + sort by the date without loading the Memory's media. Opaque to the server.
           example: d3JhcHBlZC1tZXRh
+        metaVersion:
+          x-veyq-visibility: structure
+          type: integer
+          format: int64
+          description: >
+            How many times `wrappedMeta` was replaced (0 at birth). A write of `wrappedMeta` states the value it
+            was built from (ADR 0077); nothing else moves it.
+          minimum: 0
+          example: 3
         sealedDropPrivateKey:
           type: [string, "null"]
           contentEncoding: base64
@@ -814,3 +852,5 @@ components:
 
     ErrorResponse:
       $ref: '_common.openapi.yaml#/components/schemas/ErrorResponse'
+    StaleSealedMeta:
+      $ref: '_common.openapi.yaml#/components/schemas/StaleSealedMeta'

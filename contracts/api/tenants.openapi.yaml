@@ -254,6 +254,10 @@ paths:
     post:
       tags: [tenants]
       operationId: changeTenantDomain
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries only the domain typed.
       x-veyq-channel: admin
       summary: Move a tenant to a different domain.
       description: >
@@ -795,6 +799,11 @@ paths:
     put:
       tags: [tenants]
       operationId: updateTenantTerms
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the tenant owner (the root membership is born with one OWNER, and roles change only in
+          groups); the form shows the whole document it sends.
       summary: Set/replace a tenant's terms (owner-gated; bumps the version on a real change).
       description: >
         The tenant **owner** replaces the per-locale terms markdown. The server **normalizes** the markdown
@@ -859,6 +868,10 @@ paths:
     post:
       tags: [tenants]
       operationId: acceptTenantTerms
+      x-veyq-concurrency:
+        mode: version
+        field: version
+        conflictCode: terms_version_changed
       summary: Accept the tenant's current terms (member gate; re-accept on a bump).
       description: >
         The signed-in **member** accepts the tenant's terms at the version they were shown. The server records
@@ -969,6 +982,10 @@ paths:
     put:
       tags: [tenants]
       operationId: updateTenantMailSettings
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the tenant owner; the form shows every field it sends.
       summary: Set/replace a tenant's SMTP + invite-template settings (owner-gated; password write-only).
       description: >
         The tenant **owner** configures per-tenant SMTP so member invites are emailed from the tenant's own
@@ -1094,6 +1111,10 @@ paths:
     put:
       tags: [tenants]
       operationId: updateTenantStorage
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the tenant owner; the write carries only the value typed.
       summary: Set the tenant's per-link storage limit (owner-gated).
       description: >
         The tenant **owner** sets the one per-link limit that applies to every CONTRIBUTOR and UPLOADER link of the
@@ -1149,6 +1170,10 @@ paths:
     put:
       tags: [tenants]
       operationId: setTenantStorageQuota
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: the Server Owner; the write carries only the quota typed.
       x-veyq-channel: admin
       summary: Set, change or clear a tenant's storage quota.
       description: >

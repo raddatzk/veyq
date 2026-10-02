@@ -34,6 +34,44 @@ components:
           schema: { $ref: "#/components/schemas/ErrorResponse" }
           example: { code: scope_deleting }
   schemas:
+    StaleSealedMeta:
+      # The 409 body of the two version-checked sealed-meta writes, updateNode and updateMediaMeta (ADR 0077).
+      # Shared because both blobs answer the same way, and neither entity has a single-item read the loser could
+      # re-GET: the conflict body IS the re-read.
+      type: object
+      description: >
+        A refused write. With `code: stale_version` the blob moved since the caller read it: nothing was written,
+        and the body carries the blob's current `wrappedMeta` (null when it has none) and its `metaVersion` — the
+        base the caller re-applies its own change to before retrying (ADR 0077). Any other 409 code
+        (`scope_deleting`, `slug_taken`) carries `code` alone. Operator-blind: the ciphertext is what the caller
+        can already list.
+      required: [code]
+      properties:
+        code:
+          x-veyq-visibility: public
+          type: string
+          description: Stable, client-localizable error code.
+          maxLength: 64
+          example: stale_version
+        message:
+          x-veyq-visibility: public
+          type: [string, "null"]
+          description: Optional developer-facing detail; never contains secrets or content.
+          maxLength: 512
+          example: null
+        wrappedMeta:
+          type: [string, "null"]
+          description: The blob's current sealed value (opaque base64), present with `stale_version`; null when it has none.
+          contentEncoding: base64
+          maxLength: 8192
+          example: d3JhcHBlZC1tZXRh
+        metaVersion:
+          x-veyq-visibility: structure
+          type: [integer, "null"]
+          format: int64
+          description: The blob's current version, present with `stale_version` — a retry states this one.
+          example: 4
+
     TenantStatus:
       # Shared by the tenants spec (the Server-Owner's tenant list) and the scopes spec (`MyTenant.status`, the
       # space switcher) — one lifecycle, so one enum (ADR 0038).

@@ -172,6 +172,11 @@ paths:
     put:
       tags: [account-profile]
       operationId: updateMyProfile
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder edits their own profile; the loss is between that member's own
+          devices, and the form shows every field it sends.
       summary: Update the caller's username and/or sealed real name in the active tenant.
       description: >
         Updates the caller's per-tenant profile in the Host tenant: change the `username` (re-checked unique in
@@ -247,6 +252,9 @@ paths:
     put:
       tags: [account-identity-pins]
       operationId: putIdentityPins
+      x-veyq-concurrency:
+        mode: version
+        field: version
       summary: Store the caller's sealed identity-pin store (optimistic concurrency).
       description: >
         Replaces the caller's sealed pin-store blob. `version` is the version the client last read; the write
@@ -322,6 +330,9 @@ paths:
     put:
       tags: [account-device-register]
       operationId: putDeviceRegister
+      x-veyq-concurrency:
+        mode: version
+        field: version
       summary: Store the caller's sealed device register (optimistic concurrency).
       description: >
         Replaces the caller's sealed device-register blob. `version` is the version the client last read; the
@@ -699,6 +710,11 @@ paths:
     post:
       tags: [account-password]
       operationId: changePassword
+      x-veyq-concurrency:
+        mode: last-writer-wins
+        reason: >-
+          One writer: only the account holder changes their password, and the request proves the current
+          credential, which is its own precondition.
       summary: Set a new password from a live, unlocked session.
       description: >
         Applies uc.account.change-password's one server-side mechanism for both entry points: rewrite the
