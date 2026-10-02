@@ -1,5 +1,6 @@
 package com.veyq.app.shared.membership
 
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.TestBlob
 import com.veyq.app.shared.TestIds
@@ -127,7 +128,7 @@ class ScopeAccessWorld(
             .`when`().post("/api/scopes/$scopeId/nodes/$nodeId/buckets")
             .then().statusCode(200).extract().path<String>("bucketId")
         val shareId = given().header("Authorization", auth).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$shareRole",${shareKeysJson(shareRole, nodeId, B64)},"sealedName":"$B64"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path<String>("shareId")
         given().header("Authorization", auth).contentType(ContentType.JSON)

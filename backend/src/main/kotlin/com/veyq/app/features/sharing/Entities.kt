@@ -117,6 +117,13 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "sealed_password")
     var sealedPassword: String? = null
 
+    /** ADR 0076: `SHA-256(writeToken)` (opaque base64), where `writeToken = HKDF(K_share, "veyq/v1/share-write:" + id)`
+     *  — what a guest naming themself must present the preimage of, so the id alone (a database copy, an access log)
+     *  names no guest. Set at create and re-issue for every role; null on a share minted before it existed, which
+     *  then takes no new guest, and on a tombstone. */
+    @Column(name = "write_verifier")
+    var writeVerifier: String? = null
+
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
 

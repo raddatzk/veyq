@@ -1,5 +1,6 @@
 package com.veyq.app.features.spaces.scope
 
+import com.veyq.app.features.sharing.ShareWriteProof
 import com.veyq.app.shared.membership.TestAdmission
 import com.veyq.app.shared.TestIds
 import com.veyq.app.features.media.TestBlob
@@ -1426,7 +1427,7 @@ class ScopesSliceTest {
         val (elsewhere, personal) = seedMemberScope()
         val memory = seedNode(personal, NodeEntity.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
         given().header("Authorization", bearer(elsewhere)).contentType(ContentType.JSON)
-            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"VIEWER","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
+            .body("""{"shareId":"$shareId",${ShareWriteProof.field(shareId)},"nodeId":"$memory","role":"VIEWER","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
             .`when`().post("/api/shares")
             .then().statusCode(409).body("code", equalTo("id_taken"))
     }

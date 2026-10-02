@@ -130,13 +130,13 @@ class ShareGuestNamesSliceTest {
 
     private fun createShare(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role",${shareKeysJson(role, nodeId, wrap)},"sealedName":"$sealedName"}""")
             .`when`().post("/api/shares").then().statusCode(201).extract().path("shareId")
 
     private fun createIdentity(shareId: String, role: String, name: String): String =
         given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$name"${identityKeyJson(role)}}""")
-            .`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract().path("identityId")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities").then().statusCode(201).extract().path("identityId")
 
     private fun seedMedia(scopeId: String, nodeId: String, identityId: String): String {
         val mediaId = UUID.randomUUID().toString()

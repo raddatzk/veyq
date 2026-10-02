@@ -248,7 +248,7 @@ class SharingHandler(
         userId: String, shareId: String, nodeId: String, role: String, wrap: String?,
         sealedDropPublicKey: String?, sealedDropPrivateKey: String?, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String?, sealedShareKeyEpoch: Int?, sealedShareName: String?,
-        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?, writeVerifier: String,
     ): CreateShareOutcome {
         // Instance policy first (ADR 0032): the capability this role needs must be active, else 422 — checked
         // before any node/scope lookup so it reads as "the operator turned sharing off", not a scope error.
@@ -271,7 +271,7 @@ class SharingHandler(
         val created = store.create(
             shareId, userId, node.scopeId, nodeId, role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
             sealedShareKeyEpoch, sealedShareName,
-            passwordRequired, pwSalt, pwVerifier, sealedPassword,
+            passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return when (created) {
             SharingStore.CreateResult.CREATED -> CreateShareOutcome.Created(shareId)
@@ -418,6 +418,7 @@ class SharingHandler(
         userId: String, shareId: String, newShareId: String, wrap: String?, sealedDropPublicKey: String?,
         sealedName: String, expiresAt: Instant?, sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int,
         sealedShareName: String?, passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
+        writeVerifier: String,
     ): ReissueShareOutcome {
         val old = store.find(shareId) ?: return ReissueShareOutcome.NotFound
         access.check(userId, old.scopeId, WRITE)
@@ -430,7 +431,7 @@ class SharingHandler(
         if (sealedShareKeyEpoch != scopes.currentEpoch(old.scopeId)) return ReissueShareOutcome.StaleEpoch
         val created = store.reissue(
             old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
-            sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
+            sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword, writeVerifier,
         )
         return when (created) {
             SharingStore.ReissueResult.CREATED -> ReissueShareOutcome.Created(newShareId)
@@ -496,7 +497,8 @@ class SharingHandler(
 
     /** Name yourself on a contributable share (CONTRIBUTOR/UPLOADER): seal-name in, an anonymous identity + token out. */
     fun createIdentity(
-        shareId: String, pwToken: String?, identityId: String, sealedDisplayName: String, wrappedIdentityKey: String?,
+        shareId: String, pwToken: String?, writeToken: String?, identityId: String, sealedDisplayName: String,
+        wrappedIdentityKey: String?,
     ): CreateIdentityOutcome {
         val share = activeShare(shareId) ?: return CreateIdentityOutcome.NotFound
         when (passwordCheck(share, pwToken)) { // cr-0164: the password gate fronts the write path, before the role check
@@ -505,6 +507,10 @@ class SharingHandler(
             PwCheck.TOO_MANY -> return CreateIdentityOutcome.RateLimited // cr-0165
             PwCheck.OK -> {}
         }
+        // ADR 0076: the id alone names no guest — the caller proves it holds the link's key. After the password gate
+        // (so a password-protected link still answers its own refusals first), before the role check (so a wrong
+        // proof learns nothing of the role). A share holding no verifier fails closed.
+        if (!holdsTheKey(share, writeToken)) return CreateIdentityOutcome.NotFound
         if (!ShareAccessPolicy.canUpload(share.role)) return CreateIdentityOutcome.NotContributable
         // ADR 0031 point 7: an UPLOADER identity seals under its own key and must hand it over wrapped to the drop
         // key, or nobody could ever open what it uploads; a CONTRIBUTOR seals under `K_mem` and has none to hand.
@@ -636,16 +642,25 @@ class SharingHandler(
         if (!share.passwordRequired) return PwCheck.OK
         if (pwToken.isNullOrBlank()) return PwCheck.MISSING
         val verifier = share.pwVerifier ?: return PwCheck.MISSING
-        val match = try {
-            val digest = Base64.getEncoder().encodeToString(
-                MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(pwToken)),
-            )
-            MessageDigest.isEqual(digest.toByteArray(), verifier.toByteArray())
-        } catch (e: IllegalArgumentException) {
-            false // malformed base64 token → a wrong attempt
-        }
-        if (match) return PwCheck.OK // correct password always passes, even past an exhausted budget
+        if (matchesVerifier(pwToken, verifier)) return PwCheck.OK // a malformed token is a wrong attempt // correct password always passes, even past an exhausted budget
         return if (passwordAttemptLimiter.allow(share.id)) PwCheck.WRONG else PwCheck.TOO_MANY
+    }
+
+    /** ADR 0076: [writeToken] is the preimage of the share's write verifier. No verifier, no token, a wrong or a
+     *  malformed one — all false. No attempt limiter: the token has 256 bits. */
+    private fun holdsTheKey(share: ShareEntity, writeToken: String?): Boolean {
+        val verifier = share.writeVerifier ?: return false
+        return !writeToken.isNullOrBlank() && matchesVerifier(writeToken, verifier)
+    }
+
+    /** `base64(SHA-256(base64-decoded token)) == verifier`, compared in constant time; a token that is not base64
+     *  matches nothing. The one compare behind both client-derived bearer proofs — the password token and the write
+     *  token. */
+    private fun matchesVerifier(token: String, verifier: String): Boolean = try {
+        val digest = Base64.getEncoder().encodeToString(MessageDigest.getInstance("SHA-256").digest(Base64.getDecoder().decode(token)))
+        MessageDigest.isEqual(digest.toByteArray(), verifier.toByteArray())
+    } catch (e: IllegalArgumentException) {
+        false
     }
 
     /**

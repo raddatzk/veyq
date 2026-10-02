@@ -43,7 +43,7 @@ class ShareContributorSliceTest {
         // name yourself — NO bearer; the sealed name is stored opaque, and we get an identity + a capability token
         val idResp = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201)
             .body("identityId", notNullValue())
             .body("contributorToken", notNullValue())
@@ -86,7 +86,7 @@ class ShareContributorSliceTest {
 
         given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(403).body("code", equalTo("share_not_contributable"))
     }
 
@@ -109,7 +109,7 @@ class ShareContributorSliceTest {
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
 
         given().header("Authorization", bearer(userId))
@@ -117,7 +117,7 @@ class ShareContributorSliceTest {
 
         // a revoked share is inert for the guest paths — identity-create + upload both 404 (non-enumerable)
         given().contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
-            .`when`().post("/api/shares/$shareId/identities").then().statusCode(404)
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities").then().statusCode(404)
         given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$contributorToken","items":[${TestBlob.SMALL.declare("Ymxvyi13cmFw")}]}""")
             .`when`().post("/api/shares/$shareId/blob-uploads").then().statusCode(404)
@@ -139,7 +139,7 @@ class ShareContributorSliceTest {
         val shareId = createShare(userId, memory, role = "CONTRIBUTOR")
         val contributorToken = given().contentType(ContentType.JSON)
             .body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedContributorName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(201).extract().path<String>("contributorToken")
         fun start(n: Int) = given().contentType(ContentType.JSON)
             .body("""{"contributorToken":"$contributorToken","items":${(1..n).joinToString(",", "[", "]") { TestBlob.SMALL.declare("Ymxvyi13cmFw") }}}""")
@@ -156,7 +156,7 @@ class ShareContributorSliceTest {
 
     private fun createShare(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 }

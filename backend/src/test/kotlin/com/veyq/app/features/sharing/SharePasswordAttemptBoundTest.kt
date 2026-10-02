@@ -99,11 +99,11 @@ class SharePasswordAttemptBoundTest {
         // exhaust the budget via the WRITE endpoint (create-identity) — the bound rides all six passwordCheck sites
         repeat(3) {
             given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
-                .`when`().post("/api/shares/$shareId/identities")
+                .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
                 .then().statusCode(403).body("code", equalTo("share_password_incorrect"))
         }
         given().header("X-Share-Password", wrongToken).contentType(ContentType.JSON).body("""{"identityId":"${TestIds.uuid()}","sealedDisplayName":"$sealedName"}""")
-            .`when`().post("/api/shares/$shareId/identities")
+            .header(ShareWriteProof.HEADER, ShareWriteProof.token(shareId)).`when`().post("/api/shares/$shareId/identities")
             .then().statusCode(429).body("code", equalTo("rate_limited"))
     }
 
@@ -114,7 +114,7 @@ class SharePasswordAttemptBoundTest {
 
     private fun createWithPassword(userId: String, nodeId: String, role: String): String =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"shareId":"${TestIds.shareId()}","nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier"}""")
+            .body("""{${ShareWriteProof.newShare()},"nodeId":"$nodeId","role":"$role","wrap":"$wrap","sealedName":"$sealedName","passwordRequired":true,"pwSalt":"$pwSalt","pwVerifier":"$pwVerifier"}""")
             .`when`().post("/api/shares")
             .then().statusCode(201).extract().path("shareId")
 }
