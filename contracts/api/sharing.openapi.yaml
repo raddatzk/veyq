@@ -27,7 +27,7 @@ info:
 tags:
   - name: sharing
     description: >
-      Public viewer shares — the curator's create/list/revoke (authenticated) plus the anonymous guest
+      Public viewer shares — the curator's create/list/revoke/delete (authenticated) plus the anonymous guest
       resolve + gated presigned blob GET (unauthenticated). One tag = one resource interface owning the
       `/api/shares` subtree.
 
@@ -45,7 +45,7 @@ paths:
         is rejected `422`, a non-member is a non-enumerable `404`. The **client** mints the 256-bit unguessable
         `shareId` ([ADR 0072](../../docs/decisions/0072-a-seal-binds-its-object.md) Decision 3 — the recovery wrap is sealed bound to it) and the server stores the record
         opaquely under it. The link is `/s/{shareId}#k=base64url(K_share)` — the fragment (`K_share`) is built
-        client-side and never sent. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
+        client-side and never sent. An id that already exists — in this scope or any other — is refused `id_taken` and nothing is overwritten; the answer is the same wherever the taken id lives, so it says nothing about another scope. An id is never minted twice: a deleted link's id (`deleteShare`) and the id of a link its space's erasure removed are refused `id_taken` as well — whoever holds a dead link's id and key could otherwise serve every other holder of that link their own Memory ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). Not idempotent: a retry of a create whose response was lost answers `id_taken` too, and the client re-reads.
       security:
         - bearerAuth: []
       requestBody:
@@ -82,7 +82,8 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: node_not_found } }
         "409":
           description: >
-            The `shareId` is already taken (`id_taken`), the `sealedShareKeyEpoch` is not the scope's current epoch
+            The `shareId` is already taken or was ever used — by a live, a deleted or an erased link (`id_taken`),
+            the `sealedShareKeyEpoch` is not the scope's current epoch
             (`stale_epoch` — the caller's scope key lags a rotation; re-open it and re-seal, ADR 0024 Decision 6), or
             the space is being deleted and read-only (`scope_deleting`, uc.spaces.delete-group A4). For UPLOADER: the
             request carries a drop private key the
@@ -110,7 +111,8 @@ paths:
         that Memory node visible to a **member of its scope** — not only the caller's (cr-0104), so a member can
         see and adopt an orphaned (disabled) share on a shared Memory; a non-member or an unknown node gets `[]`,
         an accepted member of a suspended tenant `403 tenant_suspended`. Each row carries `mine` (owned by the
-        caller). Operator-blind: the row carries no plaintext name or content.
+        caller). A deleted link (`deleteShare`) is in neither listing. Operator-blind: the row carries no plaintext
+        name or content.
       security:
         - bearerAuth: []
       parameters:
@@ -156,7 +158,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such share owned by the caller, or the caller is no longer a member of its space.
+          description: No such share owned by the caller, it was deleted, or the caller is no longer a member of its space.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
@@ -193,7 +195,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such share, or the caller is not a member of its scope.
+          description: No such share, it was deleted, or the caller is not a member of its scope.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
@@ -215,10 +217,10 @@ paths:
     post:
       tags: [sharing]
       operationId: reissueShare
-      summary: Re-issue a share — a new link with a fresh key, the old one turned off, in one request.
+      summary: Re-issue a share — a new link with a fresh key, the old one deleted, in one request.
       description: >
         Creates a **new** share with a fresh client-minted `shareId` and a fresh `K_share`, carrying the old one's
-        settings, and turns the old one off (`enabled = false`) in the **same transaction** — what cuts a departed
+        settings, and **deletes** the old one (a tombstone, as `deleteShare`) in the **same transaction** — what cuts a departed
         member off a link they could copy
         ([ADR 0075](../../docs/decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md)). The client
         opens the old share through its recovery copy, re-seals its note, label and password under the new
@@ -231,8 +233,9 @@ paths:
 
         An **enabled** share is re-issued only by its owner (as `revokeShare`); a **disabled** one by any current
         member of its scope, who owns the new share (as `reactivateShare` adopts). The old link then `404`s exactly
-        as a revoked one does — no redirect, which would hand the new id to the person the re-issue is for. Any
-        refusal writes nothing: the old link keeps its state and the new id stays free.
+        as a revoked one does — no redirect, which would hand the new id to the person the re-issue is for — and,
+        deleted, it leaves the manage list and can never be re-activated, re-issued again or edited. Any refusal
+        writes nothing: the old link keeps its state and the new id stays free.
       security:
         - bearerAuth: []
       parameters:
@@ -250,7 +253,7 @@ paths:
               sealedShareKeyEpoch: 1
       responses:
         "201":
-          description: The new share exists and the old one is off.
+          description: The new share exists and the old one is deleted.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ShareCreated" }
@@ -266,8 +269,8 @@ paths:
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
           description: >
-            No such share, the caller is not a member of its scope, or the share is enabled and not the caller's —
-            one non-enumerable answer.
+            No such share, it was deleted, the caller is not a member of its scope, or the share is enabled and not
+            the caller's — one non-enumerable answer.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409":
@@ -353,7 +356,7 @@ paths:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
         "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
         "404":
-          description: No such share owned by the caller (non-enumerable).
+          description: No such share owned by the caller, or it was deleted (non-enumerable).
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
         "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
@@ -363,6 +366,45 @@ paths:
             UPLOADER. The write-only drop-box is a separate action and its role is not editable in place.
           content:
             application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: invalid_role_change } }
+    delete:
+      tags: [sharing]
+      operationId: deleteShare
+      summary: Delete a share link — its ciphertext goes, its id and its guests' uploads stay.
+      description: >
+        Deletes the link for good ([ADR 0029](../../docs/decisions/0029-public-viewer-share.md) §7). The row becomes
+        a **tombstone**: it keeps its id, scope, Memory, role and dates, and every ciphertext it held — the wrap or
+        drop public key, the sealed name, note, label, recovery copy and password fields — and its expiry are
+        cleared. The link then `404`s exactly as a revoked one, and the share is gone from both listings and from
+        `revokeShare`, `updateShare`, `reactivateShare` and `reissueShare` (each a `404`). Its id is never minted
+        again (`createShare` answers `id_taken`). The photos its guests added stay in the Memory, readable by its
+        members and its other links as before: a guest's identity row — the only way to open an UPLOADER guest's
+        uploads ([ADR 0031](../../docs/decisions/0031-uploader-public-share.md) point 7) — goes only once no media
+        and no bucket of theirs remains. Nothing is reclaimed from the store.
+
+        The share's **owner** deletes it at any time — an enabled share is turned off in the same transaction.
+        **Another member** of its scope deletes it only once its owner is no longer a member of the scope (the
+        orphan a removal leaves); a co-member's link whose owner is still here is theirs, note and password copy
+        included. The list's `deletable` carries this same answer. Not idempotent on the wire: an unknown or
+        already-deleted id is the same non-enumerable `404` as a share the caller may not delete.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ShareId"
+      responses:
+        "204":
+          description: The share is deleted.
+        "401":
+          description: Generic authentication failure.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: authentication_failed } }
+        "403": { $ref: "_common.openapi.yaml#/components/responses/TenantSuspended" }
+        "404":
+          description: >
+            No such share, it was already deleted, the caller is not a member of its scope, or it belongs to another
+            member who is still in the scope — one non-enumerable answer.
+          content:
+            application/json: { schema: { $ref: "#/components/schemas/ErrorResponse" }, example: { code: share_not_found } }
+        "409": { $ref: "_common.openapi.yaml#/components/responses/ScopeDeleting" }
 
   /api/shares/{shareId}/terms:
     get:
@@ -1079,7 +1121,7 @@ components:
 
     ShareSummary:
       type: object
-      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, createdAt]
+      required: [shareId, scopeId, nodeId, role, sealedName, enabled, mine, reissueRequired, deletable, createdAt]
       properties:
         shareId:
           x-veyq-visibility: id
@@ -1171,6 +1213,14 @@ components:
             with the same predicate the re-activation refusal runs, so the manage panel's hint and the refusal cannot
             disagree.
           example: false
+        deletable:
+          x-veyq-visibility: flag
+          type: boolean
+          description: >
+            True when the caller may delete this share (`deleteShare`): it is theirs, or its owner is no longer a
+            member of its scope. The server computes it with the predicate the delete runs, so the panel's offer and
+            the refusal cannot disagree.
+          example: true
         expiresAt:
           x-veyq-visibility: time
           type: [string, "null"]

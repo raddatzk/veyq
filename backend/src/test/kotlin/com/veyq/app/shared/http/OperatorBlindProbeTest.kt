@@ -165,6 +165,7 @@ class OperatorBlindProbeTest {
         "revokeShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/revoke") },
         "reactivateShare" to Probe(Address.SHARE) { s -> Call("POST", "/api/shares/${s.shareId}/reactivate") },
         "updateShare" to Probe(Address.SHARE) { s -> Call("PATCH", "/api/shares/${s.shareId}", "{}") },
+        "deleteShare" to Probe(Address.SHARE) { s -> Call("DELETE", "/api/shares/${s.shareId}") },
         "reissueShare" to Probe(Address.SHARE) { s ->
             Call(
                 "POST", "/api/shares/${s.shareId}/reissue",

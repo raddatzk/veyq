@@ -21,7 +21,10 @@ import com.veyq.app.shared.blobstore.StoreReclaimEntity
 import com.veyq.app.shared.blobstore.StoreReclaimStore
 import com.veyq.app.shared.identity.TenantProfileEntity
 import com.veyq.app.shared.scope.ScopeEntity
+import com.veyq.app.testing.TestFixtures.CONTENT_KEY
 import com.veyq.app.testing.TestFixtures.bearer
+import com.veyq.app.testing.TestFixtures.seedMemberScope
+import com.veyq.app.testing.TestFixtures.seedNode
 import com.veyq.app.testing.TestFixtures.seedUser
 import io.quarkus.narayana.jta.QuarkusTransaction
 import io.quarkus.test.junit.QuarkusTest
@@ -1344,15 +1347,11 @@ class ScopesSliceTest {
      * BITE-TEST for the share arm of the same closure — a **live defect on a seeded arm**, and the seeding is the
      * honest part rather than a shortcut. `veyq_share.scope_id` references `veyq_scope(id)` with no `ON DELETE`
      * (V31__share.sql:20) and `veyq_share_identity.share_id` references the share (V32__contributor_share.sql:13),
-     * so both refuse the scope row exactly as the job tables did; but v1 shares are personal-scope-only
-     * (ADR 0029 §6) while this purge runs on GROUP scopes, so **no product path can arrange this today**. Going
-     * through the API would mean building group sharing first, which is the thing this pins the schema for.
-     *
-     * What it therefore proves is the *schema* requirement, and that is what will still be true when sharing
-     * reaches group scopes: at that moment this arm arms itself, and a purge that never learned to delete a share
-     * would silently stop erasing groups again. Erasing the share is also what operator-blindness asks for — the
-     * row holds the owner, the node and a sealed name belonging to a group whose erasure the owner requested, and
-     * there is no capability left to revoke.
+     * so both refuse the scope row exactly as the job tables did. The rows are seeded rather than made through the
+     * API because what this pins is the *schema* requirement: a purge that never learned to delete a share would
+     * silently stop erasing every group that ever had a link (ADR 0029 §6). Erasing the share is also what
+     * operator-blindness asks for — the row holds the owner, the node and a sealed name belonging to a group whose
+     * erasure the owner requested, and there is no capability left to revoke.
      */
     @Test
     fun purgeErasesAGroupThatCarriesAShare() {
@@ -1396,6 +1395,40 @@ class ScopesSliceTest {
             }
             purge.purge(scopeId)
         }
+    }
+
+    /**
+     * B5 (ADR 0029 §7) — the purge must delete a group's share rows (the scope's foreign key requires it), which used
+     * to FREE their ids: anyone holding a dead link's id and `K_share` could mint a share under it on a Memory of
+     * their own, and every other holder of that dead link would open the minter's Memory. The id is retired instead.
+     */
+    @Test
+    fun aPurgedGroupsShareIdsStayDead() {
+        val (owner, domain) = seedMember()
+        val scopeId = createGroupAs(owner, domain)
+        val nodeId = createNodeIn(owner, scopeId, "retired-memory")
+        val shareId = TestIds.shareId()
+        QuarkusTransaction.requiringNew().run {
+            ShareEntity().apply {
+                id = shareId; ownerAccount = owner; this.scopeId = scopeId; this.nodeId = nodeId
+                role = ShareEntity.VIEWER; wrap = "c2hhcmUtd3JhcA=="; sealedName = "c2VhbGVkLW1lbW9yeQ=="
+                createdAt = Instant.now()
+            }.persist()
+        }
+        given().header("Authorization", bearer(owner)).`when`().delete("/api/scopes/$scopeId").then().statusCode(204)
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity.findById(scopeId)!!.apply { deletedAt = Instant.now().minus(Duration.ofDays(31)) }.persist()
+        }
+        purge.purge(scopeId)
+        QuarkusTransaction.requiringNew().run { assertNull(ShareEntity.findById(shareId), "the row itself is erased") }
+
+        // a member elsewhere, on a Memory of their own, mints a share under the dead link's id
+        val (elsewhere, personal) = seedMemberScope()
+        val memory = seedNode(personal, NodeEntity.MEMORY, parentId = personal, wrappedContentKey = CONTENT_KEY)
+        given().header("Authorization", bearer(elsewhere)).contentType(ContentType.JSON)
+            .body("""{"shareId":"$shareId","nodeId":"$memory","role":"VIEWER","wrap":"c2hhcmUtd3JhcA==","sealedName":"c2VhbGVkLW1lbW9yeQ=="}""")
+            .`when`().post("/api/shares")
+            .then().statusCode(409).body("code", equalTo("id_taken"))
     }
 
     /**

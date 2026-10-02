@@ -72,9 +72,31 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
    A **personal** scope has no member removal, so only the first slice's crypto/access-path (§1–§5, §7–§8) applies
    there; the governance above is inert for it.
 
-7. **Revocation is soft (L1).** `enabled = false` / deleting the record → the next guest request `404`s; an
+7. **Revocation is soft (L1).** `enabled = false` / deleting the link → the next guest request `404`s; an
    `expiresAt` in the past `404`s. The same soft-revoke fires **automatically on member removal** for the removed
-   member's shares (§6), and a re-activation flips `enabled` back on (transferring ownership). There is **no
+   member's shares (§6), and a re-activation flips `enabled` back on (transferring ownership).
+
+   **Deleting a link is a tombstone, not a row delete.** The row keeps its id, scope, node, role and dates; every
+   ciphertext column — wrap, drop public key, sealed name, note, label, recovery copy, password fields — and its
+   expiry are cleared and `deleted_at` is set. A tombstone `404`s like a revoked link, cannot be re-activated,
+   edited or re-issued, and is in no listing. The row stays because the link's guest identities hang off it by
+   foreign key, and an UPLOADER identity's wrapped key is the only way members open that guest's uploads
+   ([ADR 0031](0031-uploader-public-share.md) point 7): a delete never touches the Memory's media, buckets or drop
+   key, and reclaims no bytes. Its owner deletes it at any time (an enabled one is turned off in the same
+   transaction); another member only once its owner is no longer a member of the scope — deleting a co-member's
+   parked link would destroy their note and password copy, which re-activation never did. A re-issue tombstones the
+   link it replaces ([ADR 0075](0075-a-link-a-departed-member-could-copy-is-reissued.md)), and the purge that erases
+   a Memory tombstones every link on it; trashing a Memory does not (its links come back on restore).
+   A guest identity of a deleted link goes once nothing can use or open it — its link is a tombstone and no media
+   row (trashed included) and no bucket references it: a guest who never uploaded goes with the delete, one who did
+   goes with the purge of the last Memory that held their uploads.
+
+   **A share id is never minted twice.** A tombstone keeps holding its id, and the scope purge — which must remove
+   share rows, the scope's foreign key requires it — records each erased id in `veyq_share_retired_id`, which
+   create consults like a live row (`409 id_taken`). Otherwise anyone holding a dead link's id and `K_share` could
+   mint a share under that id, and every other holder of the dead link would open the minter's Memory.
+
+   There is **no
    content-key rotation** for a viewer share: already-downloaded ciphertext (and a saved fragment link) cannot be
    retracted — a **stated limitation**, consistent with [ADR 0012](0012-content-key-hierarchy.md) (already-read
    content is never retractable). Heavier defense (re-seal under a fresh `K_mem`) stays available but is not part
@@ -95,7 +117,8 @@ Adopt a **public viewer share** as a standalone, operator-blind resource address
 - **Least-privilege is crypto-enforced**, not server-gated: a leaked share exposes exactly one Memory subtree,
   never the scope or a sibling Memory.
 - **New server-visible operational surface** (all non-sensitive): the opaque `shareId`, the wrapped key, the
-  plaintext `role`, and the `K_share`-sealed name. No content, no identity, no viewer.
+  plaintext `role`, and the `K_share`-sealed name. No content, no identity, no viewer. A deleted link leaves its
+  id, scope, node, role and the coarse `deleted_at` behind — the operator served its deletion anyway.
 - **Scope rotation does not revoke a share.** A share wraps `symWrap(K_share, K_mem)`, independent of `K_SC`.
   Removing a scope member rotates `K_SC` forward (a new epoch, [ADR 0024](0024-scope-key-rotation.md)) but leaves
   `K_mem` — and therefore the share — **untouched**: the publicly-shared Memory keeps working, **including content

@@ -275,10 +275,10 @@ describe('createContributorIdentity (cr-0101)', () => {
 })
 
 describe('shared-scope management (cr-0104)', () => {
-  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine` and `reissueRequired` flags', async () => {
+  it('listSharesFor scopes by nodeId server-side and threads each row’s `mine`, `reissueRequired` and `deletable` flags', async () => {
     const list = vi.fn().mockResolvedValue([
-      { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, createdAt: '2026-07-07T12:00:00Z', expiresAt: null },
-      { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, createdAt: '2026-07-06T12:00:00Z', expiresAt: null },
+      { shareId: 's1', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: true, mine: true, reissueRequired: false, deletable: true, createdAt: '2026-07-07T12:00:00Z', expiresAt: null },
+      { shareId: 's2', scopeId: SCOPE_ID, nodeId: NODE_ID, role: 'VIEWER', sealedName: 'x', enabled: false, mine: false, reissueRequired: true, deletable: false, createdAt: '2026-07-06T12:00:00Z', expiresAt: null },
     ])
     vi.mocked(sharesApi).mockReturnValue({ listShares: list } as unknown as ReturnType<typeof sharesApi>)
 
@@ -286,9 +286,9 @@ describe('shared-scope management (cr-0104)', () => {
 
     expect(list).toHaveBeenCalledWith({ nodeId: NODE_ID }) // server-scoped to the Memory, not a client filter
     // co-members' shares come back too (mine=false), disabled ones included — newest first
-    expect(rows.map((r) => [r.shareId, r.mine, r.enabled, r.reissueRequired])).toEqual([
-      ['s1', true, true, false],
-      ['s2', false, false, true], // the server's ADR 0075 verdict, carried as it came — never re-derived here
+    expect(rows.map((r) => [r.shareId, r.mine, r.enabled, r.reissueRequired, r.deletable])).toEqual([
+      ['s1', true, true, false, true],
+      ['s2', false, false, true, false], // the server's verdicts (ADR 0075, ADR 0029 §7), carried as they came
     ])
     expect(rows.every((r) => r.scopeId === SCOPE_ID)).toBe(true) // the recovery copy binds it — carried per row
   })

@@ -14,7 +14,9 @@ import java.time.Instant
  * opaque 256-bit `id`, the wrap `symWrap(K_share, K_mem)`, the plaintext `role`, the `K_share`-sealed name,
  * and the shared `nodeId` — never `K_share`, `K_mem`, a name, or the viewer. `K_share` rides the URL fragment
  * (ADR 0015) and never reaches the server. Soft (L1) revoke: `enabled = false` / a passed `expiresAt` makes the
- * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable).
+ * guest resolve + blob GET `404` (ADR 0029 §7 — already-downloaded ciphertext is not retractable). A deleted share is
+ * a tombstone ([deletedAt], `SharingStore.tombstone`): its ciphertext columns are null, and every reader goes through
+ * `SharingStore`'s lookups, which never return one.
  */
 @Entity
 @Table(name = "veyq_share")
@@ -48,9 +50,10 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "sealed_drop_public_key")
     var sealedDropPublicKey: String? = null
 
-    /** The Memory name re-sealed under `K_share` (opaque base64) — a viewer with only the fragment key shows the title. */
-    @Column(name = "sealed_name", nullable = false)
-    lateinit var sealedName: String
+    /** The Memory name re-sealed under `K_share` (opaque base64) — a viewer with only the fragment key shows the title.
+     *  Null only on a tombstone. */
+    @Column(name = "sealed_name")
+    var sealedName: String? = null
 
     /** False once revoked (soft L1) — the guest resolve + blob GET then `404`. */
     @Column(name = "enabled", nullable = false)
@@ -88,8 +91,9 @@ class ShareEntity : PanacheEntityBase {
     @Column(name = "member_removals_at_mint", nullable = false)
     var memberRemovalsAtMint: Int = 0
 
-    /** Set by a bulk switch-off (ADR 0075 point 5, `SharingStore.turnOffAllInScope`): this share comes back only by
-     *  re-issue, which mints a new row — so the mark never travels. */
+    /** Set by a bulk switch-off (ADR 0075 point 5, `SharingStore.turnOffAllInScope`) on every share of the scope, one
+     *  already off included: this share comes back only by re-issue, which mints a new row — so the mark never
+     *  travels. */
     @Column(name = "reissue_only", nullable = false)
     var reissueOnly: Boolean = false
 
@@ -115,6 +119,11 @@ class ShareEntity : PanacheEntityBase {
 
     @Column(name = "created_at", nullable = false)
     lateinit var createdAt: Instant
+
+    /** Set when the share was deleted (ADR 0029 §7): the row is a tombstone that only holds its id — so no new share
+     *  is ever minted under it — and the foreign key its guest identities need. */
+    @Column(name = "deleted_at")
+    var deletedAt: Instant? = null
 
     companion object : PanacheCompanionBase<ShareEntity, String> {
         const val VIEWER = "VIEWER"
@@ -158,4 +167,19 @@ class ShareIdentityEntity : PanacheEntityBase {
     lateinit var createdAt: Instant
 
     companion object : PanacheCompanionBase<ShareIdentityEntity, String>
+}
+
+/**
+ * The id of a share row the scope purge erased (ADR 0029 §7). The purge must remove share rows — the scope's foreign
+ * key requires it — and a freed id could be minted again by anyone holding the dead link's id and `K_share`, serving
+ * every other holder of that link their own Memory. The id is 256 random bits and names nothing once its row is gone.
+ */
+@Entity
+@Table(name = "veyq_share_retired_id")
+class ShareRetiredIdEntity : PanacheEntityBase {
+    @Id
+    @Column(name = "id", length = 64)
+    lateinit var id: String
+
+    companion object : PanacheCompanionBase<ShareRetiredIdEntity, String>
 }

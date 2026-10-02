@@ -6,7 +6,7 @@ title: Public-share a Memory in a shared scope (group / tenant)
 # role's sharing.* capability (ADR 0032) — any member may publish, not only an owner. Member removal soft-revokes
 # (enabled=false) every share the removed member created in that scope (or, opted in, every share of the group); any
 # remaining member may re-activate a deactivated share, which transfers its owner_account — unless a departed member
-# may hold its link, which then comes back only as a re-issue (a new id + key, the old one off, one transaction) — the
+# may hold its link, which then comes back only as a re-issue (a new id + key, the old one deleted, one transaction) — the
 # removal count marks that on a tenant, and a bulk switch-off's mark makes it stick. K_mem is stable across rotation (ADR 0024), so the share
 # follows new content and cannot be rotated away — the server-side deactivation IS the honest-server revocation
 # (the only forward layer for a tenant, which is ACL-revoke).
@@ -58,10 +58,10 @@ acceptanceCriteria:
       web:
         unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
   - id: reissue-replaces-a-link-in-one-request
-    text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, an UPLOADER keeping the Memory's drop key) and turns the old one off in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
+    text: Re-issue creates a new share (fresh id, fresh K_share, the old one's settings re-sealed, recovery copy at the current epoch, role and Memory from the old row, an UPLOADER keeping the Memory's drop key) and deletes the old one (a tombstone it can never come back from) in one transaction; a stale epoch, a taken id or keys that do not match the role write nothing; an enabled share is its owner's to re-issue, a disabled one any member's (who owns the new share). The old K_share opens nothing the new share carries (ADR 0075).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]
+        integration: [ShareSharedScopeSliceTest.reissueReplacesTheLinkInOneRequestAndKeepsTheRoleAndMemory, ShareSharedScopeSliceTest.aReissuedLinkCannotComeBack, ShareSharedScopeSliceTest.reissueAtAStaleEpochIs409AndWritesNothing, ShareSharedScopeSliceTest.aCoMembersEnabledShareIsNotReissuableButADisabledOneIsAdopted, ShareSharedScopeSliceTest.anUploaderReissueSealsTheExistingDropKeyAndNeverAWrap, ShareSharedScopeSliceTest.aReissueIntoATakenIdIs409AndLeavesTheOldLinkOn]
       web:
         unit: [src/features/memory/share.test.ts]
   - id: removal-can-turn-off-every-link
@@ -72,7 +72,39 @@ acceptanceCriteria:
       web:
         unit: [src/features/spaces/GroupMembersPanel.test.ts]
   - id: a-switch-off-sticks
-    text: Every bulk switch-off — a group removal's or a tenant removal's revokeLinks, and a scope owner's revokeScopeShares — marks each share it turns off, so even one with no recovery copy whose owner is still a member comes back only by re-issue; a share minted afterwards is untouched (A5, ADR 0075 point 5).
+    text: Every bulk switch-off — a group removal's or a tenant removal's revokeLinks, and a scope owner's revokeScopeShares — marks every share of the scope, one already switched off included (inbox #258), so even one with no recovery copy whose owner is still a member comes back only by re-issue; it counts only the shares it turned off, and a share minted afterwards is untouched (A5, ADR 0075 point 5).
     coverage:
       backend:
-        integration: [ShareSharedScopeSliceTest.aRemovalsSwitchOffMarksEveryLinkItTurnsOff, ShareSharedScopeSliceTest.aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks]
+        integration: [ShareSharedScopeSliceTest.aRemovalsSwitchOffMarksEveryLinkItTurnsOff, ShareSharedScopeSliceTest.aScopeOwnersSwitchOffTurnsOffEveryLinkAndItSticks, ShareSharedScopeSliceTest.aSwitchOffAlsoMarksALinkThatWasAlreadyOff]
+  - id: delete-a-link
+    text: >
+      A share's owner deletes it at any time (an enabled one is turned off in the same transaction); another member
+      only once its owner is no longer a member of the scope — otherwise the non-enumerable 404, and the list's
+      `deletable` carries the same predicate. The row becomes a tombstone (ADR 0029 §7) — its ciphertext cleared, its
+      id kept — so the link 404s, is in neither listing, and revoke, update, re-activate, re-issue and a second delete
+      answer 404; its id is refused id_taken. The panel folds switched-off links under a count, offers delete on a
+      switched-off link the server marks deletable, behind a confirm, and drops the row once deleted; switching off no
+      longer wears the trash can (A7).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ShareSharedScopeSliceTest.aCoMembersLinkIsDeletableOnlyOnceItsOwnerLeft]
+      web:
+        unit: [src/features/memory/components/ShareDialog.test.ts, src/features/memory/share.test.ts]
+  - id: a-deleted-links-uploads-stay
+    text: >
+      Deleting a link keeps the photos its guests added: members' media page still serves the uploader guest's wrapped
+      key, the bucket list still names the guest, the Memory's drop key is unchanged, and no byte is reclaimed. A guest
+      identity goes only once its link is deleted and no media row (trashed included) and no bucket references it — a
+      guest who never uploaded goes with the delete, one who did with the purge of the last Memory holding their
+      uploads; a live link keeps its guests (inbox #229).
+    coverage:
+      backend:
+        integration: [ShareUploaderSliceTest.theGuestsUploadsSurviveTheirLink, ShareDeletedNodeSliceTest.aDeadGuestIdentityGoesAndALiveOneStays]
+  - id: a-share-id-is-never-minted-twice
+    text: >
+      A deleted link's tombstone keeps holding its id, and the scope purge — which must remove a group's share rows —
+      retires each erased id; createShare refuses either with id_taken, so no one holding a dead link's id and key can
+      mint a share under it (ADR 0029 §7).
+    coverage:
+      backend:
+        integration: [ShareSharedScopeSliceTest.theOwnerDeletesALinkAndItIsGoneEverywhere, ScopesSliceTest.aPurgedGroupsShareIdsStayDead]

@@ -77,9 +77,11 @@ design impossible ([ADR 0061](../../../decisions/0061-node-deletion-reversible-n
   trashed, and the traversal deliberately does **not** skip them. A subtree ageing out on two timestamps has its
   inner rows purged first, and the restore then hands back an empty shell — that is what "stops early and strands
   the rest" costs, and it is observable against the purge rather than against the marker.
-- **E4 — a share pointing at the deleted node.** The share row survives and stays listed for its owner; it simply
-  resolves to nothing while the node is trashed, and starts working again on restore. Revoking is still the way to
-  end a share for good — deleting the Memory is not a revoke.
+- **E4 — a share pointing at the deleted node.** While the node is trashed the share row survives and stays
+  listed; it simply resolves to nothing, and starts working again on restore — trashing the Memory is not a revoke.
+  **Erasing the Memory deletes its links** ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §7): the
+  purge tombstones every share on the erased nodes, so the link `404`s for good and its ciphertext goes, and the
+  guest identities nothing references any more go with it.
 - **E5 — an upload or a contribution lands mid-delete.** A contributor upload through a share targets the node
   directly; once the node is trashed those writes are refused on the same gate as every other write to it.
 

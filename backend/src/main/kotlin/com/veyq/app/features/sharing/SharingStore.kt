@@ -2,12 +2,15 @@ package com.veyq.app.features.sharing
 
 import com.veyq.app.features.content.NodeEntity
 import com.veyq.app.features.media.BlobEntity
+import com.veyq.app.features.media.BucketEntity
 import com.veyq.app.features.media.MediaDerivativeEntity
 import com.veyq.app.features.media.MediaEntity
 import com.veyq.app.features.media.MediaStore
+import com.veyq.app.features.media.OwnerKey
 import com.veyq.app.shared.crypto.Tokens
 import com.veyq.app.shared.scope.ScopeEntity
 import jakarta.enterprise.context.ApplicationScoped
+import jakarta.persistence.LockModeType
 import jakarta.transaction.Transactional
 import java.time.Instant
 import java.util.UUID
@@ -85,7 +88,7 @@ class SharingStore(
     enum class CreateResult { CREATED, ID_TAKEN, DROP_KEY_EXISTS, DROP_KEY_MISSING }
 
     /** Persist a share under the client-minted [id] — 256 random bits, base64url, the unguessable half of the
-     *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if any share already holds it. An UPLOADER
+     *  capability (ADR 0072 keeps its form). `ID_TAKEN`, nothing written, if the id was ever used ([idTaken]). An UPLOADER
      *  share's drop private key is set on the Memory **once**, by a conditional update in this transaction: a
      *  second one would orphan every upload sealed to the first, so a Memory that already has one is
      *  `DROP_KEY_EXISTS` (the client re-reads the node), and a request with none for a Memory with none is
@@ -97,7 +100,7 @@ class SharingStore(
         sealedShareKeyEpoch: Int?, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): CreateResult {
-        if (ShareEntity.findById(id) != null) return CreateResult.ID_TAKEN
+        if (idTaken(id)) return CreateResult.ID_TAKEN
         if (keys is ShareKeys.Drop) {
             if (keys.sealedPrivateKey != null) {
                 val set = NodeEntity.update(
@@ -115,25 +118,32 @@ class SharingStore(
         return CreateResult.CREATED
     }
 
+    /** A share id is never minted twice (ADR 0029 §7): a row holds it — live or a tombstone — or the scope purge
+     *  retired it when it erased the row. */
+    private fun idTaken(id: String): Boolean = ShareEntity.findById(id) != null || ShareRetiredIdEntity.findById(id) != null
+
+    enum class ReissueResult { CREATED, ID_TAKEN, NOT_FOUND }
+
     /** Re-issue [oldId] under the client-minted [newId] (ADR 0075): persist the new share — the old one's scope,
-     *  node and role, everything else from the request — and turn the old one off, in **one** transaction. False,
-     *  nothing written, when any share already holds [newId]. The id check comes first on purpose: a re-issue that
-     *  turned the old link off and then failed would leave the curator with no link at all, believing they had a
-     *  new one. Never touches the Memory's drop key — an UPLOADER re-issue seals to the one it already has. */
+     *  node and role, everything else from the request — and delete the old one ([tombstone], ADR 0029 §7), in
+     *  **one** transaction: a replaced link has nothing left to come back for. `ID_TAKEN`, nothing written, when
+     *  [newId] was ever used. The id check comes first on purpose: a re-issue that deleted the old link and then
+     *  failed would leave the curator with no link at all, believing they had a new one. Never touches the Memory's
+     *  drop key — an UPLOADER re-issue seals to the one it already has. */
     @Transactional
     fun reissue(
         oldId: String, newId: String, ownerAccount: String, keys: ShareKeys, sealedName: String, expiresAt: Instant?,
         sealedNote: String?, sealedShareKey: String, sealedShareKeyEpoch: Int, sealedShareName: String?,
         passwordRequired: Boolean, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
-    ): Boolean {
-        if (ShareEntity.findById(newId) != null) return false
-        val old = ShareEntity.findById(oldId) ?: return false
-        old.enabled = false
+    ): ReissueResult {
+        if (idTaken(newId)) return ReissueResult.ID_TAKEN
+        val old = liveForUpdate(oldId) ?: return ReissueResult.NOT_FOUND
+        tombstone(old)
         persistShare(
             newId, ownerAccount, old.scopeId, old.nodeId, old.role, keys, sealedName, expiresAt, sealedNote, sealedShareKey,
             sealedShareKeyEpoch, sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
         )
-        return true
+        return ReissueResult.CREATED
     }
 
     private fun persistShare(
@@ -183,7 +193,7 @@ class SharingStore(
         ownerAccount: String, shareId: String, sealedNote: String?, sealedShareName: String?, role: String?,
         expiresAt: Instant?, passwordRequired: Boolean?, pwSalt: String?, pwVerifier: String?, sealedPassword: String?,
     ): UpdateResult {
-        val share = ShareEntity.findById(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return UpdateResult.NOT_FOUND
+        val share = liveForUpdate(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return UpdateResult.NOT_FOUND
         if (role != null) {
             if (role == ShareEntity.UPLOADER || share.role == ShareEntity.UPLOADER) return UpdateResult.INVALID_ROLE
             share.role = role
@@ -200,20 +210,28 @@ class SharingStore(
         return UpdateResult.DONE
     }
 
-    fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)
+    /** A share that exists and is not deleted — every reader's lookup (ADR 0029 §7): a tombstone is not found,
+     *  to the guest and to every curator operation alike. */
+    fun find(shareId: String): ShareEntity? = ShareEntity.findById(shareId)?.takeIf { it.deletedAt == null }
+
+    /** [find] under a row lock, for every write to a share. A write loads the whole row and Hibernate writes every
+     *  column back, so without the lock an edit that read the row before a delete committed would put the deleted
+     *  ciphertext back; locked, it waits for the delete and then finds no share. */
+    private fun liveForUpdate(shareId: String): ShareEntity? =
+        ShareEntity.findById(shareId, LockModeType.PESSIMISTIC_WRITE)?.takeIf { it.deletedAt == null }
 
     fun listByOwner(ownerAccount: String): List<ShareEntity> =
-        ShareEntity.find("ownerAccount = ?1", ownerAccount).list()
+        ShareEntity.find("ownerAccount = ?1 and deletedAt is null", ownerAccount).list()
 
     /** Every share on a node, any owner — for the shared-scope manage panel (cr-0104). The handler gates it on
-     *  scope membership; the store just reads the node's shares. */
+     *  scope membership; the store just reads the node's shares. A deleted one is in no listing. */
     fun listByNode(nodeId: String): List<ShareEntity> =
-        ShareEntity.find("nodeId = ?1", nodeId).list()
+        ShareEntity.find("nodeId = ?1 and deletedAt is null", nodeId).list()
 
     /** Soft-revoke a share the caller owns (idempotent). Returns false when no such share is owned by the caller. */
     @Transactional
     fun revoke(ownerAccount: String, shareId: String): Boolean {
-        val share = ShareEntity.findById(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return false
+        val share = liveForUpdate(shareId)?.takeIf { it.ownerAccount == ownerAccount } ?: return false
         share.enabled = false
         return true
     }
@@ -223,10 +241,73 @@ class SharingStore(
      *  such share. */
     @Transactional
     fun reactivate(callerAccount: String, shareId: String): Boolean {
-        val share = ShareEntity.findById(shareId) ?: return false
+        val share = liveForUpdate(shareId) ?: return false
         share.enabled = true
         share.ownerAccount = callerAccount
         return true
+    }
+
+    /** Delete a share (ADR 0029 §7) — [tombstone] it. The handler has already decided the caller may. False when
+     *  there is no such share, or it is deleted already. */
+    @Transactional
+    fun delete(shareId: String): Boolean {
+        val share = liveForUpdate(shareId) ?: return false
+        tombstone(share)
+        return true
+    }
+
+    /**
+     * The ONE body of every share deletion (ADR 0029 §7) — a delete, a re-issue's old link, the purge of the Memory
+     * it is on. Off, `deleted_at` set, and every ciphertext column and the expiry cleared: what stays is the id (so
+     * nothing is ever minted under it again), the scope, node, role and dates, and the foreign key the link's guest
+     * identities hang off. Never touches the identities' wrapped keys, the Memory's media and buckets, or its drop
+     * key: an uploader guest's photos open only through them, and they belong to the Memory, not to the link — an
+     * identity goes only once nothing of the guest's remains ([dropDeadIdentities]). Runs inside its caller's
+     * transaction.
+     */
+    fun tombstone(share: ShareEntity) {
+        share.enabled = false
+        share.deletedAt = Instant.now()
+        share.wrap = null
+        share.sealedDropPublicKey = null
+        share.sealedName = null
+        share.sealedNote = null
+        share.sealedShareName = null
+        share.sealedShareKey = null
+        share.sealedShareKeyEpoch = null
+        share.passwordRequired = false
+        share.pwSalt = null
+        share.pwVerifier = null
+        share.sealedPassword = null
+        share.expiresAt = null
+        dropDeadIdentities(ShareIdentityEntity.find("shareId", share.id).list().map { it.id })
+    }
+
+    /** Delete every share on the erased nodes ([tombstone] each, ADR 0029 §7) — the Memory purge's call: a link on a
+     *  Memory that no longer exists has nothing left to serve. Runs inside the purge's transaction. */
+    fun tombstoneAllOn(nodeIds: Collection<String>) {
+        if (nodeIds.isEmpty()) return
+        ShareEntity.find("nodeId in ?1 and deletedAt is null", nodeIds).withLock(LockModeType.PESSIMISTIC_WRITE).list()
+            .forEach { tombstone(it) }
+    }
+
+    /**
+     * Delete each of the guest identities [candidateIds] that nothing can use or open any more (inbox #229, ADR 0029
+     * §7) — all three at once: its link is a tombstone, so its token is no session (every guest write starts at the
+     * active share); no media row references it, live or trashed (a trashed one can be restored, and its wrapped key
+     * is the only way to open an uploader guest's photo); and no bucket does (the bucket list shows its name). An
+     * open upload session does not hold it: it can never complete once the link is gone, and the stale-session sweep
+     * reclaims its objects by storage key alone. Candidates are passed in — the caller knows which identities it
+     * just orphaned; this never scans the table. Runs inside its caller's transaction.
+     */
+    fun dropDeadIdentities(candidateIds: Collection<String>) {
+        for (id in candidateIds.toSet()) {
+            val identity = ShareIdentityEntity.findById(id) ?: continue
+            if (ShareEntity.findById(identity.shareId)?.deletedAt == null) continue
+            if (MediaEntity.count("shareIdentityId", id) > 0) continue
+            if (BucketEntity.count("ownerKey", OwnerKey.Share(id).format()) > 0) continue
+            ShareIdentityEntity.deleteById(id)
+        }
     }
 
     /** Soft-revoke every enabled share a removed member created in a scope (cr-0104) — their links then 404 on
@@ -238,14 +319,20 @@ class SharingStore(
             ownerAccount, scopeId,
         )
 
-    /** Turn off **every** enabled share of a scope, whoever created it, and mark each `reissue_only` — the one body
-     *  of every bulk switch-off (ADR 0075 point 5): a group removal's and a tenant removal's `revokeLinks`, and a
-     *  scope owner's standalone switch-off. Every member could rebuild every link, so a link may have leaked
-     *  whoever made it; each owner re-issues what they still want, and the mark keeps re-activation from reviving
-     *  one. Returns how many it turned off. Runs inside its caller's transaction. */
+    /** Turn off **every** enabled share of a scope, whoever created it, and mark **every** share of it `reissue_only`
+     *  — the one body of every bulk switch-off (ADR 0075 point 5): a group removal's and a tenant removal's
+     *  `revokeLinks`, and a scope owner's standalone switch-off. Every member could rebuild every link, so a link may
+     *  have leaked whoever made it; each owner re-issues what they still want, and the mark keeps re-activation from
+     *  reviving one. A link its owner had already switched off is marked too (inbox #258): it may have leaked as
+     *  well, and unmarked, one with no recovery copy came back with one click right after the switch-off. A deleted
+     *  link is left alone — it never comes back anyway. Returns how many it turned off. Runs inside its caller's
+     *  transaction. */
     @Transactional
-    fun turnOffAllInScope(scopeId: String): Int =
-        ShareEntity.update("enabled = false, reissueOnly = true where scopeId = ?1 and enabled = true", scopeId)
+    fun turnOffAllInScope(scopeId: String): Int {
+        val turnedOff = ShareEntity.update("enabled = false, reissueOnly = true where scopeId = ?1 and enabled = true", scopeId)
+        ShareEntity.update("reissueOnly = true where scopeId = ?1 and reissueOnly = false and deletedAt is null", scopeId)
+        return turnedOff
+    }
 
     // --- contributor identities (cr-0101) --------------------------------------
 

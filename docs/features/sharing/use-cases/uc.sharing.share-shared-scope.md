@@ -64,29 +64,41 @@ create-gate (scope) and a member-removal hook are new.
   authorizes.
 - **A4 — renew (re-issue) a link.** One request makes a **new** share — a new id, a fresh `K_share` — carrying the
   old one's note, private label, expiry and password (re-sealed under the new key, the password with a fresh salt),
-  and turns the old one off in the **same transaction**; any refusal writes nothing. The role and the Memory come
+  and **deletes** the old one (A7) in the **same transaction**; any refusal writes nothing. The role and the Memory come
   from the old share; an uploader link keeps the Memory's drop key, since every upload so far is sealed to it. The
   owner renews their own share, live or off; any member renews a share that is off, and owns the new one. The old
   link `404`s exactly as a revoked one — no redirect, which would hand the new link to the person it is meant to cut
-  off — and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
+  off — can never come back, and the curator hands out the new one. Guests keep the photos they added; a returning guest names themself
   again on the new link and can no longer delete their earlier uploads (a guest's session is per link), and the new
   link's storage budget starts at zero.
 - **A5 — turning off every link of a space sticks.** Three paths turn off every enabled share of a space — whoever
-  made it — and **mark** each one so it comes back only by renew (A4), never re-activate: a group removal's opt-in
+  made it — and **mark** every link of the space, one its owner had already switched off included, so each comes
+  back only by renew (A4), never re-activate: a group removal's opt-in
   ([uc.spaces.manage-group-members](../../spaces/use-cases/uc.spaces.manage-group-members.md)), a tenant removal's
   ([uc.spaces.remove-tenant-member](../../spaces/use-cases/uc.spaces.remove-tenant-member.md) A5), and a scope
   owner's switch-off with no removal (A6 there, and in the group panel). Each share's owner renews the ones still
   wanted. The mark is what makes it stick: without it, a link with no recovery copy whose owner is still a member
   would come back with one click from any member. Forcing a switch-off on every removal would break every guest's
   link even when someone leaves on good terms; a group owner already holds the stronger power of deleting the group.
+- **A7 — delete a link.** A switched-off link stays in the manage panel — folded under a count — until someone
+  **deletes** it, behind a confirm ([ADR 0029](../../../decisions/0029-public-viewer-share.md) §7). The server keeps
+  a **tombstone**: the id, scope, Memory, role and dates, every ciphertext (sealed name, note, label, recovery copy,
+  password fields, the wrap or drop key) cleared. The link `404`s, can never be re-activated, renewed or edited, and
+  is in no listing; its id is never minted again. The photos its guests added **stay** in the Memory, readable as
+  before — an uploader guest's photos open only through their identity's wrapped key, which goes only once nothing
+  of theirs remains. The share's **owner** deletes it at any time (an enabled one is switched off in the same
+  transaction; the panel offers delete on switched-off links only); **another member** only once the owner is no
+  longer a member of the scope — a co-member's parked link is theirs, note and password copy included. The server
+  serves its verdict on every row (`deletable`) from the predicate the delete runs. Erasing a Memory deletes its
+  links (`uc.memory.delete-node` E4); erasing a whole space removes its links and **retires** their ids.
 - **E1 — non-member / lost grant:** a caller who is not a member of the scope (or cannot open `K_mem`) cannot
   create a share there — the same 404/authorization path as any non-member scope access (no reveal).
 
 ## Quality notes
 
 - **Operator-blind, unchanged.** The share record is the same opaque shape (`shareId`, `symWrap(K_share, K_mem)`,
-  `role`, sealed name, `nodeId`, `owner_account`, `enabled`); a shared-scope share adds **no** new operator-visible
-  signal. The server never sees `K_share`, `K_mem`, names, or the visitor.
+  `role`, sealed name, `nodeId`, `owner_account`, `enabled`, and a deleted link's coarse `deleted_at`); a
+  shared-scope share adds **no** new operator-visible signal. The server never sees `K_share`, `K_mem`, names, or the visitor.
 - **Already-read is not retractable.** Deactivation stops *new* access; a removed member who kept both the link
   and the ciphertext they already fetched can replay *that* — and, because they kept `K_mem`, could decrypt further
   ciphertext only via a **colluding malicious operator**. A link they could copy works against an honest server
@@ -104,14 +116,16 @@ create-gate (scope) and a member-removal hook are new.
 household can turn a shared memory into a browser link for people outside. And it stays honest when someone leaves —
 the moment a member is removed, the links *they* made stop working, and you can switch off every link of the space in
 the same step — or at any time. A link made before someone left keeps working until you **renew** it: renewing gives it a new address
-and switches the old one off for good, so hand the new one out — your guests keep their photos.
+and deletes the old one, so hand the new one out — your guests keep their photos. A link you switched off can be
+**deleted** for good: what it said goes, the photos guests added stay.
 
 **DE —** Geteilte Bereiche bekommen dieselben öffentlichen Links wie deine persönlichen Erinnerungen: jede:r in der
 Gruppe oder im Haushalt kann eine geteilte Erinnerung in einen Browser-Link für Außenstehende verwandeln. Und es
 bleibt ehrlich, wenn jemand geht — sobald ein Mitglied entfernt wird, hören die Links auf zu funktionieren, die diese
 Person erstellt hat, und im selben Schritt — oder jederzeit — lassen sich alle Links des Bereichs abschalten. Ein Link, der entstanden ist,
 bevor jemand gegangen ist, funktioniert weiter, bis du ihn **erneuerst**: Dann bekommt er eine neue Adresse, und die
-alte wird endgültig abgeschaltet — gib die neue weiter; deine Gäste behalten ihre Fotos.
+alte wird gelöscht — gib die neue weiter; deine Gäste behalten ihre Fotos. Einen abgeschalteten Link kannst du
+endgültig **löschen**: Was er enthielt, verschwindet; die Fotos, die Gäste hinzugefügt haben, bleiben.
 
 ## Related
 
@@ -119,7 +133,7 @@ alte wird endgültig abgeschaltet — gib die neue weiter; deine Gäste behalten
 - Roles extended: [uc.sharing.share-public-viewer](uc.sharing.share-public-viewer.md),
   [uc.sharing.share-contributor](uc.sharing.share-contributor.md),
   [uc.sharing.share-uploader](uc.sharing.share-uploader.md)
-- Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) §6 (scope + removal governance),
+- Decisions: [ADR 0029](../../../decisions/0029-public-viewer-share.md) §6 (scope + removal governance), §7 (delete),
   [ADR 0075](../../../decisions/0075-a-link-a-departed-member-could-copy-is-reissued.md) (re-issue, never revive),
   [ADR 0024](../../../decisions/0024-scope-key-rotation.md) (`K_mem` stable across rotation),
   [ADR 0025](../../../decisions/0025-forward-secrecy-policy-per-scope.md) (tenant = ACL-revoke, group = rotation),

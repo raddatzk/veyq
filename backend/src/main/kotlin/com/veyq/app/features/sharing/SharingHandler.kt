@@ -159,6 +159,14 @@ sealed interface RevokeShareOutcome {
     object NotFound : RevokeShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
 }
 
+sealed interface DeleteShareOutcome {
+    object Done : DeleteShareOutcome
+    object Suspended : DeleteShareOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : DeleteShareOutcome, HttpFailure by Failures.scopeDeleting
+    /** No such share, deleted already, the caller is no member, or another member's who is still here — one 404. */
+    object NotFound : DeleteShareOutcome, HttpFailure by httpFailure("share_not_found", NOT_FOUND)
+}
+
 sealed interface UpdateShareOutcome {
     object Done : UpdateShareOutcome
     object Suspended : UpdateShareOutcome, HttpFailure by Failures.tenantSuspended
@@ -196,8 +204,9 @@ sealed interface ReissueShareOutcome {
     object IdTaken : ReissueShareOutcome, HttpFailure by Failures.idTaken
 }
 
-/** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4). */
-data class ListedShare(val share: ShareEntity, val reissueRequired: Boolean)
+/** A share as the manage list serves it: the row plus [ReissuePolicy]'s answer for it (ADR 0075 point 4) and
+ *  whether the caller may delete it — the gate's own answer (ADR 0029 §7). */
+data class ListedShare(val share: ShareEntity, val reissueRequired: Boolean, val deletable: Boolean)
 
 /** The shares on one Memory node (cr-0104) — `[]` for a non-member or an unknown node, a refusal only for a member. */
 sealed interface NodeSharesOutcome {
@@ -291,7 +300,7 @@ class SharingHandler(
      * that space's sealed names (uc.spaces.scope-access).
      */
     fun list(userId: String): List<ListedShare> =
-        listed(store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok })
+        listed(userId, store.listByOwner(userId).filter { access.check(userId, it.scopeId, READ) == Access.Ok })
 
     /** Every public share on a Memory node, for the shared-scope manage panel (cr-0104): visible to any **member**
      *  of the node's scope, not only the shares' owners — so a member can see + adopt an orphaned (disabled) share.
@@ -300,7 +309,7 @@ class SharingHandler(
     fun listForNode(userId: String, nodeId: String): NodeSharesOutcome {
         val node = store.findNode(nodeId) ?: return NodeSharesOutcome.Shares(emptyList())
         return when (access.check(userId, node.scopeId, READ)) {
-            Access.Ok -> NodeSharesOutcome.Shares(listed(store.listByNode(nodeId)))
+            Access.Ok -> NodeSharesOutcome.Shares(listed(userId, store.listByNode(nodeId)))
             Access.Suspended -> NodeSharesOutcome.Suspended
             else -> NodeSharesOutcome.Shares(emptyList())
         }
@@ -313,6 +322,29 @@ class SharingHandler(
             .refusal(RevokeShareOutcome.NotFound, RevokeShareOutcome.Suspended, RevokeShareOutcome.Deleting)?.let { return it }
         return if (store.revoke(userId, shareId)) RevokeShareOutcome.Done else RevokeShareOutcome.NotFound
     }
+
+    /**
+     * Delete a share (ADR 0029 §7): a tombstone — its ciphertext goes, its id and its guests' uploads stay. Its owner
+     * may at any time, an enabled share turned off in the same transaction; another member only once the owner is
+     * no longer a member of the scope ([deletable]) — deleting a co-member's parked link would destroy their note
+     * and password copy, which re-activation never did. Everything else is the non-enumerable 404.
+     */
+    fun delete(userId: String, shareId: String): DeleteShareOutcome {
+        val share = store.find(shareId) ?: return DeleteShareOutcome.NotFound
+        access.check(userId, share.scopeId, WRITE)
+            .refusal(DeleteShareOutcome.NotFound, DeleteShareOutcome.Suspended, DeleteShareOutcome.Deleting)?.let { return it }
+        if (!deletable(userId, share)) return DeleteShareOutcome.NotFound
+        return if (store.delete(shareId)) DeleteShareOutcome.Done else DeleteShareOutcome.NotFound
+    }
+
+    /** Whether [userId] may delete [share] — the ONE source of the delete gate and the list's `deletable`. */
+    private fun deletable(userId: String, share: ShareEntity): Boolean = share.ownerAccount == userId || !ownerIsMember(share)
+
+    /** "Still a member" as the gate answers it for a writer — the scope AND the tenant, so a member removed from the
+     *  tenant, whose rows on other spaces linger through the grace window, counts as gone. Only membership counts:
+     *  a space in its deletion grace refuses every writer alike, which is the gate's answer, not the owner's. */
+    private fun ownerIsMember(share: ShareEntity): Boolean =
+        access.check(share.ownerAccount, share.scopeId, WRITE) != Access.NotMember
 
     /** Edit a share in place (cr-0115/cr-0116/cr-0119, ADR 0036) — owner-gated. A share not owned by the caller is a
      *  non-enumerable 404. The `K_share`-sealed ciphertexts (re-sealed client-side) full-replace the note + name;
@@ -351,23 +383,24 @@ class SharingHandler(
         return ReactivateShareOutcome.Done
     }
 
-    /** The manage list's rows, each with [reissueRequired] — the scope read once per scope, not once per row. */
-    private fun listed(rows: List<ShareEntity>): List<ListedShare> {
+    /** The manage list's rows, each with [reissueRequired] and [deletable] for [userId] — the scope read once per
+     *  scope, not once per row. */
+    private fun listed(userId: String, rows: List<ShareEntity>): List<ListedShare> {
         val scopesById = rows.map { it.scopeId }.distinct().mapNotNull { scopes.find(it) }.associateBy { it.id }
-        return rows.map { s -> ListedShare(s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true) }
+        return rows.map { s ->
+            ListedShare(s, scopesById[s.scopeId]?.let { reissueRequired(s, it) } ?: true, deletable(userId, s))
+        }
     }
 
     /**
      * [ReissuePolicy] for one share from what the server holds (ADR 0075 point 4) — the ONE source of both the
      * re-activation refusal and the list's `reissueRequired`, so the panel's mark and the refusal cannot disagree.
-     * "Still a member" is what the gate answers for a writer — the scope AND the tenant, so a member removed from the
-     * tenant, whose rows on other spaces linger through the grace window, counts as gone. Only membership counts
-     * here: a space in its deletion grace refuses every writer alike, which is the gate's answer, not the link's.
+     * "Still a member" is [ownerIsMember].
      */
     private fun reissueRequired(share: ShareEntity, scope: ScopeEntity): Boolean =
         ReissuePolicy.required(
             reissueOnly = share.reissueOnly,
-            ownerIsMember = access.check(share.ownerAccount, share.scopeId, WRITE) != Access.NotMember,
+            ownerIsMember = ownerIsMember(share),
             copyEpoch = share.sealedShareKeyEpoch,
             currentEpoch = scope.currentEpoch,
             removalsAtMint = share.memberRemovalsAtMint,
@@ -376,7 +409,7 @@ class SharingHandler(
 
     /**
      * Re-issue a share (ADR 0075): a new share under the client-minted [newShareId] with a fresh `K_share`, and the
-     * old one turned off, in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
+     * old one deleted (ADR 0029 §7), in one transaction ([SharingStore.reissue]). The Memory, the scope and the role come from
      * the old row, so a re-issue can neither move a link nor flip it into or out of UPLOADER. An enabled share is
      * the owner's to re-issue (as revoke); a disabled one any member's, who owns the new share (as re-activation
      * adopts). Every refusal writes nothing.
@@ -399,7 +432,11 @@ class SharingHandler(
             old.id, newShareId, userId, keys, sealedName, expiresAt, sealedNote, sealedShareKey, sealedShareKeyEpoch,
             sealedShareName, passwordRequired, pwSalt, pwVerifier, sealedPassword,
         )
-        return if (created) ReissueShareOutcome.Created(newShareId) else ReissueShareOutcome.IdTaken
+        return when (created) {
+            SharingStore.ReissueResult.CREATED -> ReissueShareOutcome.Created(newShareId)
+            SharingStore.ReissueResult.ID_TAKEN -> ReissueShareOutcome.IdTaken
+            SharingStore.ReissueResult.NOT_FOUND -> ReissueShareOutcome.NotFound
+        }
     }
 
     /**

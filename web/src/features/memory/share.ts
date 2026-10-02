@@ -451,6 +451,9 @@ export type ManagedShare = {
    *  The server computes it with the predicate its re-activation refusal runs (ADR 0075 point 4) — the client has
    *  no removal count to compare, so it reads this rather than deriving it. */
   reissueRequired: boolean
+  /** True when the caller may delete this share ({@link deleteShare}): it is theirs, or its owner has left the
+   *  scope. The server's own gate answer (ADR 0029 §7) — the client cannot tell whether a co-member is still here. */
+  deletable: boolean
 }
 
 /** List every share on one Memory visible to a scope member (cr-0104) — the manage-shares panel. Scoped by
@@ -474,6 +477,7 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
       passwordRequired: r.passwordRequired ?? false,
       sealedPassword: r.sealedPassword ?? null,
       reissueRequired: r.reissueRequired,
+      deletable: r.deletable,
     }))
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
 }
@@ -481,6 +485,12 @@ export async function listSharesFor(nodeId: string): Promise<ManagedShare[]> {
 /** Revoke a share (soft — the next guest request 404s). */
 export async function revokeShare(shareId: string): Promise<void> {
   await withRefresh(() => sharesApi().revokeShare({ shareId }))
+}
+
+/** Delete a share link for good (ADR 0029 §7): the server keeps only its id, so it can never be switched back on,
+ *  renewed or minted again; the photos its guests added stay in the Memory. */
+export async function deleteShare(shareId: string): Promise<void> {
+  await withRefresh(() => sharesApi().deleteShare({ shareId }))
 }
 
 /** Re-activate a soft-revoked share and adopt its ownership (cr-0104) — any current member may take over an
