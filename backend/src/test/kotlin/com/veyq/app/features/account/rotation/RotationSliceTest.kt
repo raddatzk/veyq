@@ -8,7 +8,9 @@ import com.veyq.app.features.account.pairing.DevicePairingEntity
 import com.veyq.app.shared.tenant.TenantEntity
 import com.veyq.app.shared.scope.ScopeEntity
 import com.veyq.app.features.tasks.CapabilityTags
+import com.veyq.app.features.tasks.JobDeclineEntity
 import com.veyq.app.features.tasks.JobEntity
+import com.veyq.app.features.spaces.scope.ScopeEpochEntity
 import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.crypto.TestProofKey
 import com.veyq.app.shared.identity.MasterKeyWrapEntity
@@ -25,6 +27,7 @@ import jakarta.inject.Inject
 import org.hamcrest.CoreMatchers.equalTo
 import org.hamcrest.CoreMatchers.hasItem
 import org.hamcrest.CoreMatchers.not
+import org.hamcrest.CoreMatchers.nullValue
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotNull
 import org.junit.jupiter.api.Assertions.assertNull
@@ -146,7 +149,7 @@ class RotationSliceTest {
 
     @Test
     fun aScopeThatAlreadyHadALiveRotationStillExcludesTheRotator() {
-        // The coalescing trap: origination skips a scope that already carries a live rotation job (a removal cut
+        // The coalescing trap: origination joins a scope's already-unclaimed rotation job (a removal cut
         // moments earlier), and the naive shape then writes no exclusion — leaving the rotation this account
         // triggered claimable by the very account it locks out.
         val rotator = seedAccount()
@@ -374,6 +377,234 @@ class RotationSliceTest {
         assertEquals(OLD_IDENTITY_PUB, field(user) { it.identityPublicKey }, "a rejected request writes nothing")
     }
 
+    // --- the queued rotation an account rotation leaves behind (uc.spaces.complete-queued-rotation) -----------
+
+    @Test
+    fun anAccountRotationDuringALeaseGetsItsOwnJobAndExcludesTheRotatorFromBoth() {
+        // D3 + D5: a leased job's worker may already have read the directory with the OLD identity in it, so the
+        // rotation gets a fresh job; and the rotator is excluded from the leased one too, or its lease expiring
+        // would hand the rotator their own rotation by lazy reclaim.
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        val shared = seedTenantScope()
+        seedGrantedMembership(rotator, shared)
+        seedGrantedMembership(coOwner, shared)
+        val leased = seedRotationJob(shared)
+        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(leased))
+
+        rotate(rotator).then().statusCode(200)
+
+        val fresh = rotationJobsIn(shared) - leased
+        assertEquals(1, fresh.size, "an account rotation during a lease queues a job of its own")
+        assertEquals(JobEntity.PENDING, statusOf(fresh.single()))
+        assertEquals(ROTATION_ORIGINATOR, declineReason(fresh.single(), rotator), "excluded from the fresh job")
+        assertEquals(ROTATION_ORIGINATOR, declineReason(leased, rotator), "and from the leased one")
+        expireLease(leased)
+        claim(rotator, CapabilityTags.SCOPE_ROTATION).then().statusCode(204)
+        // Positive control: both jobs are real work for the other owner.
+        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(leased))
+        claim(coOwner, CapabilityTags.SCOPE_ROTATION).then().statusCode(200).body("jobId", equalTo(fresh.single()))
+    }
+
+    @Test
+    fun theRotatorCannotCommitWhileTheirExclusionIsLive() {
+        // D7 clause 1 (#206): for an owner rotator the claim was the only place ADR 0060 Decision 4 was enforced;
+        // a client of their own could post the commit directly.
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        val pending = seedTenantScope()
+        val leased = seedTenantScope()
+        listOf(pending, leased).forEach { seedGrantedMembership(rotator, it); seedGrantedMembership(coOwner, it) }
+        rotate(rotator).then().statusCode(200)
+        claimJob(coOwner, leased) // the leased leg: every live job of that scope is held by the other owner
+
+        listOf(pending, leased).forEach { scope ->
+            commit(rotator, scope, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
+            assertEquals(0, epochOf(scope), "nothing stored")
+            assertEquals(0L, chainLinks(scope), "no chain link stored")
+            // Positive control, same scope and moment: the other owner's identical commit lands.
+            commit(coOwner, scope, rotator, coOwner).then().statusCode(201)
+        }
+
+        // Reason filter: only the rotation exclusion counts — a worker's own decline is about one job.
+        val worker = seedAccount()
+        val other = seedTenantScope()
+        seedGrantedMembership(worker, other)
+        val job = seedRotationJob(other)
+        assertEquals(job, claimJob(worker, other))
+        given().header("Authorization", bearer(worker)).contentType(ContentType.JSON).body("""{"reason":"identity_changed"}""")
+            .`when`().post("/api/tasks/$job/decline").then().statusCode(200)
+        commit(worker, other, worker).then().statusCode(201)
+    }
+
+    @Test
+    fun afterTheCoveringRotationTheRotatorIsBehindUntilReAdmitted() {
+        // D7 clause 2 (#206): once the covering rotation landed (skipping the rotator's changed key), the rotator's
+        // live declines are all on DONE jobs and only their behind grant still holds them — until a human re-admits.
+        val tenant = seedTenantScope()
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        seedGrantedMembership(rotator, tenant)
+        seedGrantedMembership(coOwner, tenant)
+        val group = seedGroup(tenant, rotator, coOwner)
+        rotate(rotator).then().statusCode(200)
+        val job = claimJob(coOwner, group)
+        commit(coOwner, group, coOwner).then().statusCode(201) // a client that sees the rotator's key as changed
+        complete(coOwner, job).then().statusCode(204)
+
+        commit(rotator, group, rotator, coOwner).then().statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(1, epochOf(group), "nothing stored")
+
+        // Re-admission ends it: grant-delivery writes the rotator the current epoch, through the real reconcile.
+        val delivery = claimJob(coOwner, group, CapabilityTags.GRANT_DELIVERY)
+        given().header("Authorization", bearer(coOwner)).contentType(ContentType.JSON)
+            .body("""{"sealedResult":"cmUtYWRtaXR0ZWQ=","epoch":1,${TestAdmission.SIGNATURE_JSON}}""")
+            .`when`().post("/api/tasks/$delivery/complete").then().statusCode(204)
+        commit(rotator, group, rotator, coOwner).then().statusCode(201)
+
+        // Grant-less: an owner promoted before any grant reached them holds no key to chain from.
+        val promoted = seedAccount()
+        seedMembership(promoted, tenant, MembershipEntity.MEMBER)
+        seedMembership(promoted, group, MembershipEntity.MEMBER, grant = null)
+        setRole(coOwner, group, promoted, MembershipEntity.OWNER)
+        commit(promoted, group, promoted, coOwner).then().statusCode(409).body("code", equalTo("stale_epoch"))
+        assertEquals(2, epochOf(group))
+    }
+
+    @Test
+    fun theRotatorReadsEachQueuedRotationsStateFromTheServer() {
+        // D9 (#225): the status is the server's, re-readable, and `secured` never shows while the old identity can
+        // hold the current epoch. Every leg is set up before the one rotation, which covers every scope at once.
+        val tenant = seedTenantScope()
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        val member = seedAccount()
+        listOf(rotator, coOwner, member).forEach { seedGrantedMembership(it, tenant) }
+        val waitingThenFailed = seedGroup(tenant, rotator, coOwner)
+        val unswept = seedGroup(tenant, rotator, coOwner)
+        val securedByDone = seedGroup(tenant, rotator, coOwner)
+        val securedByBehind = seedGroup(tenant, rotator, coOwner)
+        val ordering = seedGroup(tenant, rotator, coOwner)
+        val soleOwner = seedGroup(tenant, rotator)
+        seedMembership(member, soleOwner, MembershipEntity.MEMBER)
+        val olderJob = seedRotationJob(ordering)
+        assertEquals(olderJob, claimJob(coOwner, ordering))
+        states(coOwner).then().statusCode(200).body("size()", equalTo(0)) // never rotated: nothing to read
+
+        rotate(rotator).then().statusCode(200)
+
+        assertEquals("waiting", stateOf(rotator, waitingThenFailed))
+        assertEquals("stalled", stateOf(rotator, soleOwner), "no owner but the excluded rotator")
+        setRole(rotator, soleOwner, member, MembershipEntity.OWNER) // E4's remedy
+        assertEquals("waiting", stateOf(rotator, soleOwner), "a granted owner without a decline makes it claimable")
+
+        deadLetter(coOwner, waitingThenFailed)
+        assertEquals("failed", stateOf(rotator, waitingThenFailed))
+
+        repeat(MAX_ATTEMPTS - 1) { fail(coOwner, claimJob(coOwner, unswept)) }
+        expireLease(claimJob(coOwner, unswept)) // the last attempt crashes: LEASED, expired, never swept
+        assertEquals("failed", stateOf(rotator, unswept), "dead in fact although the row still reads LEASED")
+
+        val covering = claimJob(coOwner, securedByDone)
+        commit(coOwner, securedByDone, coOwner).then().statusCode(201)
+        complete(coOwner, covering).then().statusCode(204)
+        assertEquals("secured", stateOf(rotator, securedByDone))
+
+        deadLetter(coOwner, securedByBehind)
+        commit(coOwner, securedByBehind, coOwner).then().statusCode(201) // a synchronous rotation, no job behind it
+        assertEquals("secured", stateOf(rotator, securedByBehind), "the old identity's grant is behind")
+
+        commit(coOwner, ordering, rotator, coOwner).then().statusCode(201) // keeps the rotator current on purpose
+        complete(coOwner, olderJob).then().statusCode(204)
+        deadLetter(coOwner, ordering)
+        assertEquals("failed", stateOf(rotator, ordering), "the newest excluding job decides, not an older DONE one")
+    }
+
+    @Test
+    fun fromFailedTheRotatorRequeuesAndTheExclusionIsBack() {
+        // D9 + Q6: re-queue only from `failed`; it excludes the rotator again, which closes the Q5 lapse.
+        val tenant = seedTenantScope()
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        val cut = seedAccount()
+        listOf(rotator, coOwner, cut).forEach { seedGrantedMembership(it, tenant) }
+        val scope = seedGroup(tenant, rotator, coOwner)
+        val twin = seedGroup(tenant, rotator, coOwner)
+        val joined = seedGroup(tenant, rotator, coOwner)
+        seedMembership(cut, joined, MembershipEntity.MEMBER)
+        val alone = seedGroup(tenant, rotator)
+        rotate(rotator).then().statusCode(200)
+        listOf(scope, twin, joined).forEach { deadLetter(coOwner, it) }
+        val jobsBefore = rotationJobsIn(scope).size
+
+        requeue(rotator, scope).then().statusCode(200).body("scopeId", equalTo(scope.scopeId)).body("state", equalTo("waiting"))
+        val requeued = rotationJobsIn(scope).single { statusOf(it) == JobEntity.PENDING }
+        assertEquals(ROTATION_ORIGINATOR, declineReason(requeued, rotator))
+        commit(rotator, scope, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
+        // The control on the same predicate: the twin, not re-queued, is the Q5 lapse the re-queue closes.
+        commit(rotator, twin, rotator, coOwner).then().statusCode(201)
+
+        requeue(rotator, scope).then().statusCode(409).body("code", equalTo("rotation_not_failed"))
+        assertEquals(jobsBefore + 1, rotationJobsIn(scope).size, "a refused re-queue writes nothing")
+        requeue(rotator, alone).then().statusCode(404).body("code", equalTo("rotation_not_found"))
+        assertEquals(requeued, claimJob(coOwner, scope))
+
+        // A removal queued an unclaimed job since the dead-letter: the re-queue joins it and excludes the rotator.
+        given().header("Authorization", bearer(coOwner)).`when`().delete("/api/tenants/${tenant.tenantId}/members/$cut")
+            .then().statusCode(204)
+        val removalJob = rotationJobsIn(joined).single { statusOf(it) == JobEntity.PENDING }
+        assertNull(declineReason(removalJob, rotator))
+        requeue(rotator, joined).then().statusCode(200)
+        assertEquals(listOf(removalJob), rotationJobsIn(joined).filter { statusOf(it) == JobEntity.PENDING }, "joined, not added")
+        assertEquals(ROTATION_ORIGINATOR, declineReason(removalJob, rotator))
+    }
+
+    @Test
+    fun anOwnerSeesAStuckCompromiseRotationOnTheirOwnRowAndRequeuesIt() {
+        // D10 (#234): the scope's other owners are the ones who can act, so the state shows on their own rows.
+        val tenant = seedTenantScope()
+        val rotator = seedAccount()
+        val coOwner = seedAccount()
+        val thirdOwner = seedAccount()
+        val member = seedAccount()
+        val decliner = seedAccount()
+        val keyless = seedAccount()
+        listOf(rotator, coOwner, thirdOwner, member, decliner, keyless).forEach { seedGrantedMembership(it, tenant) }
+        val group = seedGroup(tenant, rotator, coOwner, thirdOwner)
+        seedMembership(member, group, MembershipEntity.MEMBER)
+        val stalled = seedGroup(tenant, rotator, decliner)
+        seedMembership(keyless, stalled, MembershipEntity.OWNER, grant = null)
+        rotate(rotator).then().statusCode(200)
+
+        assertNull(ownerRow(coOwner, tenant, group), "waiting needs nobody")
+        deadLetter(coOwner, group)
+        assertEquals("failed", ownerRow(coOwner, tenant, group))
+        assertEquals("failed", ownerRow(thirdOwner, tenant, group))
+        assertNull(ownerRow(member, tenant, group), "a plain member learns nothing they could act on")
+
+        val declined = claimJob(decliner, stalled)
+        given().header("Authorization", bearer(decliner)).contentType(ContentType.JSON).body("""{"reason":"identity_changed"}""")
+            .`when`().post("/api/tasks/$declined/decline").then().statusCode(200)
+        assertEquals("stalled", ownerRow(decliner, tenant, stalled), "no granted owner without a decline is left")
+
+        // The tenant root, read through the switcher's row.
+        deadLetter(coOwner, tenant)
+        given().header("Authorization", bearer(coOwner)).`when`().get("/api/scopes/my-tenants").then().statusCode(200)
+            .body("find { it.tenantId == '${tenant.tenantId}' }.compromiseRotation", equalTo("failed"))
+
+        val jobsBefore = rotationJobsIn(group).size
+        requeueAsOwner(thirdOwner, group).then().statusCode(200).body("compromiseRotation", nullValue())
+        val requeued = rotationJobsIn(group).single { statusOf(it) == JobEntity.PENDING }
+        assertEquals(ROTATION_ORIGINATOR, declineReason(requeued, rotator), "the failed rotator is excluded again")
+        assertNull(declineReason(requeued, thirdOwner), "the owner who asked is not")
+        assertEquals(requeued, claimJob(thirdOwner, group))
+        commit(rotator, group, rotator, coOwner).then().statusCode(403).body("code", equalTo("rotation_excluded"))
+
+        requeueAsOwner(thirdOwner, group).then().statusCode(409).body("code", equalTo("rotation_not_failed"))
+        requeueAsOwner(member, group).then().statusCode(403).body("code", equalTo("not_scope_owner"))
+        assertEquals(jobsBefore + 1, rotationJobsIn(group).size, "a refused re-queue writes nothing")
+    }
+
     // --- helpers ---------------------------------------------------------------------------------------------
 
     /** A rotation of this fixture's account. The two document versions default to 0 — what an account that never
@@ -409,9 +640,62 @@ class RotationSliceTest {
         recoveryWrap = SecretKeyProof.Wrap(NEW_REC_WRAP, KDF),
     )
 
-    private fun claim(userId: String, tag: String) =
+    private fun claim(userId: String, tag: String, scope: SeededScope? = null) =
         given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
-            .body("""{"capabilityTags":["$tag"]}""").`when`().post("/api/tasks/claim")
+            .body("""{"capabilityTags":["$tag"]${scope?.let { ""","scopeId":"${it.scopeId}"""" } ?: ""}}""")
+            .`when`().post("/api/tasks/claim")
+
+    private fun claimJob(userId: String, scope: SeededScope, tag: String = CapabilityTags.SCOPE_ROTATION): String =
+        claim(userId, tag, scope).then().statusCode(200).extract().path("jobId")
+
+    private fun fail(userId: String, jobId: String): String =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("{}")
+            .`when`().post("/api/tasks/$jobId/fail").then().statusCode(200).extract().path("status")
+
+    private fun complete(userId: String, jobId: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON).body("{}")
+            .`when`().post("/api/tasks/$jobId/complete")
+
+    /** Dead-letter [scope]'s live rotation job through the real path: claim and fail it until it is `failed`. */
+    private fun deadLetter(worker: String, scope: SeededScope) {
+        repeat(MAX_ATTEMPTS) { if (fail(worker, claimJob(worker, scope)) == "failed") return }
+        error("the job did not dead-letter after $MAX_ATTEMPTS failed claims")
+    }
+
+    /** A well-formed rotation commit at [scope]'s next epoch, granting [grantees]. */
+    private fun commit(userId: String, scope: SeededScope, vararg grantees: String) =
+        given().header("Authorization", bearer(userId)).contentType(ContentType.JSON)
+            .body(
+                """{"epoch":${epochOf(scope) + 1},"wrappedPrev":"$ROT_PREV","grants":[${
+                    grantees.joinToString(",") { """{"userId":"$it","wrappedGrant":"$ROTATOR_GRANT",${TestAdmission.SIGNATURE_JSON}}""" }
+                }],${TestAdmission.openJson(scope.scopeId)}}""",
+            )
+            .`when`().post("/api/scopes/${scope.scopeId}/epochs")
+
+    private fun setRole(caller: String, scope: SeededScope, target: String, role: String) {
+        given().header("Authorization", bearer(caller)).contentType(ContentType.JSON).body("""{"role":"$role"}""")
+            .`when`().patch("/api/scopes/${scope.scopeId}/members/$target").then().statusCode(200)
+    }
+
+    private fun states(userId: String) =
+        given().header("Authorization", bearer(userId)).`when`().get("/api/account/rotation/scopes")
+
+    /** The state [userId]'s own read serves for [scope], or null when it lists no such scope. */
+    private fun stateOf(userId: String, scope: SeededScope): String? =
+        states(userId).then().statusCode(200).extract().path("find { it.scopeId == '${scope.scopeId}' }.state")
+
+    private fun requeue(userId: String, scope: SeededScope) =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/account/rotation/scopes/${scope.scopeId}/requeue")
+
+    private fun requeueAsOwner(userId: String, scope: SeededScope) =
+        given().header("Authorization", bearer(userId)).`when`().post("/api/scopes/${scope.scopeId}/rotation/requeue")
+
+    /** The `compromiseRotation` of [userId]'s own row for [scope] in `GET /api/scopes` (the tenant's Host). */
+    private fun ownerRow(userId: String, tenant: SeededScope, scope: SeededScope): String? =
+        given().header("Authorization", bearer(userId)).header("X-Forwarded-Host", tenant.domain)
+            .`when`().get("/api/scopes").then().statusCode(200)
+            .body("find { it.id == '${scope.scopeId}' }.id", equalTo(scope.scopeId))
+            .extract().path("find { it.id == '${scope.scopeId}' }.compromiseRotation")
 
     private fun seedAccount(): String {
         val userId = seedUser(
@@ -503,6 +787,48 @@ class RotationSliceTest {
             .firstResult()?.id
     }
 
+    /** Every rotation job of [scope], whatever its status, oldest first. */
+    private fun rotationJobsIn(scope: SeededScope): List<String> = QuarkusTransaction.requiringNew().call {
+        JobEntity.find("scopeId = ?1 and capabilityTag = ?2 order by createdAt", scope.scopeId, CapabilityTags.SCOPE_ROTATION)
+            .list().map { it.id }
+    }
+
+    private fun statusOf(jobId: String): String = QuarkusTransaction.requiringNew().call { JobEntity.findById(jobId)!!.status }
+
+    private fun declineReason(jobId: String, workerId: String): String? = QuarkusTransaction.requiringNew().call<String?> {
+        JobDeclineEntity.find("jobId = ?1 and workerId = ?2", jobId, workerId).firstResult()?.reason
+    }
+
+    private fun expireLease(jobId: String) = QuarkusTransaction.requiringNew().run {
+        JobEntity.update("leaseExpiresAt = ?1 where id = ?2", Instant.now().minusSeconds(60), jobId)
+    }
+
+    private fun epochOf(scope: SeededScope): Int = TestAdmission.epochOf(scope.scopeId)
+
+    private fun chainLinks(scope: SeededScope): Long =
+        QuarkusTransaction.requiringNew().call { ScopeEpochEntity.count("scopeId", scope.scopeId) }
+
+    /** A GROUP in [tenant] that every one of [owners] owns and holds the grant of. */
+    private fun seedGroup(tenant: SeededScope, vararg owners: String): SeededScope {
+        val group = SeededScope(UUID.randomUUID().toString(), tenant.tenantId)
+        QuarkusTransaction.requiringNew().run {
+            ScopeEntity().apply {
+                id = group.scopeId; tenantId = tenant.tenantId; kind = ScopeEntity.GROUP
+                encryptedName = "bmFtZQ=="; createdAt = Instant.now()
+            }.persist()
+        }
+        owners.forEach { seedMembership(it, group, MembershipEntity.OWNER) }
+        return group
+    }
+
+    private fun seedMembership(userId: String, scope: SeededScope, role: String, grant: String? = "bWVtYmVyLWdyYW50") =
+        QuarkusTransaction.requiringNew().run {
+            MembershipEntity().apply {
+                id = UUID.randomUUID().toString(); this.userId = userId; tenantId = scope.tenantId
+                scopeId = scope.scopeId; this.role = role; wrappedGrant = grant; createdAt = Instant.now()
+            }.persist()
+        }
+
     private fun <T> field(userId: String, read: (VeyqUser) -> T): T? =
         QuarkusTransaction.requiringNew().call<T?> { VeyqUser.findById(userId)?.let(read) }
 
@@ -567,6 +893,10 @@ class RotationSliceTest {
         const val SIG_FOR_ROTATOR = "c2lnbmVkLWZvci10aGUtcm90YXRvcg=="
         const val SIG_FOR_CO_OWNER = "c2lnbmVkLWJ5LXRoZS1vbGQta2V5LWZvci10aGUtY28tb3duZXI="
         const val NEW_REGISTER = "bmV3LXJlZ2lzdGVy"
+
+        /** The job's attempts budget (`veyq.tasks.max-attempts`) — every claim spends one. */
+        const val MAX_ATTEMPTS = 5
+        const val ROTATION_ORIGINATOR = "rotation_originator"
 
         /** The Secret-Key proof key every seeded account registers; [OTHER_KEY] is a Secret Key it does not hold. */
         val PROOF_KEY = TestProofKey()

@@ -59,6 +59,23 @@ sealed interface CompleteResult {
     /** A grant-delivery completion stated an epoch that is not the scope's current one (ADR 0072): nothing written,
      *  the lease released without spending an attempt, so the job re-runs at the current epoch. */
     object StaleEpoch : CompleteResult, HttpFailure by httpFailure("stale_epoch", CONFLICT)
+    /** A `scope-rotation` job whose holder committed no epoch of its scope while holding the lease (#207): nothing
+     *  written, the lease kept. The worker's failure report then spends an attempt — the right outcome for a worker
+     *  that did not rotate. */
+    object RotationNotCommitted : CompleteResult, HttpFailure by httpFailure("rotation_not_committed", CONFLICT)
+}
+
+/** One rotator's queued compromise rotation on one scope, and where it stands ([CompromiseRotationPolicy]). */
+data class CompromiseRotationRow(val scopeId: String, val rotatorId: String, val state: CompromiseRotationState)
+
+/** Outcome of queueing a dead-lettered compromise rotation again. */
+sealed interface RequeueResult {
+    /** Queued again; the scope's rows after it. */
+    data class Requeued(val rows: List<CompromiseRotationRow>) : RequeueResult
+    /** No account rotation (of the named rotator, where one is named) ever queued a rotation on the scope. */
+    object NoRotation : RequeueResult
+    /** There is one, but none of it is `FAILED` — nothing to queue again. */
+    object NotFailed : RequeueResult
 }
 
 /** Outcome of a failure report — the job's status + attempts after requeue-or-dead-letter. */
@@ -95,31 +112,39 @@ class TasksStore {
         MembershipEntity.find("userId = ?1 and wrappedGrant is not null", userId)
             .list().map { it.scopeId }.toSet()
 
+    /** The scopes the caller owns — `scope-rotation`'s narrowing of eligibility (ADR 0021 §4). */
+    fun ownedScopeIds(userId: String): Set<String> =
+        MembershipEntity.find("userId = ?1 and role = ?2", userId, MembershipEntity.OWNER)
+            .list().map { it.scopeId }.toSet()
+
     /** A job by id, or null — the handler resolves the job's scope from it before asking the gate. */
     fun find(jobId: String): JobEntity? = JobEntity.findById(jobId)
 
     /**
-     * Atomically lease one claimable job for this worker: `scope ∈ [eligible] ∧ tag ∈ [tags]`, where
-     * a PENDING job — or a LEASED job whose lease has expired (lazy reclaim) — is claimable. Reconciles
-     * grant-delivery jobs first (structural origination) and dead-letters exhausted expired jobs. Returns the
-     * leased job, or null when nothing is claimable.
+     * Atomically lease one claimable job for this worker: `tag ∈ [eligibleByTag] ∧ scope ∈ eligibleByTag[tag]`, where
+     * a PENDING job — or a LEASED job whose lease has expired (lazy reclaim) — is claimable. Eligibility is **per
+     * tag** (ADR 0021 §4): a request naming several tags still gets each tag's job only on that tag's own scopes, so a
+     * `scope-rotation` job never reaches a caller who does not own its scope. Reconciles grant-delivery jobs first
+     * (structural origination) and dead-letters exhausted expired jobs. Returns the leased job, or null when nothing
+     * is claimable.
      */
     @Transactional
     fun claim(
-        userId: String, eligible: Set<String>, tags: List<String>,
+        userId: String, eligibleByTag: Map<String, Set<String>>,
         ttl: java.time.Duration, maxAttempts: Int,
     ): ClaimedJobView? {
-        // Eligible scopes come from the handler: the caller's granted scopes the scope-access gate lets them write
-        // (uc.spaces.scope-access A5), optionally narrowed to one the worker has opened.
-        val scopeIds = eligible
-        if (scopeIds.isEmpty() || tags.isEmpty()) return null
+        // Eligible scopes come from the handler, per tag: the caller's granted scopes the scope-access gate lets them
+        // write (uc.spaces.scope-access A5), narrowed by what the tag needs, optionally to one the worker has opened.
+        val eligible = eligibleByTag.filterValues { it.isNotEmpty() }
+        if (eligible.isEmpty()) return null
 
         val now = Instant.now()
-        if (CapabilityTags.GRANT_DELIVERY in tags) reconcileGrantDelivery(scopeIds, maxAttempts)
-        sweepDeadLetters(scopeIds, tags, now)
+        eligible[CapabilityTags.GRANT_DELIVERY]?.let { reconcileGrantDelivery(it, maxAttempts) }
+        eligible.forEach { (tag, scopeIds) -> sweepDeadLetters(scopeIds, tag, now) }
 
-        // Claimable candidates (auto-flush picks up the reconciled inserts). Managed entities, but never
-        // mutated — we CAS via a bulk update and build the view from known values, so nothing dirties at flush.
+        // Claimable candidates (auto-flush picks up the reconciled inserts), one query per tag over that tag's own
+        // scopes, then the oldest first across all of them. Managed entities, but never mutated — we CAS via a bulk
+        // update and build the view from known values, so nothing dirties at flush.
         // Exclude jobs this worker has DECLINED (cr-0098): a worker that refused a job (a conflicting identity pin)
         // must never be re-offered it — but it stays claimable by other workers (not a global veto).
         //
@@ -128,12 +153,14 @@ class TasksStore {
         // about an identity, not about a browser), and ADR 0060 Decision 4 now rests on it — the rotation
         // exclusion is a decline row for the rotator, and a per-device exclusion would let them claim their own
         // rotation from any other tab.
-        val candidates = JobEntity.find(
-            "scopeId in ?1 and capabilityTag in ?2 and attempts < maxAttempts and " +
-                "(status = ?3 or (status = ?4 and leaseExpiresAt < ?5)) and " +
-                "id not in (select d.jobId from JobDeclineEntity d where d.workerId = ?6) order by createdAt",
-            scopeIds, tags, JobEntity.PENDING, JobEntity.LEASED, now, userId,
-        ).list()
+        val candidates = eligible.flatMap { (tag, scopeIds) ->
+            JobEntity.find(
+                "scopeId in ?1 and capabilityTag = ?2 and attempts < maxAttempts and " +
+                    "(status = ?3 or (status = ?4 and leaseExpiresAt < ?5)) and " +
+                    "id not in (select d.jobId from JobDeclineEntity d where d.workerId = ?6)",
+                scopeIds, tag, JobEntity.PENDING, JobEntity.LEASED, now, userId,
+            ).list()
+        }.sortedBy { it.createdAt }
 
         for (c in candidates) {
             val newExpiry = now.plus(ttl)
@@ -179,8 +206,19 @@ class TasksStore {
     /**
      * Mark a job done. For grant-delivery the `sealedResult` **is** the wrappedGrant, written onto the target
      * membership — idempotently (no-op if the target already holds a grant, first-online-wins). A job already
-     * DONE is a success no-op, checked first; otherwise the caller must hold the job's current lease
-     * (ADR 0021 §6) — which also makes them a key-holder there, since only a granted scope is claimable.
+     * DONE is a success no-op; otherwise the caller must hold the job's lease (ADR 0021 §6) — which also makes them a
+     * key-holder there, since only a granted scope is claimable — and a `scope-rotation` job must carry that holder's
+     * own commit, made during its lease ([JobEntity.rotatedEpoch], #207).
+     *
+     * **The decision is the guarded write, not the read before it** (#235, developer-styleguide §12). The `DONE`
+     * lands in one compare-and-set — `status = LEASED and leaseHolder = <caller>`, and for a rotation the commit
+     * mark — whose row count decides the answer; the unlocked read above it only picks the answer for a call that
+     * cannot win anyway. Without the guard, a holder whose lease expired completes while another worker reclaims:
+     * its read still names it, the reclaim commits, and its unconditioned write then erases the new holder's lease.
+     * A lost completion writes nothing — the grant-delivery membership write runs only after the guarded `DONE`
+     * won. "Holder" keeps meaning `LEASED` to the caller with no expiry test: a holder whose lease expired but was
+     * not reclaimed still completes. The scope row is locked first (the stale-epoch read takes it), the order every
+     * writer of one scope's jobs and memberships follows, so this cannot deadlock against a rotation.
      */
     @Transactional
     fun complete(userId: String, jobId: String, sealedResult: String?, statedEpoch: Int?, grantSignature: String?): CompleteResult {
@@ -188,48 +226,72 @@ class TasksStore {
         if (job.status == JobEntity.DONE) return CompleteResult.Done // idempotent no-op
         if (job.status != JobEntity.LEASED || job.leaseHolder != userId) return CompleteResult.NotHolder
 
-        if (job.capabilityTag == CapabilityTags.GRANT_DELIVERY) {
-            val grant = sealedResult ?: return CompleteResult.MissingResult
-            val epoch = statedEpoch ?: return CompleteResult.MissingResult
-            // The worker's signature over the grant it posts (ADR 0028 Decision 6) — stored, never verified here.
-            val signature = grantSignature ?: return CompleteResult.MissingResult
-            // The grant is sealed bound to (scope, the epoch the worker states) (ADR 0072), so that is the epoch the
-            // membership records — and it must be the scope's CURRENT one: a rotation that landed between claim and
-            // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
-            // released (the claim's attempt rolled back, like a decline) so the job re-runs at the current epoch.
-            // The scope row is read under the lock a rotation takes (ScopesStore.rotate), so the two serialize.
-            val current = ScopeEntity.findById(job.scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch ?: 0
-            if (epoch != current) {
-                JobEntity.update(
-                    "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
-                        "where id = ?2 and leaseHolder = ?3 and status = ?4",
-                    JobEntity.PENDING, jobId, userId, JobEntity.LEASED,
-                )
-                return CompleteResult.StaleEpoch
-            }
-            // Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current — e.g. a
-            // rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is already
-            // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
-            // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
-            // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
-            // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
-            // grant stays verifiable after the worker's own account rotation (ADR 0028 § What is still open). The
-            // worker is the authenticated lease holder, so its account row exists.
-            val workerKey = VeyqUser.findById(userId)!!.identityPublicKey
-            job.resourceRef?.let { membershipId ->
-                MembershipEntity.update(
-                    "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6, " +
-                        "granterIdentityPublicKey = ?7 " +
-                        "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
-                    grant, epoch, membershipId, job.scopeId, userId, signature, workerKey,
-                )
-            }
+        if (job.capabilityTag != CapabilityTags.GRANT_DELIVERY) {
+            return if (markDone(job, userId, sealedResult) == 1) CompleteResult.Done else lostCompletion(job, userId)
         }
-        JobEntity.update(
-            "status = ?1, leaseHolder = null, leaseExpiresAt = null where id = ?2", JobEntity.DONE, jobId,
-        )
-        if (sealedResult != null) JobEntity.update("sealedResult = ?1 where id = ?2", sealedResult, jobId)
+        val grant = sealedResult ?: return CompleteResult.MissingResult
+        val epoch = statedEpoch ?: return CompleteResult.MissingResult
+        // The worker's signature over the grant it posts (ADR 0028 Decision 6) — stored, never verified here.
+        val signature = grantSignature ?: return CompleteResult.MissingResult
+        // The grant is sealed bound to (scope, the epoch the worker states) (ADR 0072), so that is the epoch the
+        // membership records — and it must be the scope's CURRENT one: a rotation that landed between claim and
+        // completion, or a worker still on an older grant, sealed a key the member cannot write with. Refused and
+        // released (the claim's attempt rolled back, like a decline) so the job re-runs at the current epoch.
+        // The scope row is read under the lock a rotation takes (ScopesStore.rotate), so the two serialize.
+        val current = ScopeEntity.findById(job.scopeId, LockModeType.PESSIMISTIC_WRITE)?.currentEpoch ?: 0
+        if (epoch != current) {
+            JobEntity.update(
+                "status = ?1, leaseHolder = null, leaseExpiresAt = null, attempts = attempts - 1 " +
+                    "where id = ?2 and leaseHolder = ?3 and status = ?4",
+                JobEntity.PENDING, jobId, userId, JobEntity.LEASED,
+            )
+            return CompleteResult.StaleEpoch
+        }
+        if (markDone(job, userId, sealedResult) != 1) return lostCompletion(job, userId)
+        // Deliver onto any membership that is BEHIND: grant-less OR stale (grantedEpoch < current — e.g. a
+        // rotation re-wrap that failed, §E2). Idempotent + first-online-wins: a no-op once the member is already
+        // at the current epoch. The write is bound to the job's OWN scope (`and scopeId = ?4`) — the caller was
+        // authorized against `job.scopeId`, so it may only ever write onto a membership *in that scope*; without
+        // this an attacker holding a grant in any scope could target a foreign id (cr-0081).
+        // The worker's identity key as of this write is recorded beside its signature: the reads serve it, so the
+        // grant stays verifiable after the worker's own account rotation (ADR 0028 § What is still open). The
+        // worker is the authenticated lease holder, so its account row exists.
+        val workerKey = VeyqUser.findById(userId)!!.identityPublicKey
+        job.resourceRef?.let { membershipId ->
+            MembershipEntity.update(
+                "wrappedGrant = ?1, grantedEpoch = ?2, granterUserId = ?5, grantSignature = ?6, " +
+                    "granterIdentityPublicKey = ?7 " +
+                    "where id = ?3 and scopeId = ?4 and (wrappedGrant is null or grantedEpoch < ?2) and pendingConsent = false",
+                grant, epoch, membershipId, job.scopeId, userId, signature, workerKey,
+            )
+        }
         return CompleteResult.Done
+    }
+
+    /** The guarded `DONE`: only while the job is still leased to [userId], and for a rotation only once that holder
+     *  committed during its lease. Returns the rows it wrote — 1 won, 0 lost. */
+    private fun markDone(job: JobEntity, userId: String, sealedResult: String?): Int {
+        val committed = if (job.capabilityTag == CapabilityTags.SCOPE_ROTATION) " and rotatedEpoch is not null" else ""
+        val guard = "where id = ?2 and status = ?3 and leaseHolder = ?4$committed"
+        return if (sealedResult == null) {
+            JobEntity.update("status = ?1, leaseHolder = null, leaseExpiresAt = null $guard", JobEntity.DONE, job.id, JobEntity.LEASED, userId)
+        } else {
+            JobEntity.update(
+                "status = ?1, leaseHolder = null, leaseExpiresAt = null, sealedResult = ?5 $guard",
+                JobEntity.DONE, job.id, JobEntity.LEASED, userId, sealedResult,
+            )
+        }
+    }
+
+    /** The answer for a completion whose guarded write matched no row, read from the job as it is now. */
+    private fun lostCompletion(job: JobEntity, userId: String): CompleteResult {
+        JobEntity.getEntityManager().refresh(job)
+        return when {
+            job.status == JobEntity.DONE -> CompleteResult.Done
+            job.capabilityTag == CapabilityTags.SCOPE_ROTATION && job.status == JobEntity.LEASED &&
+                job.leaseHolder == userId && job.rotatedEpoch == null -> CompleteResult.RotationNotCommitted
+            else -> CompleteResult.NotHolder
+        }
     }
 
     /**
@@ -295,9 +357,10 @@ class TasksStore {
         resourceRef: String?, sealedBody: String?, maxAttempts: Int,
     ): String? {
         if (scopeId !in grantedScopeIds(userId)) return null
-        // Structural tags (grant-delivery) are server-originated only — never forgeable via the client front
-        // door, so a client can't fabricate a delivery job with an arbitrary target (cr-0081 hardening).
-        if (capabilityTag == CapabilityTags.GRANT_DELIVERY) return null
+        // Server-originated tags are never forgeable via the client front door: a client can't fabricate a delivery
+        // job with an arbitrary target (cr-0081), nor a rotation no event asked for and that carries none of an
+        // event's exclusions (ADR 0021 §8).
+        if (capabilityTag in CapabilityTags.SERVER_ORIGINATED) return null
         val jobId = UUID.randomUUID().toString()
         JobEntity().apply {
             id = jobId
@@ -316,22 +379,78 @@ class TasksStore {
     // --- scope-rotation event origination (cr-0092) ---------------------------------------------------------
 
     /**
-     * Originate a **scope-rotation** job for a GROUP whose co-shared membership was just cut, when no key-holder
-     * was online to rotate synchronously (cr-0092, ADR 0025 — groups rotate). Unlike grant-delivery this can
-     * **not** be reconciled from DB state: a removal cut advances no epoch and leaves no stale-epoch mismatch, so
-     * the pending-rotation state has no structural trace — it must be recorded **explicitly** here, at the moment
-     * of the cut. Idempotent + **coalescing**: skips when a live (PENDING/LEASED) rotation job already exists for
-     * the scope, so multiple removals collapse into one rotation that re-grants the whole surviving set. The job
-     * carries only the opaque tag + `scopeId` (also mirrored into `resourceRef`) — never a key. Returns whether a
-     * job was created.
+     * Originate a **scope-rotation** job for a GROUP whose co-shared membership was just cut, when the remover could
+     * not rotate synchronously (cr-0092, ADR 0025 — groups rotate). Unlike grant-delivery this can **not** be
+     * reconciled from DB state: a removal cut advances no epoch and leaves no stale-epoch mismatch, so the
+     * pending-rotation state has no structural trace — it must be recorded **explicitly** here, at the moment of the
+     * cut. It **joins** the scope's unclaimed (`PENDING`) job if there is one, so removals before anyone is online
+     * still cost one rotation; otherwise it creates one ([pendingRotationJob] says why a leased job is never joined).
+     * The job carries only the opaque tag + `scopeId` (also mirrored into `resourceRef`) — never a key. Returns
+     * whether a job was created.
+     *
+     * Serialised on the scope row (lock order scope → membership → job, the order `ScopesStore.rotate` follows; a
+     * cut takes it before it deletes): two events on one scope cannot both see "no pending job" and create one each.
      */
     @Transactional
     fun originateScopeRotation(scopeId: String, maxAttempts: Int): Boolean {
-        val live = JobEntity.count(
+        ScopeEntity.lockRow(scopeId)
+        if (pendingRotationJob(scopeId) != null) return false
+        createRotationJob(scopeId, maxAttempts)
+        return true
+    }
+
+    /**
+     * Originate a scope rotation the originator must **not** complete — key rotation after a compromise
+     * (ADR 0060 Decision 4, uc.account.rotate-keys §7) — and queue a dead-lettered one again
+     * ([requeueFailedRotations]).
+     *
+     * The exclusion rides on the **existing** decline mechanism rather than on a new column: a
+     * `(job, worker)` row is already exactly "this worker may not claim this job", and it is already what
+     * [claim]'s candidate query filters on. Written at origination instead of after a refusal, which is the
+     * only thing new here.
+     *
+     * **The decline is written on every live job of the scope**, `PENDING` and `LEASED`, whether or not this call
+     * created one. A scope that already carries an unclaimed rotation (a removal cut moments earlier) must exclude
+     * the rotator from *that* job, or the rotation this account triggered is completable by the very account it
+     * locks out; and a leased job whose lease expires would otherwise be reclaimable by the rotator, who may be an
+     * owner. The exclusion does not revoke a lease the rotator already holds — that lease is inert, because
+     * `rotateScope` refuses their commit and the completion needs one. The joined or fresh `PENDING` job is what
+     * guarantees a rotation whose directory read came after the identity changed. Returns whether a job was created.
+     *
+     * **Its bound, stated rather than engineered around:** the exclusion binds the scope's live jobs, in two places —
+     * here at the claim, and where the commit lands (`ScopesStore.rotate` asks [isRotationExcluded]). If they
+     * dead-letter it lapses on both, until the rotator or an owner of the scope queues the rotation again through
+     * this function; the window is visible to both as `FAILED` ([compromiseRotations]). A job a later removal
+     * originates after a dead-letter does not carry it either; once any rotation lands without the rotator, their
+     * behind grant still holds them at the commit.
+     */
+    @Transactional
+    fun originateScopeRotationExcluding(scopeId: String, excludedWorkerId: String, maxAttempts: Int): Boolean {
+        ScopeEntity.lockRow(scopeId)
+        val created = pendingRotationJob(scopeId) == null
+        if (created) createRotationJob(scopeId, maxAttempts)
+        JobEntity.find(
             "scopeId = ?1 and capabilityTag = ?2 and status in ?3",
             scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
-        )
-        if (live > 0) return false
+        ).list().forEach { exclude(it.id, excludedWorkerId) }
+        return created
+    }
+
+    /**
+     * The scope's unclaimed rotation job, read under its row lock — never a `LEASED` one, live or expired. A leased
+     * job's worker has already read its inputs (the directory comes right after the claim) and may already have
+     * committed, so an event folded into it would be closed by a rotation that could not reflect it — and for an
+     * account rotation, a directory read before the new identity was published seals the new epoch to the old one.
+     * The lock makes a racing claim's compare-and-set on this row wait for the event to commit, so the claim, and the
+     * directory read after it, come after the event.
+     */
+    private fun pendingRotationJob(scopeId: String): JobEntity? =
+        JobEntity.find(
+            "scopeId = ?1 and capabilityTag = ?2 and status = ?3",
+            scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.PENDING,
+        ).withLock(LockModeType.PESSIMISTIC_WRITE).list().firstOrNull()
+
+    private fun createRotationJob(scopeId: String, maxAttempts: Int) {
         JobEntity().apply {
             id = UUID.randomUUID().toString()
             this.scopeId = scopeId
@@ -342,61 +461,112 @@ class TasksStore {
             this.maxAttempts = maxAttempts
             createdAt = Instant.now()
         }.persist()
-        return true
+    }
+
+    private fun exclude(jobId: String, workerId: String) {
+        if (JobDeclineEntity.count("jobId = ?1 and workerId = ?2", jobId, workerId) > 0L) return
+        JobDeclineEntity().apply {
+            id = UUID.randomUUID().toString()
+            this.jobId = jobId
+            this.workerId = workerId
+            reason = ROTATION_ORIGINATOR
+            declinedAt = Instant.now()
+        }.persist()
     }
 
     /**
-     * Originate a scope rotation the originator must **not** complete — key rotation after a compromise
-     * (ADR 0060 Decision 4, uc.account.rotate-keys §7).
-     *
-     * The exclusion rides on the **existing** decline mechanism rather than on a new column: a
-     * `(job, worker)` row is already exactly "this worker may not claim this job", and it is already what
-     * [claim]'s candidate query filters on. Written at origination instead of after a refusal, which is the
-     * only thing new here.
-     *
-     * **The decline is written whether or not this call created the job**, and that is the part a coalescing
-     * origination gets wrong by default: a scope that already carries a live rotation (a removal cut moments
-     * earlier) must still exclude the rotator from *that* job — otherwise the rotation this account triggered
-     * is completable by the very account it is meant to lock out. So the row is found-or-created and the
-     * exclusion is unconditional; the return value reports only whether the job itself is new.
-     *
-     * **Its bound, stated rather than engineered around:** the exclusion binds this job. If the job
-     * dead-letters and a later removal originates a fresh one, the rotator is not excluded from *that* job.
-     * They also could not perform it — after the rotation their grant is sealed to an identity they no longer
-     * hold a private key for — so the residue is a claim that fails, not a re-admission. The exclusion matters
-     * in the minutes right after rotating, when the old identity key is still in the rotator's memory, and
-     * there it is exact.
+     * Whether a live (`PENDING`/`LEASED`) rotation job of [scopeId] carries [userId]'s rotation exclusion — the first
+     * fact `rotateScope` refuses on (ADR 0060 Decision 4). Only the `rotation_originator` reason counts: a worker's own
+     * `identity_changed`, `stale_epoch` or `not_scope_owner` decline is about one job, never about their authority.
+     * An exhausted job whose lease expired still reads `LEASED` until a claim sweeps it, and counts: that errs closed.
+     */
+    fun isRotationExcluded(scopeId: String, userId: String): Boolean =
+        JobDeclineEntity.count(
+            "workerId = ?1 and reason = ?2 and jobId in " +
+                "(select j.id from JobEntity j where j.scopeId = ?3 and j.capabilityTag = ?4 and j.status in ?5)",
+            userId, ROTATION_ORIGINATOR, scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
+        ) > 0L
+
+    /**
+     * Record that [committerId] committed [epoch] on [scopeId] (#207): every rotation job of the scope **leased to
+     * them** — `LEASED` with them as holder, no expiry test, exactly what [complete] means by holder — gets the mark
+     * its completion requires. Runs in the commit's transaction, after the scope row was locked. A commit by anyone
+     * else, or one made before the lease, marks nothing on the job.
      */
     @Transactional
-    fun originateScopeRotationExcluding(scopeId: String, excludedWorkerId: String, maxAttempts: Int): Boolean {
-        val live = JobEntity.find(
-            "scopeId = ?1 and capabilityTag = ?2 and status in ?3",
-            scopeId, CapabilityTags.SCOPE_ROTATION, listOf(JobEntity.PENDING, JobEntity.LEASED),
-        ).firstResult()
+    fun markRotated(scopeId: String, committerId: String, epoch: Int): Int =
+        JobEntity.update(
+            "rotatedEpoch = ?1 where scopeId = ?2 and capabilityTag = ?3 and status = ?4 and leaseHolder = ?5",
+            epoch, scopeId, CapabilityTags.SCOPE_ROTATION, JobEntity.LEASED, committerId,
+        )
 
-        val jobId = live?.id ?: UUID.randomUUID().toString().also { fresh ->
-            JobEntity().apply {
-                id = fresh
-                this.scopeId = scopeId
-                capabilityTag = CapabilityTags.SCOPE_ROTATION
-                resourceRef = scopeId
-                status = JobEntity.PENDING
-                attempts = 0
-                this.maxAttempts = maxAttempts
-                createdAt = Instant.now()
-            }.persist()
-        }
+    // --- the state of a queued compromise rotation (uc.account.rotate-keys §9, ADR 0060 Decision 6) ---------
 
-        if (JobDeclineEntity.count("jobId = ?1 and workerId = ?2", jobId, excludedWorkerId) == 0L) {
-            JobDeclineEntity().apply {
-                id = UUID.randomUUID().toString()
-                this.jobId = jobId
-                this.workerId = excludedWorkerId
-                reason = ROTATION_ORIGINATOR
-                declinedAt = Instant.now()
-            }.persist()
-        }
-        return live == null
+    /**
+     * Every compromise rotation queued on [scopeIds] (all scopes when null) by [rotatorId] (every rotator when null),
+     * with its state. One row per (scope, rotator) where the rotator still holds a membership there: a scope they
+     * left, or a purged one, drops out. The covering job is the scope's **newest** job carrying the rotator's
+     * exclusion — an origination creates a job only when none is `PENDING`, so the newest live one is the one every
+     * later event joined. Reads job, decline, membership and scope rows the server already holds; derives in
+     * [CompromiseRotationPolicy].
+     */
+    fun compromiseRotations(scopeIds: Collection<String>? = null, rotatorId: String? = null): List<CompromiseRotationRow> {
+        if (scopeIds != null && scopeIds.isEmpty()) return emptyList()
+        val query = JobEntity.getEntityManager().createQuery(
+            "select d.workerId, j.id from JobDeclineEntity d, JobEntity j where d.jobId = j.id and d.reason = :reason " +
+                "and j.capabilityTag = :tag" + (if (scopeIds != null) " and j.scopeId in :scopes" else "") +
+                (if (rotatorId != null) " and d.workerId = :rotator" else ""),
+            Array<Any>::class.java,
+        ).setParameter("reason", ROTATION_ORIGINATOR).setParameter("tag", CapabilityTags.SCOPE_ROTATION)
+        scopeIds?.let { query.setParameter("scopes", it) }
+        rotatorId?.let { query.setParameter("rotator", it) }
+        val hits = query.resultList.map { it[0] as String to it[1] as String }
+        if (hits.isEmpty()) return emptyList()
+
+        val jobs = JobEntity.find("id in ?1", hits.map { it.second }.toSet()).list().associateBy { it.id }
+        val covering = hits.mapNotNull { (rotator, jobId) -> jobs[jobId]?.let { rotator to it } }
+            .groupBy({ (rotator, job) -> job.scopeId to rotator }, { it.second })
+            .mapValues { (_, candidates) -> candidates.maxBy { it.createdAt } }
+        val scopes = covering.keys.map { it.first }.toSet()
+        val members = MembershipEntity.find("scopeId in ?1", scopes).list().groupBy { it.scopeId }
+        val epochs = ScopeEntity.find("id in ?1", scopes).list().associate { it.id to it.currentEpoch }
+        val decliners = JobDeclineEntity.find("jobId in ?1", covering.values.map { it.id }.toSet()).list()
+            .groupBy({ it.jobId }, { it.workerId })
+        val now = Instant.now()
+        return covering.mapNotNull { (key, job) ->
+            val (scopeId, rotator) = key
+            val rows = members[scopeId].orEmpty()
+            val own = rows.firstOrNull { it.userId == rotator } ?: return@mapNotNull null
+            val declined = decliners[job.id].orEmpty().toSet()
+            val facts = CompromiseRotationFacts(
+                rotatorGrantedEpoch = own.wrappedGrant?.let { own.grantedEpoch },
+                scopeCurrentEpoch = epochs[scopeId] ?: 0,
+                jobStatus = job.status, jobLeaseExpiresAt = job.leaseExpiresAt,
+                jobAttempts = job.attempts, jobMaxAttempts = job.maxAttempts,
+                claimableByAnOwner = rows.any {
+                    it.role == MembershipEntity.OWNER && it.wrappedGrant != null && it.userId !in declined
+                },
+            )
+            CompromiseRotationRow(scopeId, rotator, CompromiseRotationPolicy.state(facts, now))
+        }.sortedWith(compareBy({ it.scopeId }, { it.rotatorId }))
+    }
+
+    /**
+     * Queue a dead-lettered compromise rotation of [scopeId] again — for [rotatorId] (the rotator themselves, D9), or
+     * for every rotator whose rotation there is `FAILED` (an owner of the scope, D10). Under the scope row's lock, so
+     * the state it gates on cannot move under it. Each failed rotator's rotation is originated excluding them again,
+     * which re-arms `rotateScope`'s first refusal; nothing is written unless something is `FAILED`. The caller is not
+     * excluded unless they are one of those rotators, so an owner's own worker can claim the job at once.
+     */
+    @Transactional
+    fun requeueFailedRotations(scopeId: String, rotatorId: String?, maxAttempts: Int): RequeueResult {
+        ScopeEntity.lockRow(scopeId)
+        val rows = compromiseRotations(listOf(scopeId), rotatorId)
+        if (rows.isEmpty()) return RequeueResult.NoRotation
+        val failed = rows.filter { it.state == CompromiseRotationState.FAILED }
+        if (failed.isEmpty()) return RequeueResult.NotFailed
+        failed.forEach { originateScopeRotationExcluding(scopeId, it.rotatorId, maxAttempts) }
+        return RequeueResult.Requeued(compromiseRotations(listOf(scopeId), rotatorId))
     }
 
     /**
@@ -476,12 +646,13 @@ class TasksStore {
         return reconcileGrantDelivery(grantless + rotated, maxAttempts)
     }
 
-    /** Lazily dead-letter expired-lease jobs that have exhausted their attempts (a crashed poison worker). */
-    private fun sweepDeadLetters(scopeIds: Set<String>, tags: List<String>, now: Instant) {
+    /** Lazily dead-letter expired-lease jobs of one tag, on that tag's own eligible scopes, that have exhausted their
+     *  attempts (a crashed poison worker). */
+    private fun sweepDeadLetters(scopeIds: Set<String>, tag: String, now: Instant) {
         JobEntity.update(
-            "status = ?1, leaseHolder = null, leaseExpiresAt = null where scopeId in ?2 and capabilityTag in ?3 " +
+            "status = ?1, leaseHolder = null, leaseExpiresAt = null where scopeId in ?2 and capabilityTag = ?3 " +
                 "and status = ?4 and leaseExpiresAt < ?5 and attempts >= maxAttempts",
-            JobEntity.FAILED, scopeIds, tags, JobEntity.LEASED, now,
+            JobEntity.FAILED, scopeIds, tag, JobEntity.LEASED, now,
         )
     }
 
@@ -492,9 +663,10 @@ class TasksStore {
         return GrantDeliveryTargetView(m.userId, m.id, user.identityPublicKey, m.admission())
     }
 
-    private companion object {
+    companion object {
         /** The `reason` on a decline written at origination rather than after a refusal — greppable, and it is
-         *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. */
-        private const val ROTATION_ORIGINATOR = "rotation_originator"
+         *  what tells a rotation exclusion apart from a worker's own `identity_changed` decline. Only this reason
+         *  binds `rotateScope` ([isRotationExcluded]) and names a compromise rotation ([compromiseRotations]). */
+        const val ROTATION_ORIGINATOR = "rotation_originator"
     }
 }

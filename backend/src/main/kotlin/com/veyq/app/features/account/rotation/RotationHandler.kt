@@ -6,15 +6,23 @@ import com.veyq.app.features.account.login.SessionService
 import com.veyq.app.features.account.deviceregister.PutResult as RegisterPut
 import com.veyq.app.features.account.identitypins.PutResult as PinsPut
 import com.veyq.app.features.account.pairing.PairingStore
+import com.veyq.app.features.tasks.CompromiseRotationRow
+import com.veyq.app.features.tasks.CompromiseRotationState
+import com.veyq.app.features.tasks.RequeueResult
 import com.veyq.app.features.tasks.TasksStore
 import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.crypto.SecretKeyProof
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
+import com.veyq.app.shared.http.FailureStatus.NOT_FOUND
+import com.veyq.app.shared.http.Failures
 import com.veyq.app.shared.http.HttpFailure
 import com.veyq.app.shared.http.httpFailure
 import com.veyq.app.shared.identity.VeyqUser
+import com.veyq.app.shared.membership.AccessMode.WRITE
 import com.veyq.app.shared.membership.MembershipStore
+import com.veyq.app.shared.membership.ScopeAccess
+import com.veyq.app.shared.membership.refusal
 import io.quarkus.narayana.jta.QuarkusTransaction
 import jakarta.enterprise.context.ApplicationScoped
 
@@ -39,6 +47,18 @@ sealed interface RotationOutcome {
      * the same new keys and the same signature (the documents are not part of the proof's statement).
      */
     data object TrustStateStale : RotationOutcome, HttpFailure by httpFailure("stale_version", CONFLICT)
+}
+
+/** Outcome of the rotator queueing one of their dead-lettered rotations again (uc.account.rotate-keys E3). */
+sealed interface RequeueRotationOutcome {
+    data class Requeued(val scopeId: String, val state: CompromiseRotationState) : RequeueRotationOutcome
+    data object Suspended : RequeueRotationOutcome, HttpFailure by Failures.tenantSuspended
+    data object Deleting : RequeueRotationOutcome, HttpFailure by Failures.scopeDeleting
+    data object ScopeNotFound : RequeueRotationOutcome, HttpFailure by Failures.scopeNotFound
+    /** A member of the scope, but no rotation of their account was ever queued on it. */
+    data object RotationNotFound : RequeueRotationOutcome, HttpFailure by httpFailure("rotation_not_found", NOT_FOUND)
+    /** Waiting, stalled or secured: nothing to queue again. Nothing written. */
+    data object NotFailed : RequeueRotationOutcome, HttpFailure by httpFailure("rotation_not_failed", CONFLICT)
 }
 
 /** One Master-Key-sealed account document as the rotation re-sealed it: the blob under `MK'`, guarded by the
@@ -67,6 +87,7 @@ class RotationHandler(
     private val sessions: SessionService,
     private val identityPins: IdentityPinsStore,
     private val deviceRegister: DeviceRegisterStore,
+    private val access: ScopeAccess,
     config: VeyqConfig,
 ) {
     private val maxAttempts: Int = config.tasks().maxAttempts()
@@ -155,8 +176,10 @@ class RotationHandler(
         pairings.supersede(pairings.liveChannels(userId).map { it.id })
 
         // The split (ADR 0060 Decision 5): a scope with exactly one member is self-served — nobody to be
-        // re-admitted by, nobody to exclude but the rotator's own old identity. Everything else is queued for a
-        // DIFFERENT key-holder, with the rotator excluded from claiming it (Decision 4).
+        // re-admitted by, nobody to exclude but the rotator's own old identity. Everything else is queued for
+        // another OWNER of the scope, with the rotator excluded from every live rotation job there (Decision 4).
+        // Ascending scope order: each origination takes its scope's row lock, so two requests locking several
+        // scopes take them in one order and cannot deadlock.
         val counts = memberships.memberCountsByScopeFor(userId)
         val (sole, shared) = counts.keys.sorted().partition { (counts[it] ?: 0L) <= 1L }
         shared.forEach { tasks.originateScopeRotationExcluding(it, userId, maxAttempts) }
@@ -164,6 +187,30 @@ class RotationHandler(
         presentedAccessToken?.let { sessions.revokeOtherFamilies(userId, it) }
 
         RotationOutcome.Applied(soleMemberScopeIds = sole, queuedScopeIds = shared)
+    }
+
+    /**
+     * Where each rotation the caller's own account rotation queued stands, read from the server's rows every time
+     * (uc.account.rotate-keys §9, ADR 0060 Decision 6) — never a status the client synthesised once. Only the
+     * caller's own rows; empty for an account that never rotated.
+     */
+    fun scopeStates(userId: String): List<CompromiseRotationRow> = tasks.compromiseRotations(rotatorId = userId)
+
+    /**
+     * Queue one of the caller's dead-lettered rotations again, the caller still excluded (uc.account.rotate-keys E3).
+     * Safe to hand to the rotator: it creates work only for the scope's other owners and excludes the caller — the
+     * opposite of re-admitting themselves (ADR 0060 Decision 4) — and it re-arms `rotateScope`'s refusal, closing
+     * the window the dead-letter opened. Membership first (ADR 0042); only from `FAILED`, else nothing is written.
+     */
+    fun requeue(userId: String, scopeId: String): RequeueRotationOutcome {
+        access.check(userId, scopeId, WRITE)
+            .refusal(RequeueRotationOutcome.ScopeNotFound, RequeueRotationOutcome.Suspended, RequeueRotationOutcome.Deleting)
+            ?.let { return it }
+        return when (val r = tasks.requeueFailedRotations(scopeId, userId, maxAttempts)) {
+            is RequeueResult.Requeued -> RequeueRotationOutcome.Requeued(scopeId, r.rows.single().state)
+            RequeueResult.NoRotation -> RequeueRotationOutcome.RotationNotFound
+            RequeueResult.NotFailed -> RequeueRotationOutcome.NotFailed
+        }
     }
 
     /** Thrown inside the rotation's transaction to roll every write in it back; [rotate] maps it to

@@ -422,8 +422,9 @@ class TenantHandler(
      * scope the target belongs to in this tenant:
      *  - **TENANT** + a **shared GROUP** → **delete** the membership (instant layer-1 cut on shared content; the
      *    tenant key is **not** rotated, ADR 0025 — ACL-revoke). A co-shared GROUP additionally **queues a
-     *    `SCOPE_ROTATION` job** (cr-0092, Fork 1b) so the next online remaining key-holder rotates it forward for
-     *    layer-2 forward secrecy — the removing owner need not hold that group's key.
+     *    `SCOPE_ROTATION` job** (cr-0092, Fork 1b) so the next online remaining **owner** of the group rotates it
+     *    forward for layer-2 forward secrecy — the removing owner need not hold that group's key. It joins the
+     *    group's unclaimed rotation job if there is one, and never one already claimed.
      *  - a shared **GROUP the target solely owned** (OWNER, no other owner) → promote the **oldest** remaining
      *    member to OWNER (the orphan rule — a server rule, the tenant owner never gains access), then delete.
      *  - the target's **own** scopes — their **PERSONAL** scope + any **solo GROUP** (they are the only member) →
@@ -447,6 +448,12 @@ class TenantHandler(
             RemovalPlan.LastOwner -> RemoveTenantMemberOutcome.LastOwner
             is RemovalPlan.Cascade -> {
                 val now = Instant.now()
+                // Every scope this removal cuts is locked before anything is deleted, in ascending id order: the
+                // rotation each cut may originate serialises on the scope row, and the lock order is scope →
+                // membership → job (ScopesStore.rotate's). A cut that held a member's row while a rotation held the
+                // scope row would deadlock; one order across scopes keeps two such requests from crossing.
+                plan.steps.filter { it.action != CascadeAction.SOFT_DELETE }.map { it.scopeId }.sorted()
+                    .forEach { scopes.lockScope(it) }
                 plan.steps.forEach { execute(it, targetId, now) }
                 // ADR 0075 point 5: opted into, every link of the TENANT scope goes off in this same transaction —
                 // never a co-shared group's, which the tenant owner need not see (the removal count marks those)
@@ -473,7 +480,8 @@ class TenantHandler(
 
     /** The shared-access cut (layer-1): drop the membership, soft-revoke the shares the target created here
      *  (cr-0104), and queue the async forward rotation for a co-shared GROUP (cr-0092, Fork 1b) — the removing
-     *  owner need not be a key-holder. The TENANT scope carries `rotateAfter = false` (ACL-revoke only, ADR 0025). */
+     *  owner need not be a key-holder. The TENANT scope carries `rotateAfter = false` (ACL-revoke only, ADR 0025).
+     *  The scope row is already locked ([removeMember]), so the cut and its origination are one event to a claim. */
     private fun cutSharedAccess(step: CascadeStep, targetId: String) {
         scopes.removeMembership(targetId, step.scopeId)
         // ADR 0075: counted on EVERY scope cut — the tenant never rotates, and a co-shared group's rotation is only

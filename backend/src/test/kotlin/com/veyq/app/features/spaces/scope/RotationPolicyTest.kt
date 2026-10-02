@@ -27,7 +27,9 @@ class RotationPolicyTest {
         retags: List<Pair<String, String>> = emptyList(),
         dropped: Set<String> = emptySet(),
         removes: String? = null,
-    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, retags, dropped, removes)
+        callerExcluded: Boolean = false,
+        callerGrantedEpoch: Int? = currentEpoch,
+    ) = RotationPolicy.plan(currentEpoch, statedEpoch, members, open, grants, retags, dropped, removes, callerExcluded, callerGrantedEpoch)
 
     private fun committed(d: RotationDecision): RotationPlan = (d as RotationDecision.Commit).plan
 
@@ -186,5 +188,35 @@ class RotationPolicyTest {
     fun aStaleRemovalIsStaleBeforeAnythingElse() {
         // The client's answer to stale is to re-open and rebuild — whatever else the request got wrong.
         assertSame(RotationDecision.Stale, plan(currentEpoch = 3, statedEpoch = 3, members = group, grants = listOf(grant("bob")), removes = "bob"))
+    }
+
+    // --- the caller: excluded, or behind (ADR 0060 Decision 4, #206) ------------------------------------------
+
+    @Test
+    fun refusesACallerAnAccountRotationExcluded() {
+        assertSame(RotationDecision.Excluded, plan(currentEpoch = 2, grants = listOf(grant("a")), callerExcluded = true))
+    }
+
+    @Test
+    fun anExcludedCallerIsExcludedWhateverEpochTheyState() {
+        // The exclusion is about who may rotate, not about which epoch: it answers before staleness.
+        assertSame(RotationDecision.Excluded, plan(currentEpoch = 2, statedEpoch = 2, callerExcluded = true))
+    }
+
+    @Test
+    fun refusesACallerWhoseGrantIsBehindTheScope() {
+        // The epoch stated is the next one, but the caller holds an older key: nothing to chain the new epoch from.
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 2, statedEpoch = 3, callerGrantedEpoch = 1))
+    }
+
+    @Test
+    fun refusesACallerWhoHoldsNoGrant() {
+        assertSame(RotationDecision.Stale, plan(currentEpoch = 0, statedEpoch = 1, callerGrantedEpoch = null))
+    }
+
+    @Test
+    fun aCurrentGrantCommits() {
+        // The control at the boundary: a grant at exactly the current epoch is not behind.
+        assertEquals(3, committed(plan(currentEpoch = 2, statedEpoch = 3, callerGrantedEpoch = 2)).newEpoch)
     }
 }

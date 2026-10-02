@@ -833,7 +833,7 @@ it. D5 also writes the exclusion on older `LEASED` jobs, but none of those carri
       former), and `npm run generate:api` then `npm run check` are green in `web/`. The generated client is
       gitignored (`git check-ignore -v web/src/api/generated/tasks`), so "no diff" cannot be the check;
       descriptions change no type.
-- [ ] 2 backend:
+- [x] 2 backend:
       - D1, D3, D4, D5 and D6 in `TasksHandler`, `TasksStore`, `TasksResource` and `TenantHandler.cutSharedAccess`.
       - Rewrite the origination KDocs in `TasksStore` (*"skips when a live (PENDING/LEASED) rotation job already
         exists"*), `CapabilityTags.kt` and `TenantHandler`'s removal KDoc to the new rule. Put the reason for

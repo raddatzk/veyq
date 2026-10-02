@@ -2,6 +2,11 @@ package com.veyq.app.features.spaces.scope
 
 import com.veyq.app.features.platform.capabilities.CapabilityIds
 import com.veyq.app.features.platform.capabilities.CapabilityRegistry
+import com.veyq.app.features.tasks.CompromiseRotationPolicy
+import com.veyq.app.features.tasks.CompromiseRotationState
+import com.veyq.app.features.tasks.RequeueResult
+import com.veyq.app.features.tasks.TasksStore
+import com.veyq.app.shared.config.VeyqConfig
 import com.veyq.app.shared.http.FailureStatus.BAD_REQUEST
 import com.veyq.app.shared.http.FailureStatus.CONFLICT
 import com.veyq.app.shared.http.FailureStatus.FORBIDDEN
@@ -37,6 +42,17 @@ sealed interface CreateGroupOutcome {
     /** The `spaces.groups` capability is disabled instance-wide (ADR 0032) — a 422, a personal-only instance. */
     object CapabilityDisabled : CreateGroupOutcome, HttpFailure by Failures.capabilityDisabled
     object IdTaken : CreateGroupOutcome, HttpFailure by Failures.idTaken
+}
+
+/** Outcome of an owner re-queueing the scope's dead-lettered compromise rotation (uc.spaces.complete-queued-rotation E8). */
+sealed interface RequeueScopeRotationOutcome {
+    /** Queued again; the scope row's value now (null = nothing needs an owner). */
+    data class Requeued(val compromiseRotation: CompromiseRotationState?) : RequeueScopeRotationOutcome
+    object Suspended : RequeueScopeRotationOutcome, HttpFailure by Failures.tenantSuspended
+    object Deleting : RequeueScopeRotationOutcome, HttpFailure by Failures.scopeDeleting
+    object ScopeNotFound : RequeueScopeRotationOutcome, HttpFailure by Failures.scopeNotFound
+    object NotOwner : RequeueScopeRotationOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
+    object NotFailed : RequeueScopeRotationOutcome, HttpFailure by httpFailure("rotation_not_failed", CONFLICT)
 }
 
 /** Outcome of listing the caller's scopes. */
@@ -111,6 +127,8 @@ sealed interface RotateOutcome {
     object Deleting : RotateOutcome, HttpFailure by Failures.scopeDeleting
     object ScopeNotFound : RotateOutcome, HttpFailure by Failures.scopeNotFound
     object NotOwner : RotateOutcome, HttpFailure by httpFailure("not_scope_owner", FORBIDDEN)
+    /** The caller's account rotation queued a still-live rotation of this scope that excludes them (ADR 0060 Decision 4). */
+    object RotationExcluded : RotateOutcome, HttpFailure by httpFailure("rotation_excluded", FORBIDDEN)
     object StaleEpoch : RotateOutcome, HttpFailure by Failures.staleEpoch
     /** The rotation leaves an open admission neither re-tagged nor dropped (ADR 0020 move 6) — nothing stored. */
     object AdmissionsIncomplete : RotateOutcome, HttpFailure by httpFailure("admissions_incomplete", CONFLICT)
@@ -212,7 +230,10 @@ class ScopesHandler(
     private val store: ScopesStore,
     private val capabilities: CapabilityRegistry,
     private val access: ScopeAccess,
+    private val tasks: TasksStore,
+    config: VeyqConfig,
 ) {
+    private val maxAttempts: Int = config.tasks().maxAttempts()
 
     fun createPersonal(userId: String, tenantId: String?, scopeId: String, grant: SignedGrant): CreatePersonalOutcome {
         tenantId ?: return CreatePersonalOutcome.NoTenant
@@ -457,11 +478,33 @@ class ScopesHandler(
         if (store.currentEpoch(scopeId) == null) return RotateOutcome.ScopeNotFound
         return when (val d = store.rotate(scopeId, epoch, wrappedPrev, callerId, grants, retags, dropped, removes, revokeLinks)) {
             is RotationDecision.Commit -> RotateOutcome.Ok(d.plan.newEpoch)
+            RotationDecision.Excluded -> RotateOutcome.RotationExcluded
             RotationDecision.Stale -> RotateOutcome.StaleEpoch
             RotationDecision.AdmissionsIncomplete -> RotateOutcome.AdmissionsIncomplete
             RotationDecision.MemberNotFound -> RotateOutcome.MemberNotFound
             RotationDecision.LastOwner -> RotateOutcome.LastOwner
             RotationDecision.RemovedMemberGranted -> RotateOutcome.RemovedMemberGranted
+        }
+    }
+
+    /**
+     * An owner queues the scope's dead-lettered compromise rotation again (uc.spaces.complete-queued-rotation E8,
+     * ADR 0060 Decision 6) — the action behind the owner row's `failed`. Membership first (ADR 0042), then ownership;
+     * then, under the scope row's lock, every rotated account whose rotation here is `FAILED` is excluded from a joined
+     * or fresh job again, and the caller is not (unless they are one of them), so their own worker can claim it.
+     * Anything but `FAILED` is `409 rotation_not_failed` with nothing written. The state gate is also its rate
+     * bound: at most one live covering job, and a job needs every one of its attempts failed before it is
+     * re-queueable.
+     */
+    fun requeueScopeRotation(callerId: String, scopeId: String): RequeueScopeRotationOutcome {
+        access.check(callerId, scopeId, WRITE)
+            .refusal(RequeueScopeRotationOutcome.ScopeNotFound, RequeueScopeRotationOutcome.Suspended, RequeueScopeRotationOutcome.Deleting)
+            ?.let { return it }
+        if (!store.isScopeOwner(callerId, scopeId)) return RequeueScopeRotationOutcome.NotOwner
+        return when (val r = tasks.requeueFailedRotations(scopeId, null, maxAttempts)) {
+            is RequeueResult.Requeued ->
+                RequeueScopeRotationOutcome.Requeued(CompromiseRotationPolicy.ownerView(r.rows.map { it.state }))
+            RequeueResult.NoRotation, RequeueResult.NotFailed -> RequeueScopeRotationOutcome.NotFailed
         }
     }
 

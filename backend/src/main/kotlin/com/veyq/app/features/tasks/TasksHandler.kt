@@ -39,10 +39,18 @@ class TasksHandler(
      * Lease one job. Working a job is a write on its space (uc.spaces.scope-access A5), so the eligible scopes are the
      * caller's granted ones the gate lets them **write** — a suspended tenant's or a deleting group's jobs are simply
      * not handed out; they wait for the reactivation or the restore, or are erased with the purge.
+     *
+     * Eligibility is **per tag** (ADR 0021 §4): a `scope-rotation` job is offered only on a scope the caller also
+     * **owns**. Only an owner may commit a rotation (ADR 0014 §4), so a non-owner's claim spent one of the job's
+     * attempts on a commit refused `not_scope_owner`, and in a scope whose online members were mostly not owners the
+     * job dead-lettered before an owner came online (#180).
      */
     fun claim(userId: String, tags: List<String>, scopeFilter: String?): ClaimedJobView? {
         val granted = store.grantedScopeIds(userId).let { g -> if (scopeFilter != null) g intersect setOf(scopeFilter) else g }
-        return store.claim(userId, access.writable(userId, granted), tags, leaseTtl, maxAttempts)
+        val writable = access.writable(userId, granted)
+        val owned by lazy { writable intersect store.ownedScopeIds(userId) }
+        val eligibleByTag = tags.distinct().associateWith { tag -> if (tag == CapabilityTags.SCOPE_ROTATION) owned else writable }
+        return store.claim(userId, eligibleByTag, leaseTtl, maxAttempts)
     }
 
     fun heartbeat(userId: String, jobId: String): HeartbeatResult {
