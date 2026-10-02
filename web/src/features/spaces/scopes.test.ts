@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, type Mock } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { httpError } from '../../test/httpError'
 import { fakeApi, stubApi } from '../../test/apiMock'
+import { accountKeyMaterial, myTenant } from '../../test/models'
 
 vi.mock('../../api/client', () => ({
   scopesApi: vi.fn(),
@@ -109,7 +110,7 @@ beforeEach(() => {
   vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
   vi.mocked(masterKey).mockImplementation(() => MK.slice())
   globalThis.indexedDB = new IDBFactory() // a device that has held no epoch yet
-  stubApi(accountApi, { getAccountKeyMaterial: { userId: ME, suiteId: 'v1', wraps: [], wrappedIdentityPrivateKey: 'AQ==' } })
+  stubApi(accountApi, { getAccountKeyMaterial: accountKeyMaterial({ userId: ME }) })
   // Default: every contact is new/unchanged → the rotation re-grants them (TOFU). Overridden per test.
   vi.mocked(checkAndPin).mockResolvedValue('firstUse')
 })
@@ -717,7 +718,7 @@ describe('deleteGroup / restoreGroup (cr-0090 — group lifecycle data layer)', 
 
 describe('listMyTenants', () => {
   it('returns the caller’s tenants (membership metadata only) for the switcher', async () => {
-    const tenants: MyTenant[] = [{ tenantId: T1, name: 'Fam', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 }]
+    const tenants: MyTenant[] = [myTenant({ tenantId: T1 })]
     stubApi(scopesApi, { listMyTenants: tenants })
     expect(await listMyTenants()).toEqual(tenants)
   })
@@ -737,7 +738,7 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const iconKey = deriveSpaceIconKey(scopeKey)
     const sealedIcon = sealIcon(iconKey, { scopeId: T1, iconEpoch: 0 }, encoded)
     const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
-    return signedTenant({ tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon })
+    return signedTenant(myTenant({ tenantId: T1, iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon }))
   }
 
   it('opens the caller’s own grant and returns the encoded icon bytes', async () => {
@@ -748,8 +749,8 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
   })
 
   it('returns null (→ the initial) when the tenant has no icon or the caller holds no grant', async () => {
-    expect(await openMyTenantIcon({ tenantId: T1, name: 'Fam', domain: 'd', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 })).toBeNull()
-    expect(await openMyTenantIcon({ tenantId: T1, name: 'Fam', domain: 'd', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0, sealedIcon: 'c2VhbGVk', wrappedGrant: null })).toBeNull()
+    expect(await openMyTenantIcon(myTenant({ tenantId: T1, role: 'MEMBER' }))).toBeNull()
+    expect(await openMyTenantIcon(myTenant({ tenantId: T1, role: 'MEMBER', sealedIcon: 'c2VhbGVk', wrappedGrant: null }))).toBeNull()
   })
 
   it('returns null (never throws) when the grant opens but the icon was sealed under a different key', async () => {
@@ -757,7 +758,7 @@ describe('openMyTenantIcon (the cross-tenant switcher read)', () => {
     const scopeKey = v1.randomBytes(32)
     const wrappedGrant = b64std(v1.sealTo({ purpose: 'scope-grant', scopeId: T1, epoch: 0 }, v1.hybridPublic(ID.priv), scopeKey))
     const foreign = sealIcon(deriveSpaceIconKey(v1.randomBytes(32)), { scopeId: T1, iconEpoch: 0 }, new Uint8Array([9, 9, 9]))
-    const tenant: MyTenant = signedTenant({ tenantId: T1, name: 'Fam', domain: 'd', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon: foreign })
+    const tenant: MyTenant = signedTenant(myTenant({ tenantId: T1, iconEpoch: 0, grantedEpoch: 0, wrappedGrant, sealedIcon: foreign }))
     expect(await openMyTenantIcon(tenant)).toBeNull()
   })
 })

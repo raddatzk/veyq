@@ -32,8 +32,10 @@ import { listScopeMembers, listMemberInvites, reissueMemberInvite, revokeMemberI
 import { revokeScopeShares } from '../memory/share'
 import { listMyTenants } from './scopes'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
-import { ScopeKind } from '../../api/generated/scopes'
+import { ScopeKind, type ScopeMember } from '../../api/generated/scopes'
+import type { PendingMemberInvite } from '../../api/generated/tenants'
 import { realI18n, t } from '../../test/i18n'
+import { myTenant } from '../../test/models'
 
 const stubs = {
   Button: { props: ['label', 'icon', 'ariaLabel'], template: '<button :aria-label="ariaLabel">{{ label }}</button>' },
@@ -43,17 +45,17 @@ const stubs = {
 }
 
 // sealedName is null here (no K_tenant in the test → names stay sealed) so the rows show the @username.
-const MEMBERS = [
+const MEMBERS: ScopeMember[] = [
   { userId: 'u-own', username: 'owner', sealedName: null, email: 'owner@x.z', role: 'OWNER', identityPublicKey: 'AA==', hasGrant: true },
   { userId: 'u-pend', username: 'partner', sealedName: null, email: 'partner@x.z', role: 'MEMBER', identityPublicKey: 'BB==', hasGrant: false },
 ]
 
-const PENDING = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]
+const PENDING: PendingMemberInvite[] = [{ inviteId: 'inv-1', email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date() }]
 
 async function mountPanel(role: 'OWNER' | 'MEMBER', pending = PENDING) {
-  vi.mocked(listScopeMembers).mockResolvedValue(MEMBERS as never)
-  vi.mocked(listMemberInvites).mockResolvedValue(pending as never)
-  vi.mocked(listMyTenants).mockResolvedValue([{ tenantId: 't-1', name: 'Fam', domain: '127.0.0.1', role }] as never)
+  vi.mocked(listScopeMembers).mockResolvedValue(MEMBERS)
+  vi.mocked(listMemberInvites).mockResolvedValue(pending)
+  vi.mocked(listMyTenants).mockResolvedValue([myTenant({ tenantId: 't-1', name: 'Fam', domain: '127.0.0.1', role })])
   const router = createRouter({ history: createMemoryHistory(), routes: [{ path: '/', name: 'login', component: { template: '<div/>' } }] })
   const wrapper = mount(TenantMembersPanel, { global: { plugins: [router, realI18n()], stubs } })
   await flushPromises()
@@ -112,7 +114,9 @@ describe('TenantMembersPanel (uc.spaces.add-member, web)', () => {
   it('re-issues an invite by mail and offers no link to hand on', async () => {
     // ADR 0055 §2: the fresh secret goes to the invitee. The owner gets a confirmation naming the address and
     // nothing to copy — the absence is the assertion, since a copy-link is exactly what this retired.
-    vi.mocked(reissueMemberInvite).mockResolvedValue({ delivery: 'SENT' } as never)
+    vi.mocked(reissueMemberInvite).mockResolvedValue({
+      email: 'newbie@x.z', inviteStatus: 'ACTIVE', inviteExpiresAt: new Date(), delivery: 'SENT',
+    })
     const wrapper = await mountPanel('OWNER')
     await wrapper.find(`[aria-label="${t('members.reissue')}"]`).trigger('click')
     await flushPromises()

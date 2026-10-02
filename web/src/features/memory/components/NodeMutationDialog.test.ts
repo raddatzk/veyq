@@ -16,6 +16,7 @@ import { createFolder, createMemory, renameNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { setMapsConsent, setTileUrl, setGeocoderUrl } from '../../../shared/state/useMapConfig'
 import { realI18n, t } from '../../../test/i18n'
+import type { TreeNode } from '../tree'
 
 const AUTO_PENDING = { name: '', nameSource: 'geocoded', derivedMode: 'auto' }
 const stubs = {
@@ -37,9 +38,13 @@ const SCOPE = '11111111-1111-1111-1111-111111111111'
 const KEY = new Uint8Array(32).fill(7)
 const EPOCHS = epochsOf(KEY)
 
-function mountDialog(props: Record<string, unknown>) {
+// The test's half of the dialog's props — typed by the component, so a mount that forgets `mode` (or passes a
+// node that is not a TreeNode) is refused here rather than mounting a dialog no caller could render.
+type DialogProps = InstanceType<typeof NodeMutationDialog>['$props']
+
+function mountDialog(props: Omit<DialogProps, 'scopeId' | 'epochs'>) {
   return mount(NodeMutationDialog, {
-    props: { scopeId: SCOPE, epochs: EPOCHS, ...props } as never,
+    props: { scopeId: SCOPE, epochs: EPOCHS, ...props },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -73,7 +78,7 @@ describe('NodeMutationDialog', () => {
   })
 
   it('rename calls renameNode with the node id + parent', async () => {
-    const node = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null }
+    const node: TreeNode = { id: 'n9', parentId: 'p1', kind: 'FOLDER', name: 'Old', orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null }
     const wrapper = mountDialog({ mode: 'rename', node })
     expect((wrapper.find('input').element as HTMLInputElement).value).toBe('Old') // prefilled
     await wrapper.find('input').setValue('New')

@@ -50,6 +50,7 @@ import { TenantStatus } from '../api/generated/tenants'
 import { kitPayload, type KitData } from '@veyq/crypto/emergencyKit'
 import { importKitFromFile } from '../features/account/emergencyKit/emergencyKit'
 import { realI18n, t } from '../test/i18n'
+import { invitePreview, setupStatus } from '../test/models'
 
 const OWNER_EMAIL = 'owner@acme.example'
 // 32 bytes, as a real kit carries — the parser rejects a Secret Key of any other length.
@@ -74,9 +75,9 @@ const mounted: VueWrapper[] = []
 
 /** The sign-in branch: `hasAccount: true` and a locked vault → the screen asks for password + Secret Key. */
 async function mountSignInBranch(): Promise<VueWrapper> {
-  vi.mocked(previewInvite).mockResolvedValue({
-    tenantName: 'Acme', domain: 'acme.example', ownerEmail: OWNER_EMAIL, hasAccount: true, role: 'OWNER',
-  } as never)
+  vi.mocked(previewInvite).mockResolvedValue(
+    invitePreview({ tenantName: 'Acme', domain: 'acme.example', ownerEmail: OWNER_EMAIL, hasAccount: true }),
+  )
   const w = mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
   mounted.push(w)
   await flushPromises()
@@ -120,7 +121,7 @@ describe('TenantJoinView — importing the Emergency Kit on the invite-accept sc
     vi.mocked(sealName).mockReturnValue('AQ==')
     vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
     stubApi(setupApi, {
-      getSetupStatus: { setupRequired: false, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAA' },
+      getSetupStatus: setupStatus(),
     })
     Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: vi.fn() }, configurable: true })
   })

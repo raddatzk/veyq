@@ -412,7 +412,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
       DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)),
       Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FocalLength: 50, FNumber: 1.8, ExposureTime: 0.008, ISO: 200,
       latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -453,7 +453,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
       GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
       GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
       latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -482,7 +482,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
   it('a flash value of 16 reads as "did not fire" — the bitfield, not a truthiness test', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', Flash: 16 })
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -504,7 +504,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
   // --- the resolved place name (uc.memory.place, ADR 0016) ------------------------------------------------
   /** One geotagged photo, listed and ready to open. */
   async function seedGeotagged(memoryKey: Uint8Array) {
-    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ Make: 'Canon', latitude: 48.137, longitude: 11.575 })
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     const geo = vi.fn(async (url: string, init?: RequestInit) =>
@@ -605,7 +605,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
     mapConfig.geocoder = null // no geocoder: this test is about the needle, not the name
     vi.mocked(exifr.parse).mockResolvedValue({
       Make: 'Canon', latitude: 48.137, longitude: 11.575, GPSImgDirection: 215.3, GPSImgDirectionRef: 'T',
-    } as never)
+    })
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
@@ -624,7 +624,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
   it('shows the no-detail message when the item carries no sealed EXIF', async () => {
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue(undefined as never) // no readable EXIF → nothing sealed
+    vi.mocked(exifr.parse).mockResolvedValue(undefined) // no readable EXIF → nothing sealed
 
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
@@ -642,7 +642,7 @@ describe('MediaLightbox — lazy EXIF detail panel (cr-0064)', () => {
 
 describe('MediaLightbox — correct the capture time (cr-0065/0066)', () => {
   async function seedOne(memoryKey: Uint8Array, exifRaw: unknown) {
-    vi.mocked(exifr.parse).mockResolvedValue(exifRaw as never)
+    vi.mocked(exifr.parse).mockResolvedValue(exifRaw)
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)

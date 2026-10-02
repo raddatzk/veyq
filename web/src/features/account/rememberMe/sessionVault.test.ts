@@ -6,25 +6,16 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { IDBFactory } from 'fake-indexeddb'
 import { cacheSessionVault, loadSessionVault, clearSessionVault, isSessionVaultSupported } from './sessionVault'
 import { b64std } from '@veyq/crypto/base64'
+import { memoryStorage } from '../../../test/memoryStorage'
 
 const masterKey = () => new Uint8Array(Array.from({ length: 32 }, (_, i) => i + 1))
 
 // Minimal sessionStorage for the node test env (indexedDB comes from fake-indexeddb, crypto.subtle from node).
-const mem = new Map<string, string>()
-globalThis.sessionStorage = {
-  getItem: (k: string) => (mem.has(k) ? mem.get(k)! : null),
-  setItem: (k: string, v: string) => void mem.set(k, String(v)),
-  removeItem: (k: string) => void mem.delete(k),
-  clear: () => mem.clear(),
-  key: (i: number) => [...mem.keys()][i] ?? null,
-  get length() {
-    return mem.size
-  },
-} as Storage
+globalThis.sessionStorage = memoryStorage()
 
 describe('sessionVault (web "off" tier, cr-0057)', () => {
   beforeEach(() => {
-    mem.clear()
+    sessionStorage.clear()
     globalThis.indexedDB = new IDBFactory() // a fresh, empty key store per test
   })
 
@@ -61,7 +52,7 @@ describe('sessionVault (web "off" tier, cr-0057)', () => {
 
   it('returns null when the ciphertext is gone (browser close cleared sessionStorage) — drops the orphan key', async () => {
     await cacheSessionVault('a@b.com', masterKey())
-    mem.delete('veyq.session-vault') // simulate sessionStorage cleared on browser close (IndexedDB key lingers)
+    sessionStorage.removeItem('veyq.session-vault') // simulate sessionStorage cleared on browser close (IndexedDB key lingers)
     expect(await loadSessionVault()).toBeNull()
     // the orphaned key was dropped, so even re-adding the old ciphertext can't decrypt — proven by a clean clear
     await clearSessionVault()

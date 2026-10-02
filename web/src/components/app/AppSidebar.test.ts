@@ -33,13 +33,16 @@ vi.mock('../../features/memory/coverStore', () => ({
 }))
 
 import AppSidebar from './AppSidebar.vue'
-import { listMyTenants, listMyGroups, openMyTenantIcon } from '../../features/spaces/scopes'
+import { listMyTenants, listMyGroups, openMyTenantIcon, type GroupSpace } from '../../features/spaces/scopes'
+import type { CompromiseRotation } from '../../api/generated/scopes'
 import { getMyProfile } from '../../features/account/profile/profile'
 import { activeSpace, clearActiveSpace } from '../../app/activeSpace'
 import { treeStore } from '../../features/memory/treeStore'
+import type { TreeNode } from '../../features/memory/tree'
 import { favoritesStore } from '../../app/favoritesStore'
 
 import { realI18n, t } from '../../test/i18n'
+import { memberProfile, myTenant } from '../../test/models'
 
 // The overview lives in a teleporting PrimeVue Popover — stub it with a pass-through that always renders its
 // slot (so the tenant list is assertable) and exposes the toggle/hide the trigger calls.
@@ -69,11 +72,11 @@ async function mountAt(hash: string) {
 
 beforeEach(() => {
   vi.mocked(listMyTenants).mockResolvedValue([
-    { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
+    myTenant({ tenantId: 't-1', domain: '127.0.0.1' }),
   ])
   vi.mocked(listMyGroups).mockResolvedValue([])
   vi.mocked(openMyTenantIcon).mockResolvedValue(null)
-  vi.mocked(getMyProfile).mockResolvedValue({ username: '', sealedName: null, requireGroupAddConsent: false })
+  vi.mocked(getMyProfile).mockResolvedValue(memberProfile({ username: '' }))
   clearActiveSpace()
   activeSpace.tenantId = 't-1' // as if the tenant space is the active one
 })
@@ -161,8 +164,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('shows a chevron and an overview of every tenant when there are several', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
+      myTenant({ tenantId: 't-1', domain: '127.0.0.1' }),
+      myTenant({ tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER' }),
     ])
     const wrapper = await mountAt('')
 
@@ -179,8 +182,8 @@ describe('AppSidebar tenant switcher', () => {
 
   it('switches to another tenant from the overview (full navigation to its domain)', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'ACTIVE', iconEpoch: 0 },
+      myTenant({ tenantId: 't-1', domain: '127.0.0.1' }),
+      myTenant({ tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER' }),
     ])
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
     const wrapper = await mountAt('')
@@ -195,8 +198,8 @@ describe('AppSidebar tenant switcher', () => {
   // but is not enterable. The control is the same list's active row, which still carries its domain.
   it('lists a suspended tenant offline and not enterable', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0 },
-      { tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'SUSPENDED', iconEpoch: 0 },
+      myTenant({ tenantId: 't-1', domain: '127.0.0.1' }),
+      myTenant({ tenantId: 't-2', name: 'Verein Beispiel', domain: 'verein.localhost', role: 'MEMBER', status: 'SUSPENDED' }),
     ])
     const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => {})
     const wrapper = await mountAt('')
@@ -220,13 +223,13 @@ describe('AppSidebar tenant switcher', () => {
 // tell was in the stylesheet — `.sidebar-favorite-cover .memory-cover-image` and three `.mobile-nav-favorite`
 // rules existed with nothing in the markup matching them.
 describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
-  const MEMORY = {
+  const MEMORY: TreeNode = {
     id: 'n1', name: 'Rom 2026', kind: 'MEMORY', parentId: null, orderIndex: 0, epoch: 0,
     wrappedContentKey: 'k', wrappedMeta: 'm',
   }
 
   beforeEach(() => {
-    treeStore.nodes = [MEMORY] as unknown as typeof treeStore.nodes
+    treeStore.nodes = [MEMORY]
     favoritesStore.ids = new Set(['n1'])
     storeCovers.map = new Map([['n1', { url: 'blob:cover-1', crop: { x: 0, y: 0, w: 1, h: 1 } }]])
   })
@@ -283,9 +286,9 @@ describe('AppSidebar favorites — a pinned Memory shows its cover', () => {
 
 describe('AppSidebar — a space whose compromise rotation needs an owner is marked (uc.spaces.complete-queued-rotation)', () => {
   it('marks a group on stalled and on failed, and no other', async () => {
-    const group = (scopeId: string, compromiseRotation: string | null) =>
+    const group = (scopeId: string, compromiseRotation: CompromiseRotation | null): GroupSpace =>
       ({ scopeId, tenantId: 't-1', name: scopeId, icon: null, role: 'OWNER', deletedAt: null, purgeAfter: null, compromiseRotation })
-    vi.mocked(listMyGroups).mockResolvedValueOnce([group('g-failed', 'failed'), group('g-stalled', 'stalled'), group('g-fine', null)] as never)
+    vi.mocked(listMyGroups).mockResolvedValueOnce([group('g-failed', 'failed'), group('g-stalled', 'stalled'), group('g-fine', null)])
     const wrapper = await mountAt('')
     const link = (name: string) => wrapper.findAll('.desktop-group-link').find((a) => a.text().includes(name))!
     expect(link('g-failed').text()).toContain(t('members.compromiseRotationMark'))
@@ -295,8 +298,8 @@ describe('AppSidebar — a space whose compromise rotation needs an owner is mar
 
   it('marks the active tenant row when its root needs an owner', async () => {
     vi.mocked(listMyTenants).mockResolvedValueOnce([
-      { tenantId: 't-1', name: 'Familie Muster', domain: '127.0.0.1', role: 'OWNER', status: 'ACTIVE', iconEpoch: 0, compromiseRotation: 'failed' },
-    ] as never)
+      myTenant({ tenantId: 't-1', domain: '127.0.0.1', compromiseRotation: 'failed' }),
+    ])
     const wrapper = await mountAt('')
     expect(wrapper.get('.sidebar-tenant-space-link').text()).toContain(t('members.compromiseRotationMark'))
   })

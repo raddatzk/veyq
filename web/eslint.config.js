@@ -73,6 +73,14 @@ const API_MOCKS_SYNTAX = [
     selector: `CallExpression[callee.object.name='vi'][callee.property.name='mock'][arguments.0.value=/features\\/(?!.*\\.vue$)/] > ${factoryReturn} > Property:not([key.name=/^use[A-Z]/]) > .value:matches(:function, CallExpression):not(CallExpression[callee.object.name='vi'][callee.property.name='fn'][arguments.length=0])`,
     message: 'Mock a features/ module with bare vi.fn() exports; set behaviour per test through vi.mocked(fn), which is typed by the real function.',
   })),
+  // S7: `as never` switches a typed seam off — `vi.mocked(f).mockResolvedValue(x as never)` checks `x` against nothing.
+  // A payload comes from a builder annotated with its model; a cast that must stay names its target
+  // (`as unknown as <T>`), which a reader can grep for. LIMIT: `as unknown as <Model>` is not seen here; the
+  // styleguide's rule against it (§10) is what holds it.
+  {
+    selector: 'TSAsExpression > TSNeverKeyword',
+    message: 'No `as never` in a test: build the payload with its model type, or name the cast (`as unknown as <T>`).',
+  },
 ]
 
 // Flat config (ESLint 10). The type-checked ruleset is deliberately NOT enabled: this is a

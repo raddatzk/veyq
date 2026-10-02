@@ -4,6 +4,7 @@ import { mount } from '@vue/test-utils'
 import MemoryCard from './MemoryCard.vue'
 import { NodeKind } from '../../../api/generated/content'
 import type { TreeNode } from '../tree'
+import type { MemoryDate } from '../memoryDate'
 import { realI18n, t } from '../../../test/i18n'
 
 
@@ -49,7 +50,7 @@ describe('MemoryCard cover (cr-0072)', () => {
 
   it('renders the decrypted cover with the crop-offset styles when set', () => {
     const w = mount(MemoryCard, {
-      props: { memory, coverSrc: 'blob:cover', coverCrop: { x: 0.1, y: 0.2, width: 0.8, height: 0.6 } } as never,
+      props: { memory, coverSrc: 'blob:cover', coverCrop: { x: 0.1, y: 0.2, width: 0.8, height: 0.6 } },
       global: { plugins: [realI18n()] },
     })
     const img = w.find('.memory-card-cover img')
@@ -61,8 +62,8 @@ describe('MemoryCard cover (cr-0072)', () => {
 })
 
 describe('MemoryCard sealed date (cr-0067)', () => {
-  const mountWithDate = (date: unknown) =>
-    mount(MemoryCard, { props: { memory, date } as never, global: { plugins: [realI18n()] } })
+  const mountWithDate = (date: MemoryDate | null) =>
+    mount(MemoryCard, { props: { memory, date }, global: { plugins: [realI18n()] } })
 
   it('shows no date line when the node carries none', () => {
     expect(mountWithDate(null).find('.memory-card-date').exists()).toBe(false)

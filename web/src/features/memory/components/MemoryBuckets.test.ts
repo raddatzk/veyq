@@ -30,6 +30,7 @@ vi.mock('../../../shared/state/useToast', () => ({
 import MemoryBuckets from './MemoryBuckets.vue'
 import { listBuckets, deleteMedia, restoreMedia, type MediaItem, type BucketItem } from '../media'
 import { realI18n } from '../../../test/i18n'
+import { mediaItem } from '../../../test/models'
 
 // Stub the PrimeVue Select + Menu (not under test) and MediaGrid (renders the tile slot per item so the tile chrome
 // — checkbox + 3-dot — is exercised).
@@ -46,8 +47,7 @@ const MediaGridStub = {
     '<div class="grid-stub"><template v-for="it in items" :key="it.id"><slot name="tile" :tile="{ left: 0, top: 0, renderedWidth: 100, renderedHeight: 100 }" :item="it" /></template></div>',
 }
 
-const media = (id: string, ownerKey: string, bucketId: string): MediaItem =>
-  ({ mediaId: id, ownerKey, bucketId, original: {}, derivatives: [] }) as unknown as MediaItem
+const media = (id: string, ownerKey: string, bucketId: string): MediaItem => mediaItem({ mediaId: id, ownerKey, bucketId })
 const bucket = (bucketId: string, ownerKey: string, mediaCount: number, sealedName?: string, isPrimary = true, parentBucketId?: string): BucketItem =>
   ({ bucketId, ownerKey, isPrimary, mediaCount, sealedName, parentBucketId }) as BucketItem
 

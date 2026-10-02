@@ -35,7 +35,7 @@ const STATES = ['waiting', 'stalled', 'secured', 'failed'] as const
 const scopeOf = (state: string) => `s-${state}`
 
 async function mountPanel() {
-  vi.mocked(listQueuedRotations).mockResolvedValue(STATES.map((state) => ({ scopeId: scopeOf(state), state })) as never)
+  vi.mocked(listQueuedRotations).mockResolvedValue(STATES.map((state) => ({ scopeId: scopeOf(state), state })))
   const wrapper = mount(KeyRotationPanel, { global: { plugins: [realI18n()], stubs } })
   await flushPromises()
   return wrapper
@@ -65,7 +65,7 @@ describe('KeyRotationPanel — the queued rotations, as the server reads them', 
     const control = requeueIn(w, scopeOf('failed'))
     expect(control).toBeTruthy()
 
-    vi.mocked(requeueQueuedRotation).mockResolvedValue({ scopeId: scopeOf('failed'), state: 'waiting' } as never)
+    vi.mocked(requeueQueuedRotation).mockResolvedValue({ scopeId: scopeOf('failed'), state: 'waiting' })
     await control!.trigger('click')
     await flushPromises()
 

@@ -21,6 +21,7 @@ import { NodeKind } from '../../api/generated/content'
 import { MediaDerivativeKind, type MediaSummary } from '../../api/generated/media'
 import { ScopeKind, type ScopeSummary } from '../../api/generated/scopes'
 import { stubApi } from '../../test/apiMock'
+import { accountKeyMaterial } from '../../test/models'
 
 const SCOPE = '5c09e000-0000-4000-8000-000000000001'
 const OTHER_SCOPE = '5c09e000-0000-4000-8000-000000000002'
@@ -104,7 +105,7 @@ describe('a scope grant served in another scope\'s row', () => {
   })
   beforeEach(() => {
     vi.mocked(identityPrivate).mockImplementation(() => copyPriv())
-    stubApi(accountApi, { getAccountKeyMaterial: { userId: ME, suiteId: 'v1', wraps: [], wrappedIdentityPrivateKey: 'AQ==' } })
+    stubApi(accountApi, { getAccountKeyMaterial: accountKeyMaterial({ userId: ME }) })
   })
   const serve = (rows: ScopeSummary[]) => stubApi(scopesApi, { listMyScopes: rows })
 

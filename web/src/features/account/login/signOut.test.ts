@@ -24,22 +24,15 @@ vi.mock('../../../app/sessionRefresh', async (actual) => ({
 
 import { signOut, takeSignOutNotice } from './signOut'
 import { sessionApi } from '../../../api/client'
+import { memoryStorage } from '../../../test/memoryStorage'
 
-/** `sessionStorage` is per tab and survives the document load the ending starts — that is what the notice rides. */
-function fakeSessionStorage() {
-  const map = new Map<string, string>()
-  return {
-    getItem: (k: string) => map.get(k) ?? null,
-    setItem: (k: string, v: string) => void map.set(k, v),
-    removeItem: (k: string) => void map.delete(k),
-  }
-}
 
 const order: string[] = []
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.stubGlobal('sessionStorage', fakeSessionStorage())
+  // `sessionStorage` is per tab and survives the document load the ending starts — that is what the notice rides.
+  vi.stubGlobal('sessionStorage', memoryStorage())
   order.length = 0
   fakeApi(sessionApi, { logout })
   clearSessionVault.mockImplementation(async () => void order.push('session-vault'))

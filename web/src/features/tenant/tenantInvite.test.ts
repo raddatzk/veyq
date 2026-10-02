@@ -8,6 +8,7 @@ import { acceptInvite, registerAndAccept, tenantError } from './tenantInvite'
 import { tenantsApi } from '../../api/client'
 import { stubApi } from '../../test/apiMock'
 import { ResponseError } from '../../api/generated/tenants'
+import type { AccountMaterial } from '@veyq/crypto/accountBirth'
 
 describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => {
   const stubInvite = () =>
@@ -31,12 +32,12 @@ describe('tenant-invite accept facade (uc.admin.create-tenant, Slice B)', () => 
   })
 
   it('registerAndAccept threads the sealedName; undefined when the name is skipped (cr-0106)', async () => {
-    const material = {
+    const material: AccountMaterial = {
       suiteId: 'v1', identityPublicKey: 'aQ==', wrappedIdentityPrivateKey: 'aQ==',
       authPublicKey: 'aQ==', masterKeyWraps: [], secretKeyProofPublicKey: 'aQ==',
     }
     const userId = '5c09e000-0000-4000-8000-0000000000a7' // client-minted: a sealed name is bound to it (ADR 0072)
-    await registerAndAccept('secret', userId, 'kevin', material as never, BIRTH) // birth set, no name
+    await registerAndAccept('secret', userId, 'kevin', material, BIRTH) // birth set, no name
     expect(api.registerAndAcceptTenantInvite).toHaveBeenCalledWith(
       expect.objectContaining({
         registerAndAcceptRequest: expect.objectContaining({ userId, username: 'kevin', ...BIRTH, sealedName: undefined }),

@@ -11,7 +11,7 @@ import type {
   IdentityPins,
   MasterKeyWrap,
 } from '../../../api/generated/account'
-import type { ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
+import type { ScopeMember, ScopeSummary, ScopesApi } from '../../../api/generated/scopes'
 
 // The APIs and the vault are mocked; the scope layer and **the crypto are real** — both wraps, the identity mint
 // and the KEK derivation all run for real (the last at a light Argon cost, see the worker mock below), so
@@ -95,6 +95,10 @@ const SCOPE_PERSONAL = '5c09e000-0000-4000-8000-0000000000e1'
 const SCOPE_SHARED = '5c09e000-0000-4000-8000-0000000000e2'
 /** The caller's account id, as its own key material names it. */
 const ME = '0e000000-0000-4000-8000-0000000000e9'
+/** A whole scope member; a test passes the identity it is about. */
+const member = (o: Partial<ScopeMember> & Pick<ScopeMember, 'userId' | 'identityPublicKey'>): ScopeMember => ({
+  username: o.userId, role: 'OWNER', hasGrant: true, ...o,
+})
 const OLD_PUB = b64std(v1.serializeIdentityPublic(OLD_ID.pub))
 /** A scope the caller holds at epoch 0, its grant wrapping `e0` to the old identity — self-signed by it (ADR 0028
  *  Decision 6), since the caller birthed it. */
@@ -376,9 +380,7 @@ describe('what a rotation leaves behind', () => {
     const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, e0)] })
     // The caller's own membership carries the admission it self-tagged at birth — a rotation carries it forward.
     const own = tagAdmission(e0, { scopeId: SCOPE_PERSONAL, kind: 'PERSONAL' }, 0, ME)
-    vi.mocked(listScopeMembers).mockResolvedValue([
-      { userId: ME, identityPublicKey: 'ignored', ...own },
-    ] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
+    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored', ...own })])
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
@@ -423,9 +425,9 @@ describe('what a rotation leaves behind', () => {
     // lock that member out. The honest answer is to leave the scope alone and say it was not secured.
     const srv = fakeServer({ sole: [SCOPE_PERSONAL], held: [heldAt0(SCOPE_PERSONAL, v1.randomBytes(32))] })
     vi.mocked(listScopeMembers).mockResolvedValue([
-      { userId: 'me', identityPublicKey: 'x' },
-      { userId: 'someone-else', identityPublicKey: 'y' },
-    ] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
+      member({ userId: 'me', identityPublicKey: 'x' }),
+      member({ userId: 'someone-else', identityPublicKey: 'y' }),
+    ])
 
     const result = await rotateKeys(PASSWORD, SECRET_KEY_B64)
 
@@ -462,7 +464,7 @@ describe('what a rotation leaves behind', () => {
       pins: sealedPins(3),
       register: sealedRegister(2),
     })
-    vi.mocked(listScopeMembers).mockResolvedValue([{ userId: ME, identityPublicKey: 'ignored' }] as unknown as Awaited<ReturnType<typeof listScopeMembers>>)
+    vi.mocked(listScopeMembers).mockResolvedValue([member({ userId: ME, identityPublicKey: 'ignored' })])
 
     await rotateKeys(PASSWORD, SECRET_KEY_B64)
 

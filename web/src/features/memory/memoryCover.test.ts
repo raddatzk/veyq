@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { stubApi } from '../../test/apiMock'
+import { mediaItem } from '../../test/models'
 
 vi.mock('../../api/client', () => ({
   contentApi: vi.fn(),
@@ -33,6 +34,7 @@ import { MetaConflictError } from './sealedMetaWrite'
 import { listMedia, openGrid, openBlob } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
+
 
 const SCOPE_ID = '11111111-1111-1111-1111-111111111111'
 const nodeKey = v1.randomBytes(32)
@@ -275,7 +277,7 @@ describe('loadNodeCover', () => {
   })
 
   it('a media-source cover resolves the chosen media’s thumbnail tier (listMedia + openGrid)', async () => {
-    vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'm1' }] as never)
+    vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'm1' })])
     vi.mocked(openGrid).mockResolvedValue(new Uint8Array([9]))
     const crop = FULL_FRAME
     const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop } }, SCOPE) }
@@ -288,7 +290,7 @@ describe('loadNodeCover', () => {
   })
 
   it('a dangling media source (the chosen media is gone) falls back to null (E2, never a broken tile)', async () => {
-    vi.mocked(listMedia).mockResolvedValue([{ mediaId: 'other' }] as never)
+    vi.mocked(listMedia).mockResolvedValue([mediaItem({ mediaId: 'other' })])
     const node = { id: NODE_ID, wrappedMeta: sealMeta({ v: 1, cover: { source: { kind: 'media', mediaId: 'm1' }, crop: FULL_FRAME } }, SCOPE) }
     expect(await loadNodeCover(SCOPE, nodeKey, node)).toBeNull()
   })

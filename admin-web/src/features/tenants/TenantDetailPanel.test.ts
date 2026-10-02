@@ -38,6 +38,8 @@ vi.mock('../../shared/state/useConfirm', () => ({ useConfirm: () => ({ ask: conf
 
 import TenantDetailPanel from './TenantDetailPanel.vue'
 import { listTenants, revokeTenant, resendInvite, suspendTenant, reactivateTenant, changeTenantDomain, tenantError, setTenantStorageQuota } from './tenants'
+import type { TenantSummary } from './tenants'
+import { httpError } from '../../test/httpError'
 
 const i18n = createI18n({
   legacy: false, locale: 'en', missingWarn: false, fallbackWarn: false,
@@ -78,9 +80,9 @@ const stubs = {
 }
 
 const NO_QUOTA = { storageUsedBytes: 0, storageQuotaBytes: null }
-const PENDING = { tenantId: 't-1', name: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', status: 'PENDING', ...NO_QUOTA }
-const ACTIVE = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE', ...NO_QUOTA }
-const SUSPENDED = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED', ...NO_QUOTA }
+const PENDING: TenantSummary = { tenantId: 't-1', name: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', status: 'PENDING', ...NO_QUOTA }
+const ACTIVE: TenantSummary = { tenantId: 't-2', name: 'Live', domain: 'live.example', ownerEmail: 'o@live.example', status: 'ACTIVE', ...NO_QUOTA }
+const SUSPENDED: TenantSummary = { tenantId: 't-3', name: 'Offline', domain: 'off.example', ownerEmail: 'o@off.example', status: 'SUSPENDED', ...NO_QUOTA }
 const GiB = 1024 ** 3
 
 const mountPanel = (tenantId = 't-1') => mount(TenantDetailPanel, { props: { tenantId }, global: { plugins: [i18n], stubs } })
@@ -93,7 +95,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   beforeEach(() => {
     vi.clearAllMocks()
     confirmAsk.mockResolvedValue(true)
-    vi.mocked(listTenants).mockResolvedValue([PENDING as never])
+    vi.mocked(listTenants).mockResolvedValue([PENDING])
   })
 
   it('renders a PENDING tenant with its invite controls (reassign / resend / revoke)', async () => {
@@ -107,7 +109,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('an ACTIVE tenant shows the status badge but no invite controls', async () => {
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
     expect(w.find('.veyq-badge.success').exists()).toBe(true)
@@ -115,7 +117,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('take-offline is confirm-gated and delegates to the facade, then reloads in place', async () => {
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
 
@@ -127,7 +129,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     // that spells the consequence out (styleguide § Confirming a destructive action).
     expect(confirmAsk.mock.calls[0][0]).toMatchObject({ header: 'Take this tenant offline', message: 'offline?' })
 
-    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'SUSPENDED' } as never])
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, status: 'SUSPENDED' }])
     await btn(w, 'Take offline').trigger('click')
     await flushPromises()
     expect(suspendTenant).toHaveBeenCalledWith('t-2')
@@ -137,7 +139,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('a SUSPENDED tenant shows its own badge + notice and offers only bring-back-online', async () => {
-    vi.mocked(listTenants).mockResolvedValue([SUSPENDED as never])
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED])
     const w = mountPanel('t-3')
     await flushPromises()
     expect(w.find('.veyq-badge.danger').exists()).toBe(true)
@@ -148,7 +150,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('bring-back-online needs no confirm and delegates to the facade', async () => {
-    vi.mocked(listTenants).mockResolvedValue([SUSPENDED as never])
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED])
     const w = mountPanel('t-3')
     await flushPromises()
     await btn(w, 'Bring back online').trigger('click')
@@ -191,7 +193,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('moves an ACTIVE tenant to a new address, confirm-gated, and reloads in place', async () => {
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
     // Prefilled with where the tenant is now, so the field reads as "the address" and not as an empty command.
@@ -205,7 +207,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
     // The one confirm whose body interpolates: the address it is about has to be IN the sentence.
     expect(confirmAsk.mock.calls[0][0]).toMatchObject({ message: 'move to moved.example?' })
 
-    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, domain: 'moved.example' } as never])
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, domain: 'moved.example' }])
     await submitMove(w)
     await flushPromises()
     expect(changeTenantDomain).toHaveBeenCalledWith('t-2', 'moved.example')
@@ -222,7 +224,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('offers no move on a SUSPENDED tenant — the backend refuses it, so the UI does not ask', async () => {
-    vi.mocked(listTenants).mockResolvedValue([SUSPENDED as never])
+    vi.mocked(listTenants).mockResolvedValue([SUSPENDED])
     const w = mountPanel('t-3')
     await flushPromises()
     expect(w.findAll('button').find((b) => b.text() === 'Move')).toBeUndefined()
@@ -232,7 +234,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   it('maps the move failures apart instead of showing one generic error', async () => {
     // Three different fixes for the operator — pick another address / bring it back online / correct the form —
     // so a single "that failed" would be the wrong answer to two of them.
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
 
@@ -242,8 +244,8 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
       [{ status: 400, code: 'invalid_request' }, 'not an address'],
     ] as const) {
       await w.findAll('input')[0].setValue(`x-${expected.length}.example`)
-      vi.mocked(changeTenantDomain).mockRejectedValueOnce({ response: { status: failure.status } } as never)
-      vi.mocked(tenantError).mockResolvedValueOnce(failure as never)
+      vi.mocked(changeTenantDomain).mockRejectedValueOnce(httpError(failure.status))
+      vi.mocked(tenantError).mockResolvedValueOnce(failure)
       await submitMove(w)
       await flushPromises()
       expect(w.text()).toContain(expected)
@@ -255,7 +257,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   const quotaInput = (w: ReturnType<typeof mountPanel>) => w.find('form.tenant-storage input')
 
   it('shows the usage beside the quota, and "none" with no Remove when no quota is set', async () => {
-    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageUsedBytes: 3 * 1024 ** 2 } as never])
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageUsedBytes: 3 * 1024 ** 2 }])
     const w = mountPanel('t-2')
     await flushPromises()
     expect(w.find('.tenant-storage__figures').text()).toContain('3 MB')
@@ -264,11 +266,11 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('sets the quota typed in GiB as bytes, and reloads in place', async () => {
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
     await quotaInput(w).setValue('2,5') // the German decimal comma is a decimal too
-    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: 2.5 * GiB } as never])
+    vi.mocked(listTenants).mockResolvedValue([{ ...ACTIVE, storageQuotaBytes: 2.5 * GiB }])
     await submitQuota(w)
     await flushPromises()
     expect(setTenantStorageQuota).toHaveBeenCalledWith('t-2', 2_684_354_560) // 2.5 × 1024³
@@ -276,7 +278,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('clears a set quota with null, and prefills the input with the current one in GiB', async () => {
-    vi.mocked(listTenants).mockResolvedValue([{ ...SUSPENDED, storageQuotaBytes: 10 * GiB } as never]) // a suspended tenant keeps its quota
+    vi.mocked(listTenants).mockResolvedValue([{ ...SUSPENDED, storageQuotaBytes: 10 * GiB }]) // a suspended tenant keeps its quota
     const w = mountPanel('t-3')
     await flushPromises()
     expect((quotaInput(w).element as HTMLInputElement).value).toBe('10')
@@ -286,7 +288,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('refuses a quota that is not a number of GiB without calling', async () => {
-    vi.mocked(listTenants).mockResolvedValue([ACTIVE as never])
+    vi.mocked(listTenants).mockResolvedValue([ACTIVE])
     const w = mountPanel('t-2')
     await flushPromises()
     for (const bad of ['-1', 'lots', '']) {
@@ -304,7 +306,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
 
   it('shows a not-authorized state on a 403', async () => {
     // A real generated-client failure carries `.response.status`; the panel classifies it via `httpStatus`.
-    vi.mocked(listTenants).mockRejectedValueOnce({ response: { status: 403 } } as never)
+    vi.mocked(listTenants).mockRejectedValueOnce(httpError(403))
     const w = mountPanel()
     await flushPromises()
     expect(w.find('.msg').exists()).toBe(true)
@@ -312,7 +314,7 @@ describe('TenantDetailPanel (uc.admin.create-tenant + uc.admin.suspend-tenant, w
   })
 
   it('redirects to login on a 401', async () => {
-    vi.mocked(listTenants).mockRejectedValueOnce({ response: { status: 401 } } as never)
+    vi.mocked(listTenants).mockRejectedValueOnce(httpError(401))
     mountPanel()
     await flushPromises()
     expect(push).toHaveBeenCalledWith({ name: 'login' })

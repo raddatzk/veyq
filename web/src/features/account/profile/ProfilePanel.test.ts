@@ -61,8 +61,8 @@ const sent = () => {
 describe('ProfilePanel (uc.spaces.edit-profile, web)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    vi.mocked(getMyProfile).mockResolvedValue(STORED as never)
-    vi.mocked(updateMyProfile).mockResolvedValue(STORED as never)
+    vi.mocked(getMyProfile).mockResolvedValue(STORED)
+    vi.mocked(updateMyProfile).mockResolvedValue(STORED)
     vi.mocked(openOwnNameKey).mockResolvedValue({ key: K_TENANT, address: ADDRESS })
   })
 

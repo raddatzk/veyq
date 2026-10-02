@@ -49,6 +49,7 @@ import { buildAccount } from '@veyq/crypto/accountBirth'
 import { vaultState } from '../app/vault'
 import { pwnedCount } from '../shared/pwned'
 import { realI18n, t } from '../test/i18n'
+import { invitePreview, setupStatus } from '../test/models'
 
 // PrimeVue's real components need the plugin's config injection, which this file has no reason to install:
 // what it asserts is a `:disabled` prop and a rendered hint, not PrimeVue's own rendering. Same stub set as
@@ -77,9 +78,9 @@ const stubs = {
 
 /** `previewInvite` decides which branch the view renders: `hasAccount` false → register, true → sign in. */
 async function mountFor(hasAccount: boolean) {
-  vi.mocked(previewInvite).mockResolvedValue({
-    tenantName: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', hasAccount, role: 'OWNER',
-  } as never)
+  vi.mocked(previewInvite).mockResolvedValue(
+    invitePreview({ tenantName: 'Acme', domain: 'acme.example', ownerEmail: 'owner@acme.example', hasAccount }),
+  )
   const w = mount(TenantJoinView, { global: { plugins: [realI18n()], stubs } })
   await flushPromises()
   return w
@@ -105,7 +106,7 @@ beforeEach(() => {
   vi.mocked(sealName).mockReturnValue('AQ==')
   vi.mocked(tenantError).mockResolvedValue({ status: 0, code: null })
   stubApi(setupApi, {
-    getSetupStatus: { setupRequired: false, version: { major: 1, build: 0 }, capabilities: [], suites: ['v1'], instanceSalt: 'AAAA' },
+    getSetupStatus: setupStatus(),
   })
   vaultState.unlocked = false
 })

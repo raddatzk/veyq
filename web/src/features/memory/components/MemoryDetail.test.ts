@@ -197,9 +197,9 @@ describe('MemoryDetail (gallery grid + header)', () => {
     const memoryKey = v1.randomBytes(32)
     // media 0 = 2020, media 1 = 2022, media 2 = 2021 (creation order); the exifr date drives the capturedAt tier
     vi.mocked(exifr.parse)
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2020, 0, 1)) } as never)
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2022, 0, 1)) } as never)
-      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2021, 0, 1)) } as never)
+      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2020, 0, 1)) })
+      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2022, 0, 1)) })
+      .mockResolvedValueOnce({ DateTimeOriginal: new Date(Date.UTC(2021, 0, 1)) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(2) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(3) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
@@ -225,7 +225,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
     const memoryKey = v1.randomBytes(32)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2021, 4, 1, 10, 0, 0)) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     const wrapper = mountDetail(memoryKey)
@@ -345,7 +345,7 @@ describe('MemoryDetail (Memory date — header + auto-reconcile, cr-0067)', () =
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(epoch) } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(epoch) })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     return store
   }
@@ -519,7 +519,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     mountWithLocationStub(memoryKey, sealed)
@@ -605,7 +605,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
     const wrapper = mountWithLocationStub(memoryKey, pending)
     await flushPromises()
@@ -623,7 +623,7 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     const store = galleryFakeStore()
     fakeApi(mediaApi, store.api)
     vi.stubGlobal('fetch', store.fetchStub)
-    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 })
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
     mountWithLocationStub(memoryKey, pending)

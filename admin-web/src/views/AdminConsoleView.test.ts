@@ -37,6 +37,7 @@ import AdminConsoleView from './AdminConsoleView.vue'
 import { listTenants } from '../features/tenants/tenants'
 import { logout } from '../features/auth/login'
 import { resetServerRole } from '../app/serverRole'
+import { httpError } from '../test/httpError'
 
 const i18n = createI18n({
   legacy: false,
@@ -56,13 +57,6 @@ const i18n = createI18n({
     },
   },
 })
-
-/** A thrown generated-client error carrying an HTTP response — the shape `httpStatus` reads. */
-function httpError(status: number): Error {
-  const e = new Error(`http ${status}`)
-  ;(e as unknown as { response: Response }).response = new Response('', { status })
-  return e
-}
 
 async function mountConsole() {
   const router = createRouter({

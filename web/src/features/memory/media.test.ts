@@ -437,7 +437,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
 
   afterEach(() => {
     vi.mocked(exifr.parse).mockReset()
-    vi.mocked(exifr.parse).mockResolvedValue(undefined as never)
+    vi.mocked(exifr.parse).mockResolvedValue(undefined)
   })
 
   it('seals the layout tier {v,w,h} (geometry only) under K_mem and round-trips it through listMedia', async () => {
@@ -446,7 +446,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.stubGlobal('fetch', store.fetchStub)
     const deriver = stubDeriver()
     deriver.probeDimensions = vi.fn(async () => ({ w: 1920, h: 1080 }))
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT), Make: 'Canon' } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT), Make: 'Canon' })
 
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/png' }, deriver)
@@ -472,7 +472,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue({
       DateTimeOriginal: new Date(CAPTURED_AT),
       Make: 'Canon', Model: 'EOS R', LensModel: 'RF 50mm', FNumber: 1.8, ISO: 200, latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(10).fill(7) as BlobPart]), mediaType: 'image/jpeg' }, deriver)
@@ -525,7 +525,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
       GPSAltitude: 519.4, GPSAltitudeRef: { 0: 0 },
       GPSImgDirection: 215.3, GPSImgDirectionRef: 'T', GPSHPositioningError: 4.8,
       latitude: 48.137, longitude: 11.575,
-    } as never)
+    })
 
     const memoryKey = v1.randomBytes(32)
     const FILENAME = 'IMG_0042_holiday.HEIC'
@@ -568,7 +568,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     deriver.sourceDims = { w: 4032, h: 3024 }
     vi.mocked(exifr.parse).mockResolvedValue({
       DateTimeOriginal: new Date(CAPTURED_AT), latitude: 48.137, longitude: 11.575, Make: 'Canon',
-    } as never)
+    })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg', lastModified: 1 }, deriver)
     const [item] = await listMedia(SCOPE_ID, NODE_ID)
@@ -610,7 +610,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue({
       Make: 'Canon', FNumber: 1.8, ISO: 200, FocalLength: 50, Rating: 4,
       description: { lang: 'x-default', value: 'ä'.repeat(20_000) },
-    } as never)
+    })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
@@ -633,7 +633,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     vi.mocked(exifr.parse).mockResolvedValue({
       Make: 'Canon', FNumber: 1.8, ISO: 200,
       Artist: escaped, Copyright: escaped, title: { lang: 'x-default', value: 'x' + escaped },
-    } as never)
+    })
     const memoryKey = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(12).fill(4) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
 
@@ -681,7 +681,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     const asPickedFile = () => new File([bytes as BlobPart], 'p.jpg', { type: 'image/jpeg', lastModified: FILE_MTIME })
 
     // (a) the file carries a real EXIF date → both sides take it, and the file date is ignored by both
-    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) } as never)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(CAPTURED_AT) })
     const keyA = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyA, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const sealedA = unsealMeta(SCOPE_ID, keyA, (await listMedia(SCOPE_ID, NODE_ID))[0])
@@ -691,7 +691,7 @@ describe('addMedia — E2EE-sealed layout + EXIF tiers (cr-0059/cr-0064)', () =>
     expect(tileA.capturedAtSource).toBe(sealedA?.capturedAtSource)
 
     // (b) no readable EXIF → both fall back to the file's own date. This is the half the lever removes.
-    vi.mocked(exifr.parse).mockResolvedValue(undefined as never)
+    vi.mocked(exifr.parse).mockResolvedValue(undefined)
     const keyB = v1.randomBytes(32)
     await addMedia(SCOPE_ID, NODE_ID, keyB, { blob: new Blob([bytes as BlobPart]), mediaType: 'image/jpeg', lastModified: FILE_MTIME }, deriver)
     const listed = await listMedia(SCOPE_ID, NODE_ID)

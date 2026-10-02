@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { httpError } from '../test/httpError'
+import { setupStatus } from '../test/models'
 
 vi.mock('../features/spaces/scopes', () => ({
   ensurePersonalScope: vi.fn(),
@@ -26,6 +27,7 @@ import { getSetupStatus } from '../features/account/instance/instance'
 import { serverState } from '../shared/state/serverState'
 import { suspensionSignals } from './tenantSuspension'
 import type { TreeNode } from '../features/memory/tree'
+import { NodeKind } from '../api/generated/content'
 
 const TENANT_ID = '22222222-2222-2222-2222-222222222222'
 const TENANT_SCOPE_ID = 'tn-1'
@@ -152,7 +154,11 @@ describe('enterScope — group', () => {
 describe('enterScope — re-entry resets per-scope state', () => {
   it('clears the tree + favorites so nothing bleeds across a scope switch', async () => {
     // Seed stale per-scope state as if a previous scope was loaded.
-    treeStore.nodes = [{ id: 'stale', name: 'Stale', parentId: null } as unknown as TreeNode]
+    const stale: TreeNode = {
+      id: 'stale', name: 'Stale', parentId: null, kind: NodeKind.Folder, orderIndex: 0, epoch: 0,
+      wrappedContentKey: null, wrappedMeta: null,
+    }
+    treeStore.nodes = [stale]
     treeStore.loaded = true
     favoritesStore.ids = new Set(['fav-1'])
     favoritesStore.loaded = true
@@ -227,7 +233,7 @@ describe('enterScope — a suspended tenant (uc.spaces.scope-access A7)', () => 
 
   it('in another tenant, asks the home to leave for this domain’s own space', async () => {
     vi.mocked(openGroupByToken).mockRejectedValue(suspended())
-    vi.mocked(getSetupStatus).mockResolvedValue({ setupRequired: false } as never)
+    vi.mocked(getSetupStatus).mockResolvedValue(setupStatus())
     await enterScope('@group')
     expect(suspensionSignals.leaveHome).toBe(1)
     expect(serverState.suspended).toBe(false)

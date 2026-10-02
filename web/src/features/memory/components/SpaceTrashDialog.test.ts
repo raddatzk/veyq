@@ -9,7 +9,7 @@ vi.mock('../tree', () => ({
 }))
 
 import SpaceTrashDialog from './SpaceTrashDialog.vue'
-import { listTrash, restoreNode } from '../tree'
+import { listTrash, restoreNode, type TrashedNode } from '../tree'
 import { epochsOf } from '../../spaces/epochsTestUtil'
 import { realI18n, t } from '../../../test/i18n'
 
@@ -30,7 +30,7 @@ const stubs = {
 const SCOPE = '11111111-1111-1111-1111-111111111111'
 const EPOCHS = epochsOf(new Uint8Array(32).fill(7))
 
-const ROW = {
+const ROW: TrashedNode = {
   id: 'n1',
   parentId: null,
   kind: 'MEMORY',
@@ -42,7 +42,7 @@ const ROW = {
 
 function mountDialog() {
   return mount(SpaceTrashDialog, {
-    props: { scopeId: SCOPE, epochs: EPOCHS } as never,
+    props: { scopeId: SCOPE, epochs: EPOCHS },
     global: { plugins: [realI18n()], stubs },
   })
 }
@@ -65,7 +65,7 @@ beforeEach(() => {
 
 describe('SpaceTrashDialog', () => {
   it('lists a deleted subtree root with both lifecycle dates', async () => {
-    vi.mocked(listTrash).mockResolvedValue([ROW] as never)
+    vi.mocked(listTrash).mockResolvedValue([ROW])
     const wrapper = mountDialog()
     await settle(wrapper)
 
@@ -83,7 +83,7 @@ describe('SpaceTrashDialog', () => {
   })
 
   it('restores a row, drops it from the list, and asks the host to refetch the tree', async () => {
-    vi.mocked(listTrash).mockResolvedValue([ROW] as never)
+    vi.mocked(listTrash).mockResolvedValue([ROW])
     const wrapper = mountDialog()
     await settle(wrapper)
 
@@ -101,7 +101,7 @@ describe('SpaceTrashDialog', () => {
    * disambiguation a create does — a name field and a retry — never a silent rename and never a dead end.
    */
   it('turns a 409 slug_taken into a name field and retries under the new name', async () => {
-    vi.mocked(listTrash).mockResolvedValue([ROW] as never)
+    vi.mocked(listTrash).mockResolvedValue([ROW])
     vi.mocked(restoreNode).mockRejectedValueOnce(httpError(409, 'slug_taken'))
     const wrapper = mountDialog()
     await settle(wrapper)
@@ -126,7 +126,7 @@ describe('SpaceTrashDialog', () => {
 
   /** A 409 that is NOT a slug collision has no new-name remedy, so it must not offer one. */
   it('does not offer a rename for a failure a new name cannot fix', async () => {
-    vi.mocked(listTrash).mockResolvedValue([ROW] as never)
+    vi.mocked(listTrash).mockResolvedValue([ROW])
     vi.mocked(restoreNode).mockRejectedValueOnce(httpError(409, 'scope_deleting'))
     const wrapper = mountDialog()
     await settle(wrapper)
