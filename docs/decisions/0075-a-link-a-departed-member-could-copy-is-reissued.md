@@ -33,9 +33,10 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 
 ## Decision
 
-1. **Re-issue: a new link, the old one off, in one request.** `POST /api/shares/{shareId}/reissue` creates a new
-   share with a fresh id and a fresh `K_share` and turns the old one off (`enabled = false`) in the **same
-   transaction**; any refusal writes nothing. The server takes the Memory, the scope and the **role** from the old
+1. **Re-issue: a new link, the old one deleted, in one request.** `POST /api/shares/{shareId}/reissue` creates a
+   new share with a fresh id and a fresh `K_share` and deletes the old one — a tombstone, [ADR 0029](0029-public-viewer-share.md)
+   §7 — in the **same transaction**; any refusal writes nothing. A replaced link has nothing left to come back for,
+   and a tombstone is never re-activated, whoever left or stayed. The server takes the Memory, the scope and the **role** from the old
    row, so a re-issue cannot move a link or flip it into or out of UPLOADER. It requires the recovery copy at the
    scope's current epoch (`409 stale_epoch`, [ADR 0024](0024-scope-key-rotation.md) Decision 6) and the capability
    for the role ([ADR 0032](0032-capability-discovery-version-gating.md)). An **enabled** share is re-issued only
@@ -49,7 +50,7 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
    the new link, while a returning guest names themself again and can no longer delete their earlier uploads. The
    per-link storage budget ([ADR 0073](0073-storage-quota-belongs-to-whoever-pays-for-the-store.md) §4) starts at
    zero — no new power, since a member can already mint a fresh link.
-3. **The old link 404s, with no redirect.** It answers exactly as a revoked one. A redirect from the old id would
+3. **The old link 404s, with no redirect.** It answers exactly as a revoked one, and leaves the manage list. A redirect from the old id would
    hand the new id to the very person the re-issue is for; the curator hands out the new link.
 4. **Re-activation refuses a link a departed member may hold** — `409 reissue_required` — when any one of these
    holds, as one pure predicate (`ReissuePolicy`):
@@ -102,8 +103,8 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
 - **What this buys is honest-server only.** Revocation is layer 1: a malicious operator can keep serving a revoked
   id. Against a dump, a new `K_share` keeps only the *new* share's later password, label and note edits out of a
   departed member's reach; the Memory's content under `K_mem` stays the ADR 0012 class.
-- **The operator learns nothing new.** A re-issue is a create plus `enabled = false`, and `enabled` is already
-  plain; the removal counter counts membership deletes the operator already performs, and `reissue_only` records a
+- **The operator learns nothing new.** A re-issue is a create plus a tombstone of the old row, whose deletion the
+  operator serves anyway; the removal counter counts membership deletes the operator already performs, and `reissue_only` records a
   switch-off it already served.
 - **A re-issue breaks a link for its guests by design.** The product copy says so: the old link stops working,
   hand out the new one, guests keep their photos but give their name again.
