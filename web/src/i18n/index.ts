@@ -100,6 +100,8 @@ const en = {
     currentLabel: 'Current — shown now',
     accept: 'Accept new key',
     refuse: 'Refuse',
+    reviewPendingRekey:
+      'If this member changed their keys while a shared space is still waiting for its new key, accepting first gives it that key wherever you can. Where you can’t, the space stays closed to you until another member does it.',
     acceptFailed: 'Could not accept the key. Please try again.',
     trustRolledBack:
       'The server returned an older list of the keys you trust than this device has already seen. Nothing is shared with a key it cannot check until the current list is back.',
@@ -1136,6 +1138,8 @@ const de: typeof en = {
     currentLabel: 'Aktuell — jetzt gezeigt',
     accept: 'Neuen Schlüssel akzeptieren',
     refuse: 'Ablehnen',
+    reviewPendingRekey:
+      'Wenn dieses Mitglied seine Schlüssel getauscht hat, während ein geteilter Bereich noch auf seinen neuen Schlüssel wartet, gibt das Akzeptieren ihm diesen Schlüssel zuerst, wo du das kannst. Wo nicht, bleibt der Bereich für dich zu, bis ein anderes Mitglied das erledigt.',
     acceptFailed: 'Der Schlüssel konnte nicht akzeptiert werden. Bitte erneut versuchen.',
     trustRolledBack:
       'Der Server hat eine ältere Liste deiner vertrauten Schlüssel geliefert, als dieses Gerät schon gesehen hat. Mit Schlüsseln, die sich nicht prüfen lassen, wird nichts geteilt, bis die aktuelle Liste wieder da ist.',

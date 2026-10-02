@@ -10,7 +10,8 @@
 // key-holder) claims it via runScopeRotationWorker, mints E_1 + re-grants the survivors on-device, completes.
 // Asserts the rotation genuinely happened on the live backend: epoch 0 → 1, a real chain-link at epoch 1, B
 // re-granted at epoch 1, C gone, and the job cleared. The pure ex-member lockout crypto (E_0 can't derive E_1)
-// is unit-tested in scopes.test.ts / epochs.test.ts; this proves the whole mechanism is wired live.
+// is unit-tested in scopes.test.ts / epochs.test.ts; this proves the whole mechanism is wired live. Its last leg
+// (inbox #233) has B rotate their account keys and a co-owner E, whose grant B signed, complete the covering rotation.
 //
 // The tenant domain is `veyq.localhost` — a valid dotted domain AND an RFC 6761 loopback name, so it serves as
 // both the tenant domain and the fetch Host with no manual Host juggling. Run against a FRESH instance:
@@ -19,7 +20,9 @@
 // Or let `python3 scripts/run_web_e2e.py` do all of that, which is what CI runs.
 import { describe, it, expect } from 'vitest'
 import { tasksApi } from '../../api/client'
-import { addGroupMember, listScopeMembers, removeTenantMember } from '../spaces/members'
+import { addGroupMember, listScopeMembers, removeTenantMember, setMemberRole, SetMemberRoleRequestRoleEnum } from '../spaces/members'
+import { rotateKeys } from '../account/rotation/rotateKeys'
+import { login } from '../account/login/login'
 import { createGroup, isStaleEpoch, listMyScopes, listScopeEpochs, openScopeById, rotateGroupForRemoval } from '../spaces/scopes'
 import { createMemory, listTree } from '../memory/tree'
 import { become, birthInstance, mkActor, onboardMember } from '../../test/e2eBootstrap'
@@ -122,5 +125,36 @@ describe.skipIf(!process.env.VEYQ_E2E)('cr-0092 async rotation backstop (live, r
     const current = await openScopeById(gG)
     expect(current!.epochs.current).toBe(2)
     await createMemory(gG, current!.epochs, 'Sealed under E_2')
-  }, 240_000)
+
+    // --- inbox #233: a grant outlives its granter's account rotation (ADR 0028 § What is still open) ---
+    // B delivers E's grant in G and makes E a co-owner, then rotates their account keys (ADR 0060). E's grant is
+    // signed by B's OLD identity, so E — the owner who must complete the covering rotation — can open G only while
+    // the server serves the key that signed it. Served B's new key, E's worker failed the job on every attempt
+    // (`cannot open scope to rotate`) and G stayed at the epoch B's old identity holds.
+    await become(A)
+    const E = await onboardMember(tenant.tenantId, mkActor('e'), salt)
+    await become(B)
+    await addGroupMember(gG, E.username, E.userId!)
+    const openedForE = await openScopeById(gG)
+    await runGrantDeliveryWorker({ scopeId: gG, kind: 'GROUP', key: openedForE!.key, epoch: openedForE!.epochs.current })
+    await setMemberRole(gG, E.userId!, SetMemberRoleRequestRoleEnum.Owner)
+    await become(E)
+    expect(await openScopeById(gG), 'E opens the grant B signed, pinning B\'s key').toBeTruthy()
+
+    await become(B)
+    await rotateKeys(B.password, B.built.emergencyKit.secretKey)
+
+    // The tenant's own rotation is A's to complete (E owns no tenant), so A drains it first and E's pass meets G alone.
+    await become(A)
+    await runScopeRotationWorker()
+
+    await become(E)
+    expect(await runScopeRotationWorker(), 'E completes the rotation B\'s account rotation queued for G').toBe(1)
+    const covered = (await listMyScopes()).find((s) => s.id === gG)
+    expect(covered?.currentEpoch, 'G advanced past the epoch B\'s old identity holds').toBe(3)
+    expect(covered?.grantedEpoch, 'E re-granted at the new epoch').toBe(3)
+    // B's new key reads `changed` to E, so the covering rotation skips B: re-admission waits for E's accept.
+    await login(B.email, B.password)
+    expect((await listMyScopes()).find((s) => s.id === gG)?.grantedEpoch, 'B is not re-granted by the covering rotation').toBe(2)
+  }, 360_000)
 })

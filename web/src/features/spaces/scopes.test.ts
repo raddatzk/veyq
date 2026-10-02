@@ -809,3 +809,65 @@ describe('a grant opens only if its granter\'s signature verifies (ADR 0028 Deci
     expect(admissionVerifies(e0, 0, { scopeId: g.scopeId, kind: 'GROUP' }, ME, g)).toBe(true)
   })
 })
+
+describe('a grant verifies under the key its granter signed it with, not the granter\'s current one (inbox #233)', () => {
+  // The rotator R signed our grant with its OLD identity, then rotated its account keys (ADR 0060). The server serves
+  // the key as of the grant (ADR 0028 § What is still open); this pins what the client does with each served key,
+  // with real signatures. The client is unchanged by #233 — the backend's
+  // `RotationSliceTest.aGrantTheRotatorSignedIsStillServedWithTheKeyThatSignedIt` is the half that was red.
+  const R = 'a0000000-0000-4000-8000-0000000000a1'
+  const rOld = v1.generateIdentity()
+  const rNew = v1.generateIdentity()
+  const self: ScopeMember[] = [{ userId: ME, username: 'me', role: 'OWNER', identityPublicKey: ID_PUB, hasGrant: true }]
+
+  /** Our G1 grant at epoch 0, signed by R's old identity, served beside `servedKey`; plus a rotation endpoint. */
+  function serveRGrant(key: Uint8Array, servedKey: string) {
+    const row = signed({ id: G1, kind: 'GROUP', tenantId: 't', wrappedGrant: ownGrant(G1, key, 0), grantedEpoch: 0 }, { userId: R, identity: rOld })
+    const rotateScope = vi.fn().mockResolvedValue({ epoch: 1 })
+    vi.mocked(scopesApi).mockReturnValue({
+      listMyScopes: vi.fn().mockResolvedValue([{ ...row, granterIdentityPublicKey: servedKey }]),
+      listScopeEpochs: vi.fn().mockResolvedValue([]),
+      rotateScope,
+    } as unknown as ReturnType<typeof scopesApi>)
+    return { rotateScope }
+  }
+
+  it('served the key that signed it, with our pin still on that key: the grant opens', async () => {
+    const key = v1.randomBytes(32)
+    serveRGrant(key, pubOf(rOld))
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+    expect(Array.from((await openScopeById(G1))!.key)).toEqual(Array.from(key))
+    expect(checkAndPin).toHaveBeenCalledWith(R, pubOf(rOld))
+  })
+
+  it('and the owner holding it can therefore complete the covering rotation', async () => {
+    const { rotateScope } = serveRGrant(v1.randomBytes(32), pubOf(rOld))
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+    expect(await commitRotation(G1, self)).toBe(1)
+    expect(rotateScope).toHaveBeenCalledTimes(1)
+  })
+
+  it('the same row, once our pin moved to R\'s new key before the covering rotation reached us: refused', async () => {
+    // We accepted R's new key first. The retired key is never trusted again, so this grant stays refused
+    // (`granter_key_changed`) until a rotation replaces it — which is why accepting drains the rotation worker first.
+    serveRGrant(v1.randomBytes(32), pubOf(rOld))
+    vi.mocked(checkAndPin).mockResolvedValue('changed')
+    expect(await openScopeById(G1)).toBeNull()
+    expect(checkAndPin).toHaveBeenCalledWith(R, pubOf(rOld))
+  })
+
+  it('served R\'s CURRENT key, the signature fails before our pin is ever read — even a pin that accepted it', async () => {
+    // The lock #233 removed: the served key is not the one that signed, so `bad_signature` precedes the TOFU gate.
+    serveRGrant(v1.randomBytes(32), pubOf(rNew))
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+    expect(await openScopeById(G1)).toBeNull()
+    expect(checkAndPin).not.toHaveBeenCalled()
+  })
+
+  it('and served R\'s current key, the owner holding it cannot rotate the scope at all', async () => {
+    const { rotateScope } = serveRGrant(v1.randomBytes(32), pubOf(rNew))
+    vi.mocked(checkAndPin).mockResolvedValue('match')
+    await expect(commitRotation(G1, self)).rejects.toThrow('cannot open scope to rotate')
+    expect(rotateScope).not.toHaveBeenCalled()
+  })
+})
