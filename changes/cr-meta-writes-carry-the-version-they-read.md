@@ -61,6 +61,24 @@ invariants: [operator-blind E2EE everywhere]
    starts with an edit verb** declares `x-veyq-concurrency`. Keyed on the method alone, the guard would miss
    six POST edits (Inventory 17).
 
+**Folded 2026-10-03 (inbox #273, #274), decided under the owner's standing "all recommendations" — listed here
+so they can be reviewed:**
+
+8. **A meta writer whose blob does not open** (#273, D7). **Decided: refuse, never rebuild from empty.** The
+   self-heals and the media backfills stop without a write; an editor save makes no write and says so in one
+   line. The read paths stay best-effort (uc.memory.date E3 is about display and still holds).
+9. **The media writers rebuild from a projection** (measured during this fold, D7). `unsealMeta` returns a
+   normalized copy without `placeName`/`placeLevel`, and all three media writers spread that copy. **Decided:
+   writers open the raw tier and keep every field verbatim; `unsealMeta` also returns the place name.**
+10. **A whole-set toggle before its set loaded** (#274, D8). **Decided: the item-mark toggle — and the Memory-pin
+    toggle, which has the same shape — refuses unless the store holds a successful load for that node/scope.**
+    Not changed: an own entry that does not verify, and a pin blob that does not open. Both are documented
+    degradations whose recovery *is* the next write (ADR 0068 §9; `resealFavoritesUnderNewMasterKey`).
+11. **The cover editor after a blob operation** (D9). An `upload` (or a switch away from an uploaded cover) has
+    already moved the node's one cover-blob slot before the meta write. **Decided: once a blob operation ran, a
+    same-field conflict does not surface — the editor's own cover wins on the retry**, because re-opening on the
+    peer's cover would show a cover whose blob this save just replaced.
+
 ## Goal
 
 Two members curate the same Memory. A sets its place to "Lisbon". B opened the space earlier, then opens that
@@ -104,7 +122,11 @@ Paths are shortened: `B/` is `backend/src/main/kotlin/com/veyq/app/` and `W/` is
 | 13 | `setTenantStorageQuota`, `changeTenantDomain` | The Server Owner (singleton) | One field | Domain: conditional UPDATE on status | One editor | `grep -n "RolesAllowed" B/features/admin/tenant/TenantsResource.kt` |
 | 14 | **Exemplar:** `putIdentityPins`, `putDeviceRegister` | Self, multi-device | Whole sealed blob | **`version` CAS → `409 stale_version`**, with the client re-read, re-apply, retry loop (≤ 5) | Solved | `sed -n 45,63p B/features/account/identitypins/IdentityPinsStore.kt`; `grep -n "isStaleVersion\|MAX_WRITE_ATTEMPTS" W/features/account/identityPins.ts` |
 | 15 | **The ETag read pattern** | — | `listNodeMedia` takes `If-None-Match` = `mediaRevision`. It answers `304`, or a keyset delta with `ETag` | Read cache only; no write sends it | — | `grep -n "ifNoneMatch\|ETag" B/features/media/MediaResource.kt`; `grep -rn "bumpMediaRevision(" B` |
-| 16 | `unsealNodeMeta` on a blob that does not open | — | Returns `{ v: 1 }`. A read-modify-write after that re-seals **only its own field** | — | Wipes every sibling. A version does not help here, because the write is not stale. Proposal P2 | `sed -n 26,40p W/features/memory/nodeMeta.ts` |
+| 16 | `unsealNodeMeta` on a blob that does not open | — | Returns `{ v: 1 }`. A read-modify-write after that re-seals **only its own field** | — | Wipes every sibling. A version does not help here, because the write is not stale. Folded as D7 (#273); measured in row 18 | `sed -n 26,40p W/features/memory/nodeMeta.ts` |
+| 18 | **#273, node:** a meta write over a present blob that does not open | — | `unsealNodeMeta` → `{ v: 1 }`, then the writer's one field | — | **Measured** (throwaway vitest, 2026-10-03): `setMemoryDate` over a blob sealed under another key that held `location: Lisbon` sent `updateNode` once, with `{"v":1,"date":{…}}` — the place is gone | `sed -n 26,40p W/features/memory/nodeMeta.ts` |
+| 19 | **#273, media:** a backfill over a tier that does not open | — | `unsealMeta` → `null`, then `{ ...(meta ?? { v: 1 }), field }` | — | **Measured:** `backfillMediaType` over an unopenable tier PUT `{"v":1,"mediaType":"video/mp4"}` — capture time and GPS gone | `grep -n "meta ?? { v: 1 }" W/features/memory/media.ts` |
+| 20 | **Media writers spread a projection** (found by this fold) | — | `unsealMeta` returns a normalized copy without `placeName`/`placeLevel`; all three media writers spread it | — | **Measured:** a tier holding `placeName: Lisboa` → `unsealMeta(…).placeName` is `undefined`, and `setMediaMeta` wrote a tier without it. So every date correction drops the resolved name, and the lightbox re-resolves a name it already sealed on every open | `grep -n "placeName" W/features/memory/media.ts` |
+| 21 | **#274:** a mark / pin toggle before the own set loaded | Self | Whole set from `itemFavoritesStore.marks` / `favoritesStore.ids` | No `loaded` check | **Measured:** with `loaded = false`, `toggleItemFavorite('m1')` saved `['m1']` and `toggleFavorite('n1')` saved `['n1']`. A failed load also leaves `loaded = false` (`loadMarks` swallows) | `grep -n "loaded" W/app/itemFavoritesStore.ts W/app/favoritesStore.ts` |
 | 17 | **The guard's subject, from two angles** | — | **Measured:** `grep -nE "^    (put\|patch):" contracts/api/*.yaml \| wc -l` gives **14**. `grep -nE "operationId: (rename\|set\|update\|change\|commit\|move\|put)[A-Z]" contracts/api/*.yaml` gives **20**: the same 14 plus `renameGroup setScopeIcon moveBucketMedia commitCoverBlob changeTenantDomain changePassword` | — | Keyed on the method, the guard misses six POST edits. The difference is the finding | as stated |
 
 **Row 1 hazard paths (high risk):**
@@ -188,6 +210,22 @@ silently undone.
   - **Its limit:** the guard proves a declaration and its wire form. It never proves the server compares the
     version; the red-first slice tests do. A POST edit named outside the verb list slips through, and the
     docstring says so.
+- **D7: a writer never seals a blob it could not open, nor one rebuilt from a projection** (#273, Q8–Q9).
+  - Node: a write-path open (`nodeMeta.ts`) answers `{ v: 1 }` only for an **absent** blob; a present blob that
+    does not open or does not parse is refused (`MetaUnreadable`). Every node writer goes through it, including
+    each retry's re-open of the `409` body.
+  - Media: the same rule in `persistMeta`, and the writers start from the **raw** opened tier — every field,
+    known or not, kept verbatim — never from `unsealMeta`'s normalized copy. `unsealMeta` gains
+    `placeName`/`placeLevel`, so the lightbox stops re-resolving a name it already sealed.
+  - Who hears about it: a self-heal or backfill stops silently; an editor shows one line (the conflict notice's
+    sibling, `memory.meta.unreadable`).
+  - A version does not catch this: the write is not stale, it is blind. That is why it is its own rule.
+- **D8: a whole-set write never starts from a set it has not loaded** (#274, Q10). `toggleItemFavorite` refuses
+  (no optimistic flip, no write) unless `itemFavoritesStore` holds a successful load for **that** node;
+  `toggleFavorite` refuses unless `favoritesStore.loaded`. A failed load leaves `loaded` false, so it refuses too.
+- **D9: the cover editor's conflict exception** (Q11). `onCoverSave` surfaces a same-field conflict only when no
+  blob operation (`uploadCoverBlob`, `deleteCoverBlob`) ran in that save; after one, its own cover is re-applied
+  on the fresh blob.
 
 ## Phases
 
@@ -221,7 +259,10 @@ silently undone.
 - [ ] 4 web. D5 in `memoryDate.ts`, `memoryLocation.ts`, `memoryCover.ts`, `useMemory{Date,Location,Cover}.ts`,
   `treeStore.ts` (`patchNodeMeta` carries the version), `media.ts` `persistMeta` and its three callers, and
   `MediaLightbox.vue` (the notice on a same-field conflict).
-  - · Done when: DoD W1–W5 are green, red first, and `npm run check` is green in `web/`.
+  - D7 in `nodeMeta.ts` (the write-path open) and `media.ts` (raw-tier writers; `unsealMeta` returns the place
+    name). D8 in `app/itemFavoritesStore.ts` and `app/favoritesStore.ts`. D9 in `useMemoryCover.ts`.
+  - The gallery's live poll (`useMediaGalleryLive.ts`) patches `metaVersion` beside `wrappedMeta`.
+  - · Done when: DoD W1–W9 are green, red first, and `npm run check` is green in `web/`.
 - [ ] 5 docs close. Coverage refs for the new use-case's criteria. The `developer-styleguide.md` bullet points
   at the ADR. Inbox #271's status cell says done.
   - · Done when: the trust-chain glob is green.
@@ -250,11 +291,25 @@ silently undone.
   - **W4:** `backfillPlaceName` from a snapshot without `capturedAtOverride` meets a `409` whose tier has it.
     The retry keeps the override.
   - **W5:** the location and cover editors each get one W1-shaped case.
+  - **W6 (#273, node, live defect):** a date save and the `auto` self-heal over a present blob that does not open
+    make no `updateNode`; the save tells the user. Today: one PATCH carrying only the date (Inventory 18).
+  - **W7 (#273, media, live defect):** `backfillMediaType` / `backfillPlaceName` over an unopenable tier make no
+    PUT. Today: a PUT carrying only the backfilled field (Inventory 19).
+  - **W8 (projection, live defect):** a date correction on a tier holding `placeName` keeps it, and `unsealMeta`
+    returns it. Today: dropped (Inventory 20).
+  - **W9 (#274, live defect):** a mark toggle and a pin toggle before their set loaded make no save and no
+    optimistic flip. Control: after a load, the toggle saves the loaded set plus the new id.
+  - **W10 (D9):** a cover upload whose meta write meets a same-field `409` retries with its own cover; a crop-only
+    (`keep`) save on the same `409` re-opens instead.
 - **Bite, per lever** (snapshot and restore, `changes/README.md` § bite-proof):
   - Drop `and meta_version = ?` from either CAS: B1/B3 go red with `204`/`200`.
   - Stop the bump: B1's control goes red, because the write at 1 gets `409`.
   - Re-run `apply` on the stale blob instead of the conflict body's: W1 and W4 go red.
   - Skip the manual-date re-check after a `409`: W2 goes red.
+  - D7, node: make the write-path open return `{ v: 1 }` for a present blob that does not open: W6 goes red.
+  - D7, media: start `persistMeta`'s writers from `unsealMeta`'s copy instead of the raw tier: W8 goes red.
+  - D8: drop the `loaded` check from `toggleItemFavorite` (then from `toggleFavorite`): W9 goes red, per store.
+  - D9: surface the conflict regardless of a blob operation: W10's upload case goes red.
   - **Guard:**
     - Delete `x-veyq-concurrency` from `updateNode` → red, naming it.
     - Keep `version` but remove `metaVersion` from `UpdateNodeRequest` → red.
@@ -266,16 +321,10 @@ silently undone.
 - `./gradlew check` and `npm run check` are green, the trust-chain glob is green, and inbox #271's status
   cell points here.
 
-**Proposed inbox rows (not added; the owner decides):**
-- **P1:** `setMemberRole`'s last-owner check is count-then-write, unlocked and outside one transaction. Two
-  co-owners demoting each other at once may leave a group with no owner. [inferred; needs a race probe in the
-  shape of `cr-create-race-losers-answer-their-conflict`]
-- **P2:** a meta read-modify-write after a blob that **fails to open** (`unsealNodeMeta` → `{ v: 1 }`, and
-  `{...(meta ?? { v: 1 })}` for media) re-seals only its own field and wipes every sibling. A writer should
-  refuse when a present blob does not open. A version does not catch this.
-- **P3:** `itemFavoritesStore.mineOf` is empty when the caller's own entry was not recognised at load. The
-  next toggle then replaces the real set with one id. [inferred]
-- **P4:** the `nameEpoch`/`iconEpoch` checks run unlocked, outside the store's transaction. A rotation
-  committing in between stores a name under a superseded epoch. Check whether that is benign. [inferred]
+**The refine's proposals, as they stand:** P1 became inbox #272, P4 became #275 (both left alone here). P2 and
+P3 became #273 and #274, which this CR now folds (D7, D8). P3's own wording ("the caller's own entry was not
+recognised at load") is the half deliberately **not** changed — an own entry that does not verify is someone
+else's by ADR 0068 §9, and the next toggle replacing it is that ADR's recovery; the half that is a defect is the
+toggle before any load (Inventory 21).
 
 ## Retrospective
