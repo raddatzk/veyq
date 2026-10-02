@@ -38,6 +38,15 @@ acceptanceCriteria:
       backend:
         integration: [ShareDeletedNodeSliceTest.deletedSubtreeLeavesTheAnonymousResolve, ShareDeletedNodeSliceTest.deletedSubtreesBlobsAreNoLongerAuthorizedThroughTheShare, ShareDeletedNodeSliceTest.deletedChapterLeavesItsParentsShareWithoutTakingTheParentWithIt, ShareDeletedNodeSliceTest.restoredSubtreeComesBackOnBothSharePaths]
 
+  - id: erasing-a-memory-deletes-its-links
+    text: "The purge that erases a Memory deletes every public link on it (ADR 0029 §7): each share on an erased node becomes a tombstone — off, its ciphertext cleared, its id kept — so the link 404s for good instead of answering 200 with the Memory's sealed title, listed nowhere a member could revoke it. A link on a Memory the same purge did not erase keeps serving. The guest identities of a deleted link whose last media or bucket the purge erased go with it; a live link's guest stays."
+    coverage:
+      # Both red first on the tree before the tombstone: the erased Memory's link answered 200, and no path but
+      # the scope purge removed an identity. Dropping the purge's tombstone call reddens the first with its sibling
+      # control still green; each of the identity rule's three conditions reddens its own assertion when dropped.
+      backend:
+        integration: [ShareDeletedNodeSliceTest.erasingAMemoryEndsItsLink, ShareDeletedNodeSliceTest.aDeadGuestIdentityGoesAndALiveOneStays]
+
   - id: reads-that-must-not-filter
     text: "Three reads deliberately keep seeing soft-deleted rows, and each has a failure mode if filtered — slug uniqueness (else validation passes and the database rejects the insert afterwards, turning a clean rejection into a 500), the delete's own subtree traversal (else re-deleting a partially deleted subtree stops early and strands the rest), and the whole-space erase (which must remove every node row including trashed ones)."
     coverage:

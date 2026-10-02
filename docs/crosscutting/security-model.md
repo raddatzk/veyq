@@ -254,10 +254,10 @@ server-blind tokens make this work without the server ever seeing content:
   **every** link of a Memory from its recovery copy, so a member removed from a group or the tenant may hold every
   link that existed on its Memories while they belonged — and using one needs **no dump**: against an honest server
   the link is a bearer capability, and `K_mem` never re-keys. A **re-issue** (one request, one transaction: a new
-  id and a fresh `K_share` carrying the old settings, the old link off) is what cuts them off. Re-activation is
+  id and a fresh `K_share` carrying the old settings, the old link deleted) is what cuts them off. Re-activation is
   refused (`reissue_required`) for a share whose owner has left, whose copy predates the scope's current epoch or
   its last member removal (a scope counts its removals, because the tenant never rotates on one), or that a bulk
-  switch-off turned off; a group or tenant removal can opt to turn off every link of its space in the same
+  switch-off marked — every link of the space, one already off included; a group or tenant removal can opt to turn off every link of its space in the same
   transaction, and any owner of a space can do so at any time. This is the
   **honest-server** cut: with a dump the departed member already holds `K_mem` and reads the Memory whatever the
   link does — the ADR 0012 class.
@@ -471,3 +471,12 @@ the trash** — a member may **expedite** its purge by hand (the item was alread
 brings the inevitable purge forward, bypassing the retention window). A member cannot purge a **live** item
 directly: destruction always goes **trash → purge**, never a one-step "delete forever" of another member's live
 content. A deletion audit records accountability without retaining the erased data.
+
+**A public link goes with what it shows** ([ADR 0029](../decisions/0029-public-viewer-share.md) §7). Purging a
+Memory deletes every link on it, and a curator can delete a link by hand: the share row becomes a tombstone that
+keeps only its id, scope, Memory, role and dates — the sealed title, note, label, recovery copy, password fields and
+key wrap are erased — so the link can never answer again and its id is never minted again. A guest's identity row
+(their sealed name and wrapped key) is erased once its link is deleted and nothing of theirs remains: no photo,
+trashed or not, and no bucket. The photos guests added belong to the Memory, not to the link, and go only with it.
+Purging a whole space removes its links outright and retires their ids. As for every erasure here, a dump or a
+backup taken before keeps the old rows.

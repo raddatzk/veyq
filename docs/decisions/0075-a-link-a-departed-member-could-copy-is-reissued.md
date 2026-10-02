@@ -76,11 +76,13 @@ every enabled link on every tenant-scope Memory, rebuildable from its recovery c
    epochs itself. The panel offers a re-issue where it is set, and its hint names both causes: *made before someone
    left this space or replaced their keys*. This supersedes ADR 0029 §6's "any remaining member may re-activate it".
 5. **Turning off every link of a scope sticks.** Every bulk switch-off goes through one store body: it sets
-   `enabled = false` **and** the per-row mark `reissue_only` on every enabled share of the scope, and each such share
-   comes back only by re-issue (a re-issue mints a new row, so the mark never travels). A switch-off says *a link
-   may have leaked*, and a link with no recovery copy leaks like any other — without the mark, the removal counter
-   would let any member re-activate such a link with one click after a switch-off that removed nobody. A mark on
-   the rows it writes is exact and needs no event model; a share minted afterwards is untouched by construction.
+   `enabled = false` on every enabled share of the scope **and** the per-row mark `reissue_only` on **every** share
+   of it, and each comes back only by re-issue (a re-issue mints a new row, so the mark never travels). A switch-off
+   says *a link may have leaked*, and a link with no recovery copy leaks like any other — without the mark, the
+   removal counter would let any member re-activate such a link with one click after a switch-off that removed
+   nobody. A link its owner had turned off just before is marked too: it may have leaked as well, and "turn off
+   every link" means every link. The count it answers is still the links it turned off. A mark on the rows it
+   writes is exact and needs no event model; a share minted afterwards is untouched by construction.
    Three paths reach it, each unchecked by default behind a confirmation that names the effect:
    - a **group removal**: the removal-rotation's opt-in `revokeLinks`, valid only with `removesUserId` (`400`
      otherwise), in the removal's own transaction;

@@ -54,8 +54,10 @@ Three honest limits:
   erase what someone already saved.
 - **Links made before someone left keep working until you renew them.** Everyone in a group or a
   shared space can copy every public link of it, so someone who leaves may still have one. Renewing a
-  link gives it a new address and switches the old one off for good — hand out the new one. When you
-  remove someone you can also switch off every link of the space in the same step, or at any time.
+  link gives it a new address and deletes the old one — hand out the new one. When you remove someone
+  you can also switch off every link of the space in the same step, or at any time. A link you switched
+  off can be deleted for good; the photos guests added through it stay in the Memory. Deleting a Memory
+  for good deletes its links too.
 - **Shared means shared.** Once you hand a key to others, privacy *from them* is gone by design — only
   privacy *from us* still holds.
 
