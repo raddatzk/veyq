@@ -7,7 +7,7 @@ import type { TreeNode } from '../tree'
 import { realI18n, t } from '../../../test/i18n'
 
 
-const memory: TreeNode = { id: 'm1', kind: NodeKind.Memory, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null }
+const memory: TreeNode = { id: 'm1', kind: NodeKind.Memory, name: 'Rom', parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0 }
 
 const mountCard = (favorite: boolean) =>
   mount(MemoryCard, { props: { memory, favorite }, global: { plugins: [realI18n()] } })

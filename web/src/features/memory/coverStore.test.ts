@@ -67,7 +67,7 @@ describe('coverStore', () => {
     await settle()
     expect(covers.value.get('n1')?.url).toBe('blob:cover-1')
 
-    patchNodeMeta('n1', 'meta-2') // exactly what a cover edit already does — no new signal to forget
+    patchNodeMeta('n1', 'meta-2', 1) // exactly what a cover edit already does — no new signal to forget
     ensureCovers(['n1'])
     await settle()
 
@@ -80,7 +80,7 @@ describe('coverStore', () => {
     ensureCovers(['n1'])
     await settle()
     loadNodeCover.mockResolvedValue(null) // the cover is gone (or the chosen media was deleted — E2)
-    patchNodeMeta('n1', 'meta-2')
+    patchNodeMeta('n1', 'meta-2', 1)
     ensureCovers(['n1'])
     await settle()
 

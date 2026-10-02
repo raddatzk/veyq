@@ -27,7 +27,7 @@ const SpaceMapStub = {
 }
 
 const node = (id: string, kind: NodeKind, name: string): TreeNode => ({
-  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null,
+  id, kind, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta: null, metaVersion: 0,
 })
 
 const SCOPE_ID = '5c09e000-0000-4000-8000-0000000000bb'
@@ -49,6 +49,7 @@ function locatedMemory(label: string, parentLabel: string | null, loc: MemoryLoc
     id, kind: NodeKind.Memory, name: label, parentId: parentLabel === null ? null : uid(parentLabel), orderIndex: 0, epoch: 0,
     wrappedContentKey: b64std(v1.seal({ purpose: 'content-key', scopeId: SCOPE_ID, nodeId: id, epoch: 0 }, scopeKey, key)),
     wrappedMeta: sealNodeMeta(key, { scopeId: SCOPE_ID, nodeId: id }, { v: 1, location: loc }),
+    metaVersion: 0,
   }
 }
 /** A folder whose id is the UUID of `label` (so a located Memory's parent label resolves to it). */

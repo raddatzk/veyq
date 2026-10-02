@@ -39,7 +39,7 @@ const NODE_ID = '22222222-2222-2222-2222-222222222222'
 const THIS_NODE = { scopeId: SCOPE_ID, nodeId: NODE_ID }
 
 const node = (name: string, wrappedMeta: string | null = null): TreeNode => ({
-  id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta,
+  id: NODE_ID, kind: NodeKind.Memory, name, parentId: null, orderIndex: 0, epoch: 0, wrappedContentKey: null, wrappedMeta, metaVersion: 0,
 })
 
 /** A stub deriver: a tiny "JPEG" tagged by the requested maxEdge so each tier's bytes are distinct. */
@@ -294,7 +294,7 @@ describe('MemoryDetail (gallery grid + header)', () => {
     vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
     vi.stubGlobal('fetch', store.fetchStub)
     const chapters: TreeNode[] = [
-      { id: 'c1', kind: NodeKind.Chapter, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null },
+      { id: 'c1', kind: NodeKind.Chapter, name: 'Day 1', parentId: NODE_ID, orderIndex: 0, epoch: 0, wrappedContentKey: 'd3JhcA==', wrappedMeta: null, metaVersion: 0 },
     ]
 
     const wrapper = mountDetail(v1.randomBytes(32), { chapters })
@@ -529,6 +529,62 @@ describe('MemoryDetail (Memory location — header chip + read-modify-write, cr-
     expect(lastPatchedLocation(memoryKey)).toEqual({
       name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto', derived: { lat: 48.85, lng: 2.35 }, nameAnchor: undefined,
     })
+  })
+
+  /** A `409 stale_version` carrying the server's current node blob (ADR 0077), as the generated client throws it. */
+  const staleNode = (wrappedMeta: string, metaVersion: number) => ({
+    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+  })
+
+  /**
+   * The CR's own scenario (uc.memory.concurrent-curation E2, the worst writer): B's tree was loaded before A set the
+   * place. B merely OPENS the Memory, the auto-date self-heal re-seals — from the stale tree — and meets a 409 whose
+   * blob holds A's place. The retry re-runs only the date on it, so the place survives and the tree learns both.
+   * Before the version existed, that open-time PATCH landed and A's place was gone.
+   */
+  it('the open-time date self-heal from a stale tree keeps a place a peer set meanwhile', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    vi.mocked(exifr.parse).mockResolvedValue({ DateTimeOriginal: new Date(Date.UTC(2026, 2, 3, 12)) } as never)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    const peers = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { ...GEOCODED, derivedMode: 'fixed' } })
+    updateNode.mockRejectedValueOnce(staleNode(peers, 1))
+
+    const wrapper = mountWithLocationStub(memoryKey, null) // B's tree: no meta at all, version 0
+    await flushPromises()
+    await flushPromises()
+
+    expect(updateNode.mock.calls[0][0].updateNodeRequest.metaVersion).toBe(0)
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(1)
+    expect(lastPatchedDate(memoryKey)).toMatchObject({ mode: 'auto', from: '2026-03-03' })
+    expect(lastPatchedLocation(memoryKey)).toMatchObject({ name: 'Teneriffa', derivedMode: 'fixed' }) // A's place
+    expect(wrapper.emitted('metaUpdated')?.at(-1)?.[0]).toMatchObject({ nodeId: NODE_ID, metaVersion: 2 })
+  })
+
+  /**
+   * The location self-heal re-decides on the fresh blob: B's stale tree says `auto`, but A pinned the place
+   * (`fixed`) meanwhile — the 409's blob says so, and a fixed place is the user's, so nothing more is written.
+   */
+  it('the location self-heal does not move a place a peer fixed meanwhile', async () => {
+    const memoryKey = v1.randomBytes(32)
+    const store = galleryFakeStore()
+    vi.mocked(mediaApi).mockReturnValue(store.api as unknown as ReturnType<typeof mediaApi>)
+    vi.stubGlobal('fetch', store.fetchStub)
+    vi.mocked(exifr.parse).mockResolvedValue({ latitude: 48.85, longitude: 2.35 } as never)
+    await addMedia(SCOPE_ID, NODE_ID, memoryKey, { blob: new Blob([new Uint8Array(8).fill(1) as BlobPart]), mediaType: 'image/jpeg' }, stubDeriver())
+    const stale = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Boulder gym', nameSource: 'manual', derivedMode: 'auto' } })
+    const fixed = sealNodeMeta(memoryKey, THIS_NODE, { v: 1, location: { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed', derived: { lat: 38.7, lng: -9.1 } } })
+    updateNode.mockRejectedValueOnce(staleNode(fixed, 3))
+
+    mountWithLocationStub(memoryKey, stale)
+    await flushPromises()
+    await flushPromises()
+
+    const locationWrites = updateNode.mock.calls.filter((c) => unsealMemoryLocation(SCOPE_ID, memoryKey, { id: NODE_ID, wrappedMeta: c[0].updateNodeRequest.wrappedMeta })?.name === 'Boulder gym')
+    expect(locationWrites).toHaveLength(1) // the stale attempt, refused — and no retry over the peer's fixed place
+    expect(updateNode).toHaveBeenCalledTimes(1)
   })
 
   it('shows “no location detected” for an armed auto location when there is NO geotagged media (nothing to resolve)', async () => {

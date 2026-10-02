@@ -46,6 +46,7 @@ import Menu from 'primevue/menu'
 import { useViewMode } from '../../../shared/state/useViewMode'
 import { useCapabilities } from '../../../shared/state/useCapabilities'
 import { SHARING_UPLOADER_LINKS } from '../../platform/capabilities'
+import type { NodeMetaUpdate } from '../useMetaWriteFeedback'
 
 const props = defineProps<{
   node: TreeNode
@@ -69,7 +70,7 @@ const emit = defineEmits<{
   createChapter: []
   share: []
   shareUpload: []
-  metaUpdated: [{ nodeId: string; wrappedMeta: string }]
+  metaUpdated: [NodeMetaUpdate]
 }>()
 
 const { t } = useI18n()

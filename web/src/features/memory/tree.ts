@@ -46,6 +46,8 @@ export type TreeNode = {
   wrappedContentKey: string | null
   /** Curated metadata (date now, place later) sealed under this node's `K_mem` (cr-0067); null when unset. */
   wrappedMeta: string | null
+  /** The version [wrappedMeta] is at — what a meta write states it was built from (ADR 0077). */
+  metaVersion: number
 }
 
 /** Seal a node's name under a scope content key `K_SC` (the `node-name` seal, ADR 0012), bound to the node. A group's
@@ -74,6 +76,7 @@ export async function listTree(scopeId: string, epochs: EpochKeys): Promise<Tree
     name: openName(keyAt(epochs, r.epoch), { scopeId, nodeId: r.id, epoch: r.epoch }, r.encryptedName),
     wrappedContentKey: r.wrappedContentKey ?? null,
     wrappedMeta: r.wrappedMeta ?? null,
+    metaVersion: r.metaVersion,
   }))
 }
 

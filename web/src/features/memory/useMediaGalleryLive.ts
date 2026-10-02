@@ -189,10 +189,11 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
   }
   /** A date correction from the lightbox → patch the item's sealed tier so the grid re-sorts (no refetch). The item
    *  object is shared with the open lightbox's snapshot, so the reopened detail stays consistent too. */
-  function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null }) {
+  function onCapturedAtUpdated(payload: { mediaId: string; wrappedMeta: string | null; metaVersion: number }) {
     const item = items.value.find((it) => it.mediaId === payload.mediaId)
     if (!item) return
     item.wrappedMeta = payload.wrappedMeta ?? undefined
+    item.metaVersion = payload.metaVersion // the base of the next meta write on this item (ADR 0077)
     items.value = [...items.value] // reassign so sortedItems recomputes and the grid re-sorts
   }
 
@@ -277,6 +278,7 @@ export function useMediaGalleryLive(ctx: MediaGalleryLiveCtx) {
       const existing = byId.get(m.mediaId)
       if (existing) {
         existing.wrappedMeta = m.wrappedMeta // a meta edit re-sealed the tier; patch in place (shared with the lightbox snapshot)
+        existing.metaVersion = m.metaVersion // …and the version it is at, or the next write from here would 409 once
         existing.updatedAt = m.updatedAt
       } else {
         byId.set(m.mediaId, m)

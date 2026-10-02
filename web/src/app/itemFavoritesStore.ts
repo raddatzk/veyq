@@ -47,13 +47,20 @@ export async function loadItemFavoritesFor(
   itemFavoritesStore.loaded = true
 }
 
-/** Toggle the caller's mark on an item — optimistic, reverts on a failed write. */
+/**
+ * Toggle the caller's mark on an item — optimistic, reverts on a failed write.
+ *
+ * **Refused until the caller's own set has loaded for THIS node** (ADR 0077 point 5, inbox #274). The write
+ * replaces the whole set, so a toggle before the load — or after a load that failed, which leaves `loaded` false
+ * — would store a one-element set over the real one. It does nothing instead: no flip, no write.
+ */
 export async function toggleItemFavorite(
   mediaId: string,
   scopeId: string,
   nodeId: string,
   scopeKey: Uint8Array,
 ): Promise<void> {
+  if (!itemFavoritesStore.loaded || itemFavoritesStore.nodeId !== nodeId) return
   const before = itemFavoritesStore.marks
   const mine = new Set(mineOf(before))
   if (mine.has(mediaId)) mine.delete(mediaId)

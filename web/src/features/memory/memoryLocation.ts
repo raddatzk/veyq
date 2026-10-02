@@ -10,10 +10,10 @@
 // A location is **never auto-created from GPS presence** — it is a deliberate per-Memory "set location" choice.
 // This module is the pure model + seal; the map editor (Leaflet) and the medoid-over-media self-heal live in the
 // UI layer (cr-0069 phase 2), reusing `computeMedoid` here.
-import { contentApi } from '../../api/client'
-import { withRefresh } from '../../app/sessionRefresh'
 import { unsealMeta, type MediaItem } from './media'
-import { sealNodeMeta, unsealNodeMeta } from './nodeMeta'
+import { editField, unsealNodeMeta } from './nodeMeta'
+import { writeNodeMeta } from './nodeMetaWrite'
+import type { SealedMetaState } from './sealedMetaWrite'
 import type { GeoLevel } from './geocode'
 
 /** A geographic point in decimal degrees. */
@@ -102,25 +102,21 @@ export function unsealMemoryLocation(
 }
 
 /**
- * **Read-modify-write** the node-meta blob: unseal the current `{ v, date?, location? }` under `nodeKey`
- * (`K_mem`), set (or, for `null`, **remove**) only the `location`, re-seal, and PATCH via the partial
- * `updateNode`. **Preserves the sibling `date`** in every case (cr-0069). `currentMeta` is the node's live
- * `wrappedMeta` (or null). Returns the sealed blob so the caller can update its local `node.wrappedMeta` without
- * a re-list.
+ * The location EDITOR's save: **read-modify-write** the node-meta blob — set (or, for `null`, **remove**) only the
+ * `location`, re-seal, PATCH with the `metaVersion` it was built from. **Preserves the sibling `date`/`cover`** in
+ * every case (cr-0069), including ones a peer wrote meanwhile (ADR 0077); a peer's change to the PLACE itself
+ * throws `MetaConflictError` so the editor re-opens on it. Returns the state the server confirmed.
  */
 export async function setMemoryLocation(
   scopeId: string,
   nodeId: string,
   nodeKey: Uint8Array,
   location: MemoryLocation | null,
-  currentMeta: string | null,
-): Promise<string> {
-  const meta = unsealNodeMeta(nodeKey, { scopeId, nodeId }, currentMeta)
-  if (location) meta.location = location
-  else delete meta.location
-  const wrappedMeta = sealNodeMeta(nodeKey, { scopeId, nodeId }, meta)
-  await withRefresh(() => contentApi().updateNode({ scopeId, nodeId, updateNodeRequest: { wrappedMeta } }))
-  return wrappedMeta
+  current: SealedMetaState,
+): Promise<SealedMetaState> {
+  const openedWith = unsealNodeMeta(nodeKey, { scopeId, nodeId }, current.wrappedMeta).location
+  const { state } = await writeNodeMeta(scopeId, nodeId, nodeKey, current, editField('location', location, openedWith))
+  return state
 }
 
 /** Whether two locations are equal (all fields) — the self-heal re-seals `derived` only when this is false. */

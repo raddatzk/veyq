@@ -25,7 +25,9 @@ import {
   type MediaExif,
   type MediaMeta,
   type ChunkProvider,
+  type MediaMetaWrite,
 } from '../media'
+import { MetaConflictError, MetaUnreadableError, staleMetaOf, type SealedMetaState } from '../sealedMetaWrite'
 import { derivedDownloadName, saveBytes, sniffMediaType } from '../download'
 import { resolvePlaceName } from '../placeName'
 import { useMapConfig } from '../../../shared/state/useMapConfig'
@@ -57,7 +59,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   close: []
-  updated: [{ mediaId: string; wrappedMeta: string | null }]
+  updated: [{ mediaId: string } & SealedMetaState] // a meta write landed, or a conflict handed back the current tier
   setCover: [{ mediaId: string }] // "use this photo as the Memory's cover" (cr-0073 §gallery-source)
   delete: [{ mediaId: string }] // trash this photo (cr-0110); the parent soft-deletes + shows an undo toast
 }>()
@@ -101,7 +103,9 @@ const isDetailsOpen = ref(false) // mobile bottom-sheet toggle (the design's swi
 const isEditingCapturedAt = ref(false)
 const capturedAtInput = ref('') // bound to <input type="datetime-local">
 const savingCapturedAt = ref(false)
-const capturedAtError = ref(false)
+// Why the last capture-time save did not land: it failed, a peer corrected the time meanwhile (the editor re-opened
+// on theirs, ADR 0077), or the tier does not open and is never rebuilt from empty. Null = no message.
+const capturedAtError = ref<'failed' | 'conflict' | 'unreadable' | null>(null)
 
 const item = computed(() => props.items[current.value])
 const isCover = computed(() => !!item.value && item.value.mediaId === props.coverMediaId) // this photo is the Memory's cover
@@ -145,7 +149,7 @@ watch(() => item.value?.mediaId, loadPreview, { immediate: true })
 async function loadDetails() {
   exif.value = null
   isEditingCapturedAt.value = false // close the editor when the item changes
-  capturedAtError.value = false
+  capturedAtError.value = null
   const target = item.value
   if (!target) return
   captured.value = metaOf(target)
@@ -185,23 +189,45 @@ function datetimeLocalToMs(value: string): number | null {
 
 function startCapturedAtEdit() {
   capturedAtInput.value = msToDatetimeLocal(effectiveCaptured.value)
-  capturedAtError.value = false
+  capturedAtError.value = null
   isEditingCapturedAt.value = true
+}
+
+/** A write landed (or a conflict handed back the current tier): show it, and let the grid patch its item — the
+ *  item's `wrappedMeta` + `metaVersion` are the base of the next write from here. */
+function applyMetaState(target: MediaItem, state: SealedMetaState, tier: MediaMeta | null) {
+  if (item.value === target) captured.value = tier
+  emit('updated', { mediaId: target.mediaId, ...state })
+}
+
+/** A backfill that did not land: keep the grid current if the server handed back a newer tier; otherwise quiet. */
+async function backfillFailed(target: MediaItem, e: unknown) {
+  const fresh = await staleMetaOf(e)
+  if (fresh) applyMetaState(target, fresh, metaOf({ ...target, wrappedMeta: fresh.wrappedMeta ?? undefined }))
 }
 
 async function persistCapturedAt(overrideMs: number | null) {
   const target = item.value
   if (!target) return
   savingCapturedAt.value = true
-  capturedAtError.value = false
+  capturedAtError.value = null
   try {
-    const updated = await setMediaMeta(props.scopeId, target, props.memoryKey, captured.value, overrideMs)
+    const updated: MediaMetaWrite = await setMediaMeta(props.scopeId, target, props.memoryKey, overrideMs)
+    applyMetaState(target, updated, updated.tier) // let the grid re-sort
     if (item.value !== target) return // navigated away mid-save — drop the stale result
-    captured.value = updated.tier
     isEditingCapturedAt.value = false
-    emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta }) // let the grid re-sort
-  } catch {
-    if (item.value === target) capturedAtError.value = true
+  } catch (e) {
+    if (e instanceof MetaConflictError) {
+      // A peer corrected the time meanwhile: show theirs and re-open the editor on it, instead of overwriting.
+      applyMetaState(target, e.current, metaOf({ ...target, wrappedMeta: e.current.wrappedMeta ?? undefined }))
+      if (item.value === target) {
+        capturedAtInput.value = msToDatetimeLocal(effectiveCaptured.value)
+        capturedAtError.value = 'conflict'
+      }
+    } else if (item.value === target) {
+      capturedAtError.value = e instanceof MetaUnreadableError ? 'unreadable' : 'failed'
+      await backfillFailed(target, e)
+    }
   } finally {
     if (item.value === target) savingCapturedAt.value = false
   }
@@ -299,11 +325,12 @@ async function resolvePlaceForCurrent() {
   const resolved = await resolvePlaceName(geocoderUrl.value, meta.gpsLat!, meta.gpsLng!, locale.value)
   if (!resolved) return
   try {
-    const updated = await backfillPlaceName(props.scopeId, target, props.memoryKey, meta, resolved.name, resolved.level)
-    if (item.value === target) captured.value = updated.tier
-    emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta })
-  } catch {
-    /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again */
+    const updated = await backfillPlaceName(props.scopeId, target, props.memoryKey, resolved.name, resolved.level)
+    applyMetaState(target, updated, updated.tier)
+  } catch (e) {
+    /* best-effort: a failed seal leaves the coordinate showing, and the next open tries again — and a tier that
+       does not open is never rebuilt from empty (ADR 0077) */
+    await backfillFailed(target, e)
   }
 }
 // What the photo itself knows, in the order someone reads it: when, what it is, what took it, how it was
@@ -413,7 +440,7 @@ async function download() {
   if (!item.value || downloading.value) return
   downloading.value = true
   const target = item.value
-  const targetMeta = captured.value // snapshot the shown item's tier — the backfill merges mediaType into it
+  const targetMeta = captured.value // the shown tier, only to skip a media that already has a type — the backfill itself re-reads the listed tier
   try {
     const bytes = await originalOf(target)
     saveBytes(bytes, derivedDownloadName(props.memoryName, current.value, bytes))
@@ -434,11 +461,11 @@ async function maybeBackfillMediaType(target: MediaItem, targetMeta: MediaMeta |
   const sniffed = sniffMediaType(bytes)
   if (!sniffed) return
   try {
-    const updated = await backfillMediaType(props.scopeId, target, props.memoryKey, targetMeta, sniffed)
-    if (item.value === target) captured.value = updated.tier
-    emit('updated', { mediaId: target.mediaId, wrappedMeta: updated.wrappedMeta }) // let the grid re-list with the badge
-  } catch {
+    const updated = await backfillMediaType(props.scopeId, target, props.memoryKey, sniffed)
+    applyMetaState(target, updated, updated.tier) // let the grid re-list with the badge
+  } catch (e) {
     /* best-effort — a failed backfill just means no badge yet */
+    await backfillFailed(target, e)
   }
 }
 
@@ -629,7 +656,9 @@ onBeforeUnmount(() => {
               {{ t('media.resetCapturedAt') }}
             </button>
           </div>
-          <p v-if="capturedAtError" class="media-lightbox-error">{{ t('media.capturedAtSaveFailed') }}</p>
+          <p v-if="capturedAtError === 'failed'" class="media-lightbox-error">{{ t('media.capturedAtSaveFailed') }}</p>
+          <p v-else-if="capturedAtError === 'conflict'" class="media-lightbox-error">{{ t('media.capturedAtConflict') }}</p>
+          <p v-else-if="capturedAtError === 'unreadable'" class="media-lightbox-error">{{ t('media.metaUnreadable') }}</p>
         </form>
 
         <template v-else>

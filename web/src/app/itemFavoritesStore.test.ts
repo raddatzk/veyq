@@ -95,6 +95,33 @@ describe('itemFavoritesStore', () => {
     expect(markCount('c')).toBe(1) // back to the one co-member who had it
   })
 
+  /**
+   * W9 (#274, live defect): the write replaces the caller's whole set for the node, so a toggle before that set
+   * loaded — or after a load that failed, which leaves `loaded` false — stored a one-element set over the real one.
+   * It now does nothing: no optimistic flip, no write. A load for ANOTHER node does not count either. Control:
+   * after this node's load the same toggle saves the loaded set plus the new id.
+   */
+  it('W9: a toggle before this node\'s set loaded does nothing; after the load it keeps the loaded set', async () => {
+    vi.mocked(saveItemFavorites).mockResolvedValue(undefined)
+    await toggleItemFavorite('c', 's', 'n', KEY)
+    expect(saveItemFavorites).not.toHaveBeenCalled()
+    expect(isMarkedByMe('c')).toBe(false)
+
+    vi.mocked(loadItemFavorites).mockRejectedValueOnce(new Error('network'))
+    await loadItemFavoritesFor('s', 'n', KEY).catch(() => undefined) // a failed load leaves the store unloaded
+    await toggleItemFavorite('c', 's', 'n', KEY)
+    expect(saveItemFavorites).not.toHaveBeenCalled()
+
+    vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
+    await loadItemFavoritesFor('s', 'other-node', KEY)
+    await toggleItemFavorite('c', 's', 'n', KEY)
+    expect(saveItemFavorites).not.toHaveBeenCalled()
+
+    await loadItemFavoritesFor('s', 'n', KEY)
+    await toggleItemFavorite('c', 's', 'n', KEY)
+    expect(saveItemFavorites).toHaveBeenCalledWith('s', 'n', KEY, new Set(['a', 'b', 'c']))
+  })
+
   it('clears when the Memory closes', async () => {
     vi.mocked(loadItemFavorites).mockResolvedValue(threeMembers)
     await loadItemFavoritesFor('s', 'n', KEY)

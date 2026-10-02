@@ -5,7 +5,9 @@
 // the reactive wiring the component used to inline (editor open-state, the header label, save + self-heal).
 import { computed, ref, type Ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { unsealMemoryDate, computeAutoRange, setMemoryDate, sameMemoryDate, sortNodesByDate, type MemoryDate } from './memoryDate'
+import { unsealMemoryDate, computeAutoRange, reconcileMemoryDate, setMemoryDate, sortNodesByDate, type MemoryDate } from './memoryDate'
+import { nodeMetaState } from './nodeMeta'
+import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { formatClosedRange, formatDay } from './memoryDateRange'
 import type { MediaItem } from './media'
 import type { TreeNode } from './tree'
@@ -18,13 +20,14 @@ export interface MemoryDateContext {
   memoryKey: () => Uint8Array | null
   chapters: () => TreeNode[] | undefined
   items: Ref<MediaItem[]>
-  onMetaUpdated: (payload: { nodeId: string; wrappedMeta: string }) => void
+  onMetaUpdated: (payload: NodeMetaUpdate) => void
 }
 
 export function useMemoryDate(ctx: MemoryDateContext) {
   const { t, locale } = useI18n()
 
   const dateEditorOpen = ref(false)
+  const { editorFailed, selfHealFailed } = useMetaWriteFeedback(ctx.onMetaUpdated)
   const storedDate = computed(() => (ctx.memoryKey() ? unsealMemoryDate(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   const autoRange = computed<MemoryDate>(() => {
     const key = ctx.memoryKey()
@@ -44,35 +47,33 @@ export function useMemoryDate(ctx: MemoryDateContext) {
   // epoch-independent (only the top-level wrap keys off the epoch), so every chapter resolves under the one memoryKey.
   const datedChapters = computed(() => sortNodesByDate(ctx.scopeId(), ctx.memoryKey, ctx.chapters() ?? []))
 
-  /** Save an edited date: re-seal under K_mem, PATCH via updateNode, and let the host update the tree. */
+  /** Save an edited date: re-seal under K_mem, PATCH version-checked, and let the host update the tree. A peer's
+   *  date written meanwhile re-opens the editor on it (ADR 0077); other failures stay best-effort. */
   async function onDateSave(date: MemoryDate) {
     const key = ctx.memoryKey()
     if (!key) return
     const nodeId = ctx.node().id
     try {
-      const wrappedMeta = await setMemoryDate(ctx.scopeId(), nodeId, key, date, ctx.node().wrappedMeta)
-      ctx.onMetaUpdated({ nodeId, wrappedMeta })
-    } catch {
-      // best-effort: keep the header stable; the next open-time reconcile can re-materialize an `auto` range
+      const state = await setMemoryDate(ctx.scopeId(), nodeId, key, date, nodeMetaState(ctx.node()))
+      ctx.onMetaUpdated({ nodeId, ...state })
+    } catch (e) {
+      await editorFailed(nodeId, e, () => (dateEditorOpen.value = true))
     }
   }
 
-  /** Materialize the `auto` range from the full media list and re-seal only when it changed (the self-heal). */
+  /** The `auto` self-heal: materialize the range from the full media list and re-seal only when it changed. The
+   *  decision — "a manual date is never overwritten" included — runs on the server's current blob, not on the tree
+   *  loaded at space entry (uc.memory.concurrent-curation E2). Silent either way. */
   async function reconcileAuto() {
     const key = ctx.memoryKey()
     if (!key) return
-    const stored = unsealMemoryDate(ctx.scopeId(), key, ctx.node())
-    if (stored && stored.mode !== 'auto') return // a manual date is the user's — never overwritten
-    const next = computeAutoRange(ctx.scopeId(), ctx.items.value, key)
-    const current: MemoryDate = stored ?? { mode: 'auto' }
-    if (sameMemoryDate(current, next)) return
-    if (!stored && next.from === undefined) return // absent meta already == the empty `auto` state; nothing to seal
     const nodeId = ctx.node().id
     try {
-      const wrappedMeta = await setMemoryDate(ctx.scopeId(), nodeId, key, next, ctx.node().wrappedMeta)
-      if (ctx.node().id === nodeId) ctx.onMetaUpdated({ nodeId, wrappedMeta })
-    } catch {
-      // leave the stale range; the next Memory open self-heals it
+      const { state } = await reconcileMemoryDate(ctx.scopeId(), nodeId, key, ctx.items.value, nodeMetaState(ctx.node()))
+      if (ctx.node().id === nodeId) ctx.onMetaUpdated({ nodeId, ...state })
+    } catch (e) {
+      // leave the stale range; the next Memory open self-heals it (a blob that does not open is never rebuilt)
+      await selfHealFailed(nodeId, e)
     }
   }
 

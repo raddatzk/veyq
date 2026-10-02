@@ -228,7 +228,7 @@ async function onDeleteDone() {
         @open-chapter="openChapter"
         @share="shareVisible = true"
         @share-upload="uploaderVisible = true"
-        @meta-updated="patchNodeMeta($event.nodeId, $event.wrappedMeta)"
+        @meta-updated="patchNodeMeta($event.nodeId, $event.wrappedMeta, $event.metaVersion)"
       />
       <MemoryBrowse
         v-else

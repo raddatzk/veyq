@@ -13,8 +13,12 @@ import {
   mediaGpsPoints,
   sameMemoryLocation,
   isLocationPending,
+  normalizeLocation,
   type MemoryLocation,
 } from './memoryLocation'
+import { nodeMetaState } from './nodeMeta'
+import { writeNodeMeta } from './nodeMetaWrite'
+import { useMetaWriteFeedback, type NodeMetaUpdate } from './useMetaWriteFeedback'
 import { reverseGeocode, defaultLevel, nameAtLevel } from './geocode'
 import { useMapConfig, setMapsConsent } from '../../shared/state/useMapConfig'
 import type { MediaItem } from './media'
@@ -27,7 +31,7 @@ export interface MemoryLocationContext {
   node: () => TreeNode
   memoryKey: () => Uint8Array | null
   items: Ref<MediaItem[]>
-  onMetaUpdated: (payload: { nodeId: string; wrappedMeta: string }) => void
+  onMetaUpdated: (payload: NodeMetaUpdate) => void
 }
 
 export function useMemoryLocation(ctx: MemoryLocationContext) {
@@ -35,6 +39,7 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
   const { mapsAvailable, geocoderUrl, geocodingAvailable } = useMapConfig()
 
   const locationEditorOpen = ref(false)
+  const { editorFailed, selfHealFailed } = useMetaWriteFeedback(ctx.onMetaUpdated)
   const consentDialogOpen = ref(false)
   const storedLocation = computed(() => (ctx.memoryKey() ? unsealMemoryLocation(ctx.scopeId(), ctx.memoryKey()!, ctx.node()) : null))
   const gpsPoints = computed(() => {
@@ -78,39 +83,51 @@ export function useMemoryLocation(ctx: MemoryLocationContext) {
     if (!key) return
     const nodeId = ctx.node().id
     try {
-      const wrappedMeta = await setMemoryLocation(ctx.scopeId(), nodeId, key, location, ctx.node().wrappedMeta)
-      ctx.onMetaUpdated({ nodeId, wrappedMeta })
-    } catch {
-      // best-effort: keep the header stable; a retry re-seals
+      const state = await setMemoryLocation(ctx.scopeId(), nodeId, key, location, nodeMetaState(ctx.node()))
+      ctx.onMetaUpdated({ nodeId, ...state })
+    } catch (e) {
+      // a peer's place written meanwhile re-opens the editor on it (ADR 0077); other failures stay best-effort
+      await editorFailed(nodeId, e, () => (locationEditorOpen.value = true))
     }
   }
 
-  /** Re-medoid an `auto` location from the media, and materialize a **pending** name by reverse-geocoding the
-   *  medoid once (opt-in) — the self-heal that turns a create-time `auto` arm into a named place on the first
-   *  geotagged upload. Re-seals only when something changed. A `manual` name / a `fixed` place is never touched. */
-  async function reconcileAutoLocation() {
-    const key = ctx.memoryKey()
-    if (!key) return
-    const stored = unsealMemoryLocation(ctx.scopeId(), key, ctx.node())
-    if (!stored || stored.derivedMode !== 'auto') return // no location / a `fixed` place is the user's — never moved
-    const point = computeMedoid(mediaGpsPoints(ctx.scopeId(), ctx.items.value, key))
-    if (!point) return // no GPS yet (e.g. an `auto` pre-armed at creation) — nothing to derive from
+  /** The next `auto` place for `stored` at medoid `point`: re-medoided, and a geocoded name materialized (a pending
+   *  arm) or refreshed (a moved medoid) at the stored granularity `level` (client-direct third-party, ADR 0016
+   *  standing consent). */
+  async function nextAutoLocation(stored: MemoryLocation, point: { lat: number; lng: number }): Promise<MemoryLocation> {
     let next: MemoryLocation = { ...stored, derived: point }
-    // Materialize/refresh a geocoded name from the medoid at the stored granularity `level` (client-direct
-    // third-party, ADR 0016 standing consent): a pending arm gets its first name; a moved medoid refreshes it.
     const medoidMoved = stored.derived?.lat !== point.lat || stored.derived?.lng !== point.lng
     if (stored.nameSource === 'geocoded' && geocodingAvailable.value && (isLocationPending(stored) || medoidMoved)) {
       const levels = await reverseGeocode(geocoderUrl.value, point.lat, point.lng, locale.value)
       const level = levels ? (stored.nameAnchor?.level && levels.find((l) => l.key === stored.nameAnchor?.level) ? { key: stored.nameAnchor.level, name: nameAtLevel(levels, stored.nameAnchor.level)! } : defaultLevel(levels)) : null
       if (level) next = { ...next, name: level.name, nameAnchor: { lat: point.lat, lng: point.lng, level: level.key } }
     }
-    if (sameMemoryLocation(stored, next)) return
+    return next
+  }
+
+  /** Re-medoid an `auto` location from the media, and materialize a **pending** name by reverse-geocoding the
+   *  medoid once (opt-in) — the self-heal that turns a create-time `auto` arm into a named place on the first
+   *  geotagged upload. Re-seals only when something changed. A `manual` name / a `fixed` place is never touched —
+   *  decided on the server's current blob, so a place a peer pinned meanwhile is not moved (ADR 0077). */
+  async function reconcileAutoLocation() {
+    const key = ctx.memoryKey()
+    if (!key) return
+    const point = computeMedoid(mediaGpsPoints(ctx.scopeId(), ctx.items.value, key))
+    if (!point) return // no GPS yet (e.g. an `auto` pre-armed at creation) — nothing to derive from
     const nodeId = ctx.node().id
     try {
-      const wrappedMeta = await setMemoryLocation(ctx.scopeId(), nodeId, key, next, ctx.node().wrappedMeta)
-      if (ctx.node().id === nodeId) ctx.onMetaUpdated({ nodeId, wrappedMeta })
-    } catch {
-      // leave the stale position; the next Memory open self-heals it
+      const { state } = await writeNodeMeta(ctx.scopeId(), nodeId, key, nodeMetaState(ctx.node()), async (meta) => {
+        const stored = normalizeLocation(meta.location)
+        if (!stored || stored.derivedMode !== 'auto') return null // no location / a `fixed` place is the user's
+        const next = await nextAutoLocation(stored, point)
+        if (sameMemoryLocation(stored, next)) return null
+        meta.location = next
+        return meta
+      })
+      if (ctx.node().id === nodeId) ctx.onMetaUpdated({ nodeId, ...state })
+    } catch (e) {
+      // leave the stale position; the next Memory open self-heals it (a blob that does not open is never rebuilt)
+      await selfHealFailed(nodeId, e)
     }
   }
 

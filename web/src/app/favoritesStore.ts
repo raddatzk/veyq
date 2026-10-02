@@ -37,8 +37,14 @@ export async function loadFavoritesFor(scopeId: string): Promise<void> {
   favoritesStore.loaded = true
 }
 
-/** Toggle a Memory's pinned state — optimistic, reverts on a failed write. */
+/**
+ * Toggle a Memory's pinned state — optimistic, reverts on a failed write.
+ *
+ * **Refused until the pin set has loaded** (ADR 0077 point 5, inbox #274): the write replaces the whole set, so a
+ * toggle before the load (or after one that failed) would store a one-element set over the real pins.
+ */
 export async function toggleFavorite(nodeId: string, scopeId: string): Promise<void> {
+  if (!favoritesStore.loaded) return
   const next = new Set(favoritesStore.ids)
   if (next.has(nodeId)) next.delete(nodeId)
   else next.add(nodeId)

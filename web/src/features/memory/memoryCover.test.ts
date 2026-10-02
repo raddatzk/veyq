@@ -28,6 +28,7 @@ import {
   type MemoryCover,
 } from './memoryCover'
 import { contentApi } from '../../api/client'
+import { MetaConflictError } from './sealedMetaWrite'
 import { listMedia, openGrid, openBlob } from './media'
 import * as v1 from '@veyq/crypto/v1'
 import { b64std, fromB64std } from '@veyq/crypto/base64'
@@ -159,7 +160,7 @@ describe('setMemoryCover', () => {
     vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: { x: 0.1, y: 0.2, width: 0.5, height: 0.28 } }
-    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, null)
+    const { wrappedMeta: sealed } = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 0 })
 
     const req = updateNode.mock.calls[0][0]
     expect(req.scopeId).toBe(SCOPE_ID)
@@ -177,7 +178,7 @@ describe('setMemoryCover', () => {
     const withSiblings = sealMeta({ v: 1, date, location })
 
     const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
-    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, withSiblings)
+    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: withSiblings, metaVersion: 0 })).wrappedMeta!
 
     const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toEqual(cover)
@@ -193,13 +194,50 @@ describe('setMemoryCover', () => {
     const location = { name: 'Teneriffa', nameSource: 'manual', derivedMode: 'fixed' }
     const withCover = sealMeta({ v: 1, date, location, cover: { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME } })
 
-    const sealed = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, withCover)
+    const sealed = (await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, null, { wrappedMeta: withCover, metaVersion: 0 })).wrappedMeta!
 
     const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(sealed))))
     expect(blob.cover).toBeUndefined()
     expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: sealed })).toBeNull()
     expect(blob.date).toEqual(date)
     expect(blob.location).toEqual(location)
+  })
+  const staleWith = (wrappedMeta: string, metaVersion: number) => ({
+    response: new Response(JSON.stringify({ code: 'stale_version', wrappedMeta, metaVersion }), { status: 409 }),
+  })
+
+  /** W5 (ADR 0077): a cover save from a stale tree meets a 409 whose blob holds a peer's place — the retry keeps it. */
+  it('W5: on 409 stale_version re-applies only the cover on the current blob — a peer\'s place survives', async () => {
+    const location = { name: 'Lisbon', nameSource: 'manual', derivedMode: 'fixed' }
+    const updateNode = vi.fn().mockRejectedValueOnce(staleWith(sealMeta({ v: 1, location }), 2)).mockResolvedValueOnce(undefined)
+    vi.mocked(contentApi).mockReturnValue({ updateNode } as unknown as ReturnType<typeof contentApi>)
+    const cover: MemoryCover = { source: { kind: 'media', mediaId: 'm-3' }, crop: FULL_FRAME }
+
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, cover, { wrappedMeta: null, metaVersion: 1 })
+
+    expect(updateNode.mock.calls[1][0].updateNodeRequest.metaVersion).toBe(2)
+    const blob = JSON.parse(new TextDecoder().decode(v1.open(metaCtx(SCOPE_ID, NODE_ID), nodeKey, fromB64std(state.wrappedMeta!))))
+    expect(blob.cover).toEqual(cover)
+    expect(blob.location).toEqual(location)
+  })
+
+  /** W10 (D9): a peer changed the COVER — a plain save re-opens (conflict), a save that moved the blob re-applies. */
+  it('W10: a same-field conflict surfaces by default, and is re-applied when told the cover blob already moved', async () => {
+    const peersCover = { source: { kind: 'media', mediaId: 'peer' }, crop: FULL_FRAME }
+    const peers = sealMeta({ v: 1, cover: peersCover })
+    const mine: MemoryCover = { source: { kind: 'media', mediaId: 'mine' }, crop: FULL_FRAME }
+
+    const surfaced = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    vi.mocked(contentApi).mockReturnValue({ updateNode: surfaced } as unknown as ReturnType<typeof contentApi>)
+    const err = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }).catch((e) => e)
+    expect(err).toBeInstanceOf(MetaConflictError)
+    expect(surfaced).toHaveBeenCalledTimes(1)
+
+    const reapplied = vi.fn().mockRejectedValueOnce(staleWith(peers, 2)).mockResolvedValue(undefined)
+    vi.mocked(contentApi).mockReturnValue({ updateNode: reapplied } as unknown as ReturnType<typeof contentApi>)
+    const state = await setMemoryCover(SCOPE_ID, NODE_ID, nodeKey, mine, { wrappedMeta: null, metaVersion: 1 }, false)
+    expect(reapplied).toHaveBeenCalledTimes(2)
+    expect(unsealMemoryCover(SCOPE_ID, nodeKey, { id: NODE_ID, wrappedMeta: state.wrappedMeta })).toEqual(mine)
   })
 })
 
