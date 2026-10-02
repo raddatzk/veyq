@@ -1,7 +1,7 @@
 ---
 id: cr-one-time-secrets-spend-by-compare-and-set
 title: A one-time secret is spent by a checked compare-and-set, first in its transaction, and nothing writes its status back
-status: planned
+status: done
 satisfies: [uc.admin.create-tenant, uc.spaces.add-member, uc.spaces.manage-member-invites, uc.account.recover-access, uc.account.onboard-device, uc.account.login, uc.account.sessions]
 adrs: ["0054", "0059", "0020", "0004"]
 invariants: [operator-blind E2EE everywhere]
@@ -302,3 +302,40 @@ The refresh chain (inbox #222) was on this list until 2026-10-01. It is now Inve
   cells point here.
 
 ## Retrospective
+
+**Measured at implement** (worktree of `main` @ `7594bdb`, 2026-10-02, H2 test datasource; every red is the named
+test, recorded before its fix; every bite a snapshot-and-restore injection whose file was byte-compared after):
+
+- **Red first, round 0 each:** owner accept `[500, 200]`, register `[500, 201]`, member accept `[500, 200]`,
+  revoke-then-spend `true` (the spend won), rotation re-tag → `ACTIVE`, recovery `[Applied, Applied]`, pairing
+  `[200, 200]`, refresh fork `[200, 200]`, refresh-vs-revoke `(200, …)` with the family `ACTIVE`.
+- **Bites:** drop the invite predicate → the three accept races and #4 red; ignore its count → the same four red,
+  but the tenant losers answer `409 username_taken` / `email_taken`, not the predicted `500`, because the spend now
+  precedes those checks; CAS after the inserts → #1 and #2 red with `500`; restore the managed save → #5 red; drop
+  the revoke predicate → #4 red; drop the rollback after a late refusal → `aRefusalAfterTheSpendLeavesTheInviteLive`
+  red; drop the scope lock (D4) → nothing red, as predicted (#6 was read, not run). Recovery: predicate and count
+  → red. Pairing: predicate and count → red with `[200, 200]`; mint-then-claim → only the family count red (3), the
+  answers stay `[404, 200]`. Family lock dropped → #11 and #12 red; locked after the token row → green, with the
+  test log naming a deadlock 24 times that `withDeadlockRetry` retried (0 in the shipped order); token entity
+  loaded before the lock → #11 red (D6's remembered trap, now measured).
+- **Not run:** the purge-vs-refresh lock footprint on MariaDB with the family lock in (D6's coordination
+  bullet) — it needs the throwaway MariaDB and multi-million-row seed of `cr-session-purge-cost-on-mariadb`, and this
+  ran in a five-agent parallel wave. `@DynamicUpdate` had not landed, so the full-row-flush bites ran as written.
+- **Inbox #252 (two concurrent share re-issues) not folded.** The rule needs a live state to compare and set, and a
+  share has none: ADR 0075 lets any member re-issue a *disabled* share, so two sequential re-issues of one share
+  both succeed by design, and a CAS on `enabled` would hand the loser exactly that second success. Whether a share
+  may be re-issued once is a product decision (and likely a column), not this CR's mechanism.
+
+- **Planning: the DoD's "exactly one `410`" was unreachable from D1 as written.** D1 placed the spend "before any
+  insert", i.e. after the checks; but Inventory 1 had already measured one `[200, 409 tenant_not_pending]` round —
+  a loser that read the winner's commit in a *check*. The spend had to move ahead of every check that reads what a
+  racer writes (tenant status, email, username), which then needed a rollback for a refusal after the spend
+  (`TenantAcceptHandler.unspend`) — a design step nobody named. Root cause: the minority answer in the race tally
+  was read as noise. Next time: every distinct loser answer in a race measurement is a read the fix must order;
+  harvested into `changes/README.md`.
+- **Execution: the bite predictions were made against the pre-fix order.** "Ignore the count → 500" assumed the
+  checks still ran first; with the spend first the same lever shows `409`. Harmless here (the test reddens by name),
+  but a bite that names its expected observable should be re-derived after the design changes, not carried.
+- **Process: the sandbox refuses heredocs and glob-filtered `gradlew` calls as "too complex".** Every test run and
+  bite went through a small Python runner in the scratchpad instead, which also made the byte-compare restore and
+  the deadlock count cheap. Next time: start an implement session by writing that runner, not after the first refusal.
