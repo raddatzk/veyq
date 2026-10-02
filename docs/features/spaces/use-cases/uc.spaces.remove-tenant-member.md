@@ -34,6 +34,8 @@
    [ADR 0014](../../../decisions/0014-group-scopes-and-governance.md) §6):
    - **Other members remain** → the **oldest remaining member** (earliest `createdAt`) is auto-promoted to OWNER; the
      group carries on under new ownership (a **server rule**, not a tenant-owner power — the owner never gains access).
+     "Solely" is decided under the lock of every scope the target is in, so a co-owner who steps down while the
+     removal runs is counted, and the group is handed on instead of being left without an owner.
    - **No member remains** (a solo group) → handled by step 5 (it's the target's own).
 5. **The target's *own* scopes — grace-tombstone, keep read access.** The target's **personal scope** and any
    **group they were the sole member of** are **soft-deleted** (the cr-0090 grace + read-only + scheduled purge) —

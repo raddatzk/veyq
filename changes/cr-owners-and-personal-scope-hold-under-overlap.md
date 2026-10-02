@@ -96,4 +96,18 @@ conflict` fixed losers whose index already existed, and this rule had no index.
   proof; no CI test runs migrations against stale data). MariaDB itself is not measured, and the CR says so.
 
 ## Retrospective
-_(filled at close)_
+- **Planning: the row named one writer, and the invariant had three.** #272 described two demotes. Grepping the
+  decision's read (`ownerCount`) turned up the tenant removal's plan, and its test was red in round 0 too. Root
+  cause: the row was written from the symptom. Fix: harvested to `changes/README` as "race every writer of the
+  invariant".
+- **Execution: an H2 green would have hidden a MariaDB-only staleness.** The obvious tenant-removal fix locks
+  inside the existing `@Transactional`, after the gates have already read. It passes on H2 (READ COMMITTED) and is
+  stale on MariaDB. Only reasoning about InnoDB's REPEATABLE READ caught it, because no test here can. The same
+  reasoning shows that the landed
+  `SharingHandler.reactivate` (`liveScopeOf` before `lockScope`) has the same shape. That case was read and not
+  measured, so it goes to the inbox. Fix: harvested to styleguide §12 and `changes/README`.
+- **Process: refine and implement in one session**, by the owner's standing "all recommendations". That was
+  acceptable because the bite tests are the gate. Still, the unreachable "two tenant owners" test was written
+  before `MembershipEntity.OWNER` was grepped, and then deleted.
+- **Next time:** before writing the race tests, grep both the invariant's decision read and the write that
+  confers the state (`OWNER`). The first gives the full set of tests, the second removes the impossible ones.
