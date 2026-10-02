@@ -1,7 +1,7 @@
 ---
 id: cr-wire-assertion-history-and-mail
 title: The wire sweep reads what the stack kept, not only what it ended with — the SQL history and every mail
-status: planned
+status: in-progress
 satisfies: []
 adrs: ["0053", "0049", "0040"]
 invariants:
@@ -93,7 +93,7 @@ failing the run naming the line.
 | H1 | The DB sweep is one data-only `mariadb-dump` per suite, taken at suite end inside `run_member`; the store sweep mirrors the bucket at the same point. Neither sees an intermediate state | `grep -n 'def sweep(\|mariadb-dump\|def sweep_store\|def run_member' scripts/run_web_e2e.py` | measured |
 | H2 | The dev compose `mariadb` service is `mariadb:11.4` with **no** `command:`; the prod compose and the chart pin the same image. Nothing enables a general or binary log anywhere | `grep -n 'mariadb:11.4\|general_log\|log.bin\|binlog' infra/docker-compose.yml infra/docker-compose.prod.yml charts/veyq/values.yaml` | measured |
 | H3 | State that is replaced or removed within one run: `PATCH /api/scopes/{id}/nodes/{id}` ×7, `PUT …/mail-settings` ×11, `PUT /api/account/identity-pins` ×5, `PUT /api/account/device-register` ×2, `DELETE …/media/{id}` ×1, `DELETE …/members/{id}` ×1; store `PUT` ×10 | the refine's probe `delete_probe.py` (below) over `http-*.jsonl` | measured (one run) |
-| H4 | `general_log` and `general_log_file` are dynamic globals in MariaDB 11.4; Connector/J 3.x defaults to client-side prepared statements, so the logged statement text carries the bound values as SQL literals; a `Connect` entry names the schema (`… on veyq_e2e_<n>`) | MariaDB and Connector/J documentation | **remembered** — phase 1 measures all three before building on them |
+| H4 | **Measured 2026-10-01 (run `1790879108`, `memoryLocation.e2e`):** `general_log`, `general_log_file`, `log_output` are dynamic — set and restored at runtime, `@@global.general_log` back to `0` and the container's `/tmp` empty afterwards. Connector/J 3.5.8 prepares client-side: 0 `Prepare`/`Execute` entries, every bound value an inline literal (`… encrypted_name='AlwD…'`); its escaping (`javap -c …Writer.writeStringEscaped`) puts a backslash before `\`, `'`, `"` and NUL only. A `Connect` entry reads `veyq@192.168.65.1 on veyq_e2e_1 using TCP/IP`. **Unforeseen:** `set autocommit=0` occurs 380× in one suite's log and the migrations' comments carry `range`/`auto`, both real canaries — so the sweep searches **literals only** | `grep -a -c 'autocommit' .e2e-out/<run>/mariadb-general.log`; `awk -F'\t' 'NF>=3{split($2,a," "); print a[2]}' … \| sort \| uniq -c` | measured |
 | M1 | Both mail kinds interpolate only `MailContext(link, domain, expiry)`; an invite template naming any other `{{tag}}` is refused at write time; the recovery body is fixed text over the same context | `grep -n 'data class MailContext\|VARIABLES = ' backend/src/main/kotlin/com/veyq/app/features/admin/tenant/InviteMailRenderer.kt`; `grep -n 'MailContext\|ctx\.' backend/src/main/kotlin/com/veyq/app/features/account/recovery/RecoveryMailer.kt` | measured |
 | M2 | Every suite's tenant is pointed at Mailpit (`127.0.0.1:18025` API, `11025` SMTP); Mailpit has no volume and `restart: unless-stopped`, so it is one long-lived mailbox shared by every run and by the developer | `grep -n 'MAILPIT\b\|VEYQ_MAILPIT' scripts/run_web_e2e.py`; `grep -n -A12 '^  mailpit:' infra/docker-compose.yml` | measured |
 | M3 | The wire recorder wraps the suite's global `fetch`, so a suite's reads of Mailpit are recorded and `sweep_http` (no host filter) already searches them: 7 `GET /api/v1/message/{id}` across 3 recordings, against 8 mail-sending requests (6 member invites, 2 recovery requests) | `grep -c ':18025' .e2e-out/<run>/http-*.jsonl`; the probe `mail_probe.py`; `grep -n 'def sweep_http' -A50 scripts/run_web_e2e.py` | measured (one run) |
@@ -149,7 +149,7 @@ The probes are the refine's scratch scripts, not shipped; re-derive them at impl
 
 ## Phases
 
-- [ ] **1 · Measure H4, then the statement-log sweep** · Done when: H4's three facts are measured on a real run
+- [x] **1 · Measure H4, then the statement-log sweep** · Done when: H4's three facts are measured on a real run
       and written into this CR's Inventory (replacing *remembered*); `python3 scripts/validate_wire_log_matcher.py`
       green; one `scripts/run_web_e2e.py` run green printing the statement log's line count, both sentinels
       found, and every suite database's `Connect` found; B1, B2, B3 red first.
