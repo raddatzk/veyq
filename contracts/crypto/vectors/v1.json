@@ -451,6 +451,15 @@
     "slug": "italien-2026-café",
     "token": "7bab374606a8ff5d04d1ebdc6ed6226524f64d242219dfdcaf6e592f5e21c868"
   },
+  "share_write_token": {
+    "note": "ADR 0076 share write proof: writeToken = HKDF-SHA256(ikm=K_share, salt=\"\" (empty), info=utf8(\"veyq/v1/share-write:\" + shareId), 32); the share stores verifier = SHA-256(writeToken), and naming yourself on the link presents writeToken (X-Share-Write). The share id is in the info so a token is bound to its link (ADR 0072): other_share_id under the same K_share gives a different token. The label is its own, so the token opens no seal and reveals nothing about K_share.",
+    "kShare": "5555555555555555555555555555555555555555555555555555555555555555",
+    "shareId": "3q2-7v8Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i",
+    "token": "d0203df46734627204fcf04d804658ae7ee2ed64d9d66904db4a2bc3fa23e66b",
+    "verifier": "16c3703470b209a90b88a61489d6857150044d94fda4d8458a05adf399ebbd24",
+    "other_share_id": "9Xk1p0aZ9bQ4rT6yW-uJ5nD2fL8sB1cE0gH3i3q2-7v",
+    "other_token": "2289a891f76f744ab71ee3fd1b8b962c596775851dbb6694a6d584583a228eb1"
+  },
   "chunk_frame": {
     "note": "Chunked-AEAD frame: nonce(12) || AEAD(contentKey, nonce, plaintext, aad) with aad = u32be(index) || u32be(total). For resumable upload + segmented streaming.",
     "contentKey": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",

@@ -359,6 +359,15 @@ describe('v1 crypto conformance (web TS vs shared vectors)', () => {
     expect(hex(v1.slugToken(unhex(s.contentKey), s.parentSlot, s.slug))).toBe(s.token)
   })
 
+  it('share write token (ADR 0076)', () => {
+    const w = vectors.share_write_token
+    const token = v1.shareWriteToken(unhex(w.kShare), w.shareId)
+    expect(hex(token)).toBe(w.token)
+    expect(hex(v1.sha256Digest(token))).toBe(w.verifier)
+    // bound to its link: the same K_share under another share id derives another token
+    expect(hex(v1.shareWriteToken(unhex(w.kShare), w.other_share_id))).toBe(w.other_token)
+  })
+
   it('media dedup token (AD-09)', () => {
     const d = vectors.dedup_token
     expect(hex(v1.dedupToken(unhex(d.contentKey), unhex(d.content)))).toBe(d.token)
